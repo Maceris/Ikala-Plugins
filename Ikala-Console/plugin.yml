@@ -1,0 +1,6 @@
+name: Ikala-Console
+version: 0.0.1
+description: A console for interacting with the system
+authors: [maceris]
+main: com.ikalagaming.graphics.GraphicsPlugin
+prefix: console
