@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="Ikala-Graphics" default="compileTest" basedir=".">
+	<!-- set global properties for this build -->
+	<property name="src.dir" location="src" />
+	<property name="test.dir" location="test" />
+	<property name="build.dir" location="bin" />
+	<property name="dist.dir" location="dist" />
+	<property name="doc.dir" location="javadoc" />
+	<property name="jars.plugins.dir" location="lib/plugins" />
+	<property name="jars.bundled.dir" location="lib/bundled" />
+	<property name="jars.info.dir" location="lib/info" />
+	<property name="jars.test.dir" location="lib/testing" />
+
+	<!-- some configuration -->
+	<property name="packages" value="com.ikalagaming.*" />
+	<property name="leavedebugsymbols" value="true" />
+	<property name="verbose" value="true" />
+	
+	<!-- Load in the plugin name and version from plugin.yml -->
+	<loadproperties srcFile="plugin.yml" prefix="plugin">
+	    <filterchain>
+	        <linecontains>
+	            <contains value="name"/>
+	        </linecontains>
+	    </filterchain>
+	</loadproperties>
+	<loadproperties srcFile="plugin.yml" prefix="plugin">
+	    <filterchain>
+	        <linecontains>
+	            <contains value="version"/>
+	        </linecontains>
+	    </filterchain>
+	</loadproperties>
+	
+
+	<target name="init">
+		<!-- Create the time stamp -->
+		<tstamp />
+		<!-- Create the build directory structure used by compile -->
+		<mkdir dir="${build.dir}" />
+	</target>
+
+	<target name="compile" depends="init" description="compile the source">
+		<!-- Compile the java code from ${src.dir} into ${build.dir} -->
+		<javac srcdir="${src.dir}" destdir="${build.dir}" includeAntRuntime="false" debug="${leavedebugsymbols}">
+			<classpath>
+				<fileset dir="${jars.plugins.dir}" includes="*.jar" />
+				<fileset dir="${jars.bundled.dir}" includes="*.jar" />
+			</classpath>
+		</javac>
+		<copy verbose="${verbose}" todir="${build.dir}" preservelastmodified="false">
+			<fileset dir=".">
+				<include name="*.yml" />
+			</fileset>
+		</copy>
+		<copy verbose="${verbose}" todir="${build.dir}" preservelastmodified="false">
+			<fileset dir="${src.dir}">
+				<include name="**/*.properties" />
+			</fileset>
+		</copy>
+	</target>
+
+	<target name="compileTest" depends="compile" description="compile the JUnit tests">
+		<javac srcdir="${test.dir}" destdir="${build.dir}" includeAntRuntime="false">
+			<classpath>
+				<fileset dir="${jars.plugins.dir}" includes="*.jar" />
+				<fileset dir="${jars.bundled.dir}" includes="*.jar" />
+				<fileset dir="${jars.test.dir}" includes="*.jar" />
+			</classpath>
+		</javac>
+	</target>
+
+	<target name="test" depends="compileTest" description="run JUnit tests">
+		<junit>
+			<classpath>
+				<pathelement location="${build.dir}" />
+				<fileset dir="${jars.plugins.dir}" includes="*.jar" />
+				<fileset dir="${jars.bundled.dir}" includes="*.jar" />
+				<fileset dir="${jars.test.dir}" includes="*.jar" />
+			</classpath>
+			<formatter type="brief" usefile="false" />
+			<batchtest>
+				<fileset dir="${test.dir}" includes="**/Test*" />
+			</batchtest>
+		</junit>
+	</target>
+
+	<target name="javadoc" description="generate javadoc">
+		<javadoc access="package" author="true" destdir="${doc.dir}" nodeprecated="false" nodeprecatedlist="false" noindex="false" nonavbar="false" notree="false" packagenames="${packages}" source="1.8" sourcepath="${src.dir}" splitindex="true" use="true" version="true">
+			<classpath>
+				<fileset dir="${jars.plugins.dir}" includes="*.jar" />
+				<fileset dir="${jars.bundled.dir}" includes="*.jar" />
+			</classpath>
+		</javadoc>
+	</target>
+
+	<target name="dist" depends="compile,javadoc" description="generate distribution jars">
+		<!-- Create the distribution directory -->
+		<mkdir dir="${dist.dir}" />
+
+		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}.jar" basedir="${build.dir}">
+			<zipgroupfileset dir="${jars.bundled.dir}" includes="*.jar" />
+		</jar>
+		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}-sources.jar" basedir="${src.dir}" />
+		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}-javadoc.jar" basedir="${doc.dir}" />
+	</target>
+
+	<target name="clean" description="clean up">
+		<!-- Delete the ${build.dir} and ${dist.dir} directory trees -->
+		<delete dir="${build.dir}" />
+		<delete dir="${dist.dir}" />
+	</target>
+</project>

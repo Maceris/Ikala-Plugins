@@ -1,0 +1,6 @@
+name: Ikala-Graphics
+version: 0.0.1
+description: A graphics plugin
+authors: [maceris]
+main: com.ikalagaming.graphics.GraphicsPlugin
+prefix: graphics
