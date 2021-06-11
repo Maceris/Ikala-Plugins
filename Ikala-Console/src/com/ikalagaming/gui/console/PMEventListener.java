@@ -5,13 +5,14 @@ import com.ikalagaming.event.Listener;
 import com.ikalagaming.gui.console.events.ConsoleCommandEntered;
 import com.ikalagaming.gui.console.events.ConsoleMessage;
 import com.ikalagaming.gui.console.events.ReportUnknownCommand;
-import com.ikalagaming.logging.Logging;
 import com.ikalagaming.plugins.Plugin;
 import com.ikalagaming.plugins.PluginCommand;
 import com.ikalagaming.plugins.PluginInfo;
 import com.ikalagaming.plugins.PluginManager;
 import com.ikalagaming.plugins.events.PluginCommandSent;
 import com.ikalagaming.util.SafeResourceLoader;
+
+import lombok.CustomLog;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,18 +25,19 @@ import java.util.Optional;
  * @author Ches Burks
  *
  */
+@CustomLog(topic = ConsolePlugin.PLUGIN_NAME)
 class PMEventListener implements Listener {
 
-	private Console parent;
+	private ConsolePlugin parent;
 	private PluginManager manager;
 
 	/**
 	 * Constructs a listener for the default plugin manager.
 	 *
-	 * @param par the parent console
+	 * @param parent the parent console
 	 */
-	public PMEventListener(Console par) {
-		this.parent = par;
+	public PMEventListener(ConsolePlugin parent) {
+		this.parent = parent;
 		this.manager = PluginManager.getInstance();
 	}
 
@@ -119,7 +121,7 @@ class PMEventListener implements Listener {
 			.getString(whichAlert, this.manager.getResourceBundle())
 			.replaceFirst("\\$PLUGIN", pInfo.getName())
 			.replaceFirst("\\$VERSION", pInfo.getVersion());
-		Logging.fine(Console.PLUGIN_NAME, message);
+		log.fine(message);
 	}
 
 	/**

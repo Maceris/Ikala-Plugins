@@ -1,13 +1,13 @@
 package com.ikalagaming.gui.console;
 
 import com.ikalagaming.event.EventManager;
-import com.ikalagaming.event.Listener;
 import com.ikalagaming.gui.console.events.ConsoleCommandEntered;
-import com.ikalagaming.localization.Localization;
-import com.ikalagaming.logging.Logging;
-import com.ikalagaming.plugins.Plugin;
 import com.ikalagaming.plugins.PluginManager;
 import com.ikalagaming.util.SafeResourceLoader;
+
+import lombok.CustomLog;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.awt.Color;
 import java.awt.Font;
@@ -25,9 +25,6 @@ import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.MissingResourceException;
-import java.util.ResourceBundle;
-import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 
 import javax.swing.ActionMap;
@@ -44,32 +41,34 @@ import javax.swing.text.DefaultCaret;
  * @author Ches Burks
  *
  */
-public class Console extends WindowAdapter implements Plugin, ClipboardOwner {
+@CustomLog(topic = ConsolePlugin.PLUGIN_NAME)
+public class Console extends WindowAdapter implements ClipboardOwner {
 
 	private class ConsoleKeyListener extends KeyAdapter {
 
-		private Console parent;
+		private Console parentConsole;
 
 		public ConsoleKeyListener(Console parentConsole) {
-			this.parent = parentConsole;
+			this.parentConsole = parentConsole;
 		}
 
 		private void handleArrow(int keyCode) {
 			if (Console.ARROW_LEFT.contains(keyCode)) {
-				this.parent.moveLeft();
+				this.parentConsole.moveLeft();
 			}
 			else if (Console.ARROW_RIGHT.contains(keyCode)) {
-				this.parent.moveRight();
+				this.parentConsole.moveRight();
 			}
 			else if (Console.ARROW_UP.contains(keyCode)) {
-				if (this.parent.history.hasPrevious()) {
-					this.parent
-						.setCurrentText(this.parent.history.getPrevious());
+				if (this.parentConsole.history.hasPrevious()) {
+					this.parentConsole.setCurrentText(
+						this.parentConsole.history.getPrevious());
 				}
 			}
 			else if (Console.ARROW_DOWN.contains(keyCode)) {
-				if (this.parent.history.hasNext()) {
-					this.parent.setCurrentText(this.parent.history.getNext());
+				if (this.parentConsole.history.hasNext()) {
+					this.parentConsole
+						.setCurrentText(this.parentConsole.history.getNext());
 				}
 			}
 		}
@@ -82,28 +81,76 @@ public class Console extends WindowAdapter implements Plugin, ClipboardOwner {
 				this.handleArrow(keyCode);
 			}
 			else if (keyCode == KeyEvent.VK_ENTER) {
-				this.parent.runLine();
+				this.parentConsole.runLine();
 			}
 			else if (keyCode == KeyEvent.VK_BACK_SPACE) {
-				this.parent.delChar();
+				this.parentConsole.delChar();
 			}
 			else if (keyCode == KeyEvent.VK_V && event.isControlDown()) {
-				this.parent.setCurrentText(this.parent.getClipboardContents());
+				this.parentConsole
+					.setCurrentText(this.parentConsole.getClipboardContents());
 			}
 			else if (keyCode == KeyEvent.VK_C && event.isControlDown()) {
-				if (this.parent.textArea.getSelectedText() != null) {
-					this.parent.setClipboardContents(
-						this.parent.textArea.getSelectedText());
+				if (this.parentConsole.textArea.getSelectedText() != null) {
+					this.parentConsole.setClipboardContents(
+						this.parentConsole.textArea.getSelectedText());
 				}
 			}
 			else if (Console.LETTERS.contains(keyCode)) {
-				this.parent.addChar(event.getKeyChar());
+				this.parentConsole.addChar(event.getKeyChar());
 			}
 		}
 
 		@Override
 		public void keyReleased(KeyEvent event) {}
 	}
+
+	/**
+	 * Keys that represent the down arrow on the keyboard.
+	 */
+	static final HashSet<Integer> ARROW_DOWN =
+		new HashSet<>(Arrays.asList(KeyEvent.VK_DOWN, KeyEvent.VK_KP_DOWN));
+
+	/**
+	 * Keys that represent the left arrow on the keyboard.
+	 */
+	static final HashSet<Integer> ARROW_LEFT =
+		new HashSet<>(Arrays.asList(KeyEvent.VK_LEFT, KeyEvent.VK_KP_LEFT));
+	/**
+	 * Keys that represent the right arrow on the keyboard.
+	 */
+	static final HashSet<Integer> ARROW_RIGHT =
+		new HashSet<>(Arrays.asList(KeyEvent.VK_RIGHT, KeyEvent.VK_KP_RIGHT));
+	/**
+	 * Keys that represent the up arrow on the keyboard.
+	 */
+	static final HashSet<Integer> ARROW_UP =
+		new HashSet<>(Arrays.asList(KeyEvent.VK_UP, KeyEvent.VK_KP_UP));
+	/**
+	 * Up, down, left, and right arrows.
+	 */
+	static final HashSet<Integer> ARROWS =
+		new HashSet<>(Arrays.asList(KeyEvent.VK_LEFT, KeyEvent.VK_KP_LEFT,
+			KeyEvent.VK_RIGHT, KeyEvent.VK_KP_RIGHT, KeyEvent.VK_UP,
+			KeyEvent.VK_KP_UP, KeyEvent.VK_DOWN, KeyEvent.VK_KP_DOWN));
+
+	/**
+	 * The default height of the console. The console will start out with this
+	 * dimension.
+	 */
+	static final int DEFAULT_HEIGHT = 350;
+
+	/**
+	 * The default number of lines allowed in the console. Lines that go past
+	 * this limit are removed from the console.
+	 */
+	static final int DEFAULT_LINE_COUNT = 150;
+
+	/**
+	 * The default width of the console. The console will start out with this
+	 * dimension.
+	 */
+	static final int DEFAULT_WIDTH = 680;
 
 	private static final Integer[] LETTER_VALUES = new Integer[] {KeyEvent.VK_0,
 		KeyEvent.VK_0, KeyEvent.VK_1, KeyEvent.VK_2, KeyEvent.VK_3,
@@ -134,85 +181,80 @@ public class Console extends WindowAdapter implements Plugin, ClipboardOwner {
 	 */
 	static final HashSet<Integer> LETTERS =
 		new HashSet<>(Arrays.asList(Console.LETTER_VALUES));
-	/**
-	 * Keys that represent the left arrow on the keyboard.
-	 */
-	static final HashSet<Integer> ARROW_LEFT =
-		new HashSet<>(Arrays.asList(KeyEvent.VK_LEFT, KeyEvent.VK_KP_LEFT));
-	/**
-	 * Keys that represent the right arrow on the keyboard.
-	 */
-	static final HashSet<Integer> ARROW_RIGHT =
-		new HashSet<>(Arrays.asList(KeyEvent.VK_RIGHT, KeyEvent.VK_KP_RIGHT));
-	/**
-	 * Keys that represent the up arrow on the keyboard.
-	 */
-	static final HashSet<Integer> ARROW_UP =
-		new HashSet<>(Arrays.asList(KeyEvent.VK_UP, KeyEvent.VK_KP_UP));
 
-	/**
-	 * Keys that represent the down arrow on the keyboard.
-	 */
-	static final HashSet<Integer> ARROW_DOWN =
-		new HashSet<>(Arrays.asList(KeyEvent.VK_DOWN, KeyEvent.VK_KP_DOWN));
-
-	/**
-	 * Up, down, left, and right arrows.
-	 */
-	static final HashSet<Integer> ARROWS =
-		new HashSet<>(Arrays.asList(KeyEvent.VK_LEFT, KeyEvent.VK_KP_LEFT,
-			KeyEvent.VK_RIGHT, KeyEvent.VK_KP_RIGHT, KeyEvent.VK_UP,
-			KeyEvent.VK_KP_UP, KeyEvent.VK_DOWN, KeyEvent.VK_KP_DOWN));
-
-	/**
-	 * The default width of the console. The console will start out with this
-	 * dimension.
-	 */
-	static final int DEFAULT_WIDTH = 680;
-	/**
-	 * The default height of the console. The console will start out with this
-	 * dimension.
-	 */
-	static final int DEFAULT_HEIGHT = 350;
-	/**
-	 * The default number of lines allowed in the console. Lines that go past
-	 * this limit are removed from the console.
-	 */
-	static final int DEFAULT_LINE_COUNT = 150;
-	/**
-	 * The name to use for the console, should be whatever is in plugin.yml
-	 */
-	static final String PLUGIN_NAME = "Ikala-Console";
-
-	private ResourceBundle resourceBundle;
-	private ConsoleListener listener;
-	private PMEventListener listen2;
-	private String windowTitle;
-	private int width = Console.DEFAULT_WIDTH;
-	private int height = Console.DEFAULT_HEIGHT;
-	private int maxLineCount = Console.DEFAULT_LINE_COUNT;
 	private Color background = new Color(2, 3, 2);
 
+	private int currentIndicatorLine = 0;
+
+	private String currentLine = "";
+
+	private ReentrantLock editLock = new ReentrantLock();
+	private EventManager eventManager;
+
 	private Color foreground = new Color(2, 200, 2);
-	private JFrame frame;
 
 	/**
-	 * The main area of the console where text is shown.
+	 * The window that contains the console.
 	 */
-	JTextArea textArea;
-	private int posInString = 0;// where the cursor is in the string
-	private char inputIndicator = '>';
-	private String currentLine = "";
-	private int currentIndicatorLine = 0;
-	private final int maxHistory = 30;
-	private ReentrantLock editLock = new ReentrantLock();
+	JFrame frame;
+
+	/**
+	 * The window height. This is the height of the frame the console is in.
+	 *
+	 * @return The height of the frame.
+	 */
+	@SuppressWarnings("javadoc")
+	@Getter
+	private int height = Console.DEFAULT_HEIGHT;
 
 	/**
 	 * The previous commands typed in the console.
 	 */
 	CommandHistory history;
-	private EventManager eventManager;
-	private HashSet<Listener> listeners;
+	private char inputIndicator = '>';
+	private final int maxHistory = 30;
+	/**
+	 * The maximum number of lines that are stored in the window.
+	 *
+	 * @return The max number of lines stored in the console.
+	 * @param maxLineCount the maximum number of lines to store
+	 */
+	@SuppressWarnings("javadoc")
+	@Getter
+	@Setter
+	private int maxLineCount = Console.DEFAULT_LINE_COUNT;
+
+	/**
+	 * The parent plugin.
+	 * 
+	 * @param parent The plugin that uses this console.
+	 */
+	@SuppressWarnings("javadoc")
+	@Setter
+	private ConsolePlugin parent;
+
+	private int posInString = 0;// where the cursor is in the string
+	/**
+	 * The main area of the console where text is shown.
+	 */
+	JTextArea textArea;
+
+	/**
+	 * The window width. This is the width of the frame the console is in.
+	 *
+	 * @return The width of the console frame
+	 */
+	@SuppressWarnings("javadoc")
+	@Getter
+	private int width = Console.DEFAULT_WIDTH;
+	/**
+	 * The window title.
+	 *
+	 * @return The String that is used as the title.
+	 */
+	@SuppressWarnings("javadoc")
+	@Getter
+	private String windowTitle;
 
 	/**
 	 * Constructs a console that uses the default EventManager for sending and
@@ -233,8 +275,6 @@ public class Console extends WindowAdapter implements Plugin, ClipboardOwner {
 	 */
 	public Console(EventManager evtManager) {
 		this.eventManager = evtManager;
-		this.listener = new ConsoleListener(this);
-		this.listen2 = new PMEventListener(this);
 	}
 
 	/**
@@ -261,7 +301,7 @@ public class Console extends WindowAdapter implements Plugin, ClipboardOwner {
 	/**
 	 * Appends the input indicator char to the console
 	 */
-	private void appendIndicatorChar() {
+	void appendIndicatorChar() {
 		this.editLock.lock();
 		try {
 			this.textArea.append("" + this.inputIndicator);
@@ -379,50 +419,12 @@ public class Console extends WindowAdapter implements Plugin, ClipboardOwner {
 			}
 			catch (UnsupportedFlavorException | IOException ex) {
 				String msg = SafeResourceLoader
-					.getString("invalid_clipboard", this.getResourceBundle())
+					.getString("invalid_clipboard", parent.getResourceBundle())
 					.concat(ex.getLocalizedMessage());
-				Logging.warning(Console.PLUGIN_NAME, msg);
+				log.warning(msg);
 			}
 		}
 		return result;
-	}
-
-	/**
-	 * Returns the window height. This is the height of the frame the console is
-	 * in.
-	 *
-	 * @return the height of the frame
-	 */
-	public int getHeight() {
-		return this.height;
-	}
-
-	@Override
-	public Set<Listener> getListeners() {
-		if (this.listeners == null) {
-			this.listeners = new HashSet<>();
-			this.listeners.add(this.listener);
-			this.listeners.add(this.listen2);
-		}
-		return this.listeners;
-	}
-
-	/**
-	 * Returns the maximum number of lines that are stored in the window.
-	 *
-	 * @return the max number of lines
-	 */
-	public int getMaxLineCount() {
-		return this.maxLineCount;
-	}
-
-	/**
-	 * Returns the resource bundle for this console
-	 *
-	 * @return the resource bundle
-	 */
-	public ResourceBundle getResourceBundle() {
-		return this.resourceBundle;
 	}
 
 	/**
@@ -449,31 +451,16 @@ public class Console extends WindowAdapter implements Plugin, ClipboardOwner {
 		}
 		catch (BadLocationException e) {
 			String msg = SafeResourceLoader.getString("error_bad_location",
-				this.getResourceBundle());
-			Logging.warning(Console.PLUGIN_NAME, msg);
+				this.parent.getResourceBundle());
+			log.warning(msg);
 		}
 		return 0;
 	}
 
 	/**
-	 * Returns window width. This is the width of the frame the console is in.
-	 *
-	 * @return the width of the frame
+	 * Initialize the console window.
 	 */
-	public int getWidth() {
-		return this.width;
-	}
-
-	/**
-	 * Returns the window title.
-	 *
-	 * @return the String that is used as the title
-	 */
-	public String getWindowTitle() {
-		return this.windowTitle;
-	}
-
-	private void init() {
+	protected void init() {
 		this.frame = new JFrame(this.windowTitle);
 		this.frame.setSize(this.width, this.height);
 		this.frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
@@ -647,57 +634,6 @@ public class Console extends WindowAdapter implements Plugin, ClipboardOwner {
 		this.updateCaretPosition();
 	}
 
-	@Override
-	public boolean onDisable() {
-		this.frame.setVisible(false);
-		this.frame.dispose();
-		return true;
-	}
-
-	@Override
-	public boolean onEnable() {
-		this.init();
-		this.appendIndicatorChar();
-		this.appendMessage(SafeResourceLoader.getString("missed_logs",
-			this.getResourceBundle()));
-		return true;
-	}
-
-	@Override
-	public boolean onLoad() {
-		try {
-			this.setResourceBundle(ResourceBundle.getBundle(
-				"com.ikalagaming.gui.console.resources.Console",
-				Localization.getLocale()));
-		}
-		catch (MissingResourceException missingResource) {
-			// don't localize this since it would fail anyways
-			Logging.warning(Console.PLUGIN_NAME,
-				"Locale not found for Console in onLoad()");
-		}
-		this.windowTitle =
-			SafeResourceLoader.getString("title", this.getResourceBundle());
-
-		return true;
-	}
-
-	@Override
-	public boolean onUnload() {
-		if (this.frame != null) {
-			this.frame.setVisible(false);
-			this.frame.dispose();
-			this.frame = null;
-		}
-		this.setResourceBundle(null);
-		this.history = null;
-		this.listener = null;
-		if (this.listeners != null) {
-			this.listeners.clear();
-			this.listeners = null;
-		}
-		return true;
-	}
-
 	/**
 	 * Replaces the input indicator char to the console
 	 */
@@ -724,8 +660,8 @@ public class Console extends WindowAdapter implements Plugin, ClipboardOwner {
 		}
 		catch (BadLocationException e) {
 			String msg = SafeResourceLoader.getString("error_bad_location",
-				this.getResourceBundle());
-			Logging.warning(Console.PLUGIN_NAME, msg);
+				this.parent.getResourceBundle());
+			log.warning(msg);
 		}
 		finally {
 			this.editLock.lock();
@@ -793,19 +729,6 @@ public class Console extends WindowAdapter implements Plugin, ClipboardOwner {
 		}
 		this.height = h;
 		this.frame.setSize(this.frame.getWidth(), h);
-	}
-
-	/**
-	 * Sets the maximum number of lines stored in the window.
-	 *
-	 * @param newMaxLines the maximum number of lines to store
-	 */
-	public void setMaxLineCount(int newMaxLines) {
-		this.maxLineCount = newMaxLines;
-	}
-
-	private void setResourceBundle(ResourceBundle newBundle) {
-		this.resourceBundle = newBundle;
 	}
 
 	/**

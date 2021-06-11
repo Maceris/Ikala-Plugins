@@ -9,23 +9,32 @@ import com.ikalagaming.plugins.PluginManager;
 import com.ikalagaming.plugins.events.PluginCommandSent;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import lombok.AllArgsConstructor;
+
 /**
  * The listener for the console gui. This handles events for the console.
  *
  * @author Ches Burks
  *
  */
+@AllArgsConstructor
 class ConsoleListener implements Listener {
-	private Console parent;
 
 	/**
-	 * Constructs a listener for the given console.
-	 *
-	 * @param console the console to listen for
+	 * The parent plugin we are working with.
+	 * 
+	 * @param parent The parent plugin.
 	 */
-	public ConsoleListener(Console console) {
-		this.parent = console;
-	}
+	@SuppressWarnings("javadoc")
+	private ConsolePlugin parent;
+
+	/**
+	 * The console we are interacting with.
+	 * 
+	 * @param console The console to interact with.
+	 */
+	@SuppressWarnings("javadoc")
+	private Console console;
 
 	/**
 	 * Called when a command event is sent.
@@ -34,7 +43,7 @@ class ConsoleListener implements Listener {
 	 */
 	@EventHandler
 	public void onCommand(PluginCommandSent event) {
-	
+
 		// TODO do something with commands
 	}
 
@@ -50,7 +59,7 @@ class ConsoleListener implements Listener {
 				+ event.getMessage() + "'");
 			return;// Don't try to log things if it is disabled
 		}
-		this.parent.appendMessage(event.getMessage());
+		this.console.appendMessage(event.getMessage());
 	}
 
 	/**
@@ -65,7 +74,7 @@ class ConsoleListener implements Listener {
 				+ event.getMessage() + "'");
 			return;// Don't try to log things if it is disabled
 		}
-		this.parent.appendMessage(event.getMessage());
+		this.console.appendMessage(event.getMessage());
 	}
 
 	/**
@@ -89,6 +98,6 @@ class ConsoleListener implements Listener {
 				"Console is disabled! Cannot print message '" + message + "'");
 			return;// Don't try to log things if it is disabled
 		}
-		this.parent.appendMessage(message);
+		this.console.appendMessage(message);
 	}
 }
