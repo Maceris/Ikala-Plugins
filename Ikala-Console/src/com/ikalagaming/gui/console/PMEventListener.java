@@ -16,7 +16,8 @@ import lombok.CustomLog;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -42,31 +43,24 @@ class PMEventListener implements Listener {
 	}
 
 	private void cbPrintHelp(@SuppressWarnings("unused") String[] args) {
-		ArrayList<PluginCommand> commands;
+		List<PluginCommand> commands;
 		commands = this.manager.getCommands();
-		String tmp;
-		ConsoleMessage message;
 		for (PluginCommand cmd : commands) {
-			tmp = cmd.getCommand();
-
-			message = new ConsoleMessage(tmp);
-			this.manager.fireEvent(message);
+			new ConsoleMessage(cmd.getCommand()).fire();
 		}
 	}
 
 	private void cbPrintPlugins(@SuppressWarnings("unused") String[] args) {
 		String tmp;
-		ConsoleMessage message;
-		HashMap<String, Plugin> loadedPlugins = this.manager.getLoadedPlugins();
+		Map<String, Plugin> loadedPlugins = this.manager.getLoadedPlugins();
 		ArrayList<String> names = new ArrayList<>();
 		names.addAll(loadedPlugins.keySet());
 		Collections.sort(names);
 
 		for (String name : names) {
 			tmp = "";
-			tmp += this.manager.getInfo(loadedPlugins.get(name)).get()
-				.getFullName();
-			if (this.manager.isEnabled(loadedPlugins.get(name))) {
+			tmp += this.manager.getInfo(name).get().getFullName();
+			if (this.manager.isEnabled(name)) {
 				tmp +=
 					" " + "(" + SafeResourceLoader.getString("ENABLED_STATUS",
 						this.manager.getResourceBundle()) + ")";
@@ -76,8 +70,7 @@ class PMEventListener implements Listener {
 					" " + "(" + SafeResourceLoader.getString("DISABLED_STATUS",
 						this.manager.getResourceBundle()) + ")";
 			}
-			message = new ConsoleMessage(tmp);
-			this.manager.fireEvent(message);
+			new ConsoleMessage(tmp).fire();
 		}
 	}
 
@@ -101,10 +94,16 @@ class PMEventListener implements Listener {
 			return;
 		}
 		String tmp = SafeResourceLoader.getString("PLUGIN_VERSION",
-			this.manager.getResourceBundle())
-			+ this.manager.getInfo(pack.get()).get().getVersion();
+			this.manager.getResourceBundle());
+		Optional<PluginInfo> info = this.manager.getInfo(pluginName);
+		if (info.isPresent()) {
+			tmp += info.get().getVersion();
+		}
+		else {
+			tmp += "?";
+		}
 
-		this.manager.fireEvent(new ConsoleMessage(tmp));
+		new ConsoleMessage(tmp).fire();
 	}
 
 	/**
@@ -114,7 +113,7 @@ class PMEventListener implements Listener {
 	 * @param whichAlert The string to read from the resource bundle
 	 * @param plugin The plugin that the alert is about
 	 */
-	void logAlert(String whichAlert, Plugin plugin) {
+	void logAlert(String whichAlert, String plugin) {
 		PluginInfo pInfo = this.manager.getInfo(plugin).get();
 
 		String message = SafeResourceLoader
@@ -134,11 +133,10 @@ class PMEventListener implements Listener {
 	public void onConsoleCommandEntered(ConsoleCommandEntered event) {
 		String firstWord = event.getCommand().trim().split("\\s+")[0];
 		if (!this.manager.containsCommand(firstWord)) {
-			ReportUnknownCommand report = new ReportUnknownCommand(firstWord);
-			this.manager.fireEvent(report);
+			new ReportUnknownCommand(firstWord).fire();
 		}
 
-		this.manager.fireEvent(new PluginCommandSent(event.getCommand()));
+		new PluginCommandSent(event.getCommand()).fire();
 	}
 
 	/**
@@ -150,22 +148,25 @@ class PMEventListener implements Listener {
 		ConsoleMessage message = new ConsoleMessage(SafeResourceLoader
 			.getString("PLUGIN_NOT_LOADED", this.manager.getResourceBundle())
 			.replaceFirst("\\$PLUGIN", pluginName));
-		this.manager.fireEvent(message);
+		message.fire();
 	}
 
 	/**
 	 * Load the commands from the resource files.
 	 */
 	void setCommands() {
-		this.manager.registerCommand(SafeResourceLoader
-			.getString("COMMAND_HELP", this.parent.getResourceBundle()),
-			this::cbPrintHelp);
-		this.manager.registerCommand(SafeResourceLoader
-			.getString("COMMAND_LIST_PLUGINS", this.parent.getResourceBundle()),
-			this::cbPrintPlugins);
-		this.manager.registerCommand(SafeResourceLoader
-			.getString("COMMAND_VERSION", this.parent.getResourceBundle()),
-			this::cbPrintVersion);
+		this.manager.registerCommand(
+			SafeResourceLoader.getString("COMMAND_HELP",
+				this.parent.getResourceBundle()),
+			this::cbPrintHelp, ConsolePlugin.PLUGIN_NAME);
+		this.manager.registerCommand(
+			SafeResourceLoader.getString("COMMAND_LIST_PLUGINS",
+				this.parent.getResourceBundle()),
+			this::cbPrintPlugins, ConsolePlugin.PLUGIN_NAME);
+		this.manager.registerCommand(
+			SafeResourceLoader.getString("COMMAND_VERSION",
+				this.parent.getResourceBundle()),
+			this::cbPrintVersion, ConsolePlugin.PLUGIN_NAME);
 	}
 
 }

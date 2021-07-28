@@ -54,7 +54,7 @@ class ConsoleListener implements Listener {
 	 */
 	@EventHandler
 	public void onConsoleMessage(ConsoleMessage event) {
-		if (!PluginManager.getInstance().isEnabled(this.parent)) {
+		if (!PluginManager.getInstance().isEnabled(ConsolePlugin.PLUGIN_NAME)) {
 			System.err.println("Console is disabled! Cannot print message '"
 				+ event.getMessage() + "'");
 			return;// Don't try to log things if it is disabled
@@ -69,7 +69,7 @@ class ConsoleListener implements Listener {
 	 */
 	@EventHandler
 	public void onDisplayLog(Log event) {
-		if (!PluginManager.getInstance().isEnabled(this.parent)) {
+		if (!PluginManager.getInstance().isEnabled(ConsolePlugin.PLUGIN_NAME)) {
 			System.err.println("Console is disabled! Cannot print message '"
 				+ event.getMessage() + "'");
 			return;// Don't try to log things if it is disabled
@@ -93,7 +93,7 @@ class ConsoleListener implements Listener {
 			+ " '" + SafeResourceLoader.getString("COMMAND_HELP",
 				"com.ikalagaming.plugins.resources.PluginManager")
 			+ "'";
-		if (!PluginManager.getInstance().isEnabled(this.parent)) {
+		if (!PluginManager.getInstance().isEnabled(ConsolePlugin.PLUGIN_NAME)) {
 			System.err.println(
 				"Console is disabled! Cannot print message '" + message + "'");
 			return;// Don't try to log things if it is disabled
