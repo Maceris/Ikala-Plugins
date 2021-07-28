@@ -7,9 +7,9 @@ import com.ikalagaming.graphics.events.CreateWindow;
 import com.ikalagaming.graphics.events.GraphicsTick;
 import com.ikalagaming.graphics.events.WindowCreated;
 import com.ikalagaming.graphics.events.WindowDestroyed;
-import com.ikalagaming.logging.Logging;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import lombok.CustomLog;
 import org.lwjgl.glfw.Callbacks;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
@@ -27,11 +27,12 @@ import java.nio.IntBuffer;
  * @author Ches Burks
  *
  */
+@CustomLog(topic = GraphicsPlugin.NAME)
 public class ControlListener implements Listener {
 
 	private GraphicsState state;
 	private GraphicsPlugin par;
-	
+
 	/**
 	 * Creates a listener given a parent.
 	 * 
@@ -51,8 +52,8 @@ public class ControlListener implements Listener {
 		 */
 		GLFWErrorCallback.createPrint(System.err).set();
 		if (!GLFW.glfwInit()) {
-			Logging.severe(GraphicsPlugin.NAME, SafeResourceLoader
-				.getString("GLFW_INIT_FAIL", par.getResourceBundle()));
+			log.severe(SafeResourceLoader.getString("GLFW_INIT_FAIL",
+				par.getResourceBundle()));
 			throw new IllegalStateException("Unable to initialize GLFW");
 		}
 	}
@@ -80,8 +81,7 @@ public class ControlListener implements Listener {
 		window = GLFW.glfwCreateWindow(300, 300, "Hello World!",
 			MemoryUtil.NULL, MemoryUtil.NULL);
 		if (window == MemoryUtil.NULL) {
-			Logging.severe(GraphicsPlugin.NAME,
-				"Failed to create the GLFW window");
+			log.severe("Failed to create the GLFW window");
 			throw new RuntimeException("Failed to create the GLFW window");
 		}
 
@@ -134,8 +134,8 @@ public class ControlListener implements Listener {
 		// Set the clear color
 		GL11.glClearColor(1.0f, 0.0f, 0.0f, 0.0f);
 
-		Logging.finer(GraphicsPlugin.NAME, SafeResourceLoader
-			.getString("WINDOW_CREATED", par.getResourceBundle()));
+		log.finer(SafeResourceLoader.getString("WINDOW_CREATED",
+			par.getResourceBundle()));
 	}
 
 	/**
@@ -169,8 +169,8 @@ public class ControlListener implements Listener {
 		Callbacks.glfwFreeCallbacks(window);
 		GLFW.glfwDestroyWindow(window);
 
-		Logging.finer(GraphicsPlugin.NAME, SafeResourceLoader
-			.getString("WINDOW_DESTROYED", par.getResourceBundle()));
+		log.finer(SafeResourceLoader.getString("WINDOW_DESTROYED",
+			par.getResourceBundle()));
 	}
 
 	/**

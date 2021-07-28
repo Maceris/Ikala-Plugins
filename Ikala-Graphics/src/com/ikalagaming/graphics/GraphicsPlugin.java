@@ -2,8 +2,9 @@ package com.ikalagaming.graphics;
 
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.localization.Localization;
-import com.ikalagaming.logging.Logging;
 import com.ikalagaming.plugins.Plugin;
+
+import lombok.CustomLog;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -17,7 +18,8 @@ import java.util.Set;
  * @author Ches Burks
  *
  */
-public class GraphicsPlugin implements Plugin {
+@CustomLog(topic = GraphicsPlugin.NAME)
+public class GraphicsPlugin extends Plugin {
 
 	/**
 	 * The name of the plugin.
@@ -84,8 +86,7 @@ public class GraphicsPlugin implements Plugin {
 		}
 		catch (MissingResourceException missingResource) {
 			// don't localize this since it would fail anyways
-			Logging.warning("Ikala-Graphics",
-				"Locale not found for Ikala-Graphics in onLoad()");
+			log.warning("Locale not found for Ikala-Graphics in onLoad()");
 		}
 		return true;
 	}
