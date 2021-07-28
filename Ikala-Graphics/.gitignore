@@ -1,5 +1,7 @@
 javadoc/
 dist/
+wiki/
+src-delomboked/
 
 .metadata
 bin/
