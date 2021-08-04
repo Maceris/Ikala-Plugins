@@ -35,7 +35,8 @@ TestSoftDependC --> TestSoftDependD
 ```
 
 ## Error scenarios
-`TestErrorNoName` - Missing the required name field.
-`TestErrorNoVersion` - Missing the required version field.
-`TestErrorNoDescription` - Missing the required description field.
+
+* `TestErrorNoName` - Missing the required name field.
+* `TestErrorNoVersion` - Missing the required version field.
+* `TestErrorNoDescription` - Missing the required description field.
 
