@@ -1,0 +1,5 @@
+name: TestSoftDependD
+version: 0.0.1
+description: The soft dependency for a plugin
+authors: [maceris]
+main-class: com.ikalagaming.plugins.test.TestSoftDependD

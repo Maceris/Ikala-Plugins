@@ -1,0 +1,4 @@
+version: 0.0.1
+description: A plugin missing the required name field
+authors: [maceris]
+main-class: com.ikalagaming.plugins.test.TestErrorNoName

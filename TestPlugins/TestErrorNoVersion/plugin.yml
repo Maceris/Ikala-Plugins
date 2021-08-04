@@ -1,0 +1,4 @@
+name: TestErrorNoVersion
+description: A plugin without the required version field
+authors: [maceris]
+main-class: com.ikalagaming.plugins.test.TestErrorNoVersion

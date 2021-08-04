@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project name="TestPlugins" default="buildJars" basedir=".">
-	
 	<property name="output.dir" location="jars" />
 	
 	<target name="init">
@@ -8,10 +7,9 @@
 	</target>
 	
 	<target name="buildJars" depends="init" description="build all the plugin jars">
-		<property name="targetName" value="dist" />
-		<ant dir="./TestStandalone" useNativeBasedir="true" target="${targetName}" inheritAll="false" />
-		<ant dir="./TestCycleA" useNativeBasedir="true" target="${targetName}" inheritAll="false" />
-		<ant dir="./TestCycleB" useNativeBasedir="true" target="${targetName}" inheritAll="false" />
+		<subant target="dist">
+			<dirset dir="." includes="Test*" />
+		</subant>
 		<copy todir="${output.dir}" flatten="true">
 			<fileset dir=".">
 				<include name="**/dist/*.jar"/>
@@ -22,10 +20,9 @@
 	</target>
 	
 	<target name="clean" description="clean all projects">
-		<property name="targetName" value="clean" />
-		<ant dir="./TestStandalone" useNativeBasedir="true" target="${targetName}" inheritAll="false" />
-		<ant dir="./TestCycleA" useNativeBasedir="true" target="${targetName}" inheritAll="false" />
-		<ant dir="./TestCycleB" useNativeBasedir="true" target="${targetName}" inheritAll="false" />
+		<subant target="clean">
+			<dirset dir="." includes="Test*" />
+		</subant>
 		<delete dir="${output.dir}" />
 	</target>
 </project>

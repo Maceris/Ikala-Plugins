@@ -1,6 +1,6 @@
 name: TestCycleB
 version: 0.0.1
-description: An simple plugin with a cyclic dependency
+description: A simple plugin with a cyclic dependency
 authors: [maceris]
 main-class: com.ikalagaming.plugins.test.TestCycleB
 dependencies: [TestCycleA]
