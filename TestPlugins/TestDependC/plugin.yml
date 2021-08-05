@@ -1,0 +1,6 @@
+name: TestDependC
+version: 0.0.1
+description: The dependency for a plugin with its own soft dependency
+authors: [maceris]
+main-class: com.ikalagaming.plugins.test.TestDependC
+dependencies: [TestDependD]

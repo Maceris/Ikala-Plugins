@@ -1,0 +1,6 @@
+name: TestDependA
+version: 0.0.1
+description: A plugin with dependencies
+authors: [maceris]
+main-class: com.ikalagaming.plugins.test.TestDependA
+dependencies: [TestDependB, TestDependC]

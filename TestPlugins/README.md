@@ -24,9 +24,19 @@ TestCycleA ==> TestCycleB
 TestCycleB ==> TestCycleA
 ```
 
+## Dependencies
+
+These classes test the dependency resolution and load order.
+
+```
+TestDependA --> TestDependB
+    ''      --> TestDependC
+TestDependC --> TestDependD
+```
+
 ## Soft dependencies
 
-These classes don't do much but test the load order.
+These classes test the load order.
 
 ```
 TestSoftDependA --> TestSoftDependB
