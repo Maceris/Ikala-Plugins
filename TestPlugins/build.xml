@@ -13,8 +13,6 @@
 		<copy todir="${output.dir}" flatten="true">
 			<fileset dir=".">
 				<include name="**/dist/*.jar"/>
-				<exclude name="**/dist/*-sources.jar"/>
-				<exclude name="**/dist/*-javadoc.jar"/>
 			</fileset>
 		</copy>
 	</target>
