@@ -38,7 +38,7 @@
 		</filterchain>
 	</loadproperties>
 
-	<target name="init">
+	<target name="init" description="create folders for generated output">
 		<!-- Create the build directory structure used by compile -->
 		<mkdir dir="${output.dir}" />
 		<mkdir dir="${output.src.dir}" />
@@ -110,7 +110,7 @@
 		</junitlauncher>
 	</target>
 
-	<target name="test.console.launcher" depends="compileTest">
+	<target name="test.console.launcher" depends="compileTest" description="run the JUnit console launcher">
 		<java classname="org.junit.platform.console.ConsoleLauncher" fork="true" failonerror="true">
 			<classpath>
 				<pathelement location="${output.src.dir}" />
@@ -130,7 +130,7 @@
 		</junitreport>
 	</target>
 
-	<target name="test" depends="test.junit.launcher, test.console.launcher" />
+	<target name="test" depends="test.junit.launcher, test.console.launcher" description="run the tests and generate reports" />
 
 	<target name="javadoc" depends="delombok" description="generate javadoc">
 		<javadoc access="package" author="true" destdir="${doc.dir}" nodeprecated="false" nodeprecatedlist="false" noindex="false" nonavbar="false" notree="false" packagenames="${packages}" source="${javaVersion}" sourcepath="${src.delomboked.dir}" splitindex="true" use="true" version="true">
