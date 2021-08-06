@@ -16,7 +16,7 @@
 	<property name="jars.test.dir" location="lib/testing" />
 
 	<!-- some configuration -->
-	<property name="packages" value="com.ikalagaming.*" />
+	<property name="packagesForJavadoc" value="com.ikalagaming.*" />
 	<property name="leavedebugsymbols" value="true" />
 	<property name="verbose" value="false" />
 	<property name="javaVersion" value="1.8" />
@@ -133,7 +133,7 @@
 	<target name="test" depends="test.junit.launcher, test.console.launcher" description="run the tests and generate reports" />
 
 	<target name="javadoc" depends="delombok" description="generate javadoc">
-		<javadoc access="package" author="true" destdir="${doc.dir}" nodeprecated="false" nodeprecatedlist="false" noindex="false" nonavbar="false" notree="false" packagenames="${packages}" source="${javaVersion}" sourcepath="${src.delomboked.dir}" splitindex="true" use="true" version="true">
+		<javadoc access="package" author="true" destdir="${doc.dir}" nodeprecated="false" nodeprecatedlist="false" noindex="false" nonavbar="false" notree="false" packagenames="${packagesForJavadoc}" source="${javaVersion}" sourcepath="${src.delomboked.dir}" splitindex="true" use="true" version="true">
 			<classpath>
 				<fileset dir="${jars.plugins.dir}" includes="*.jar" />
 				<fileset dir="${jars.bundled.dir}" includes="*.jar" />

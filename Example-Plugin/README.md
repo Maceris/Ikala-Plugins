@@ -6,6 +6,20 @@ creating new plugins.
 ## Building
 
 You will need Ant to compile the plugin, below are the important targets.
+It is important that things be set up properly if you don't want to go
+configure everything. The library structure for what is included in the builds
+or output allows you to place resources in without reconfiguring everything,
+except maybe in IDE's.
+
+Additionally, while the `plugin.yml` file is important for a plugin to be
+loaded, it's also where name and version information is pulled when generating
+the distributable jars.
+
+When you have your own plugin, you'll need to configure the
+`packagesForJavadoc` property to tell it what you want to generate
+javadoc for, and there are options for other things like leaving in debug
+symbols or verbose output. In addition, all the folders are configured as
+properties and can be changed if you have a different folder structure.
 
 ### Ant targets
 
