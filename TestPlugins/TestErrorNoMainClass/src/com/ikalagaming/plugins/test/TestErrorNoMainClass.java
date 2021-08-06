@@ -8,4 +8,4 @@ import com.ikalagaming.plugins.Plugin;
  * @author Ches Burks
  *
  */
-public class TestErrorNoDescription extends Plugin {}
+public class TestErrorNoMainClass extends Plugin {}

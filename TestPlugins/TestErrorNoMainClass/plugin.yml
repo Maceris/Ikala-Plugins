@@ -1,0 +1,4 @@
+name: TestErrorNoMainClass
+version: 0.0.1
+authors: [maceris]
+description: A plugin without a main class

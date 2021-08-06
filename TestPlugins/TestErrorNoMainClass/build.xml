@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="TestErrorNoDescription" default="compile" basedir=".">
+<project name="TestErrorNoMainClass" default="compile" basedir=".">
 	<!-- set global properties for this build -->
 	<property name="src.dir" location="src" />
 	<property name="src.delomboked.dir" location="src-delomboked" />
