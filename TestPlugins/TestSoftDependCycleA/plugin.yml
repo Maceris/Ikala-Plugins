@@ -1,0 +1,6 @@
+name: TestSoftDependCycleA
+version: 0.0.1
+description: A plugin with cyclic soft dependencies
+authors: [maceris]
+main-class: com.ikalagaming.plugins.test.TestSoftDependCycleA
+soft-dependencies: [TestSoftDependCycleB]
