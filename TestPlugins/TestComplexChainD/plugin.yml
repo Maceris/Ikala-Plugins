@@ -1,0 +1,7 @@
+name: TestComplexChainD
+version: 0.0.1
+main-class: com.ikalagaming.plugins.test.TestComplexChainD
+authors: [maceris]
+description: A plugin that has a complex dependency graph
+dependencies: [TestComplexChainC]
+soft-dependencies: [TestComplexChainA]
