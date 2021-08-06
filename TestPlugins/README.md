@@ -72,7 +72,9 @@ TestComplexChainD ==> TestComplexChainC
 
 * `TestErrorInvalidName` - Invalid characters in the name in the plugin config.
 * `TestErrorInvalidVersion` - Invalid version in the name in the plugin config.
+* `TestErrorMainClassType` - Main class does not extend Plugin.
 * `TestErrorNoMainClass` - Missing the required main-class field in the plugin config.
 * `TestErrorNoMainClassFile` - Missing the main class, as in the actual Java file.
 * `TestErrorNoName` - Missing the required name field in the plugin config.
 * `TestErrorNoVersion` - Missing the required version field in the plugin config.
+* `TestErrorNoYml` - Missing the required plugin.yml file.
