@@ -13,7 +13,7 @@ The plugins that exist, and a brief description of why they exist, are below. Fo
 
 ## Standalone
 
-`TestStandalone` is just a plugin that has no dependencies. It should work fine.
+`TestStandalone` is a minimal plugin with no dependencies.
 
 ## Cyclic dependencies
 
@@ -22,6 +22,16 @@ These plugins depend on each other, and use classes from each other at runtime.
 ```
 TestCycleA ==> TestCycleB
 TestCycleB ==> TestCycleA
+```
+
+## Cyclic soft dependencies
+
+These plugins have a soft dependency graph with a loop.
+
+```
+TestSoftDependCycleA --> TestSoftDependCycleB
+TestSoftDependCycleB --> TestSoftDependCycleC
+TestSoftDependCycleC --> TestSoftDependCycleA
 ```
 
 ## Dependencies
@@ -44,9 +54,24 @@ TestSoftDependA --> TestSoftDependB
 TestSoftDependC --> TestSoftDependD
 ```
 
+## Complex dependency resolution
+
+This group of plugins has a complex dependency graph with many cycles.
+
+```
+TestComplexChainA ==> TestComplexChainB
+       ''         --> TestComplexChainC
+TestComplexChainB --> TestComplexChainD
+TestComplexChainC ==> TestComplexChainA
+       ''         --> TestComplexChainD
+TestComplexChainD ==> TestComplexChainC
+       ''         --> TestComplexChainA
+```
+
 ## Error scenarios
 
 * `TestErrorNoName` - Missing the required name field.
 * `TestErrorNoVersion` - Missing the required version field.
-* `TestErrorNoDescription` - Missing the required description field.
+* `TestErrorNoMainClass` - Missing the required main-class field.
+* `TestErrorNoMainClassFile` - Missing the main class, as in the actual Java file.
 
