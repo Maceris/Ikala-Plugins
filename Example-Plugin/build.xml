@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project name="Example-Plugin" default="compileTest" basedir=".">
-	<!-- set global properties for this build -->
+	<!-- configure folder names for the project -->
 	<property name="src.dir" location="src" />
 	<property name="src.delomboked.dir" location="src-delomboked" />
 	<property name="test.dir" location="test" />
@@ -15,7 +15,7 @@
 	<property name="jars.info.dir" location="lib/info" />
 	<property name="jars.test.dir" location="lib/testing" />
 
-	<!-- some configuration -->
+	<!-- other configuration -->
 	<property name="packagesForJavadoc" value="com.ikalagaming.*" />
 	<property name="leavedebugsymbols" value="true" />
 	<property name="verbose" value="false" />
@@ -63,7 +63,6 @@
 	</target>
 
 	<target name="compile" depends="init" description="compile the source">
-		<!-- Compile the java code from ${src.dir} into ${output.src.dir} -->
 		<javac srcdir="${src.dir}" destdir="${output.src.dir}" includeAntRuntime="false" debug="${leavedebugsymbols}" source="${javaVersion}" target="${javaVersion}">
 			<classpath>
 				<fileset dir="${jars.plugins.dir}" includes="*.jar" />
@@ -142,7 +141,6 @@
 	</target>
 
 	<target name="dist" depends="compile,javadoc" description="generate distribution jars">
-		<!-- Create the distribution directory -->
 		<mkdir dir="${dist.dir}" />
 
 		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}.jar" basedir="${output.src.dir}">
