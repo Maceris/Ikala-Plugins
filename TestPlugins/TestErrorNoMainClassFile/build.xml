@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="TestErrorNoMainClassFile" default="compile" basedir=".">
+	<!-- set global properties for this build -->
+	<property name="src.dir" location="src" />
+	<property name="src.delomboked.dir" location="src-delomboked" />
+	<property name="test.dir" location="test" />
+	<property name="output.dir" location="bin" />
+	<property name="output.src.dir" location="${output.dir}/classes" />
+	<property name="dist.dir" location="dist" />
+	<property name="doc.dir" location="javadoc" />
+	<property name="jars.plugins.dir" location="lib/plugins" />
+	<property name="jars.bundled.dir" location="lib/bundled" />
+	<property name="jars.info.dir" location="lib/info" />
+	<property name="jars.test.dir" location="lib/testing" />
+
+	<!-- some configuration -->
+	<property name="packages" value="com.ikalagaming.*" />
+	<property name="leavedebugsymbols" value="true" />
+	<property name="verbose" value="false" />
+	<property name="javaVersion" value="1.8" />
+	<property name="pluginConfig" value="plugin.yml" />
+
+	<!-- Load in the plugin name and version from plugin.yml -->
+	<loadproperties srcFile="${pluginConfig}" prefix="plugin">
+		<filterchain>
+			<linecontains>
+				<contains value="name" />
+			</linecontains>
+		</filterchain>
+	</loadproperties>
+	<loadproperties srcFile="${pluginConfig}" prefix="plugin">
+		<filterchain>
+			<linecontains>
+				<contains value="version" />
+			</linecontains>
+		</filterchain>
+	</loadproperties>
+
+	<target name="init">
+		<!-- Create the build directory structure used by compile -->
+		<mkdir dir="${output.dir}" />
+		<mkdir dir="${output.src.dir}" />
+		<mkdir dir="${src.delomboked.dir}" />
+	</target>
+
+	<target name="delombok" depends="init" description="generates sources from lombok">
+		<taskdef classname="lombok.delombok.ant.Tasks$Delombok" name="delombok">
+			<classpath>
+				<fileset dir="${jars.plugins.dir}" includes="Ikala-Core-*.jar" />
+			</classpath>
+		</taskdef>
+		<delombok verbose="true" encoding="UTF-8" to="${src.delomboked.dir}" from="${src.dir}">
+			<format value="suppressWarnings:skip" />
+			<classpath>
+				<fileset dir="${jars.plugins.dir}" includes="*.jar" />
+				<fileset dir="${jars.bundled.dir}" includes="*.jar" />
+			</classpath>
+		</delombok>
+	</target>
+
+	<target name="compile" depends="init" description="compile the source">
+		<javac srcdir="${src.dir}" destdir="${output.src.dir}" includeAntRuntime="false" debug="${leavedebugsymbols}" source="${javaVersion}" target="${javaVersion}">
+			<classpath>
+				<fileset dir="${jars.plugins.dir}" includes="*.jar" />
+				<fileset dir="${jars.bundled.dir}" includes="*.jar" />
+			</classpath>
+		</javac>
+		<copy verbose="${verbose}" todir="${output.src.dir}" preservelastmodified="false">
+			<fileset dir=".">
+				<include name="${pluginConfig}" />
+			</fileset>
+		</copy>
+		<copy verbose="${verbose}" todir="${output.src.dir}" preservelastmodified="false">
+			<fileset dir="${src.dir}">
+				<include name="**/*.properties" />
+			</fileset>
+		</copy>
+	</target>
+
+	<target name="dist" depends="compile" description="generate distribution jars">
+		<mkdir dir="${dist.dir}" />
+		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}.jar" basedir="${output.src.dir}">
+			<zipgroupfileset dir="${jars.bundled.dir}" includes="*.jar" />
+		</jar>
+	</target>
+
+	<target name="clean" description="clean up">
+		<!-- Delete the generated directory trees -->
+		<delete dir="${output.dir}" />
+		<delete dir="${dist.dir}" />
+		<delete dir="${src.delomboked.dir}" />
+	</target>
+</project>

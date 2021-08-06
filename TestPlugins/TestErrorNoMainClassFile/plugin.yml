@@ -1,0 +1,5 @@
+name: TestErrorNoMainClassFile
+version: 0.0.1
+description: A simple plugin with no dependencies
+authors: [maceris]
+main-class: com.ikalagaming.plugins.test.Missing
