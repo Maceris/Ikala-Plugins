@@ -5,6 +5,8 @@ import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 
 import lombok.CustomLog;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -25,14 +27,21 @@ public class GraphicsPlugin extends Plugin {
 	 * The name of the plugin.
 	 */
 	static final String NAME = "Ikala-Graphics";
-	private GraphicsState state;
 	private ControlListener ctrl;
 	private Set<Listener> listeners;
+	/**
+	 * The resource bundle for the Graphics plugin.
+	 * 
+	 * @return The bundle.
+	 * @param resourceBundle The new bundle to use.
+	 */
+	@Getter
+	@Setter
 	private ResourceBundle resourceBundle;
 
 	private ControlListener getCtrl() {
 		if (this.ctrl == null) {
-			this.ctrl = new ControlListener(this);
+			this.ctrl = new ControlListener();
 		}
 		return this.ctrl;
 	}
@@ -50,31 +59,9 @@ public class GraphicsPlugin extends Plugin {
 
 	@Override
 	public boolean onDisable() {
-		this.state = null;
-		if (this.ctrl != null) {
-			this.ctrl.shutdown();
-		}
+		GraphicsManager.destroyAllWindows();
+		GraphicsManager.terminate();
 		return true;
-	}
-
-	@Override
-	public boolean onEnable() {
-		this.state = new GraphicsState();
-		this.getCtrl().setState(this.state);
-		return true;
-	}
-
-	/**
-	 * Returns the resource bundle for this console
-	 *
-	 * @return the resource bundle
-	 */
-	ResourceBundle getResourceBundle() {
-		return this.resourceBundle;
-	}
-
-	private void setResourceBundle(ResourceBundle newBundle) {
-		this.resourceBundle = newBundle;
 	}
 
 	@Override
@@ -88,11 +75,13 @@ public class GraphicsPlugin extends Plugin {
 			// don't localize this since it would fail anyways
 			log.warning("Locale not found for Ikala-Graphics in onLoad()");
 		}
+		GraphicsManager.setPlugin(this);
 		return true;
 	}
 
 	@Override
 	public boolean onUnload() {
+		GraphicsManager.setPlugin(null);
 		this.ctrl = null;
 		this.setResourceBundle(null);
 		return true;
