@@ -6,7 +6,6 @@ import com.ikalagaming.gui.console.events.ConsoleCommandEntered;
 import com.ikalagaming.gui.console.events.ConsoleMessage;
 import com.ikalagaming.gui.console.events.ReportUnknownCommand;
 import com.ikalagaming.plugins.Plugin;
-import com.ikalagaming.plugins.PluginCommand;
 import com.ikalagaming.plugins.PluginInfo;
 import com.ikalagaming.plugins.PluginManager;
 import com.ikalagaming.plugins.events.PluginCommandSent;
@@ -14,10 +13,6 @@ import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.CustomLog;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -40,38 +35,6 @@ class PMEventListener implements Listener {
 	public PMEventListener(ConsolePlugin parent) {
 		this.parent = parent;
 		this.manager = PluginManager.getInstance();
-	}
-
-	private void cbPrintHelp(@SuppressWarnings("unused") String[] args) {
-		List<PluginCommand> commands;
-		commands = this.manager.getCommands();
-		for (PluginCommand cmd : commands) {
-			new ConsoleMessage(cmd.getCommand()).fire();
-		}
-	}
-
-	private void cbPrintPlugins(@SuppressWarnings("unused") String[] args) {
-		String tmp;
-		Map<String, Plugin> loadedPlugins = this.manager.getLoadedPlugins();
-		ArrayList<String> names = new ArrayList<>();
-		names.addAll(loadedPlugins.keySet());
-		Collections.sort(names);
-
-		for (String name : names) {
-			tmp = "";
-			tmp += this.manager.getInfo(name).get().getFullName();
-			if (this.manager.isEnabled(name)) {
-				tmp +=
-					" " + "(" + SafeResourceLoader.getString("ENABLED_STATUS",
-						this.manager.getResourceBundle()) + ")";
-			}
-			else {
-				tmp +=
-					" " + "(" + SafeResourceLoader.getString("DISABLED_STATUS",
-						this.manager.getResourceBundle()) + ")";
-			}
-			new ConsoleMessage(tmp).fire();
-		}
 	}
 
 	/**
@@ -155,14 +118,6 @@ class PMEventListener implements Listener {
 	 * Load the commands from the resource files.
 	 */
 	void setCommands() {
-		this.manager.registerCommand(
-			SafeResourceLoader.getString("COMMAND_HELP",
-				this.parent.getResourceBundle()),
-			this::cbPrintHelp, ConsolePlugin.PLUGIN_NAME);
-		this.manager.registerCommand(
-			SafeResourceLoader.getString("COMMAND_LIST_PLUGINS",
-				this.parent.getResourceBundle()),
-			this::cbPrintPlugins, ConsolePlugin.PLUGIN_NAME);
 		this.manager.registerCommand(
 			SafeResourceLoader.getString("COMMAND_VERSION",
 				this.parent.getResourceBundle()),
