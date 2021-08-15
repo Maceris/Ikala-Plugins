@@ -39,9 +39,9 @@ TestSoftDependCycleC --> TestSoftDependCycleA
 These classes test the dependency resolution and load order.
 
 ```
-TestDependA --> TestDependB
-    ''      --> TestDependC
-TestDependC --> TestDependD
+TestDependA ==> TestDependB
+    ''      ==> TestDependC
+TestDependC ==> TestDependD
 ```
 
 ## Soft dependencies
