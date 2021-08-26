@@ -6,6 +6,10 @@ Plugins for the Ikala Engine.
 
 Each plugin will likely have it's own README, but below are high level descriptions of what each is.
 
+### EntityComponentSystem
+
+Provides a framework for the Entity Component System pattern.
+
 ### Example-Plugin
 
 An example plugin, set up and ready to build. This can be used as a framework to start building your own plugins.
@@ -17,6 +21,10 @@ A simple Swing console that can be used to see logs and execute commands.
 ### Ikala-Graphics
 
 Proivides utilities for graphics, using LWJGL.
+
+### Random
+
+Provides random generation utilities.
 
 ### TestPlugins
 
