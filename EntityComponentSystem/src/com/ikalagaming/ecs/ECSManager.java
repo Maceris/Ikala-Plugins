@@ -156,19 +156,57 @@ public class ECSManager {
 	}
 
 	/**
-	 * Return a list of all entity ID's that contain the given type of
-	 * component.
+	 * Return a list of all entity ID's that contain all the given types of
+	 * components.
 	 *
-	 * @param <T> The type of component we are looking for.
-	 * @param type The type of component we are looking for.
+	 * @param types The types of component we are looking for.
 	 * @return The list of unique ID's for entities that contain the given
 	 *         component. May be empty.
 	 */
-	public static <T extends Component<?>> List<UUID>
-		getAllEntitiesWithComponent(@NonNull Class<T> type) {
-		List<T> components = ECSManager.getAllComponents(type);
-		return components.stream().map(Component::getParentID)
+	@SafeVarargs
+	public static List<UUID> getAllEntitiesWithComponent(
+		final @NonNull Class<? extends Component<?>>... types) {
+		for (Class<?> type : types) {
+			if (type == null) {
+				throw new NullPointerException("null parameter passed in");
+			}
+		}
+		if (types.length == 0) {
+			return new ArrayList<>();
+		}
+
+		Class<?> firstType = types[0];
+		List<? extends Component<?>> components =
+			ECSManager.componentsMap.get(firstType);
+		if (components == null) {
+			// we don't have anything with that component
+			return new ArrayList<>();
+		}
+
+		List<UUID> values = components.stream().map(Component::getParentID)
 			.collect(Collectors.toList());
+
+		if (types.length == 1) {
+			return values;
+		}
+		boolean skipOne = true;
+		for (Class<? extends Component<?>> type : types) {
+			if (skipOne) {
+				// we already looked at the first list, skip one item
+				skipOne = false;
+				continue;
+			}
+			List<? extends Component<?>> tempComponents =
+				ECSManager.componentsMap.get(type);
+			if (tempComponents == null) {
+				// we don't have anything with that component
+				return new ArrayList<>();
+			}
+			List<UUID> tempIDs = tempComponents.stream()
+				.map(Component::getParentID).collect(Collectors.toList());
+			values.removeIf(uuid -> !tempIDs.contains(uuid));
+		}
+		return values;
 	}
 
 	/**
