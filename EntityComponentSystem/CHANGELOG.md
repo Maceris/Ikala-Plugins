@@ -6,9 +6,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.0.1] - 2021-08-05
 ### Added
-- Example Plugin class with logger
-- Lombok config
-- Example event listener
-- Example JUnit 5 test
-- Standardized build XML
-- Standardized library folder structure
+- Component class
+- Entity-Component-Service management class
