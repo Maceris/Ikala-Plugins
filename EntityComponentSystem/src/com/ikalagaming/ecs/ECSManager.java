@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Handles tracking and management of Entities, Components, and Systems.
@@ -53,6 +54,35 @@ public class ECSManager {
 
 		component.setParentID(entityID);
 		entity.put(component.getActualClass(), component);
+	}
+
+	/**
+	 * Delete everything, all entities and components tracked by the system.
+	 */
+	public static void clear() {
+		ECSManager.componentsMap.forEach((clazz, list) -> list.clear());
+		ECSManager.componentsMap.clear();
+		ECSManager.entityMap.forEach((id, map) -> map.clear());
+		ECSManager.entityMap.clear();
+	}
+
+	/**
+	 * Checks if an entity contains a specific component.
+	 *
+	 * @param <T> The type of the component to fetch.
+	 * @param entityID The unique entity ID.
+	 * @param type The class of the component we are looking for.
+	 * @return True if the entity has a component of the given type, false if
+	 *         the entity is not found or does not have the component.
+	 */
+	public static <T extends Component<?>> boolean
+		containsComponent(@NonNull UUID entityID, @NonNull Class<T> type) {
+		Map<Class<? extends Component<?>>, Component<?>> components =
+			ECSManager.entityMap.get(entityID);
+		if (components == null) {
+			return false;
+		}
+		return components.containsKey(type);
 	}
 
 	/**
@@ -103,6 +133,42 @@ public class ECSManager {
 		}
 		ECSManager.entityMap.remove(entityID);
 
+	}
+
+	/**
+	 * Return a list of all of the components of a given type.
+	 *
+	 * @param <T> The type of component we are looking for.
+	 * @param type The class of components we are interested in.
+	 * @return A list of all components with that given type, which may be
+	 *         empty.
+	 */
+	public static <T extends Component<?>> List<T>
+		getAllComponents(@NonNull Class<T> type) {
+		List<?> output = ECSManager.componentsMap.get(type);
+		if (output == null) {
+			return new ArrayList<>();
+		}
+		// we know the type, that's how it's stored.
+		@SuppressWarnings("unchecked")
+		List<T> cast = (List<T>) output;
+		return cast;
+	}
+
+	/**
+	 * Return a list of all entity ID's that contain the given type of
+	 * component.
+	 *
+	 * @param <T> The type of component we are looking for.
+	 * @param type The type of component we are looking for.
+	 * @return The list of unique ID's for entities that contain the given
+	 *         component. May be empty.
+	 */
+	public static <T extends Component<?>> List<UUID>
+		getAllEntitiesWithComponent(@NonNull Class<T> type) {
+		List<T> components = ECSManager.getAllComponents(type);
+		return components.stream().map(Component::getParentID)
+			.collect(Collectors.toList());
 	}
 
 	/**
