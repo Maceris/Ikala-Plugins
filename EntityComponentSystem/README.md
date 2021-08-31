@@ -18,6 +18,11 @@ Some examples of things that components might store:
 * World coordinates for physics simulations
 * Graphics information for rendering the entity
 
+### Creating your own
+
+You can create your own component by creating a subclass of Component. Due to a workaround of Java's type erasure, you'll have to supply its own class as a type parameter, so creating a new class will look like this:
+`public class SampleComponent extends Component<SampleComponent>`.
+
 ## System
 
 Systems perform actions on entities that have relevant components. They could be independent services or 
