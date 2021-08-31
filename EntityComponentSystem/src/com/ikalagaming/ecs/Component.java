@@ -69,7 +69,7 @@ public abstract class Component<T extends Component<?>>
 	 *
 	 * @return The Component class it should be.
 	 */
-	public Class<T> getActualClass() {
+	public Class<T> getOriginalClass() {
 		@SuppressWarnings("unchecked")
 		Class<T> persistentClass = (Class<T>) ((ParameterizedType) this
 			.getClass().getGenericSuperclass()).getActualTypeArguments()[0];

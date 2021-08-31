@@ -38,7 +38,7 @@ public class ECSManager {
 		addComponent(@NonNull UUID entityID, @NonNull Component<T> component) {
 
 		List<Component<?>> components =
-			ECSManager.componentsMap.computeIfAbsent(component.getActualClass(),
+			ECSManager.componentsMap.computeIfAbsent(component.getOriginalClass(),
 				clazz -> new ArrayList<>());
 
 		if (!components.contains(component)) {
@@ -46,14 +46,14 @@ public class ECSManager {
 		}
 		component.referenceCount++;
 
-		ECSManager.componentsMap.get(component.getActualClass()).add(component);
+		ECSManager.componentsMap.get(component.getOriginalClass()).add(component);
 
 		Map<Class<? extends Component<?>>, Component<?>> entity =
 			ECSManager.entityMap.computeIfAbsent(entityID,
 				id -> new HashMap<>());
 
 		component.setParentID(entityID);
-		entity.put(component.getActualClass(), component);
+		entity.put(component.getOriginalClass(), component);
 	}
 
 	/**
