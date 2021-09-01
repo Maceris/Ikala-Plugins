@@ -95,7 +95,8 @@ public class RandomGen {
 
 	/**
 	 * Normalize an array of doubles, so that they are all in the range [0, 1],
-	 * and also they all add up to 1, or at least extremely close.
+	 * and also they all add up to 1, or at least extremely close. Also makes
+	 * the values positive.
 	 *
 	 * @param values The values to normalize, this is modified.
 	 */
@@ -108,6 +109,9 @@ public class RandomGen {
 			double value = values[i];
 			if (value <= 0 || Double.isNaN(value) || Double.isInfinite(value)) {
 				values[i] = 0;
+			}
+			if (values[i] < 0) {
+				values[i] = -values[i];
 			}
 			total += values[i];
 		}
@@ -184,8 +188,10 @@ public class RandomGen {
 	 * provided weight. Does not guarantee it is exactly the max weight, but
 	 * tries to get close and does not go over.
 	 *
-	 * @param weights The weights of each index.
-	 * @param maxWeight The max weight we can have total.
+	 * @param weights The weights of each index. The absolute value will be used
+	 *            for negative weights.
+	 * @param maxWeight The max weight we can have total. Must be positive if
+	 *            you want any selections.
 	 * @return The list of choices, where each choice is the index in the
 	 *         supplied weights list. May be empty depending on inputs.
 	 */
@@ -220,7 +226,7 @@ public class RandomGen {
 			}
 			WeightEntry selection =
 				validChoices.get(RandomGen.random.nextInt(size));
-			remainingWeight -= selection.getWeight();
+			remainingWeight -= Math.abs(selection.getWeight());
 			selections.add(selection.getIndex());
 		}
 
