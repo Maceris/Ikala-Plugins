@@ -95,7 +95,7 @@ class PMEventListener implements Listener {
 	@EventHandler
 	public void onConsoleCommandEntered(ConsoleCommandEntered event) {
 		String firstWord = event.getCommand().trim().split("\\s+")[0];
-		if (!this.manager.containsCommand(firstWord)) {
+		if (!this.manager.isCommandRegistered(firstWord)) {
 			new ReportUnknownCommand(firstWord).fire();
 		}
 
