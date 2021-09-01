@@ -2,10 +2,13 @@ package com.ikalagaming.random;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NonNull;
 
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.SplittableRandom;
 
 /**
@@ -21,6 +24,19 @@ public class RandomGen {
 	private static class Interval {
 		private double start;
 		private double end;
+	}
+
+	/**
+	 * Used for selecting items from a list up to a certain weight.
+	 *
+	 * @author Ches Burks
+	 * @see RandomGen#selectUpToWeight(int[], int)
+	 */
+	@AllArgsConstructor
+	@Getter
+	private static class WeightEntry {
+		private int index;
+		private int weight;
 	}
 
 	private static SplittableRandom random;
@@ -117,9 +133,9 @@ public class RandomGen {
 	 *            will be returned.
 	 * @return The list of selections, in the order they were made.
 	 */
-	public int[] selectFromWeightedList(final double[] weights,
+	public int[] selectFromWeightedList(@NonNull final double[] weights,
 		final int count) {
-		if (count <= 0) {
+		if (count <= 0 || weights.length == 0) {
 			return new int[0];
 		}
 		double[] normalizedWeights = new double[weights.length];
@@ -161,6 +177,59 @@ public class RandomGen {
 				}
 				return 0;
 			});
+	}
+
+	/**
+	 * Given a list of weights, selects items at random up to the maximum
+	 * provided weight. Does not guarantee it is exactly the max weight, but
+	 * tries to get close and does not go over.
+	 *
+	 * @param weights The weights of each index.
+	 * @param maxWeight The max weight we can have total.
+	 * @return The list of choices, where each choice is the index in the
+	 *         supplied weights list. May be empty depending on inputs.
+	 */
+	public int[] selectUpToWeight(@NonNull final int[] weights,
+		final int maxWeight) {
+		if (maxWeight <= 0 || weights.length == 0) {
+			return new int[0];
+		}
+
+		int remainingWeight = maxWeight;
+
+		List<WeightEntry> validChoices = new ArrayList<>();
+		List<Integer> selections = new ArrayList<>();
+
+		for (int i = 0; i < weights.length; ++i) {
+			validChoices.add(new WeightEntry(i, weights[i]));
+		}
+		while (remainingWeight > 0) {
+			/*
+			 * Java complains that the weight is not effectively final, even
+			 * though the lambda does not modify it. Annoying workaround.
+			 */
+			final int weightBecauseLambdas = remainingWeight;
+
+			// get rid of any values that are too expensive to select
+			validChoices
+				.removeIf(entry -> entry.getWeight() > weightBecauseLambdas);
+			// if we can't make any more valid choices, then bail
+			int size = validChoices.size();
+			if (size == 0) {
+				break;
+			}
+			WeightEntry selection =
+				validChoices.get(RandomGen.random.nextInt(size));
+			remainingWeight -= selection.getWeight();
+			selections.add(selection.getIndex());
+		}
+
+		int[] values = new int[selections.size()];
+
+		for (int i = 0; i < selections.size(); ++i) {
+			values[i] = selections.get(i);
+		}
+		return values;
 	}
 
 }
