@@ -89,4 +89,29 @@ public class TestRandomGen {
 		}
 	}
 
+	/**
+	 * Test the method {@link RandomGen#selectFromWeightedList(double[], int)}
+	 * handles weird inputs correctly.
+	 */
+	@Test
+	public void testWeightedListSelectionErrors() {
+		RandomGen generator = new RandomGen();
+
+		Assert.assertThrows(NullPointerException.class,
+			() -> generator.selectFromWeightedList(null, 10));
+
+		int[] selections = generator.selectFromWeightedList(new double[0], 10);
+		Assert.assertNotNull(selections);
+		Assert.assertEquals(0, selections.length);
+
+		double[] weights = {1};
+		selections = generator.selectFromWeightedList(weights, 0);
+		Assert.assertNotNull(selections);
+		Assert.assertEquals(0, selections.length);
+
+		selections = generator.selectFromWeightedList(weights, -1);
+		Assert.assertNotNull(selections);
+		Assert.assertEquals(0, selections.length);
+	}
+
 }
