@@ -59,6 +59,54 @@ public class TestRandomGen {
 	}
 
 	/**
+	 * Tests the {@link RandomGen#selectUpToWeight(int[], int)} method.
+	 */
+	@Test
+	public void testSelectUpToWeight() {
+		int[] weights = new int[100];
+		SplittableRandom rand = new SplittableRandom();
+		for (int i = 0; i < weights.length; ++i) {
+			weights[i] = rand.nextInt();
+		}
+
+		final int requestedTotal = 5000;
+		RandomGen generator = new RandomGen();
+		int[] selections = generator.selectUpToWeight(weights, requestedTotal);
+
+		int total = 0;
+		for (int i = 0; i < selections.length; ++i) {
+			total += selections[i];
+		}
+		Assert.assertTrue(total < requestedTotal);
+	}
+
+	/**
+	 * Tests the {@link RandomGen#selectUpToWeight(int[], int)} methods error
+	 * scenarios.
+	 */
+	@Test
+	public void testSelectUpToWeightErrors() {
+		RandomGen generator = new RandomGen();
+
+		Assert.assertThrows(NullPointerException.class,
+			() -> generator.selectUpToWeight(null, 10));
+
+		int[] selections = generator.selectUpToWeight(new int[0], 10);
+		Assert.assertNotNull(selections);
+		Assert.assertEquals(0, selections.length);
+
+		int[] weights = {1};
+		selections = generator.selectUpToWeight(weights, 0);
+		Assert.assertNotNull(selections);
+		Assert.assertEquals(0, selections.length);
+
+		selections = generator.selectUpToWeight(weights, -1);
+		Assert.assertNotNull(selections);
+		Assert.assertEquals(0, selections.length);
+
+	}
+
+	/**
 	 * Test the distribution of
 	 * {@link RandomGen#selectFromWeightedList(double[], int)} matches what it
 	 * should be.
