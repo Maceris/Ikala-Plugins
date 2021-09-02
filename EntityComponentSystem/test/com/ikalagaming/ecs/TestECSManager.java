@@ -26,6 +26,57 @@ public class TestECSManager {
 	}
 
 	/**
+	 * Test that the clear method really clears everything.
+	 */
+	@Test
+	public void testClear() {
+		UUID entity1 = ECSManager.createEntity();
+		UUID entity2 = ECSManager.createEntity();
+		ECSManager.createEntity();
+
+		TestA a1 = new TestA();
+		a1.setTestInt(3);
+		TestA a2 = new TestA();
+		a2.setTestInt(5);
+		TestB b1 = new TestB();
+		b1.setTestString("Example");
+
+		ECSManager.addComponent(entity1, a1);
+		ECSManager.addComponent(entity1, b1);
+		ECSManager.addComponent(entity2, a2);
+
+		ECSManager.clear();
+
+		List<UUID> entities = ECSManager.getAllEntities();
+		Assert.assertNotNull(entities);
+		Assert.assertTrue(entities.isEmpty());
+
+		List<TestA> aComponents = ECSManager.getAllComponents(TestA.class);
+		Assert.assertNotNull(aComponents);
+		Assert.assertTrue(aComponents.isEmpty());
+		List<TestB> bComponents = ECSManager.getAllComponents(TestB.class);
+		Assert.assertNotNull(bComponents);
+		Assert.assertTrue(bComponents.isEmpty());
+
+		List<UUID> aEntities =
+			ECSManager.getAllEntitiesWithComponent(TestA.class);
+		Assert.assertNotNull(aEntities);
+		Assert.assertTrue(aEntities.isEmpty());
+		List<UUID> bEntities =
+			ECSManager.getAllEntitiesWithComponent(TestB.class);
+		Assert.assertNotNull(bEntities);
+		Assert.assertTrue(bEntities.isEmpty());
+
+		Assert.assertFalse(
+			ECSManager.getComponent(entity1, TestA.class).isPresent());
+		Assert.assertFalse(
+			ECSManager.getComponent(entity1, TestB.class).isPresent());
+		Assert.assertFalse(
+			ECSManager.getComponent(entity2, TestA.class).isPresent());
+
+	}
+
+	/**
 	 * Test that components can be stored and retrieved.
 	 */
 	@Test
