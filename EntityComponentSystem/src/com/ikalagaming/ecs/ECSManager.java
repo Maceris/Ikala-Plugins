@@ -165,6 +165,16 @@ public class ECSManager {
 	}
 
 	/**
+	 * Generates a list of all entities that currently exist.
+	 *
+	 * @return A list of all unique IDs for current entities.
+	 */
+	@Synchronized
+	public static List<UUID> getAllEntities() {
+		return new ArrayList<>(entityMap.keySet());
+	}
+
+	/**
 	 * Return a list of all entity ID's that contain all the given types of
 	 * components.
 	 *
