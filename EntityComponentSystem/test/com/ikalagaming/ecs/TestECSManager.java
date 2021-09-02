@@ -58,6 +58,37 @@ public class TestECSManager {
 	}
 
 	/**
+	 * Tests the {@link ECSManager#containsComponent(UUID, Class)} method.
+	 */
+	@Test
+	public void testContainsComponent() {
+		UUID hasA = ECSManager.createEntity();
+		UUID hasBoth = ECSManager.createEntity();
+		UUID hasB = ECSManager.createEntity();
+		UUID hasNone = ECSManager.createEntity();
+
+		TestA a1 = new TestA();
+		TestA a2 = new TestA();
+		TestB b1 = new TestB();
+		TestB b2 = new TestB();
+
+		ECSManager.addComponent(hasA, a1);
+		ECSManager.addComponent(hasBoth, a2);
+		ECSManager.addComponent(hasBoth, b1);
+		ECSManager.addComponent(hasB, b2);
+
+		Assert.assertTrue(ECSManager.containsComponent(hasA, TestA.class));
+		Assert.assertTrue(ECSManager.containsComponent(hasBoth, TestA.class));
+		Assert.assertTrue(ECSManager.containsComponent(hasBoth, TestB.class));
+		Assert.assertTrue(ECSManager.containsComponent(hasB, TestB.class));
+
+		Assert.assertFalse(ECSManager.containsComponent(hasA, TestB.class));
+		Assert.assertFalse(ECSManager.containsComponent(hasB, TestA.class));
+		Assert.assertFalse(ECSManager.containsComponent(hasNone, TestA.class));
+		Assert.assertFalse(ECSManager.containsComponent(hasNone, TestB.class));
+	}
+
+	/**
 	 * Test that deleting entities works.
 	 */
 	@Test
