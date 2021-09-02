@@ -58,6 +58,8 @@ public class ECSManager {
 
 	/**
 	 * Delete everything, all entities and components tracked by the system.
+	 * Does not do anything to the actual contents of components, only
+	 * dereferences the component.
 	 */
 	@Synchronized
 	public static void clear() {
