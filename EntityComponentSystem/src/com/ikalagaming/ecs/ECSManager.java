@@ -1,6 +1,7 @@
 package com.ikalagaming.ecs;
 
 import lombok.NonNull;
+import lombok.Synchronized;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -34,19 +35,21 @@ public class ECSManager {
 	 * @param entityID The unique ID of the entity we are adding a component to.
 	 * @param component The component to add.
 	 */
+	@Synchronized
 	public static <T extends Component<?>> void
 		addComponent(@NonNull UUID entityID, @NonNull Component<T> component) {
 
 		List<Component<?>> components =
-			ECSManager.componentsMap.computeIfAbsent(component.getOriginalClass(),
-				clazz -> new ArrayList<>());
+			ECSManager.componentsMap.computeIfAbsent(
+				component.getOriginalClass(), clazz -> new ArrayList<>());
 
 		if (!components.contains(component)) {
 			components.add(component);
 		}
 		component.referenceCount++;
 
-		ECSManager.componentsMap.get(component.getOriginalClass()).add(component);
+		ECSManager.componentsMap.get(component.getOriginalClass())
+			.add(component);
 
 		Map<Class<? extends Component<?>>, Component<?>> entity =
 			ECSManager.entityMap.computeIfAbsent(entityID,
@@ -59,6 +62,7 @@ public class ECSManager {
 	/**
 	 * Delete everything, all entities and components tracked by the system.
 	 */
+	@Synchronized
 	public static void clear() {
 		ECSManager.componentsMap.forEach((clazz, list) -> list.clear());
 		ECSManager.componentsMap.clear();
@@ -75,6 +79,7 @@ public class ECSManager {
 	 * @return True if the entity has a component of the given type, false if
 	 *         the entity is not found or does not have the component.
 	 */
+	@Synchronized
 	public static <T extends Component<?>> boolean
 		containsComponent(@NonNull UUID entityID, @NonNull Class<T> type) {
 		Map<Class<? extends Component<?>>, Component<?>> components =
@@ -90,6 +95,7 @@ public class ECSManager {
 	 *
 	 * @return The entity's unique ID.
 	 */
+	@Synchronized
 	public static UUID createEntity() {
 		UUID uniqueID = UUID.randomUUID();
 		ECSManager.entityMap.put(uniqueID, new HashMap<>());
@@ -103,6 +109,7 @@ public class ECSManager {
 	 * @param type The type of component to remove.
 	 * @param component The actual component to delete.
 	 */
+	@Synchronized
 	private static void deleteFromComponents(Class<?> type,
 		Component<?> component) {
 		List<Component<?>> list = ECSManager.componentsMap.get(type);
@@ -119,6 +126,7 @@ public class ECSManager {
 	 *
 	 * @param entityID The unique ID of the entity to delete.
 	 */
+	@Synchronized
 	public static void destroyEntity(UUID entityID) {
 		Map<Class<? extends Component<?>>, Component<?>> entity =
 			ECSManager.entityMap.get(entityID);
@@ -143,6 +151,7 @@ public class ECSManager {
 	 * @return A list of all components with that given type, which may be
 	 *         empty.
 	 */
+	@Synchronized
 	public static <T extends Component<?>> List<T>
 		getAllComponents(@NonNull Class<T> type) {
 		List<?> output = ECSManager.componentsMap.get(type);
@@ -164,6 +173,7 @@ public class ECSManager {
 	 *         component. May be empty.
 	 */
 	@SafeVarargs
+	@Synchronized
 	public static List<UUID> getAllEntitiesWithComponent(
 		final @NonNull Class<? extends Component<?>>... types) {
 		for (Class<?> type : types) {
@@ -218,6 +228,7 @@ public class ECSManager {
 	 * @return The component of that class, or an empty optional if the entity
 	 *         entity does not exist or does not have that component.
 	 */
+	@Synchronized
 	public static <T extends Component<?>> Optional<T>
 		getComponent(@NonNull UUID entityID, @NonNull Class<T> type) {
 		Map<Class<? extends Component<?>>, Component<?>> components =
@@ -242,6 +253,7 @@ public class ECSManager {
 	 * @param entityID The unique entity ID.
 	 * @param type The class of the component we are looking for.
 	 */
+	@Synchronized
 	public static <T extends Component<?>> void
 		removeComponent(@NonNull UUID entityID, @NonNull Class<T> type) {
 		Map<Class<? extends Component<?>>, Component<?>> components =
