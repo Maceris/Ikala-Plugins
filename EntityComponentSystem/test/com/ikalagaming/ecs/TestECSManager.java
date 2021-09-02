@@ -282,4 +282,68 @@ public class TestECSManager {
 		Assert.assertFalse(withAB.contains(hasNone));
 	}
 
+	/**
+	 * Test the removal of components.
+	 */
+	@Test
+	public void testRemoveComponent() {
+		UUID entity1 = ECSManager.createEntity();
+		UUID entity2 = ECSManager.createEntity();
+
+		TestA a1 = new TestA();
+		a1.setTestInt(3);
+		TestB b1 = new TestB();
+		b1.setTestString("Example");
+
+		ECSManager.addComponent(entity1, a1);
+		ECSManager.addComponent(entity2, b1);
+
+		Assert.assertTrue(ECSManager.containsComponent(entity1, TestA.class));
+		ECSManager.removeComponent(entity1, TestA.class);
+		Assert.assertFalse(ECSManager.containsComponent(entity1, TestA.class));
+		Assert.assertFalse(
+			ECSManager.getComponent(entity1, TestA.class).isPresent());
+
+		List<TestA> empty = ECSManager.getAllComponents(TestA.class);
+		Assert.assertNotNull(empty);
+		Assert.assertTrue(empty.isEmpty());
+
+		List<UUID> entities =
+			ECSManager.getAllEntitiesWithComponent(TestA.class);
+		Assert.assertNotNull(entities);
+		Assert.assertTrue(entities.isEmpty());
+
+		// does not affect B
+		List<TestB> notEmpty = ECSManager.getAllComponents(TestB.class);
+		Assert.assertNotNull(notEmpty);
+		Assert.assertFalse(notEmpty.isEmpty());
+
+		entities = ECSManager.getAllEntitiesWithComponent(TestB.class);
+		Assert.assertNotNull(entities);
+		Assert.assertFalse(entities.isEmpty());
+	}
+
+	/**
+	 * Handle edge cases for removing components.
+	 */
+	@Test
+	public void testRemoveComponentEdgeCases() {
+		// No exceptions should occur
+		ECSManager.removeComponent(UUID.randomUUID(), TestA.class);
+
+		UUID entity1 = ECSManager.createEntity();
+		TestA a1 = new TestA();
+
+		ECSManager.addComponent(entity1, a1);
+		Assert.assertTrue(ECSManager.containsComponent(entity1, TestA.class));
+
+		// Remove twice
+		ECSManager.removeComponent(entity1, TestA.class);
+		ECSManager.removeComponent(entity1, TestA.class);
+
+		Assert.assertFalse(ECSManager.containsComponent(entity1, TestA.class));
+		Assert.assertFalse(
+			ECSManager.getComponent(entity1, TestA.class).isPresent());
+	}
+
 }
