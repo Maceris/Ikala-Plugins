@@ -136,6 +136,7 @@ public class RandomGen {
 	 * @param count The number of selections to make. If <= 0, an empty list
 	 *            will be returned.
 	 * @return The list of selections, in the order they were made.
+	 * @see #selectFromWeightedList(List, int)
 	 */
 	public int[] selectFromWeightedList(@NonNull final double[] weights,
 		final int count) {
@@ -184,6 +185,42 @@ public class RandomGen {
 	}
 
 	/**
+	 * Select weighted random values, given the list of relative weight for each
+	 * index. For example, an item with weight 2 would be twice as likely to be
+	 * selected as one with weight 1. <br>
+	 * No real constraints on the values, as it will be normalized, although
+	 * note that weird values like NaN or Infinity count as 0.
+	 *
+	 * @param weights The weights of each index.
+	 * @param count The number of selections to make. If <= 0, an empty list
+	 *            will be returned.
+	 * @return The list of selections, in the order they were made.
+	 * @see #selectFromWeightedList(double[], int)
+	 */
+	public List<Integer> selectFromWeightedList(
+		@NonNull final List<Double> weights, final int count) {
+		if (count <= 0 || weights.isEmpty()) {
+			return new ArrayList<>();
+		}
+		double[] normalizedWeights = new double[weights.size()];
+
+		for (int i = 0; i < weights.size(); ++i) {
+			normalizedWeights[i] = weights.get(i);
+		}
+		this.normalize(normalizedWeights);
+
+		double[] cdf = this.generateCDF(normalizedWeights);
+		Interval[] intervals = this.calculateIntervals(cdf);
+
+		List<Integer> selections = new ArrayList<>(count);
+
+		for (int i = 0; i < count; ++i) {
+			selections.add(this.selectFromWeightedList(intervals));
+		}
+		return selections;
+	}
+
+	/**
 	 * Given a list of weights, selects items at random up to the maximum
 	 * provided weight. Does not guarantee it is exactly the max weight, but
 	 * tries to get close and does not go over.
@@ -194,6 +231,7 @@ public class RandomGen {
 	 *            you want any selections.
 	 * @return The list of choices, where each choice is the index in the
 	 *         supplied weights list. May be empty depending on inputs.
+	 * @see #selectUpToWeight(List, int)
 	 */
 	public int[] selectUpToWeight(@NonNull final int[] weights,
 		final int maxWeight) {
@@ -236,6 +274,57 @@ public class RandomGen {
 			values[i] = selections.get(i);
 		}
 		return values;
+	}
+
+	/**
+	 * Given a list of weights, selects items at random up to the maximum
+	 * provided weight. Does not guarantee it is exactly the max weight, but
+	 * tries to get close and does not go over.
+	 *
+	 * @param weights The weights of each index. The absolute value will be used
+	 *            for negative weights.
+	 * @param maxWeight The max weight we can have total. Must be positive if
+	 *            you want any selections.
+	 * @return The list of choices, where each choice is the index in the
+	 *         supplied weights list. May be empty depending on inputs.
+	 * @see #selectUpToWeight(int[], int)
+	 */
+	public List<Integer> selectUpToWeight(@NonNull final List<Integer> weights,
+		final int maxWeight) {
+		if (maxWeight <= 0 || weights.isEmpty()) {
+			return new ArrayList<>();
+		}
+
+		int remainingWeight = maxWeight;
+
+		List<WeightEntry> validChoices = new ArrayList<>();
+		List<Integer> selections = new ArrayList<>();
+
+		for (int i = 0; i < weights.size(); ++i) {
+			validChoices.add(new WeightEntry(i, weights.get(i)));
+		}
+		while (remainingWeight > 0) {
+			/*
+			 * Java complains that the weight is not effectively final, even
+			 * though the lambda does not modify it. Annoying workaround.
+			 */
+			final int weightBecauseLambdas = remainingWeight;
+
+			// get rid of any values that are too expensive to select
+			validChoices
+				.removeIf(entry -> entry.getWeight() > weightBecauseLambdas);
+			// if we can't make any more valid choices, then bail
+			int size = validChoices.size();
+			if (size == 0) {
+				break;
+			}
+			WeightEntry selection =
+				validChoices.get(RandomGen.random.nextInt(size));
+			remainingWeight -= Math.abs(selection.getWeight());
+			selections.add(selection.getIndex());
+		}
+
+		return selections;
 	}
 
 }

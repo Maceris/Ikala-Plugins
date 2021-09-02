@@ -3,7 +3,10 @@ package com.ikalagaming.random;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.SplittableRandom;
+import java.util.stream.Collectors;
 
 /**
  * Tests for the random number generation.
@@ -88,8 +91,9 @@ public class TestRandomGen {
 	public void testSelectUpToWeightErrors() {
 		RandomGen generator = new RandomGen();
 
+		int[] badArray = null;
 		Assert.assertThrows(NullPointerException.class,
-			() -> generator.selectUpToWeight(null, 10));
+			() -> generator.selectUpToWeight(badArray, 10));
 
 		int[] selections = generator.selectUpToWeight(new int[0], 10);
 		Assert.assertNotNull(selections);
@@ -103,7 +107,59 @@ public class TestRandomGen {
 		selections = generator.selectUpToWeight(weights, -1);
 		Assert.assertNotNull(selections);
 		Assert.assertEquals(0, selections.length);
+	}
 
+	/**
+	 * Tests the {@link RandomGen#selectUpToWeight(List, int)} method.
+	 */
+	@Test
+	public void testSelectUpToWeightList() {
+		final int weightSize = 100;
+		List<Integer> weights = new ArrayList<>(weightSize);
+
+		SplittableRandom rand = new SplittableRandom();
+		for (int i = 0; i < weightSize; ++i) {
+			weights.add(rand.nextInt());
+		}
+
+		final int requestedTotal = 5000;
+		RandomGen generator = new RandomGen();
+		List<Integer> selections =
+			generator.selectUpToWeight(weights, requestedTotal);
+
+		int total =
+			selections.stream().collect(Collectors.summingInt(item -> item));
+
+		Assert.assertTrue(total < requestedTotal);
+	}
+
+	/**
+	 * Tests the {@link RandomGen#selectUpToWeight(List, int)} methods error
+	 * scenarios.
+	 */
+	@Test
+	public void testSelectUpToWeightListErrors() {
+		RandomGen generator = new RandomGen();
+
+		List<Integer> badList = null;
+		Assert.assertThrows(NullPointerException.class,
+			() -> generator.selectUpToWeight(badList, 10));
+
+		List<Integer> selections =
+			generator.selectUpToWeight(new ArrayList<>(), 10);
+		Assert.assertNotNull(selections);
+		Assert.assertTrue(selections.isEmpty());
+
+		List<Integer> weights = new ArrayList<>();
+		weights.add(1);
+
+		selections = generator.selectUpToWeight(weights, 0);
+		Assert.assertNotNull(selections);
+		Assert.assertTrue(selections.isEmpty());
+
+		selections = generator.selectUpToWeight(weights, -1);
+		Assert.assertNotNull(selections);
+		Assert.assertTrue(selections.isEmpty());
 	}
 
 	/**
@@ -139,14 +195,15 @@ public class TestRandomGen {
 
 	/**
 	 * Test the method {@link RandomGen#selectFromWeightedList(double[], int)}
-	 * handles weird inputs correctly.
+	 * handles invalid inputs correctly.
 	 */
 	@Test
 	public void testWeightedListSelectionErrors() {
 		RandomGen generator = new RandomGen();
 
+		double[] badArray = null;
 		Assert.assertThrows(NullPointerException.class,
-			() -> generator.selectFromWeightedList(null, 10));
+			() -> generator.selectFromWeightedList(badArray, 10));
 
 		int[] selections = generator.selectFromWeightedList(new double[0], 10);
 		Assert.assertNotNull(selections);
@@ -160,6 +217,74 @@ public class TestRandomGen {
 		selections = generator.selectFromWeightedList(weights, -1);
 		Assert.assertNotNull(selections);
 		Assert.assertEquals(0, selections.length);
+	}
+
+	/**
+	 * Test the distribution of
+	 * {@link RandomGen#selectFromWeightedList(List, int)} matches what it
+	 * should be.
+	 */
+	@Test
+	public void testWeightedListSelectionListDistribution() {
+		final int weightSize = 100;
+		List<Double> weights = new ArrayList<>(weightSize);
+		SplittableRandom rand = new SplittableRandom();
+		for (int i = 0; i < weightSize; ++i) {
+			weights.add(rand.nextDouble() * 100);
+		}
+
+		RandomGen generator = new RandomGen();
+		List<Integer> selections =
+			generator.selectFromWeightedList(weights, 1000000);
+
+		double[] counts = new double[weights.size()];
+		for (int i = 0; i < selections.size(); ++i) {
+			int value = selections.get(i);
+			Assert.assertTrue(value < weights.size());
+			Assert.assertTrue(value >= 0);
+			counts[value] = counts[value] + 1;
+		}
+
+		double[] weightArray = new double[weights.size()];
+		for (int i = 0; i < weights.size(); ++i) {
+			weightArray[i] = weights.get(i);
+		}
+
+		generator.normalize(weightArray);
+		generator.normalize(counts);
+		for (int i = 0; i < weightArray.length; ++i) {
+			double error = Math.abs(weightArray[i] - counts[i]);
+			Assert.assertTrue(error < 0.001);
+		}
+	}
+
+	/**
+	 * Test the method {@link RandomGen#selectFromWeightedList(List, int)}
+	 * handles invalid inputs correctly.
+	 */
+	@Test
+	public void testWeightedListSelectionListErrors() {
+		RandomGen generator = new RandomGen();
+
+		List<Double> badList = null;
+		Assert.assertThrows(NullPointerException.class,
+			() -> generator.selectFromWeightedList(badList, 10));
+
+		List<Integer> selections =
+			generator.selectFromWeightedList(new ArrayList<>(), 10);
+		Assert.assertNotNull(selections);
+		Assert.assertTrue(selections.isEmpty());
+
+		List<Double> weights = new ArrayList<>();
+		weights.add(1D);
+
+		selections = generator.selectFromWeightedList(weights, 0);
+		Assert.assertNotNull(selections);
+		Assert.assertTrue(selections.isEmpty());
+
+		selections = generator.selectFromWeightedList(weights, -1);
+		Assert.assertNotNull(selections);
+		Assert.assertTrue(selections.isEmpty());
 	}
 
 }
