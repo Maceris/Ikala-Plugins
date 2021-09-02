@@ -48,9 +48,6 @@ public class ECSManager {
 		}
 		component.referenceCount++;
 
-		ECSManager.componentsMap.get(component.getOriginalClass())
-			.add(component);
-
 		Map<Class<? extends Component<?>>, Component<?>> entity =
 			ECSManager.entityMap.computeIfAbsent(entityID,
 				id -> new HashMap<>());
@@ -218,6 +215,7 @@ public class ECSManager {
 			}
 			List<? extends Component<?>> tempComponents =
 				ECSManager.componentsMap.get(type);
+
 			if (tempComponents == null) {
 				// we don't have anything with that component
 				return new ArrayList<>();
