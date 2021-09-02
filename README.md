@@ -15,7 +15,7 @@ Each plugin will likely have it's own README, but below are high level descripti
 
 ## Creating your own
 
-You can get started by making a copy of the Example-Plugin, but you'll need to make some changes before you get started:
+You can get started by making a copy of the Example-Plugin, but you'll need to make some changes:
 
 * If using Eclipse, you'll need to change the name of the project in the `.project` file to what you want to call it
 * `build.xml` should have the project name changed as well, `packagesForJavadoc` should be updated to include what packages you want in the docs. You can also reconfigure all the folder names and build options there.
