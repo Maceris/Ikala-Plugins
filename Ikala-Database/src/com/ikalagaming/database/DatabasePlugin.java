@@ -1,4 +1,4 @@
-package com.ikalagaming.example;
+package com.ikalagaming.database;
 
 import com.ikalagaming.plugins.Plugin;
 
