@@ -15,21 +15,15 @@ public class DatabasePlugin extends Plugin {
 	 */
 	public static final String PLUGIN_NAME = "Ikala-Database";
 
-	/**
-	 * Our database connection.
-	 */
-	private Database database;
-
 	@Override
 	public boolean onDisable() {
-		this.database.closeConnection();
+		Database.closeConnection();
 		return true;
 	}
 
 	@Override
 	public boolean onEnable() {
-		this.database = new Database();
-		this.database.createConnection();
+		Database.createConnection();
 		return true;
 	}
 }
