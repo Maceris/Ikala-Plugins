@@ -14,6 +14,7 @@
 	<property name="jars.bundled.dir" location="lib/bundled" />
 	<property name="jars.info.dir" location="lib/info" />
 	<property name="jars.test.dir" location="lib/testing" />
+	<property name="licenses.dir" location="licenses" />
 
 	<!-- other configuration -->
 	<property name="packagesForJavadoc" value="com.ikalagaming.*" />
@@ -145,6 +146,7 @@
 
 		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}.jar" basedir="${output.src.dir}">
 			<zipgroupfileset dir="${jars.bundled.dir}" includes="*.jar" />
+			<zipfileset dir="${licenses.dir}" includes="*" prefix="licenses" />
 		</jar>
 		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}-sources.jar" basedir="${src.delomboked.dir}" />
 		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}-javadoc.jar" basedir="${doc.dir}" />

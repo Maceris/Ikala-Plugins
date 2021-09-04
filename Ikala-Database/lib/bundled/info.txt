@@ -1,1 +1,0 @@
-This folder contains jars used in compiling and bundled into the exported jars.
