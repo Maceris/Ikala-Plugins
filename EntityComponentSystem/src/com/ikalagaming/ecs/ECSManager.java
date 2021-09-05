@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * Handles tracking and management of Entities, Components, and Systems.
@@ -52,7 +51,7 @@ public class ECSManager {
 			ECSManager.entityMap.computeIfAbsent(entityID,
 				id -> new HashMap<>());
 
-		component.setParentID(entityID);
+		component.getParents().add(entityID);
 		entity.put(component.getOriginalClass(), component);
 	}
 
@@ -202,8 +201,9 @@ public class ECSManager {
 			return new ArrayList<>();
 		}
 
-		List<UUID> values = components.stream().map(Component::getParentID)
-			.collect(Collectors.toList());
+		List<UUID> values = new ArrayList<>();
+		components.stream()
+			.forEach(component -> values.addAll(component.getParents()));
 
 		if (types.length == 1) {
 			return values;
@@ -222,8 +222,9 @@ public class ECSManager {
 				// we don't have anything with that component
 				return new ArrayList<>();
 			}
-			List<UUID> tempIDs = tempComponents.stream()
-				.map(Component::getParentID).collect(Collectors.toList());
+			List<UUID> tempIDs = new ArrayList<>();
+			tempComponents.stream()
+				.forEach(component -> tempIDs.addAll(component.getParents()));
 			values.removeIf(uuid -> !tempIDs.contains(uuid));
 		}
 		return values;
@@ -279,6 +280,7 @@ public class ECSManager {
 		}
 		components.remove(type);
 		component.referenceCount--;
+		component.getParents().remove(entityID);
 		if (component.referenceCount <= 0) {
 			ECSManager.deleteFromComponents(type, component);
 		}

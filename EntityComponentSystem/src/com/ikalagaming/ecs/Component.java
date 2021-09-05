@@ -1,9 +1,10 @@
 package com.ikalagaming.ecs;
 
 import lombok.Getter;
-import lombok.Setter;
 
 import java.lang.reflect.ParameterizedType;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -31,14 +32,12 @@ public abstract class Component<T extends Component<?>>
 	int referenceCount = 0;
 
 	/**
-	 * The ID of the Entity that this component belongs to.
+	 * The IDs of the Entities that this component belongs to.
 	 *
-	 * @return The unique ID of the entity that contains this component.
-	 * @param parentID the new ID of the entity this component belongs to.
+	 * @return The unique IDs of the entities that contains this component.
 	 */
 	@Getter
-	@Setter
-	private UUID parentID;
+	private List<UUID> parents = new ArrayList<>();
 
 	/**
 	 * Casts this component to its actual class.
