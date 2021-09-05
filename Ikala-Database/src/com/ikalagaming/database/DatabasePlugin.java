@@ -1,7 +1,10 @@
 package com.ikalagaming.database;
 
-import com.ikalagaming.launcher.Constants;
+import com.ikalagaming.launcher.PluginFolder;
+import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.plugins.Plugin;
+
+import java.io.File;
 
 /**
  * The plugin class for the database plugin.
@@ -20,18 +23,17 @@ public class DatabasePlugin extends Plugin {
 
 	@Override
 	public boolean onDisable() {
-		database.closeConnection();
-		database = null;
+		this.database.closeConnection();
+		this.database = null;
 		return true;
 	}
 
 	@Override
 	public boolean onEnable() {
-		final String location =
-			System.getProperty("user.dir") + Constants.PLUGIN_FOLDER_PATH
-				+ DatabasePlugin.PLUGIN_NAME + Constants.DATA_PATH + "database";
-		database = new Database(location);
-		database.createConnection();
+		File db = PluginFolder.getResource(DatabasePlugin.PLUGIN_NAME,
+			ResourceType.DATA, "mainDatabase");
+		this.database = new Database(db.getAbsolutePath());
+		this.database.createConnection();
 		return true;
 	}
 }
