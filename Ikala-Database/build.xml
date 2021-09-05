@@ -22,6 +22,7 @@
 	<property name="verbose" value="false" />
 	<property name="javaVersion" value="1.8" />
 	<property name="pluginConfig" value="plugin.yml" />
+	<property name="bundleLibraryJavadocs" value="true" />
 
 	<!-- Load in the plugin name and version from plugin.yml -->
 	<loadproperties srcFile="${pluginConfig}" prefix="plugin">
@@ -41,6 +42,7 @@
 
 	<target name="init" description="create folders for generated output">
 		<!-- Create the build directory structure used by compile -->
+		<mkdir dir="${doc.dir}" />
 		<mkdir dir="${output.dir}" />
 		<mkdir dir="${output.src.dir}" />
 		<mkdir dir="${output.test.dir}" />
@@ -133,6 +135,11 @@
 	<target name="test" depends="test.junit.launcher, test.console.launcher" description="run the tests and generate reports" />
 
 	<target name="javadoc" depends="delombok" description="generate javadoc">
+		<unzip dest="${doc.dir}">
+			<fileset dir="${jars.info.dir}">
+				<include name="*-javadoc.jar" />
+			</fileset>
+		</unzip>
 		<javadoc access="package" author="true" destdir="${doc.dir}" nodeprecated="false" nodeprecatedlist="false" noindex="false" nonavbar="false" notree="false" packagenames="${packagesForJavadoc}" source="${javaVersion}" sourcepath="${src.delomboked.dir}" splitindex="true" use="true" version="true">
 			<classpath>
 				<fileset dir="${jars.plugins.dir}" includes="*.jar" />
@@ -149,9 +156,7 @@
 			<zipfileset dir="${licenses.dir}" includes="*" prefix="licenses" />
 		</jar>
 		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}-sources.jar" basedir="${src.delomboked.dir}" />
-		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}-javadoc.jar" basedir="${doc.dir}" >
-			<zipgroupfileset dir="${jars.info.dir}" includes="*-javadoc.jar" />
-		</jar>
+		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}-javadoc.jar" basedir="${doc.dir}" />
 	</target>
 
 	<target name="clean" description="clean up">
