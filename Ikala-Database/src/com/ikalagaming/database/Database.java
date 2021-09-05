@@ -1,7 +1,6 @@
 package com.ikalagaming.database;
 
 import com.ikalagaming.database.query.Column;
-import com.ikalagaming.launcher.Constants;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -29,29 +28,40 @@ import java.util.ResourceBundle;
 @CustomLog(topic = DatabasePlugin.PLUGIN_NAME)
 public class Database {
 
-	private static final String DB_LOCATION = "jdbc:h2:"
-		+ System.getProperty("user.dir") + Constants.PLUGIN_FOLDER_PATH
-		+ DatabasePlugin.PLUGIN_NAME + Constants.DATA_PATH + "database";
-
 	/**
 	 * The current resource bundle for the plugin manager.
 	 */
-	private static ResourceBundle resourceBundle =
-		ResourceBundle.getBundle("com.ikalagaming.database.resources.Database",
-			Localization.getLocale());
+	private ResourceBundle resourceBundle;
+
+	private final String dbLocation;
 
 	/**
 	 * The connection to our database.
 	 */
-	private static Connection connection;
+	private Connection connection;
+
+	/**
+	 * Creates a new database handler for the database at the given path. If no
+	 * database exists there, it's going to try and create one when a connection
+	 * is established.
+	 *
+	 * @param location The location of the database.
+	 * @see #createConnection()
+	 */
+	public Database(String location) {
+		this.dbLocation = "jdbc:h2:" + location;
+		this.resourceBundle = ResourceBundle.getBundle(
+			"com.ikalagaming.database.resources.Database",
+			Localization.getLocale());
+	}
 
 	/**
 	 * Checks that the connection is open and throw an exception if not.
 	 */
-	private static void checkConnection() {
+	private void checkConnection() {
 		boolean invalidConnection = false;
 		try {
-			if (null == Database.connection || Database.connection.isClosed()) {
+			if (null == this.connection || this.connection.isClosed()) {
 				invalidConnection = true;
 			}
 		}
@@ -68,7 +78,7 @@ public class Database {
 	 * Closes the connection to the database.
 	 */
 	@Synchronized
-	public static void closeConnection() {
+	public void closeConnection() {
 		try {
 			connection.close();
 		}
@@ -83,7 +93,7 @@ public class Database {
 	 * exists yet.
 	 */
 	@Synchronized
-	public static void createConnection() {
+	public void createConnection() {
 
 		try {
 			/*
@@ -97,8 +107,7 @@ public class Database {
 				.getString("ERROR_SETTING_UP_DRIVER", resourceBundle));
 		}
 		try {
-			connection =
-				DriverManager.getConnection(Database.DB_LOCATION, "sa", "");
+			connection = DriverManager.getConnection(this.dbLocation, "sa", "");
 		}
 		catch (SQLException e) {
 			Database.log.warning(SafeResourceLoader
@@ -115,7 +124,7 @@ public class Database {
 	 * @throws InvalidConnectionException If there is no connection open.
 	 */
 	@Synchronized
-	public static void createTable(@NonNull String name, List<Column> columns,
+	public void createTable(@NonNull String name, List<Column> columns,
 		List<Constraint> constraints) {
 		/*
 		 * We end with an execute call but have no way to convince the linter
@@ -137,14 +146,9 @@ public class Database {
 	 * @throws InvalidConnectionException If there is no connection open.
 	 */
 	@Synchronized
-	public static DSLContext startQuery() {
+	public DSLContext startQuery() {
 		checkConnection();
 		return DSL.using(connection, SQLDialect.H2);
 	}
-
-	/**
-	 * Private constructor so this class is not instantiated.
-	 */
-	private Database() {}
 
 }

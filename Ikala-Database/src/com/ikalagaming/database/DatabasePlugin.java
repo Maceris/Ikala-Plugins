@@ -1,5 +1,6 @@
 package com.ikalagaming.database;
 
+import com.ikalagaming.launcher.Constants;
 import com.ikalagaming.plugins.Plugin;
 
 /**
@@ -15,15 +16,22 @@ public class DatabasePlugin extends Plugin {
 	 */
 	public static final String PLUGIN_NAME = "Ikala-Database";
 
+	private Database database;
+
 	@Override
 	public boolean onDisable() {
-		Database.closeConnection();
+		database.closeConnection();
+		database = null;
 		return true;
 	}
 
 	@Override
 	public boolean onEnable() {
-		Database.createConnection();
+		final String location =
+			System.getProperty("user.dir") + Constants.PLUGIN_FOLDER_PATH
+				+ DatabasePlugin.PLUGIN_NAME + Constants.DATA_PATH + "database";
+		database = new Database(location);
+		database.createConnection();
 		return true;
 	}
 }
