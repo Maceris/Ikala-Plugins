@@ -6,4 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] -
 ### Added
-- Initial creation
+- Database creation
+- Session management
+- jOOQ
+- h2 database
+- Hibernate
+- reactive-streams (for jOOQ)
