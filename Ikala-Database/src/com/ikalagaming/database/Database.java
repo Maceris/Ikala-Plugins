@@ -5,6 +5,7 @@ import com.ikalagaming.localization.Localization;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.CustomLog;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.Synchronized;
 import org.jooq.Constraint;
@@ -33,7 +34,13 @@ public class Database {
 	 */
 	private ResourceBundle resourceBundle;
 
-	private final String dbLocation;
+	/**
+	 * The connection string for the database.
+	 * 
+	 * @return The connection string for the database.
+	 */
+	@Getter
+	private final String connectionString;
 
 	/**
 	 * The connection to our database.
@@ -49,7 +56,7 @@ public class Database {
 	 * @see #createConnection()
 	 */
 	public Database(String location) {
-		this.dbLocation = "jdbc:h2:" + location;
+		this.connectionString = "jdbc:h2:" + location;
 		this.resourceBundle = ResourceBundle.getBundle(
 			"com.ikalagaming.database.resources.Database",
 			Localization.getLocale());
@@ -107,7 +114,8 @@ public class Database {
 				.getString("ERROR_SETTING_UP_DRIVER", resourceBundle));
 		}
 		try {
-			connection = DriverManager.getConnection(this.dbLocation, "sa", "");
+			connection =
+				DriverManager.getConnection(this.connectionString, "sa", "");
 		}
 		catch (SQLException e) {
 			Database.log.warning(SafeResourceLoader
