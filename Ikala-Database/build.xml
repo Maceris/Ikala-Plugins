@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="Ikala-Database" default="compileTest" basedir=".">
+<project name="Example-Plugin" default="compileTest" basedir="." xmlns:if="ant:if">
 	<!-- configure folder names for the project -->
 	<property name="src.dir" location="src" />
 	<property name="src.delomboked.dir" location="src-delomboked" />
 	<property name="test.dir" location="test" />
+	<property name="licenses.dir" location="licenses" />
 	<property name="output.dir" location="bin" />
 	<property name="output.reports.dir" location="${output.dir}/test-report" />
 	<property name="output.src.dir" location="${output.dir}/classes" />
@@ -14,7 +15,6 @@
 	<property name="jars.bundled.dir" location="lib/bundled" />
 	<property name="jars.info.dir" location="lib/info" />
 	<property name="jars.test.dir" location="lib/testing" />
-	<property name="licenses.dir" location="licenses" />
 
 	<!-- other configuration -->
 	<property name="packagesForJavadoc" value="com.ikalagaming.*" />
@@ -22,7 +22,8 @@
 	<property name="verbose" value="false" />
 	<property name="javaVersion" value="1.8" />
 	<property name="pluginConfig" value="plugin.yml" />
-	<property name="bundleLibraryJavadocs" value="true" />
+	<property name="bundleInJavadocs" value="true" />
+	<property name="includeLicensesFolder" value="true" />
 
 	<!-- Load in the plugin name and version from plugin.yml -->
 	<loadproperties srcFile="${pluginConfig}" prefix="plugin">
@@ -65,8 +66,8 @@
 		</delombok>
 	</target>
 
-	<target name="compile" depends="init" description="compile the source">
-		<javac srcdir="${src.dir}" destdir="${output.src.dir}" includeAntRuntime="false" debug="${leavedebugsymbols}" source="${javaVersion}" target="${javaVersion}">
+	<target name="compile" depends="init,delombok" description="compile the source">
+		<javac srcdir="${src.delomboked.dir}" destdir="${output.src.dir}" includeAntRuntime="false" debug="${leavedebugsymbols}" source="${javaVersion}" target="${javaVersion}">
 			<classpath>
 				<fileset dir="${jars.plugins.dir}" includes="*.jar" />
 				<fileset dir="${jars.bundled.dir}" includes="*.jar" />
@@ -135,7 +136,7 @@
 	<target name="test" depends="test.junit.launcher, test.console.launcher" description="run the tests and generate reports" />
 
 	<target name="javadoc" depends="delombok" description="generate javadoc">
-		<unzip dest="${doc.dir}">
+		<unzip dest="${doc.dir}" if:true="${bundleInJavadocs}">
 			<fileset dir="${jars.info.dir}">
 				<include name="*-javadoc.jar" />
 			</fileset>
@@ -152,8 +153,8 @@
 		<mkdir dir="${dist.dir}" />
 
 		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}.jar" basedir="${output.src.dir}">
+			<zipfileset dir="${licenses.dir}" includes="*" prefix="licenses" if:true="${includeLicensesFolder}"/>
 			<zipgroupfileset dir="${jars.bundled.dir}" includes="*.jar" />
-			<zipfileset dir="${licenses.dir}" includes="*" prefix="licenses" />
 		</jar>
 		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}-sources.jar" basedir="${src.delomboked.dir}" />
 		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}-javadoc.jar" basedir="${doc.dir}" />

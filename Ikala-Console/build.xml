@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="Ikala-Console" default="compileTest" basedir=".">
-	<!-- set global properties for this build -->
+<project name="Example-Plugin" default="compileTest" basedir="." xmlns:if="ant:if">
+	<!-- configure folder names for the project -->
 	<property name="src.dir" location="src" />
 	<property name="src.delomboked.dir" location="src-delomboked" />
 	<property name="test.dir" location="test" />
-	<property name="build.dir" location="bin" />
+	<property name="licenses.dir" location="licenses" />
+	<property name="output.dir" location="bin" />
+	<property name="output.reports.dir" location="${output.dir}/test-report" />
+	<property name="output.src.dir" location="${output.dir}/classes" />
+	<property name="output.test.dir" location="${output.dir}/test-classes" />
 	<property name="dist.dir" location="dist" />
 	<property name="doc.dir" location="javadoc" />
 	<property name="jars.plugins.dir" location="lib/plugins" />
@@ -12,21 +16,24 @@
 	<property name="jars.info.dir" location="lib/info" />
 	<property name="jars.test.dir" location="lib/testing" />
 
-	<!-- some configuration -->
-	<property name="packages" value="com.ikalagaming.*" />
+	<!-- other configuration -->
+	<property name="packagesForJavadoc" value="com.ikalagaming.*" />
 	<property name="leavedebugsymbols" value="true" />
 	<property name="verbose" value="false" />
 	<property name="javaVersion" value="1.8" />
+	<property name="pluginConfig" value="plugin.yml" />
+	<property name="bundleInJavadocs" value="false" />
+	<property name="includeLicensesFolder" value="false" />
 
 	<!-- Load in the plugin name and version from plugin.yml -->
-	<loadproperties srcFile="plugin.yml" prefix="plugin">
+	<loadproperties srcFile="${pluginConfig}" prefix="plugin">
 		<filterchain>
 			<linecontains>
 				<contains value="name" />
 			</linecontains>
 		</filterchain>
 	</loadproperties>
-	<loadproperties srcFile="plugin.yml" prefix="plugin">
+	<loadproperties srcFile="${pluginConfig}" prefix="plugin">
 		<filterchain>
 			<linecontains>
 				<contains value="version" />
@@ -34,10 +41,14 @@
 		</filterchain>
 	</loadproperties>
 
-	<target name="init">
+	<target name="init" description="create folders for generated output">
 		<!-- Create the build directory structure used by compile -->
-		<mkdir dir="${build.dir}" />
+		<mkdir dir="${doc.dir}" />
+		<mkdir dir="${output.dir}" />
+		<mkdir dir="${output.src.dir}" />
+		<mkdir dir="${output.test.dir}" />
 		<mkdir dir="${src.delomboked.dir}" />
+		<mkdir dir="${output.reports.dir}" />
 	</target>
 
 	<target name="delombok" depends="init" description="generates sources from lombok">
@@ -55,20 +66,19 @@
 		</delombok>
 	</target>
 
-	<target name="compile" depends="init" description="compile the source">
-		<!-- Compile the java code from ${src.dir} into ${build.dir} -->
-		<javac srcdir="${src.dir}" destdir="${build.dir}" includeAntRuntime="false" debug="${leavedebugsymbols}" source="${javaVersion}">
+	<target name="compile" depends="init,delombok" description="compile the source">
+		<javac srcdir="${src.delomboked.dir}" destdir="${output.src.dir}" includeAntRuntime="false" debug="${leavedebugsymbols}" source="${javaVersion}" target="${javaVersion}">
 			<classpath>
 				<fileset dir="${jars.plugins.dir}" includes="*.jar" />
 				<fileset dir="${jars.bundled.dir}" includes="*.jar" />
 			</classpath>
 		</javac>
-		<copy verbose="${verbose}" todir="${build.dir}" preservelastmodified="false">
+		<copy verbose="${verbose}" todir="${output.src.dir}" preservelastmodified="false">
 			<fileset dir=".">
-				<include name="*.yml" />
+				<include name="${pluginConfig}" />
 			</fileset>
 		</copy>
-		<copy verbose="${verbose}" todir="${build.dir}" preservelastmodified="false">
+		<copy verbose="${verbose}" todir="${output.src.dir}" preservelastmodified="false">
 			<fileset dir="${src.dir}">
 				<include name="**/*.properties" />
 			</fileset>
@@ -76,8 +86,9 @@
 	</target>
 
 	<target name="compileTest" depends="compile" description="compile the JUnit tests">
-		<javac srcdir="${test.dir}" destdir="${build.dir}" includeAntRuntime="false" source="${javaVersion}">
+		<javac srcdir="${test.dir}" destdir="${output.test.dir}" includeAntRuntime="false" source="${javaVersion}" target="${javaVersion}">
 			<classpath>
+				<pathelement location="${output.src.dir}" />
 				<fileset dir="${jars.plugins.dir}" includes="*.jar" />
 				<fileset dir="${jars.bundled.dir}" includes="*.jar" />
 				<fileset dir="${jars.test.dir}" includes="*.jar" />
@@ -85,23 +96,52 @@
 		</javac>
 	</target>
 
-	<target name="test" depends="compileTest" description="run JUnit tests">
-		<junit>
+	<target name="test.junit.launcher" depends="compileTest" description="run JUnit tests">
+		<junitlauncher>
 			<classpath>
-				<pathelement location="${build.dir}" />
+				<pathelement location="${output.src.dir}" />
+				<pathelement location="${output.test.dir}" />
 				<fileset dir="${jars.plugins.dir}" includes="*.jar" />
 				<fileset dir="${jars.bundled.dir}" includes="*.jar" />
 				<fileset dir="${jars.test.dir}" includes="*.jar" />
 			</classpath>
-			<formatter type="brief" usefile="false" />
-			<batchtest>
-				<fileset dir="${test.dir}" includes="**/Test*" />
-			</batchtest>
-		</junit>
+			<testclasses outputdir="${output.reports.dir}">
+				<fileset dir="${output.test.dir}" />
+				<listener type="legacy-brief" sendSysOut="true" />
+				<listener type="legacy-xml" sendSysErr="true" sendSysOut="true" />
+			</testclasses>
+		</junitlauncher>
 	</target>
 
+	<target name="test.console.launcher" depends="compileTest" description="run the JUnit console launcher">
+		<java classname="org.junit.platform.console.ConsoleLauncher" fork="true" failonerror="true">
+			<classpath>
+				<pathelement location="${output.src.dir}" />
+				<pathelement location="${output.test.dir}" />
+				<fileset dir="${jars.plugins.dir}" includes="*.jar" />
+				<fileset dir="${jars.bundled.dir}" includes="*.jar" />
+				<fileset dir="${jars.test.dir}" includes="*.jar" />
+			</classpath>
+			<arg value="--scan-classpath" />
+			<arg value="--reports-dir ${output.reports.dir}" />
+		</java>
+		<junitreport todir="${output.reports.dir}">
+			<fileset dir="${output.reports.dir}">
+				<include name="TEST-*.xml" />
+			</fileset>
+			<report format="frames" todir="${output.reports.dir}/html" />
+		</junitreport>
+	</target>
+
+	<target name="test" depends="test.junit.launcher, test.console.launcher" description="run the tests and generate reports" />
+
 	<target name="javadoc" depends="delombok" description="generate javadoc">
-		<javadoc access="package" author="true" destdir="${doc.dir}" nodeprecated="false" nodeprecatedlist="false" noindex="false" nonavbar="false" notree="false" packagenames="${packages}" source="${javaVersion}" sourcepath="${src.delomboked.dir}" splitindex="true" use="true" version="true">
+		<unzip dest="${doc.dir}" if:true="${bundleInJavadocs}">
+			<fileset dir="${jars.info.dir}">
+				<include name="*-javadoc.jar" />
+			</fileset>
+		</unzip>
+		<javadoc access="package" author="true" destdir="${doc.dir}" nodeprecated="false" nodeprecatedlist="false" noindex="false" nonavbar="false" notree="false" packagenames="${packagesForJavadoc}" source="${javaVersion}" sourcepath="${src.delomboked.dir}" splitindex="true" use="true" version="true">
 			<classpath>
 				<fileset dir="${jars.plugins.dir}" includes="*.jar" />
 				<fileset dir="${jars.bundled.dir}" includes="*.jar" />
@@ -110,21 +150,21 @@
 	</target>
 
 	<target name="dist" depends="compile,javadoc" description="generate distribution jars">
-		<!-- Create the distribution directory -->
 		<mkdir dir="${dist.dir}" />
 
-		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}.jar" basedir="${build.dir}">
+		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}.jar" basedir="${output.src.dir}">
+			<zipfileset dir="${licenses.dir}" includes="*" prefix="licenses" if:true="${includeLicensesFolder}"/>
 			<zipgroupfileset dir="${jars.bundled.dir}" includes="*.jar" />
 		</jar>
-		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}-sources.jar" basedir="${src.dir}" />
+		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}-sources.jar" basedir="${src.delomboked.dir}" />
 		<jar jarfile="${dist.dir}/${plugin.name}-${plugin.version}-javadoc.jar" basedir="${doc.dir}" />
 	</target>
 
 	<target name="clean" description="clean up">
 		<!-- Delete the generated directory trees -->
-		<delete dir="${build.dir}" />
-		<delete dir="${doc.dir}" />
+		<delete dir="${output.dir}" />
 		<delete dir="${dist.dir}" />
+		<delete dir="${doc.dir}" />
 		<delete dir="${src.delomboked.dir}" />
 	</target>
 </project>
