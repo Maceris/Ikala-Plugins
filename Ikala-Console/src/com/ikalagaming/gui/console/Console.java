@@ -5,9 +5,9 @@ import com.ikalagaming.gui.console.events.ConsoleCommandEntered;
 import com.ikalagaming.plugins.PluginManager;
 import com.ikalagaming.util.SafeResourceLoader;
 
-import lombok.CustomLog;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 
 import java.awt.Color;
 import java.awt.Font;
@@ -41,10 +41,10 @@ import javax.swing.text.DefaultCaret;
  * @author Ches Burks
  *
  */
-@CustomLog(topic = ConsolePlugin.PLUGIN_NAME)
+@Slf4j
 public class Console extends WindowAdapter implements ClipboardOwner {
 
-	private class ConsoleKeyListener extends KeyAdapter {
+	private static class ConsoleKeyListener extends KeyAdapter {
 
 		private Console parentConsole;
 
@@ -65,11 +65,10 @@ public class Console extends WindowAdapter implements ClipboardOwner {
 						this.parentConsole.history.getPrevious());
 				}
 			}
-			else if (Console.ARROW_DOWN.contains(keyCode)) {
-				if (this.parentConsole.history.hasNext()) {
-					this.parentConsole
-						.setCurrentText(this.parentConsole.history.getNext());
-				}
+			else if (Console.ARROW_DOWN.contains(keyCode)
+				&& this.parentConsole.history.hasNext()) {
+				this.parentConsole
+					.setCurrentText(this.parentConsole.history.getNext());
 			}
 		}
 
@@ -226,7 +225,7 @@ public class Console extends WindowAdapter implements ClipboardOwner {
 
 	/**
 	 * The parent plugin.
-	 * 
+	 *
 	 * @param parent The plugin that uses this console.
 	 */
 	@SuppressWarnings("javadoc")
@@ -418,10 +417,9 @@ public class Console extends WindowAdapter implements ClipboardOwner {
 					(String) contents.getTransferData(DataFlavor.stringFlavor);
 			}
 			catch (UnsupportedFlavorException | IOException ex) {
-				String msg = SafeResourceLoader
-					.getString("invalid_clipboard", parent.getResourceBundle())
-					.concat(ex.getLocalizedMessage());
-				log.warning(msg);
+				String msg = SafeResourceLoader.getString("invalid_clipboard",
+					this.parent.getResourceBundle());
+				Console.log.warn(msg, ex);
 			}
 		}
 		return result;
@@ -452,7 +450,7 @@ public class Console extends WindowAdapter implements ClipboardOwner {
 		catch (BadLocationException e) {
 			String msg = SafeResourceLoader.getString("error_bad_location",
 				this.parent.getResourceBundle());
-			log.warning(msg);
+			Console.log.warn(msg);
 		}
 		return 0;
 	}
@@ -583,12 +581,7 @@ public class Console extends WindowAdapter implements ClipboardOwner {
 	 */
 	void moveRight() {
 
-		if (this.currentLine.length() <= 0) {
-			this.validatePositions();
-			this.updateCaretPosition();
-			return;// do not do anything
-		}
-		if (this.posInString >= this.currentLine.length()) {
+		if ((this.currentLine.length() <= 0) || (this.posInString >= this.currentLine.length())) {
 			this.validatePositions();
 			this.updateCaretPosition();
 			return;// do not do anything
@@ -661,7 +654,7 @@ public class Console extends WindowAdapter implements ClipboardOwner {
 		catch (BadLocationException e) {
 			String msg = SafeResourceLoader.getString("error_bad_location",
 				this.parent.getResourceBundle());
-			log.warning(msg);
+			Console.log.warn(msg);
 		}
 		finally {
 			this.editLock.lock();

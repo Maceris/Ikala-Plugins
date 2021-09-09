@@ -11,8 +11,6 @@ import com.ikalagaming.plugins.PluginManager;
 import com.ikalagaming.plugins.events.PluginCommandSent;
 import com.ikalagaming.util.SafeResourceLoader;
 
-import lombok.CustomLog;
-
 import java.util.Optional;
 
 /**
@@ -21,7 +19,6 @@ import java.util.Optional;
  * @author Ches Burks
  *
  */
-@CustomLog(topic = ConsolePlugin.PLUGIN_NAME)
 class PMEventListener implements Listener {
 
 	private ConsolePlugin parent;
@@ -56,34 +53,17 @@ class PMEventListener implements Listener {
 			this.reportNotLoaded(pluginName);
 			return;
 		}
-		String tmp = SafeResourceLoader.getString("PLUGIN_VERSION",
-			this.manager.getResourceBundle());
+		StringBuilder tmp = new StringBuilder().append(SafeResourceLoader
+			.getString("PLUGIN_VERSION", this.manager.getResourceBundle()));
 		Optional<PluginInfo> info = this.manager.getInfo(pluginName);
 		if (info.isPresent()) {
-			tmp += info.get().getVersion();
+			tmp.append(info.get().getVersion());
 		}
 		else {
-			tmp += "?";
+			tmp.append("?");
 		}
 
-		new ConsoleMessage(tmp).fire();
-	}
-
-	/**
-	 * Log an alert about a plugin lifecycle, where plugin name and version are
-	 * automatically replaced.
-	 *
-	 * @param whichAlert The string to read from the resource bundle
-	 * @param plugin The plugin that the alert is about
-	 */
-	void logAlert(String whichAlert, String plugin) {
-		PluginInfo pInfo = this.manager.getInfo(plugin).get();
-
-		String message = SafeResourceLoader
-			.getString(whichAlert, this.manager.getResourceBundle())
-			.replaceFirst("\\$PLUGIN", pInfo.getName())
-			.replaceFirst("\\$VERSION", pInfo.getVersion());
-		log.fine(message);
+		new ConsoleMessage(tmp.toString()).fire();
 	}
 
 	/**

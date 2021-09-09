@@ -1,11 +1,10 @@
 package com.ikalagaming.permissions;
 
-import com.ikalagaming.plugins.PluginManager;
 import com.ikalagaming.util.SafeResourceLoader;
 
-import lombok.CustomLog;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -23,7 +22,7 @@ import java.util.Optional;
  * @author Ches Burks
  *
  */
-@CustomLog(topic = PluginManager.PLUGIN_NAME)
+@Slf4j
 public class PermissionGroup implements PermissionHolder {
 
 	private static final PermissionGroup ROOT;
@@ -34,9 +33,8 @@ public class PermissionGroup implements PermissionHolder {
 			rootGroup = new PermissionGroup("root", null);
 		}
 		catch (DuplicateGroupException e) {
-			PermissionGroup.log.severe(SafeResourceLoader
-				.getString("DUPLICATE_PERMISSION", Permission.RESOURCE_LOCATION)
-				.replaceFirst("\\$PERMISSION", "root"));
+			PermissionGroup.log.warn(SafeResourceLoader.getString(
+				"DUPLICATE_PERMISSION", Permission.RESOURCE_LOCATION), "root");
 		}
 		/*
 		 * May be null at this point, but logs will help determine why things

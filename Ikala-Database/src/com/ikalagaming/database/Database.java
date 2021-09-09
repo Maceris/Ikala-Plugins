@@ -4,10 +4,10 @@ import com.ikalagaming.database.query.Column;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.util.SafeResourceLoader;
 
-import lombok.CustomLog;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Synchronized;
+import lombok.extern.slf4j.Slf4j;
 import org.jooq.Constraint;
 import org.jooq.CreateTableColumnStep;
 import org.jooq.DSLContext;
@@ -26,7 +26,7 @@ import java.util.ResourceBundle;
  * @author Ches Burks
  *
  */
-@CustomLog(topic = DatabasePlugin.PLUGIN_NAME)
+@Slf4j
 public class Database {
 
 	/**
@@ -90,7 +90,7 @@ public class Database {
 			connection.close();
 		}
 		catch (SQLException e) {
-			Database.log.warning(SafeResourceLoader
+			Database.log.warn(SafeResourceLoader
 				.getString("ERROR_CLOSING_CONNECTION", resourceBundle));
 		}
 	}
@@ -110,7 +110,7 @@ public class Database {
 			Class.forName("org.h2.Driver"); // NOSONAR
 		}
 		catch (ClassNotFoundException e1) {
-			Database.log.warning(SafeResourceLoader
+			Database.log.warn(SafeResourceLoader
 				.getString("ERROR_SETTING_UP_DRIVER", resourceBundle));
 		}
 		try {
@@ -118,8 +118,8 @@ public class Database {
 				DriverManager.getConnection(this.connectionString, "sa", "");
 		}
 		catch (SQLException e) {
-			Database.log.warning(SafeResourceLoader
-				.getString("ERROR_CONNECTING", resourceBundle));
+			Database.log.warn(SafeResourceLoader.getString("ERROR_CONNECTING",
+				resourceBundle));
 		}
 	}
 

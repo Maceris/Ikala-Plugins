@@ -3,8 +3,8 @@ package com.ikalagaming.graphics;
 import com.ikalagaming.graphics.events.WindowCreated;
 import com.ikalagaming.util.SafeResourceLoader;
 
-import lombok.CustomLog;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.glfw.Callbacks;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
@@ -24,7 +24,7 @@ import java.util.List;
  * @author Ches Burks
  *
  */
-@CustomLog(topic = GraphicsPlugin.NAME)
+@Slf4j
 public class GraphicsManager {
 
 	private static boolean initialized = false;
@@ -72,7 +72,7 @@ public class GraphicsManager {
 		window = GLFW.glfwCreateWindow(300, 300, "Hello World!",
 			MemoryUtil.NULL, MemoryUtil.NULL);
 		if (window == MemoryUtil.NULL) {
-			GraphicsManager.log.severe("Failed to create the GLFW window");
+			GraphicsManager.log.error("Failed to create the GLFW window");
 			throw new RuntimeException("Failed to create the GLFW window");
 		}
 
@@ -124,7 +124,7 @@ public class GraphicsManager {
 		// Set the clear color
 		GL11.glClearColor(1.0f, 0.0f, 0.0f, 0.0f);
 
-		GraphicsManager.log.finer(SafeResourceLoader.getString("WINDOW_CREATED",
+		GraphicsManager.log.debug(SafeResourceLoader.getString("WINDOW_CREATED",
 			GraphicsManager.plugin.getResourceBundle()));
 		new WindowCreated(window).fire();
 	}
@@ -153,7 +153,7 @@ public class GraphicsManager {
 		GLFW.glfwDestroyWindow(window);
 		GraphicsManager.windows.remove(window);
 
-		GraphicsManager.log.finer(SafeResourceLoader.getString(
+		GraphicsManager.log.debug(SafeResourceLoader.getString(
 			"WINDOW_DESTROYED", GraphicsManager.plugin.getResourceBundle()));
 	}
 
@@ -168,7 +168,7 @@ public class GraphicsManager {
 		 */
 		GLFWErrorCallback.createPrint(System.err).set();
 		if (!GLFW.glfwInit()) {
-			GraphicsManager.log.severe(SafeResourceLoader.getString(
+			GraphicsManager.log.error(SafeResourceLoader.getString(
 				"GLFW_INIT_FAIL", GraphicsManager.plugin.getResourceBundle()));
 			throw new IllegalStateException("Unable to initialize GLFW");
 		}

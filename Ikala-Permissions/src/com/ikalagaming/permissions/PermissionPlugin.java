@@ -4,7 +4,7 @@ import com.ikalagaming.plugins.Plugin;
 
 /**
  * Lifecycle methods for permissions.
- * 
+ *
  * @author Ches Burks
  *
  */

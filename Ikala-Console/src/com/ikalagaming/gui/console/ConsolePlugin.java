@@ -5,9 +5,9 @@ import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 import com.ikalagaming.util.SafeResourceLoader;
 
-import lombok.CustomLog;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashSet;
 import java.util.MissingResourceException;
@@ -20,7 +20,7 @@ import java.util.Set;
  * @author Ches Burks
  *
  */
-@CustomLog(topic = ConsolePlugin.PLUGIN_NAME)
+@Slf4j
 public class ConsolePlugin extends Plugin {
 
 	/**
@@ -95,8 +95,7 @@ public class ConsolePlugin extends Plugin {
 		}
 		catch (MissingResourceException missingResource) {
 			// don't localize this since it would fail anyways
-			ConsolePlugin.log
-				.warning("Locale not found for Console in onLoad()");
+			ConsolePlugin.log.warn("Locale not found for Console in onLoad()");
 		}
 		return true;
 	}

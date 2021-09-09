@@ -1,10 +1,9 @@
 package com.ikalagaming.permissions;
 
-import com.ikalagaming.plugins.PluginManager;
 import com.ikalagaming.util.SafeResourceLoader;
 
-import lombok.CustomLog;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -19,7 +18,7 @@ import java.util.Optional;
  * @author Ches Burks
  *
  */
-@CustomLog(topic = PluginManager.PLUGIN_NAME)
+@Slf4j
 public class Permission {
 
 	/**
@@ -93,10 +92,7 @@ public class Permission {
 	}
 
 	private static boolean isValidName(String name) {
-		if (name.endsWith(".")) {
-			return false;
-		}
-		if (name.startsWith(".")) {
+		if (name.endsWith(".") || name.startsWith(".")) {
 			return false;
 		}
 		for (char c : name.toCharArray()) {
@@ -233,7 +229,7 @@ public class Permission {
 			catch (Exception ex) {
 				String msg = SafeResourceLoader.getString("INVALID_PERMISSIONS",
 					Permission.RESOURCE_LOCATION);
-				Permission.log.warning(msg);
+				Permission.log.warn(msg);
 
 				ex.printStackTrace();
 			}
@@ -590,10 +586,10 @@ public class Permission {
 		Map<String, Boolean> perms = this.getChildPermissions();
 		for (String s : perms.keySet()) {
 			if (!Permission.exists(s)) {
-				Permission.log.warning(SafeResourceLoader
-					.getString("NON_EXISTANT_SUBPERMISSON",
-						Permission.RESOURCE_LOCATION)
-					.replaceFirst("\\$PERMISSION", s));
+				Permission.log.warn(
+					SafeResourceLoader.getString("NON_EXISTANT_SUBPERMISSON",
+						Permission.RESOURCE_LOCATION),
+					s);
 				continue;// it was not created somehow
 			}
 			// this is recursive
