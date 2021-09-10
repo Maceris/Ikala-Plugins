@@ -7,7 +7,9 @@ import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.util.FileUtils;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.glfw.Callbacks;
 import org.lwjgl.glfw.GLFW;
@@ -21,6 +23,8 @@ import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.IntBuffer;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Provides utilities for handling graphics.
@@ -31,7 +35,7 @@ import java.nio.IntBuffer;
 @Slf4j
 public class GraphicsManager {
 
-	private static boolean initialized = false;
+	private static AtomicBoolean initialized = new AtomicBoolean(false);
 
 	/**
 	 * A reference to the graphics plugin for resource bundle access.
@@ -52,6 +56,16 @@ public class GraphicsManager {
 
 	private static ShaderProgram shaderProgram;
 	private static Mesh mesh;
+
+	@Getter(value = AccessLevel.PACKAGE)
+	private static AtomicBoolean shutdownFlag = new AtomicBoolean(false);
+
+	/**
+	 * Used to track the tick method reference in the framework.
+	 */
+	@Getter(value = AccessLevel.PACKAGE)
+	@Setter(value = AccessLevel.PACKAGE)
+	private static UUID tickStageID;
 
 	/**
 	 * Creates a graphics window, fires off a {@link WindowCreated} event. Won't
@@ -150,11 +164,13 @@ public class GraphicsManager {
 		GraphicsManager.shaderProgram.link();
 
 		// Set up vertices
-		float[] vertices =
-			new float[] {-0.5f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, 0.5f,
-				0.0f, 0.5f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f,};
+		float[] positions = new float[] {-0.5f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f,
+			0.5f, -0.5f, 0.0f, 0.5f, 0.5f, 0.0f,};
+		int[] indices = new int[] {0, 1, 3, 3, 1, 2,};
+		float[] colors = new float[] {0.5f, 0.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0.0f,
+			0.0f, 0.5f, 0.0f, 0.5f, 0.5f,};
 
-		GraphicsManager.mesh = new Mesh(vertices);
+		GraphicsManager.mesh = new Mesh(positions, colors, indices);
 	}
 
 	/**
@@ -175,10 +191,9 @@ public class GraphicsManager {
 	}
 
 	private static void init() {
-		if (GraphicsManager.initialized) {
+		if (!GraphicsManager.initialized.compareAndSet(false, true)) {
 			return;
 		}
-		GraphicsManager.initialized = true;
 		/*
 		 * Setup an error callback. The default implementation will print the
 		 * error message in System.err.
@@ -189,6 +204,7 @@ public class GraphicsManager {
 				"GLFW_INIT_FAIL", GraphicsManager.plugin.getResourceBundle()));
 			throw new IllegalStateException("Unable to initialize GLFW");
 		}
+		shutdownFlag.set(false);
 	}
 
 	/**
@@ -215,6 +231,7 @@ public class GraphicsManager {
 		GraphicsManager.destroyWindow();
 		GLFW.glfwTerminate();
 		GLFW.glfwSetErrorCallback(null).free();
+		GraphicsManager.initialized.set(false);
 	}
 
 	/**
@@ -227,6 +244,10 @@ public class GraphicsManager {
 	static int tick() {
 		if (MemoryUtil.NULL == GraphicsManager.window) {
 			return -1;
+		}
+		if (shutdownFlag.get()) {
+			GraphicsManager.terminate();
+			return Launcher.STATUS_OK;
 		}
 
 		// Measure speed
@@ -256,10 +277,11 @@ public class GraphicsManager {
 		// Bind to the VAO
 		GL30.glBindVertexArray(GraphicsManager.mesh.getVaoId());
 		GL20.glEnableVertexAttribArray(0);
+		GL20.glEnableVertexAttribArray(1);
 
 		// Draw the vertices
-		GL11.glDrawArrays(GL11.GL_TRIANGLES, 0,
-			GraphicsManager.mesh.getVertexCount());
+		GL11.glDrawElements(GL11.GL_TRIANGLES, mesh.getVertexCount(),
+			GL11.GL_UNSIGNED_INT, 0);
 
 		// Restore state
 		GL20.glDisableVertexAttribArray(0);
