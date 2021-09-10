@@ -14,6 +14,7 @@ import java.util.HashSet;
 import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * The plugin for handling graphics.
@@ -52,15 +53,16 @@ public class GraphicsPlugin extends Plugin {
 
 	@Override
 	public boolean onDisable() {
-		GraphicsManager.destroyWindow();
-		GraphicsManager.terminate();
+		GraphicsManager.getShutdownFlag().set(true);
+		Launcher.removeMainThreadStage(GraphicsManager.getTickStageID());
 		return true;
 	}
 
 	@Override
 	public boolean onEnable() {
 		GraphicsManager.createWindow();
-		Launcher.addMainThreadStage(GraphicsManager::tick);
+		UUID stageID = Launcher.addMainThreadStage(GraphicsManager::tick);
+		GraphicsManager.setTickStageID(stageID);
 		return true;
 	}
 
