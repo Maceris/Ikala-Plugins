@@ -15,13 +15,11 @@ import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWVidMode;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
-import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 
 /**
@@ -53,8 +51,7 @@ public class GraphicsManager {
 	private static int frameCount;
 
 	private static ShaderProgram shaderProgram;
-	private static int vaoId;
-	private static int vboId;
+	private static Mesh mesh;
 
 	/**
 	 * Creates a graphics window, fires off a {@link WindowCreated} event. Won't
@@ -66,8 +63,6 @@ public class GraphicsManager {
 			return;
 		}
 		GraphicsManager.init();
-		GraphicsManager.log.info("Using GLFW version {}",
-			GLFW.glfwGetVersionString());
 
 		// Configure GLFW
 
@@ -145,32 +140,21 @@ public class GraphicsManager {
 		GraphicsManager.lastTimestamp = GLFW.glfwGetTime();
 
 		// Create a shader program
-		shaderProgram = new ShaderProgram();
-		shaderProgram.createVertexShader(FileUtils.readAsString(PluginFolder
-			.getResource(GraphicsPlugin.NAME, ResourceType.DATA, "vertex.vs")));
-		shaderProgram.createFragmentShader(
+		GraphicsManager.shaderProgram = new ShaderProgram();
+		GraphicsManager.shaderProgram.createVertexShader(
+			FileUtils.readAsString(PluginFolder.getResource(GraphicsPlugin.NAME,
+				ResourceType.DATA, "vertex.vs")));
+		GraphicsManager.shaderProgram.createFragmentShader(
 			FileUtils.readAsString(PluginFolder.getResource(GraphicsPlugin.NAME,
 				ResourceType.DATA, "fragment.fs")));
-		shaderProgram.link();
+		GraphicsManager.shaderProgram.link();
 
 		// Set up vertices
-		float[] vertices = new float[] {0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f,
-			0.5f, -0.5f, 0.0f};
-		FloatBuffer verticesBuffer = MemoryUtil.memAllocFloat(vertices.length);
-		verticesBuffer.put(vertices).flip();
+		float[] vertices =
+			new float[] {-0.5f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, 0.5f,
+				0.0f, 0.5f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f,};
 
-		// create and bind VAO
-		vaoId = GL30.glGenVertexArrays();
-		GL30.glBindVertexArray(vaoId);
-
-		// Create VBO and fill with data
-		vboId = GL15.glGenBuffers();
-		GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboId);
-		GL15.glBufferData(GL15.GL_ARRAY_BUFFER, verticesBuffer,
-			GL15.GL_STATIC_DRAW);
-		MemoryUtil.memFree(verticesBuffer);
-
-		GL20.glVertexAttribPointer(0, 3, GL11.GL_FLOAT, false, 0, 0);
+		GraphicsManager.mesh = new Mesh(vertices);
 	}
 
 	/**
@@ -221,20 +205,13 @@ public class GraphicsManager {
 	 * they are destroyed.
 	 */
 	public static void terminate() {
-		if (shaderProgram != null) {
-			shaderProgram.cleanup();
+		if (GraphicsManager.shaderProgram != null) {
+			GraphicsManager.shaderProgram.cleanup();
+		}
+		if (GraphicsManager.mesh != null) {
+			GraphicsManager.mesh.cleanUp();
 		}
 
-		GL20.glDisableVertexAttribArray(0);
-
-		// Delete the VBO
-		GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
-		GL15.glDeleteBuffers(vboId);
-
-		// Delete the VAO
-		GL30.glBindVertexArray(0);
-		GL30.glDeleteVertexArrays(vaoId);
-		
 		GraphicsManager.destroyWindow();
 		GLFW.glfwTerminate();
 		GLFW.glfwSetErrorCallback(null).free();
@@ -274,20 +251,21 @@ public class GraphicsManager {
 		// clear the framebuffer
 		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
 
-		shaderProgram.bind();
+		GraphicsManager.shaderProgram.bind();
 
 		// Bind to the VAO
-		GL30.glBindVertexArray(vaoId);
+		GL30.glBindVertexArray(GraphicsManager.mesh.getVaoId());
 		GL20.glEnableVertexAttribArray(0);
 
 		// Draw the vertices
-		GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, 3);
+		GL11.glDrawArrays(GL11.GL_TRIANGLES, 0,
+			GraphicsManager.mesh.getVertexCount());
 
 		// Restore state
 		GL20.glDisableVertexAttribArray(0);
 		GL30.glBindVertexArray(0);
 
-		shaderProgram.unbind();
+		GraphicsManager.shaderProgram.unbind();
 
 		GLFW.glfwSwapBuffers(GraphicsManager.window); // swap the color buffers
 
