@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics;
 
 import com.ikalagaming.event.Listener;
+import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 
@@ -27,11 +28,11 @@ public class GraphicsPlugin extends Plugin {
 	 * The name of the plugin.
 	 */
 	static final String NAME = "Ikala-Graphics";
-	private ControlListener ctrl;
 	private Set<Listener> listeners;
+
 	/**
 	 * The resource bundle for the Graphics plugin.
-	 * 
+	 *
 	 * @return The bundle.
 	 * @param resourceBundle The new bundle to use.
 	 */
@@ -39,19 +40,11 @@ public class GraphicsPlugin extends Plugin {
 	@Setter
 	private ResourceBundle resourceBundle;
 
-	private ControlListener getCtrl() {
-		if (this.ctrl == null) {
-			this.ctrl = new ControlListener();
-		}
-		return this.ctrl;
-	}
-
 	@Override
 	public Set<Listener> getListeners() {
 		if (this.listeners == null) {
 			this.listeners =
 				Collections.synchronizedSet(new HashSet<Listener>());
-			this.listeners.add(this.getCtrl());
 		}
 
 		return this.listeners;
@@ -59,8 +52,15 @@ public class GraphicsPlugin extends Plugin {
 
 	@Override
 	public boolean onDisable() {
-		GraphicsManager.destroyAllWindows();
+		GraphicsManager.destroyWindow();
 		GraphicsManager.terminate();
+		return true;
+	}
+
+	@Override
+	public boolean onEnable() {
+		GraphicsManager.createWindow();
+		Launcher.addMainThreadStage(GraphicsManager::tick);
 		return true;
 	}
 
@@ -73,7 +73,8 @@ public class GraphicsPlugin extends Plugin {
 		}
 		catch (MissingResourceException missingResource) {
 			// don't localize this since it would fail anyways
-			log.warn("Locale not found for Ikala-Graphics in onLoad()");
+			GraphicsPlugin.log
+				.warn("Locale not found for Ikala-Graphics in onLoad()");
 		}
 		GraphicsManager.setPlugin(this);
 		return true;
@@ -82,7 +83,6 @@ public class GraphicsPlugin extends Plugin {
 	@Override
 	public boolean onUnload() {
 		GraphicsManager.setPlugin(null);
-		this.ctrl = null;
 		this.setResourceBundle(null);
 		return true;
 	}

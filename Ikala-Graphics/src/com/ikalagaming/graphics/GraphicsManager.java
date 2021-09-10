@@ -1,6 +1,10 @@
 package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.events.WindowCreated;
+import com.ikalagaming.launcher.Launcher;
+import com.ikalagaming.launcher.PluginFolder;
+import com.ikalagaming.launcher.PluginFolder.ResourceType;
+import com.ikalagaming.util.FileUtils;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.Getter;
@@ -11,12 +15,14 @@ import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWVidMode;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL15;
+import org.lwjgl.opengl.GL20;
+import org.lwjgl.opengl.GL30;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
+import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Provides utilities for handling graphics.
@@ -35,30 +41,34 @@ public class GraphicsManager {
 	private static GraphicsPlugin plugin;
 
 	/**
-	 * Set the plugin to the given reference.
-	 * 
-	 * @param plugin The plugin to use.
-	 */
-	static synchronized void setPlugin(GraphicsPlugin plugin) {
-		GraphicsManager.plugin = plugin;
-	}
-
-	/**
-	 * The list of window handles that have been created.
+	 * The window handle that have been created.
 	 *
-	 * @return All known window handles.
+	 * @return The window handle.
 	 */
 	@Getter
-	private static List<Long> windows = new ArrayList<>();
+	private static long window = MemoryUtil.NULL;
+
+	private static double lastTimestamp;
+
+	private static int frameCount;
+
+	private static ShaderProgram shaderProgram;
+	private static int vaoId;
+	private static int vboId;
 
 	/**
-	 * Creates a graphics window, fires off a {@link WindowCreated} event.
+	 * Creates a graphics window, fires off a {@link WindowCreated} event. Won't
+	 * do anything if a window already exists.
 	 *
 	 */
 	public static void createWindow() {
+		if (MemoryUtil.NULL != GraphicsManager.window) {
+			return;
+		}
 		GraphicsManager.init();
+		GraphicsManager.log.info("Using GLFW version {}",
+			GLFW.glfwGetVersionString());
 
-		long window;
 		// Configure GLFW
 
 		// optional, the current window hints are already the default
@@ -67,20 +77,23 @@ public class GraphicsManager {
 		GLFW.glfwWindowHint(GLFW.GLFW_VISIBLE, GLFW.GLFW_FALSE);
 		// the window will be resizable
 		GLFW.glfwWindowHint(GLFW.GLFW_RESIZABLE, GLFW.GLFW_TRUE);
+		GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR, 3);
+		GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MINOR, 2);
+		GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_PROFILE,
+			GLFW.GLFW_OPENGL_CORE_PROFILE);
+		GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_FORWARD_COMPAT, GLFW.GLFW_TRUE);
 
 		// Create the window
-		window = GLFW.glfwCreateWindow(300, 300, "Hello World!",
+		GraphicsManager.window = GLFW.glfwCreateWindow(640, 480, "Hello World!",
 			MemoryUtil.NULL, MemoryUtil.NULL);
-		if (window == MemoryUtil.NULL) {
+		if (GraphicsManager.window == MemoryUtil.NULL) {
 			GraphicsManager.log.error("Failed to create the GLFW window");
 			throw new RuntimeException("Failed to create the GLFW window");
 		}
 
-		GraphicsManager.windows.add(window);
-
 		// Setup a key callback. It will be called every time a key is pressed,
 		// repeated or released.
-		GLFW.glfwSetKeyCallback(window,
+		GLFW.glfwSetKeyCallback(GraphicsManager.window,
 			(window1, key, scancode, action, mods) -> {
 				if (key == GLFW.GLFW_KEY_ESCAPE
 					&& action == GLFW.GLFW_RELEASE) {
@@ -95,24 +108,25 @@ public class GraphicsManager {
 			IntBuffer pHeight = stack.mallocInt(1); // int*
 
 			// Get the window size passed to glfwCreateWindow
-			GLFW.glfwGetWindowSize(window, pWidth, pHeight);
+			GLFW.glfwGetWindowSize(GraphicsManager.window, pWidth, pHeight);
 
 			// Get the resolution of the primary monitor
 			GLFWVidMode vidmode =
 				GLFW.glfwGetVideoMode(GLFW.glfwGetPrimaryMonitor());
 
 			// Center the window
-			GLFW.glfwSetWindowPos(window, (vidmode.width() - pWidth.get(0)) / 2,
+			GLFW.glfwSetWindowPos(GraphicsManager.window,
+				(vidmode.width() - pWidth.get(0)) / 2,
 				(vidmode.height() - pHeight.get(0)) / 2);
 		} // the stack frame is popped automatically
 
 		// Make the OpenGL context current
-		GLFW.glfwMakeContextCurrent(window);
+		GLFW.glfwMakeContextCurrent(GraphicsManager.window);
 		// Enable v-sync
 		GLFW.glfwSwapInterval(1);
 
 		// Make the window visible
-		GLFW.glfwShowWindow(window);
+		GLFW.glfwShowWindow(GraphicsManager.window);
 
 		// This line is critical for LWJGL's interoperation with GLFW's
 		// OpenGL context, or any context that is managed externally.
@@ -122,36 +136,55 @@ public class GraphicsManager {
 		GL.createCapabilities();
 
 		// Set the clear color
-		GL11.glClearColor(1.0f, 0.0f, 0.0f, 0.0f);
+		GL11.glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
 		GraphicsManager.log.debug(SafeResourceLoader.getString("WINDOW_CREATED",
 			GraphicsManager.plugin.getResourceBundle()));
-		new WindowCreated(window).fire();
-	}
+		new WindowCreated(GraphicsManager.window).fire();
+		GraphicsManager.frameCount = 0;
+		GraphicsManager.lastTimestamp = GLFW.glfwGetTime();
 
-	/**
-	 * Destroy all the window handles that we know about.
-	 *
-	 * @see #getWindows()
-	 * @see #destroyWindow(long)
-	 */
-	public static void destroyAllWindows() {
-		// copy of the list so we don't have concurrent modification
-		List<Long> temp = new ArrayList<>(GraphicsManager.windows);
-		for (long handle : temp) {
-			GraphicsManager.destroyWindow(handle);
-		}
+		// Create a shader program
+		shaderProgram = new ShaderProgram();
+		shaderProgram.createVertexShader(FileUtils.readAsString(PluginFolder
+			.getResource(GraphicsPlugin.NAME, ResourceType.DATA, "vertex.vs")));
+		shaderProgram.createFragmentShader(
+			FileUtils.readAsString(PluginFolder.getResource(GraphicsPlugin.NAME,
+				ResourceType.DATA, "fragment.fs")));
+		shaderProgram.link();
+
+		// Set up vertices
+		float[] vertices = new float[] {0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f,
+			0.5f, -0.5f, 0.0f};
+		FloatBuffer verticesBuffer = MemoryUtil.memAllocFloat(vertices.length);
+		verticesBuffer.put(vertices).flip();
+
+		// create and bind VAO
+		vaoId = GL30.glGenVertexArrays();
+		GL30.glBindVertexArray(vaoId);
+
+		// Create VBO and fill with data
+		vboId = GL15.glGenBuffers();
+		GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboId);
+		GL15.glBufferData(GL15.GL_ARRAY_BUFFER, verticesBuffer,
+			GL15.GL_STATIC_DRAW);
+		MemoryUtil.memFree(verticesBuffer);
+
+		GL20.glVertexAttribPointer(0, 3, GL11.GL_FLOAT, false, 0, 0);
 	}
 
 	/**
 	 * Destroy the window with the given window handle.
 	 *
-	 * @param window The window handle we want to destroy.
 	 */
-	public static void destroyWindow(long window) {
-		Callbacks.glfwFreeCallbacks(window);
-		GLFW.glfwDestroyWindow(window);
-		GraphicsManager.windows.remove(window);
+	public static void destroyWindow() {
+		if (MemoryUtil.NULL == GraphicsManager.window) {
+			return;
+		}
+		Callbacks.glfwFreeCallbacks(GraphicsManager.window);
+		GLFW.glfwDestroyWindow(GraphicsManager.window);
+
+		GraphicsManager.window = MemoryUtil.NULL;
 
 		GraphicsManager.log.debug(SafeResourceLoader.getString(
 			"WINDOW_DESTROYED", GraphicsManager.plugin.getResourceBundle()));
@@ -175,13 +208,34 @@ public class GraphicsManager {
 	}
 
 	/**
+	 * Set the plugin to the given reference.
+	 *
+	 * @param plugin The plugin to use.
+	 */
+	static synchronized void setPlugin(GraphicsPlugin plugin) {
+		GraphicsManager.plugin = plugin;
+	}
+
+	/**
 	 * Terminate GLFW and free the error callback. If any windows still remain,
 	 * they are destroyed.
 	 */
 	public static void terminate() {
-		if (!GraphicsManager.windows.isEmpty()) {
-			GraphicsManager.destroyAllWindows();
+		if (shaderProgram != null) {
+			shaderProgram.cleanup();
 		}
+
+		GL20.glDisableVertexAttribArray(0);
+
+		// Delete the VBO
+		GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
+		GL15.glDeleteBuffers(vboId);
+
+		// Delete the VAO
+		GL30.glBindVertexArray(0);
+		GL30.glDeleteVertexArrays(vaoId);
+		
+		GraphicsManager.destroyWindow();
 		GLFW.glfwTerminate();
 		GLFW.glfwSetErrorCallback(null).free();
 	}
@@ -191,25 +245,54 @@ public class GraphicsManager {
 	 * is, returns false if the window was destroyed and true if it still
 	 * exists.
 	 *
-	 * @param window the window to update.
 	 * @return True if the window updated, false if has been destroyed.
 	 */
-	static boolean tick(long window) {
-		// Run the rendering loop until the user has attempted to close
-		// the window or has pressed the ESCAPE key.
-		if (!GLFW.glfwWindowShouldClose(window)) {
-			// clear the framebuffer
-			GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
-
-			GLFW.glfwSwapBuffers(window); // swap the color buffers
-
-			// Poll for window events. The key callback above will only be
-			// invoked during this call.
-			GLFW.glfwPollEvents();
-			return true;
+	static int tick() {
+		if (MemoryUtil.NULL == GraphicsManager.window) {
+			return -1;
 		}
-		GraphicsManager.destroyWindow(window);
-		return false;
+
+		// Measure speed
+		double currentTime = GLFW.glfwGetTime();
+		GraphicsManager.frameCount++;
+		// If a second has passed.
+		if (currentTime - GraphicsManager.lastTimestamp >= 1.0) {
+			// Display the frame count here any way you want.
+			// displayFPS(frameCount);
+
+			GraphicsManager.frameCount = 0;
+			GraphicsManager.lastTimestamp = currentTime;
+		}
+
+		// Poll for window events
+		GLFW.glfwPollEvents();
+
+		if (GLFW.glfwWindowShouldClose(GraphicsManager.window)) {
+			GraphicsManager.destroyWindow();
+			return -1;
+		}
+		// clear the framebuffer
+		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+
+		shaderProgram.bind();
+
+		// Bind to the VAO
+		GL30.glBindVertexArray(vaoId);
+		GL20.glEnableVertexAttribArray(0);
+
+		// Draw the vertices
+		GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, 3);
+
+		// Restore state
+		GL20.glDisableVertexAttribArray(0);
+		GL30.glBindVertexArray(0);
+
+		shaderProgram.unbind();
+
+		GLFW.glfwSwapBuffers(GraphicsManager.window); // swap the color buffers
+
+		return Launcher.STATUS_OK;
+
 	}
 
 	/**
