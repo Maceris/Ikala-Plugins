@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="Example-Plugin" default="compileTest" basedir="." xmlns:if="ant:if">
+<project name="Ikala-Item" default="compileTest" basedir="." xmlns:if="ant:if">
 	<!-- configure folder names for the project -->
 	<property name="src.dir" location="src" />
 	<property name="src.delomboked.dir" location="src-delomboked" />

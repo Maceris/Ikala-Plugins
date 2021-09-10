@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="Example-Plugin" default="compileTest" basedir="." xmlns:if="ant:if">
+<project name="Ikala-Graphics" default="compileTest" basedir="." xmlns:if="ant:if">
 	<!-- configure folder names for the project -->
 	<property name="src.dir" location="src" />
 	<property name="src.delomboked.dir" location="src-delomboked" />
@@ -23,7 +23,7 @@
 	<property name="javaVersion" value="1.8" />
 	<property name="pluginConfig" value="plugin.yml" />
 	<property name="bundleInJavadocs" value="false" />
-	<property name="includeLicensesFolder" value="false" />
+	<property name="includeLicensesFolder" value="true" />
 
 	<!-- Load in the plugin name and version from plugin.yml -->
 	<loadproperties srcFile="${pluginConfig}" prefix="plugin">
