@@ -5,7 +5,9 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A window on the screen. These can nest and are aligned, sized, and positioned
@@ -102,7 +104,7 @@ public class Window {
 	/**
 	 * A list of sub-windows this window contains.
 	 */
-	private ArrayList<Window> children;
+	private List<Window> children;
 
 	/**
 	 * True if this window absorbs touches and stops them from reaching lower
@@ -170,6 +172,16 @@ public class Window {
 	 * @param item The child to add to the window.
 	 */
 	public void addChild(@NonNull Window item) {
+		Window temp = item.parent;
+		while (temp != null) {
+			if (temp == this || temp == item) {
+				// TODO localize
+				Window.log.warn("Trying to add cyclic child, canceling");
+				return;
+			}
+			temp = temp.parent;
+		}
+
 		this.children.add(item);
 		if (item.parent != this) {
 			item.setParent(this);
@@ -201,7 +213,10 @@ public class Window {
 	 * this window.
 	 */
 	void delete() {
-		// TODO finish this?
+		this.parent = null;
+		this.children.forEach(WindowManager::unregisterWin);
+		this.children.forEach(Window::delete);
+		this.children.clear();
 	}
 
 	/**
@@ -610,6 +625,16 @@ public class Window {
 	 * @param newParent The new parent of this window.
 	 */
 	public void setParent(final Window newParent) {
+		ArrayDeque<Window> childQueue = new ArrayDeque<>(newParent.children);
+		while (!childQueue.isEmpty()) {
+			Window child = childQueue.removeFirst();
+			if (child == this) {
+				// TODO localize
+				Window.log.warn("Trying to add cyclic child, canceling");
+				return;
+			}
+			childQueue.addAll(child.children);
+		}
 		this.parent = newParent;
 		if (!this.parent.hasChild(this)) {
 			this.parent.addChild(this);

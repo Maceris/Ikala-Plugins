@@ -255,7 +255,7 @@ public class WindowManager implements Listener {
 
 		// remove the window from the name map
 		WindowManager.nameMap.values().remove(window);
-
+		window.delete();
 	}
 
 	/**
