@@ -24,4 +24,5 @@ public class AttributeString implements Attribute<String> {
 	private Integer id;
 	private String name;
 	private String value;
+	private String componentType;
 }

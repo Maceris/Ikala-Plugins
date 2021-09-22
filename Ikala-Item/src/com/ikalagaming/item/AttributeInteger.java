@@ -24,4 +24,5 @@ public class AttributeInteger implements Attribute<Integer> {
 	private Integer id;
 	private String name;
 	private Integer value;
+	private String componentType;
 }

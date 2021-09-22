@@ -24,4 +24,5 @@ public class AttributeFloat implements Attribute<Double> {
 	private Integer id;
 	private String name;
 	private Double value;
+	private String componentType;
 }

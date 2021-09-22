@@ -24,4 +24,5 @@ public class AttributeBoolean implements Attribute<Boolean> {
 	private Integer id;
 	private String name;
 	private Boolean value;
+	private String componentType;
 }
