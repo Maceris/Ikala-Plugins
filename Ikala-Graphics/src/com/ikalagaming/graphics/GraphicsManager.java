@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.events.WindowCreated;
+import com.ikalagaming.graphics.exceptions.WindowCreationException;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
@@ -97,11 +98,13 @@ public class GraphicsManager {
 			MemoryUtil.NULL, MemoryUtil.NULL);
 		if (GraphicsManager.window == MemoryUtil.NULL) {
 			GraphicsManager.log.error("Failed to create the GLFW window");
-			throw new RuntimeException("Failed to create the GLFW window");
+			throw new WindowCreationException("Failed to create the GLFW window");
 		}
 
-		// Setup a key callback. It will be called every time a key is pressed,
-		// repeated or released.
+		/*
+		 * Setup a key callback. It will be called every time a key is pressed,
+		 * repeated or released.
+		 */
 		GLFW.glfwSetKeyCallback(GraphicsManager.window,
 			(window1, key, scancode, action, mods) -> {
 				if (key == GLFW.GLFW_KEY_ESCAPE
@@ -137,11 +140,13 @@ public class GraphicsManager {
 		// Make the window visible
 		GLFW.glfwShowWindow(GraphicsManager.window);
 
-		// This line is critical for LWJGL's interoperation with GLFW's
-		// OpenGL context, or any context that is managed externally.
-		// LWJGL detects the context that is current in the current thread,
-		// creates the GLCapabilities instance and makes the OpenGL
-		// bindings available for use.
+		/*
+		 * This line is critical for LWJGL's interoperation with GLFW's OpenGL
+		 * context, or any context that is managed externally. LWJGL detects the
+		 * context that is current in the current thread, creates the
+		 * GLCapabilities instance and makes the OpenGL bindings available for
+		 * use.
+		 */
 		GL.createCapabilities();
 
 		// Set the clear color
