@@ -13,6 +13,7 @@ import org.hibernate.cfg.Configuration;
 import java.io.File;
 import java.util.Arrays;
 import java.util.Properties;
+import java.util.logging.Level;
 
 /**
  * Handles the lifecycle for the item plugin.
@@ -36,9 +37,10 @@ public class ItemPlugin extends Plugin {
 		prop.setProperty("hibernate.connection.password", "");
 		prop.setProperty("hibernate.connection.driver_class", "org.h2.Driver");
 		prop.setProperty("hibernate.hbm2ddl.auto", "create");
-		prop.setProperty("show_sql", "true");
+		prop.setProperty("show_sql", "false");
 		prop.setProperty("hibernate.transaction.jta.platform",
 			"org.hibernate.service.jta.platform.internal.BitronixJtaPlatform");
+		java.util.logging.Logger.getLogger("org.hibernate").setLevel(Level.WARNING);
 
 		Configuration config = new Configuration().addProperties(prop);
 		Arrays
@@ -53,15 +55,19 @@ public class ItemPlugin extends Plugin {
 		AttributeBoolean bool = new AttributeBoolean();
 		bool.setName("testBool");
 		bool.setValue(true);
+		bool.setComponentType(this.getClass().getName());
 		AttributeFloat floatval = new AttributeFloat();
 		floatval.setName("testFloat");
 		floatval.setValue(1.23d);
+		floatval.setComponentType(this.getClass().getName());
 		AttributeInteger intval = new AttributeInteger();
 		intval.setName("testInt");
 		intval.setValue(3);
+		intval.setComponentType(this.getClass().getName());
 		AttributeString str = new AttributeString();
 		str.setName("testStr");
 		str.setValue("sample");
+		str.setComponentType(this.getClass().getName());
 
 		item.getAttributes().add(bool);
 		item.getAttributes().add(floatval);
