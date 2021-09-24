@@ -29,8 +29,6 @@ public class GraphicsPlugin extends Plugin {
 	 * The name of the plugin.
 	 */
 	static final String NAME = "Ikala-Graphics";
-	private Set<Listener> listeners;
-
 	/**
 	 * The resource bundle for the Graphics plugin.
 	 *
@@ -39,7 +37,9 @@ public class GraphicsPlugin extends Plugin {
 	 */
 	@Getter
 	@Setter
-	private ResourceBundle resourceBundle;
+	private static ResourceBundle resourceBundle;
+
+	private Set<Listener> listeners;
 
 	@Override
 	public Set<Listener> getListeners() {
@@ -69,7 +69,7 @@ public class GraphicsPlugin extends Plugin {
 	@Override
 	public boolean onLoad() {
 		try {
-			this.setResourceBundle(ResourceBundle.getBundle(
+			GraphicsPlugin.setResourceBundle(ResourceBundle.getBundle(
 				"com.ikalagaming.graphics.resources.strings",
 				Localization.getLocale()));
 		}
@@ -78,14 +78,12 @@ public class GraphicsPlugin extends Plugin {
 			GraphicsPlugin.log
 				.warn("Locale not found for Ikala-Graphics in onLoad()");
 		}
-		GraphicsManager.setPlugin(this);
 		return true;
 	}
 
 	@Override
 	public boolean onUnload() {
-		GraphicsManager.setPlugin(null);
-		this.setResourceBundle(null);
+		GraphicsPlugin.setResourceBundle(null);
 		return true;
 	}
 

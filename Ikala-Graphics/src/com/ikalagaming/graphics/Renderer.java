@@ -1,14 +1,14 @@
 package com.ikalagaming.graphics;
 
+import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.util.FileUtils;
+import com.ikalagaming.util.SafeResourceLoader;
 
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
-import org.lwjgl.glfw.GLFW;
-import org.lwjgl.system.MemoryStack;
 
-import java.nio.IntBuffer;
 import java.util.List;
 
 /**
@@ -17,6 +17,7 @@ import java.util.List;
  * @author Ches Burks
  *
  */
+@Slf4j
 public class Renderer {
 
 	/**
@@ -64,17 +65,10 @@ public class Renderer {
 	 * @return The newly calculated projection matrix.
 	 */
 	private Matrix4f calculateProjectionMatrix() {
-		try (MemoryStack stack = MemoryStack.stackPush()) {
-			IntBuffer width = stack.mallocInt(1);
-			IntBuffer height = stack.mallocInt(1);
-
-			// Get the window size passed to glfwCreateWindow
-			GLFW.glfwGetWindowSize(GraphicsManager.getWindowID(), width,
-				height);
-
-			return this.transformation.getProjectionMatrix(Renderer.FOV,
-				width.get(0), height.get(0), Renderer.Z_NEAR, Renderer.Z_FAR);
-		}
+		Window window = GraphicsManager.getWindow();
+		return this.transformation.getProjectionMatrix(Renderer.FOV,
+			window.getWidth(), window.getHeight(), Renderer.Z_NEAR,
+			Renderer.Z_FAR);
 	}
 
 	/**
@@ -92,15 +86,22 @@ public class Renderer {
 	public void init() {
 		// Create a shader program
 		this.shaderProgram = new ShaderProgram();
-		this.shaderProgram.createVertexShader(
-			FileUtils.readAsString(PluginFolder.getResource(GraphicsPlugin.NAME,
-				ResourceType.DATA, "vertex.vs")));
-		this.shaderProgram.createFragmentShader(
-			FileUtils.readAsString(PluginFolder.getResource(GraphicsPlugin.NAME,
-				ResourceType.DATA, "fragment.fs")));
+		try {
+			this.shaderProgram.createVertexShader(
+				FileUtils.readAsString(PluginFolder.getResource(
+					GraphicsPlugin.NAME, ResourceType.DATA, "vertex.vs")));
+			this.shaderProgram.createFragmentShader(
+				FileUtils.readAsString(PluginFolder.getResource(
+					GraphicsPlugin.NAME, ResourceType.DATA, "fragment.fs")));
+		}
+		catch (ShaderException e) {
+			Renderer.log.error(SafeResourceLoader.getString(
+				"SHADER_ERROR_SETUP", GraphicsPlugin.getResourceBundle()), e);
+		}
 		this.shaderProgram.link();
 		this.shaderProgram.createUniform(Renderer.PROJECTION_MATRIX);
 		this.shaderProgram.createUniform(Renderer.WORLD_MATRIX);
+		this.shaderProgram.createUniform("texture_sampler");
 	}
 
 	/**
@@ -119,6 +120,7 @@ public class Renderer {
 				this.transformation.getWorldMatrix(gameItem.getPosition(),
 					gameItem.getRotation(), gameItem.getScale());
 			this.shaderProgram.setUniform(Renderer.WORLD_MATRIX, worldMatrix);
+			this.shaderProgram.setUniform("texture_sampler", 0);
 			// Render the mesh for this game item
 			gameItem.getMesh().render();
 		}

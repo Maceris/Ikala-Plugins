@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.exceptions.ShaderException;
+import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
@@ -56,7 +57,7 @@ public class ShaderProgram {
 	 * Create a fragment shader given shader code.
 	 *
 	 * @param shaderCode The shader code to compile.
-	 * @throws RuntimeException If there was an error creating or compiling the
+	 * @throws ShaderException If there was an error creating or compiling the
 	 *             shader.
 	 */
 	public void createFragmentShader(String shaderCode) {
@@ -70,22 +71,27 @@ public class ShaderProgram {
 	 * @param shaderCode The code to compile.
 	 * @param shaderType The type of shader we are compiling.
 	 * @return The newly created shader ID.
-	 * @throws RuntimeException If there was an error creating or compiling the
+	 * @throws ShaderException If there was an error creating or compiling the
 	 *             shader.
 	 */
 	protected int createShader(String shaderCode, int shaderType) {
 		int shaderId = GL20.glCreateShader(shaderType);
 		if (shaderId == 0) {
-			throw new ShaderException(
-				"Error creating shader. Type: " + shaderType);
+			ShaderProgram.log
+				.info(SafeResourceLoader.getString("SHADER_ERROR_CREATING",
+					GraphicsPlugin.getResourceBundle()), shaderType);
+			throw new ShaderException();
 		}
 
 		GL20.glShaderSource(shaderId, shaderCode);
 		GL20.glCompileShader(shaderId);
 
 		if (GL20.glGetShaderi(shaderId, GL20.GL_COMPILE_STATUS) == 0) {
-			throw new ShaderException("Error compiling Shader code: "
-				+ GL20.glGetShaderInfoLog(shaderId, 1024));
+			String message = SafeResourceLoader.getString(
+				"SHADER_ERROR_COMPILING", GraphicsPlugin.getResourceBundle());
+			ShaderProgram.log.info(message, shaderType);
+			throw new ShaderException(
+				message + " " + GL20.glGetShaderInfoLog(shaderId, 1024));
 		}
 
 		GL20.glAttachShader(this.programId, shaderId);
@@ -97,12 +103,17 @@ public class ShaderProgram {
 	 * Create a new uniform, which is a global GLSL variable for communicating
 	 * with shaders.
 	 *
-	 * @param name The name of the uniform.
+	 * @param name The name of the uniform.\
+	 * @throws ShaderException If the uniform cannot be found.
 	 */
 	public void createUniform(String name) {
 		int uniformLocation = GL20.glGetUniformLocation(this.programId, name);
 		if (uniformLocation < 0) {
-			throw new ShaderException("Could not find uniform:" + name);
+			ShaderProgram.log.warn(
+				SafeResourceLoader.getString("SHADER_ERROR_MISSING_UNIFORM",
+					GraphicsPlugin.getResourceBundle()),
+				name);
+			throw new ShaderException();
 		}
 		this.uniforms.put(name, uniformLocation);
 	}
@@ -111,7 +122,7 @@ public class ShaderProgram {
 	 * Create a vertex shader.
 	 *
 	 * @param shaderCode The shader code to compile.
-	 * @throws RuntimeException If there was an error creating or compiling the
+	 * @throws ShaderException If there was an error creating or compiling the
 	 *             shader.
 	 */
 	public void createVertexShader(String shaderCode) {
@@ -125,8 +136,11 @@ public class ShaderProgram {
 	public void link() {
 		GL20.glLinkProgram(this.programId);
 		if (GL20.glGetProgrami(this.programId, GL20.GL_LINK_STATUS) == 0) {
-			throw new ShaderException("Error linking Shader code: "
-				+ GL20.glGetProgramInfoLog(this.programId, 1024));
+			String message = SafeResourceLoader.getString(
+				"SHADER_ERROR_LINKING", GraphicsPlugin.getResourceBundle());
+			ShaderProgram.log.warn(message);
+			throw new ShaderException(
+				message + " " + GL20.glGetProgramInfoLog(this.programId, 1024));
 		}
 
 		if (this.vertexShaderId != 0) {
@@ -138,9 +152,21 @@ public class ShaderProgram {
 
 		GL20.glValidateProgram(this.programId);
 		if (GL20.glGetProgrami(this.programId, GL20.GL_VALIDATE_STATUS) == 0) {
-			ShaderProgram.log.warn("Warning validating Shader code: {}",
+			ShaderProgram.log.warn(
+				SafeResourceLoader.getString("SHADER_ERROR_VALIDATION_WARNING",
+					GraphicsPlugin.getResourceBundle()),
 				GL20.glGetProgramInfoLog(this.programId, 1024));
 		}
+	}
+
+	/**
+	 * Set the value of a uniform to the provided integer value.
+	 *
+	 * @param uniformName The name of the uniform to set.
+	 * @param value The value to set.
+	 */
+	public void setUniform(String uniformName, int value) {
+		GL20.glUniform1i(this.uniforms.get(uniformName), value);
 	}
 
 	/**

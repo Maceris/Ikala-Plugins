@@ -30,5 +30,10 @@
 			<attribute name="javadoc_location" value="jar:platform:/resource/Ikala-Graphics/lib/info/joml-1.10.2-javadoc.jar!/"/>
 		</attributes>
 	</classpathentry>
+	<classpathentry kind="lib" path="lib/bundled/pngdecoder-1.0.jar" sourcepath="lib/info/pngdecoder-1.0-sources.jar">
+		<attributes>
+			<attribute name="javadoc_location" value="jar:platform:/resource/Ikala-Graphics/lib/info/pngdecoder-1.0-javadoc.jar!/"/>
+		</attributes>
+	</classpathentry>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
