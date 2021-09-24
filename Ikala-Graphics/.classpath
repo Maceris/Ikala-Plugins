@@ -25,5 +25,10 @@
 			<attribute name="javadoc_location" value="jar:platform:/resource/Ikala-Graphics/lib/info/Ikala-Core-0.4.1-javadoc.jar!/"/>
 		</attributes>
 	</classpathentry>
+	<classpathentry kind="lib" path="lib/bundled/joml-1.10.2.jar" sourcepath="lib/info/joml-1.10.2-sources.jar">
+		<attributes>
+			<attribute name="javadoc_location" value="jar:platform:/resource/Ikala-Graphics/lib/info/joml-1.10.2-javadoc.jar!/"/>
+		</attributes>
+	</classpathentry>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
