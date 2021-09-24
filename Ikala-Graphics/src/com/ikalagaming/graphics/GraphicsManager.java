@@ -3,9 +3,6 @@ package com.ikalagaming.graphics;
 import com.ikalagaming.graphics.events.WindowCreated;
 import com.ikalagaming.graphics.exceptions.WindowCreationException;
 import com.ikalagaming.launcher.Launcher;
-import com.ikalagaming.launcher.PluginFolder;
-import com.ikalagaming.launcher.PluginFolder.ResourceType;
-import com.ikalagaming.util.FileUtils;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.AccessLevel;
@@ -15,15 +12,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.glfw.Callbacks;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
-import org.lwjgl.glfw.GLFWVidMode;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL20;
-import org.lwjgl.opengl.GL30;
-import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
-import java.nio.IntBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -38,10 +32,37 @@ public class GraphicsManager {
 
 	private static AtomicBoolean initialized = new AtomicBoolean(false);
 
+	private static List<SceneItem> items;
+
 	/**
 	 * A reference to the graphics plugin for resource bundle access.
 	 */
 	private static GraphicsPlugin plugin;
+
+	private static Renderer renderer;
+
+	@Getter(value = AccessLevel.PACKAGE)
+	private static AtomicBoolean shutdownFlag = new AtomicBoolean(false);
+
+	/**
+	 * Used to track the tick method reference in the framework.
+	 *
+	 * @param tickStageID The stage ID to use.
+	 * @return The tick stage ID.
+	 */
+	@Getter(value = AccessLevel.PACKAGE)
+	@Setter(value = AccessLevel.PACKAGE)
+	private static UUID tickStageID;
+
+	/**
+	 * The window utility.
+	 *
+	 * @return The window object.
+	 */
+	@Getter
+	private static Window window;
+
+	private static final String WINDOW_TITLE = "Ikala Gaming";
 
 	/**
 	 * The window handle that have been created.
@@ -49,24 +70,7 @@ public class GraphicsManager {
 	 * @return The window handle.
 	 */
 	@Getter
-	private static long window = MemoryUtil.NULL;
-
-	private static double lastTimestamp;
-
-	private static int frameCount;
-
-	private static ShaderProgram shaderProgram;
-	private static Mesh mesh;
-
-	@Getter(value = AccessLevel.PACKAGE)
-	private static AtomicBoolean shutdownFlag = new AtomicBoolean(false);
-
-	/**
-	 * Used to track the tick method reference in the framework.
-	 */
-	@Getter(value = AccessLevel.PACKAGE)
-	@Setter(value = AccessLevel.PACKAGE)
-	private static UUID tickStageID;
+	private static long windowID = MemoryUtil.NULL;
 
 	/**
 	 * Creates a graphics window, fires off a {@link WindowCreated} event. Won't
@@ -74,7 +78,7 @@ public class GraphicsManager {
 	 *
 	 */
 	public static void createWindow() {
-		if (MemoryUtil.NULL != GraphicsManager.window) {
+		if (MemoryUtil.NULL != GraphicsManager.windowID) {
 			return;
 		}
 		GraphicsManager.init();
@@ -94,18 +98,20 @@ public class GraphicsManager {
 		GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_FORWARD_COMPAT, GLFW.GLFW_TRUE);
 
 		// Create the window
-		GraphicsManager.window = GLFW.glfwCreateWindow(640, 480, "Hello World!",
-			MemoryUtil.NULL, MemoryUtil.NULL);
-		if (GraphicsManager.window == MemoryUtil.NULL) {
+		GraphicsManager.windowID = GLFW.glfwCreateWindow(640, 480,
+			GraphicsManager.WINDOW_TITLE, MemoryUtil.NULL, MemoryUtil.NULL);
+		if (GraphicsManager.windowID == MemoryUtil.NULL) {
 			GraphicsManager.log.error("Failed to create the GLFW window");
-			throw new WindowCreationException("Failed to create the GLFW window");
+			throw new WindowCreationException(
+				"Failed to create the GLFW window");
 		}
+		GraphicsManager.window = new Window(GraphicsManager.windowID);
 
 		/*
 		 * Setup a key callback. It will be called every time a key is pressed,
 		 * repeated or released.
 		 */
-		GLFW.glfwSetKeyCallback(GraphicsManager.window,
+		GLFW.glfwSetKeyCallback(GraphicsManager.windowID,
 			(window1, key, scancode, action, mods) -> {
 				if (key == GLFW.GLFW_KEY_ESCAPE
 					&& action == GLFW.GLFW_RELEASE) {
@@ -114,31 +120,15 @@ public class GraphicsManager {
 				}
 			});
 
-		// Get the thread stack and push a new frame
-		try (MemoryStack stack = MemoryStack.stackPush()) {
-			IntBuffer pWidth = stack.mallocInt(1); // int*
-			IntBuffer pHeight = stack.mallocInt(1); // int*
-
-			// Get the window size passed to glfwCreateWindow
-			GLFW.glfwGetWindowSize(GraphicsManager.window, pWidth, pHeight);
-
-			// Get the resolution of the primary monitor
-			GLFWVidMode vidmode =
-				GLFW.glfwGetVideoMode(GLFW.glfwGetPrimaryMonitor());
-
-			// Center the window
-			GLFW.glfwSetWindowPos(GraphicsManager.window,
-				(vidmode.width() - pWidth.get(0)) / 2,
-				(vidmode.height() - pHeight.get(0)) / 2);
-		} // the stack frame is popped automatically
+		GraphicsManager.window.centerWindow();
 
 		// Make the OpenGL context current
-		GLFW.glfwMakeContextCurrent(GraphicsManager.window);
+		GLFW.glfwMakeContextCurrent(GraphicsManager.windowID);
 		// Enable v-sync
 		GLFW.glfwSwapInterval(1);
 
 		// Make the window visible
-		GLFW.glfwShowWindow(GraphicsManager.window);
+		GLFW.glfwShowWindow(GraphicsManager.windowID);
 
 		/*
 		 * This line is critical for LWJGL's interoperation with GLFW's OpenGL
@@ -154,28 +144,22 @@ public class GraphicsManager {
 
 		GraphicsManager.log.debug(SafeResourceLoader.getString("WINDOW_CREATED",
 			GraphicsManager.plugin.getResourceBundle()));
-		new WindowCreated(GraphicsManager.window).fire();
-		GraphicsManager.frameCount = 0;
-		GraphicsManager.lastTimestamp = GLFW.glfwGetTime();
+		new WindowCreated(GraphicsManager.windowID).fire();
 
-		// Create a shader program
-		GraphicsManager.shaderProgram = new ShaderProgram();
-		GraphicsManager.shaderProgram.createVertexShader(
-			FileUtils.readAsString(PluginFolder.getResource(GraphicsPlugin.NAME,
-				ResourceType.DATA, "vertex.vs")));
-		GraphicsManager.shaderProgram.createFragmentShader(
-			FileUtils.readAsString(PluginFolder.getResource(GraphicsPlugin.NAME,
-				ResourceType.DATA, "fragment.fs")));
-		GraphicsManager.shaderProgram.link();
+		GraphicsManager.renderer = new Renderer();
+		GraphicsManager.renderer.init();
 
-		// Set up vertices
-		float[] positions = new float[] {-0.5f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f,
-			0.5f, -0.5f, 0.0f, 0.5f, 0.5f, 0.0f,};
-		int[] indices = new int[] {0, 1, 3, 3, 1, 2,};
+		float[] positions = new float[] {-0.5f, 0.5f, -1.05f, -0.5f, -0.5f,
+			-1.05f, 0.5f, -0.5f, -1.05f, 0.5f, 0.5f, -1.05f,};
+		int[] indices = new int[] {0, 1, 3, 3, 1, 2};
 		float[] colors = new float[] {0.5f, 0.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0.0f,
-			0.0f, 0.5f, 0.0f, 0.5f, 0.5f,};
+			0.0f, 0.5f, 0.0f, 0.5f, 0.5f};
 
-		GraphicsManager.mesh = new Mesh(positions, colors, indices);
+		Mesh mesh = new Mesh(positions, colors, indices);
+		SceneItem item = new SceneItem(mesh);
+
+		GraphicsManager.items = new ArrayList<>();
+		GraphicsManager.items.add(item);
 	}
 
 	/**
@@ -183,13 +167,13 @@ public class GraphicsManager {
 	 *
 	 */
 	public static void destroyWindow() {
-		if (MemoryUtil.NULL == GraphicsManager.window) {
+		if (MemoryUtil.NULL == GraphicsManager.windowID) {
 			return;
 		}
-		Callbacks.glfwFreeCallbacks(GraphicsManager.window);
-		GLFW.glfwDestroyWindow(GraphicsManager.window);
+		Callbacks.glfwFreeCallbacks(GraphicsManager.windowID);
+		GLFW.glfwDestroyWindow(GraphicsManager.windowID);
 
-		GraphicsManager.window = MemoryUtil.NULL;
+		GraphicsManager.windowID = MemoryUtil.NULL;
 
 		GraphicsManager.log.debug(SafeResourceLoader.getString(
 			"WINDOW_DESTROYED", GraphicsManager.plugin.getResourceBundle()));
@@ -209,7 +193,7 @@ public class GraphicsManager {
 				"GLFW_INIT_FAIL", GraphicsManager.plugin.getResourceBundle()));
 			throw new IllegalStateException("Unable to initialize GLFW");
 		}
-		shutdownFlag.set(false);
+		GraphicsManager.shutdownFlag.set(false);
 	}
 
 	/**
@@ -226,13 +210,8 @@ public class GraphicsManager {
 	 * they are destroyed.
 	 */
 	public static void terminate() {
-		if (GraphicsManager.shaderProgram != null) {
-			GraphicsManager.shaderProgram.cleanup();
-		}
-		if (GraphicsManager.mesh != null) {
-			GraphicsManager.mesh.cleanUp();
-		}
-
+		GraphicsManager.renderer.cleanup();
+		GraphicsManager.items.forEach(SceneItem::cleanup);
 		GraphicsManager.destroyWindow();
 		GLFW.glfwTerminate();
 		GLFW.glfwSetErrorCallback(null).free();
@@ -247,54 +226,29 @@ public class GraphicsManager {
 	 * @return True if the window updated, false if has been destroyed.
 	 */
 	static int tick() {
-		if (MemoryUtil.NULL == GraphicsManager.window) {
-			return -1;
+		if (MemoryUtil.NULL == GraphicsManager.windowID) {
+			return Launcher.STATUS_ERROR;
 		}
-		if (shutdownFlag.get()) {
+		if (GraphicsManager.shutdownFlag.get()) {
 			GraphicsManager.terminate();
 			return Launcher.STATUS_OK;
-		}
-
-		// Measure speed
-		double currentTime = GLFW.glfwGetTime();
-		GraphicsManager.frameCount++;
-		// If a second has passed.
-		if (currentTime - GraphicsManager.lastTimestamp >= 1.0) {
-			// Display the frame count here any way you want.
-			// displayFPS(frameCount);
-
-			GraphicsManager.frameCount = 0;
-			GraphicsManager.lastTimestamp = currentTime;
 		}
 
 		// Poll for window events
 		GLFW.glfwPollEvents();
 
-		if (GLFW.glfwWindowShouldClose(GraphicsManager.window)) {
+		if (GLFW.glfwWindowShouldClose(GraphicsManager.windowID)) {
 			GraphicsManager.destroyWindow();
-			return -1;
+			return Launcher.STATUS_REQUEST_REMOVAL;
 		}
+
 		// clear the framebuffer
 		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
 
-		GraphicsManager.shaderProgram.bind();
+		GraphicsManager.renderer.render(GraphicsManager.items);
 
-		// Bind to the VAO
-		GL30.glBindVertexArray(GraphicsManager.mesh.getVaoId());
-		GL20.glEnableVertexAttribArray(0);
-		GL20.glEnableVertexAttribArray(1);
-
-		// Draw the vertices
-		GL11.glDrawElements(GL11.GL_TRIANGLES, mesh.getVertexCount(),
-			GL11.GL_UNSIGNED_INT, 0);
-
-		// Restore state
-		GL20.glDisableVertexAttribArray(0);
-		GL30.glBindVertexArray(0);
-
-		GraphicsManager.shaderProgram.unbind();
-
-		GLFW.glfwSwapBuffers(GraphicsManager.window); // swap the color buffers
+		GLFW.glfwSwapBuffers(GraphicsManager.windowID); // swap the color
+														// buffers
 
 		return Launcher.STATUS_OK;
 

@@ -1,7 +1,15 @@
 package com.ikalagaming.graphics;
 
+import com.ikalagaming.graphics.exceptions.ShaderException;
+
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL20;
+import org.lwjgl.system.MemoryStack;
+
+import java.nio.FloatBuffer;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * An OpenGL shader program.
@@ -9,9 +17,10 @@ import org.lwjgl.opengl.GL20;
 @Slf4j
 public class ShaderProgram {
 
-	private final int programId;
-	private int vertexShaderId;
 	private int fragmentShaderId;
+	private final int programId;
+	private final Map<String, Integer> uniforms;
+	private int vertexShaderId;
 
 	/**
 	 * Create a new shader program.
@@ -21,8 +30,9 @@ public class ShaderProgram {
 	public ShaderProgram() {
 		this.programId = GL20.glCreateProgram();
 		if (this.programId == 0) {
-			throw new RuntimeException("Could not create Shader");
+			throw new ShaderException("Could not create Shader");
 		}
+		this.uniforms = new HashMap<>();
 	}
 
 	/**
@@ -66,7 +76,7 @@ public class ShaderProgram {
 	protected int createShader(String shaderCode, int shaderType) {
 		int shaderId = GL20.glCreateShader(shaderType);
 		if (shaderId == 0) {
-			throw new RuntimeException(
+			throw new ShaderException(
 				"Error creating shader. Type: " + shaderType);
 		}
 
@@ -74,13 +84,27 @@ public class ShaderProgram {
 		GL20.glCompileShader(shaderId);
 
 		if (GL20.glGetShaderi(shaderId, GL20.GL_COMPILE_STATUS) == 0) {
-			throw new RuntimeException("Error compiling Shader code: "
+			throw new ShaderException("Error compiling Shader code: "
 				+ GL20.glGetShaderInfoLog(shaderId, 1024));
 		}
 
 		GL20.glAttachShader(this.programId, shaderId);
 
 		return shaderId;
+	}
+
+	/**
+	 * Create a new uniform, which is a global GLSL variable for communicating
+	 * with shaders.
+	 *
+	 * @param name The name of the uniform.
+	 */
+	public void createUniform(String name) {
+		int uniformLocation = GL20.glGetUniformLocation(this.programId, name);
+		if (uniformLocation < 0) {
+			throw new ShaderException("Could not find uniform:" + name);
+		}
+		this.uniforms.put(name, uniformLocation);
 	}
 
 	/**
@@ -101,7 +125,7 @@ public class ShaderProgram {
 	public void link() {
 		GL20.glLinkProgram(this.programId);
 		if (GL20.glGetProgrami(this.programId, GL20.GL_LINK_STATUS) == 0) {
-			throw new RuntimeException("Error linking Shader code: "
+			throw new ShaderException("Error linking Shader code: "
 				+ GL20.glGetProgramInfoLog(this.programId, 1024));
 		}
 
@@ -117,7 +141,22 @@ public class ShaderProgram {
 			ShaderProgram.log.warn("Warning validating Shader code: {}",
 				GL20.glGetProgramInfoLog(this.programId, 1024));
 		}
+	}
 
+	/**
+	 * Set the value of a uniform to the provided matrix.
+	 *
+	 * @param uniformName The name of the uniform to set.
+	 * @param value The value to set.
+	 */
+	public void setUniform(String uniformName, Matrix4f value) {
+		// Using auto-managed buffer due to the small size and scope
+		try (MemoryStack stack = MemoryStack.stackPush()) {
+			FloatBuffer fb = stack.mallocFloat(16);
+			// Dump the matrix into a float buffer
+			value.get(fb);
+			GL20.glUniformMatrix4fv(this.uniforms.get(uniformName), false, fb);
+		}
 	}
 
 	/**
