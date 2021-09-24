@@ -1,4 +1,4 @@
-package com.ikalagaming.graphics;
+package com.ikalagaming.graphics.graph;
 
 import org.joml.Matrix4f;
 import org.joml.Vector3f;

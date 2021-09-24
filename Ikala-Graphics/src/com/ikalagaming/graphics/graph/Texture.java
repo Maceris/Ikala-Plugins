@@ -1,5 +1,6 @@
-package com.ikalagaming.graphics;
+package com.ikalagaming.graphics.graph;
 
+import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
@@ -43,7 +44,7 @@ public class Texture {
 	 *            resource dir.
 	 */
 	public Texture(String fileName) {
-		File textureFile = PluginFolder.getResource(GraphicsPlugin.NAME,
+		File textureFile = PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
 			ResourceType.DATA, fileName);
 		if (!textureFile.canRead()) {
 			Texture.log

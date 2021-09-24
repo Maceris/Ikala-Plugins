@@ -1,6 +1,8 @@
 package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.exceptions.ShaderException;
+import com.ikalagaming.graphics.graph.ShaderProgram;
+import com.ikalagaming.graphics.graph.Transformation;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.util.FileUtils;
@@ -89,10 +91,10 @@ public class Renderer {
 		try {
 			this.shaderProgram.createVertexShader(
 				FileUtils.readAsString(PluginFolder.getResource(
-					GraphicsPlugin.NAME, ResourceType.DATA, "vertex.vs")));
+					GraphicsPlugin.PLUGIN_NAME, ResourceType.DATA, "vertex.vs")));
 			this.shaderProgram.createFragmentShader(
 				FileUtils.readAsString(PluginFolder.getResource(
-					GraphicsPlugin.NAME, ResourceType.DATA, "fragment.fs")));
+					GraphicsPlugin.PLUGIN_NAME, ResourceType.DATA, "fragment.fs")));
 		}
 		catch (ShaderException e) {
 			Renderer.log.error(SafeResourceLoader.getString(

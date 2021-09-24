@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics;
 
+import com.ikalagaming.graphics.graph.Mesh;
+
 import lombok.Getter;
 import lombok.Setter;
 import org.joml.Vector3f;

@@ -3,6 +3,8 @@ package com.ikalagaming.graphics;
 import com.ikalagaming.graphics.events.WindowCreated;
 import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.graphics.exceptions.WindowCreationException;
+import com.ikalagaming.graphics.graph.Mesh;
+import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.util.SafeResourceLoader;
 

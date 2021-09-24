@@ -1,4 +1,4 @@
-package com.ikalagaming.graphics;
+package com.ikalagaming.graphics.graph;
 
 import lombok.Getter;
 import org.lwjgl.opengl.GL11;

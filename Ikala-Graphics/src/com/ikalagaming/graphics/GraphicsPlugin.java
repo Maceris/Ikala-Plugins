@@ -28,7 +28,7 @@ public class GraphicsPlugin extends Plugin {
 	/**
 	 * The name of the plugin.
 	 */
-	static final String NAME = "Ikala-Graphics";
+	public static final String PLUGIN_NAME = "Ikala-Graphics";
 	/**
 	 * The resource bundle for the Graphics plugin.
 	 *

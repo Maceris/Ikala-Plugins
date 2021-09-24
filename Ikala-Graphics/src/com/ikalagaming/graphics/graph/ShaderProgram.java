@@ -1,5 +1,6 @@
-package com.ikalagaming.graphics;
+package com.ikalagaming.graphics.graph;
 
+import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.util.SafeResourceLoader;
 
