@@ -77,6 +77,9 @@ public class GraphicsManager {
 
 		GraphicsManager.renderer = new Renderer();
 		GraphicsManager.renderer.init();
+		
+		GraphicsManager.log.debug(SafeResourceLoader.getString("RENDERER_CREATED",
+			GraphicsPlugin.getResourceBundle()));
 
 		// Create the Mesh
 		float[] positions = new float[] {

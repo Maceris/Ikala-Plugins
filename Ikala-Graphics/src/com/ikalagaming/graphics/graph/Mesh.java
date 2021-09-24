@@ -76,7 +76,6 @@ public class Mesh {
 			GL15.glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, indexVboId);
 			GL15.glBufferData(GL15.GL_ELEMENT_ARRAY_BUFFER, indicesBuffer,
 				GL15.GL_STATIC_DRAW);
-			MemoryUtil.memFree(indicesBuffer);
 
 			// Texture VBO
 			int textureVboId = GL15.glGenBuffers();
@@ -86,8 +85,10 @@ public class Mesh {
 			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, textureVboId);
 			GL15.glBufferData(GL15.GL_ARRAY_BUFFER, textCoordsBuffer,
 				GL15.GL_STATIC_DRAW);
+			GL20.glEnableVertexAttribArray(1);
 			GL20.glVertexAttribPointer(1, 2, GL11.GL_FLOAT, false, 0, 0);
 
+			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
 			GL30.glBindVertexArray(0);
 		}
 		finally {
