@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.exceptions.ShaderException;
+import com.ikalagaming.graphics.graph.Camera;
 import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.Transformation;
 import com.ikalagaming.launcher.PluginFolder;
@@ -33,9 +34,9 @@ public class Renderer {
 	private static final String PROJECTION_MATRIX = "projectionMatrix";
 
 	/**
-	 * The name of the world matrix uniform.
+	 * The name of the model view matrix uniform.
 	 */
-	private static final String WORLD_MATRIX = "worldMatrix";
+	private static final String MODEL_VIEW_MATRIX = "modelViewMatrix";
 
 	/**
 	 * Distance from the camera to the far plane.
@@ -61,19 +62,6 @@ public class Renderer {
 	}
 
 	/**
-	 * Recalculate the projection matrix after the size of the window has
-	 * changed.
-	 *
-	 * @return The newly calculated projection matrix.
-	 */
-	private Matrix4f calculateProjectionMatrix() {
-		Window window = GraphicsManager.getWindow();
-		return this.transformation.getProjectionMatrix(Renderer.FOV,
-			window.getWidth(), window.getHeight(), Renderer.Z_NEAR,
-			Renderer.Z_FAR);
-	}
-
-	/**
 	 * Clean up resources.
 	 */
 	public void cleanup() {
@@ -89,12 +77,12 @@ public class Renderer {
 		// Create a shader program
 		this.shaderProgram = new ShaderProgram();
 		try {
-			this.shaderProgram.createVertexShader(
-				FileUtils.readAsString(PluginFolder.getResource(
-					GraphicsPlugin.PLUGIN_NAME, ResourceType.DATA, "vertex.vs")));
-			this.shaderProgram.createFragmentShader(
-				FileUtils.readAsString(PluginFolder.getResource(
-					GraphicsPlugin.PLUGIN_NAME, ResourceType.DATA, "fragment.fs")));
+			this.shaderProgram.createVertexShader(FileUtils.readAsString(
+				PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
+					ResourceType.DATA, "vertex.vs")));
+			this.shaderProgram.createFragmentShader(FileUtils.readAsString(
+				PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
+					ResourceType.DATA, "fragment.fs")));
 		}
 		catch (ShaderException e) {
 			Renderer.log.error(SafeResourceLoader.getString(
@@ -102,27 +90,41 @@ public class Renderer {
 		}
 		this.shaderProgram.link();
 		this.shaderProgram.createUniform(Renderer.PROJECTION_MATRIX);
-		this.shaderProgram.createUniform(Renderer.WORLD_MATRIX);
+		this.shaderProgram.createUniform(Renderer.MODEL_VIEW_MATRIX);
 		this.shaderProgram.createUniform("texture_sampler");
 	}
 
 	/**
 	 * Render an array of scene items.
 	 *
+	 * @param window The window to render on.
+	 * @param camera The camera.
+	 *
 	 * @param sceneItems The items to render.
 	 */
-	public void render(List<SceneItem> sceneItems) {
+	public void render(Window window, Camera camera,
+		List<SceneItem> sceneItems) {
+
 		this.shaderProgram.bind();
 
+		// Update the projection matrix
+		Matrix4f projectionMatrix = this.transformation.getProjectionMatrix(
+			Renderer.FOV, window.getWidth(), window.getHeight(),
+			Renderer.Z_NEAR, Renderer.Z_FAR);
 		this.shaderProgram.setUniform(Renderer.PROJECTION_MATRIX,
-			this.calculateProjectionMatrix());
+			projectionMatrix);
+
+		// Update the view matrix
+		Matrix4f viewMatrix = this.transformation.getViewMatrix(camera);
+		this.shaderProgram.setUniform("texture_sampler", 0);
+
 		for (SceneItem gameItem : sceneItems) {
-			// Set world matrix for this item
-			Matrix4f worldMatrix =
-				this.transformation.getWorldMatrix(gameItem.getPosition(),
-					gameItem.getRotation(), gameItem.getScale());
-			this.shaderProgram.setUniform(Renderer.WORLD_MATRIX, worldMatrix);
-			this.shaderProgram.setUniform("texture_sampler", 0);
+			// Set model view matrix for this item
+			Matrix4f modelViewMatrix =
+				this.transformation.getModelViewMatrix(gameItem, viewMatrix);
+			this.shaderProgram.setUniform(Renderer.MODEL_VIEW_MATRIX,
+				modelViewMatrix);
+
 			// Render the mesh for this game item
 			gameItem.getMesh().render();
 		}

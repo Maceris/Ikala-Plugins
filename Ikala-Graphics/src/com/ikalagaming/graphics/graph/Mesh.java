@@ -1,11 +1,13 @@
 package com.ikalagaming.graphics.graph;
 
+import static org.lwjgl.opengl.GL11.*;
+import static org.lwjgl.opengl.GL13.*;
+import static org.lwjgl.opengl.GL15.*;
+import static org.lwjgl.opengl.GL20.*;
+import static org.lwjgl.opengl.GL30.*;
+
 import lombok.Getter;
-import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL15;
-import org.lwjgl.opengl.GL20;
-import org.lwjgl.opengl.GL30;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.FloatBuffer;
@@ -56,40 +58,38 @@ public class Mesh {
 			this.vertexCount = indices.length;
 			verticesBuffer.put(positions).flip();
 
-			this.vaoId = GL30.glGenVertexArrays();
-			GL30.glBindVertexArray(this.vaoId);
+			this.vaoId = glGenVertexArrays();
+			glBindVertexArray(this.vaoId);
 
 			// Position VBO
-			int positionVBO = GL15.glGenBuffers();
+			int positionVBO = glGenBuffers();
 			this.vboIdList.add(positionVBO);
-			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, positionVBO);
-			GL15.glBufferData(GL15.GL_ARRAY_BUFFER, verticesBuffer,
-				GL15.GL_STATIC_DRAW);
-			GL20.glVertexAttribPointer(0, 3, GL11.GL_FLOAT, false, 0, 0);
-			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
+			glBindBuffer(GL_ARRAY_BUFFER, positionVBO);
+			glBufferData(GL_ARRAY_BUFFER, verticesBuffer, GL_STATIC_DRAW);
+			glVertexAttribPointer(0, 3, GL_FLOAT, false, 0, 0);
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 			// Index VBO
-			int indexVboId = GL15.glGenBuffers();
+			int indexVboId = glGenBuffers();
 			this.vboIdList.add(indexVboId);
 			indicesBuffer = MemoryUtil.memAllocInt(indices.length);
 			indicesBuffer.put(indices).flip();
-			GL15.glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, indexVboId);
-			GL15.glBufferData(GL15.GL_ELEMENT_ARRAY_BUFFER, indicesBuffer,
-				GL15.GL_STATIC_DRAW);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexVboId);
+			glBufferData(GL_ELEMENT_ARRAY_BUFFER, indicesBuffer,
+				GL_STATIC_DRAW);
 
 			// Texture VBO
-			int textureVboId = GL15.glGenBuffers();
+			int textureVboId = glGenBuffers();
 			this.vboIdList.add(textureVboId);
 			textCoordsBuffer = MemoryUtil.memAllocFloat(textCoords.length);
 			textCoordsBuffer.put(textCoords).flip();
-			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, textureVboId);
-			GL15.glBufferData(GL15.GL_ARRAY_BUFFER, textCoordsBuffer,
-				GL15.GL_STATIC_DRAW);
-			GL20.glEnableVertexAttribArray(1);
-			GL20.glVertexAttribPointer(1, 2, GL11.GL_FLOAT, false, 0, 0);
+			glBindBuffer(GL_ARRAY_BUFFER, textureVboId);
+			glBufferData(GL_ARRAY_BUFFER, textCoordsBuffer, GL_STATIC_DRAW);
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(1, 2, GL_FLOAT, false, 0, 0);
 
-			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
-			GL30.glBindVertexArray(0);
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
+			glBindVertexArray(0);
 		}
 		finally {
 			if (verticesBuffer != null) {
@@ -108,16 +108,16 @@ public class Mesh {
 	 * Clean the mesh up.
 	 */
 	public void cleanUp() {
-		GL20.glDisableVertexAttribArray(0);
+		glDisableVertexAttribArray(0);
 
 		// Delete the VBOs
-		GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		this.vboIdList.forEach(GL15::glDeleteBuffers);
 		this.vboIdList.clear();
 
 		// Delete the VAO
-		GL30.glBindVertexArray(0);
-		GL30.glDeleteVertexArrays(this.vaoId);
+		glBindVertexArray(0);
+		glDeleteVertexArrays(this.vaoId);
 	}
 
 	/**
@@ -125,21 +125,20 @@ public class Mesh {
 	 */
 	public void render() {
 		// Activate first texture unit
-		GL13.glActiveTexture(GL13.GL_TEXTURE0);
+		glActiveTexture(GL_TEXTURE0);
 		// Bind the texture
-		GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.texture.getId());
+		glBindTexture(GL_TEXTURE_2D, this.texture.getId());
 
 		// Draw the mesh
-		GL30.glBindVertexArray(this.getVaoId());
-		GL20.glEnableVertexAttribArray(0);
-		GL20.glEnableVertexAttribArray(1);
+		glBindVertexArray(this.getVaoId());
+		glEnableVertexAttribArray(0);
+		glEnableVertexAttribArray(1);
 
-		GL11.glDrawElements(GL11.GL_TRIANGLES, this.getVertexCount(),
-			GL11.GL_UNSIGNED_INT, 0);
+		glDrawElements(GL_TRIANGLES, this.getVertexCount(), GL_UNSIGNED_INT, 0);
 
 		// Restore state
-		GL20.glDisableVertexAttribArray(0);
-		GL20.glDisableVertexAttribArray(1);
-		GL30.glBindVertexArray(0);
+		glDisableVertexAttribArray(0);
+		glDisableVertexAttribArray(1);
+		glBindVertexArray(0);
 	}
 }

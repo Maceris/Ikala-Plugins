@@ -34,6 +34,25 @@ public class GraphicsManager {
 	private static List<SceneItem> items;
 
 	private static Renderer renderer;
+	private static CameraManager cameraManager;
+	private static Timer timer;
+
+	/**
+	 * The target frames per second that we want to hit.
+	 */
+	public static final int TARGET_FPS = 60;
+
+	/**
+	 * The (fractional) number of seconds between frame renders at the target
+	 * FPS.
+	 */
+	private static final float FRAME_TIME = 1f / GraphicsManager.TARGET_FPS;
+
+	/**
+	 * The time when the next render call should happen to maintain the target
+	 * FPS.
+	 */
+	private static double nextRenderTime;
 
 	@Getter(value = AccessLevel.PACKAGE)
 	private static AtomicBoolean shutdownFlag = new AtomicBoolean(false);
@@ -77,9 +96,12 @@ public class GraphicsManager {
 
 		GraphicsManager.renderer = new Renderer();
 		GraphicsManager.renderer.init();
-		
-		GraphicsManager.log.debug(SafeResourceLoader.getString("RENDERER_CREATED",
-			GraphicsPlugin.getResourceBundle()));
+
+		GraphicsManager.log.debug(SafeResourceLoader
+			.getString("RENDERER_CREATED", GraphicsPlugin.getResourceBundle()));
+
+		GraphicsManager.cameraManager =
+			new CameraManager(GraphicsManager.window);
 
 		// Create the Mesh
 		float[] positions = new float[] {
@@ -186,10 +208,49 @@ public class GraphicsManager {
 		}
 		Mesh mesh = new Mesh(positions, textCoords, indices, texture);
 		SceneItem item = new SceneItem(mesh);
+		item.setScale(0.5f);
 		item.setPosition(0, 0, -2);
+		
+		SceneItem item2 = new SceneItem(mesh);
+		item2.setScale(0.5f);
+		item2.setPosition(1.5f, 1.5f, -2);
+
+		SceneItem item3 = new SceneItem(mesh);
+		item3.setScale(0.5f);
+		item3.setPosition(0, 0, -3.5f);
+
+		SceneItem item4 = new SceneItem(mesh);
+		item4.setScale(0.5f);
+		item4.setPosition(1.5f, 0, -3.5f);
 
 		GraphicsManager.items = new ArrayList<>();
 		GraphicsManager.items.add(item);
+		GraphicsManager.items.add(item2);
+		GraphicsManager.items.add(item3);
+		GraphicsManager.items.add(item4);
+
+		GraphicsManager.timer = new Timer();
+		GraphicsManager.timer.init();
+		GraphicsManager.nextRenderTime = GraphicsManager.timer.getLastLoopTime()
+			+ GraphicsManager.FRAME_TIME;
+	}
+
+	/**
+	 * Render to the screen.
+	 */
+	private static void render() {
+		// clear the framebuffer
+		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+
+		GraphicsManager.updateItems();
+		GraphicsManager.renderer.render(GraphicsManager.window,
+			GraphicsManager.cameraManager.getCamera(), GraphicsManager.items);
+
+		GraphicsManager.window.update();
+
+		// Update the next time we should render a frame
+		GraphicsManager.nextRenderTime = GraphicsManager.timer.getLastLoopTime()
+			+ GraphicsManager.FRAME_TIME;
 	}
 
 	/**
@@ -235,16 +296,17 @@ public class GraphicsManager {
 			return Launcher.STATUS_REQUEST_REMOVAL;
 		}
 
-		// clear the framebuffer
-		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+		final float elapsedTime = GraphicsManager.timer.getElapsedTime();
 
-		GraphicsManager.updateItems();
-		GraphicsManager.renderer.render(GraphicsManager.items);
+		GraphicsManager.cameraManager.processInput();
 
-		GraphicsManager.window.update();
+		GraphicsManager.cameraManager.updateCamera(elapsedTime);
+
+		if (GraphicsManager.timer.getTime() >= GraphicsManager.nextRenderTime) {
+			GraphicsManager.render();
+		}
 
 		return Launcher.STATUS_OK;
-
 	}
 
 	private static void updateItems() {
