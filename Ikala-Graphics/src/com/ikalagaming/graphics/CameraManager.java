@@ -20,6 +20,12 @@ public class CameraManager {
 	 * The speed in world units that the camera moves per second.
 	 */
 	private static final float MOVE_SPEED_PER_SECOND = 5f;
+
+	/**
+	 * The length of the camera increment vector.
+	 */
+	private static final float CAMERA_INCREMENT = 1f;
+
 	private final MouseInput mouseInput;
 	/**
 	 * The camera for the window.
@@ -52,24 +58,26 @@ public class CameraManager {
 		this.mouseInput.input(this.window);
 		this.cameraInc.set(0, 0, 0);
 		if (this.window.isKeyPressed(GLFW.GLFW_KEY_W)) {
-			this.cameraInc.z = -1;
+			this.cameraInc.z = -CameraManager.CAMERA_INCREMENT;
 		}
 		else if (this.window.isKeyPressed(GLFW.GLFW_KEY_S)) {
-			this.cameraInc.z = 1;
+			this.cameraInc.z = CameraManager.CAMERA_INCREMENT;
 		}
 		if (this.window.isKeyPressed(GLFW.GLFW_KEY_A)) {
-			this.cameraInc.x = -1;
+			this.cameraInc.x = -CameraManager.CAMERA_INCREMENT;
 		}
 		else if (this.window.isKeyPressed(GLFW.GLFW_KEY_D)) {
-			this.cameraInc.x = 1;
+			this.cameraInc.x = CameraManager.CAMERA_INCREMENT;
 		}
 		if (this.window.isKeyPressed(GLFW.GLFW_KEY_Z)) {
-			this.cameraInc.y = -1;
+			this.cameraInc.y = -CameraManager.CAMERA_INCREMENT;
 		}
 		else if (this.window.isKeyPressed(GLFW.GLFW_KEY_X)) {
-			this.cameraInc.y = 1;
+			this.cameraInc.y = CameraManager.CAMERA_INCREMENT;
 		}
-
+		if (this.cameraInc.length() != 0) {
+			this.cameraInc.normalize(CameraManager.CAMERA_INCREMENT);
+		}
 	}
 
 	/**
