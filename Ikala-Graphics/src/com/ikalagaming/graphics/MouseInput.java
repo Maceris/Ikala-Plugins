@@ -1,6 +1,8 @@
 package com.ikalagaming.graphics;
 
-import static org.lwjgl.glfw.GLFW.*;
+import static org.lwjgl.glfw.GLFW.GLFW_PRESS;
+import static org.lwjgl.glfw.GLFW.GLFW_RELEASE;
+import static org.lwjgl.glfw.GLFW.GLFW_REPEAT;
 
 import lombok.Getter;
 import org.joml.Vector2d;

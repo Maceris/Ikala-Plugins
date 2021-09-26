@@ -2,6 +2,7 @@ package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.graph.Camera;
+import com.ikalagaming.graphics.graph.Mesh;
 import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.Transformation;
 import com.ikalagaming.launcher.PluginFolder;
@@ -31,12 +32,26 @@ public class Renderer {
 	/**
 	 * The name of the projection matrix uniform.
 	 */
-	private static final String PROJECTION_MATRIX = "projectionMatrix";
+	private static final String UNIFORM_PROJECTION_MATRIX = "projectionMatrix";
 
 	/**
 	 * The name of the model view matrix uniform.
 	 */
-	private static final String MODEL_VIEW_MATRIX = "modelViewMatrix";
+	private static final String UNIFORM_MODEL_VIEW_MATRIX = "modelViewMatrix";
+
+	/**
+	 * The name of the uniform used to pass in a mesh color.
+	 */
+	private static final String UNIFORM_COLOR = "color";
+	/**
+	 * The name of the uniform used to toggle if we are using colors or texture.
+	 */
+	private static final String UNIFORM_COLOR_FLAG = "useColor";
+
+	/**
+	 * The name of the uniform used to sample textures.
+	 */
+	private static final String UNIFORM_TEXTURE_SAMPLER = "texture_sampler";
 
 	/**
 	 * Distance from the camera to the far plane.
@@ -89,9 +104,12 @@ public class Renderer {
 				"SHADER_ERROR_SETUP", GraphicsPlugin.getResourceBundle()), e);
 		}
 		this.shaderProgram.link();
-		this.shaderProgram.createUniform(Renderer.PROJECTION_MATRIX);
-		this.shaderProgram.createUniform(Renderer.MODEL_VIEW_MATRIX);
-		this.shaderProgram.createUniform("texture_sampler");
+		this.shaderProgram.createUniform(Renderer.UNIFORM_PROJECTION_MATRIX);
+		this.shaderProgram.createUniform(Renderer.UNIFORM_MODEL_VIEW_MATRIX);
+		// Create uniform for default color and the flag that controls it
+		this.shaderProgram.createUniform(Renderer.UNIFORM_COLOR);
+		this.shaderProgram.createUniform(Renderer.UNIFORM_COLOR_FLAG);
+		this.shaderProgram.createUniform(Renderer.UNIFORM_TEXTURE_SAMPLER);
 	}
 
 	/**
@@ -111,22 +129,27 @@ public class Renderer {
 		Matrix4f projectionMatrix = this.transformation.getProjectionMatrix(
 			Renderer.FOV, window.getWidth(), window.getHeight(),
 			Renderer.Z_NEAR, Renderer.Z_FAR);
-		this.shaderProgram.setUniform(Renderer.PROJECTION_MATRIX,
+		this.shaderProgram.setUniform(Renderer.UNIFORM_PROJECTION_MATRIX,
 			projectionMatrix);
 
 		// Update the view matrix
 		Matrix4f viewMatrix = this.transformation.getViewMatrix(camera);
-		this.shaderProgram.setUniform("texture_sampler", 0);
+		this.shaderProgram.setUniform(Renderer.UNIFORM_TEXTURE_SAMPLER, 0);
 
 		for (SceneItem gameItem : sceneItems) {
 			// Set model view matrix for this item
 			Matrix4f modelViewMatrix =
 				this.transformation.getModelViewMatrix(gameItem, viewMatrix);
-			this.shaderProgram.setUniform(Renderer.MODEL_VIEW_MATRIX,
+			this.shaderProgram.setUniform(Renderer.UNIFORM_MODEL_VIEW_MATRIX,
 				modelViewMatrix);
 
 			// Render the mesh for this game item
-			gameItem.getMesh().render();
+			Mesh mesh = gameItem.getMesh();
+			this.shaderProgram.setUniform(Renderer.UNIFORM_COLOR,
+				mesh.getColor());
+			this.shaderProgram.setUniform(Renderer.UNIFORM_COLOR_FLAG,
+				mesh.isTextured() ? 0 : 1);
+			mesh.render();
 		}
 
 		this.shaderProgram.unbind();
