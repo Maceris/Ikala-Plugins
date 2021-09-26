@@ -7,10 +7,11 @@ package com.ikalagaming.graphics.exceptions;
  *
  */
 public class ShaderException extends RuntimeException {
+
 	/**
 	 * Generated ID.
 	 */
-	private static final long serialVersionUID = 944216281096689423L;
+	private static final long serialVersionUID = 6775621362813997976L;
 
 	/**
 	 * Create an exception without any details.
