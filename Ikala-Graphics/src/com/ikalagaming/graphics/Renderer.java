@@ -3,6 +3,7 @@ package com.ikalagaming.graphics;
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.graph.Camera;
 import com.ikalagaming.graphics.graph.Mesh;
+import com.ikalagaming.graphics.graph.PointLight;
 import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.Transformation;
 import com.ikalagaming.launcher.PluginFolder;
@@ -12,6 +13,8 @@ import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
+import org.joml.Vector4f;
 
 import java.util.List;
 
@@ -30,30 +33,6 @@ public class Renderer {
 	private static final float FOV = (float) Math.toRadians(60.0f);
 
 	/**
-	 * The name of the projection matrix uniform.
-	 */
-	private static final String UNIFORM_PROJECTION_MATRIX = "projectionMatrix";
-
-	/**
-	 * The name of the model view matrix uniform.
-	 */
-	private static final String UNIFORM_MODEL_VIEW_MATRIX = "modelViewMatrix";
-
-	/**
-	 * The name of the uniform used to pass in a mesh color.
-	 */
-	private static final String UNIFORM_COLOR = "color";
-	/**
-	 * The name of the uniform used to toggle if we are using colors or texture.
-	 */
-	private static final String UNIFORM_COLOR_FLAG = "useColor";
-
-	/**
-	 * The name of the uniform used to sample textures.
-	 */
-	private static final String UNIFORM_TEXTURE_SAMPLER = "texture_sampler";
-
-	/**
 	 * Distance from the camera to the far plane.
 	 */
 	private static final float Z_FAR = 1000.f;
@@ -61,6 +40,8 @@ public class Renderer {
 	 * Distance from the camera to the near plane.
 	 */
 	private static final float Z_NEAR = 0.01f;
+
+	private float specularPower;
 
 	private ShaderProgram shaderProgram;
 
@@ -74,6 +55,7 @@ public class Renderer {
 	 */
 	public Renderer() {
 		this.transformation = new Transformation();
+		this.specularPower = 10f;
 	}
 
 	/**
@@ -104,12 +86,25 @@ public class Renderer {
 				"SHADER_ERROR_SETUP", GraphicsPlugin.getResourceBundle()), e);
 		}
 		this.shaderProgram.link();
-		this.shaderProgram.createUniform(Renderer.UNIFORM_PROJECTION_MATRIX);
-		this.shaderProgram.createUniform(Renderer.UNIFORM_MODEL_VIEW_MATRIX);
-		// Create uniform for default color and the flag that controls it
-		this.shaderProgram.createUniform(Renderer.UNIFORM_COLOR);
-		this.shaderProgram.createUniform(Renderer.UNIFORM_COLOR_FLAG);
-		this.shaderProgram.createUniform(Renderer.UNIFORM_TEXTURE_SAMPLER);
+
+		this.shaderProgram
+			.createUniform(ShaderConstants.Uniform.Vertex.PROJECTION_MATRIX);
+		this.shaderProgram
+			.createUniform(ShaderConstants.Uniform.Vertex.MODEL_VIEW_MATRIX);
+		this.shaderProgram
+			.createUniform(ShaderConstants.Uniform.Fragment.TEXTURE_SAMPLER);
+
+		// Create uniform for material
+		this.shaderProgram
+			.createMaterialUniform(ShaderConstants.Uniform.Fragment.MATERIAL);
+
+		// Create lighting related uniforms
+		this.shaderProgram
+			.createUniform(ShaderConstants.Uniform.Fragment.SPECULAR_POWER);
+		this.shaderProgram
+			.createUniform(ShaderConstants.Uniform.Fragment.AMBIENT_LIGHT);
+		this.shaderProgram.createPointLightUniform(
+			ShaderConstants.Uniform.Fragment.POINT_LIGHT);
 	}
 
 	/**
@@ -117,11 +112,12 @@ public class Renderer {
 	 *
 	 * @param window The window to render on.
 	 * @param camera The camera.
-	 *
 	 * @param sceneItems The items to render.
+	 * @param ambientLight The ambient light color.
+	 * @param pointLight A point light to use.
 	 */
-	public void render(Window window, Camera camera,
-		List<SceneItem> sceneItems) {
+	public void render(Window window, Camera camera, List<SceneItem> sceneItems,
+		Vector3f ambientLight, PointLight pointLight) {
 
 		this.shaderProgram.bind();
 
@@ -129,26 +125,47 @@ public class Renderer {
 		Matrix4f projectionMatrix = this.transformation.getProjectionMatrix(
 			Renderer.FOV, window.getWidth(), window.getHeight(),
 			Renderer.Z_NEAR, Renderer.Z_FAR);
-		this.shaderProgram.setUniform(Renderer.UNIFORM_PROJECTION_MATRIX,
-			projectionMatrix);
+		this.shaderProgram.setUniform(
+			ShaderConstants.Uniform.Vertex.PROJECTION_MATRIX, projectionMatrix);
 
 		// Update the view matrix
 		Matrix4f viewMatrix = this.transformation.getViewMatrix(camera);
-		this.shaderProgram.setUniform(Renderer.UNIFORM_TEXTURE_SAMPLER, 0);
 
-		for (SceneItem gameItem : sceneItems) {
+		// Update Light Uniforms
+		this.shaderProgram.setUniform(
+			ShaderConstants.Uniform.Fragment.AMBIENT_LIGHT, ambientLight);
+		this.shaderProgram.setUniform(
+			ShaderConstants.Uniform.Fragment.SPECULAR_POWER,
+			this.specularPower);
+		/*
+		 * Get a copy of the light object and transform its position to view
+		 * coordinates
+		 */
+		PointLight currPointLight = new PointLight(pointLight);
+		Vector3f lightPos = currPointLight.getPosition();
+		Vector4f aux = new Vector4f(lightPos, 1);
+		aux.mul(viewMatrix);
+		lightPos.x = aux.x;
+		lightPos.y = aux.y;
+		lightPos.z = aux.z;
+		this.shaderProgram.setUniform(
+			ShaderConstants.Uniform.Fragment.POINT_LIGHT, currPointLight);
+
+		this.shaderProgram
+			.setUniform(ShaderConstants.Uniform.Fragment.TEXTURE_SAMPLER, 0);
+
+		for (SceneItem sceneItem : sceneItems) {
 			// Set model view matrix for this item
 			Matrix4f modelViewMatrix =
-				this.transformation.getModelViewMatrix(gameItem, viewMatrix);
-			this.shaderProgram.setUniform(Renderer.UNIFORM_MODEL_VIEW_MATRIX,
+				this.transformation.getModelViewMatrix(sceneItem, viewMatrix);
+			this.shaderProgram.setUniform(
+				ShaderConstants.Uniform.Vertex.MODEL_VIEW_MATRIX,
 				modelViewMatrix);
 
-			// Render the mesh for this game item
-			Mesh mesh = gameItem.getMesh();
-			this.shaderProgram.setUniform(Renderer.UNIFORM_COLOR,
-				mesh.getColor());
-			this.shaderProgram.setUniform(Renderer.UNIFORM_COLOR_FLAG,
-				mesh.isTextured() ? 0 : 1);
+			// Render the mesh for this scene item
+			Mesh mesh = sceneItem.getMesh();
+			this.shaderProgram.setUniform(
+				ShaderConstants.Uniform.Fragment.MATERIAL, mesh.getMaterial());
 			mesh.render();
 		}
 

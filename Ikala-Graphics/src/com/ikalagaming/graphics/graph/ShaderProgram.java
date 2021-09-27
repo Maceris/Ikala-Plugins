@@ -1,12 +1,14 @@
 package com.ikalagaming.graphics.graph;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
+import com.ikalagaming.graphics.ShaderConstants;
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
+import org.joml.Vector4f;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.system.MemoryStack;
 
@@ -65,6 +67,49 @@ public class ShaderProgram {
 	public void createFragmentShader(String shaderCode) {
 		this.fragmentShaderId =
 			this.createShader(shaderCode, GL20.GL_FRAGMENT_SHADER);
+	}
+
+	/**
+	 * Create a material uniform.
+	 *
+	 * @param uniformName The name of the uniform.
+	 */
+	public void createMaterialUniform(String uniformName) {
+		final String name = uniformName + ".";
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.Material.AMBIENT);
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.Material.DIFFUSE);
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.Material.SPECULAR);
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.Material.HAS_TEXTURE);
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.Material.REFLECTANCE);
+	}
+
+	/**
+	 * Create a point light uniform.
+	 *
+	 * @param uniformName The name of the uniform.
+	 */
+	public void createPointLightUniform(String uniformName) {
+		final String name = uniformName + ".";
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.PointLight.COLOR);
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.PointLight.POSITION);
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.PointLight.INTENSITY);
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.PointLight.ATTENUATION + "."
+				+ ShaderConstants.Uniform.Fragment.Attenuation.CONSTANT);
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.PointLight.ATTENUATION + "."
+				+ ShaderConstants.Uniform.Fragment.Attenuation.LINEAR);
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.PointLight.ATTENUATION + "."
+				+ ShaderConstants.Uniform.Fragment.Attenuation.EXPONENT);
 	}
 
 	/**
@@ -162,6 +207,16 @@ public class ShaderProgram {
 	}
 
 	/**
+	 * Set the value of a uniform to the provided floating point value.
+	 *
+	 * @param uniformName The name of the uniform to set.
+	 * @param value The value to set.
+	 */
+	public void setUniform(String uniformName, float value) {
+		GL20.glUniform1f(this.uniforms.get(uniformName), value);
+	}
+
+	/**
 	 * Set the value of a uniform to the provided integer value.
 	 *
 	 * @param uniformName The name of the uniform to set.
@@ -169,6 +224,31 @@ public class ShaderProgram {
 	 */
 	public void setUniform(String uniformName, int value) {
 		GL20.glUniform1i(this.uniforms.get(uniformName), value);
+	}
+
+	/**
+	 * Set a material uniform.
+	 *
+	 * @param uniformName The name of the uniform.
+	 * @param material The material to set.
+	 */
+	public void setUniform(String uniformName, Material material) {
+		final String name = uniformName + ".";
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.Material.AMBIENT,
+			material.getAmbientColor());
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.Material.DIFFUSE,
+			material.getDiffuseColor());
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.Material.SPECULAR,
+			material.getSpecularColor());
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.Material.HAS_TEXTURE,
+			material.isTextured() ? 1 : 0);
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.Material.REFLECTANCE,
+			material.getReflectance());
 	}
 
 	/**
@@ -188,6 +268,38 @@ public class ShaderProgram {
 	}
 
 	/**
+	 * Set a point light uniform.
+	 *
+	 * @param uniformName The name of the uniform.
+	 * @param pointLight The point light to set.
+	 */
+	public void setUniform(String uniformName, PointLight pointLight) {
+		final String name = uniformName + ".";
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.PointLight.COLOR,
+			pointLight.getColor());
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.PointLight.POSITION,
+			pointLight.getPosition());
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.PointLight.INTENSITY,
+			pointLight.getIntensity());
+		PointLight.Attenuation att = pointLight.getAttenuation();
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.PointLight.ATTENUATION + "."
+				+ ShaderConstants.Uniform.Fragment.Attenuation.CONSTANT,
+			att.getConstant());
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.PointLight.ATTENUATION + "."
+				+ ShaderConstants.Uniform.Fragment.Attenuation.LINEAR,
+			att.getLinear());
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.PointLight.ATTENUATION + "."
+				+ ShaderConstants.Uniform.Fragment.Attenuation.EXPONENT,
+			att.getExponent());
+	}
+
+	/**
 	 * Set the value of a uniform to the provided vector.
 	 *
 	 * @param uniformName The name of the uniform to set.
@@ -196,6 +308,17 @@ public class ShaderProgram {
 	public void setUniform(String uniformName, Vector3f value) {
 		GL20.glUniform3f(this.uniforms.get(uniformName), value.x, value.y,
 			value.z);
+	}
+
+	/**
+	 * Set the value of a uniform to the provided vector.
+	 *
+	 * @param uniformName The name of the uniform to set.
+	 * @param value The value to set.
+	 */
+	public void setUniform(String uniformName, Vector4f value) {
+		GL20.glUniform4f(this.uniforms.get(uniformName), value.x, value.y,
+			value.z, value.w);
 	}
 
 	/**

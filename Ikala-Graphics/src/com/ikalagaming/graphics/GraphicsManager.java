@@ -4,7 +4,9 @@ import com.ikalagaming.graphics.events.WindowCreated;
 import com.ikalagaming.graphics.exceptions.MeshException;
 import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.graphics.exceptions.WindowCreationException;
+import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.Mesh;
+import com.ikalagaming.graphics.graph.PointLight;
 import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -13,6 +15,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Vector3f;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.opengl.GL11;
 
@@ -76,6 +79,9 @@ public class GraphicsManager {
 	@Getter
 	private static Window window;
 
+	private static Vector3f ambientLight;
+	private static PointLight pointLight;
+
 	/**
 	 * Creates a graphics window, fires off a {@link WindowCreated} event. Won't
 	 * do anything if a window already exists.
@@ -118,29 +124,27 @@ public class GraphicsManager {
 		catch (MeshException e) {
 			throw new WindowCreationException(e);
 		}
-		mesh.setTexture(texture);
+
+		float reflectance = 1f;
+		Material material = new Material(texture, reflectance);
+		mesh.setMaterial(material);
 
 		SceneItem item = new SceneItem(mesh);
 		item.setScale(0.5f);
 		item.setPosition(0, 0, -2);
 
-		SceneItem item2 = new SceneItem(mesh);
-		item2.setScale(0.5f);
-		item2.setPosition(1.5f, 1.5f, -2);
-
-		SceneItem item3 = new SceneItem(mesh);
-		item3.setScale(0.5f);
-		item3.setPosition(0, 0, -3.5f);
-
-		SceneItem item4 = new SceneItem(mesh);
-		item4.setScale(0.5f);
-		item4.setPosition(1.5f, 0, -3.5f);
-
 		GraphicsManager.items = new ArrayList<>();
 		GraphicsManager.items.add(item);
-		GraphicsManager.items.add(item2);
-		GraphicsManager.items.add(item3);
-		GraphicsManager.items.add(item4);
+
+		GraphicsManager.ambientLight = new Vector3f(0.3f, 0.3f, 0.3f);
+		Vector3f lightColour = new Vector3f(1, 1, 1);
+		Vector3f lightPosition = new Vector3f(0, 0, 1);
+		float lightIntensity = 1.0f;
+		GraphicsManager.pointLight =
+			new PointLight(lightColour, lightPosition, lightIntensity);
+		PointLight.Attenuation att =
+			new PointLight.Attenuation(0.0f, 0.0f, 1.0f);
+		GraphicsManager.pointLight.setAttenuation(att);
 
 		GraphicsManager.timer = new Timer();
 		GraphicsManager.timer.init();
@@ -157,7 +161,8 @@ public class GraphicsManager {
 
 		GraphicsManager.updateItems();
 		GraphicsManager.renderer.render(GraphicsManager.window,
-			GraphicsManager.cameraManager.getCamera(), GraphicsManager.items);
+			GraphicsManager.cameraManager.getCamera(), GraphicsManager.items,
+			GraphicsManager.ambientLight, GraphicsManager.pointLight);
 
 		GraphicsManager.window.update();
 

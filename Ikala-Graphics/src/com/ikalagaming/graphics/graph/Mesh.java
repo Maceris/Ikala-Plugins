@@ -1,9 +1,7 @@
 package com.ikalagaming.graphics.graph;
 
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.Setter;
-import org.joml.Vector3f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL15;
@@ -23,12 +21,6 @@ import java.util.List;
  *
  */
 public class Mesh {
-
-	/**
-	 * The default color to use until one is specified.
-	 */
-	private static final Vector3f DEFAULT_COLOUR =
-		new Vector3f(1.0f, 1.0f, 1.0f);
 
 	/**
 	 * A list of vertex buffer objects for this mesh.
@@ -52,25 +44,14 @@ public class Mesh {
 	private final int vertexCount;
 
 	/**
-	 * The texture for the mesh, if it exists.
+	 * The material for the mesh.
 	 *
-	 * @param texture The new texture to use.
-	 * @return The current texture, or null.
+	 * @param material The new material to use.
+	 * @return The current material for the mesh.
 	 */
 	@Getter
 	@Setter
-	private Texture texture;
-
-	/**
-	 * The color of the mesh. Cannot be null.
-	 *
-	 * @param color The new color of the mesh.
-	 * @return The current mesh color.
-	 */
-	@Getter
-	@Setter
-	@NonNull
-	private Vector3f color;
+	private Material material;
 
 	/**
 	 * Create a new mesh given the vertices.
@@ -88,7 +69,6 @@ public class Mesh {
 		IntBuffer indicesBuffer = null;
 
 		try {
-			this.color = Mesh.DEFAULT_COLOUR;
 			this.vertexCount = indices.length;
 			this.vboIdList = new ArrayList<>();
 
@@ -171,8 +151,9 @@ public class Mesh {
 		this.vboIdList.clear();
 
 		// Delete the texture
-		if (this.texture != null) {
-			this.texture.cleanup();
+		Texture texture = this.material.getTexture();
+		if (texture != null) {
+			texture.cleanup();
 		}
 
 		// Delete the VAO
@@ -181,24 +162,15 @@ public class Mesh {
 	}
 
 	/**
-	 * Checks if this mesh has a texture. Equivalent to checking if the texture
-	 * is not null.
-	 *
-	 * @return True if there is a texture, false if not.
-	 */
-	public boolean isTextured() {
-		return this.texture != null;
-	}
-
-	/**
 	 * Render the mesh.
 	 */
 	public void render() {
-		if (this.texture != null) {
+		Texture texture = this.material.getTexture();
+		if (texture != null) {
 			// Activate first texture unit
 			GL13.glActiveTexture(GL13.GL_TEXTURE0);
 			// Bind the texture
-			GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.texture.getId());
+			GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture.getId());
 		}
 
 		// Draw the mesh
