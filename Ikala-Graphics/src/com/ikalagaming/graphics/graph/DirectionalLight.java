@@ -32,7 +32,7 @@ public class DirectionalLight {
 	/**
 	 * The intensity of the light, between 0 and 1.
 	 *
-	 * @param The new intensity of the light.
+	 * @param intensity The new intensity of the light.
 	 * @return The intensity of the light.
 	 */
 	private float intensity;

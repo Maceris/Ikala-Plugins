@@ -170,6 +170,12 @@ public class ShaderConstants {
 			 */
 			public static final String POINT_LIGHT = "pointLight";
 			/**
+			 * A directional light.
+			 *
+			 * @see DirectionalLight
+			 */
+			public static final String DIRECTIONAL_LIGHT = "directionalLight";
+			/**
 			 * The camera position in view space coordinates.
 			 */
 			public static final String CAMERA_POSITION = "cameraPos";

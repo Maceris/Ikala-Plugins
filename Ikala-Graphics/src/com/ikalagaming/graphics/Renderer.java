@@ -2,6 +2,7 @@ package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.graph.Camera;
+import com.ikalagaming.graphics.graph.DirectionalLight;
 import com.ikalagaming.graphics.graph.Mesh;
 import com.ikalagaming.graphics.graph.PointLight;
 import com.ikalagaming.graphics.graph.ShaderProgram;
@@ -105,6 +106,8 @@ public class Renderer {
 			.createUniform(ShaderConstants.Uniform.Fragment.AMBIENT_LIGHT);
 		this.shaderProgram.createPointLightUniform(
 			ShaderConstants.Uniform.Fragment.POINT_LIGHT);
+		this.shaderProgram.createDirectionalLightUniform(
+			ShaderConstants.Uniform.Fragment.DIRECTIONAL_LIGHT);
 	}
 
 	/**
@@ -115,9 +118,11 @@ public class Renderer {
 	 * @param sceneItems The items to render.
 	 * @param ambientLight The ambient light color.
 	 * @param pointLight A point light to use.
+	 * @param directionalLight A directional light to use.
 	 */
 	public void render(Window window, Camera camera, List<SceneItem> sceneItems,
-		Vector3f ambientLight, PointLight pointLight) {
+		Vector3f ambientLight, PointLight pointLight,
+		DirectionalLight directionalLight) {
 
 		this.shaderProgram.bind();
 
@@ -137,6 +142,7 @@ public class Renderer {
 		this.shaderProgram.setUniform(
 			ShaderConstants.Uniform.Fragment.SPECULAR_POWER,
 			this.specularPower);
+
 		/*
 		 * Get a copy of the light object and transform its position to view
 		 * coordinates
@@ -150,6 +156,17 @@ public class Renderer {
 		lightPos.z = aux.z;
 		this.shaderProgram.setUniform(
 			ShaderConstants.Uniform.Fragment.POINT_LIGHT, currPointLight);
+
+		/*
+		 * Get a copy of the directional light object and transform its position
+		 * to view coordinates
+		 */
+		DirectionalLight currDirLight = new DirectionalLight(directionalLight);
+		Vector4f dir = new Vector4f(currDirLight.getDirection(), 0);
+		dir.mul(viewMatrix);
+		currDirLight.setDirection(new Vector3f(dir.x, dir.y, dir.z));
+		this.shaderProgram.setUniform(
+			ShaderConstants.Uniform.Fragment.DIRECTIONAL_LIGHT, currDirLight);
 
 		this.shaderProgram
 			.setUniform(ShaderConstants.Uniform.Fragment.TEXTURE_SAMPLER, 0);

@@ -4,6 +4,7 @@ import com.ikalagaming.graphics.events.WindowCreated;
 import com.ikalagaming.graphics.exceptions.MeshException;
 import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.graphics.exceptions.WindowCreationException;
+import com.ikalagaming.graphics.graph.DirectionalLight;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.Mesh;
 import com.ikalagaming.graphics.graph.PointLight;
@@ -81,6 +82,11 @@ public class GraphicsManager {
 
 	private static Vector3f ambientLight;
 	private static PointLight pointLight;
+	private static DirectionalLight directionalLight;
+	/**
+	 * The angle the directional light is at.
+	 */
+	private static float lightAngle;
 
 	/**
 	 * Creates a graphics window, fires off a {@link WindowCreated} event. Won't
@@ -146,6 +152,11 @@ public class GraphicsManager {
 			new PointLight.Attenuation(0.0f, 0.0f, 1.0f);
 		GraphicsManager.pointLight.setAttenuation(att);
 
+		lightPosition = new Vector3f(-1, 0, 0);
+		lightColour = new Vector3f(1, 1, 1);
+		GraphicsManager.directionalLight =
+			new DirectionalLight(lightColour, lightPosition, lightIntensity);
+
 		GraphicsManager.timer = new Timer();
 		GraphicsManager.timer.init();
 		GraphicsManager.nextRenderTime = GraphicsManager.timer.getLastLoopTime()
@@ -160,9 +171,12 @@ public class GraphicsManager {
 		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
 
 		GraphicsManager.updateItems();
+		GraphicsManager.updateDirectionalLight();
+
 		GraphicsManager.renderer.render(GraphicsManager.window,
 			GraphicsManager.cameraManager.getCamera(), GraphicsManager.items,
-			GraphicsManager.ambientLight, GraphicsManager.pointLight);
+			GraphicsManager.ambientLight, GraphicsManager.pointLight,
+			GraphicsManager.directionalLight);
 
 		GraphicsManager.window.update();
 
@@ -225,6 +239,38 @@ public class GraphicsManager {
 		}
 
 		return Launcher.STATUS_OK;
+	}
+
+	private static void updateDirectionalLight() {
+		// Update directional light direction, intensity and color
+		GraphicsManager.lightAngle += 1.1f;
+		if (GraphicsManager.lightAngle > 90) {
+			GraphicsManager.directionalLight.setIntensity(0);
+			if (GraphicsManager.lightAngle >= 360) {
+				GraphicsManager.lightAngle = -90;
+			}
+		}
+		else if (GraphicsManager.lightAngle <= -80
+			|| GraphicsManager.lightAngle >= 80) {
+			float factor =
+				1 - (Math.abs(GraphicsManager.lightAngle) - 80) / 10.0f;
+			GraphicsManager.directionalLight.setIntensity(factor);
+			GraphicsManager.directionalLight.getColor().y =
+				Math.max(factor, 0.9f);
+			GraphicsManager.directionalLight.getColor().z =
+				Math.max(factor, 0.5f);
+		}
+		else {
+			GraphicsManager.directionalLight.setIntensity(1);
+			GraphicsManager.directionalLight.getColor().x = 1;
+			GraphicsManager.directionalLight.getColor().y = 1;
+			GraphicsManager.directionalLight.getColor().z = 1;
+		}
+		double angRad = Math.toRadians(GraphicsManager.lightAngle);
+		GraphicsManager.directionalLight.getDirection().x =
+			(float) Math.sin(angRad);
+		GraphicsManager.directionalLight.getDirection().y =
+			(float) Math.cos(angRad);
 	}
 
 	private static void updateItems() {
