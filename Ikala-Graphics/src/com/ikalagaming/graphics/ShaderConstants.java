@@ -63,7 +63,7 @@ public class ShaderConstants {
 				 */
 				public static final String COLOR = "color";
 				/**
-				 * The direction of the light.
+				 * The direction that the light is coming from.
 				 */
 				public static final String DIRECTION = "direction";
 				/**

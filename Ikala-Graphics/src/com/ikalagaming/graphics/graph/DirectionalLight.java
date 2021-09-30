@@ -22,9 +22,9 @@ public class DirectionalLight {
 	private Vector3f color;
 
 	/**
-	 * The direction the light is pointing towards.
+	 * The direction the light is coming from.
 	 *
-	 * @param direction The direction the light points towards.
+	 * @param direction The direction the light comes from.
 	 * @return The direction of the light.
 	 */
 	private Vector3f direction;
