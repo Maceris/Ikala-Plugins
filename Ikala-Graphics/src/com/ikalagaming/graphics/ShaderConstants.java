@@ -52,6 +52,32 @@ public class ShaderConstants {
 			}
 
 			/**
+			 * A directional light.
+			 *
+			 * @author Ches Burks
+			 *
+			 */
+			public static class DirectionalLight {
+				/**
+				 * The color of the light.
+				 */
+				public static final String COLOR = "color";
+				/**
+				 * The direction of the light.
+				 */
+				public static final String DIRECTION = "direction";
+				/**
+				 * The intensity, a number between 0 and 1.
+				 */
+				public static final String INTENSITY = "intensity";
+
+				/**
+				 * Private constructor so this class is not instantiated.
+				 */
+				private DirectionalLight() {}
+			}
+
+			/**
 			 * Information about a material.
 			 *
 			 * @author Ches Burks
