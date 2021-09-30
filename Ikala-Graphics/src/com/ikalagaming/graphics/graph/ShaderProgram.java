@@ -58,6 +58,21 @@ public class ShaderProgram {
 	}
 
 	/**
+	 * Create a directional light uniform.
+	 *
+	 * @param uniformName The name of the uniform.
+	 */
+	public void createDirectionalLightUniform(String uniformName) {
+		final String name = uniformName + ".";
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.DirectionalLight.COLOR);
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.DirectionalLight.DIRECTION);
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.DirectionalLight.INTENSITY);
+	}
+
+	/**
 	 * Create a fragment shader given shader code.
 	 *
 	 * @param shaderCode The shader code to compile.
@@ -204,6 +219,26 @@ public class ShaderProgram {
 					GraphicsPlugin.getResourceBundle()),
 				GL20.glGetProgramInfoLog(this.programId, 1024));
 		}
+	}
+
+	/**
+	 * Set a directional light uniform.
+	 *
+	 * @param uniformName The name of the uniform.
+	 * @param directionalLight The directional light to set.
+	 */
+	public void setUniform(String uniformName,
+		DirectionalLight directionalLight) {
+		final String name = uniformName + ".";
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.DirectionalLight.COLOR,
+			directionalLight.getColor());
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.DirectionalLight.DIRECTION,
+			directionalLight.getDirection());
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.DirectionalLight.INTENSITY,
+			directionalLight.getIntensity());
 	}
 
 	/**
