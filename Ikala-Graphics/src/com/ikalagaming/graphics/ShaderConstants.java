@@ -145,6 +145,32 @@ public class ShaderConstants {
 			}
 
 			/**
+			 * A Spot light.
+			 *
+			 * @author Ches Burks
+			 *
+			 */
+			public static class SpotLight {
+				/**
+				 * The point light that stores lighting information.
+				 */
+				public static final String POINT_LIGHT = "pointLight";
+				/**
+				 * The direction the light is facing.
+				 */
+				public static final String CONE_DIRECTION = "coneDirection";
+				/**
+				 * The cutoff angle, in radians.
+				 */
+				public static final String CUTOFF = "cutoff";
+
+				/**
+				 * Private constructor so this class is not instantiated.
+				 */
+				private SpotLight() {}
+			}
+
+			/**
 			 * Used to sample a 2d texture.
 			 */
 			public static final String TEXTURE_SAMPLER = "textureSampler";
@@ -164,11 +190,18 @@ public class ShaderConstants {
 			 */
 			public static final String MATERIAL = "material";
 			/**
-			 * A point light.
+			 * A list of point lights.
 			 *
 			 * @see PointLight
 			 */
-			public static final String POINT_LIGHT = "pointLight";
+			public static final String POINT_LIGHTS = "pointLights";
+			/**
+			 * A list of spot lights.
+			 *
+			 * @see SpotLight
+			 */
+			public static final String SPOT_LIGHTS = "spotLights";
+
 			/**
 			 * A directional light.
 			 *
@@ -179,6 +212,18 @@ public class ShaderConstants {
 			 * The camera position in view space coordinates.
 			 */
 			public static final String CAMERA_POSITION = "cameraPos";
+
+			/**
+			 * The maximum number of point lights that are supported, must be a
+			 * compile time constant in the shader.
+			 */
+			public static final int MAX_POINT_LIGHTS = 5;
+
+			/**
+			 * The maximum number of spot lights that are supported, must be a
+			 * compile time constant in the shader.
+			 */
+			public static final int MAX_SPOT_LIGHTS = 5;
 
 			/**
 			 * Private constructor so this class is not instantiated.
