@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.ShaderConstants;
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -62,7 +63,7 @@ public class ShaderProgram {
 	 *
 	 * @param uniformName The name of the uniform.
 	 */
-	public void createDirectionalLightUniform(String uniformName) {
+	public void createDirectionalLightUniform(@NonNull String uniformName) {
 		final String name = uniformName + ".";
 		this.createUniform(
 			name + ShaderConstants.Uniform.Fragment.DirectionalLight.COLOR);
@@ -79,7 +80,7 @@ public class ShaderProgram {
 	 * @throws ShaderException If there was an error creating or compiling the
 	 *             shader.
 	 */
-	public void createFragmentShader(String shaderCode) {
+	public void createFragmentShader(@NonNull String shaderCode) {
 		this.fragmentShaderId =
 			this.createShader(shaderCode, GL20.GL_FRAGMENT_SHADER);
 	}
@@ -89,7 +90,7 @@ public class ShaderProgram {
 	 *
 	 * @param uniformName The name of the uniform.
 	 */
-	public void createMaterialUniform(String uniformName) {
+	public void createMaterialUniform(@NonNull String uniformName) {
 		final String name = uniformName + ".";
 		this.createUniform(
 			name + ShaderConstants.Uniform.Fragment.Material.AMBIENT);
@@ -104,11 +105,29 @@ public class ShaderProgram {
 	}
 
 	/**
+	 * Create a uniform for a point light list.
+	 *
+	 * @param uniformName The name of the uniform.
+	 * @param size The size of the list.
+	 * @throws ShaderException If the size is not valid.
+	 */
+	public void createPointLightListUniform(@NonNull String uniformName,
+		int size) {
+		if (size <= 0
+			|| size > ShaderConstants.Uniform.Fragment.MAX_POINT_LIGHTS) {
+			throw new ShaderException("Invalid size " + size);
+		}
+		for (int i = 0; i < size; i++) {
+			this.createPointLightUniform(uniformName + "[" + i + "]");
+		}
+	}
+
+	/**
 	 * Create a point light uniform.
 	 *
 	 * @param uniformName The name of the uniform.
 	 */
-	public void createPointLightUniform(String uniformName) {
+	public void createPointLightUniform(@NonNull String uniformName) {
 		final String name = uniformName + ".";
 		this.createUniform(
 			name + ShaderConstants.Uniform.Fragment.PointLight.COLOR);
@@ -136,7 +155,7 @@ public class ShaderProgram {
 	 * @throws ShaderException If there was an error creating or compiling the
 	 *             shader.
 	 */
-	protected int createShader(String shaderCode, int shaderType) {
+	protected int createShader(@NonNull String shaderCode, int shaderType) {
 		int shaderId = GL20.glCreateShader(shaderType);
 		if (shaderId == 0) {
 			ShaderProgram.log
@@ -162,13 +181,46 @@ public class ShaderProgram {
 	}
 
 	/**
+	 * Create a uniform for a spot light list.
+	 *
+	 * @param uniformName The name of the uniform.
+	 * @param size The size of the list.
+	 * @throws ShaderException If the size is not valid.
+	 */
+	public void createSpotLightListUniform(@NonNull String uniformName,
+		int size) {
+		if (size <= 0
+			|| size > ShaderConstants.Uniform.Fragment.MAX_SPOT_LIGHTS) {
+			throw new ShaderException("Invalid size " + size);
+		}
+		for (int i = 0; i < size; i++) {
+			this.createSpotLightUniform(uniformName + "[" + i + "]");
+		}
+	}
+
+	/**
+	 * Create a spot light uniform.
+	 *
+	 * @param uniformName The name of the uniform.
+	 */
+	public void createSpotLightUniform(@NonNull String uniformName) {
+		final String name = uniformName + ".";
+		this.createPointLightUniform(
+			name + ShaderConstants.Uniform.Fragment.SpotLight.POINT_LIGHT);
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.SpotLight.CONE_DIRECTION);
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.SpotLight.CUTOFF);
+	}
+
+	/**
 	 * Create a new uniform, which is a global GLSL variable for communicating
 	 * with shaders.
 	 *
 	 * @param name The name of the uniform.\
 	 * @throws ShaderException If the uniform cannot be found.
 	 */
-	public void createUniform(String name) {
+	public void createUniform(@NonNull String name) {
 		int uniformLocation = GL20.glGetUniformLocation(this.programId, name);
 		if (uniformLocation < 0) {
 			ShaderProgram.log.warn(
@@ -187,7 +239,7 @@ public class ShaderProgram {
 	 * @throws ShaderException If there was an error creating or compiling the
 	 *             shader.
 	 */
-	public void createVertexShader(String shaderCode) {
+	public void createVertexShader(@NonNull String shaderCode) {
 		this.vertexShaderId =
 			this.createShader(shaderCode, GL20.GL_VERTEX_SHADER);
 	}
@@ -227,8 +279,8 @@ public class ShaderProgram {
 	 * @param uniformName The name of the uniform.
 	 * @param directionalLight The directional light to set.
 	 */
-	public void setUniform(String uniformName,
-		DirectionalLight directionalLight) {
+	public void setUniform(@NonNull String uniformName,
+		@NonNull DirectionalLight directionalLight) {
 		final String name = uniformName + ".";
 		this.setUniform(
 			name + ShaderConstants.Uniform.Fragment.DirectionalLight.COLOR,
@@ -247,7 +299,7 @@ public class ShaderProgram {
 	 * @param uniformName The name of the uniform to set.
 	 * @param value The value to set.
 	 */
-	public void setUniform(String uniformName, float value) {
+	public void setUniform(@NonNull String uniformName, float value) {
 		GL20.glUniform1f(this.uniforms.get(uniformName), value);
 	}
 
@@ -257,7 +309,7 @@ public class ShaderProgram {
 	 * @param uniformName The name of the uniform to set.
 	 * @param value The value to set.
 	 */
-	public void setUniform(String uniformName, int value) {
+	public void setUniform(@NonNull String uniformName, int value) {
 		GL20.glUniform1i(this.uniforms.get(uniformName), value);
 	}
 
@@ -267,7 +319,8 @@ public class ShaderProgram {
 	 * @param uniformName The name of the uniform.
 	 * @param material The material to set.
 	 */
-	public void setUniform(String uniformName, Material material) {
+	public void setUniform(@NonNull String uniformName,
+		@NonNull Material material) {
 		final String name = uniformName + ".";
 		this.setUniform(
 			name + ShaderConstants.Uniform.Fragment.Material.AMBIENT,
@@ -292,7 +345,8 @@ public class ShaderProgram {
 	 * @param uniformName The name of the uniform to set.
 	 * @param value The value to set.
 	 */
-	public void setUniform(String uniformName, Matrix4f value) {
+	public void setUniform(@NonNull String uniformName,
+		@NonNull Matrix4f value) {
 		// Using auto-managed buffer due to the small size and scope
 		try (MemoryStack stack = MemoryStack.stackPush()) {
 			FloatBuffer fb = stack.mallocFloat(16);
@@ -308,7 +362,8 @@ public class ShaderProgram {
 	 * @param uniformName The name of the uniform.
 	 * @param pointLight The point light to set.
 	 */
-	public void setUniform(String uniformName, PointLight pointLight) {
+	public void setUniform(@NonNull String uniformName,
+		@NonNull PointLight pointLight) {
 		final String name = uniformName + ".";
 		this.setUniform(
 			name + ShaderConstants.Uniform.Fragment.PointLight.COLOR,
@@ -335,12 +390,103 @@ public class ShaderProgram {
 	}
 
 	/**
+	 * Set one of the point lights in the array uniform.
+	 *
+	 * @param uniformName The name of the uniform.
+	 * @param pointLight The point light we are setting.
+	 * @param pos The position in the point light array.
+	 * @throws ShaderException If the position is outside the valid bounds.
+	 */
+	public void setUniform(@NonNull String uniformName,
+		@NonNull PointLight pointLight, int pos) {
+		if (pos < 0
+			|| pos >= ShaderConstants.Uniform.Fragment.MAX_POINT_LIGHTS) {
+			throw new ShaderException("Index out of bounds");
+		}
+		this.setUniform(uniformName + "[" + pos + "]", pointLight);
+	}
+
+	/**
+	 * Sets a point light array uniform.
+	 *
+	 * @param uniformName The name of the uniform.
+	 * @param pointLights The point light array to set.
+	 * @throws ShaderException If the point light array is larger than the
+	 *             maximum number supported.
+	 */
+	public void setUniform(@NonNull String uniformName,
+		@NonNull PointLight[] pointLights) {
+		if (pointLights.length > ShaderConstants.Uniform.Fragment.MAX_POINT_LIGHTS) {
+			throw new ShaderException("Point light array too large");
+		}
+		for (int i = 0; i < pointLights.length; i++) {
+			this.setUniform(uniformName, pointLights[i], i);
+		}
+	}
+
+	/**
+	 * Set a spot light uniform.
+	 *
+	 * @param uniformName The name of the uniform.
+	 * @param spotLight The spotlight to set.
+	 */
+	public void setUniform(@NonNull String uniformName,
+		@NonNull SpotLight spotLight) {
+		final String name = uniformName + ".";
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.SpotLight.POINT_LIGHT,
+			spotLight.getPointLight());
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.SpotLight.CONE_DIRECTION,
+			spotLight.getConeDirection());
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.SpotLight.CUTOFF,
+			spotLight.getCutOff());
+	}
+
+	/**
+	 * Set one of the spotlights in the array uniform.
+	 *
+	 * @param uniformName The name of the uniform.
+	 * @param spotLight The spotlight we are setting.
+	 * @param pos The position in the spot light array.
+	 * @throws ShaderException If the position is outside the valid bounds.
+	 */
+	public void setUniform(@NonNull String uniformName,
+		@NonNull SpotLight spotLight, int pos) {
+		if (pos < 0
+			|| pos >= ShaderConstants.Uniform.Fragment.MAX_SPOT_LIGHTS) {
+			throw new ShaderException("Index out of bounds");
+		}
+		this.setUniform(uniformName + "[" + pos + "]", spotLight);
+	}
+
+	/**
+	 * Sets a spot light array uniform.
+	 *
+	 * @param uniformName The name of the uniform.
+	 * @param spotLights The spot light array to set.
+	 * @throws ShaderException If the spot light array is larger than the
+	 *             maximum number supported.
+	 */
+	public void setUniform(@NonNull String uniformName,
+		@NonNull SpotLight[] spotLights) {
+		if (spotLights.length > ShaderConstants.Uniform.Fragment.MAX_SPOT_LIGHTS) {
+			throw new ShaderException("Spot light array too large");
+		}
+		for (int i = 0; i < spotLights.length; i++) {
+			this.setUniform(uniformName, spotLights[i], i);
+		}
+	}
+
+	/**
 	 * Set the value of a uniform to the provided vector.
 	 *
 	 * @param uniformName The name of the uniform to set.
 	 * @param value The value to set.
 	 */
-	public void setUniform(String uniformName, Vector3f value) {
+	public void setUniform(@NonNull String uniformName,
+		@NonNull Vector3f value) {
 		GL20.glUniform3f(this.uniforms.get(uniformName), value.x, value.y,
 			value.z);
 	}
@@ -351,7 +497,8 @@ public class ShaderProgram {
 	 * @param uniformName The name of the uniform to set.
 	 * @param value The value to set.
 	 */
-	public void setUniform(String uniformName, Vector4f value) {
+	public void setUniform(@NonNull String uniformName,
+		@NonNull Vector4f value) {
 		GL20.glUniform4f(this.uniforms.get(uniformName), value.x, value.y,
 			value.z, value.w);
 	}
