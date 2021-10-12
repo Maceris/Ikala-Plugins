@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.graph.DirectionalLight;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.Mesh;
 import com.ikalagaming.graphics.graph.PointLight;
+import com.ikalagaming.graphics.graph.SpotLight;
 import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -81,12 +82,22 @@ public class GraphicsManager {
 	private static Window window;
 
 	private static Vector3f ambientLight;
-	private static PointLight pointLight;
+	private static PointLight[] pointLightList;
+	private static SpotLight[] spotLightList;
 	private static DirectionalLight directionalLight;
 	/**
 	 * The angle the directional light is at.
 	 */
 	private static float lightAngle;
+
+	/**
+	 * The angle of the spotlight.
+	 */
+	private static float spotAngle = 0;
+	/**
+	 * The increment at which the spotlight angle changes.
+	 */
+	private static float spotIncrement = 1;
 
 	/**
 	 * Creates a graphics window, fires off a {@link WindowCreated} event. Won't
@@ -143,19 +154,35 @@ public class GraphicsManager {
 		GraphicsManager.items.add(item);
 
 		GraphicsManager.ambientLight = new Vector3f(0.3f, 0.3f, 0.3f);
+
+		// Point light
 		Vector3f lightColour = new Vector3f(1, 1, 1);
 		Vector3f lightPosition = new Vector3f(0, 0, 1);
 		float lightIntensity = 1.0f;
-		GraphicsManager.pointLight =
+		PointLight pointLight =
 			new PointLight(lightColour, lightPosition, lightIntensity);
 		PointLight.Attenuation att =
 			new PointLight.Attenuation(0.0f, 0.0f, 1.0f);
-		GraphicsManager.pointLight.setAttenuation(att);
+		pointLight.setAttenuation(att);
+		GraphicsManager.pointLightList = new PointLight[] {pointLight};
 
+		// Directional light
 		lightPosition = new Vector3f(-1, 0, 0);
 		lightColour = new Vector3f(1, 1, 1);
 		GraphicsManager.directionalLight =
 			new DirectionalLight(lightColour, lightPosition, lightIntensity);
+
+		// Spot light
+		lightPosition = new Vector3f(0, 0.0f, 10f);
+		pointLight = new PointLight(new Vector3f(1, 1, 1), lightPosition,
+			lightIntensity);
+		att = new PointLight.Attenuation(0.0f, 0.0f, 0.02f);
+		pointLight.setAttenuation(att);
+		Vector3f coneDir = new Vector3f(0, 0, -1);
+		float cutoff = (float) Math.cos(Math.toRadians(140));
+		SpotLight spotLight = new SpotLight(pointLight, coneDir, cutoff);
+		GraphicsManager.spotLightList =
+			new SpotLight[] {spotLight, new SpotLight(spotLight)};
 
 		GraphicsManager.timer = new Timer();
 		GraphicsManager.timer.init();
@@ -175,8 +202,8 @@ public class GraphicsManager {
 
 		GraphicsManager.renderer.render(GraphicsManager.window,
 			GraphicsManager.cameraManager.getCamera(), GraphicsManager.items,
-			GraphicsManager.ambientLight, GraphicsManager.pointLight,
-			GraphicsManager.directionalLight);
+			GraphicsManager.ambientLight, GraphicsManager.pointLightList,
+			GraphicsManager.spotLightList, GraphicsManager.directionalLight);
 
 		GraphicsManager.window.update();
 
@@ -242,6 +269,18 @@ public class GraphicsManager {
 	}
 
 	private static void updateDirectionalLight() {
+		// Update spot light direction
+		GraphicsManager.spotAngle += GraphicsManager.spotIncrement * 0.05f;
+		if (GraphicsManager.spotAngle > 2) {
+			GraphicsManager.spotIncrement = -1;
+		}
+		else if (GraphicsManager.spotAngle < -2) {
+			GraphicsManager.spotIncrement = 1;
+		}
+		double spotAngleRad = Math.toRadians(GraphicsManager.spotAngle);
+		Vector3f coneDir = GraphicsManager.spotLightList[0].getConeDirection();
+		coneDir.y = (float) Math.sin(spotAngleRad);
+
 		// Update directional light direction, intensity and color
 		GraphicsManager.lightAngle += 1.1f;
 		if (GraphicsManager.lightAngle > 90) {

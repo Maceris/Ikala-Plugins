@@ -6,12 +6,14 @@ import com.ikalagaming.graphics.graph.DirectionalLight;
 import com.ikalagaming.graphics.graph.Mesh;
 import com.ikalagaming.graphics.graph.PointLight;
 import com.ikalagaming.graphics.graph.ShaderProgram;
+import com.ikalagaming.graphics.graph.SpotLight;
 import com.ikalagaming.graphics.graph.Transformation;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.util.FileUtils;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -104,8 +106,12 @@ public class Renderer {
 			.createUniform(ShaderConstants.Uniform.Fragment.SPECULAR_POWER);
 		this.shaderProgram
 			.createUniform(ShaderConstants.Uniform.Fragment.AMBIENT_LIGHT);
-		this.shaderProgram.createPointLightUniform(
-			ShaderConstants.Uniform.Fragment.POINT_LIGHT);
+		this.shaderProgram.createPointLightListUniform(
+			ShaderConstants.Uniform.Fragment.POINT_LIGHTS,
+			ShaderConstants.Uniform.Fragment.MAX_POINT_LIGHTS);
+		this.shaderProgram.createSpotLightListUniform(
+			ShaderConstants.Uniform.Fragment.SPOT_LIGHTS,
+			ShaderConstants.Uniform.Fragment.MAX_SPOT_LIGHTS);
 		this.shaderProgram.createDirectionalLightUniform(
 			ShaderConstants.Uniform.Fragment.DIRECTIONAL_LIGHT);
 	}
@@ -117,11 +123,13 @@ public class Renderer {
 	 * @param camera The camera.
 	 * @param sceneItems The items to render.
 	 * @param ambientLight The ambient light color.
-	 * @param pointLight A point light to use.
+	 * @param pointLightList A list of point lights to use.
+	 * @param spotLightList A list of spot lights to use.
 	 * @param directionalLight A directional light to use.
 	 */
-	public void render(Window window, Camera camera, List<SceneItem> sceneItems,
-		Vector3f ambientLight, PointLight pointLight,
+	public void render(@NonNull Window window, @NonNull Camera camera,
+		List<SceneItem> sceneItems, Vector3f ambientLight,
+		PointLight[] pointLightList, SpotLight[] spotLightList,
 		DirectionalLight directionalLight) {
 
 		this.shaderProgram.bind();
@@ -136,37 +144,8 @@ public class Renderer {
 		// Update the view matrix
 		Matrix4f viewMatrix = this.transformation.getViewMatrix(camera);
 
-		// Update Light Uniforms
-		this.shaderProgram.setUniform(
-			ShaderConstants.Uniform.Fragment.AMBIENT_LIGHT, ambientLight);
-		this.shaderProgram.setUniform(
-			ShaderConstants.Uniform.Fragment.SPECULAR_POWER,
-			this.specularPower);
-
-		/*
-		 * Get a copy of the light object and transform its position to view
-		 * coordinates
-		 */
-		PointLight currPointLight = new PointLight(pointLight);
-		Vector3f lightPos = currPointLight.getPosition();
-		Vector4f aux = new Vector4f(lightPos, 1);
-		aux.mul(viewMatrix);
-		lightPos.x = aux.x;
-		lightPos.y = aux.y;
-		lightPos.z = aux.z;
-		this.shaderProgram.setUniform(
-			ShaderConstants.Uniform.Fragment.POINT_LIGHT, currPointLight);
-
-		/*
-		 * Get a copy of the directional light object and transform its position
-		 * to view coordinates
-		 */
-		DirectionalLight currDirLight = new DirectionalLight(directionalLight);
-		Vector4f dir = new Vector4f(currDirLight.getDirection(), 0);
-		dir.mul(viewMatrix);
-		currDirLight.setDirection(new Vector3f(dir.x, dir.y, dir.z));
-		this.shaderProgram.setUniform(
-			ShaderConstants.Uniform.Fragment.DIRECTIONAL_LIGHT, currDirLight);
+		this.renderLights(viewMatrix, ambientLight, pointLightList,
+			spotLightList, directionalLight);
 
 		this.shaderProgram
 			.setUniform(ShaderConstants.Uniform.Fragment.TEXTURE_SAMPLER, 0);
@@ -187,5 +166,87 @@ public class Renderer {
 		}
 
 		this.shaderProgram.unbind();
+	}
+
+	/**
+	 * Handle the lighting phase of rendering.
+	 *
+	 * @param viewMatrix The view transform matrix.
+	 * @param ambientLight The ambient light color.
+	 * @param pointLightList A list of point lights to use.
+	 * @param spotLightList A list of spot lights to use.
+	 * @param directionalLight A directional light to use.
+	 */
+	private void renderLights(Matrix4f viewMatrix, Vector3f ambientLight,
+		PointLight[] pointLightList, SpotLight[] spotLightList,
+		DirectionalLight directionalLight) {
+		// Update Light Uniforms
+		this.shaderProgram.setUniform(
+			ShaderConstants.Uniform.Fragment.AMBIENT_LIGHT, ambientLight);
+		this.shaderProgram.setUniform(
+			ShaderConstants.Uniform.Fragment.SPECULAR_POWER,
+			this.specularPower);
+
+		// Process Point Lights
+		int numLights = pointLightList == null ? 0 : pointLightList.length;
+		for (int i = 0; i < numLights; ++i) {
+			// Can't be null, size = 0 if null
+			@SuppressWarnings("null")
+			PointLight pointLight = pointLightList[i];
+			if (null == pointLight) {
+				continue;
+			}
+			/*
+			 * Get a copy of the light object and transform its position to view
+			 * coordinates
+			 */
+			PointLight currentPointLight = new PointLight(pointLight);
+			Vector3f lightPosition = currentPointLight.getPosition();
+			Vector4f aux = new Vector4f(lightPosition, 1);
+			aux.mul(viewMatrix);
+			lightPosition.set(aux.x, aux.y, aux.z);
+			this.shaderProgram.setUniform(
+				ShaderConstants.Uniform.Fragment.POINT_LIGHTS,
+				currentPointLight, i);
+		}
+
+		// Process Spot Lights
+		numLights = spotLightList == null ? 0 : spotLightList.length;
+		for (int i = 0; i < numLights; i++) {
+			// Can't be null, size = 0 if null
+			@SuppressWarnings("null")
+			SpotLight spotLight = spotLightList[i];
+			/*
+			 * Get a copy of the light object and transform its position and
+			 * cone direction to view coordinates
+			 */
+			SpotLight currentSpotLight = new SpotLight(spotLight);
+			Vector4f direction =
+				new Vector4f(currentSpotLight.getConeDirection(), 0);
+			direction.mul(viewMatrix);
+			currentSpotLight.setConeDirection(
+				new Vector3f(direction.x, direction.y, direction.z));
+			Vector3f lightPosition =
+				currentSpotLight.getPointLight().getPosition();
+
+			Vector4f aux = new Vector4f(lightPosition, 1);
+			aux.mul(viewMatrix);
+			lightPosition.set(aux.x, aux.y, aux.z);
+			this.shaderProgram.setUniform(
+				ShaderConstants.Uniform.Fragment.SPOT_LIGHTS, currentSpotLight,
+				i);
+		}
+		/*
+		 * Get a copy of the directional light object and transform its position
+		 * to view coordinates
+		 */
+		DirectionalLight currentDirectionalLight =
+			new DirectionalLight(directionalLight);
+		Vector4f dir = new Vector4f(currentDirectionalLight.getDirection(), 0);
+		dir.mul(viewMatrix);
+		currentDirectionalLight.setDirection(new Vector3f(dir.x, dir.y, dir.z));
+		this.shaderProgram.setUniform(
+			ShaderConstants.Uniform.Fragment.DIRECTIONAL_LIGHT,
+			currentDirectionalLight);
 	}
 }
