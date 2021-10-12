@@ -69,10 +69,10 @@ public class CameraManager {
 		else if (this.window.isKeyPressed(GLFW.GLFW_KEY_D)) {
 			this.cameraInc.x = CameraManager.CAMERA_INCREMENT;
 		}
-		if (this.window.isKeyPressed(GLFW.GLFW_KEY_Z)) {
+		if (this.window.isKeyPressed(GLFW.GLFW_KEY_LEFT_SHIFT)) {
 			this.cameraInc.y = -CameraManager.CAMERA_INCREMENT;
 		}
-		else if (this.window.isKeyPressed(GLFW.GLFW_KEY_X)) {
+		else if (this.window.isKeyPressed(GLFW.GLFW_KEY_SPACE)) {
 			this.cameraInc.y = CameraManager.CAMERA_INCREMENT;
 		}
 		if (this.cameraInc.length() != 0) {
