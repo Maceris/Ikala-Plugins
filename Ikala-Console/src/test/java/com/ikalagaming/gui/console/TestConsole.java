@@ -1,13 +1,13 @@
 package com.ikalagaming.gui.console;
 
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
 import com.ikalagaming.event.EventManager;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 /**
  * Tests the functionality of the console class.
@@ -24,7 +24,7 @@ public class TestConsole {
 	 *
 	 * @throws Exception if there is an exception setting up the console.
 	 */
-	@BeforeClass
+	@BeforeAll
 	public static void setUpBeforeClass() throws Exception {
 		TestConsole.manager = new EventManager();
 	}
@@ -34,7 +34,7 @@ public class TestConsole {
 	 *
 	 * @throws Exception If there is an error shutting down the event manager
 	 */
-	@AfterClass
+	@AfterAll
 	public static void tearDownAfterClass() throws Exception {
 		TestConsole.manager.shutdown();
 	}
@@ -46,9 +46,10 @@ public class TestConsole {
 	 *
 	 * @throws Exception if an exception occurs when constructing the console
 	 */
-	@Before
+	@BeforeEach
 	public void setUp() throws Exception {
 		this.console = new Console(TestConsole.manager);
+		this.console.init();
 	}
 
 	/**
@@ -57,11 +58,10 @@ public class TestConsole {
 	 *
 	 * @throws Exception if an exception is thrown while unloading
 	 */
-	@After
+	@AfterEach
 	public void tearDown() throws Exception {
 		this.console = null;
 	}
-
 
 	/**
 	 * Tests the consoles constructor.
@@ -73,7 +73,6 @@ public class TestConsole {
 		Console consoleTest = new Console(TestConsole.manager);
 	}
 
-
 	/**
 	 * Tests the getter for height. This depends on {@link #testSetHeight()}, as
 	 * the height must be changed to test properly.
@@ -81,9 +80,10 @@ public class TestConsole {
 	@Test
 	public void testGetHeight() {
 		final int TEST_HEIGHT = 450;
-		Assert.assertEquals(Console.DEFAULT_HEIGHT, this.console.getHeight(), 0);
+		Assertions.assertEquals(Console.DEFAULT_HEIGHT,
+			this.console.getHeight(), 0);
 		this.console.setHeight(TEST_HEIGHT);
-		Assert.assertEquals(TEST_HEIGHT, this.console.getHeight(), 0);
+		Assertions.assertEquals(TEST_HEIGHT, this.console.getHeight(), 0);
 	}
 
 	/**
@@ -96,11 +96,11 @@ public class TestConsole {
 		final int TEST_HEIGHT_SMALL = 10;
 		final int TEST_HEIGHT_NEGATIVE = -100;
 		this.console.setHeight(TEST_HEIGHT_LARGE);
-		Assert.assertEquals(TEST_HEIGHT_LARGE, this.console.getHeight(), 0);
+		Assertions.assertEquals(TEST_HEIGHT_LARGE, this.console.getHeight(), 0);
 		this.console.setHeight(TEST_HEIGHT_SMALL);
-		Assert.assertEquals(TEST_HEIGHT_SMALL, this.console.getHeight(), 0);
+		Assertions.assertEquals(TEST_HEIGHT_SMALL, this.console.getHeight(), 0);
 		this.console.setHeight(TEST_HEIGHT_NEGATIVE);
-		Assert.assertEquals(0, this.console.getHeight(), 0);
+		Assertions.assertEquals(0, this.console.getHeight(), 0);
 	}
 
 }

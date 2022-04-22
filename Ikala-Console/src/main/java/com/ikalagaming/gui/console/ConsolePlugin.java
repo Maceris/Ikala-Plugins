@@ -89,9 +89,9 @@ public class ConsolePlugin extends Plugin {
 		this.console.setParent(this);
 
 		try {
-			this.setResourceBundle(ResourceBundle.getBundle(
-				"com.ikalagaming.gui.console.resources.Console",
-				Localization.getLocale()));
+			this.setResourceBundle(
+				ResourceBundle.getBundle("com.ikalagaming.gui.console.Console",
+					Localization.getLocale()));
 		}
 		catch (MissingResourceException missingResource) {
 			// don't localize this since it would fail anyways
