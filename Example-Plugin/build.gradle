@@ -20,7 +20,8 @@ java {
     withJavadocJar()
 }
 
-def config = new org.yaml.snakeyaml.Yaml().load( new File("plugin.yml").newInputStream() )
+def resourcesDir = sourceSets.main.resources.srcDirs.first()
+def config = new org.yaml.snakeyaml.Yaml().load( new File("${resourcesDir}/plugin.yml").newInputStream() )
 
 archivesBaseName = "${config.name}"
 version = "${config.version}"

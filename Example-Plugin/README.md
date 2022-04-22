@@ -5,47 +5,23 @@ creating new plugins.
 
 ## Building
 
-You will need Ant to compile the plugin, below are the important targets.
+This plugin uses Gradle to build. To build you will need Ikala-Core downloaded
+as well, in the same folder that the Ikala-Plugins folder was downloaded. To 
+build this you will need to run `./gradlew clean build` from the command
+line.
 
-The build file is set up to be generic and work for most plugins with only
-small configuration if you use the structure specified below. If you have
-a different folder structure, you can also easily reconfigure the folder names.
+## Making your own plugin
 
-For your own plugin, you'll need to configure the project name, and the
-`packagesForJavadoc` property to tell it what packages you want to
-generate javadoc for. There is also configuration for other things like
-leaving in debug symbols or verbose output.
+This project uses the standard Gradle folder structure. It has been configured 
+so that you can run `./gradlew eclipse` to set up for import into Eclipse, 
+or `./gradlew idea` to set up for IntelliJ.
+
+For your own plugin, you'll need to configure:
+
+- The root project name in `settings.gradle`
+- The plugin details in `src/test/resources/plugin.yml`
+- Dependency information in `build.gradle` and `gradle.properties`
 
 Additionally while the `plugin.yml` file is important for a plugin to be
 loaded, it's also where name and version information is pulled when generating
-the distributable jars.
-
-### Ant targets
-
-These are the important ant targets:
-
-- `clean` Deletes generated files and directories, distribution files, compiled classes, etc.
-- `compile` Compiles the source code.
-- `compileTest` (default) Compiles the source and test code.
-- `dist` Compiles the source, generates plugin, source, and javadoc jars.
-- `test` Runs all the tests.
-
-## Folder Structure
-
-The standard directory structure is laid out below:
-
-- `src/` (source goes here)
-- `test/` (test code goes here)
-- `bin/` (used during building)
-  - `classes` (output from compiling `src`)
-  - `test-classes` (output from compiling `test`)
-  - `test-report` (output from running JUnit test suites)
-- `lib/` (libraries)
-  - `bundled/` (needed for compilation, included in distribution jar)
-  - `info/` (source and javadoc jars, for use in an IDE)
-  - `plugins/` (needed for compilation, not included in distribution jars)
-  - `testing/` (needed for compiling/running test code)
-- `javadoc/` (javadoc is built here)
-- `dist/` (jars generated for distribution go here)
-- `build.xml` (Ant build file)
-- `plugin.yml` (contains plugin information)
+the distributable jars so it is very important to update that information.
