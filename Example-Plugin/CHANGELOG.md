@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Changed
 - Bundle in javadoc from libraries by default into javadoc distribution file
+- Switched build system to Gradle
 
 ## [0.0.1] - 2021-08-05
 ### Added
