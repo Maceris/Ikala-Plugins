@@ -1,8 +1,8 @@
 package com.ikalagaming.ecs;
 
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,7 +20,7 @@ public class TestECSManager {
 	/**
 	 * Setup before each test.
 	 */
-	@Before
+	@BeforeEach
 	public void beforeTest() {
 		ECSManager.clear();
 	}
@@ -48,30 +48,30 @@ public class TestECSManager {
 		ECSManager.clear();
 
 		List<UUID> entities = ECSManager.getAllEntities();
-		Assert.assertNotNull(entities);
-		Assert.assertTrue(entities.isEmpty());
+		Assertions.assertNotNull(entities);
+		Assertions.assertTrue(entities.isEmpty());
 
 		List<TestA> aComponents = ECSManager.getAllComponents(TestA.class);
-		Assert.assertNotNull(aComponents);
-		Assert.assertTrue(aComponents.isEmpty());
+		Assertions.assertNotNull(aComponents);
+		Assertions.assertTrue(aComponents.isEmpty());
 		List<TestB> bComponents = ECSManager.getAllComponents(TestB.class);
-		Assert.assertNotNull(bComponents);
-		Assert.assertTrue(bComponents.isEmpty());
+		Assertions.assertNotNull(bComponents);
+		Assertions.assertTrue(bComponents.isEmpty());
 
 		List<UUID> aEntities =
 			ECSManager.getAllEntitiesWithComponent(TestA.class);
-		Assert.assertNotNull(aEntities);
-		Assert.assertTrue(aEntities.isEmpty());
+		Assertions.assertNotNull(aEntities);
+		Assertions.assertTrue(aEntities.isEmpty());
 		List<UUID> bEntities =
 			ECSManager.getAllEntitiesWithComponent(TestB.class);
-		Assert.assertNotNull(bEntities);
-		Assert.assertTrue(bEntities.isEmpty());
+		Assertions.assertNotNull(bEntities);
+		Assertions.assertTrue(bEntities.isEmpty());
 
-		Assert.assertFalse(
+		Assertions.assertFalse(
 			ECSManager.getComponent(entity1, TestA.class).isPresent());
-		Assert.assertFalse(
+		Assertions.assertFalse(
 			ECSManager.getComponent(entity1, TestB.class).isPresent());
-		Assert.assertFalse(
+		Assertions.assertFalse(
 			ECSManager.getComponent(entity2, TestA.class).isPresent());
 
 	}
@@ -99,13 +99,13 @@ public class TestECSManager {
 		TestB retB1 = ECSManager.getComponent(entity1, TestB.class).get();
 		TestA retA2 = ECSManager.getComponent(entity2, TestA.class).get();
 
-		Assert.assertEquals(a1, retA1);
-		Assert.assertEquals(a2, retA2);
-		Assert.assertEquals(b1, retB1);
+		Assertions.assertEquals(a1, retA1);
+		Assertions.assertEquals(a2, retA2);
+		Assertions.assertEquals(b1, retB1);
 
-		Assert.assertEquals(a1.getTestInt(), retA1.getTestInt());
-		Assert.assertEquals(a2.getTestInt(), retA2.getTestInt());
-		Assert.assertEquals(b1.getTestString(), retB1.getTestString());
+		Assertions.assertEquals(a1.getTestInt(), retA1.getTestInt());
+		Assertions.assertEquals(a2.getTestInt(), retA2.getTestInt());
+		Assertions.assertEquals(b1.getTestString(), retB1.getTestString());
 	}
 
 	/**
@@ -128,15 +128,19 @@ public class TestECSManager {
 		ECSManager.addComponent(hasBoth, b1);
 		ECSManager.addComponent(hasB, b2);
 
-		Assert.assertTrue(ECSManager.containsComponent(hasA, TestA.class));
-		Assert.assertTrue(ECSManager.containsComponent(hasBoth, TestA.class));
-		Assert.assertTrue(ECSManager.containsComponent(hasBoth, TestB.class));
-		Assert.assertTrue(ECSManager.containsComponent(hasB, TestB.class));
+		Assertions.assertTrue(ECSManager.containsComponent(hasA, TestA.class));
+		Assertions
+			.assertTrue(ECSManager.containsComponent(hasBoth, TestA.class));
+		Assertions
+			.assertTrue(ECSManager.containsComponent(hasBoth, TestB.class));
+		Assertions.assertTrue(ECSManager.containsComponent(hasB, TestB.class));
 
-		Assert.assertFalse(ECSManager.containsComponent(hasA, TestB.class));
-		Assert.assertFalse(ECSManager.containsComponent(hasB, TestA.class));
-		Assert.assertFalse(ECSManager.containsComponent(hasNone, TestA.class));
-		Assert.assertFalse(ECSManager.containsComponent(hasNone, TestB.class));
+		Assertions.assertFalse(ECSManager.containsComponent(hasA, TestB.class));
+		Assertions.assertFalse(ECSManager.containsComponent(hasB, TestA.class));
+		Assertions
+			.assertFalse(ECSManager.containsComponent(hasNone, TestA.class));
+		Assertions
+			.assertFalse(ECSManager.containsComponent(hasNone, TestB.class));
 	}
 
 	/**
@@ -161,15 +165,15 @@ public class TestECSManager {
 		ECSManager.destroyEntity(entity1);
 
 		Optional<TestA> retA1 = ECSManager.getComponent(entity1, TestA.class);
-		Assert.assertFalse(retA1.isPresent());
+		Assertions.assertFalse(retA1.isPresent());
 		Optional<TestB> retB1 = ECSManager.getComponent(entity1, TestB.class);
-		Assert.assertFalse(retB1.isPresent());
+		Assertions.assertFalse(retB1.isPresent());
 
 		Optional<TestA> retA2 = ECSManager.getComponent(entity2, TestA.class);
-		Assert.assertTrue(retA2.isPresent());
+		Assertions.assertTrue(retA2.isPresent());
 		ECSManager.destroyEntity(entity2);
 		retA2 = ECSManager.getComponent(entity2, TestA.class);
-		Assert.assertFalse(retA2.isPresent());
+		Assertions.assertFalse(retA2.isPresent());
 
 	}
 
@@ -197,12 +201,12 @@ public class TestECSManager {
 		ECSManager.destroyEntity(entity2);
 
 		Optional<TestA> retA1 = ECSManager.getComponent(entity3, TestA.class);
-		Assert.assertTrue(retA1.isPresent());
-		Assert.assertEquals(a1.getTestInt(), retA1.get().getTestInt());
+		Assertions.assertTrue(retA1.isPresent());
+		Assertions.assertEquals(a1.getTestInt(), retA1.get().getTestInt());
 		ECSManager.destroyEntity(entity3);
 
 		retA1 = ECSManager.getComponent(entity3, TestA.class);
-		Assert.assertFalse(retA1.isPresent());
+		Assertions.assertFalse(retA1.isPresent());
 	}
 
 	/**
@@ -212,8 +216,8 @@ public class TestECSManager {
 	public void testGetAllComponents() {
 		// Empty case
 		List<TestA> aComponents = ECSManager.getAllComponents(TestA.class);
-		Assert.assertNotNull(aComponents);
-		Assert.assertTrue(aComponents.isEmpty());
+		Assertions.assertNotNull(aComponents);
+		Assertions.assertTrue(aComponents.isEmpty());
 
 		// Normal flow
 		UUID entity1 = ECSManager.createEntity();
@@ -233,24 +237,24 @@ public class TestECSManager {
 		aComponents = ECSManager.getAllComponents(TestA.class);
 		List<TestB> bComponents = ECSManager.getAllComponents(TestB.class);
 
-		Assert.assertNotNull(aComponents);
-		Assert.assertEquals(2, aComponents.size());
+		Assertions.assertNotNull(aComponents);
+		Assertions.assertEquals(2, aComponents.size());
 
-		Assert.assertNotNull(bComponents);
-		Assert.assertEquals(2, bComponents.size());
+		Assertions.assertNotNull(bComponents);
+		Assertions.assertEquals(2, bComponents.size());
 
-		Assert.assertTrue(aComponents.contains(a1));
-		Assert.assertTrue(aComponents.contains(a2));
+		Assertions.assertTrue(aComponents.contains(a1));
+		Assertions.assertTrue(aComponents.contains(a2));
 
-		Assert.assertTrue(bComponents.contains(b1));
-		Assert.assertTrue(bComponents.contains(b3));
+		Assertions.assertTrue(bComponents.contains(b1));
+		Assertions.assertTrue(bComponents.contains(b3));
 
 		// See if removing components works as expected
 		ECSManager.removeComponent(entity1, TestA.class);
 		aComponents = ECSManager.getAllComponents(TestA.class);
-		Assert.assertNotNull(aComponents);
-		Assert.assertEquals(1, aComponents.size());
-		Assert.assertTrue(aComponents.contains(a2));
+		Assertions.assertNotNull(aComponents);
+		Assertions.assertEquals(1, aComponents.size());
+		Assertions.assertTrue(aComponents.contains(a2));
 	}
 
 	/**
@@ -259,8 +263,8 @@ public class TestECSManager {
 	@Test
 	public void testGetAllEntities() {
 		List<UUID> entities = ECSManager.getAllEntities();
-		Assert.assertNotNull(entities);
-		Assert.assertTrue(entities.isEmpty());
+		Assertions.assertNotNull(entities);
+		Assertions.assertTrue(entities.isEmpty());
 
 		List<UUID> ids = new ArrayList<>();
 		for (int i = 0; i < 5; ++i) {
@@ -268,18 +272,18 @@ public class TestECSManager {
 		}
 
 		entities = ECSManager.getAllEntities();
-		Assert.assertNotNull(entities);
-		Assert.assertEquals(ids.size(), entities.size());
-		entities.forEach(id -> Assert.assertTrue(ids.contains(id)));
+		Assertions.assertNotNull(entities);
+		Assertions.assertEquals(ids.size(), entities.size());
+		entities.forEach(id -> Assertions.assertTrue(ids.contains(id)));
 
 		UUID removed = ids.remove(0);
 		ECSManager.destroyEntity(removed);
 
 		entities = ECSManager.getAllEntities();
-		Assert.assertNotNull(entities);
-		Assert.assertEquals(ids.size(), entities.size());
-		entities.forEach(id -> Assert.assertTrue(ids.contains(id)));
-		Assert.assertFalse(entities.contains(removed));
+		Assertions.assertNotNull(entities);
+		Assertions.assertEquals(ids.size(), entities.size());
+		entities.forEach(id -> Assertions.assertTrue(ids.contains(id)));
+		Assertions.assertFalse(entities.contains(removed));
 	}
 
 	/**
@@ -289,8 +293,8 @@ public class TestECSManager {
 	@Test
 	public void testGetAllEntitiesWithComponent() {
 		List<UUID> blank = ECSManager.getAllEntitiesWithComponent(TestA.class);
-		Assert.assertNotNull(blank);
-		Assert.assertTrue(blank.isEmpty());
+		Assertions.assertNotNull(blank);
+		Assertions.assertTrue(blank.isEmpty());
 
 		UUID hasA = ECSManager.createEntity();
 		UUID hasBoth = ECSManager.createEntity();
@@ -312,25 +316,25 @@ public class TestECSManager {
 		List<UUID> withAB =
 			ECSManager.getAllEntitiesWithComponent(TestA.class, TestB.class);
 
-		Assert.assertNotNull(withA);
-		Assert.assertNotNull(withB);
-		Assert.assertNotNull(withAB);
+		Assertions.assertNotNull(withA);
+		Assertions.assertNotNull(withB);
+		Assertions.assertNotNull(withAB);
 
-		Assert.assertEquals(2, withA.size());
-		Assert.assertEquals(2, withB.size());
-		Assert.assertEquals(1, withAB.size());
+		Assertions.assertEquals(2, withA.size());
+		Assertions.assertEquals(2, withB.size());
+		Assertions.assertEquals(1, withAB.size());
 
-		Assert.assertTrue(withA.contains(hasA));
-		Assert.assertTrue(withA.contains(hasBoth));
+		Assertions.assertTrue(withA.contains(hasA));
+		Assertions.assertTrue(withA.contains(hasBoth));
 
-		Assert.assertTrue(withB.contains(hasB));
-		Assert.assertTrue(withB.contains(hasBoth));
+		Assertions.assertTrue(withB.contains(hasB));
+		Assertions.assertTrue(withB.contains(hasBoth));
 
-		Assert.assertTrue(withAB.contains(hasBoth));
+		Assertions.assertTrue(withAB.contains(hasBoth));
 
-		Assert.assertFalse(withA.contains(hasNone));
-		Assert.assertFalse(withB.contains(hasNone));
-		Assert.assertFalse(withAB.contains(hasNone));
+		Assertions.assertFalse(withA.contains(hasNone));
+		Assertions.assertFalse(withB.contains(hasNone));
+		Assertions.assertFalse(withAB.contains(hasNone));
 	}
 
 	/**
@@ -349,29 +353,31 @@ public class TestECSManager {
 		ECSManager.addComponent(entity1, a1);
 		ECSManager.addComponent(entity2, b1);
 
-		Assert.assertTrue(ECSManager.containsComponent(entity1, TestA.class));
+		Assertions
+			.assertTrue(ECSManager.containsComponent(entity1, TestA.class));
 		ECSManager.removeComponent(entity1, TestA.class);
-		Assert.assertFalse(ECSManager.containsComponent(entity1, TestA.class));
-		Assert.assertFalse(
+		Assertions
+			.assertFalse(ECSManager.containsComponent(entity1, TestA.class));
+		Assertions.assertFalse(
 			ECSManager.getComponent(entity1, TestA.class).isPresent());
 
 		List<TestA> empty = ECSManager.getAllComponents(TestA.class);
-		Assert.assertNotNull(empty);
-		Assert.assertTrue(empty.isEmpty());
+		Assertions.assertNotNull(empty);
+		Assertions.assertTrue(empty.isEmpty());
 
 		List<UUID> entities =
 			ECSManager.getAllEntitiesWithComponent(TestA.class);
-		Assert.assertNotNull(entities);
-		Assert.assertTrue(entities.isEmpty());
+		Assertions.assertNotNull(entities);
+		Assertions.assertTrue(entities.isEmpty());
 
 		// does not affect B
 		List<TestB> notEmpty = ECSManager.getAllComponents(TestB.class);
-		Assert.assertNotNull(notEmpty);
-		Assert.assertFalse(notEmpty.isEmpty());
+		Assertions.assertNotNull(notEmpty);
+		Assertions.assertFalse(notEmpty.isEmpty());
 
 		entities = ECSManager.getAllEntitiesWithComponent(TestB.class);
-		Assert.assertNotNull(entities);
-		Assert.assertFalse(entities.isEmpty());
+		Assertions.assertNotNull(entities);
+		Assertions.assertFalse(entities.isEmpty());
 	}
 
 	/**
@@ -386,14 +392,16 @@ public class TestECSManager {
 		TestA a1 = new TestA();
 
 		ECSManager.addComponent(entity1, a1);
-		Assert.assertTrue(ECSManager.containsComponent(entity1, TestA.class));
+		Assertions
+			.assertTrue(ECSManager.containsComponent(entity1, TestA.class));
 
 		// Remove twice
 		ECSManager.removeComponent(entity1, TestA.class);
 		ECSManager.removeComponent(entity1, TestA.class);
 
-		Assert.assertFalse(ECSManager.containsComponent(entity1, TestA.class));
-		Assert.assertFalse(
+		Assertions
+			.assertFalse(ECSManager.containsComponent(entity1, TestA.class));
+		Assertions.assertFalse(
 			ECSManager.getComponent(entity1, TestA.class).isPresent());
 	}
 
