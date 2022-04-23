@@ -1,0 +1,14 @@
+repositories {
+    mavenCentral()
+}
+
+tasks.register('build', Copy) {
+	mkdir 'jars'
+	from subprojects.collect { it.tasks.withType(Jar) }
+	exclude '**/Ikala-Core-*.jar'
+    into 'jars'
+}
+
+tasks.register('clean') {
+	delete 'jars'
+}

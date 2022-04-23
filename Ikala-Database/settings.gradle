@@ -1,0 +1,3 @@
+rootProject.name = 'Ikala-Database'
+include ':Ikala-Core'
+project(':Ikala-Core').projectDir = new File('../../Ikala-Core')
