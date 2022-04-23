@@ -25,3 +25,5 @@ For your own plugin, you'll need to configure:
 Additionally while the `plugin.yml` file is important for a plugin to be
 loaded, it's also where name and version information is pulled when generating
 the distributable jars so it is very important to update that information.
+
+You will also want to update this file and `CHANGELOG.md` to contain your own information.
