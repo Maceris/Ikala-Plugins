@@ -1,0 +1,82 @@
+plugins {
+    id 'java'
+    id 'eclipse'
+    id 'idea'
+    id 'io.franzbecker.gradle-lombok' version '5.0.0'
+}
+
+import io.franzbecker.gradle.lombok.task.DelombokTask
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+// Hardcoded since this is broken on purpose
+archivesBaseName = "TestErrorNoYml"
+version = "0.0.1"
+
+repositories {
+    mavenCentral()
+}
+
+eclipse {
+    classpath {
+        downloadJavadoc = true
+        downloadSources = true
+    }
+}
+
+idea {
+    module {
+        downloadJavadoc = true
+        downloadSources = true
+    }
+}
+
+dependencies {
+	implementation project(':Ikala-Core')
+
+	// Testing
+	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
+	
+	// lombok
+	compileOnly "org.projectlombok:lombok:${lombokVersion}"
+	annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+	testCompileOnly "org.projectlombok:lombok:${lombokVersion}"
+	testAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+}
+
+tasks.register('delombok', DelombokTask) {
+	description 'Delomboks the source code'
+    ext.outputDir = file('build/src-delomboked')
+    outputs.dir(outputDir)
+    sourceSets.main.java.srcDirs.each { 
+        inputs.dir(it)
+        args(it, "-d", outputDir)
+    }
+    doFirst {
+        outputDir.deleteDir()
+    }
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+	testLogging {
+		exceptionFormat 'full'
+		events 'passed', 'skipped', 'failed'
+		showStandardStreams true
+	}
+}
+
+tasks.named('javadoc') {
+	dependsOn delombok
+	source = delombok.outputDir
+	failOnError = false
+}
+
+tasks.named('clean') {
+	delete 'build/src-delomboked'
+	// tests generate this
+	delete 'logs'
+}

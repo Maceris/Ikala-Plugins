@@ -1,0 +1,99 @@
+buildscript {
+	dependencies {
+		classpath "org.yaml:snakeyaml:${snakeYamlVersion}"
+	}
+}
+
+plugins {
+    id 'java'
+    id 'eclipse'
+    id 'idea'
+    id 'io.franzbecker.gradle-lombok' version '5.0.0'
+}
+
+import io.franzbecker.gradle.lombok.task.DelombokTask
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+def resourcesDir = sourceSets.main.resources.srcDirs.first()
+def config = new org.yaml.snakeyaml.Yaml().load( new File("${resourcesDir}/plugin.yml").newInputStream() )
+
+archivesBaseName = "${config.name}"
+version = "${config.version}"
+
+repositories {
+    mavenCentral()
+}
+
+eclipse {
+    classpath {
+        downloadJavadoc = true
+        downloadSources = true
+    }
+}
+
+idea {
+    module {
+        downloadJavadoc = true
+        downloadSources = true
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs 'src'
+            srcDirs '../TestCycleB/src'
+        }
+    }
+ }
+ 
+dependencies {
+	implementation project(':Ikala-Core')
+	
+	// Testing
+	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
+	
+	// lombok
+	compileOnly "org.projectlombok:lombok:${lombokVersion}"
+	annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+	testCompileOnly "org.projectlombok:lombok:${lombokVersion}"
+	testAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+}
+
+tasks.register('delombok', DelombokTask) {
+	description 'Delomboks the source code'
+    ext.outputDir = file('build/src-delomboked')
+    outputs.dir(outputDir)
+    sourceSets.main.java.srcDirs.each { 
+        inputs.dir(it)
+        args(it, "-d", outputDir)
+    }
+    doFirst {
+        outputDir.deleteDir()
+    }
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+	testLogging {
+		exceptionFormat 'full'
+		events 'passed', 'skipped', 'failed'
+		showStandardStreams true
+	}
+}
+
+tasks.named('javadoc') {
+	dependsOn delombok
+	source = delombok.outputDir
+	failOnError = false
+}
+
+tasks.named('clean') {
+	delete 'build/src-delomboked'
+	// tests generate this
+	delete 'logs'
+}
