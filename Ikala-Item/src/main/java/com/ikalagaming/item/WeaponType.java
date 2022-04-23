@@ -1,4 +1,4 @@
-package com.ikalagaming.item.template;
+package com.ikalagaming.item;
 
 /**
  * What kind of weapon an item is.

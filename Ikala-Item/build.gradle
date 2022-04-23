@@ -46,6 +46,7 @@ idea {
 
 dependencies {
 	implementation project(':Ikala-Core')
+	compileOnly project(':Ikala-Attributes')
 
 	// Testing
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"

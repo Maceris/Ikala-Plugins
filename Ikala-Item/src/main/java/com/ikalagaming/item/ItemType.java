@@ -1,4 +1,4 @@
-package com.ikalagaming.item.template;
+package com.ikalagaming.item;
 
 /**
  * The category of item.

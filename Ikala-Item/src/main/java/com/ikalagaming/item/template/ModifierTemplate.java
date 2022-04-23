@@ -1,5 +1,7 @@
 package com.ikalagaming.item.template;
 
+import com.ikalagaming.item.ModifierType;
+
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -13,7 +15,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @Getter
 @Setter
-public class Modifier {
+public class ModifierTemplate {
 	/**
 	 * The ID of the modifier this applies to, can be a damage type, character
 	 * stat, etc.

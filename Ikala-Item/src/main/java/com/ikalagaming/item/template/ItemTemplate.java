@@ -1,5 +1,7 @@
 package com.ikalagaming.item.template;
 
+import com.ikalagaming.item.ItemType;
+
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;

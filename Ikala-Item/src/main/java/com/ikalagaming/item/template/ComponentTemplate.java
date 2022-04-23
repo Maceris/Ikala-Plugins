@@ -6,7 +6,6 @@ import lombok.Setter;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * 
@@ -18,9 +17,9 @@ import java.util.UUID;
 @NoArgsConstructor
 @Getter
 @Setter
-public class Component {
-	private UUID id;
-	private List<Modifier> damage = new ArrayList<>();
-	private List<Modifier> userBuffs = new ArrayList<>();
-	private List<Modifier> targetDebuffs = new ArrayList<>();
+public class ComponentTemplate {
+	private Integer id;
+	private List<ModifierTemplate> damage = new ArrayList<>();
+	private List<ModifierTemplate> userBuffs = new ArrayList<>();
+	private List<ModifierTemplate> targetDebuffs = new ArrayList<>();
 }
