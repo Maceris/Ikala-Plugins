@@ -11,6 +11,10 @@ plugins {
     id 'io.franzbecker.gradle-lombok' version '5.0.0'
 }
 
+configurations {
+	jarInclude
+}
+
 import io.franzbecker.gradle.lombok.task.DelombokTask
 
 java {
@@ -50,7 +54,19 @@ dependencies {
 	implementation "org.lwjgl:lwjgl:${lwjglVersion}"
 	implementation "org.lwjgl:lwjgl-glfw:${lwjglVersion}"
 	implementation "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
+	runtimeOnly "org.lwjgl:lwjgl:${lwjglVersion}:natives-windows"
+	runtimeOnly "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-windows"
+	runtimeOnly "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-windows"
 	implementation "org.l33tlabs.twl:pngdecoder:${pngDecoderVersion}"
+	
+	jarInclude "org.joml:joml:${jomlVersion}"
+	jarInclude "org.lwjgl:lwjgl:${lwjglVersion}"
+	jarInclude "org.lwjgl:lwjgl-glfw:${lwjglVersion}"
+	jarInclude "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
+	jarInclude "org.l33tlabs.twl:pngdecoder:${pngDecoderVersion}"
+	jarInclude "org.lwjgl:lwjgl:${lwjglVersion}:natives-windows"
+	jarInclude "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-windows"
+	jarInclude "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-windows"
 
 	// Testing
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
@@ -94,4 +110,11 @@ tasks.named('clean') {
 	delete 'build/src-delomboked'
 	// tests generate this
 	delete 'logs'
+}
+
+tasks.named('jar') {
+    from {
+        configurations.jarInclude.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }

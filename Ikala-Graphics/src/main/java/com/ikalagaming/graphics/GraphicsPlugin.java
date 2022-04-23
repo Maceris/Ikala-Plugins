@@ -70,8 +70,7 @@ public class GraphicsPlugin extends Plugin {
 	public boolean onLoad() {
 		try {
 			GraphicsPlugin.setResourceBundle(ResourceBundle.getBundle(
-				"com.ikalagaming.graphics.resources.strings",
-				Localization.getLocale()));
+				"com.ikalagaming.graphics.strings", Localization.getLocale()));
 		}
 		catch (MissingResourceException missingResource) {
 			// don't localize this since it would fail anyways
