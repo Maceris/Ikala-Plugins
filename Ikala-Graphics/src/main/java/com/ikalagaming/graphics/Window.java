@@ -183,7 +183,7 @@ public class Window {
 		GL.createCapabilities();
 
 		// Set the clear color
-		GL11.glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+		GL11.glClearColor(0.5f, 0.73f, 0.82f, 1.0f);
 		GL11.glEnable(GL11.GL_DEPTH_TEST);
 	}
 
