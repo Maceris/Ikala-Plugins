@@ -30,7 +30,7 @@ public class Permission {
 	 * The location for permissions resource bundle
 	 */
 	static final String RESOURCE_LOCATION =
-		"com.ikalagaming.permissions.resources.Permissions";
+		"com.ikalagaming.permissions.Permissions";
 
 	private static HashMap<String, Permission> permissionByName =
 		new HashMap<>();
