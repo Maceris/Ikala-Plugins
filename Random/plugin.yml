@@ -1,5 +1,0 @@
-name: Random
-version: 0.0.1
-description: Random generation utilities
-authors: [maceris]
-main-class: com.ikalagaming.random.RandomPlugin
