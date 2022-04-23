@@ -1,5 +1,6 @@
 package com.ikalagaming.item.template;
 
+import com.ikalagaming.attributes.Attribute;
 import com.ikalagaming.item.ModifierType;
 
 import lombok.Getter;
@@ -7,7 +8,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Tracks modification of stats, damage, and similar attributes.
+ * Tracks modification of an attribute.
  * 
  * @author Ches Burks
  *
@@ -15,15 +16,14 @@ import lombok.Setter;
 @NoArgsConstructor
 @Getter
 @Setter
-public class ModifierTemplate {
+public class AttributeModifierTemplate {
 	/**
-	 * The ID of the modifier this applies to, can be a damage type, character
-	 * stat, etc.
+	 * The specific attribute this modifier affects.
 	 * 
-	 * @param modifierTargetID The unique ID of the type of thing this modifies.
-	 * @return The unique ID of the type of thing this modifies.
+	 * @param attribute The attribute this modifies.
+	 * @return The attribute this modifies.
 	 */
-	private Integer modifierTargetID;
+	private Attribute attribute;
 	/**
 	 * How this modifier affects the base value, such as a flat change,
 	 * percentage difference, or a range of possible values.

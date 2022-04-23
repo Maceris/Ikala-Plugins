@@ -19,7 +19,7 @@ import java.util.List;
 @Setter
 public class ComponentTemplate {
 	private Integer id;
-	private List<ModifierTemplate> damage = new ArrayList<>();
-	private List<ModifierTemplate> userBuffs = new ArrayList<>();
-	private List<ModifierTemplate> targetDebuffs = new ArrayList<>();
+	private List<DamageModifierTemplate> damage = new ArrayList<>();
+	private List<DamageModifierTemplate> userBuffs = new ArrayList<>();
+	private List<DamageModifierTemplate> targetDebuffs = new ArrayList<>();
 }
