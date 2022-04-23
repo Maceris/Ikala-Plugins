@@ -1,7 +1,7 @@
 package com.ikalagaming.random;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -54,11 +54,11 @@ public class TestRandomGen {
 		gen.normalize(many);
 		gen.normalize(weird);
 
-		Assert.assertTrue(this.isNormalized(one));
-		Assert.assertTrue(this.isNormalized(two));
-		Assert.assertTrue(this.isNormalized(three));
-		Assert.assertTrue(this.isNormalized(many));
-		Assert.assertTrue(this.isNormalized(weird));
+		Assertions.assertTrue(this.isNormalized(one));
+		Assertions.assertTrue(this.isNormalized(two));
+		Assertions.assertTrue(this.isNormalized(three));
+		Assertions.assertTrue(this.isNormalized(many));
+		Assertions.assertTrue(this.isNormalized(weird));
 	}
 
 	/**
@@ -80,7 +80,7 @@ public class TestRandomGen {
 		for (int i = 0; i < selections.length; ++i) {
 			total += selections[i];
 		}
-		Assert.assertTrue(total < requestedTotal);
+		Assertions.assertTrue(total < requestedTotal);
 	}
 
 	/**
@@ -92,21 +92,21 @@ public class TestRandomGen {
 		RandomGen generator = new RandomGen();
 
 		int[] badArray = null;
-		Assert.assertThrows(NullPointerException.class,
+		Assertions.assertThrows(NullPointerException.class,
 			() -> generator.selectUpToWeight(badArray, 10));
 
 		int[] selections = generator.selectUpToWeight(new int[0], 10);
-		Assert.assertNotNull(selections);
-		Assert.assertEquals(0, selections.length);
+		Assertions.assertNotNull(selections);
+		Assertions.assertEquals(0, selections.length);
 
 		int[] weights = {1};
 		selections = generator.selectUpToWeight(weights, 0);
-		Assert.assertNotNull(selections);
-		Assert.assertEquals(0, selections.length);
+		Assertions.assertNotNull(selections);
+		Assertions.assertEquals(0, selections.length);
 
 		selections = generator.selectUpToWeight(weights, -1);
-		Assert.assertNotNull(selections);
-		Assert.assertEquals(0, selections.length);
+		Assertions.assertNotNull(selections);
+		Assertions.assertEquals(0, selections.length);
 	}
 
 	/**
@@ -130,7 +130,7 @@ public class TestRandomGen {
 		int total =
 			selections.stream().collect(Collectors.summingInt(item -> item));
 
-		Assert.assertTrue(total < requestedTotal);
+		Assertions.assertTrue(total < requestedTotal);
 	}
 
 	/**
@@ -142,24 +142,24 @@ public class TestRandomGen {
 		RandomGen generator = new RandomGen();
 
 		List<Integer> badList = null;
-		Assert.assertThrows(NullPointerException.class,
+		Assertions.assertThrows(NullPointerException.class,
 			() -> generator.selectUpToWeight(badList, 10));
 
 		List<Integer> selections =
 			generator.selectUpToWeight(new ArrayList<>(), 10);
-		Assert.assertNotNull(selections);
-		Assert.assertTrue(selections.isEmpty());
+		Assertions.assertNotNull(selections);
+		Assertions.assertTrue(selections.isEmpty());
 
 		List<Integer> weights = new ArrayList<>();
 		weights.add(1);
 
 		selections = generator.selectUpToWeight(weights, 0);
-		Assert.assertNotNull(selections);
-		Assert.assertTrue(selections.isEmpty());
+		Assertions.assertNotNull(selections);
+		Assertions.assertTrue(selections.isEmpty());
 
 		selections = generator.selectUpToWeight(weights, -1);
-		Assert.assertNotNull(selections);
-		Assert.assertTrue(selections.isEmpty());
+		Assertions.assertNotNull(selections);
+		Assertions.assertTrue(selections.isEmpty());
 	}
 
 	/**
@@ -181,15 +181,15 @@ public class TestRandomGen {
 		double[] counts = new double[weights.length];
 		for (int i = 0; i < selections.length; ++i) {
 			int value = selections[i];
-			Assert.assertTrue(value < weights.length);
-			Assert.assertTrue(value >= 0);
+			Assertions.assertTrue(value < weights.length);
+			Assertions.assertTrue(value >= 0);
 			counts[value] = counts[value] + 1;
 		}
 		generator.normalize(weights);
 		generator.normalize(counts);
 		for (int i = 0; i < weights.length; ++i) {
 			double error = Math.abs(weights[i] - counts[i]);
-			Assert.assertTrue(error < 0.001);
+			Assertions.assertTrue(error < 0.001);
 		}
 	}
 
@@ -202,21 +202,21 @@ public class TestRandomGen {
 		RandomGen generator = new RandomGen();
 
 		double[] badArray = null;
-		Assert.assertThrows(NullPointerException.class,
+		Assertions.assertThrows(NullPointerException.class,
 			() -> generator.selectFromWeightedList(badArray, 10));
 
 		int[] selections = generator.selectFromWeightedList(new double[0], 10);
-		Assert.assertNotNull(selections);
-		Assert.assertEquals(0, selections.length);
+		Assertions.assertNotNull(selections);
+		Assertions.assertEquals(0, selections.length);
 
 		double[] weights = {1};
 		selections = generator.selectFromWeightedList(weights, 0);
-		Assert.assertNotNull(selections);
-		Assert.assertEquals(0, selections.length);
+		Assertions.assertNotNull(selections);
+		Assertions.assertEquals(0, selections.length);
 
 		selections = generator.selectFromWeightedList(weights, -1);
-		Assert.assertNotNull(selections);
-		Assert.assertEquals(0, selections.length);
+		Assertions.assertNotNull(selections);
+		Assertions.assertEquals(0, selections.length);
 	}
 
 	/**
@@ -240,8 +240,8 @@ public class TestRandomGen {
 		double[] counts = new double[weights.size()];
 		for (int i = 0; i < selections.size(); ++i) {
 			int value = selections.get(i);
-			Assert.assertTrue(value < weights.size());
-			Assert.assertTrue(value >= 0);
+			Assertions.assertTrue(value < weights.size());
+			Assertions.assertTrue(value >= 0);
 			counts[value] = counts[value] + 1;
 		}
 
@@ -254,7 +254,7 @@ public class TestRandomGen {
 		generator.normalize(counts);
 		for (int i = 0; i < weightArray.length; ++i) {
 			double error = Math.abs(weightArray[i] - counts[i]);
-			Assert.assertTrue(error < 0.001);
+			Assertions.assertTrue(error < 0.001);
 		}
 	}
 
@@ -267,24 +267,24 @@ public class TestRandomGen {
 		RandomGen generator = new RandomGen();
 
 		List<Double> badList = null;
-		Assert.assertThrows(NullPointerException.class,
+		Assertions.assertThrows(NullPointerException.class,
 			() -> generator.selectFromWeightedList(badList, 10));
 
 		List<Integer> selections =
 			generator.selectFromWeightedList(new ArrayList<>(), 10);
-		Assert.assertNotNull(selections);
-		Assert.assertTrue(selections.isEmpty());
+		Assertions.assertNotNull(selections);
+		Assertions.assertTrue(selections.isEmpty());
 
 		List<Double> weights = new ArrayList<>();
 		weights.add(1D);
 
 		selections = generator.selectFromWeightedList(weights, 0);
-		Assert.assertNotNull(selections);
-		Assert.assertTrue(selections.isEmpty());
+		Assertions.assertNotNull(selections);
+		Assertions.assertTrue(selections.isEmpty());
 
 		selections = generator.selectFromWeightedList(weights, -1);
-		Assert.assertNotNull(selections);
-		Assert.assertTrue(selections.isEmpty());
+		Assertions.assertNotNull(selections);
+		Assertions.assertTrue(selections.isEmpty());
 	}
 
 }
