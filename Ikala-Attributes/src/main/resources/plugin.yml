@@ -1,0 +1,6 @@
+---
+name: Ikala-Attributes
+version: 0.0.1
+description: Provides ARPG attributes for characters
+authors: [maceris]
+main-class: com.ikalagaming.attributes.AttributesPlugin
