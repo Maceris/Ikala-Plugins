@@ -1,5 +1,0 @@
-name: Ikala-Permissions
-version: 0.0.1
-description: Provides permission system for players
-authors: [maceris]
-main-class: com.ikalagaming.permissions.PermissionPlugin
