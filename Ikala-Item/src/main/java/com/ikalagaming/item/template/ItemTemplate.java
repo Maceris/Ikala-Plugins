@@ -18,13 +18,6 @@ import lombok.Setter;
 @Setter
 public class ItemTemplate {
 	/**
-	 * The unique ID of this type of item.
-	 *
-	 * @param id The unique ID for this item type.
-	 * @return The unique ID for this item type.
-	 */
-	private Integer id;
-	/**
 	 * The category of the item, such as a weapon or consumable.
 	 *
 	 * @param type The type of the item, like a weapon or consumable.
@@ -32,12 +25,13 @@ public class ItemTemplate {
 	 */
 	private ItemType type;
 	/**
-	 * The (unlocalized) name of the item.
+	 * The unique name of the item, which should follow a standard format and be
+	 * human readable but unlocalized.
 	 *
-	 * @param name The name of the item.
-	 * @return The name of the item.
+	 * @param name The name of the item in the database/code level.
+	 * @return The name of the item in the database/code level.
 	 */
-	private String name;
+	private String ID;
 	/**
 	 * The quality of the items, which helps specify how rare or powerful it is.
 	 * This is associated with UI indicators to quickly communicate to the
