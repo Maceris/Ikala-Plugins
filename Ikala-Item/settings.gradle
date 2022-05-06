@@ -5,3 +5,5 @@ include ':EntityComponentSystem'
 project(':EntityComponentSystem').projectDir = new File('../EntityComponentSystem')
 include ':Ikala-Attributes'
 project(':Ikala-Attributes').projectDir = new File('../Ikala-Attributes')
+include ':Random'
+project(':Random').projectDir = new File('../Random')
