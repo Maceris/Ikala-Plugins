@@ -3,6 +3,7 @@ package com.ikalagaming.item.template;
 import com.ikalagaming.item.ComponentType;
 import com.ikalagaming.item.Item;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -13,6 +14,7 @@ import lombok.Setter;
  * @author Ches Burks
  *
  */
+@EqualsAndHashCode(callSuper = false)
 @Getter
 @Setter
 public class ComponentTemplate extends Item {
@@ -34,5 +36,5 @@ public class ComponentTemplate extends Item {
 	 * @param itemStats The stat bonuses provided by the item.
 	 * @return The stat bonuses provided by the item.
 	 */
-	private ItemStatsTemplate itemStats;
+	private ItemStatsTemplate itemStats = new ItemStatsTemplate();
 }

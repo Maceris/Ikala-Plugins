@@ -2,6 +2,7 @@ package com.ikalagaming.item.template;
 
 import com.ikalagaming.item.AttributeModifier;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -11,6 +12,7 @@ import lombok.Setter;
  * @author Ches Burks
  *
  */
+@EqualsAndHashCode(callSuper = false)
 @Getter
 @Setter
 public class AttributeModifierTemplate extends AttributeModifier {

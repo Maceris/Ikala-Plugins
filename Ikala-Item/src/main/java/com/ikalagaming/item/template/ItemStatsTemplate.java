@@ -1,5 +1,8 @@
 package com.ikalagaming.item.template;
 
+import com.ikalagaming.item.DamageModifier;
+
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -12,6 +15,7 @@ import java.util.List;
  * @author Ches Burks
  *
  */
+@EqualsAndHashCode
 @Getter
 @Setter
 public class ItemStatsTemplate {
@@ -26,7 +30,7 @@ public class ItemStatsTemplate {
 	 * @param damageBuffs Buffs to damage done by the wielder of this item.
 	 * @return Buffs to damage done by the wielder of this item.
 	 */
-	private List<DamageModifierTemplate> damageBuffs = new ArrayList<>();
+	private List<DamageModifier> damageBuffs = new ArrayList<>();
 	/**
 	 * Buffs to damage resistance that the item provides to the wielder.
 	 *
@@ -34,7 +38,7 @@ public class ItemStatsTemplate {
 	 *            wielder.
 	 * @return Damage resistance that the item provides to the wielder.
 	 */
-	private List<DamageModifierTemplate> resistanceBuffs = new ArrayList<>();
+	private List<DamageModifier> resistanceBuffs = new ArrayList<>();
 	/**
 	 * Buffs to attributes that the item provides to the wielder.
 	 *

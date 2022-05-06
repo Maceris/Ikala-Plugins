@@ -1,5 +1,6 @@
 package com.ikalagaming.item;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -9,6 +10,7 @@ import lombok.Setter;
  * @author Ches Burks
  *
  */
+@EqualsAndHashCode
 @Getter
 @Setter
 public class Item {
