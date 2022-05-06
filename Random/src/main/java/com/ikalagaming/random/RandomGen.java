@@ -126,6 +126,18 @@ public class RandomGen {
 	}
 
 	/**
+	 * Select a value at random from the specified enum class.
+	 *
+	 * @param <T> The enum we are selecting from.
+	 * @param enumClass The enum class we want to select values from.
+	 * @return The randomly selected value out of the specified enum.
+	 */
+	public <T extends Enum<T>> T selectEnumValue(Class<T> enumClass) {
+		final T[] enumValues = enumClass.getEnumConstants();
+		return enumValues[RandomGen.random.nextInt(enumValues.length)];
+	}
+
+	/**
 	 * Select weighted random values, given the list of relative weight for each
 	 * index. For example, an item with weight 2 would be twice as likely to be
 	 * selected as one with weight 1. <br>

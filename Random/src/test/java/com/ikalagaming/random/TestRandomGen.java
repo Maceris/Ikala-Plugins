@@ -4,7 +4,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.SplittableRandom;
 import java.util.stream.Collectors;
 
@@ -15,6 +17,24 @@ import java.util.stream.Collectors;
  *
  */
 public class TestRandomGen {
+	/**
+	 * Used to test the selection of random enum values.
+	 *
+	 * @author Ches Burks
+	 * @see TestRandomGen#testSelectEnumValue()
+	 */
+	private enum TestEnum {
+		VALUE_1,
+		VALUE_2,
+		VALUE_3,
+		VALUE_4,
+		VALUE_5,
+		VALUE_6,
+		VALUE_7,
+		VALUE_8,
+		VALUE_9,
+		VALUE_10;
+	}
 
 	/**
 	 * Helper function for testing if a list is normalized.
@@ -59,6 +79,30 @@ public class TestRandomGen {
 		Assertions.assertTrue(this.isNormalized(three));
 		Assertions.assertTrue(this.isNormalized(many));
 		Assertions.assertTrue(this.isNormalized(weird));
+	}
+
+	/**
+	 * Test the selection of a random enum value.
+	 */
+	@Test
+	public void testSelectEnumValue() {
+		RandomGen gen = new RandomGen();
+
+		Map<TestEnum, Integer> selections = new HashMap<>();
+		for (TestEnum value : TestEnum.values()) {
+			selections.put(value, 0);
+		}
+		final int queries = 10000;
+		for (int i = 0; i < queries; ++i) {
+			TestEnum selection = gen.selectEnumValue(TestEnum.class);
+			selections.put(selection, selections.get(selection) + 1);
+		}
+
+		for (TestEnum value : TestEnum.values()) {
+			Assertions.assertTrue(selections
+				.get(value) > (queries / TestEnum.values().length) / 2);
+		}
+
 	}
 
 	/**
