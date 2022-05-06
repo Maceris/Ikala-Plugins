@@ -5,7 +5,7 @@ import lombok.Getter;
 
 /**
  * What type of consumable an item is.
- * 
+ *
  * @author Ches Burks
  *
  */

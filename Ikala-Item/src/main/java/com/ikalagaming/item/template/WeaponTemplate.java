@@ -1,11 +1,10 @@
 package com.ikalagaming.item.template;
 
+import com.ikalagaming.item.WeaponType;
+
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * A template for generating weapons from.
@@ -16,7 +15,7 @@ import java.util.List;
 @NoArgsConstructor
 @Getter
 @Setter
-public class WeaponTemplate extends ItemTemplate {
+public class WeaponTemplate extends EquipmentTemplate {
 	/**
 	 * The minimum damage that this weapon does, usually damage done per hit is
 	 * randomly distributed within a range of values.
@@ -36,29 +35,11 @@ public class WeaponTemplate extends ItemTemplate {
 	 */
 	private Integer maxDamage;
 	/**
-	 * Extra damage that this weapon does by default.
-	 *
-	 * @param extraDamage Extra damage done by the weapon on top of its standard
-	 *            attack damage.
-	 * @return Extra damage done by the weapon on top of its standard attack
-	 *         damage.
+	 * What kind of weapon this is.
+	 * 
+	 * @param weaponType The classification of weapon.
+	 * @return The classification of weapon.
 	 */
-	private List<DamageModifierTemplate> extraDamage = new ArrayList<>();
-	/**
-	 * Buffs to damage resistance that the weapon provides to the wielder.
-	 *
-	 * @param userResistanceBuffs Damage resistance that the weapon provides to
-	 *            the wielder.
-	 * @return Damage resistance that the weapon provides to the wielder.
-	 */
-	private List<DamageModifierTemplate> userResistanceBuffs =
-		new ArrayList<>();
-	/**
-	 * Buffs to attributes that the weapon provides to the wielder.
-	 *
-	 * @param userBuffs Buffs to attributes that the weapon provides to the
-	 *            wielder.
-	 * @return Buffs to attributes that the weapon provides to the wielder.
-	 */
-	private List<AttributeModifierTemplate> userBuffs = new ArrayList<>();
+	private WeaponType weaponType;
+
 }

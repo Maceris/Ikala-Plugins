@@ -1,11 +1,11 @@
 package com.ikalagaming.item.template;
 
+import com.ikalagaming.item.ComponentType;
+import com.ikalagaming.item.Item;
+
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  *
@@ -17,31 +17,19 @@ import java.util.List;
 @NoArgsConstructor
 @Getter
 @Setter
-public class ComponentTemplate extends ItemTemplate {
+public class ComponentTemplate extends Item {
 	/**
-	 * Extra damage that this weapon does by default.
-	 *
-	 * @param extraDamage Extra damage done by the weapon on top of its standard
-	 *            attack damage.
-	 * @return Extra damage done by the weapon on top of its standard attack
-	 *         damage.
+	 * What kind of component the item is.
+	 * 
+	 * @param componentType The kind of component the item is.
+	 * @return The kind of component the item is.
 	 */
-	private List<DamageModifierTemplate> extraDamage = new ArrayList<>();
+	private ComponentType componentType;
 	/**
-	 * Buffs to damage resistance that the weapon provides to the wielder.
-	 *
-	 * @param userResistanceBuffs Damage resistance that the weapon provides to
-	 *            the wielder.
-	 * @return Damage resistance that the weapon provides to the wielder.
+	 * Stat bonuses provided by the item.
+	 * 
+	 * @param itemStats The stat bonuses provided by the item.
+	 * @return The stat bonuses provided by the item.
 	 */
-	private List<DamageModifierTemplate> userResistanceBuffs =
-		new ArrayList<>();
-	/**
-	 * Buffs to attributes that the weapon provides to the wielder.
-	 *
-	 * @param userBuffs Buffs to attributes that the weapon provides to the
-	 *            wielder.
-	 * @return Buffs to attributes that the weapon provides to the wielder.
-	 */
-	private List<AttributeModifierTemplate> userBuffs = new ArrayList<>();
+	private ItemStatsTemplate itemStats;
 }

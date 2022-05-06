@@ -1,7 +1,4 @@
-package com.ikalagaming.item.template;
-
-import com.ikalagaming.item.ItemType;
-import com.ikalagaming.item.Quality;
+package com.ikalagaming.item;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -16,7 +13,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @Getter
 @Setter
-public class ItemTemplate {
+public class Item {
 	/**
 	 * The category of the item, such as a weapon or consumable.
 	 *
