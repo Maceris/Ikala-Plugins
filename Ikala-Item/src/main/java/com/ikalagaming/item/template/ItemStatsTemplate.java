@@ -1,7 +1,6 @@
 package com.ikalagaming.item.template;
 
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.ArrayList;
@@ -15,8 +14,12 @@ import java.util.List;
  */
 @Getter
 @Setter
-@NoArgsConstructor
 public class ItemStatsTemplate {
+	/**
+	 * Construct a new item stat template.
+	 */
+	public ItemStatsTemplate() {}
+
 	/**
 	 * Buffs to damage done by the wielder of this item.
 	 *

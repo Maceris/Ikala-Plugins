@@ -3,7 +3,6 @@ package com.ikalagaming.item.template;
 import com.ikalagaming.item.WeaponType;
 
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
@@ -12,10 +11,14 @@ import lombok.Setter;
  * @author Ches Burks
  *
  */
-@NoArgsConstructor
 @Getter
 @Setter
 public class WeaponTemplate extends EquipmentTemplate {
+	/**
+	 * Construct a new weapon template.
+	 */
+	public WeaponTemplate() {}
+
 	/**
 	 * The minimum damage that this weapon does, usually damage done per hit is
 	 * randomly distributed within a range of values.

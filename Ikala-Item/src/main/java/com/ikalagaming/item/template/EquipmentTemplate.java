@@ -4,9 +4,9 @@ import com.ikalagaming.item.AttributeModifier;
 import com.ikalagaming.item.Item;
 
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -17,8 +17,12 @@ import java.util.List;
  */
 @Getter
 @Setter
-@NoArgsConstructor
 public class EquipmentTemplate extends Item {
+	/**
+	 * Construct a new equipment template.
+	 */
+	public EquipmentTemplate() {}
+
 	/**
 	 * The level requirement required for using this equipment.
 	 * 
@@ -35,7 +39,7 @@ public class EquipmentTemplate extends Item {
 	 * @return The minimum attribute values that are required for using this
 	 *         equipment.
 	 */
-	private List<AttributeModifier> attributeRequirements;
+	private List<AttributeModifier> attributeRequirements = new ArrayList<>();
 	/**
 	 * Stat bonuses provided by the item.
 	 * 

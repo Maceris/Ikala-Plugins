@@ -4,7 +4,6 @@ import com.ikalagaming.attributes.DamageType;
 import com.ikalagaming.item.ModifierType;
 
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
@@ -13,10 +12,14 @@ import lombok.Setter;
  * @author Ches Burks
  *
  */
-@NoArgsConstructor
 @Getter
 @Setter
 public class DamageModifierTemplate {
+	/**
+	 * Construct a new damage modifier template.
+	 */
+	public DamageModifierTemplate() {}
+
 	/**
 	 * The type of damage this modifier affects.
 	 *

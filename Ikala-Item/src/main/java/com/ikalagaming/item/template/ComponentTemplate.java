@@ -4,7 +4,6 @@ import com.ikalagaming.item.ComponentType;
 import com.ikalagaming.item.Item;
 
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
@@ -14,10 +13,14 @@ import lombok.Setter;
  * @author Ches Burks
  *
  */
-@NoArgsConstructor
 @Getter
 @Setter
 public class ComponentTemplate extends Item {
+	/**
+	 * Construct a new component template.
+	 */
+	public ComponentTemplate() {}
+
 	/**
 	 * What kind of component the item is.
 	 * 

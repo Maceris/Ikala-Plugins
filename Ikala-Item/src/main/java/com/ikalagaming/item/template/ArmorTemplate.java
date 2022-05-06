@@ -3,7 +3,6 @@ package com.ikalagaming.item.template;
 import com.ikalagaming.item.ArmorType;
 
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
@@ -12,10 +11,15 @@ import lombok.Setter;
  * @author Ches Burks
  *
  */
-@NoArgsConstructor
 @Getter
 @Setter
 public class ArmorTemplate extends EquipmentTemplate {
+
+	/**
+	 * Construct a new armor template.
+	 */
+	public ArmorTemplate() {}
+
 	/**
 	 * What kind of armor this is.
 	 * 

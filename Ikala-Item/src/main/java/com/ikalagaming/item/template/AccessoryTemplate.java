@@ -3,7 +3,6 @@ package com.ikalagaming.item.template;
 import com.ikalagaming.item.AccessoryType;
 
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
@@ -12,10 +11,15 @@ import lombok.Setter;
  * @author Ches Burks
  *
  */
-@NoArgsConstructor
 @Getter
 @Setter
 public class AccessoryTemplate extends EquipmentTemplate {
+
+	/**
+	 * Construct a new accessory template.
+	 */
+	public AccessoryTemplate() {}
+
 	/**
 	 * What kind of accessory this is.
 	 * 

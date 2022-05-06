@@ -3,7 +3,6 @@ package com.ikalagaming.item;
 import com.ikalagaming.attributes.Attribute;
 
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
@@ -12,7 +11,6 @@ import lombok.Setter;
  * @author Ches Burks
  *
  */
-@NoArgsConstructor
 @Getter
 @Setter
 public class AttributeModifier {
@@ -23,6 +21,7 @@ public class AttributeModifier {
 	 * @return The attribute this modifies.
 	 */
 	private Attribute attribute;
+
 	/**
 	 * How this modifier affects the base value, such as a flat change,
 	 * percentage difference, or a range of possible values.
@@ -41,5 +40,10 @@ public class AttributeModifier {
 	 * @return The amount the attribute is modified by.
 	 */
 	private Integer amount;
+
+	/**
+	 * Construct a new attribute modifier.
+	 */
+	public AttributeModifier() {}
 
 }

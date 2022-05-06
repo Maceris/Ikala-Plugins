@@ -1,7 +1,6 @@
 package com.ikalagaming.item;
 
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
@@ -10,7 +9,6 @@ import lombok.Setter;
  * @author Ches Burks
  *
  */
-@NoArgsConstructor
 @Getter
 @Setter
 public class Item {
@@ -21,11 +19,12 @@ public class Item {
 	 * @return The type of the item, like a weapon or consumable.
 	 */
 	private ItemType type;
+
 	/**
 	 * The unique name of the item, which should follow a standard format and be
 	 * human readable but unlocalized.
 	 *
-	 * @param name The name of the item in the database/code level.
+	 * @param ID The name of the item in the database/code level.
 	 * @return The name of the item in the database/code level.
 	 */
 	private String ID;
@@ -49,4 +48,9 @@ public class Item {
 	 * @return The expected level where this item is expected to be encountered.
 	 */
 	private Integer itemLevel;
+
+	/**
+	 * Construct a new item.
+	 */
+	public Item() {}
 }
