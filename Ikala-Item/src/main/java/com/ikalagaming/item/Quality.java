@@ -4,7 +4,7 @@ package com.ikalagaming.item;
  * The quality of items, describing how rare or powerful they are. This is
  * communicated to the player to indicate how good an item is at a glance, and
  * used for filtering.
- * 
+ *
  * @author Ches Burks
  *
  */

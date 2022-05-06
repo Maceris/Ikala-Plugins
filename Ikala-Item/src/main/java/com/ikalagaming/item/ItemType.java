@@ -5,7 +5,7 @@ import lombok.Getter;
 
 /**
  * The category of item.
- * 
+ *
  * @author Ches Burks
  *
  */
@@ -49,7 +49,7 @@ public enum ItemType {
 	/**
 	 * The prefix that is used in the IDs for items of this type in the
 	 * database.
-	 * 
+	 *
 	 * @return The prefix that appears before items of this type in the
 	 *         database.
 	 */

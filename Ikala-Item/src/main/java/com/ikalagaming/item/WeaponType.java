@@ -5,7 +5,7 @@ import lombok.Getter;
 
 /**
  * What kind of weapon an item is.
- * 
+ *
  * @author Ches Burks
  *
  */
@@ -50,7 +50,7 @@ public enum WeaponType {
 	/**
 	 * The prefix that is used in the IDs for weapons of each type in the
 	 * database, after the item type prefix.
-	 * 
+	 *
 	 * @return The prefix that appears before weapons of each type, after the
 	 *         item type prefix, in the database.
 	 */
