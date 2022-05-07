@@ -15,7 +15,7 @@ import lombok.Setter;
 @EqualsAndHashCode(callSuper = false)
 @Getter
 @Setter
-public class Component {
+public class Component extends Item {
 
 	/**
 	 * What kind of component the item is.
