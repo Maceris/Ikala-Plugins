@@ -28,15 +28,15 @@ public class ItemRoller {
 	 *            modified.
 	 * @param template The item to copy from, not modified.
 	 */
-	private void copyEquipmentFields(Equipment modified,
+	private static void copyEquipmentFields(Equipment modified,
 		final EquipmentTemplate template) {
-		this.copyItemFields(modified, template);
+		ItemRoller.copyItemFields(modified, template);
 		template.getAttributeRequirements()
 			.forEach(modifier -> modified.getAttributeRequirements()
-				.add(this.rollAttributeModifier(modifier)));
+				.add(ItemRoller.rollAttributeModifier(modifier)));
 		modified.setLevelRequirement(template.getLevelRequirement());
-		modified
-			.setItemStats(this.rollItemStats(template.getItemStatsTemplate()));
+		modified.setItemStats(
+			ItemRoller.rollItemStats(template.getItemStatsTemplate()));
 	}
 
 	/**
@@ -45,7 +45,7 @@ public class ItemRoller {
 	 * @param modified The item to copy fields into, which is modified.
 	 * @param template The item to copy from, not modified.
 	 */
-	private void copyItemFields(Item modified, final Item template) {
+	private static void copyItemFields(Item modified, final Item template) {
 		modified.setID(template.getID());
 		modified.setItemLevel(template.getItemLevel());
 		modified.setItemType(template.getItemType());
@@ -58,9 +58,9 @@ public class ItemRoller {
 	 * @param template The template we are generating an accessory from.
 	 * @return The newly generated accessory.
 	 */
-	public Accessory rollAccessory(AccessoryTemplate template) {
+	public static Accessory rollAccessory(AccessoryTemplate template) {
 		Accessory accessory = new Accessory();
-		this.copyEquipmentFields(accessory, template);
+		ItemRoller.copyEquipmentFields(accessory, template);
 		accessory.setAccessoryType(template.getAccessoryType());
 		return accessory;
 	}
@@ -74,7 +74,7 @@ public class ItemRoller {
 	 *            within.
 	 * @return The random amount given the base amount and variance.
 	 */
-	private int rollAmount(final int amount, final int variance) {
+	private static int rollAmount(final int amount, final int variance) {
 		return amount + ItemRoller.rand.nextInt(2 * variance) - variance;
 	}
 
@@ -84,9 +84,9 @@ public class ItemRoller {
 	 * @param template The template to generate armor from.
 	 * @return The newly generated armor.
 	 */
-	public Armor rollArmor(ArmorTemplate template) {
+	public static Armor rollArmor(ArmorTemplate template) {
 		Armor armor = new Armor();
-		this.copyEquipmentFields(armor, template);
+		ItemRoller.copyEquipmentFields(armor, template);
 		armor.setArmorType(template.getArmorType());
 		return armor;
 	}
@@ -97,12 +97,12 @@ public class ItemRoller {
 	 * @param template The template we are generating a modifier from.
 	 * @return The newly generated attribute modifier.
 	 */
-	private AttributeModifier
+	private static AttributeModifier
 		rollAttributeModifier(AttributeModifierTemplate template) {
 
 		AttributeModifier modifier = new AttributeModifier();
-		modifier.setAmount(
-			this.rollAmount(template.getAmount(), template.getVariance()));
+		modifier.setAmount(ItemRoller.rollAmount(template.getAmount(),
+			template.getVariance()));
 		modifier.setAttribute(template.getAttribute());
 		modifier.setType(template.getType());
 		return modifier;
@@ -114,11 +114,12 @@ public class ItemRoller {
 	 * @param template The template to generate a component from.
 	 * @return The newly generated component.
 	 */
-	public Component rollComponent(ComponentTemplate template) {
+	public static Component rollComponent(ComponentTemplate template) {
 		Component component = new Component();
-		this.copyItemFields(component, template);
+		ItemRoller.copyItemFields(component, template);
 		component.setComponentType(template.getComponentType());
-		component.setItemStats(this.rollItemStats(template.getItemStats()));
+		component
+			.setItemStats(ItemRoller.rollItemStats(template.getItemStats()));
 		return component;
 	}
 
@@ -128,10 +129,11 @@ public class ItemRoller {
 	 * @param template The template we are generating a modifier from.
 	 * @return The newly generated damage modifier.
 	 */
-	private DamageModifier rollDamageModifier(DamageModifierTemplate template) {
+	private static DamageModifier
+		rollDamageModifier(DamageModifierTemplate template) {
 		DamageModifier modifier = new DamageModifier();
-		modifier.setAmount(
-			this.rollAmount(template.getAmount(), template.getVariance()));
+		modifier.setAmount(ItemRoller.rollAmount(template.getAmount(),
+			template.getVariance()));
 		modifier.setDamageType(template.getDamageType());
 		modifier.setType(template.getType());
 		return template;
@@ -143,14 +145,15 @@ public class ItemRoller {
 	 * @param template The template we are generating item stats from.
 	 * @return The newly generated item stats block.
 	 */
-	private ItemStats rollItemStats(ItemStatsTemplate template) {
+	private static ItemStats rollItemStats(ItemStatsTemplate template) {
 		ItemStats stats = new ItemStats();
-		template.getAttributeBuffs().forEach(modifier -> stats
-			.getAttributeBuffs().add(this.rollAttributeModifier(modifier)));
+		template.getAttributeBuffs()
+			.forEach(modifier -> stats.getAttributeBuffs()
+				.add(ItemRoller.rollAttributeModifier(modifier)));
 		template.getDamageBuffs().forEach(modifier -> stats.getDamageBuffs()
-			.add(this.rollDamageModifier(modifier)));
+			.add(ItemRoller.rollDamageModifier(modifier)));
 		template.getResistanceBuffs().forEach(modifier -> stats
-			.getResistanceBuffs().add(this.rollDamageModifier(modifier)));
+			.getResistanceBuffs().add(ItemRoller.rollDamageModifier(modifier)));
 		return stats;
 	}
 
@@ -160,9 +163,9 @@ public class ItemRoller {
 	 * @param template The template to generate a weapon from.
 	 * @return The newly generated weapon.
 	 */
-	public Weapon rollWeapon(WeaponTemplate template) {
+	public static Weapon rollWeapon(WeaponTemplate template) {
 		Weapon weapon = new Weapon();
-		this.copyEquipmentFields(weapon, template);
+		ItemRoller.copyEquipmentFields(weapon, template);
 		weapon.setMaxDamage(template.getMaxDamage());
 		weapon.setMinDamage(template.getMinDamage());
 		weapon.setWeaponType(template.getWeaponType());
