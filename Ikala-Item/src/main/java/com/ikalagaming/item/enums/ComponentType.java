@@ -13,13 +13,13 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum ComponentType {
 	/**
-	 * A gem that slots into or is attached to an item.
-	 */
-	GEM("gem_"),
-	/**
 	 * Provides some kind of augmentation to an item.
 	 */
-	AUGMENT("augment_");
+	AUGMENT("augment_"),
+	/**
+	 * A gem that slots into or is attached to an item.
+	 */
+	GEM("gem_");
 
 	/**
 	 * The prefix that is used in the IDs for components of each type in the

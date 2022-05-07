@@ -17,25 +17,25 @@ public enum ConsumableType {
 	 */
 	BANDAGE("bandage_"),
 	/**
-	 * Consumed typically to restore health over time, but could restore other
-	 * stats or give buffs.
-	 */
-	FOOD("food_"),
-	/**
 	 * Consumed typically to restore mana over time, but could restore other
 	 * stats or give buffs.
 	 */
 	DRINK("drink_"),
 	/**
-	 * Drinkable items that provide an effect to the drinker, such as healing,
-	 * or buffs.
-	 */
-	POTION("potion_"),
-	/**
 	 * Drinkable items that provide an effect to the drinker such as buffs,
 	 * similar to potions, but typically last longer.
 	 */
 	ELIXIR("elixir_"),
+	/**
+	 * Consumed typically to restore health over time, but could restore other
+	 * stats or give buffs.
+	 */
+	FOOD("food_"),
+	/**
+	 * Drinkable items that provide an effect to the drinker, such as healing,
+	 * or buffs.
+	 */
+	POTION("potion_"),
 	/**
 	 * Must be read to be used, may provide a buff effect, perform a magical
 	 * spell when used, or contain a message.

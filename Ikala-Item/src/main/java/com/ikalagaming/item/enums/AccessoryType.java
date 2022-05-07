@@ -17,10 +17,6 @@ public enum AccessoryType {
 	 */
 	AMULET("amulet_"),
 	/**
-	 * A ring.
-	 */
-	RING("ring_"),
-	/**
 	 * Worn on the waist, like a belt.
 	 */
 	BELT("belt_"),
@@ -28,6 +24,10 @@ public enum AccessoryType {
 	 * Worn on the back, like a cape.
 	 */
 	CAPE("cape_"),
+	/**
+	 * A ring.
+	 */
+	RING("ring_"),
 	/**
 	 * A minor trinket, such as an earring, medal, broach, bauble, or talisman.
 	 */

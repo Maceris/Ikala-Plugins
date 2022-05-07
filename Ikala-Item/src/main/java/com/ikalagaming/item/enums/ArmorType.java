@@ -13,33 +13,33 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum ArmorType {
 	/**
-	 * Worn on the head, like helmets or hats.
-	 */
-	HEAD("head_"),
-	/**
-	 * Worn on the shoulders.
-	 */
-	SHOULDERS("shoulders_"),
-	/**
 	 * Worn on the chest, like chest plates and shirts.
 	 */
 	CHEST("chest_"),
 	/**
-	 * Worn on the wrists or arms, like bracers.
+	 * Worn on the feet, like shoes.
 	 */
-	WRIST("wrist_"),
+	FEET("feet_"),
 	/**
 	 * Worn on the hands, like gloves.
 	 */
 	HANDS("hands_"),
 	/**
+	 * Worn on the head, like helmets or hats.
+	 */
+	HEAD("head_"),
+	/**
 	 * Worn on the legs, like trousers.
 	 */
 	LEGS("legs_"),
 	/**
-	 * Worn on the feet, like shoes.
+	 * Worn on the shoulders.
 	 */
-	FEET("feet_");
+	SHOULDERS("shoulders_"),
+	/**
+	 * Worn on the wrists or arms, like bracers.
+	 */
+	WRIST("wrist_");
 
 	/**
 	 * The prefix that is used in the IDs for armor of each type in the
