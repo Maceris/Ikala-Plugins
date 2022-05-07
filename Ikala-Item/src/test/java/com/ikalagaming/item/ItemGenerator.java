@@ -2,8 +2,10 @@ package com.ikalagaming.item;
 
 import com.ikalagaming.attributes.Attribute;
 import com.ikalagaming.attributes.DamageType;
+import com.ikalagaming.item.template.AccessoryTemplate;
 import com.ikalagaming.item.template.AttributeModifierTemplate;
 import com.ikalagaming.item.template.DamageModifierTemplate;
+import com.ikalagaming.item.template.EquipmentTemplate;
 import com.ikalagaming.item.template.ItemStatsTemplate;
 import com.ikalagaming.item.template.WeaponTemplate;
 import com.ikalagaming.random.RandomGen;
@@ -23,6 +25,27 @@ class ItemGenerator {
 	private static AtomicInteger nextID = new AtomicInteger();
 
 	/**
+	 * Generate a random accessory template.
+	 *
+	 * @return The randomly generated accessory template.
+	 */
+	public static AccessoryTemplate getAccessoryTemplate() {
+		AccessoryTemplate accessory = new AccessoryTemplate();
+
+		accessory.setItemType(ItemType.ACCESSORY);
+		accessory.setItemLevel(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
+		accessory
+			.setQuality(ItemGenerator.random.selectEnumValue(Quality.class));
+		accessory.setAccessoryType(
+			ItemGenerator.random.selectEnumValue(AccessoryType.class));
+		accessory.setID(accessory.getItemType().getPrefix()
+			+ accessory.getAccessoryType().getPrefix()
+			+ ItemGenerator.nextID.getAndIncrement());
+		ItemGenerator.populateEquipment(accessory);
+		return accessory;
+	}
+
+	/**
 	 * Generates a random attribute modifier template for use in generating
 	 * random item templates.
 	 *
@@ -34,7 +57,7 @@ class ItemGenerator {
 			ItemGenerator.random.selectEnumValue(Attribute.class));
 		attribute
 			.setType(ItemGenerator.random.selectEnumValue(ModifierType.class));
-		attribute.setAmount(Math.abs(ItemGenerator.rand.nextInt(100)));
+		attribute.setAmount(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
 		attribute
 			.setVariance(ItemGenerator.rand.nextInt(attribute.getAmount()));
 		return attribute;
@@ -48,7 +71,7 @@ class ItemGenerator {
 	 */
 	private static DamageModifierTemplate getDamageModifierTemplate() {
 		DamageModifierTemplate damage = new DamageModifierTemplate();
-		damage.setAmount(Math.abs(ItemGenerator.rand.nextInt(100)));
+		damage.setAmount(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
 		damage.setDamageType(
 			ItemGenerator.random.selectEnumValue(DamageType.class));
 		damage
@@ -92,28 +115,37 @@ class ItemGenerator {
 		WeaponTemplate weapon = new WeaponTemplate();
 
 		// Item traits, plus weapon type so we can name it properly
-		weapon.setType(ItemType.WEAPON);
+		weapon.setItemType(ItemType.WEAPON);
+		weapon.setItemLevel(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
 		weapon.setWeaponType(
 			ItemGenerator.random.selectEnumValue(WeaponType.class));
 		weapon.setQuality(ItemGenerator.random.selectEnumValue(Quality.class));
-		weapon.setItemLevel(Math.abs(ItemGenerator.rand.nextInt(100)));
-		weapon.setID(
-			weapon.getType().getPrefix() + weapon.getWeaponType().getPrefix()
-				+ ItemGenerator.nextID.getAndIncrement());
+		weapon.setID(weapon.getItemType().getPrefix()
+			+ weapon.getWeaponType().getPrefix()
+			+ ItemGenerator.nextID.getAndIncrement());
 
-		// Equipment traits
-		final int maxRequirements = ItemGenerator.rand.nextInt(4) + 1;
-		for (int i = 0; i < maxRequirements; ++i) {
-			weapon.getAttributeRequirements()
-				.add(ItemGenerator.getAttributeModifierTemplate());
-		}
-		weapon.setLevelRequirement(Math.abs(ItemGenerator.rand.nextInt(100)));
-		weapon.setItemStats(ItemGenerator.getItemStatsTemplate());
+		ItemGenerator.populateEquipment(weapon);
 
 		// weapon traits
-		weapon.setMaxDamage(Math.abs(ItemGenerator.rand.nextInt(100)));
+		weapon.setMaxDamage(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
 		weapon.setMinDamage(ItemGenerator.rand.nextInt(weapon.getMaxDamage()));
 
 		return weapon;
+	}
+
+	/**
+	 * Fill out fields for equipment.
+	 *
+	 * @param template The item template to fill out fields for.
+	 */
+	private static void populateEquipment(EquipmentTemplate template) {
+		final int maxRequirements = ItemGenerator.rand.nextInt(4) + 1;
+		for (int i = 0; i < maxRequirements; ++i) {
+			template.getAttributeRequirements()
+				.add(ItemGenerator.getAttributeModifierTemplate());
+		}
+		template
+			.setLevelRequirement(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
+		template.setItemStats(ItemGenerator.getItemStatsTemplate());
 	}
 }

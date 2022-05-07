@@ -17,10 +17,10 @@ public class Item {
 	/**
 	 * The category of the item, such as a weapon or consumable.
 	 *
-	 * @param type The type of the item, like a weapon or consumable.
+	 * @param itemType The type of the item, like a weapon or consumable.
 	 * @return The type of the item, like a weapon or consumable.
 	 */
-	private ItemType type;
+	private ItemType itemType;
 
 	/**
 	 * The unique name of the item, which should follow a standard format and be
