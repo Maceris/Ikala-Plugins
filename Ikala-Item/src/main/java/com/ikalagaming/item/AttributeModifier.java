@@ -1,6 +1,7 @@
 package com.ikalagaming.item;
 
 import com.ikalagaming.attributes.Attribute;
+import com.ikalagaming.item.enums.ModifierType;
 
 import lombok.Getter;
 import lombok.Setter;

@@ -2,6 +2,12 @@ package com.ikalagaming.item;
 
 import com.ikalagaming.attributes.Attribute;
 import com.ikalagaming.attributes.DamageType;
+import com.ikalagaming.item.enums.AccessoryType;
+import com.ikalagaming.item.enums.ArmorType;
+import com.ikalagaming.item.enums.ComponentType;
+import com.ikalagaming.item.enums.ItemType;
+import com.ikalagaming.item.enums.ModifierType;
+import com.ikalagaming.item.enums.WeaponType;
 import com.ikalagaming.item.template.AccessoryTemplate;
 import com.ikalagaming.item.template.ArmorTemplate;
 import com.ikalagaming.item.template.AttributeModifierTemplate;

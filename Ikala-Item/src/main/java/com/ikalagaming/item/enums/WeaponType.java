@@ -1,4 +1,4 @@
-package com.ikalagaming.item;
+package com.ikalagaming.item.enums;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

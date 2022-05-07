@@ -1,4 +1,4 @@
-package com.ikalagaming.item.template;
+package com.ikalagaming.item;
 
 import com.ikalagaming.item.enums.ArmorType;
 
@@ -7,7 +7,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * A template for generating armor from.
+ * Armor that is worn for protection or power.
  *
  * @author Ches Burks
  *
@@ -15,18 +15,18 @@ import lombok.Setter;
 @EqualsAndHashCode(callSuper = false)
 @Getter
 @Setter
-public class ArmorTemplate extends EquipmentTemplate {
-
-	/**
-	 * Construct a new armor template.
-	 */
-	public ArmorTemplate() {}
+public class Armor extends Equipment {
 
 	/**
 	 * What kind of armor this is.
-	 * 
+	 *
 	 * @param armorType The classification of armor.
 	 * @return The classification of armor.
 	 */
 	private ArmorType armorType;
+
+	/**
+	 * Constructs a new armor item.
+	 */
+	public Armor() {}
 }

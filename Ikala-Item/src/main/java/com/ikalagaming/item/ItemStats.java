@@ -1,4 +1,4 @@
-package com.ikalagaming.item.template;
+package com.ikalagaming.item;
 
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -8,27 +8,23 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A block of item stats.
- * 
+ * Stats that belong to an item that describes what it provides to the user.
+ *
  * @author Ches Burks
  *
  */
 @EqualsAndHashCode
 @Getter
 @Setter
-public class ItemStatsTemplate {
-	/**
-	 * Construct a new item stat template.
-	 */
-	public ItemStatsTemplate() {}
-
+public class ItemStats {
 	/**
 	 * Buffs to damage done by the wielder of this item.
 	 *
 	 * @param damageBuffs Buffs to damage done by the wielder of this item.
 	 * @return Buffs to damage done by the wielder of this item.
 	 */
-	private List<DamageModifierTemplate> damageBuffs = new ArrayList<>();
+	private List<DamageModifier> damageBuffs = new ArrayList<>();
+
 	/**
 	 * Buffs to damage resistance that the item provides to the wielder.
 	 *
@@ -36,7 +32,7 @@ public class ItemStatsTemplate {
 	 *            wielder.
 	 * @return Damage resistance that the item provides to the wielder.
 	 */
-	private List<DamageModifierTemplate> resistanceBuffs = new ArrayList<>();
+	private List<DamageModifier> resistanceBuffs = new ArrayList<>();
 	/**
 	 * Buffs to attributes that the item provides to the wielder.
 	 *
@@ -44,5 +40,10 @@ public class ItemStatsTemplate {
 	 *            wielder.
 	 * @return Buffs to attributes that the item provides to the wielder.
 	 */
-	private List<AttributeModifierTemplate> attributeBuffs = new ArrayList<>();
+	private List<AttributeModifier> attributeBuffs = new ArrayList<>();
+
+	/**
+	 * Construct a new item stat object.
+	 */
+	public ItemStats() {}
 }

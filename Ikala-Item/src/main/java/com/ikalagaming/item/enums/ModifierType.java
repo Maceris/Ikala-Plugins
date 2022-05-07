@@ -1,4 +1,4 @@
-package com.ikalagaming.item;
+package com.ikalagaming.item.enums;
 
 /**
  * What kind of modifier we have, whether it is a {@link #FLAT}

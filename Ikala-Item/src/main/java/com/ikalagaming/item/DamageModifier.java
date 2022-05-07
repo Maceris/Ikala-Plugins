@@ -1,6 +1,7 @@
 package com.ikalagaming.item;
 
 import com.ikalagaming.attributes.DamageType;
+import com.ikalagaming.item.enums.ModifierType;
 
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -17,17 +18,13 @@ import lombok.Setter;
 @Setter
 public class DamageModifier {
 	/**
-	 * Construct a new damage modifier.
-	 */
-	public DamageModifier() {}
-
-	/**
 	 * The type of damage this modifier affects.
 	 *
 	 * @param damageType The damage type this modifies.
 	 * @return The damage type this modifies.
 	 */
 	private DamageType damageType;
+
 	/**
 	 * How this modifier affects the base value, such as a flat change,
 	 * percentage difference, or a range of possible values.
@@ -46,5 +43,10 @@ public class DamageModifier {
 	 * @return The amount of the damage or damage modification.
 	 */
 	private Integer amount;
+
+	/**
+	 * Construct a new damage modifier.
+	 */
+	public DamageModifier() {}
 
 }

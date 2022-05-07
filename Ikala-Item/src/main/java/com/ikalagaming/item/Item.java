@@ -1,5 +1,7 @@
 package com.ikalagaming.item;
 
+import com.ikalagaming.item.enums.ItemType;
+
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
