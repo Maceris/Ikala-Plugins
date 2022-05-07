@@ -1,9 +1,13 @@
 package com.ikalagaming.item;
 
 import com.ikalagaming.item.template.AccessoryTemplate;
+import com.ikalagaming.item.template.ArmorTemplate;
 import com.ikalagaming.item.template.AttributeModifierTemplate;
+import com.ikalagaming.item.template.ComponentTemplate;
 import com.ikalagaming.item.template.DamageModifierTemplate;
+import com.ikalagaming.item.template.EquipmentTemplate;
 import com.ikalagaming.item.template.ItemStatsTemplate;
+import com.ikalagaming.item.template.WeaponTemplate;
 
 import java.util.SplittableRandom;
 
@@ -17,6 +21,38 @@ public class ItemRoller {
 	private static SplittableRandom rand = new SplittableRandom();
 
 	/**
+	 * Copies both item fields, and equipment fields, into the first object from
+	 * the second. Rolls fields as required.
+	 *
+	 * @param modified The item to copy item and equipment fields into, which is
+	 *            modified.
+	 * @param template The item to copy from, not modified.
+	 */
+	private void copyEquipmentFields(Equipment modified,
+		final EquipmentTemplate template) {
+		this.copyItemFields(modified, template);
+		template.getAttributeRequirements()
+			.forEach(modifier -> modified.getAttributeRequirements()
+				.add(this.rollAttributeModifier(modifier)));
+		modified.setLevelRequirement(template.getLevelRequirement());
+		modified
+			.setItemStats(this.rollItemStats(template.getItemStatsTemplate()));
+	}
+
+	/**
+	 * Copy the item fields into the first object from the second one.
+	 *
+	 * @param modified The item to copy fields into, which is modified.
+	 * @param template The item to copy from, not modified.
+	 */
+	private void copyItemFields(Item modified, final Item template) {
+		modified.setID(template.getID());
+		modified.setItemLevel(template.getItemLevel());
+		modified.setItemType(template.getItemType());
+		modified.setQuality(template.getQuality());
+	}
+
+	/**
 	 * Roll an accessory based on an accessory template.
 	 *
 	 * @param template The template we are generating an accessory from.
@@ -24,17 +60,8 @@ public class ItemRoller {
 	 */
 	public Accessory rollAccessory(AccessoryTemplate template) {
 		Accessory accessory = new Accessory();
+		this.copyEquipmentFields(accessory, template);
 		accessory.setAccessoryType(template.getAccessoryType());
-		template.getAttributeRequirements()
-			.forEach(modifier -> accessory.getAttributeRequirements()
-				.add(this.rollAttributeModifier(modifier)));
-		accessory.setID(template.getID());
-		accessory.setItemLevel(template.getItemLevel());
-		accessory
-			.setItemStats(this.rollItemStats(template.getItemStatsTemplate()));
-		accessory.setItemType(template.getItemType());
-		accessory.setLevelRequirement(template.getLevelRequirement());
-		accessory.setQuality(template.getQuality());
 		return accessory;
 	}
 
@@ -52,6 +79,19 @@ public class ItemRoller {
 	}
 
 	/**
+	 * Roll armor based on a template.
+	 *
+	 * @param template The template to generate armor from.
+	 * @return The newly generated armor.
+	 */
+	public Armor rollArmor(ArmorTemplate template) {
+		Armor armor = new Armor();
+		this.copyEquipmentFields(armor, template);
+		armor.setArmorType(template.getArmorType());
+		return armor;
+	}
+
+	/**
 	 * Roll an attribute modifier based on the template.
 	 *
 	 * @param template The template we are generating a modifier from.
@@ -66,6 +106,20 @@ public class ItemRoller {
 		modifier.setAttribute(template.getAttribute());
 		modifier.setType(template.getType());
 		return modifier;
+	}
+
+	/**
+	 * Roll a component based on a template.
+	 *
+	 * @param template The template to generate a component from.
+	 * @return The newly generated component.
+	 */
+	public Component rollComponent(ComponentTemplate template) {
+		Component component = new Component();
+		this.copyItemFields(component, template);
+		component.setComponentType(template.getComponentType());
+		component.setItemStats(this.rollItemStats(template.getItemStats()));
+		return component;
 	}
 
 	/**
@@ -98,6 +152,21 @@ public class ItemRoller {
 		template.getResistanceBuffs().forEach(modifier -> stats
 			.getResistanceBuffs().add(this.rollDamageModifier(modifier)));
 		return stats;
+	}
+
+	/**
+	 * Roll a weapon based on a template.
+	 *
+	 * @param template The template to generate a weapon from.
+	 * @return The newly generated weapon.
+	 */
+	public Weapon rollWeapon(WeaponTemplate template) {
+		Weapon weapon = new Weapon();
+		this.copyEquipmentFields(weapon, template);
+		weapon.setMaxDamage(template.getMaxDamage());
+		weapon.setMinDamage(template.getMinDamage());
+		weapon.setWeaponType(template.getWeaponType());
+		return weapon;
 	}
 
 }
