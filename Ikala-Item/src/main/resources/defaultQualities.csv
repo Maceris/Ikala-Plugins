@@ -1,7 +1,0 @@
-ID	name	prefix	suffix
-0	trash	FALSE	FALSE
-1	common	FALSE	FALSE
-2	magic	FALSE	FALSE
-3	rare	FALSE	TRUE
-4	epic	TRUE	TRUE
-5	legendary	TRUE	TRUE
