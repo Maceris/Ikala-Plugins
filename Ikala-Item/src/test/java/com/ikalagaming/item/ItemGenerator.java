@@ -3,7 +3,9 @@ package com.ikalagaming.item;
 import com.ikalagaming.attributes.Attribute;
 import com.ikalagaming.attributes.DamageType;
 import com.ikalagaming.item.template.AccessoryTemplate;
+import com.ikalagaming.item.template.ArmorTemplate;
 import com.ikalagaming.item.template.AttributeModifierTemplate;
+import com.ikalagaming.item.template.ComponentTemplate;
 import com.ikalagaming.item.template.DamageModifierTemplate;
 import com.ikalagaming.item.template.EquipmentTemplate;
 import com.ikalagaming.item.template.ItemStatsTemplate;
@@ -46,6 +48,26 @@ class ItemGenerator {
 	}
 
 	/**
+	 * Generate a random armor template.
+	 *
+	 * @return The randomly generated armor template.
+	 */
+	public static ArmorTemplate getArmorTemplate() {
+		ArmorTemplate armor = new ArmorTemplate();
+
+		armor.setItemType(ItemType.ARMOR);
+		armor.setItemLevel(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
+		armor.setQuality(ItemGenerator.random.selectEnumValue(Quality.class));
+		armor.setArmorType(
+			ItemGenerator.random.selectEnumValue(ArmorType.class));
+		armor.setID(
+			armor.getItemType().getPrefix() + armor.getArmorType().getPrefix()
+				+ ItemGenerator.nextID.getAndIncrement());
+		ItemGenerator.populateEquipment(armor);
+		return armor;
+	}
+
+	/**
 	 * Generates a random attribute modifier template for use in generating
 	 * random item templates.
 	 *
@@ -61,6 +83,28 @@ class ItemGenerator {
 		attribute
 			.setVariance(ItemGenerator.rand.nextInt(attribute.getAmount()));
 		return attribute;
+	}
+
+	/**
+	 * Generate a random component template.
+	 *
+	 * @return The randomly generated component template.
+	 */
+	public static ComponentTemplate getComponentTemplate() {
+		ComponentTemplate component = new ComponentTemplate();
+
+		component.setItemType(ItemType.ARMOR);
+		component.setItemLevel(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
+		component
+			.setQuality(ItemGenerator.random.selectEnumValue(Quality.class));
+		component.setComponentType(
+			ItemGenerator.random.selectEnumValue(ComponentType.class));
+		component.setID(component.getItemType().getPrefix()
+			+ component.getComponentType().getPrefix()
+			+ ItemGenerator.nextID.getAndIncrement());
+		component.setItemStats(ItemGenerator.getItemStatsTemplate());
+
+		return component;
 	}
 
 	/**
