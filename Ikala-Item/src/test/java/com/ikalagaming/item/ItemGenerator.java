@@ -420,6 +420,6 @@ class ItemGenerator {
 		}
 		template
 			.setLevelRequirement(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
-		template.setItemStats(ItemGenerator.getItemStatsTemplate());
+		template.setItemStatsTemplate(ItemGenerator.getItemStatsTemplate());
 	}
 }

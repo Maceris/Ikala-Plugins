@@ -22,9 +22,10 @@ public class AttributeModifierTemplate extends AttributeModifier {
 	public AttributeModifierTemplate() {}
 
 	/**
-	 * How far away from the base value we can go, as an integer percentage. For
-	 * example, a value of 10 would mean we can generate values +/- 10% from the
-	 * base.
+	 * How far away from the base value we can go. For example, a base value of
+	 * 100 and a variance of 10 would mean we can generate values between 90 and
+	 * 110. Should be between 0 and the amount so that values generated are
+	 * positive and reasonable.
 	 *
 	 * @param variance The percentage variance.
 	 * @return The percentage variance in the base amount.

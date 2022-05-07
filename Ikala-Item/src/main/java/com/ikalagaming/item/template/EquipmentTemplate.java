@@ -45,8 +45,8 @@ public class EquipmentTemplate extends Item {
 	/**
 	 * Stat bonuses provided by the item.
 	 * 
-	 * @param itemStats The stat bonuses provided by the item.
+	 * @param itemStatsTemplate The stat bonuses provided by the item.
 	 * @return The stat bonuses provided by the item.
 	 */
-	private ItemStatsTemplate itemStats = new ItemStatsTemplate();
+	private ItemStatsTemplate itemStatsTemplate = new ItemStatsTemplate();
 }
