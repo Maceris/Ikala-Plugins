@@ -1,4 +1,4 @@
-package com.ikalagaming.item;
+package com.ikalagaming.item.enums;
 
 /**
  * The quality of items, describing how rare or powerful they are. This is
