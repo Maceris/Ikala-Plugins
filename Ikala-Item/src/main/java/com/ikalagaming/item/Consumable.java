@@ -8,7 +8,7 @@ import lombok.Setter;
 
 /**
  * An item that is consumed by using it.
- * 
+ *
  * @author Ches Burks
  *
  */

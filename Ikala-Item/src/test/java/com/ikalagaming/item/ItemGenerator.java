@@ -8,6 +8,7 @@ import com.ikalagaming.item.enums.ComponentType;
 import com.ikalagaming.item.enums.ConsumableType;
 import com.ikalagaming.item.enums.ItemType;
 import com.ikalagaming.item.enums.ModifierType;
+import com.ikalagaming.item.enums.Quality;
 import com.ikalagaming.item.enums.WeaponType;
 import com.ikalagaming.item.template.AccessoryTemplate;
 import com.ikalagaming.item.template.ArmorTemplate;

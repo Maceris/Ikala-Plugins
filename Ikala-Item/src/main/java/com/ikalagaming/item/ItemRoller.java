@@ -75,7 +75,8 @@ public class ItemRoller {
 	 * @return The random amount given the base amount and variance.
 	 */
 	private static int rollAmount(final int amount, final int variance) {
-		return amount + ItemRoller.rand.nextInt(2 * variance) - variance;
+		return amount + ItemRoller.rand.nextInt(2 * variance + 1) - variance
+			- 1;
 	}
 
 	/**
