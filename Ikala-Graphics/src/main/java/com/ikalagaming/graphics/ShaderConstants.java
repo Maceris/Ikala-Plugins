@@ -2,6 +2,8 @@ package com.ikalagaming.graphics;
 
 /**
  * Common definitions of the fields that we need when interacting with shaders.
+ * 
+ * This will be replaced at some point by a file based specification.
  *
  * @author Ches Burks
  *
@@ -252,6 +254,36 @@ public class ShaderConstants {
 			 * Private constructor so this class is not instantiated.
 			 */
 			private Vertex() {}
+		}
+
+		/**
+		 * Vertex shader variables.
+		 *
+		 * @author Ches Burks
+		 *
+		 */
+		public static class HUD {
+			/**
+			 * Used to calculate the position when projecting a model onto the
+			 * screen space.
+			 */
+			public static final String PROJECTION_MATRIX = "projModelMatrix";
+
+			/**
+			 * Used to calculate the position when projecting a model onto the
+			 * screen space.
+			 */
+			public static final String COLOR = "color";
+
+			/**
+			 * Whether or not the shader is using a texture.
+			 */
+			public static final String HAS_TEXTURE = "hasTexture";
+
+			/**
+			 * Private constructor so this class is not instantiated.
+			 */
+			private HUD() {}
 		}
 
 		/**

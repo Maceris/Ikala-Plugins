@@ -16,6 +16,7 @@ public class Transformation {
 	private final Matrix4f modelViewMatrix;
 	private final Matrix4f projectionMatrix;
 	private final Matrix4f viewMatrix;
+	private final Matrix4f orthoMatrix;
 
 	/**
 	 * Create a new transformation.
@@ -24,6 +25,7 @@ public class Transformation {
 		this.modelViewMatrix = new Matrix4f();
 		this.projectionMatrix = new Matrix4f();
 		this.viewMatrix = new Matrix4f();
+		this.orthoMatrix = new Matrix4f();
 	}
 
 	/**
@@ -45,6 +47,45 @@ public class Transformation {
 			.scale(sceneItem.getScale());
 		Matrix4f currentView = new Matrix4f(cameraViewMatrix);
 		return currentView.mul(this.modelViewMatrix);
+	}
+
+	/**
+	 * Get an orthographic projection matrix.
+	 *
+	 * @param left The distance from the center to the left frustum edge.
+	 * @param right The distance from the center to the right frustum edge.
+	 * @param bottom The distance from the center to the bottom frustum edge.
+	 * @param top The distance from the center to the top frustum edge.
+	 *
+	 * @return The newly calculated matrix.
+	 */
+	public final Matrix4f getOrthoProjectionMatrix(float left, float right,
+		float bottom, float top) {
+		this.orthoMatrix.identity();
+		this.orthoMatrix.setOrtho2D(left, right, bottom, top);
+		return this.orthoMatrix;
+	}
+
+	/**
+	 * Orthographic projection matrix of a model.
+	 *
+	 * @param gameItem The game item to render.
+	 * @param orthographicMatrix The orthographic projection transformation
+	 *            matrix.
+	 * @return The transformed item matrix.
+	 */
+	public Matrix4f getOrtoProjModelMatrix(SceneItem gameItem,
+		Matrix4f orthographicMatrix) {
+		Vector3f rotation = gameItem.getRotation();
+		Matrix4f modelMatrix = new Matrix4f();
+		modelMatrix.identity().translate(gameItem.getPosition())
+			.rotateX((float) Math.toRadians(-rotation.x))
+			.rotateY((float) Math.toRadians(-rotation.y))
+			.rotateZ((float) Math.toRadians(-rotation.z))
+			.scale(gameItem.getScale());
+		Matrix4f orthoMatrixCurr = new Matrix4f(orthographicMatrix);
+		orthoMatrixCurr.mul(modelMatrix);
+		return orthoMatrixCurr;
 	}
 
 	/**

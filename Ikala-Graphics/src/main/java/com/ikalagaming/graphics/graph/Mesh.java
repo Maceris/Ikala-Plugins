@@ -145,15 +145,26 @@ public class Mesh {
 	public void cleanUp() {
 		GL20.glDisableVertexAttribArray(0);
 
-		// Delete the VBOs
-		GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
-		this.vboIdList.forEach(GL15::glDeleteBuffers);
-		this.vboIdList.clear();
+		this.deleteBuffers();
 
 		// Delete the texture
 		Texture texture = this.material.getTexture();
 		if (texture != null) {
 			texture.cleanup();
+		}
+
+	}
+
+	/**
+	 * Delete the buffers for the mesh.
+	 */
+	public void deleteBuffers() {
+		GL20.glDisableVertexAttribArray(0);
+
+		// Delete the VBOs
+		GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
+		for (int vboId : this.vboIdList) {
+			GL15.glDeleteBuffers(vboId);
 		}
 
 		// Delete the VAO
@@ -175,17 +186,11 @@ public class Mesh {
 
 		// Draw the mesh
 		GL30.glBindVertexArray(this.getVaoId());
-		GL20.glEnableVertexAttribArray(0);
-		GL20.glEnableVertexAttribArray(1);
-		GL20.glEnableVertexAttribArray(2);
 
 		GL11.glDrawElements(GL11.GL_TRIANGLES, this.getVertexCount(),
 			GL11.GL_UNSIGNED_INT, 0);
 
 		// Restore state
-		GL20.glDisableVertexAttribArray(0);
-		GL20.glDisableVertexAttribArray(1);
-		GL20.glDisableVertexAttribArray(2);
 		GL30.glBindVertexArray(0);
 		GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);
 	}

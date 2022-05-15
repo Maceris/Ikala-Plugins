@@ -81,10 +81,8 @@ public class GraphicsManager {
 	@Getter
 	private static Window window;
 
-	private static Vector3f ambientLight;
-	private static PointLight[] pointLightList;
-	private static SpotLight[] spotLightList;
-	private static DirectionalLight directionalLight;
+	private static SceneLight sceneLight;
+
 	/**
 	 * The angle the directional light is at.
 	 */
@@ -98,6 +96,11 @@ public class GraphicsManager {
 	 * The increment at which the spotlight angle changes.
 	 */
 	private static float spotIncrement = 1;
+
+	/**
+	 * The heads up display.
+	 */
+	private static DemoHud hud;
 
 	/**
 	 * Creates a graphics window, fires off a {@link WindowCreated} event. Won't
@@ -153,7 +156,9 @@ public class GraphicsManager {
 		GraphicsManager.items = new ArrayList<>();
 		GraphicsManager.items.add(item);
 
-		GraphicsManager.ambientLight = new Vector3f(0.3f, 0.3f, 0.3f);
+		GraphicsManager.sceneLight = new SceneLight();
+		GraphicsManager.sceneLight
+			.setAmbientLight(new Vector3f(0.3f, 0.3f, 0.3f));
 
 		// Point light
 		Vector3f lightColour = new Vector3f(1, 1, 1);
@@ -164,13 +169,14 @@ public class GraphicsManager {
 		PointLight.Attenuation att =
 			new PointLight.Attenuation(0.0f, 0.0f, 1.0f);
 		pointLight.setAttenuation(att);
-		GraphicsManager.pointLightList = new PointLight[] {pointLight};
+		GraphicsManager.sceneLight
+			.setPointLightList(new PointLight[] {pointLight});
 
 		// Directional light
 		lightPosition = new Vector3f(-1, 0, 0);
 		lightColour = new Vector3f(1, 1, 1);
-		GraphicsManager.directionalLight =
-			new DirectionalLight(lightColour, lightPosition, lightIntensity);
+		GraphicsManager.sceneLight.setDirectionalLight(
+			new DirectionalLight(lightColour, lightPosition, lightIntensity));
 
 		// Spot light
 		lightPosition = new Vector3f(0, 0.0f, 10f);
@@ -181,8 +187,16 @@ public class GraphicsManager {
 		Vector3f coneDir = new Vector3f(0, 0, -1);
 		float cutoff = (float) Math.cos(Math.toRadians(140));
 		SpotLight spotLight = new SpotLight(pointLight, coneDir, cutoff);
-		GraphicsManager.spotLightList =
-			new SpotLight[] {spotLight, new SpotLight(spotLight)};
+		GraphicsManager.sceneLight.setSpotLightList(
+			new SpotLight[] {spotLight, new SpotLight(spotLight)});
+
+		// HUD
+		try {
+			GraphicsManager.hud = new DemoHud("DEMO");
+		}
+		catch (Exception e) {
+			throw new WindowCreationException(e);
+		}
 
 		GraphicsManager.timer = new Timer();
 		GraphicsManager.timer.init();
@@ -199,11 +213,11 @@ public class GraphicsManager {
 
 		GraphicsManager.updateItems();
 		GraphicsManager.updateDirectionalLight();
+		hud.updateSize(window);
 
 		GraphicsManager.renderer.render(GraphicsManager.window,
 			GraphicsManager.cameraManager.getCamera(), GraphicsManager.items,
-			GraphicsManager.ambientLight, GraphicsManager.pointLightList,
-			GraphicsManager.spotLightList, GraphicsManager.directionalLight);
+			GraphicsManager.sceneLight, GraphicsManager.hud);
 
 		GraphicsManager.window.update();
 
@@ -258,8 +272,10 @@ public class GraphicsManager {
 		final float elapsedTime = GraphicsManager.timer.getElapsedTime();
 
 		GraphicsManager.cameraManager.processInput();
-
 		GraphicsManager.cameraManager.updateCamera(elapsedTime);
+
+		GraphicsManager.hud.rotateCompass(
+			GraphicsManager.cameraManager.getCamera().getRotation().y);
 
 		if (GraphicsManager.timer.getTime() >= GraphicsManager.nextRenderTime) {
 			GraphicsManager.render();
@@ -278,13 +294,14 @@ public class GraphicsManager {
 			GraphicsManager.spotIncrement = 1;
 		}
 		double spotAngleRad = Math.toRadians(GraphicsManager.spotAngle);
-		Vector3f coneDir = GraphicsManager.spotLightList[0].getConeDirection();
+		Vector3f coneDir =
+			GraphicsManager.sceneLight.getSpotLightList()[0].getConeDirection();
 		coneDir.y = (float) Math.sin(spotAngleRad);
 
 		// Update directional light direction, intensity and color
 		GraphicsManager.lightAngle += 1.1f;
 		if (GraphicsManager.lightAngle > 90) {
-			GraphicsManager.directionalLight.setIntensity(0);
+			GraphicsManager.sceneLight.getDirectionalLight().setIntensity(0);
 			if (GraphicsManager.lightAngle >= 360) {
 				GraphicsManager.lightAngle = -90;
 			}
@@ -293,22 +310,23 @@ public class GraphicsManager {
 			|| GraphicsManager.lightAngle >= 80) {
 			float factor =
 				1 - (Math.abs(GraphicsManager.lightAngle) - 80) / 10.0f;
-			GraphicsManager.directionalLight.setIntensity(factor);
-			GraphicsManager.directionalLight.getColor().y =
+			GraphicsManager.sceneLight.getDirectionalLight()
+				.setIntensity(factor);
+			GraphicsManager.sceneLight.getDirectionalLight().getColor().y =
 				Math.max(factor, 0.9f);
-			GraphicsManager.directionalLight.getColor().z =
+			GraphicsManager.sceneLight.getDirectionalLight().getColor().z =
 				Math.max(factor, 0.5f);
 		}
 		else {
-			GraphicsManager.directionalLight.setIntensity(1);
-			GraphicsManager.directionalLight.getColor().x = 1;
-			GraphicsManager.directionalLight.getColor().y = 1;
-			GraphicsManager.directionalLight.getColor().z = 1;
+			GraphicsManager.sceneLight.getDirectionalLight().setIntensity(1);
+			GraphicsManager.sceneLight.getDirectionalLight().getColor().x = 1;
+			GraphicsManager.sceneLight.getDirectionalLight().getColor().y = 1;
+			GraphicsManager.sceneLight.getDirectionalLight().getColor().z = 1;
 		}
 		double angRad = Math.toRadians(GraphicsManager.lightAngle);
-		GraphicsManager.directionalLight.getDirection().x =
+		GraphicsManager.sceneLight.getDirectionalLight().getDirection().x =
 			(float) Math.sin(angRad);
-		GraphicsManager.directionalLight.getDirection().y =
+		GraphicsManager.sceneLight.getDirectionalLight().getDirection().y =
 			(float) Math.cos(angRad);
 	}
 

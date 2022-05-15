@@ -185,6 +185,10 @@ public class Window {
 		// Set the clear color
 		GL11.glClearColor(0.5f, 0.73f, 0.82f, 1.0f);
 		GL11.glEnable(GL11.GL_DEPTH_TEST);
+
+		// Support for transparencies
+		GL11.glEnable(GL11.GL_BLEND);
+		GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 	}
 
 	/**

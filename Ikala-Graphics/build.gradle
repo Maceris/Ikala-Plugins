@@ -57,16 +57,18 @@ dependencies {
 	runtimeOnly "org.lwjgl:lwjgl:${lwjglVersion}:natives-windows"
 	runtimeOnly "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-windows"
 	runtimeOnly "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-windows"
-	implementation "org.l33tlabs.twl:pngdecoder:${pngDecoderVersion}"
+	implementation "org.lwjgl:lwjgl-stb:${lwjglVersion}"
+	runtimeOnly "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-windows"
 	
 	jarInclude "org.joml:joml:${jomlVersion}"
 	jarInclude "org.lwjgl:lwjgl:${lwjglVersion}"
-	jarInclude "org.lwjgl:lwjgl-glfw:${lwjglVersion}"
-	jarInclude "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
-	jarInclude "org.l33tlabs.twl:pngdecoder:${pngDecoderVersion}"
 	jarInclude "org.lwjgl:lwjgl:${lwjglVersion}:natives-windows"
+	jarInclude "org.lwjgl:lwjgl-glfw:${lwjglVersion}"
 	jarInclude "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-windows"
+	jarInclude "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
 	jarInclude "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-windows"
+	jarInclude "org.lwjgl:lwjgl-stb:${lwjglVersion}"
+	jarInclude "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-windows"
 
 	// Testing
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"

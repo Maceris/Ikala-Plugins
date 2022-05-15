@@ -46,7 +46,8 @@ public class Renderer {
 
 	private float specularPower;
 
-	private ShaderProgram shaderProgram;
+	private ShaderProgram sceneShaderProgram;
+	private ShaderProgram hudShaderProgram;
 
 	/**
 	 * The transformation to use for the renderer.
@@ -65,8 +66,8 @@ public class Renderer {
 	 * Clean up resources.
 	 */
 	public void cleanup() {
-		if (this.shaderProgram != null) {
-			this.shaderProgram.cleanup();
+		if (this.sceneShaderProgram != null) {
+			this.sceneShaderProgram.cleanup();
 		}
 	}
 
@@ -74,46 +75,8 @@ public class Renderer {
 	 * Initialize the renderer.
 	 */
 	public void init() {
-		// Create a shader program
-		this.shaderProgram = new ShaderProgram();
-		try {
-			this.shaderProgram.createVertexShader(FileUtils.readAsString(
-				PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
-					ResourceType.DATA, "vertex.vs")));
-			this.shaderProgram.createFragmentShader(FileUtils.readAsString(
-				PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
-					ResourceType.DATA, "fragment.fs")));
-		}
-		catch (ShaderException e) {
-			Renderer.log.error(SafeResourceLoader.getString(
-				"SHADER_ERROR_SETUP", GraphicsPlugin.getResourceBundle()), e);
-		}
-		this.shaderProgram.link();
-
-		this.shaderProgram
-			.createUniform(ShaderConstants.Uniform.Vertex.PROJECTION_MATRIX);
-		this.shaderProgram
-			.createUniform(ShaderConstants.Uniform.Vertex.MODEL_VIEW_MATRIX);
-		this.shaderProgram
-			.createUniform(ShaderConstants.Uniform.Fragment.TEXTURE_SAMPLER);
-
-		// Create uniform for material
-		this.shaderProgram
-			.createMaterialUniform(ShaderConstants.Uniform.Fragment.MATERIAL);
-
-		// Create lighting related uniforms
-		this.shaderProgram
-			.createUniform(ShaderConstants.Uniform.Fragment.SPECULAR_POWER);
-		this.shaderProgram
-			.createUniform(ShaderConstants.Uniform.Fragment.AMBIENT_LIGHT);
-		this.shaderProgram.createPointLightListUniform(
-			ShaderConstants.Uniform.Fragment.POINT_LIGHTS,
-			ShaderConstants.Uniform.Fragment.MAX_POINT_LIGHTS);
-		this.shaderProgram.createSpotLightListUniform(
-			ShaderConstants.Uniform.Fragment.SPOT_LIGHTS,
-			ShaderConstants.Uniform.Fragment.MAX_SPOT_LIGHTS);
-		this.shaderProgram.createDirectionalLightUniform(
-			ShaderConstants.Uniform.Fragment.DIRECTIONAL_LIGHT);
+		this.setupSceneShader();
+		this.setupHudShader();
 	}
 
 	/**
@@ -122,77 +85,63 @@ public class Renderer {
 	 * @param window The window to render on.
 	 * @param camera The camera.
 	 * @param sceneItems The items to render.
-	 * @param ambientLight The ambient light color.
-	 * @param pointLightList A list of point lights to use.
-	 * @param spotLightList A list of spot lights to use.
-	 * @param directionalLight A directional light to use.
+	 * @param sceneLight The lights to render.
+	 * @param hud The HUD to render.
 	 */
 	public void render(@NonNull Window window, @NonNull Camera camera,
-		List<SceneItem> sceneItems, Vector3f ambientLight,
-		PointLight[] pointLightList, SpotLight[] spotLightList,
-		DirectionalLight directionalLight) {
+		List<SceneItem> sceneItems, @NonNull SceneLight sceneLight,
+		@NonNull Hud hud) {
 
-		this.shaderProgram.bind();
+		this.renderScene(window, camera, sceneItems, sceneLight);
+		this.renderHud(window, hud);
+	}
 
-		// Update the projection matrix
-		Matrix4f projectionMatrix = this.transformation.getProjectionMatrix(
-			Renderer.FOV, window.getWidth(), window.getHeight(),
-			Renderer.Z_NEAR, Renderer.Z_FAR);
-		this.shaderProgram.setUniform(
-			ShaderConstants.Uniform.Vertex.PROJECTION_MATRIX, projectionMatrix);
+	private void renderHud(Window window, Hud hud) {
+		this.hudShaderProgram.bind();
 
-		// Update the view matrix
-		Matrix4f viewMatrix = this.transformation.getViewMatrix(camera);
+		Matrix4f ortho = this.transformation.getOrthoProjectionMatrix(0,
+			window.getWidth(), window.getHeight(), 0);
+		for (SceneItem gameItem : hud.getSceneItems()) {
+			Mesh mesh = gameItem.getMesh();
+			// Set orthographic and model matrix for this HUD item
+			Matrix4f projModelMatrix =
+				this.transformation.getOrtoProjModelMatrix(gameItem, ortho);
+			this.hudShaderProgram.setUniform(
+				ShaderConstants.Uniform.HUD.PROJECTION_MATRIX, projModelMatrix);
+			this.hudShaderProgram.setUniform(ShaderConstants.Uniform.HUD.COLOR,
+				gameItem.getMesh().getMaterial().getAmbientColor());
+			this.hudShaderProgram.setUniform(
+				ShaderConstants.Uniform.HUD.HAS_TEXTURE,
+				gameItem.getMesh().getMaterial().isTextured() ? 1 : 0);
 
-		this.renderLights(viewMatrix, ambientLight, pointLightList,
-			spotLightList, directionalLight);
-
-		this.shaderProgram
-			.setUniform(ShaderConstants.Uniform.Fragment.TEXTURE_SAMPLER, 0);
-
-		for (SceneItem sceneItem : sceneItems) {
-			// Set model view matrix for this item
-			Matrix4f modelViewMatrix =
-				this.transformation.getModelViewMatrix(sceneItem, viewMatrix);
-			this.shaderProgram.setUniform(
-				ShaderConstants.Uniform.Vertex.MODEL_VIEW_MATRIX,
-				modelViewMatrix);
-
-			// Render the mesh for this scene item
-			Mesh mesh = sceneItem.getMesh();
-			this.shaderProgram.setUniform(
-				ShaderConstants.Uniform.Fragment.MATERIAL, mesh.getMaterial());
+			// Render the mesh for this HUD item
 			mesh.render();
 		}
 
-		this.shaderProgram.unbind();
+		this.hudShaderProgram.unbind();
 	}
 
 	/**
 	 * Handle the lighting phase of rendering.
 	 *
 	 * @param viewMatrix The view transform matrix.
-	 * @param ambientLight The ambient light color.
-	 * @param pointLightList A list of point lights to use.
-	 * @param spotLightList A list of spot lights to use.
-	 * @param directionalLight A directional light to use.
+	 * @param sceneLight The light information.
 	 */
-	private void renderLights(Matrix4f viewMatrix, Vector3f ambientLight,
-		PointLight[] pointLightList, SpotLight[] spotLightList,
-		DirectionalLight directionalLight) {
+	private void renderLights(Matrix4f viewMatrix, SceneLight sceneLight) {
 		// Update Light Uniforms
-		this.shaderProgram.setUniform(
-			ShaderConstants.Uniform.Fragment.AMBIENT_LIGHT, ambientLight);
-		this.shaderProgram.setUniform(
+		this.sceneShaderProgram.setUniform(
+			ShaderConstants.Uniform.Fragment.AMBIENT_LIGHT,
+			sceneLight.getAmbientLight());
+		this.sceneShaderProgram.setUniform(
 			ShaderConstants.Uniform.Fragment.SPECULAR_POWER,
 			this.specularPower);
 
 		// Process Point Lights
-		int numLights = pointLightList == null ? 0 : pointLightList.length;
+		int numLights = sceneLight.getPointLightList() == null ? 0
+			: sceneLight.getPointLightList().length;
 		for (int i = 0; i < numLights; ++i) {
 			// Can't be null, size = 0 if null
-			@SuppressWarnings("null")
-			PointLight pointLight = pointLightList[i];
+			PointLight pointLight = sceneLight.getPointLightList()[i];
 			if (null == pointLight) {
 				continue;
 			}
@@ -205,17 +154,17 @@ public class Renderer {
 			Vector4f aux = new Vector4f(lightPosition, 1);
 			aux.mul(viewMatrix);
 			lightPosition.set(aux.x, aux.y, aux.z);
-			this.shaderProgram.setUniform(
+			this.sceneShaderProgram.setUniform(
 				ShaderConstants.Uniform.Fragment.POINT_LIGHTS,
 				currentPointLight, i);
 		}
 
 		// Process Spot Lights
-		numLights = spotLightList == null ? 0 : spotLightList.length;
+		numLights = sceneLight.getSpotLightList() == null ? 0
+			: sceneLight.getSpotLightList().length;
 		for (int i = 0; i < numLights; i++) {
 			// Can't be null, size = 0 if null
-			@SuppressWarnings("null")
-			SpotLight spotLight = spotLightList[i];
+			SpotLight spotLight = sceneLight.getSpotLightList()[i];
 			/*
 			 * Get a copy of the light object and transform its position and
 			 * cone direction to view coordinates
@@ -232,7 +181,7 @@ public class Renderer {
 			Vector4f aux = new Vector4f(lightPosition, 1);
 			aux.mul(viewMatrix);
 			lightPosition.set(aux.x, aux.y, aux.z);
-			this.shaderProgram.setUniform(
+			this.sceneShaderProgram.setUniform(
 				ShaderConstants.Uniform.Fragment.SPOT_LIGHTS, currentSpotLight,
 				i);
 		}
@@ -241,12 +190,128 @@ public class Renderer {
 		 * to view coordinates
 		 */
 		DirectionalLight currentDirectionalLight =
-			new DirectionalLight(directionalLight);
+			new DirectionalLight(sceneLight.getDirectionalLight());
 		Vector4f dir = new Vector4f(currentDirectionalLight.getDirection(), 0);
 		dir.mul(viewMatrix);
 		currentDirectionalLight.setDirection(new Vector3f(dir.x, dir.y, dir.z));
-		this.shaderProgram.setUniform(
+		this.sceneShaderProgram.setUniform(
 			ShaderConstants.Uniform.Fragment.DIRECTIONAL_LIGHT,
 			currentDirectionalLight);
+	}
+
+	/**
+	 * Render the scene items.
+	 *
+	 * @param window The window to render on.
+	 * @param camera The camera.
+	 * @param sceneItems The items to render.
+	 * @param sceneLight The lights to render.
+	 */
+	private void renderScene(Window window, Camera camera,
+		List<SceneItem> sceneItems, SceneLight sceneLight) {
+		this.sceneShaderProgram.bind();
+
+		// Update the projection matrix
+		Matrix4f projectionMatrix = this.transformation.getProjectionMatrix(
+			Renderer.FOV, window.getWidth(), window.getHeight(),
+			Renderer.Z_NEAR, Renderer.Z_FAR);
+		this.sceneShaderProgram.setUniform(
+			ShaderConstants.Uniform.Vertex.PROJECTION_MATRIX, projectionMatrix);
+
+		// Update the view matrix
+		Matrix4f viewMatrix = this.transformation.getViewMatrix(camera);
+
+		this.renderLights(viewMatrix, sceneLight);
+
+		this.sceneShaderProgram
+			.setUniform(ShaderConstants.Uniform.Fragment.TEXTURE_SAMPLER, 0);
+
+		for (SceneItem sceneItem : sceneItems) {
+			// Set model view matrix for this item
+			Matrix4f modelViewMatrix =
+				this.transformation.getModelViewMatrix(sceneItem, viewMatrix);
+			this.sceneShaderProgram.setUniform(
+				ShaderConstants.Uniform.Vertex.MODEL_VIEW_MATRIX,
+				modelViewMatrix);
+
+			// Render the mesh for this scene item
+			Mesh mesh = sceneItem.getMesh();
+			this.sceneShaderProgram.setUniform(
+				ShaderConstants.Uniform.Fragment.MATERIAL, mesh.getMaterial());
+			mesh.render();
+		}
+
+		this.sceneShaderProgram.unbind();
+	}
+
+	/**
+	 * Set up the HUD shader program.
+	 */
+	private void setupHudShader() {
+		this.hudShaderProgram = new ShaderProgram();
+		try {
+			this.hudShaderProgram.createVertexShader(FileUtils.readAsString(
+				PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
+					ResourceType.DATA, "shaders/hud_vertex.vs")));
+			this.hudShaderProgram.createFragmentShader(FileUtils.readAsString(
+				PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
+					ResourceType.DATA, "shaders/hud_fragment.fs")));
+		}
+		catch (ShaderException e) {
+			Renderer.log.error(SafeResourceLoader.getString(
+				"SHADER_ERROR_SETUP", GraphicsPlugin.getResourceBundle()), e);
+		}
+		this.hudShaderProgram.link();
+
+		this.hudShaderProgram
+		.createUniform(ShaderConstants.Uniform.HUD.PROJECTION_MATRIX);
+		this.hudShaderProgram.createUniform(ShaderConstants.Uniform.HUD.COLOR);
+		this.hudShaderProgram
+			.createUniform(ShaderConstants.Uniform.HUD.HAS_TEXTURE);
+	}
+
+	/**
+	 * Set up the scene shader program.
+	 */
+	private void setupSceneShader() {
+		this.sceneShaderProgram = new ShaderProgram();
+		try {
+			this.sceneShaderProgram.createVertexShader(FileUtils.readAsString(
+				PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
+					ResourceType.DATA, "shaders/vertex.vs")));
+			this.sceneShaderProgram.createFragmentShader(FileUtils.readAsString(
+				PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
+					ResourceType.DATA, "shaders/fragment.fs")));
+		}
+		catch (ShaderException e) {
+			Renderer.log.error(SafeResourceLoader.getString(
+				"SHADER_ERROR_SETUP", GraphicsPlugin.getResourceBundle()), e);
+		}
+		this.sceneShaderProgram.link();
+
+		this.sceneShaderProgram
+			.createUniform(ShaderConstants.Uniform.Vertex.PROJECTION_MATRIX);
+		this.sceneShaderProgram
+			.createUniform(ShaderConstants.Uniform.Vertex.MODEL_VIEW_MATRIX);
+		this.sceneShaderProgram
+			.createUniform(ShaderConstants.Uniform.Fragment.TEXTURE_SAMPLER);
+
+		// Create uniform for material
+		this.sceneShaderProgram
+			.createMaterialUniform(ShaderConstants.Uniform.Fragment.MATERIAL);
+
+		// Create lighting related uniforms
+		this.sceneShaderProgram
+			.createUniform(ShaderConstants.Uniform.Fragment.SPECULAR_POWER);
+		this.sceneShaderProgram
+			.createUniform(ShaderConstants.Uniform.Fragment.AMBIENT_LIGHT);
+		this.sceneShaderProgram.createPointLightListUniform(
+			ShaderConstants.Uniform.Fragment.POINT_LIGHTS,
+			ShaderConstants.Uniform.Fragment.MAX_POINT_LIGHTS);
+		this.sceneShaderProgram.createSpotLightListUniform(
+			ShaderConstants.Uniform.Fragment.SPOT_LIGHTS,
+			ShaderConstants.Uniform.Fragment.MAX_SPOT_LIGHTS);
+		this.sceneShaderProgram.createDirectionalLightUniform(
+			ShaderConstants.Uniform.Fragment.DIRECTIONAL_LIGHT);
 	}
 }

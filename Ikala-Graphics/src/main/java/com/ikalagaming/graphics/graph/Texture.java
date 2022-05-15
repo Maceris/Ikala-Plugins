@@ -6,19 +6,16 @@ import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.util.SafeResourceLoader;
 
-import de.matthiasmann.twl.utils.PNGDecoder;
-import de.matthiasmann.twl.utils.PNGDecoder.Format;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
+import org.lwjgl.stb.STBImage;
+import org.lwjgl.system.MemoryStack;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 
 /**
  * A texture.
@@ -27,76 +24,68 @@ import java.nio.ByteBuffer;
  *
  */
 @Slf4j
+@Getter
 public class Texture {
-
-	/**
-	 * Load a texture from file name.
-	 *
-	 * @param fileName The name of the file for the texture, including path from
-	 *            resource dir.
-	 * @return The ID of the newly created texture.
-	 * @throws TextureException If there was a problem loading the texture.
-	 */
-	private static int loadTexture(String fileName) {
-		File textureFile = PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
-			ResourceType.DATA, fileName);
-		if (!textureFile.canRead()) {
-			Texture.log
-				.warn(SafeResourceLoader.getString("TEXTURE_ERROR_MISSING",
-					GraphicsPlugin.getResourceBundle()), fileName);
-			throw new TextureException();
-		}
-		InputStream inputStream;
-		try {
-			inputStream = new FileInputStream(textureFile);
-		}
-		catch (FileNotFoundException e) {
-			Texture.log
-				.warn(SafeResourceLoader.getString("TEXTURE_ERROR_MISSING",
-					GraphicsPlugin.getResourceBundle()), fileName);
-			throw new TextureException(e);
-		}
-		PNGDecoder decoder;
-		ByteBuffer buffer;
-		try {
-			decoder = new PNGDecoder(inputStream);
-			buffer = ByteBuffer
-				.allocateDirect(4 * decoder.getWidth() * decoder.getHeight());
-			decoder.decode(buffer, decoder.getWidth() * 4, Format.RGBA);
-			buffer.flip();
-		}
-		catch (IOException e) {
-			Texture.log
-				.warn(SafeResourceLoader.getString("TEXTURE_ERROR_DECODING",
-					GraphicsPlugin.getResourceBundle()), fileName);
-			throw new TextureException(e);
-		}
-
-		// Create a new OpenGL texture
-		int id = GL11.glGenTextures();
-		GL11.glBindTexture(GL11.GL_TEXTURE_2D, id);
-		GL11.glPixelStorei(GL11.GL_UNPACK_ALIGNMENT, 1);
-
-		final int LEVEL_OF_DETAIL = 0;
-		final int BORDER = 0;// Must be 0
-		GL11.glTexImage2D(GL11.GL_TEXTURE_2D, LEVEL_OF_DETAIL, GL11.GL_RGBA,
-			decoder.getWidth(), decoder.getHeight(), BORDER, GL11.GL_RGBA,
-			GL11.GL_UNSIGNED_BYTE, buffer);
-
-		GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
-		return id;
-	}
 
 	/**
 	 * The OpenGL Texture ID.
 	 *
 	 * @return The texture ID for this texture.
 	 */
-	@Getter
-	private int id;
+	private final int id;
 
 	/**
-	 * The name of the texture resource.
+	 * The width of the texture.
+	 *
+	 * @return The width in pixels.
+	 */
+	private final int width;
+
+	/**
+	 * The height of the texture.
+	 *
+	 * @return The height in pixels.
+	 */
+	private final int height;
+
+	/**
+	 * Create a new texture from a memory buffer.
+	 *
+	 * @param imageBuffer The image data.
+	 * @throws TextureException If the texture could not be loaded.
+	 */
+	public Texture(ByteBuffer imageBuffer) {
+		try {
+			ByteBuffer buffer;
+			try (MemoryStack stack = MemoryStack.stackPush()) {
+				IntBuffer w = stack.mallocInt(1);
+				IntBuffer h = stack.mallocInt(1);
+				IntBuffer channels = stack.mallocInt(1);
+
+				buffer = STBImage.stbi_load_from_memory(imageBuffer, w, h,
+					channels, 4);
+				if (buffer == null) {
+					throw new TextureException("Image file not loaded: "
+						+ STBImage.stbi_failure_reason());
+				}
+
+				this.width = w.get();
+				this.height = h.get();
+			}
+
+			this.id = this.createTexture(buffer);
+			STBImage.stbi_image_free(buffer);
+		}
+		catch (TextureException e) {
+			Texture.log
+				.error(SafeResourceLoader.getString("TEXTURE_ERROR_CREATION",
+					GraphicsPlugin.getResourceBundle()), e);
+			throw e;
+		}
+	}
+
+	/**
+	 * Create a new texture that is read from the provided file.
 	 *
 	 * @param fileName The name of the file for the texture, including path from
 	 *            resource dir.
@@ -104,7 +93,32 @@ public class Texture {
 	 */
 	public Texture(String fileName) {
 		try {
-			this.id = Texture.loadTexture(fileName);
+			File textureFile = PluginFolder.getResource(
+				GraphicsPlugin.PLUGIN_NAME, ResourceType.DATA, fileName);
+			if (!textureFile.canRead()) {
+				Texture.log
+					.warn(SafeResourceLoader.getString("TEXTURE_ERROR_MISSING",
+						GraphicsPlugin.getResourceBundle()), fileName);
+				throw new TextureException();
+			}
+			ByteBuffer buffer;
+			try (MemoryStack stack = MemoryStack.stackPush()) {
+				IntBuffer w = stack.mallocInt(1);
+				IntBuffer h = stack.mallocInt(1);
+				IntBuffer channels = stack.mallocInt(1);
+				buffer = STBImage.stbi_load(textureFile.getAbsolutePath(), w, h,
+					channels, 4);
+				if (buffer == null) {
+					throw new TextureException("Image file [" + fileName
+						+ "] not loaded: " + STBImage.stbi_failure_reason());
+				}
+
+				this.width = w.get();
+				this.height = h.get();
+			}
+
+			this.id = this.createTexture(buffer);
+			STBImage.stbi_image_free(buffer);
 		}
 		catch (TextureException e) {
 			Texture.log
@@ -126,6 +140,38 @@ public class Texture {
 	 */
 	public void cleanup() {
 		GL11.glDeleteTextures(this.id);
+	}
+
+	/**
+	 * Create the a texture from a byte buffer.
+	 *
+	 * @param buffer The buffer that contains the texture information.
+	 * @return The texture ID.
+	 */
+	private int createTexture(ByteBuffer buffer) {
+		// Create a new OpenGL texture
+		int textureID = GL11.glGenTextures();
+		GL11.glBindTexture(GL11.GL_TEXTURE_2D, textureID);
+		GL11.glPixelStorei(GL11.GL_UNPACK_ALIGNMENT, 1);
+
+		// Tell OpenGL how to unpack the RGBA bytes. Each component is 1 byte
+		// size
+		GL11.glPixelStorei(GL11.GL_UNPACK_ALIGNMENT, 1);
+
+		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER,
+			GL11.GL_NEAREST);
+		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER,
+			GL11.GL_NEAREST);
+
+		final int LEVEL_OF_DETAIL = 0;
+		final int BORDER = 0;// Must be 0
+		GL11.glTexImage2D(GL11.GL_TEXTURE_2D, LEVEL_OF_DETAIL, GL11.GL_RGBA,
+			this.width, this.height, BORDER, GL11.GL_RGBA,
+			GL11.GL_UNSIGNED_BYTE, buffer);
+
+		GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
+
+		return textureID;
 	}
 
 }

@@ -12,21 +12,21 @@ import org.joml.Vector3f;
  * @author Ches Burks
  *
  */
+@Getter
 public class SceneItem {
 	/**
 	 * The mesh to render for this item.
 	 *
 	 * @return The mesh for this item.
 	 */
-	@Getter
-	private final Mesh mesh;
+	@Setter
+	private Mesh mesh;
 
 	/**
 	 * The position of the item.
 	 *
 	 * @return The position vector.
 	 */
-	@Getter
 	private final Vector3f position;
 
 	/**
@@ -34,7 +34,6 @@ public class SceneItem {
 	 *
 	 * @return The rotation vector.
 	 */
-	@Getter
 	private final Vector3f rotation;
 	/**
 	 * The scale of the item.
@@ -42,9 +41,17 @@ public class SceneItem {
 	 * @param scale The new scale.
 	 * @return The scale.
 	 */
-	@Getter
 	@Setter
 	private float scale;
+
+	/**
+	 * Construct a new scene item without a mesh.
+	 */
+	public SceneItem() {
+		this.position = new Vector3f(0, 0, 0);
+		this.scale = 1;
+		this.rotation = new Vector3f(0, 0, 0);
+	}
 
 	/**
 	 * Create a new scene item for the given mesh. Defaults to a zero position
@@ -53,10 +60,8 @@ public class SceneItem {
 	 * @param mesh The mesh for the item.
 	 */
 	public SceneItem(Mesh mesh) {
+		this();
 		this.mesh = mesh;
-		this.position = new Vector3f(0, 0, 0);
-		this.scale = 1;
-		this.rotation = new Vector3f(0, 0, 0);
 	}
 
 	/**
