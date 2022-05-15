@@ -87,9 +87,13 @@ public class MouseInput {
 					switch (action) {
 						case GLFW_PRESS:
 							this.rightButtonPressed = true;
+							GLFW.glfwSetInputMode(windowHandle,
+								GLFW.GLFW_CURSOR, GLFW.GLFW_CURSOR_DISABLED);
 							break;
 						case GLFW_RELEASE:
 							this.rightButtonPressed = false;
+							GLFW.glfwSetInputMode(windowHandle,
+								GLFW.GLFW_CURSOR, GLFW.GLFW_CURSOR_NORMAL);
 							break;
 						case GLFW_REPEAT:
 						default:
