@@ -3,12 +3,84 @@ package com.ikalagaming.graphics;
 /**
  * Common definitions of the fields that we need when interacting with shaders.
  * 
- * This will be replaced at some point by a file based specification.
+ * This may be replaced at some point by a file based specification.
  *
  * @author Ches Burks
  *
  */
 public class ShaderConstants {
+	/**
+	 * To be used to dynamically load in shaders.
+	 * 
+	 * @author Ches Burks
+	 *
+	 */
+	public static class Program {
+		/**
+		 * A list of the names of directional light uniforms to create for the
+		 * shader.
+		 */
+		public static final String DIRECTIONAL_LIGHT_UNIFORMS =
+			"directionalLightUniforms";
+		/**
+		 * The location of the fragment shader file, relative to the resources
+		 * directory.
+		 */
+		public static final String FRAGMENT_SHADER = "fragmentShader";
+
+		/**
+		 * A list of the names of material uniforms to create for the shader.
+		 */
+		public static final String MATERIAL_UNIFORMS = "materialUniforms";
+
+		/**
+		 * Should contain mappings from the names of the uniforms to the sizes
+		 * of each uniform. <br>
+		 * For example: <br>
+		 * <code>
+		 * pointLightListUniforms: <br>
+		 * &nbsp;&nbsp;pointLights: 5 <br>
+		 * &nbsp;&nbsp;specialPointLights: 2 <br>
+		 * </code>
+		 */
+		public static final String POINT_LIGHT_LIST_UNIFORMS =
+			"pointLightListUniforms";
+
+		/**
+		 * A list of the names of point light uniforms to create for the shader.
+		 */
+		public static final String POINT_LIGHT_UNIFORMS = "pointLightUniforms";
+
+		/**
+		 * Should contain mappings from the names of the uniforms to the sizes
+		 * of each uniform. <br>
+		 * For example: <br>
+		 * <code>
+		 * spotLightListUniforms: <br>
+		 * &nbsp;&nbsp;pointLights: 5 <br>
+		 * &nbsp;&nbsp;specialPointLights: 2 <br>
+		 * </code>
+		 */
+		public static final String SPOT_LIGHT_LIST_UNIFORMS =
+			"spotLightListUniforms";
+
+		/**
+		 * A list of the names of spot light uniforms to create for the shader.
+		 */
+		public static final String SPOT_LIGHT_UNIFORMS = "spotLightUniforms";
+
+		/**
+		 * A list of the names of uniforms to create for the shader.
+		 */
+		public static final String UNIFORMS = "uniforms";
+
+		/**
+		 * The location of the vertex shader file, relative to the resources
+		 * directory.
+		 */
+		public static final String VERTEX_SHADER = "vertexShader";
+	}
+
 	/**
 	 * Uniforms, or parameters that users of a shader program can pass to that
 	 * program.

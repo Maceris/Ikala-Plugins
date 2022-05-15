@@ -21,8 +21,6 @@ import org.joml.Vector3f;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.opengl.GL11;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -37,7 +35,7 @@ public class GraphicsManager {
 
 	private static AtomicBoolean initialized = new AtomicBoolean(false);
 
-	private static List<SceneItem> items;
+	private static Scene scene;
 
 	private static Renderer renderer;
 	private static CameraManager cameraManager;
@@ -80,8 +78,6 @@ public class GraphicsManager {
 	 */
 	@Getter
 	private static Window window;
-
-	private static SceneLight sceneLight;
 
 	/**
 	 * The angle the directional light is at.
@@ -130,6 +126,8 @@ public class GraphicsManager {
 		GraphicsManager.cameraManager =
 			new CameraManager(GraphicsManager.window);
 
+		GraphicsManager.scene = new Scene();
+
 		Texture texture;
 		try {
 			texture = new Texture("textures/grassblock.png");
@@ -149,46 +147,43 @@ public class GraphicsManager {
 		Material material = new Material(texture, reflectance);
 		mesh.setMaterial(material);
 
-		SceneItem item = new SceneItem(mesh);
-		item.setScale(0.5f);
-		item.setPosition(0, 0, -2);
+		final float blockScale = 0.5f;
+		final float skyBoxScale = 10.0f;
+		final float extension = 2.0f;
 
-		GraphicsManager.items = new ArrayList<>();
-		GraphicsManager.items.add(item);
+		final float startx = extension * (-skyBoxScale + blockScale);
+		final float startz = extension * (skyBoxScale - blockScale);
+		final float starty = -1.0f;
+		final float inc = blockScale * 2;
 
-		GraphicsManager.sceneLight = new SceneLight();
-		GraphicsManager.sceneLight
-			.setAmbientLight(new Vector3f(0.3f, 0.3f, 0.3f));
+		float posx = startx;
+		float posz = startz;
+		float incY = 0.0f;
+		final int NUM_ROWS = (int) (extension * skyBoxScale * 2 / inc);
+		final int NUM_COLS = (int) (extension * skyBoxScale * 2 / inc);
+		SceneItem[] gameItems = new SceneItem[NUM_ROWS * NUM_COLS];
+		for (int i = 0; i < NUM_ROWS; i++) {
+			for (int j = 0; j < NUM_COLS; j++) {
+				SceneItem sceneItem = new SceneItem(mesh);
+				sceneItem.setScale(blockScale);
+				incY = Math.random() > 0.9f ? blockScale * 2 : 0f;
+				sceneItem.setPosition(posx, starty + incY, posz);
+				gameItems[i * NUM_COLS + j] = sceneItem;
 
-		// Point light
-		Vector3f lightColour = new Vector3f(1, 1, 1);
-		Vector3f lightPosition = new Vector3f(0, 0, 1);
-		float lightIntensity = 1.0f;
-		PointLight pointLight =
-			new PointLight(lightColour, lightPosition, lightIntensity);
-		PointLight.Attenuation att =
-			new PointLight.Attenuation(0.0f, 0.0f, 1.0f);
-		pointLight.setAttenuation(att);
-		GraphicsManager.sceneLight
-			.setPointLightList(new PointLight[] {pointLight});
+				posx += inc;
+			}
+			posx = startx;
+			posz -= inc;
+		}
 
-		// Directional light
-		lightPosition = new Vector3f(-1, 0, 0);
-		lightColour = new Vector3f(1, 1, 1);
-		GraphicsManager.sceneLight.setDirectionalLight(
-			new DirectionalLight(lightColour, lightPosition, lightIntensity));
+		GraphicsManager.scene.setSceneItems(gameItems);
 
-		// Spot light
-		lightPosition = new Vector3f(0, 0.0f, 10f);
-		pointLight = new PointLight(new Vector3f(1, 1, 1), lightPosition,
-			lightIntensity);
-		att = new PointLight.Attenuation(0.0f, 0.0f, 0.02f);
-		pointLight.setAttenuation(att);
-		Vector3f coneDir = new Vector3f(0, 0, -1);
-		float cutoff = (float) Math.cos(Math.toRadians(140));
-		SpotLight spotLight = new SpotLight(pointLight, coneDir, cutoff);
-		GraphicsManager.sceneLight.setSpotLightList(
-			new SpotLight[] {spotLight, new SpotLight(spotLight)});
+		// Setup SkyBox
+		SkyBox skyBox = new SkyBox("/models/skybox.obj", "textures/skybox.png");
+		skyBox.setScale(skyBoxScale);
+		GraphicsManager.scene.setSkyBox(skyBox);
+
+		GraphicsManager.setupLights();
 
 		// HUD
 		try {
@@ -211,13 +206,17 @@ public class GraphicsManager {
 		// clear the framebuffer
 		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
 
-		GraphicsManager.updateItems();
+		if (window.isResized()) {
+			GL11.glViewport(0, 0, window.getWidth(), window.getHeight());
+			window.setResized(false);
+		}
+
 		GraphicsManager.updateDirectionalLight();
-		hud.updateSize(window);
+		GraphicsManager.hud.updateSize(GraphicsManager.window);
 
 		GraphicsManager.renderer.render(GraphicsManager.window,
-			GraphicsManager.cameraManager.getCamera(), GraphicsManager.items,
-			GraphicsManager.sceneLight, GraphicsManager.hud);
+			GraphicsManager.cameraManager.getCamera(), GraphicsManager.scene,
+			GraphicsManager.hud);
 
 		GraphicsManager.window.update();
 
@@ -227,12 +226,55 @@ public class GraphicsManager {
 	}
 
 	/**
+	 * Set up the lights in the scene.
+	 */
+	private static void setupLights() {
+		SceneLight sceneLight = new SceneLight();
+
+		// Ambient light
+		sceneLight.setAmbientLight(new Vector3f(0.3f, 0.3f, 0.3f));
+
+		// Point light
+		Vector3f lightColour = new Vector3f(1, 1, 1);
+		Vector3f lightPosition = new Vector3f(0, 0, 1);
+		float lightIntensity = 1.0f;
+		PointLight pointLight =
+			new PointLight(lightColour, lightPosition, lightIntensity);
+		PointLight.Attenuation att =
+			new PointLight.Attenuation(0.0f, 0.0f, 1.0f);
+		pointLight.setAttenuation(att);
+		sceneLight.setPointLightList(new PointLight[] {pointLight});
+
+		// Directional light
+		lightPosition = new Vector3f(-1, 0, 0);
+		lightColour = new Vector3f(1, 1, 1);
+		sceneLight.setDirectionalLight(
+			new DirectionalLight(lightColour, lightPosition, lightIntensity));
+
+		// Spot light
+		lightPosition = new Vector3f(0, 0.0f, 10f);
+		pointLight = new PointLight(new Vector3f(1, 1, 1), lightPosition,
+			lightIntensity);
+		att = new PointLight.Attenuation(0.0f, 0.0f, 0.02f);
+		pointLight.setAttenuation(att);
+		Vector3f coneDir = new Vector3f(0, 0, -1);
+		float cutoff = (float) Math.cos(Math.toRadians(140));
+		SpotLight spotLight = new SpotLight(pointLight, coneDir, cutoff);
+		sceneLight.setSpotLightList(
+			new SpotLight[] {spotLight, new SpotLight(spotLight)});
+
+		GraphicsManager.scene.setSceneLight(sceneLight);
+	}
+
+	/**
 	 * Terminate GLFW and free the error callback. If any windows still remain,
 	 * they are destroyed.
 	 */
 	public static void terminate() {
 		GraphicsManager.renderer.cleanup();
-		GraphicsManager.items.forEach(SceneItem::cleanup);
+		for (SceneItem item : GraphicsManager.scene.getSceneItems()) {
+			item.cleanup();
+		}
 
 		if (null != GraphicsManager.window) {
 			GraphicsManager.window.destroy();
@@ -295,13 +337,15 @@ public class GraphicsManager {
 		}
 		double spotAngleRad = Math.toRadians(GraphicsManager.spotAngle);
 		Vector3f coneDir =
-			GraphicsManager.sceneLight.getSpotLightList()[0].getConeDirection();
+			GraphicsManager.scene.getSceneLight().getSpotLightList()[0]
+				.getConeDirection();
 		coneDir.y = (float) Math.sin(spotAngleRad);
 
 		// Update directional light direction, intensity and color
 		GraphicsManager.lightAngle += 1.1f;
 		if (GraphicsManager.lightAngle > 90) {
-			GraphicsManager.sceneLight.getDirectionalLight().setIntensity(0);
+			GraphicsManager.scene.getSceneLight().getDirectionalLight()
+				.setIntensity(0);
 			if (GraphicsManager.lightAngle >= 360) {
 				GraphicsManager.lightAngle = -90;
 			}
@@ -310,35 +354,28 @@ public class GraphicsManager {
 			|| GraphicsManager.lightAngle >= 80) {
 			float factor =
 				1 - (Math.abs(GraphicsManager.lightAngle) - 80) / 10.0f;
-			GraphicsManager.sceneLight.getDirectionalLight()
+			GraphicsManager.scene.getSceneLight().getDirectionalLight()
 				.setIntensity(factor);
-			GraphicsManager.sceneLight.getDirectionalLight().getColor().y =
-				Math.max(factor, 0.9f);
-			GraphicsManager.sceneLight.getDirectionalLight().getColor().z =
-				Math.max(factor, 0.5f);
+			GraphicsManager.scene.getSceneLight().getDirectionalLight()
+				.getColor().y = Math.max(factor, 0.9f);
+			GraphicsManager.scene.getSceneLight().getDirectionalLight()
+				.getColor().z = Math.max(factor, 0.5f);
 		}
 		else {
-			GraphicsManager.sceneLight.getDirectionalLight().setIntensity(1);
-			GraphicsManager.sceneLight.getDirectionalLight().getColor().x = 1;
-			GraphicsManager.sceneLight.getDirectionalLight().getColor().y = 1;
-			GraphicsManager.sceneLight.getDirectionalLight().getColor().z = 1;
+			GraphicsManager.scene.getSceneLight().getDirectionalLight()
+				.setIntensity(1);
+			GraphicsManager.scene.getSceneLight().getDirectionalLight()
+				.getColor().x = 1;
+			GraphicsManager.scene.getSceneLight().getDirectionalLight()
+				.getColor().y = 1;
+			GraphicsManager.scene.getSceneLight().getDirectionalLight()
+				.getColor().z = 1;
 		}
 		double angRad = Math.toRadians(GraphicsManager.lightAngle);
-		GraphicsManager.sceneLight.getDirectionalLight().getDirection().x =
-			(float) Math.sin(angRad);
-		GraphicsManager.sceneLight.getDirectionalLight().getDirection().y =
-			(float) Math.cos(angRad);
-	}
-
-	private static void updateItems() {
-		for (SceneItem item : GraphicsManager.items) {
-			// Update rotation angle
-			float rotation = item.getRotation().x + 1.5f;
-			if (rotation > 360) {
-				rotation = 0;
-			}
-			item.setRotation(rotation, rotation, rotation);
-		}
+		GraphicsManager.scene.getSceneLight().getDirectionalLight()
+			.getDirection().x = (float) Math.sin(angRad);
+		GraphicsManager.scene.getSceneLight().getDirectionalLight()
+			.getDirection().y = (float) Math.cos(angRad);
 	}
 
 	/**

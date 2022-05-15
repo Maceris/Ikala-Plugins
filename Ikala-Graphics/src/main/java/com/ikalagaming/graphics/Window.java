@@ -54,6 +54,7 @@ public class Window {
 	 * @return True if the window has been resized, false otherwise.
 	 * @param resized resized If the window has been resized.
 	 */
+	@Getter
 	@Setter
 	private boolean resized;
 	/**

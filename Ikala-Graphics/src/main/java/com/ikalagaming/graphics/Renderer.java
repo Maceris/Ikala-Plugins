@@ -19,8 +19,6 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
-import java.util.List;
-
 /**
  * Renders things on the screen.
  *
@@ -48,6 +46,7 @@ public class Renderer {
 
 	private ShaderProgram sceneShaderProgram;
 	private ShaderProgram hudShaderProgram;
+	private ShaderProgram skyBoxShaderProgram;
 
 	/**
 	 * The transformation to use for the renderer.
@@ -77,6 +76,7 @@ public class Renderer {
 	public void init() {
 		this.setupSceneShader();
 		this.setupHudShader();
+		this.setupSkyBoxShader();
 	}
 
 	/**
@@ -84,15 +84,14 @@ public class Renderer {
 	 *
 	 * @param window The window to render on.
 	 * @param camera The camera.
-	 * @param sceneItems The items to render.
-	 * @param sceneLight The lights to render.
+	 * @param scene The scene to render.
 	 * @param hud The HUD to render.
 	 */
 	public void render(@NonNull Window window, @NonNull Camera camera,
-		List<SceneItem> sceneItems, @NonNull SceneLight sceneLight,
-		@NonNull Hud hud) {
+		Scene scene, @NonNull Hud hud) {
 
-		this.renderScene(window, camera, sceneItems, sceneLight);
+		this.renderScene(window, camera, scene);
+		this.renderSkyBox(window, camera, scene);
 		this.renderHud(window, hud);
 	}
 
@@ -204,11 +203,9 @@ public class Renderer {
 	 *
 	 * @param window The window to render on.
 	 * @param camera The camera.
-	 * @param sceneItems The items to render.
-	 * @param sceneLight The lights to render.
+	 * @param scene The scene to render.
 	 */
-	private void renderScene(Window window, Camera camera,
-		List<SceneItem> sceneItems, SceneLight sceneLight) {
+	private void renderScene(Window window, Camera camera, Scene scene) {
 		this.sceneShaderProgram.bind();
 
 		// Update the projection matrix
@@ -221,12 +218,12 @@ public class Renderer {
 		// Update the view matrix
 		Matrix4f viewMatrix = this.transformation.getViewMatrix(camera);
 
-		this.renderLights(viewMatrix, sceneLight);
+		this.renderLights(viewMatrix, scene.getSceneLight());
 
 		this.sceneShaderProgram
 			.setUniform(ShaderConstants.Uniform.Fragment.TEXTURE_SAMPLER, 0);
 
-		for (SceneItem sceneItem : sceneItems) {
+		for (SceneItem sceneItem : scene.getSceneItems()) {
 			// Set model view matrix for this item
 			Matrix4f modelViewMatrix =
 				this.transformation.getModelViewMatrix(sceneItem, viewMatrix);
@@ -242,6 +239,43 @@ public class Renderer {
 		}
 
 		this.sceneShaderProgram.unbind();
+	}
+
+	/**
+	 * Render the skybox as a background.
+	 *
+	 * @param window The window we are drawing on.
+	 * @param camera The camera.
+	 * @param scene The scene to render.
+	 */
+	private void renderSkyBox(Window window, Camera camera, Scene scene) {
+		this.skyBoxShaderProgram.bind();
+
+		this.skyBoxShaderProgram
+			.setUniform(ShaderConstants.Uniform.Fragment.TEXTURE_SAMPLER, 0);
+
+		// Update projection Matrix
+		Matrix4f projectionMatrix = this.transformation.getProjectionMatrix(
+			Renderer.FOV, window.getWidth(), window.getHeight(),
+			Renderer.Z_NEAR, Renderer.Z_FAR);
+		this.skyBoxShaderProgram.setUniform(
+			ShaderConstants.Uniform.Vertex.PROJECTION_MATRIX, projectionMatrix);
+		SkyBox skyBox = scene.getSkyBox();
+		Matrix4f viewMatrix = this.transformation.getViewMatrix(camera);
+		viewMatrix.m30(0);
+		viewMatrix.m31(0);
+		viewMatrix.m32(0);
+		Matrix4f modelViewMatrix =
+			this.transformation.getModelViewMatrix(skyBox, viewMatrix);
+		this.skyBoxShaderProgram.setUniform(
+			ShaderConstants.Uniform.Vertex.MODEL_VIEW_MATRIX, modelViewMatrix);
+		this.skyBoxShaderProgram.setUniform(
+			ShaderConstants.Uniform.Fragment.AMBIENT_LIGHT,
+			scene.getSceneLight().getAmbientLight());
+
+		scene.getSkyBox().getMesh().render();
+
+		this.skyBoxShaderProgram.unbind();
 	}
 
 	/**
@@ -264,7 +298,7 @@ public class Renderer {
 		this.hudShaderProgram.link();
 
 		this.hudShaderProgram
-		.createUniform(ShaderConstants.Uniform.HUD.PROJECTION_MATRIX);
+			.createUniform(ShaderConstants.Uniform.HUD.PROJECTION_MATRIX);
 		this.hudShaderProgram.createUniform(ShaderConstants.Uniform.HUD.COLOR);
 		this.hudShaderProgram
 			.createUniform(ShaderConstants.Uniform.HUD.HAS_TEXTURE);
@@ -313,5 +347,29 @@ public class Renderer {
 			ShaderConstants.Uniform.Fragment.MAX_SPOT_LIGHTS);
 		this.sceneShaderProgram.createDirectionalLightUniform(
 			ShaderConstants.Uniform.Fragment.DIRECTIONAL_LIGHT);
+	}
+
+	/**
+	 * Set up the skybox shader program.
+	 */
+	private void setupSkyBoxShader() {
+		this.skyBoxShaderProgram = new ShaderProgram();
+		this.skyBoxShaderProgram.createVertexShader(FileUtils
+			.readAsString(PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
+				ResourceType.DATA, "shaders/skybox_vertex.vs")));
+		this.skyBoxShaderProgram.createFragmentShader(FileUtils
+			.readAsString(PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
+				ResourceType.DATA, "shaders/skybox_fragment.fs")));
+		this.skyBoxShaderProgram.link();
+
+		// Create uniforms for projection matrix
+		this.skyBoxShaderProgram
+			.createUniform(ShaderConstants.Uniform.Vertex.PROJECTION_MATRIX);
+		this.skyBoxShaderProgram
+			.createUniform(ShaderConstants.Uniform.Vertex.MODEL_VIEW_MATRIX);
+		this.skyBoxShaderProgram
+			.createUniform(ShaderConstants.Uniform.Fragment.TEXTURE_SAMPLER);
+		this.skyBoxShaderProgram
+			.createUniform(ShaderConstants.Uniform.Fragment.AMBIENT_LIGHT);
 	}
 }
