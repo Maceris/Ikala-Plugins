@@ -45,6 +45,14 @@ public class Equipment extends Item {
 	private ItemStats itemStats = new ItemStats();
 
 	/**
+	 * The affixes for this equipment.
+	 *
+	 * @param affixes The affixes for this item.
+	 * @return The affixes for this item.
+	 */
+	private List<Affix> affixes = new ArrayList<>();
+
+	/**
 	 * Construct a new equipment item.
 	 */
 	public Equipment() {}
