@@ -19,6 +19,9 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
+import java.util.List;
+import java.util.Map;
+
 /**
  * Renders things on the screen.
  *
@@ -223,19 +226,16 @@ public class Renderer {
 		this.sceneShaderProgram
 			.setUniform(ShaderConstants.Uniform.Fragment.TEXTURE_SAMPLER, 0);
 
-		for (SceneItem sceneItem : scene.getSceneItems()) {
-			// Set model view matrix for this item
-			Matrix4f modelViewMatrix =
-				this.transformation.getModelViewMatrix(sceneItem, viewMatrix);
-			this.sceneShaderProgram.setUniform(
-				ShaderConstants.Uniform.Vertex.MODEL_VIEW_MATRIX,
-				modelViewMatrix);
-
-			// Render the mesh for this scene item
-			Mesh mesh = sceneItem.getMesh();
-			this.sceneShaderProgram.setUniform(
-				ShaderConstants.Uniform.Fragment.MATERIAL, mesh.getMaterial());
-			mesh.render();
+		// Render each mesh with the associated game Items
+		Map<Mesh, List<SceneItem>> mapMeshes = scene.getMeshMap();
+		for (Mesh mesh : mapMeshes.keySet()) {
+			this.sceneShaderProgram.setUniform("material", mesh.getMaterial());
+			mesh.renderList(mapMeshes.get(mesh), (SceneItem gameItem) -> {
+				Matrix4f modelViewMatrix = this.transformation
+					.buildModelViewMatrix(gameItem, viewMatrix);
+				this.sceneShaderProgram.setUniform("modelViewMatrix",
+					modelViewMatrix);
+			});
 		}
 
 		this.sceneShaderProgram.unbind();

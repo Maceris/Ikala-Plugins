@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.graph;
 
+import com.ikalagaming.graphics.Utils;
+
 import lombok.Getter;
 import org.joml.Vector3f;
 
@@ -78,7 +80,7 @@ public class Camera {
 	 * @param offsetZ The offset around the z axis.
 	 */
 	public void moveRotation(float offsetX, float offsetY, float offsetZ) {
-		this.rotation.x += offsetX;
+		this.rotation.x = Utils.clampFloat(this.rotation.x + offsetX, -90, 90);
 		this.rotation.y += offsetY;
 		this.rotation.z += offsetZ;
 	}

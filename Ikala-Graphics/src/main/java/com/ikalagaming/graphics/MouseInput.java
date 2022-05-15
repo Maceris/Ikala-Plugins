@@ -28,8 +28,6 @@ public class MouseInput {
 	@Getter
 	private final Vector2f displaceVector;
 
-	private boolean inWindow = false;
-
 	/**
 	 * If the left button is currently pressed.
 	 *
@@ -66,8 +64,6 @@ public class MouseInput {
 				this.currentPos.x = xpos;
 				this.currentPos.y = ypos;
 			});
-		GLFW.glfwSetCursorEnterCallback(window.getWindowHandle(),
-			(windowHandle, entered) -> this.inWindow = entered);
 		GLFW.glfwSetMouseButtonCallback(window.getWindowHandle(),
 			(windowHandle, button, action, mode) -> {
 				if (button == GLFW.GLFW_MOUSE_BUTTON_1) {
@@ -111,17 +107,15 @@ public class MouseInput {
 	public void input(Window window) {
 		this.displaceVector.x = 0;
 		this.displaceVector.y = 0;
-		if (this.previousPos.x > 0 && this.previousPos.y > 0 && this.inWindow) {
-			double deltax = this.currentPos.x - this.previousPos.x;
-			double deltay = this.currentPos.y - this.previousPos.y;
-			boolean rotateX = deltax != 0;
-			boolean rotateY = deltay != 0;
-			if (rotateX) {
-				this.displaceVector.y = (float) deltax;
-			}
-			if (rotateY) {
-				this.displaceVector.x = (float) deltay;
-			}
+		double deltax = this.currentPos.x - this.previousPos.x;
+		double deltay = this.currentPos.y - this.previousPos.y;
+		boolean rotateX = deltax != 0;
+		boolean rotateY = deltay != 0;
+		if (rotateX) {
+			this.displaceVector.y = (float) deltax;
+		}
+		if (rotateY) {
+			this.displaceVector.x = (float) deltay;
 		}
 		this.previousPos.x = this.currentPos.x;
 		this.previousPos.y = this.currentPos.y;

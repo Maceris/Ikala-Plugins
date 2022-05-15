@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.graph;
 
+import com.ikalagaming.graphics.SceneItem;
+
 import lombok.Getter;
 import lombok.Setter;
 import org.lwjgl.opengl.GL11;
@@ -13,6 +15,7 @@ import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Given an array of positions, sets up data to load into graphics card.
@@ -172,10 +175,13 @@ public class Mesh {
 		GL30.glDeleteVertexArrays(this.vaoId);
 	}
 
-	/**
-	 * Render the mesh.
-	 */
-	public void render() {
+	private void endRender() {
+		// Restore state
+		GL30.glBindVertexArray(0);
+		GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+	}
+
+	private void initRender() {
 		Texture texture = this.material.getTexture();
 		if (texture != null) {
 			// Activate first texture unit
@@ -186,12 +192,36 @@ public class Mesh {
 
 		// Draw the mesh
 		GL30.glBindVertexArray(this.getVaoId());
+	}
 
+	/**
+	 * Render the mesh.
+	 */
+	public void render() {
+		this.initRender();
 		GL11.glDrawElements(GL11.GL_TRIANGLES, this.getVertexCount(),
 			GL11.GL_UNSIGNED_INT, 0);
+		this.endRender();
+	}
 
-		// Restore state
-		GL30.glBindVertexArray(0);
-		GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+	/**
+	 * Render a list of scene items.
+	 *
+	 * @param sceneItems The items to render.
+	 * @param consumer A method to set up data required by the items.
+	 */
+	public void renderList(List<SceneItem> sceneItems,
+		Consumer<SceneItem> consumer) {
+		this.initRender();
+
+		for (SceneItem sceneItem : sceneItems) {
+			// Set up data required by SceneItem
+			consumer.accept(sceneItem);
+			// Render this game item
+			GL11.glDrawElements(GL11.GL_TRIANGLES, this.getVertexCount(),
+				GL11.GL_UNSIGNED_INT, 0);
+		}
+
+		this.endRender();
 	}
 }

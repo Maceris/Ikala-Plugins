@@ -13,6 +13,7 @@ import org.joml.Vector3f;
  */
 public class Transformation {
 
+	private final Matrix4f modelMatrix;
 	private final Matrix4f modelViewMatrix;
 	private final Matrix4f projectionMatrix;
 	private final Matrix4f viewMatrix;
@@ -22,6 +23,7 @@ public class Transformation {
 	 * Create a new transformation.
 	 */
 	public Transformation() {
+		this.modelMatrix = new Matrix4f();
 		this.modelViewMatrix = new Matrix4f();
 		this.projectionMatrix = new Matrix4f();
 		this.viewMatrix = new Matrix4f();
@@ -77,7 +79,6 @@ public class Transformation {
 	public Matrix4f getOrtoProjModelMatrix(SceneItem gameItem,
 		Matrix4f orthographicMatrix) {
 		Vector3f rotation = gameItem.getRotation();
-		Matrix4f modelMatrix = new Matrix4f();
 		modelMatrix.identity().translate(gameItem.getPosition())
 			.rotateX((float) Math.toRadians(-rotation.x))
 			.rotateY((float) Math.toRadians(-rotation.y))
@@ -104,6 +105,25 @@ public class Transformation {
 		this.projectionMatrix.identity();
 		this.projectionMatrix.perspective(fov, aspectRatio, zNear, zFar);
 		return this.projectionMatrix;
+	}
+
+	/**
+	 * Build a model view matrix for the given scene item.
+	 * 
+	 * @param sceneItem The item to generate a transformation matrix for.
+	 * @param cameraViewMatrix The view matrix.
+	 * @return The model view matrix for the given item.
+	 */
+	public Matrix4f buildModelViewMatrix(SceneItem sceneItem,
+		Matrix4f cameraViewMatrix) {
+		Vector3f rotation = sceneItem.getRotation();
+		modelMatrix.identity().translate(sceneItem.getPosition())
+			.rotateX((float) Math.toRadians(-rotation.x))
+			.rotateY((float) Math.toRadians(-rotation.y))
+			.rotateZ((float) Math.toRadians(-rotation.z))
+			.scale(sceneItem.getScale());
+		modelViewMatrix.set(cameraViewMatrix);
+		return modelViewMatrix.mul(modelMatrix);
 	}
 
 	/**

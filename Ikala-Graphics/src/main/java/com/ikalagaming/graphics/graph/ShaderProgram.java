@@ -13,7 +13,6 @@ import org.joml.Vector4f;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.system.MemoryStack;
 
-import java.nio.FloatBuffer;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -349,10 +348,9 @@ public class ShaderProgram {
 		@NonNull Matrix4f value) {
 		// Using auto-managed buffer due to the small size and scope
 		try (MemoryStack stack = MemoryStack.stackPush()) {
-			FloatBuffer fb = stack.mallocFloat(16);
 			// Dump the matrix into a float buffer
-			value.get(fb);
-			GL20.glUniformMatrix4fv(this.uniforms.get(uniformName), false, fb);
+			GL20.glUniformMatrix4fv(this.uniforms.get(uniformName), false,
+				value.get(stack.mallocFloat(16)));
 		}
 	}
 

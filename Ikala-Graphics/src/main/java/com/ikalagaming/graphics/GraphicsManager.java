@@ -148,7 +148,7 @@ public class GraphicsManager {
 		mesh.setMaterial(material);
 
 		final float blockScale = 0.5f;
-		final float skyBoxScale = 10.0f;
+		final float skyBoxScale = 50.0f;
 		final float extension = 2.0f;
 
 		final float startx = extension * (-skyBoxScale + blockScale);
@@ -232,7 +232,7 @@ public class GraphicsManager {
 		SceneLight sceneLight = new SceneLight();
 
 		// Ambient light
-		sceneLight.setAmbientLight(new Vector3f(0.3f, 0.3f, 0.3f));
+		sceneLight.setAmbientLight(new Vector3f(0.7f, 0.7f, 0.7f));
 
 		// Point light
 		Vector3f lightColour = new Vector3f(1, 1, 1);
