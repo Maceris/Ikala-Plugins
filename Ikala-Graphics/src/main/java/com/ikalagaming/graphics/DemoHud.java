@@ -80,7 +80,7 @@ public class DemoHud implements Hud {
 	 * @param window The window we are drawing on.
 	 */
 	public void updateSize(Window window) {
-		this.statusTextItem.setPosition(10f, window.getHeight() - 50f, 0);
+		this.statusTextItem.setPosition(10f, 10f, 0);
 		this.compassItem.setPosition(window.getWidth() - 40f, 50f, 0);
 	}
 

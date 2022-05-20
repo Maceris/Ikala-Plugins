@@ -54,6 +54,20 @@ public class GraphicsManager {
 	 */
 	private static double nextRenderTime;
 
+	/**
+	 * The current time, stored here to prevent extra doubles.
+	 */
+	private static double currentTime;
+	/**
+	 * The last time we rendered a frame, for calculating FPS.
+	 */
+	private static double lastTime;
+
+	/**
+	 * How many frames we rendered since we calculated FPS.
+	 */
+	private static double framesSinceLastCalculation;
+
 	@Getter(value = AccessLevel.PACKAGE)
 	private static AtomicBoolean shutdownFlag = new AtomicBoolean(false);
 
@@ -150,7 +164,7 @@ public class GraphicsManager {
 
 		// HUD
 		try {
-			GraphicsManager.hud = new DemoHud("DEMO");
+			GraphicsManager.hud = new DemoHud("FPS");
 		}
 		catch (Exception e) {
 			throw new WindowCreationException(e);
@@ -160,6 +174,7 @@ public class GraphicsManager {
 		GraphicsManager.timer.init();
 		GraphicsManager.nextRenderTime = GraphicsManager.timer.getLastLoopTime()
 			+ GraphicsManager.FRAME_TIME;
+		GraphicsManager.lastTime = GLFW.glfwGetTime();
 	}
 
 	/**
@@ -178,6 +193,16 @@ public class GraphicsManager {
 		GraphicsManager.updateDirectionalLight();
 		GraphicsManager.hud.updateSize(GraphicsManager.window);
 
+		// Calculate and render FPS
+		GraphicsManager.currentTime = GLFW.glfwGetTime();
+		GraphicsManager.framesSinceLastCalculation++;
+		if (currentTime - lastTime >= 1d) {
+			GraphicsManager.hud.setStatusText(String.format("%.0f",
+				1000d / GraphicsManager.framesSinceLastCalculation));
+			GraphicsManager.framesSinceLastCalculation = 0;
+			GraphicsManager.lastTime = GLFW.glfwGetTime();
+		}
+
 		GraphicsManager.renderer.render(GraphicsManager.window,
 			GraphicsManager.cameraManager.getCamera(), GraphicsManager.scene,
 			GraphicsManager.hud);
@@ -187,6 +212,7 @@ public class GraphicsManager {
 		// Update the next time we should render a frame
 		GraphicsManager.nextRenderTime = GraphicsManager.timer.getLastLoopTime()
 			+ GraphicsManager.FRAME_TIME;
+
 	}
 
 	/**
