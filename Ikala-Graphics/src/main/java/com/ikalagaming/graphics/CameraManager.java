@@ -58,22 +58,22 @@ public class CameraManager {
 		this.mouseInput.input(this.window);
 		this.cameraInc.set(0, 0, 0);
 		if (this.window.isKeyPressed(GLFW.GLFW_KEY_W)) {
-			this.cameraInc.z = -CameraManager.CAMERA_INCREMENT;
+			this.cameraInc.z -= CameraManager.CAMERA_INCREMENT;
 		}
-		else if (this.window.isKeyPressed(GLFW.GLFW_KEY_S)) {
-			this.cameraInc.z = CameraManager.CAMERA_INCREMENT;
+		if (this.window.isKeyPressed(GLFW.GLFW_KEY_S)) {
+			this.cameraInc.z += CameraManager.CAMERA_INCREMENT;
 		}
 		if (this.window.isKeyPressed(GLFW.GLFW_KEY_A)) {
-			this.cameraInc.x = -CameraManager.CAMERA_INCREMENT;
+			this.cameraInc.x -= CameraManager.CAMERA_INCREMENT;
 		}
-		else if (this.window.isKeyPressed(GLFW.GLFW_KEY_D)) {
-			this.cameraInc.x = CameraManager.CAMERA_INCREMENT;
+		if (this.window.isKeyPressed(GLFW.GLFW_KEY_D)) {
+			this.cameraInc.x += CameraManager.CAMERA_INCREMENT;
 		}
 		if (this.window.isKeyPressed(GLFW.GLFW_KEY_LEFT_SHIFT)) {
-			this.cameraInc.y = -CameraManager.CAMERA_INCREMENT;
+			this.cameraInc.y -= CameraManager.CAMERA_INCREMENT;
 		}
-		else if (this.window.isKeyPressed(GLFW.GLFW_KEY_SPACE)) {
-			this.cameraInc.y = CameraManager.CAMERA_INCREMENT;
+		if (this.window.isKeyPressed(GLFW.GLFW_KEY_SPACE)) {
+			this.cameraInc.y += CameraManager.CAMERA_INCREMENT;
 		}
 		if (this.cameraInc.length() != 0) {
 			this.cameraInc.normalize(CameraManager.CAMERA_INCREMENT);

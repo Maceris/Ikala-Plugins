@@ -62,6 +62,14 @@ public class GraphicsManager {
 	 * The last time we rendered a frame, for calculating FPS.
 	 */
 	private static double lastTime;
+	/**
+	 * The location of the camera last time we rendered a frame.
+	 */
+	private static Vector3f lastCameraPosition = new Vector3f();
+	/**
+	 * The current camera position.
+	 */
+	private static Vector3f currentCameraPosition = new Vector3f();
 
 	/**
 	 * How many frames we rendered since we calculated FPS.
@@ -106,7 +114,7 @@ public class GraphicsManager {
 	/**
 	 * The heads up display.
 	 */
-	private static DemoHud hud;
+	private static DebugHud hud;
 
 	/**
 	 * Creates a graphics window, fires off a {@link WindowCreated} event. Won't
@@ -164,7 +172,7 @@ public class GraphicsManager {
 
 		// HUD
 		try {
-			GraphicsManager.hud = new DemoHud("FPS");
+			GraphicsManager.hud = new DebugHud();
 		}
 		catch (Exception e) {
 			throw new WindowCreationException(e);
@@ -191,17 +199,13 @@ public class GraphicsManager {
 		}
 
 		GraphicsManager.updateDirectionalLight();
-		GraphicsManager.hud.updateSize(GraphicsManager.window);
 
-		// Calculate and render FPS
-		GraphicsManager.currentTime = GLFW.glfwGetTime();
-		GraphicsManager.framesSinceLastCalculation++;
-		if (currentTime - lastTime >= 1d) {
-			GraphicsManager.hud.setStatusText(String.format("%.0f",
-				1000d / GraphicsManager.framesSinceLastCalculation));
-			GraphicsManager.framesSinceLastCalculation = 0;
-			GraphicsManager.lastTime = GLFW.glfwGetTime();
-		}
+		final float elapsedTime = GraphicsManager.timer.getElapsedTime();
+
+		GraphicsManager.cameraManager.processInput();
+		GraphicsManager.cameraManager.updateCamera(elapsedTime);
+
+		GraphicsManager.updateHud(elapsedTime);
 
 		GraphicsManager.renderer.render(GraphicsManager.window,
 			GraphicsManager.cameraManager.getCamera(), GraphicsManager.scene,
@@ -291,20 +295,12 @@ public class GraphicsManager {
 			GraphicsManager.terminate();
 			return Launcher.STATUS_OK;
 		}
-		
+
 		if (GraphicsManager.window.windowShouldClose()) {
 			GraphicsManager.window.destroy();
 			GraphicsManager.window = null;
 			return Launcher.STATUS_REQUEST_REMOVAL;
 		}
-
-		final float elapsedTime = GraphicsManager.timer.getElapsedTime();
-
-		GraphicsManager.cameraManager.processInput();
-		GraphicsManager.cameraManager.updateCamera(elapsedTime);
-
-		GraphicsManager.hud.rotateCompass(
-			GraphicsManager.cameraManager.getCamera().getRotation().y);
 
 		if (GraphicsManager.timer.getTime() >= GraphicsManager.nextRenderTime) {
 			GraphicsManager.render();
@@ -363,6 +359,41 @@ public class GraphicsManager {
 			.getDirection().x = (float) Math.sin(angRad);
 		GraphicsManager.scene.getSceneLight().getDirectionalLight()
 			.getDirection().y = (float) Math.cos(angRad);
+	}
+
+	private static void updateHud(final float elapsedTime) {
+		GraphicsManager.hud.updateSize(GraphicsManager.window);
+		GraphicsManager.hud.rotateCompass(
+			GraphicsManager.cameraManager.getCamera().getRotation().y);
+
+		// Calculate and render FPS
+		GraphicsManager.currentTime = GLFW.glfwGetTime();
+		GraphicsManager.framesSinceLastCalculation++;
+		if (GraphicsManager.currentTime - GraphicsManager.lastTime >= 1d) {
+			GraphicsManager.hud.setFPS(String.format("FPS: %.0f",
+				1000d / GraphicsManager.framesSinceLastCalculation));
+			GraphicsManager.framesSinceLastCalculation = 0;
+			GraphicsManager.lastTime = GLFW.glfwGetTime();
+		}
+
+		Vector3f position =
+			GraphicsManager.cameraManager.getCamera().getPosition();
+		GraphicsManager.hud.setCameraPosition(
+			String.format("Camera Pos (x, y, z): (%.2f, %.2f, %.2f)",
+				position.x, position.y, position.z));
+		GraphicsManager.lastCameraPosition
+			.set(GraphicsManager.currentCameraPosition);
+		GraphicsManager.currentCameraPosition
+			.set(GraphicsManager.cameraManager.getCamera().getPosition());
+
+		GraphicsManager.hud.setCameraSpeed(
+			String.format("Camera Speed (x, y, z): (%.2f, %.2f, %.2f)",
+				(GraphicsManager.currentCameraPosition.x
+					- GraphicsManager.lastCameraPosition.x) / elapsedTime,
+				(GraphicsManager.currentCameraPosition.y
+					- GraphicsManager.lastCameraPosition.y) / elapsedTime,
+				(GraphicsManager.currentCameraPosition.z
+					- GraphicsManager.lastCameraPosition.z) / elapsedTime));
 	}
 
 	/**
