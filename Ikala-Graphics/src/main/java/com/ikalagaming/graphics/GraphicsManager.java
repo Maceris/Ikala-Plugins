@@ -291,10 +291,7 @@ public class GraphicsManager {
 			GraphicsManager.terminate();
 			return Launcher.STATUS_OK;
 		}
-
-		// Poll for window events
-		GLFW.glfwPollEvents();
-
+		
 		if (GraphicsManager.window.windowShouldClose()) {
 			GraphicsManager.window.destroy();
 			GraphicsManager.window = null;
