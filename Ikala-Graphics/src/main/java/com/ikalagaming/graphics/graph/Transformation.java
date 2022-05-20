@@ -18,6 +18,7 @@ public class Transformation {
 	private final Matrix4f projectionMatrix;
 	private final Matrix4f viewMatrix;
 	private final Matrix4f orthoMatrix;
+	private final Matrix4f orthoModelMatrix;
 
 	/**
 	 * Create a new transformation.
@@ -28,6 +29,46 @@ public class Transformation {
 		this.projectionMatrix = new Matrix4f();
 		this.viewMatrix = new Matrix4f();
 		this.orthoMatrix = new Matrix4f();
+		this.orthoModelMatrix = new Matrix4f();
+	}
+
+	/**
+	 * Build a model view matrix for the given scene item.
+	 *
+	 * @param sceneItem The item to generate a transformation matrix for.
+	 * @param cameraViewMatrix The view matrix.
+	 * @return The model view matrix for the given item.
+	 */
+	public Matrix4f buildModelViewMatrix(SceneItem sceneItem,
+		Matrix4f cameraViewMatrix) {
+		Vector3f rotation = sceneItem.getRotation();
+		this.modelMatrix.identity().translate(sceneItem.getPosition())
+			.rotateX((float) Math.toRadians(-rotation.x))
+			.rotateY((float) Math.toRadians(-rotation.y))
+			.rotateZ((float) Math.toRadians(-rotation.z))
+			.scale(sceneItem.getScale());
+		this.modelViewMatrix.set(cameraViewMatrix);
+		return this.modelViewMatrix.mul(this.modelMatrix);
+	}
+
+	/**
+	 * Build an Orthographic projection matrix of a model.
+	 *
+	 * @param sceneItem The item to calculate a matrix for.
+	 * @param orthographciMatrix The orthographic projection matrix.
+	 * @return The projection matrix for the given model.
+	 */
+	public Matrix4f buildOrthoProjModelMatrix(SceneItem sceneItem,
+		Matrix4f orthographciMatrix) {
+		Vector3f rotation = sceneItem.getRotation();
+		this.modelMatrix.identity().translate(sceneItem.getPosition())
+			.rotateX((float) Math.toRadians(-rotation.x))
+			.rotateY((float) Math.toRadians(-rotation.y))
+			.rotateZ((float) Math.toRadians(-rotation.z))
+			.scale(sceneItem.getScale());
+		this.orthoModelMatrix.set(orthographciMatrix);
+		this.orthoModelMatrix.mul(this.modelMatrix);
+		return this.orthoModelMatrix;
 	}
 
 	/**
@@ -79,13 +120,13 @@ public class Transformation {
 	public Matrix4f getOrtoProjModelMatrix(SceneItem gameItem,
 		Matrix4f orthographicMatrix) {
 		Vector3f rotation = gameItem.getRotation();
-		modelMatrix.identity().translate(gameItem.getPosition())
+		this.modelMatrix.identity().translate(gameItem.getPosition())
 			.rotateX((float) Math.toRadians(-rotation.x))
 			.rotateY((float) Math.toRadians(-rotation.y))
 			.rotateZ((float) Math.toRadians(-rotation.z))
 			.scale(gameItem.getScale());
 		Matrix4f orthoMatrixCurr = new Matrix4f(orthographicMatrix);
-		orthoMatrixCurr.mul(modelMatrix);
+		orthoMatrixCurr.mul(this.modelMatrix);
 		return orthoMatrixCurr;
 	}
 
@@ -105,25 +146,6 @@ public class Transformation {
 		this.projectionMatrix.identity();
 		this.projectionMatrix.perspective(fov, aspectRatio, zNear, zFar);
 		return this.projectionMatrix;
-	}
-
-	/**
-	 * Build a model view matrix for the given scene item.
-	 * 
-	 * @param sceneItem The item to generate a transformation matrix for.
-	 * @param cameraViewMatrix The view matrix.
-	 * @return The model view matrix for the given item.
-	 */
-	public Matrix4f buildModelViewMatrix(SceneItem sceneItem,
-		Matrix4f cameraViewMatrix) {
-		Vector3f rotation = sceneItem.getRotation();
-		modelMatrix.identity().translate(sceneItem.getPosition())
-			.rotateX((float) Math.toRadians(-rotation.x))
-			.rotateY((float) Math.toRadians(-rotation.y))
-			.rotateZ((float) Math.toRadians(-rotation.z))
-			.scale(sceneItem.getScale());
-		modelViewMatrix.set(cameraViewMatrix);
-		return modelViewMatrix.mul(modelMatrix);
 	}
 
 	/**

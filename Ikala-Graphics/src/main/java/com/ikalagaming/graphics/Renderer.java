@@ -107,7 +107,7 @@ public class Renderer {
 			Mesh mesh = gameItem.getMesh();
 			// Set orthographic and model matrix for this HUD item
 			Matrix4f projModelMatrix =
-				this.transformation.getOrtoProjModelMatrix(gameItem, ortho);
+				this.transformation.buildOrthoProjModelMatrix(gameItem, ortho);
 			this.hudShaderProgram.setUniform(
 				ShaderConstants.Uniform.HUD.PROJECTION_MATRIX, projModelMatrix);
 			this.hudShaderProgram.setUniform(ShaderConstants.Uniform.HUD.COLOR,
@@ -286,10 +286,10 @@ public class Renderer {
 		try {
 			this.hudShaderProgram.createVertexShader(FileUtils.readAsString(
 				PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
-					ResourceType.DATA, "shaders/hud_vertex.vs")));
+					ResourceType.DATA, "/shaders/hud_vertex.vs")));
 			this.hudShaderProgram.createFragmentShader(FileUtils.readAsString(
 				PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
-					ResourceType.DATA, "shaders/hud_fragment.fs")));
+					ResourceType.DATA, "/shaders/hud_fragment.fs")));
 		}
 		catch (ShaderException e) {
 			Renderer.log.error(SafeResourceLoader.getString(
@@ -312,10 +312,10 @@ public class Renderer {
 		try {
 			this.sceneShaderProgram.createVertexShader(FileUtils.readAsString(
 				PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
-					ResourceType.DATA, "shaders/vertex.vs")));
+					ResourceType.DATA, "/shaders/vertex.vs")));
 			this.sceneShaderProgram.createFragmentShader(FileUtils.readAsString(
 				PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
-					ResourceType.DATA, "shaders/fragment.fs")));
+					ResourceType.DATA, "/shaders/fragment.fs")));
 		}
 		catch (ShaderException e) {
 			Renderer.log.error(SafeResourceLoader.getString(
@@ -356,10 +356,10 @@ public class Renderer {
 		this.skyBoxShaderProgram = new ShaderProgram();
 		this.skyBoxShaderProgram.createVertexShader(FileUtils
 			.readAsString(PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
-				ResourceType.DATA, "shaders/skybox_vertex.vs")));
+				ResourceType.DATA, "/shaders/skybox_vertex.vs")));
 		this.skyBoxShaderProgram.createFragmentShader(FileUtils
 			.readAsString(PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
-				ResourceType.DATA, "shaders/skybox_fragment.fs")));
+				ResourceType.DATA, "/shaders/skybox_fragment.fs")));
 		this.skyBoxShaderProgram.link();
 
 		// Create uniforms for projection matrix

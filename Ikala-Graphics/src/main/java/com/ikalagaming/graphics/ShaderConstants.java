@@ -2,7 +2,7 @@ package com.ikalagaming.graphics;
 
 /**
  * Common definitions of the fields that we need when interacting with shaders.
- * 
+ *
  * This may be replaced at some point by a file based specification.
  *
  * @author Ches Burks
@@ -11,7 +11,7 @@ package com.ikalagaming.graphics;
 public class ShaderConstants {
 	/**
 	 * To be used to dynamically load in shaders.
-	 * 
+	 *
 	 * @author Ches Burks
 	 *
 	 */
@@ -311,29 +311,6 @@ public class ShaderConstants {
 		 * @author Ches Burks
 		 *
 		 */
-		public static class Vertex {
-			/**
-			 * A combination of the view matrix and world matrix.
-			 */
-			public static final String MODEL_VIEW_MATRIX = "modelViewMatrix";
-			/**
-			 * Used to calculate the position when projected onto the screen
-			 * space.
-			 */
-			public static final String PROJECTION_MATRIX = "projectionMatrix";
-
-			/**
-			 * Private constructor so this class is not instantiated.
-			 */
-			private Vertex() {}
-		}
-
-		/**
-		 * Vertex shader variables.
-		 *
-		 * @author Ches Burks
-		 *
-		 */
 		public static class HUD {
 			/**
 			 * Used to calculate the position when projecting a model onto the
@@ -356,6 +333,29 @@ public class ShaderConstants {
 			 * Private constructor so this class is not instantiated.
 			 */
 			private HUD() {}
+		}
+
+		/**
+		 * Vertex shader variables.
+		 *
+		 * @author Ches Burks
+		 *
+		 */
+		public static class Vertex {
+			/**
+			 * A combination of the view matrix and world matrix.
+			 */
+			public static final String MODEL_VIEW_MATRIX = "modelViewMatrix";
+			/**
+			 * Used to calculate the position when projected onto the screen
+			 * space.
+			 */
+			public static final String PROJECTION_MATRIX = "projectionMatrix";
+
+			/**
+			 * Private constructor so this class is not instantiated.
+			 */
+			private Vertex() {}
 		}
 
 		/**

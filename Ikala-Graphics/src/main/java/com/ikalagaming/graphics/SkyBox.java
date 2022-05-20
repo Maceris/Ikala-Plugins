@@ -6,7 +6,7 @@ import com.ikalagaming.graphics.graph.Texture;
 
 /**
  * A sky box that provides a backdrop for the environment.
- * 
+ *
  * @author Ches Burks
  *
  */
@@ -14,7 +14,7 @@ public class SkyBox extends SceneItem {
 
 	/**
 	 * Set up a new skybox.
-	 * 
+	 *
 	 * @param objModel The model to use for the box.
 	 * @param textureFile The name of the file to use for the texture.
 	 */
@@ -23,7 +23,7 @@ public class SkyBox extends SceneItem {
 		Mesh skyBoxMesh = OBJLoader.loadMesh(objModel);
 		Texture skyBoxtexture = new Texture(textureFile);
 		skyBoxMesh.setMaterial(new Material(skyBoxtexture, 0.0f));
-		setMesh(skyBoxMesh);
-		setPosition(0, 0, 0);
+		this.setMesh(skyBoxMesh);
+		this.setPosition(0, 0, 0);
 	}
 }

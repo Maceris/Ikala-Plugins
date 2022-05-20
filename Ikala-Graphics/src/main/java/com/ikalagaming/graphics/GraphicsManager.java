@@ -1,15 +1,11 @@
 package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.events.WindowCreated;
-import com.ikalagaming.graphics.exceptions.MeshException;
-import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.graphics.exceptions.WindowCreationException;
 import com.ikalagaming.graphics.graph.DirectionalLight;
-import com.ikalagaming.graphics.graph.Material;
-import com.ikalagaming.graphics.graph.Mesh;
 import com.ikalagaming.graphics.graph.PointLight;
 import com.ikalagaming.graphics.graph.SpotLight;
-import com.ikalagaming.graphics.graph.Texture;
+import com.ikalagaming.graphics.graph.Terrain;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -128,55 +124,22 @@ public class GraphicsManager {
 
 		GraphicsManager.scene = new Scene();
 
-		Texture texture;
+		float skyBoxScale = 50.0f;
+		float terrainScale = 100;
+		int terrainSize = 3;
+		float minY = -0.1f;
+		float maxY = 0.1f;
+		int textInc = 40;
+		Terrain terrain;
 		try {
-			texture = new Texture("textures/grassblock.png");
+			terrain = new Terrain(terrainSize, terrainScale, minY, maxY,
+				"textures/heightmap.png", "textures/terrain.png", textInc);
 		}
-		catch (TextureException e) {
+		catch (Exception e) {
 			throw new WindowCreationException(e);
 		}
-		Mesh mesh;
-		try {
-			mesh = OBJLoader.loadMesh("models/cube.obj");
-		}
-		catch (MeshException e) {
-			throw new WindowCreationException(e);
-		}
 
-		float reflectance = 1f;
-		Material material = new Material(texture, reflectance);
-		mesh.setMaterial(material);
-
-		final float blockScale = 0.5f;
-		final float skyBoxScale = 50.0f;
-		final float extension = 2.0f;
-
-		final float startx = extension * (-skyBoxScale + blockScale);
-		final float startz = extension * (skyBoxScale - blockScale);
-		final float starty = -1.0f;
-		final float inc = blockScale * 2;
-
-		float posx = startx;
-		float posz = startz;
-		float incY = 0.0f;
-		final int NUM_ROWS = (int) (extension * skyBoxScale * 2 / inc);
-		final int NUM_COLS = (int) (extension * skyBoxScale * 2 / inc);
-		SceneItem[] gameItems = new SceneItem[NUM_ROWS * NUM_COLS];
-		for (int i = 0; i < NUM_ROWS; i++) {
-			for (int j = 0; j < NUM_COLS; j++) {
-				SceneItem sceneItem = new SceneItem(mesh);
-				sceneItem.setScale(blockScale);
-				incY = Math.random() > 0.9f ? blockScale * 2 : 0f;
-				sceneItem.setPosition(posx, starty + incY, posz);
-				gameItems[i * NUM_COLS + j] = sceneItem;
-
-				posx += inc;
-			}
-			posx = startx;
-			posz -= inc;
-		}
-
-		GraphicsManager.scene.setSceneItems(gameItems);
+		GraphicsManager.scene.setSceneItems(terrain.getSceneItems());
 
 		// Setup SkyBox
 		SkyBox skyBox = new SkyBox("/models/skybox.obj", "textures/skybox.png");
@@ -206,9 +169,10 @@ public class GraphicsManager {
 		// clear the framebuffer
 		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
 
-		if (window.isResized()) {
-			GL11.glViewport(0, 0, window.getWidth(), window.getHeight());
-			window.setResized(false);
+		if (GraphicsManager.window.isResized()) {
+			GL11.glViewport(0, 0, GraphicsManager.window.getWidth(),
+				GraphicsManager.window.getHeight());
+			GraphicsManager.window.setResized(false);
 		}
 
 		GraphicsManager.updateDirectionalLight();
