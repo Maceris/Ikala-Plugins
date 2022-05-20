@@ -370,8 +370,9 @@ public class GraphicsManager {
 		GraphicsManager.currentTime = GLFW.glfwGetTime();
 		GraphicsManager.framesSinceLastCalculation++;
 		if (GraphicsManager.currentTime - GraphicsManager.lastTime >= 1d) {
-			GraphicsManager.hud.setFPS(String.format("FPS: %.0f",
-				1000d / GraphicsManager.framesSinceLastCalculation));
+			GraphicsManager.hud.setFPS(String.format("FPS: %.0f (%.2f ms)",
+				1000d / GraphicsManager.framesSinceLastCalculation,
+				elapsedTime * 1000));
 			GraphicsManager.framesSinceLastCalculation = 0;
 			GraphicsManager.lastTime = GLFW.glfwGetTime();
 		}
