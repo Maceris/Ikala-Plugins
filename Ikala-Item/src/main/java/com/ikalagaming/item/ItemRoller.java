@@ -37,6 +37,7 @@ public class ItemRoller {
 		modified.setLevelRequirement(template.getLevelRequirement());
 		modified.setItemStats(
 			ItemRoller.rollItemStats(template.getItemStatsTemplate()));
+		modified.setAffixes(template.getAffixes());
 	}
 
 	/**
@@ -66,8 +67,8 @@ public class ItemRoller {
 	}
 
 	/**
-	 * Generate an amount +/- some variance. Variance should be between 0 and
-	 * amount, inclusive, if you want it to behave as expected.
+	 * Generate an amount +/- some variance. Variance should be between 1 and
+	 * amount, we will take the absolute value of the variance if negative.
 	 *
 	 * @param amount The amount.
 	 * @param variance The distance from the amount we can generate values
@@ -75,8 +76,11 @@ public class ItemRoller {
 	 * @return The random amount given the base amount and variance.
 	 */
 	private static int rollAmount(final int amount, final int variance) {
-		return amount + ItemRoller.rand.nextInt(2 * variance + 1) - variance
-			- 1;
+		final int absVariance = Math.abs(variance);
+		if (absVariance <= 0) {
+			return amount;
+		}
+		return amount + ItemRoller.rand.nextInt(2 * absVariance) - absVariance;
 	}
 
 	/**

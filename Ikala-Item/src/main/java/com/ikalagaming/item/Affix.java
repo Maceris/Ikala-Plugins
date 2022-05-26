@@ -3,6 +3,7 @@ package com.ikalagaming.item;
 import com.ikalagaming.item.enums.AffixType;
 import com.ikalagaming.item.enums.Quality;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -14,6 +15,7 @@ import lombok.Setter;
  */
 @Getter
 @Setter
+@EqualsAndHashCode
 public class Affix {
 	/**
 	 * The unique name of the affix, which should follow a standard format and

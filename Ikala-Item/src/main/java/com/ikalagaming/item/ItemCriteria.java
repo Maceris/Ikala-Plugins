@@ -5,6 +5,7 @@ import com.ikalagaming.item.enums.ArmorType;
 import com.ikalagaming.item.enums.ItemType;
 import com.ikalagaming.item.enums.WeaponType;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -19,7 +20,16 @@ import java.util.List;
  */
 @Getter
 @Setter
+@EqualsAndHashCode
 public class ItemCriteria {
+
+	/**
+	 * The minimum item level requirement for this item.
+	 *
+	 * @param levelRequirement The item level requirement for this item.
+	 * @return The item level requirement for this item.
+	 */
+	private Integer levelRequirement;
 
 	/**
 	 * The types of items that are relevant.

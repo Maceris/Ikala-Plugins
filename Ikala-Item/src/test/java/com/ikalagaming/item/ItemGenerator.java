@@ -3,6 +3,7 @@ package com.ikalagaming.item;
 import com.ikalagaming.attributes.Attribute;
 import com.ikalagaming.attributes.DamageType;
 import com.ikalagaming.item.enums.AccessoryType;
+import com.ikalagaming.item.enums.AffixType;
 import com.ikalagaming.item.enums.ArmorType;
 import com.ikalagaming.item.enums.ComponentType;
 import com.ikalagaming.item.enums.ConsumableType;
@@ -20,6 +21,8 @@ import com.ikalagaming.item.template.ItemStatsTemplate;
 import com.ikalagaming.item.template.WeaponTemplate;
 import com.ikalagaming.random.RandomGen;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -74,6 +77,22 @@ class ItemGenerator {
 			+ ItemGenerator.nextID.getAndIncrement());
 		ItemGenerator.populateEquipmentTemplate(accessory);
 		return accessory;
+	}
+
+	/**
+	 * Generate a random affix.
+	 *
+	 * @return The randomly generated affix.
+	 */
+	public static Affix getAffix() {
+		Affix affix = new Affix();
+		affix.setAffixType(
+			ItemGenerator.random.selectEnumValue(AffixType.class));
+		affix.setID("Affix_" + ItemGenerator.nextID.getAndIncrement());
+		affix.setItemCriteria(ItemGenerator.getItemCriteria());
+		affix.setItemStats(ItemGenerator.getItemStats());
+		affix.setQuality(ItemGenerator.random.selectEnumValue(Quality.class));
+		return affix;
 	}
 
 	/**
@@ -167,6 +186,7 @@ class ItemGenerator {
 			+ component.getComponentType().getPrefix()
 			+ ItemGenerator.nextID.getAndIncrement());
 		component.setItemStats(ItemGenerator.getItemStats());
+		component.setItemCriteria(ItemGenerator.getItemCriteria());
 
 		return component;
 	}
@@ -242,6 +262,47 @@ class ItemGenerator {
 			.setType(ItemGenerator.random.selectEnumValue(ModifierType.class));
 		damage.setVariance(ItemGenerator.rand.nextInt(damage.getAmount()));
 		return damage;
+	}
+
+	/**
+	 * Generate random item criteria.
+	 *
+	 * @return The randomly generated item criteria.
+	 */
+	private static ItemCriteria getItemCriteria() {
+		ItemCriteria itemCriteria = new ItemCriteria();
+
+		List<ItemType> itemTypes = new ArrayList<>();
+		switch (ItemGenerator.rand.nextInt(3)) {
+			case 0:
+				itemTypes.add(ItemType.ACCESSORY);
+				itemCriteria.setItemTypes(itemTypes);
+				List<AccessoryType> accessoryTypes = new ArrayList<>();
+				accessoryTypes.add(
+					ItemGenerator.random.selectEnumValue(AccessoryType.class));
+				itemCriteria.setAccessoryTypes(accessoryTypes);
+				break;
+			case 1:
+				itemTypes.add(ItemType.ARMOR);
+				itemCriteria.setItemTypes(itemTypes);
+				List<ArmorType> armorTypes = new ArrayList<>();
+				armorTypes
+					.add(ItemGenerator.random.selectEnumValue(ArmorType.class));
+				itemCriteria.setArmorTypes(armorTypes);
+				break;
+			case 2:
+			default:
+				itemTypes.add(ItemType.WEAPON);
+				itemCriteria.setItemTypes(itemTypes);
+				List<WeaponType> weaponTypes = new ArrayList<>();
+				weaponTypes.add(
+					ItemGenerator.random.selectEnumValue(WeaponType.class));
+				itemCriteria.setWeaponTypes(weaponTypes);
+				break;
+		}
+		itemCriteria.setLevelRequirement(ItemGenerator.rand.nextInt(100));
+
+		return itemCriteria;
 	}
 
 	/**
@@ -406,6 +467,9 @@ class ItemGenerator {
 		equipment
 			.setLevelRequirement(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
 		equipment.setItemStats(ItemGenerator.getItemStats());
+		List<Affix> affixes = new ArrayList<>();
+		affixes.add(ItemGenerator.getAffix());
+		equipment.setAffixes(affixes);
 	}
 
 	/**
@@ -422,5 +486,8 @@ class ItemGenerator {
 		template
 			.setLevelRequirement(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
 		template.setItemStatsTemplate(ItemGenerator.getItemStatsTemplate());
+		List<Affix> affixes = new ArrayList<>();
+		affixes.add(ItemGenerator.getAffix());
+		template.setAffixes(affixes);
 	}
 }

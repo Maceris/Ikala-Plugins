@@ -13,9 +13,9 @@ import java.util.List;
  * @author Ches Burks
  *
  */
-@EqualsAndHashCode
 @Getter
 @Setter
+@EqualsAndHashCode
 public class ItemStats {
 	/**
 	 * Buffs to damage done by the wielder of this item.

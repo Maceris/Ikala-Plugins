@@ -1,5 +1,6 @@
 package com.ikalagaming.item.template;
 
+import com.ikalagaming.item.Affix;
 import com.ikalagaming.item.Item;
 
 import lombok.EqualsAndHashCode;
@@ -11,7 +12,7 @@ import java.util.List;
 
 /**
  * A template for equipment.
- * 
+ *
  * @author Ches Burks
  *
  */
@@ -20,21 +21,17 @@ import java.util.List;
 @Setter
 public class EquipmentTemplate extends Item {
 	/**
-	 * Construct a new equipment template.
-	 */
-	public EquipmentTemplate() {}
-
-	/**
 	 * The level requirement required for using this equipment.
-	 * 
+	 *
 	 * @param levelRequirement The level that is required in order to equip this
 	 *            item.
 	 * @return The level that is required in order to equip this item.
 	 */
 	private Integer levelRequirement;
+
 	/**
 	 * The minimum attribute values that are required for using this equipment.
-	 * 
+	 *
 	 * @param attributeRequirements The minimum attribute values that are
 	 *            required for using this equipment.
 	 * @return The minimum attribute values that are required for using this
@@ -43,10 +40,23 @@ public class EquipmentTemplate extends Item {
 	private List<AttributeModifierTemplate> attributeRequirements =
 		new ArrayList<>();
 	/**
+	 * The affixes for this equipment.
+	 *
+	 * @param affixes The affixes for this item.
+	 * @return The affixes for this item.
+	 */
+	private List<Affix> affixes = new ArrayList<>();
+
+	/**
 	 * Stat bonuses provided by the item.
-	 * 
+	 *
 	 * @param itemStatsTemplate The stat bonuses provided by the item.
 	 * @return The stat bonuses provided by the item.
 	 */
 	private ItemStatsTemplate itemStatsTemplate = new ItemStatsTemplate();
+
+	/**
+	 * Construct a new equipment template.
+	 */
+	public EquipmentTemplate() {}
 }

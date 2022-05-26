@@ -34,6 +34,14 @@ public class Component extends Item {
 	private ItemStats itemStats = new ItemStats();
 
 	/**
+	 * The types of items this component can be applied to.
+	 *
+	 * @param itemCriteria The types of items this component can be applied to.
+	 * @return The types of items this component can be applied to.
+	 */
+	private ItemCriteria itemCriteria = new ItemCriteria();
+
+	/**
 	 * Constructs a new component.
 	 */
 	public Component() {}

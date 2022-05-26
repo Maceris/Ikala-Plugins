@@ -2,7 +2,7 @@ package com.ikalagaming.item.enums;
 
 /**
  * What type of affix we have.
- * 
+ *
  * @author Ches Burks
  *
  */

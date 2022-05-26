@@ -9,7 +9,7 @@ import java.util.List;
 
 /**
  * A block of item stats.
- * 
+ *
  * @author Ches Burks
  *
  */
@@ -18,17 +18,13 @@ import java.util.List;
 @Setter
 public class ItemStatsTemplate {
 	/**
-	 * Construct a new item stat template.
-	 */
-	public ItemStatsTemplate() {}
-
-	/**
 	 * Buffs to damage done by the wielder of this item.
 	 *
 	 * @param damageBuffs Buffs to damage done by the wielder of this item.
 	 * @return Buffs to damage done by the wielder of this item.
 	 */
 	private List<DamageModifierTemplate> damageBuffs = new ArrayList<>();
+
 	/**
 	 * Buffs to damage resistance that the item provides to the wielder.
 	 *
@@ -45,4 +41,9 @@ public class ItemStatsTemplate {
 	 * @return Buffs to attributes that the item provides to the wielder.
 	 */
 	private List<AttributeModifierTemplate> attributeBuffs = new ArrayList<>();
+
+	/**
+	 * Construct a new item stat template.
+	 */
+	public ItemStatsTemplate() {}
 }
