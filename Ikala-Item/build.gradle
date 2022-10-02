@@ -48,6 +48,7 @@ dependencies {
 	implementation project(':Ikala-Core')
 	compileOnly project(':Ikala-Attributes')
 	compileOnly project(':Random')
+	compileOnly project(':Ikala-Database')
 
 	// Testing
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"

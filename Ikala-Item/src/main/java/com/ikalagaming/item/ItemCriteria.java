@@ -24,14 +24,6 @@ import java.util.List;
 public class ItemCriteria {
 
 	/**
-	 * The minimum item level requirement for this item.
-	 *
-	 * @param levelRequirement The item level requirement for this item.
-	 * @return The item level requirement for this item.
-	 */
-	private Integer levelRequirement;
-
-	/**
 	 * The types of items that are relevant.
 	 *
 	 * @param itemTypes The categories of items that are relevant.

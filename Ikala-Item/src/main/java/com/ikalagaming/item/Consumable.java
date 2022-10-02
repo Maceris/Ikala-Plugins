@@ -6,6 +6,10 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
+import javax.persistence.Column;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
+
 /**
  * An item that is consumed by using it.
  *
@@ -22,6 +26,8 @@ public class Consumable extends Item {
 	 * @param consumableType The type of consumable this item is.
 	 * @return The type of consumable this item is.
 	 */
+	@Column(name = "CONSUMABLE_TYPE")
+	@Enumerated(EnumType.STRING)
 	private ConsumableType consumableType;
 
 	/**

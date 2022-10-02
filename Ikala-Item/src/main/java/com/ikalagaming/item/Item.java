@@ -7,6 +7,10 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
+import javax.persistence.Column;
+import javax.persistence.Id;
+import javax.persistence.MappedSuperclass;
+
 /**
  * An item in the game.
  *
@@ -16,6 +20,7 @@ import lombok.Setter;
 @EqualsAndHashCode
 @Getter
 @Setter
+@MappedSuperclass
 public class Item {
 	/**
 	 * The category of the item, such as a weapon or consumable.
@@ -23,6 +28,7 @@ public class Item {
 	 * @param itemType The type of the item, like a weapon or consumable.
 	 * @return The type of the item, like a weapon or consumable.
 	 */
+	@Column(name = "ITEM_TYPE")
 	private ItemType itemType;
 
 	/**
@@ -32,6 +38,7 @@ public class Item {
 	 * @param ID The name of the item in the database/code level.
 	 * @return The name of the item in the database/code level.
 	 */
+	@Id
 	private String ID;
 	/**
 	 * The quality of the items, which helps specify how rare or powerful it is.
@@ -41,6 +48,7 @@ public class Item {
 	 * @param quality The quality the item is.
 	 * @return The quality of the item.
 	 */
+	@Column(name = "QUALITY")
 	private Quality quality;
 	/**
 	 * The expected level that this item should drop in. Level 10 items would be
@@ -52,6 +60,7 @@ public class Item {
 	 *            encountered.
 	 * @return The expected level where this item is expected to be encountered.
 	 */
+	@Column(name = "ITEM_LEVEL")
 	private Integer itemLevel;
 
 	/**

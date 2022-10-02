@@ -6,6 +6,10 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
+import javax.persistence.Column;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
+
 /**
  * A template for generating accessories from.
  *
@@ -23,6 +27,8 @@ public class AccessoryTemplate extends EquipmentTemplate {
 	 * @param accessoryType The classification of accessory.
 	 * @return The classification of accessory.
 	 */
+	@Column(name = "ACCESSORY_TYPE")
+	@Enumerated(EnumType.STRING)
 	private AccessoryType accessoryType;
 
 	/**

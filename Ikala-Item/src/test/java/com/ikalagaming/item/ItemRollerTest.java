@@ -184,8 +184,6 @@ class ItemRollerTest {
 			actual.getItemTypes());
 		ItemRollerTest.matchLists(expected.getWeaponTypes(),
 			actual.getWeaponTypes());
-		Assertions.assertEquals(expected.getLevelRequirement(),
-			actual.getLevelRequirement());
 	}
 
 	/**

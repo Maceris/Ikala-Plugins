@@ -6,6 +6,10 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
+import javax.persistence.Column;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
+
 /**
  * An accessory like rings that are worn to increase power.
  *
@@ -22,6 +26,8 @@ public class Accessory extends Equipment {
 	 * @param accessoryType The classification of accessory.
 	 * @return The classification of accessory.
 	 */
+	@Column(name = "ACCESSORY_TYPE")
+	@Enumerated(EnumType.STRING)
 	private AccessoryType accessoryType;
 
 	/**

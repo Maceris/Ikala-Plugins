@@ -6,6 +6,10 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
+import javax.persistence.Column;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
+
 /**
  * A template for generating weapons from.
  *
@@ -24,6 +28,7 @@ public class WeaponTemplate extends EquipmentTemplate {
 	 *            weapon.
 	 * @return The lower bound of default damage for this type of weapon.
 	 */
+	@Column(name = "MIN_DAMAGE")
 	private Integer minDamage;
 
 	/**
@@ -34,6 +39,7 @@ public class WeaponTemplate extends EquipmentTemplate {
 	 *            weapon.
 	 * @return The upper bound of default damage for this type of weapon.
 	 */
+	@Column(name = "MAX_DAMAGE")
 	private Integer maxDamage;
 	/**
 	 * What kind of weapon this is.
@@ -41,6 +47,8 @@ public class WeaponTemplate extends EquipmentTemplate {
 	 * @param weaponType The classification of weapon.
 	 * @return The classification of weapon.
 	 */
+	@Column(name = "WEAPON_TYPE")
+	@Enumerated(EnumType.STRING)
 	private WeaponType weaponType;
 
 	/**

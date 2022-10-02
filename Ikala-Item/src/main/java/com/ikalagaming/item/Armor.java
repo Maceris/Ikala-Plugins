@@ -6,6 +6,10 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
+import javax.persistence.Column;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
+
 /**
  * Armor that is worn for protection or power.
  *
@@ -23,6 +27,8 @@ public class Armor extends Equipment {
 	 * @param armorType The classification of armor.
 	 * @return The classification of armor.
 	 */
+	@Column(name = "ARMOR_TYPE")
+	@Enumerated(EnumType.STRING)
 	private ArmorType armorType;
 
 	/**

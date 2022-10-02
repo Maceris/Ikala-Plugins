@@ -92,6 +92,7 @@ class ItemGenerator {
 		affix.setItemCriteria(ItemGenerator.getItemCriteria());
 		affix.setItemStats(ItemGenerator.getItemStats());
 		affix.setQuality(ItemGenerator.random.selectEnumValue(Quality.class));
+		affix.setLevelRequirement(ItemGenerator.rand.nextInt(100));
 		return affix;
 	}
 
@@ -209,6 +210,7 @@ class ItemGenerator {
 			+ component.getComponentType().getPrefix()
 			+ ItemGenerator.nextID.getAndIncrement());
 		component.setItemStats(ItemGenerator.getItemStatsTemplate());
+		component.setLevelRequirement(ItemGenerator.rand.nextInt(100));
 
 		return component;
 	}
@@ -300,7 +302,6 @@ class ItemGenerator {
 				itemCriteria.setWeaponTypes(weaponTypes);
 				break;
 		}
-		itemCriteria.setLevelRequirement(ItemGenerator.rand.nextInt(100));
 
 		return itemCriteria;
 	}

@@ -2,6 +2,9 @@ package com.ikalagaming.item.template;
 
 import com.ikalagaming.item.Affix;
 import com.ikalagaming.item.Item;
+import com.ikalagaming.item.persistence.AffixListConverter;
+import com.ikalagaming.item.persistence.AttributeModifierTemplateListConverter;
+import com.ikalagaming.item.persistence.ItemStatsTemplateConverter;
 
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -9,6 +12,9 @@ import lombok.Setter;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import javax.persistence.Column;
+import javax.persistence.Convert;
 
 /**
  * A template for equipment.
@@ -27,6 +33,7 @@ public class EquipmentTemplate extends Item {
 	 *            item.
 	 * @return The level that is required in order to equip this item.
 	 */
+	@Column(name = "LEVEL_REQUIREMENT")
 	private Integer levelRequirement;
 
 	/**
@@ -37,6 +44,8 @@ public class EquipmentTemplate extends Item {
 	 * @return The minimum attribute values that are required for using this
 	 *         equipment.
 	 */
+	@Column(name = "ATTRIBUTE_REQUIREMENTS")
+	@Convert(converter = AttributeModifierTemplateListConverter.class)
 	private List<AttributeModifierTemplate> attributeRequirements =
 		new ArrayList<>();
 	/**
@@ -45,6 +54,8 @@ public class EquipmentTemplate extends Item {
 	 * @param affixes The affixes for this item.
 	 * @return The affixes for this item.
 	 */
+	@Column(name = "AFFIXES")
+	@Convert(converter = AffixListConverter.class)
 	private List<Affix> affixes = new ArrayList<>();
 
 	/**
@@ -53,6 +64,8 @@ public class EquipmentTemplate extends Item {
 	 * @param itemStatsTemplate The stat bonuses provided by the item.
 	 * @return The stat bonuses provided by the item.
 	 */
+	@Column(name = "ITEM_STATS_TEMPLATE")
+	@Convert(converter = ItemStatsTemplateConverter.class)
 	private ItemStatsTemplate itemStatsTemplate = new ItemStatsTemplate();
 
 	/**
