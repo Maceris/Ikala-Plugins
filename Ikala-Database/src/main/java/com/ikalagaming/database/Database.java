@@ -45,7 +45,11 @@ public class Database {
 	/**
 	 * The connection to our database.
 	 */
+	@Getter
 	private Connection connection;
+
+	@Getter
+	private DSLContext context;
 
 	/**
 	 * Creates a new database handler for the database at the given path. If no
@@ -58,8 +62,7 @@ public class Database {
 	public Database(String location) {
 		this.connectionString = "jdbc:h2:" + location;
 		this.resourceBundle = ResourceBundle.getBundle(
-			"com.ikalagaming.database.resources.Database",
-			Localization.getLocale());
+			"com.ikalagaming.database.Database", Localization.getLocale());
 	}
 
 	/**
@@ -87,6 +90,7 @@ public class Database {
 	@Synchronized
 	public void closeConnection() {
 		try {
+			context = null;
 			connection.close();
 		}
 		catch (SQLException e) {
@@ -121,6 +125,7 @@ public class Database {
 			Database.log.warn(SafeResourceLoader.getString("ERROR_CONNECTING",
 				resourceBundle));
 		}
+		context = DSL.using(connection, SQLDialect.H2);
 	}
 
 	/**

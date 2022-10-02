@@ -4,6 +4,8 @@ import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.plugins.Plugin;
 
+import lombok.Getter;
+
 import java.io.File;
 
 /**
@@ -19,6 +21,7 @@ public class DatabasePlugin extends Plugin {
 	 */
 	public static final String PLUGIN_NAME = "Ikala-Database";
 
+	@Getter
 	private Database database;
 
 	@Override
