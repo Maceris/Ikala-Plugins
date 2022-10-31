@@ -28,8 +28,14 @@ public class HeightMapMesh {
 	 */
 	private static final int MAX_COLOR = 255 * 255 * 255;
 
-	private static final float STARTX = -0.5f;
-	private static final float STARTZ = -0.5f;
+	/**
+	 * The starting x position.
+	 */
+	static final float STARTX = -0.5f;
+	/**
+	 * The starting z position.
+	 */
+	static final float STARTZ = -0.5f;
 
 	/**
 	 * Get the size of the height map in the x dimension.
@@ -50,8 +56,19 @@ public class HeightMapMesh {
 	}
 
 	private final float minY;
-
 	private final float maxY;
+
+	/**
+	 * The width of the height map file in pixels.
+	 */
+	@Getter
+	private int width;
+
+	/**
+	 * The height of the height map file in pixels.
+	 */
+	@Getter
+	private int height;
 
 	/**
 	 * The mesh generated from the height map.
@@ -60,6 +77,11 @@ public class HeightMapMesh {
 	 */
 	@Getter
 	private final Mesh mesh;
+
+	/**
+	 * Cached position array for quickly referencing the height at any pixel.
+	 */
+	private float[] positionArray;
 
 	/**
 	 * Create a new height map mesh from a height map file.
@@ -79,8 +101,7 @@ public class HeightMapMesh {
 		this.maxY = maxY;
 
 		ByteBuffer buffer = null;
-		int width;
-		int height;
+
 		try (MemoryStack stack = MemoryStack.stackPush()) {
 			IntBuffer w = stack.mallocInt(1);
 			IntBuffer h = stack.mallocInt(1);
@@ -117,7 +138,7 @@ public class HeightMapMesh {
 			for (int col = 0; col < width; col++) {
 				// Create vertex for current position
 				positions.add(HeightMapMesh.STARTX + col * incX); // x
-				positions.add(this.getHeight(col, row, width, buffer)); // y
+				positions.add(this.calculateHeight(col, row, buffer)); // y
 				positions.add(HeightMapMesh.STARTZ + row * incZ); // z
 
 				// Set texture coordinates
@@ -142,12 +163,13 @@ public class HeightMapMesh {
 			}
 		}
 
-		float[] posArry = Utils.listToArray(positions);
+		positionArray = Utils.listToArray(positions);
 		int[] indicesArray = indices.stream().mapToInt(i -> i).toArray();
 		float[] textCoordsArray = Utils.listToArray(textCoords);
-		float[] normalsArray = this.calculateNormals(posArry, width, height);
-		this.mesh =
-			new Mesh(posArry, textCoordsArray, normalsArray, indicesArray);
+		float[] normalsArray =
+			this.calculateNormals(positionArray, width, height);
+		this.mesh = new Mesh(positionArray, textCoordsArray, normalsArray,
+			indicesArray);
 		Material material = new Material(texture, 0.0f);
 		this.mesh.setMaterial(material);
 
@@ -158,11 +180,11 @@ public class HeightMapMesh {
 	 * Calculate normals for an array of positions.
 	 *
 	 * @param posArray The array of positions to calculate normals of.
-	 * @param width The number of columns.
-	 * @param height The number of rows.
+	 * @param columns The number of columns.
+	 * @param rows The number of rows.
 	 * @return The normal array.
 	 */
-	private float[] calculateNormals(float[] posArray, int width, int height) {
+	private float[] calculateNormals(float[] posArray, int columns, int rows) {
 		Vector3f v0 = new Vector3f();
 		Vector3f v1 = new Vector3f();
 		Vector3f v2 = new Vector3f();
@@ -174,33 +196,33 @@ public class HeightMapMesh {
 		Vector3f v41 = new Vector3f();
 		List<Float> normals = new ArrayList<>();
 		Vector3f normal = new Vector3f();
-		for (int row = 0; row < height; row++) {
-			for (int col = 0; col < width; col++) {
-				if (row > 0 && row < height - 1 && col > 0 && col < width - 1) {
-					int i0 = row * width * 3 + col * 3;
+		for (int row = 0; row < rows; row++) {
+			for (int col = 0; col < columns; col++) {
+				if (row > 0 && row < rows - 1 && col > 0 && col < columns - 1) {
+					int i0 = row * columns * 3 + col * 3;
 					v0.x = posArray[i0];
 					v0.y = posArray[i0 + 1];
 					v0.z = posArray[i0 + 2];
 
-					int i1 = row * width * 3 + (col - 1) * 3;
+					int i1 = row * columns * 3 + (col - 1) * 3;
 					v1.x = posArray[i1];
 					v1.y = posArray[i1 + 1];
 					v1.z = posArray[i1 + 2];
 					v1 = v1.sub(v0);
 
-					int i2 = (row + 1) * width * 3 + col * 3;
+					int i2 = (row + 1) * columns * 3 + col * 3;
 					v2.x = posArray[i2];
 					v2.y = posArray[i2 + 1];
 					v2.z = posArray[i2 + 2];
 					v2 = v2.sub(v0);
 
-					int i3 = (row) * width * 3 + (col + 1) * 3;
+					int i3 = (row) * columns * 3 + (col + 1) * 3;
 					v3.x = posArray[i3];
 					v3.y = posArray[i3 + 1];
 					v3.z = posArray[i3 + 2];
 					v3 = v3.sub(v0);
 
-					int i4 = (row - 1) * width * 3 + col * 3;
+					int i4 = (row - 1) * columns * 3 + col * 3;
 					v4.x = posArray[i4];
 					v4.y = posArray[i4 + 1];
 					v4.z = posArray[i4 + 2];
@@ -240,11 +262,10 @@ public class HeightMapMesh {
 	 * 
 	 * @param x The x coordinate.
 	 * @param z The z coordinate.
-	 * @param width The width of the image in pixels.
 	 * @param buffer The byte buffer to read from.
 	 * @return The data to read from.
 	 */
-	private float getHeight(final int x, final int z, final int width,
+	private float calculateHeight(final int x, final int z,
 		final ByteBuffer buffer) {
 		byte r = buffer.get(x * 4 + 0 + z * 4 * width);
 		byte g = buffer.get(x * 4 + 1 + z * 4 * width);
@@ -254,6 +275,24 @@ public class HeightMapMesh {
 			| (0xFF & b);
 		return this.minY + Math.abs(this.maxY - this.minY)
 			* ((float) argb / (float) HeightMapMesh.MAX_COLOR);
+	}
+
+	/**
+	 * Fetch the height at a given position.
+	 * 
+	 * @param x The x position in pixels.
+	 * @param z The z position in pixels.
+	 * @return The height at the given position.
+	 */
+	public float getHeight(final int x, final int z) {
+		if (x < 0 || x > width) {
+			return 0f;
+		}
+		if (z < 0 || z > height) {
+			return 0f;
+		}
+		int i = x * width * 3 + z * 3;
+		return positionArray[i + 1];
 	}
 
 }

@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.graph.Camera;
+import com.ikalagaming.graphics.graph.Terrain;
 
 import lombok.Getter;
 import org.joml.Vector2f;
@@ -84,14 +85,20 @@ public class CameraManager {
 	 * Actually reposition the camera based on how much time has passed.
 	 *
 	 * @param deltaTime The fractional part of a second since the last update.
+	 * @param terrain The terrain, to handle collision
 	 */
-	public void updateCamera(float deltaTime) {
+	public void updateCamera(float deltaTime, Terrain terrain) {
 		// Update camera position
+		Vector3f lastPosition = new Vector3f(camera.getPosition());
 		this.camera.movePosition(
 			this.cameraInc.x * CameraManager.MOVE_SPEED_PER_SECOND * deltaTime,
 			this.cameraInc.y * CameraManager.MOVE_SPEED_PER_SECOND * deltaTime,
 			this.cameraInc.z * CameraManager.MOVE_SPEED_PER_SECOND * deltaTime);
 
+		final float height = terrain.getHeight(camera.getPosition());
+		if (camera.getPosition().y <= height) {
+			camera.setPosition(lastPosition.x, lastPosition.y, lastPosition.z);
+		}
 		// Update camera based on mouse
 		if (this.mouseInput.isRightButtonPressed()) {
 			Vector2f rotVec = this.mouseInput.getDisplaceVector();

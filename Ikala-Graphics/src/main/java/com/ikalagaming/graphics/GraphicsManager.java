@@ -36,6 +36,7 @@ public class GraphicsManager {
 	private static Renderer renderer;
 	private static CameraManager cameraManager;
 	private static Timer timer;
+	private static Terrain terrain;
 
 	/**
 	 * The target frames per second that we want to hit.
@@ -152,16 +153,17 @@ public class GraphicsManager {
 		float minY = -0.1f;
 		float maxY = 0.1f;
 		int textInc = 40;
-		Terrain terrain;
 		try {
-			terrain = new Terrain(terrainSize, terrainScale, minY, maxY,
-				"textures/heightmap.png", "textures/terrain.png", textInc);
+			GraphicsManager.terrain =
+				new Terrain(terrainSize, terrainScale, minY, maxY,
+					"textures/heightmap.png", "textures/terrain.png", textInc);
 		}
 		catch (Exception e) {
 			throw new WindowCreationException(e);
 		}
 
-		GraphicsManager.scene.setSceneItems(terrain.getSceneItems());
+		GraphicsManager.scene
+			.setSceneItems(GraphicsManager.terrain.getSceneItems());
 
 		// Setup SkyBox
 		SkyBox skyBox = new SkyBox("/models/skybox.obj", "textures/skybox.png");
@@ -203,7 +205,8 @@ public class GraphicsManager {
 		final float elapsedTime = GraphicsManager.timer.getElapsedTime();
 
 		GraphicsManager.cameraManager.processInput();
-		GraphicsManager.cameraManager.updateCamera(elapsedTime);
+		GraphicsManager.cameraManager.updateCamera(elapsedTime,
+			GraphicsManager.terrain);
 
 		GraphicsManager.updateHud(elapsedTime);
 
