@@ -72,7 +72,7 @@ public class HeightMapMesh {
 
 	/**
 	 * The mesh generated from the height map.
-	 * 
+	 *
 	 * @return The generated mesh.
 	 */
 	@Getter
@@ -121,36 +121,36 @@ public class HeightMapMesh {
 						+ "] not loaded: " + STBImage.stbi_failure_reason());
 			}
 
-			width = w.get();
-			height = h.get();
+			this.width = w.get();
+			this.height = h.get();
 		}
 
 		Texture texture = new Texture(textureFile);
 
-		float incX = HeightMapMesh.getXLength() / (width - 1);
-		float incZ = HeightMapMesh.getZLength() / (height - 1);
+		float incX = HeightMapMesh.getXLength() / (this.width - 1);
+		float incZ = HeightMapMesh.getZLength() / (this.height - 1);
 
 		List<Float> positions = new ArrayList<>();
 		List<Float> textCoords = new ArrayList<>();
 		List<Integer> indices = new ArrayList<>();
 
-		for (int row = 0; row < height; row++) {
-			for (int col = 0; col < width; col++) {
+		for (int row = 0; row < this.height; row++) {
+			for (int col = 0; col < this.width; col++) {
 				// Create vertex for current position
 				positions.add(HeightMapMesh.STARTX + col * incX); // x
 				positions.add(this.calculateHeight(col, row, buffer)); // y
 				positions.add(HeightMapMesh.STARTZ + row * incZ); // z
 
 				// Set texture coordinates
-				textCoords.add((float) textInc * (float) col / width);
-				textCoords.add((float) textInc * (float) row / height);
+				textCoords.add((float) textInc * (float) col / this.width);
+				textCoords.add((float) textInc * (float) row / this.height);
 
 				// Create indices
-				if (col < width - 1 && row < height - 1) {
-					int topLeft = row * width + col;
-					int bottomLeft = (row + 1) * width + col;
-					int topRight = row * width + col + 1;
-					int bottomRight = (row + 1) * width + col + 1;
+				if (col < this.width - 1 && row < this.height - 1) {
+					int topLeft = row * this.width + col;
+					int bottomLeft = (row + 1) * this.width + col;
+					int topRight = row * this.width + col + 1;
+					int bottomRight = (row + 1) * this.width + col + 1;
 
 					indices.add(topLeft);
 					indices.add(bottomLeft);
@@ -163,17 +163,37 @@ public class HeightMapMesh {
 			}
 		}
 
-		positionArray = Utils.listToArray(positions);
+		this.positionArray = Utils.listToArray(positions);
 		int[] indicesArray = indices.stream().mapToInt(i -> i).toArray();
 		float[] textCoordsArray = Utils.listToArray(textCoords);
 		float[] normalsArray =
-			this.calculateNormals(positionArray, width, height);
-		this.mesh = new Mesh(positionArray, textCoordsArray, normalsArray,
+			this.calculateNormals(this.positionArray, this.width, this.height);
+		this.mesh = new Mesh(this.positionArray, textCoordsArray, normalsArray,
 			indicesArray);
 		Material material = new Material(texture, 0.0f);
 		this.mesh.setMaterial(material);
 
 		STBImage.stbi_image_free(buffer);
+	}
+
+	/**
+	 * Calculate the height at a position in a byte buffer, based on the colors.
+	 *
+	 * @param x The x coordinate.
+	 * @param z The z coordinate.
+	 * @param buffer The byte buffer to read from.
+	 * @return The data to read from.
+	 */
+	private float calculateHeight(final int x, final int z,
+		final ByteBuffer buffer) {
+		byte r = buffer.get(x * 4 + 0 + z * 4 * this.width);
+		byte g = buffer.get(x * 4 + 1 + z * 4 * this.width);
+		byte b = buffer.get(x * 4 + 2 + z * 4 * this.width);
+		byte a = buffer.get(x * 4 + 3 + z * 4 * this.width);
+		int argb = ((0xFF & a) << 24) | ((0xFF & r) << 16) | ((0xFF & g) << 8)
+			| (0xFF & b);
+		return this.minY + Math.abs(this.maxY - this.minY)
+			* ((float) argb / (float) HeightMapMesh.MAX_COLOR);
 	}
 
 	/**
@@ -258,41 +278,18 @@ public class HeightMapMesh {
 	}
 
 	/**
-	 * Calculate the height at a position in a byte buffer, based on the colors.
-	 * 
-	 * @param x The x coordinate.
-	 * @param z The z coordinate.
-	 * @param buffer The byte buffer to read from.
-	 * @return The data to read from.
-	 */
-	private float calculateHeight(final int x, final int z,
-		final ByteBuffer buffer) {
-		byte r = buffer.get(x * 4 + 0 + z * 4 * width);
-		byte g = buffer.get(x * 4 + 1 + z * 4 * width);
-		byte b = buffer.get(x * 4 + 2 + z * 4 * width);
-		byte a = buffer.get(x * 4 + 3 + z * 4 * width);
-		int argb = ((0xFF & a) << 24) | ((0xFF & r) << 16) | ((0xFF & g) << 8)
-			| (0xFF & b);
-		return this.minY + Math.abs(this.maxY - this.minY)
-			* ((float) argb / (float) HeightMapMesh.MAX_COLOR);
-	}
-
-	/**
 	 * Fetch the height at a given position.
-	 * 
+	 *
 	 * @param x The x position in pixels.
 	 * @param z The z position in pixels.
 	 * @return The height at the given position.
 	 */
 	public float getHeight(final int x, final int z) {
-		if (x < 0 || x > width) {
+		if (x < 0 || x > this.width || z < 0 || z > this.height) {
 			return 0f;
 		}
-		if (z < 0 || z > height) {
-			return 0f;
-		}
-		int i = x * width * 3 + z * 3;
-		return positionArray[i + 1];
+		int i = x * this.width * 3 + z * 3;
+		return this.positionArray[i + 1];
 	}
 
 }

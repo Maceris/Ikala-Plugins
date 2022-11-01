@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.graph;
 
-import com.ikalagaming.graphics.SceneItem;
+import com.ikalagaming.graphics.scene.Camera;
+import com.ikalagaming.graphics.scene.SceneItem;
 
 import org.joml.Matrix4f;
 import org.joml.Vector3f;

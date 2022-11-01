@@ -4,7 +4,7 @@ import com.ikalagaming.event.Event;
 
 /**
  * Update the graphics.
- * 
+ *
  * @author Ches Burks
  *
  */

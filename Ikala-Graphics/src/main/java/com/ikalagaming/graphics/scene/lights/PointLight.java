@@ -1,4 +1,4 @@
-package com.ikalagaming.graphics.graph;
+package com.ikalagaming.graphics.scene.lights;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

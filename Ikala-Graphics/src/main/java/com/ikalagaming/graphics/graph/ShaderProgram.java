@@ -3,6 +3,11 @@ package com.ikalagaming.graphics.graph;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderConstants;
 import com.ikalagaming.graphics.exceptions.ShaderException;
+import com.ikalagaming.graphics.scene.Fog;
+import com.ikalagaming.graphics.scene.lights.AmbientLight;
+import com.ikalagaming.graphics.scene.lights.DirectionalLight;
+import com.ikalagaming.graphics.scene.lights.PointLight;
+import com.ikalagaming.graphics.scene.lights.SpotLight;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
@@ -58,6 +63,19 @@ public class ShaderProgram {
 	}
 
 	/**
+	 * Create an ambient light uniform.
+	 *
+	 * @param uniformName The name of the uniform.
+	 */
+	public void createAmbientLightUniform(@NonNull String uniformName) {
+		final String name = uniformName + ".";
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.AmbientLight.COLOR);
+		this.createUniform(
+			name + ShaderConstants.Uniform.Fragment.AmbientLight.INTENSITY);
+	}
+
+	/**
 	 * Create a directional light uniform.
 	 *
 	 * @param uniformName The name of the uniform.
@@ -70,6 +88,18 @@ public class ShaderProgram {
 			name + ShaderConstants.Uniform.Fragment.DirectionalLight.DIRECTION);
 		this.createUniform(
 			name + ShaderConstants.Uniform.Fragment.DirectionalLight.INTENSITY);
+	}
+
+	/**
+	 * Create a fog uniform.
+	 *
+	 * @param uniformName The name of the uniform.
+	 */
+	public void createFogUniform(@NonNull String uniformName) {
+		final String name = uniformName + ".";
+		this.createUniform(name + ShaderConstants.Uniform.Fragment.Fog.COLOR);
+		this.createUniform(name + ShaderConstants.Uniform.Fragment.Fog.DENSITY);
+		this.createUniform(name + ShaderConstants.Uniform.Fragment.Fog.ENABLED);
 	}
 
 	/**
@@ -273,6 +303,23 @@ public class ShaderProgram {
 	}
 
 	/**
+	 * Set an ambient light uniform.
+	 *
+	 * @param uniformName The name of the uniform.
+	 * @param ambientLight The ambient light to set.
+	 */
+	public void setUniform(@NonNull String uniformName,
+		@NonNull AmbientLight ambientLight) {
+		final String name = uniformName + ".";
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.AmbientLight.COLOR,
+			ambientLight.getColor());
+		this.setUniform(
+			name + ShaderConstants.Uniform.Fragment.AmbientLight.INTENSITY,
+			ambientLight.getIntensity());
+	}
+
+	/**
 	 * Set a directional light uniform.
 	 *
 	 * @param uniformName The name of the uniform.
@@ -300,6 +347,27 @@ public class ShaderProgram {
 	 */
 	public void setUniform(@NonNull String uniformName, float value) {
 		GL20.glUniform1f(this.uniforms.get(uniformName), value);
+	}
+
+	/**
+	 * Set a fog uniform.
+	 *
+	 * @param uniformName The name of the uniform.
+	 * @param fog The fog to set.
+	 */
+	public void setUniform(@NonNull String uniformName, @NonNull Fog fog) {
+		final String name = uniformName + ".";
+
+		this.createUniform(name + ShaderConstants.Uniform.Fragment.Fog.COLOR);
+		this.createUniform(name + ShaderConstants.Uniform.Fragment.Fog.DENSITY);
+		this.createUniform(name + ShaderConstants.Uniform.Fragment.Fog.ENABLED);
+
+		this.setUniform(name + ShaderConstants.Uniform.Fragment.Fog.COLOR,
+			fog.getColor());
+		this.setUniform(name + ShaderConstants.Uniform.Fragment.Fog.DENSITY,
+			fog.getDensity());
+		this.setUniform(name + ShaderConstants.Uniform.Fragment.Fog.ENABLED,
+			fog.isActive() ? 1 : 0);
 	}
 
 	/**

@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics;
 
+import com.ikalagaming.graphics.scene.SceneItem;
+
 /**
  * An interface that defines how to draw a Heads Up Display on the screen.
  *

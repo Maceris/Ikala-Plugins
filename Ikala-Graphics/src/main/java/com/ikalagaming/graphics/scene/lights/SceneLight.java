@@ -1,12 +1,7 @@
-package com.ikalagaming.graphics;
-
-import com.ikalagaming.graphics.graph.DirectionalLight;
-import com.ikalagaming.graphics.graph.PointLight;
-import com.ikalagaming.graphics.graph.SpotLight;
+package com.ikalagaming.graphics.scene.lights;
 
 import lombok.Getter;
 import lombok.Setter;
-import org.joml.Vector3f;
 
 /**
  * The lighting information for a scene.
@@ -18,12 +13,12 @@ import org.joml.Vector3f;
 @Setter
 public class SceneLight {
 	/**
-	 * The ambient light color.
+	 * The ambient light details.
 	 *
 	 * @param ambientLight The color of the ambient light.
 	 * @return The color of the ambient light.
 	 */
-	private Vector3f ambientLight;
+	private AmbientLight ambientLight;
 
 	/**
 	 * The list of point lights in a scene.

@@ -1,5 +1,6 @@
-package com.ikalagaming.graphics;
+package com.ikalagaming.graphics.scene;
 
+import com.ikalagaming.graphics.OBJLoader;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.Mesh;
 import com.ikalagaming.graphics.graph.Texture;

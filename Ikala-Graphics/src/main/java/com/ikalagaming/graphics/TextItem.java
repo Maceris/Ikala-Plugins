@@ -3,6 +3,7 @@ package com.ikalagaming.graphics;
 import com.ikalagaming.graphics.graph.FontTexture;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.Mesh;
+import com.ikalagaming.graphics.scene.SceneItem;
 
 import lombok.Getter;
 

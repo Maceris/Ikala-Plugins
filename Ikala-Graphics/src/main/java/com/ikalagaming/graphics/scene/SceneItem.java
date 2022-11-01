@@ -1,4 +1,4 @@
-package com.ikalagaming.graphics;
+package com.ikalagaming.graphics.scene;
 
 import com.ikalagaming.graphics.graph.Mesh;
 

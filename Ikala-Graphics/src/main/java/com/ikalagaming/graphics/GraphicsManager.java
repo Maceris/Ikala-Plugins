@@ -2,10 +2,16 @@ package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.events.WindowCreated;
 import com.ikalagaming.graphics.exceptions.WindowCreationException;
-import com.ikalagaming.graphics.graph.DirectionalLight;
-import com.ikalagaming.graphics.graph.PointLight;
-import com.ikalagaming.graphics.graph.SpotLight;
 import com.ikalagaming.graphics.graph.Terrain;
+import com.ikalagaming.graphics.scene.Fog;
+import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.SceneItem;
+import com.ikalagaming.graphics.scene.SkyBox;
+import com.ikalagaming.graphics.scene.lights.AmbientLight;
+import com.ikalagaming.graphics.scene.lights.DirectionalLight;
+import com.ikalagaming.graphics.scene.lights.PointLight;
+import com.ikalagaming.graphics.scene.lights.SceneLight;
+import com.ikalagaming.graphics.scene.lights.SpotLight;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -99,20 +105,6 @@ public class GraphicsManager {
 	private static Window window;
 
 	/**
-	 * The angle the directional light is at.
-	 */
-	private static float lightAngle;
-
-	/**
-	 * The angle of the spotlight.
-	 */
-	private static float spotAngle = 0;
-	/**
-	 * The increment at which the spotlight angle changes.
-	 */
-	private static float spotIncrement = 1;
-
-	/**
 	 * The heads up display.
 	 */
 	private static DebugHud hud;
@@ -170,6 +162,9 @@ public class GraphicsManager {
 		skyBox.setScale(skyBoxScale);
 		GraphicsManager.scene.setSkyBox(skyBox);
 
+		GraphicsManager.scene
+			.setFog(new Fog(true, new Vector3f(0.5f, 0.5f, 0.5f), 0.5f));
+
 		GraphicsManager.setupLights();
 
 		// HUD
@@ -200,8 +195,6 @@ public class GraphicsManager {
 			GraphicsManager.window.setResized(false);
 		}
 
-		GraphicsManager.updateDirectionalLight();
-
 		final float elapsedTime = GraphicsManager.timer.getElapsedTime();
 
 		GraphicsManager.cameraManager.processInput();
@@ -229,14 +222,14 @@ public class GraphicsManager {
 		SceneLight sceneLight = new SceneLight();
 
 		// Ambient light
-		sceneLight.setAmbientLight(new Vector3f(0.7f, 0.7f, 0.7f));
+		sceneLight.setAmbientLight(
+			new AmbientLight(new Vector3f(0.3f, 0.3f, 0.3f), 0.5f));
 
 		// Point light
 		Vector3f lightColour = new Vector3f(1, 1, 1);
 		Vector3f lightPosition = new Vector3f(0, 0, 1);
-		float lightIntensity = 1.0f;
 		PointLight pointLight =
-			new PointLight(lightColour, lightPosition, lightIntensity);
+			new PointLight(lightColour, lightPosition, 1.0f);
 		PointLight.Attenuation att =
 			new PointLight.Attenuation(0.0f, 0.0f, 1.0f);
 		pointLight.setAttenuation(att);
@@ -246,12 +239,11 @@ public class GraphicsManager {
 		lightPosition = new Vector3f(-1, 0, 0);
 		lightColour = new Vector3f(1, 1, 1);
 		sceneLight.setDirectionalLight(
-			new DirectionalLight(lightColour, lightPosition, lightIntensity));
+			new DirectionalLight(lightColour, lightPosition, 0.5f));
 
 		// Spot light
 		lightPosition = new Vector3f(0, 0.0f, 10f);
-		pointLight = new PointLight(new Vector3f(1, 1, 1), lightPosition,
-			lightIntensity);
+		pointLight = new PointLight(new Vector3f(1, 1, 1), lightPosition, 1.0f);
 		att = new PointLight.Attenuation(0.0f, 0.0f, 0.02f);
 		pointLight.setAttenuation(att);
 		Vector3f coneDir = new Vector3f(0, 0, -1);
@@ -310,58 +302,6 @@ public class GraphicsManager {
 		}
 
 		return Launcher.STATUS_OK;
-	}
-
-	private static void updateDirectionalLight() {
-		// Update spot light direction
-		GraphicsManager.spotAngle += GraphicsManager.spotIncrement * 0.05f;
-		if (GraphicsManager.spotAngle > 2) {
-			GraphicsManager.spotIncrement = -1;
-		}
-		else if (GraphicsManager.spotAngle < -2) {
-			GraphicsManager.spotIncrement = 1;
-		}
-		double spotAngleRad = Math.toRadians(GraphicsManager.spotAngle);
-		Vector3f coneDir =
-			GraphicsManager.scene.getSceneLight().getSpotLightList()[0]
-				.getConeDirection();
-		coneDir.y = (float) Math.sin(spotAngleRad);
-
-		// Update directional light direction, intensity and color
-		GraphicsManager.lightAngle += 1.1f;
-		if (GraphicsManager.lightAngle > 90) {
-			GraphicsManager.scene.getSceneLight().getDirectionalLight()
-				.setIntensity(0);
-			if (GraphicsManager.lightAngle >= 360) {
-				GraphicsManager.lightAngle = -90;
-			}
-		}
-		else if (GraphicsManager.lightAngle <= -80
-			|| GraphicsManager.lightAngle >= 80) {
-			float factor =
-				1 - (Math.abs(GraphicsManager.lightAngle) - 80) / 10.0f;
-			GraphicsManager.scene.getSceneLight().getDirectionalLight()
-				.setIntensity(factor);
-			GraphicsManager.scene.getSceneLight().getDirectionalLight()
-				.getColor().y = Math.max(factor, 0.9f);
-			GraphicsManager.scene.getSceneLight().getDirectionalLight()
-				.getColor().z = Math.max(factor, 0.5f);
-		}
-		else {
-			GraphicsManager.scene.getSceneLight().getDirectionalLight()
-				.setIntensity(1);
-			GraphicsManager.scene.getSceneLight().getDirectionalLight()
-				.getColor().x = 1;
-			GraphicsManager.scene.getSceneLight().getDirectionalLight()
-				.getColor().y = 1;
-			GraphicsManager.scene.getSceneLight().getDirectionalLight()
-				.getColor().z = 1;
-		}
-		double angRad = Math.toRadians(GraphicsManager.lightAngle);
-		GraphicsManager.scene.getSceneLight().getDirectionalLight()
-			.getDirection().x = (float) Math.sin(angRad);
-		GraphicsManager.scene.getSceneLight().getDirectionalLight()
-			.getDirection().y = (float) Math.cos(angRad);
 	}
 
 	private static void updateHud(final float elapsedTime) {

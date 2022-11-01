@@ -3,6 +3,7 @@ package com.ikalagaming.graphics;
 import com.ikalagaming.graphics.graph.FontTexture;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.Mesh;
+import com.ikalagaming.graphics.scene.SceneItem;
 
 import lombok.Getter;
 import org.joml.Vector4f;
@@ -72,17 +73,8 @@ public class DebugHud implements Hud {
 	}
 
 	/**
-	 * Set the status text.
-	 *
-	 * @param fpsText The new text to display.
-	 */
-	public void setFPS(String fpsText) {
-		this.fpsTextItem.setText(fpsText);
-	}
-
-	/**
 	 * Set the camera position text.
-	 * 
+	 *
 	 * @param positionText The text to display for the camera position.
 	 */
 	public void setCameraPosition(String positionText) {
@@ -91,11 +83,20 @@ public class DebugHud implements Hud {
 
 	/**
 	 * Sets the camera speed text.
-	 * 
+	 *
 	 * @param speedText The text to display for the camera speed.
 	 */
 	public void setCameraSpeed(String speedText) {
 		this.cameraSpeedTextItem.setText(speedText);
+	}
+
+	/**
+	 * Set the status text.
+	 *
+	 * @param fpsText The new text to display.
+	 */
+	public void setFPS(String fpsText) {
+		this.fpsTextItem.setText(fpsText);
 	}
 
 	/**

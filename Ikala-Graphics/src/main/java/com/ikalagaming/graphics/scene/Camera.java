@@ -1,4 +1,4 @@
-package com.ikalagaming.graphics.graph;
+package com.ikalagaming.graphics.scene;
 
 import com.ikalagaming.graphics.Utils;
 
@@ -7,7 +7,7 @@ import org.joml.Vector3f;
 
 /**
  * Represents a camera in the world space.
- * 
+ *
  * @author Ches Burks
  *
  */
@@ -38,7 +38,7 @@ public class Camera {
 
 	/**
 	 * Creates a camera with supplied position and rotation.
-	 * 
+	 *
 	 * @param position The initial position of the camera.
 	 * @param rotation The initial rotation of the camera.
 	 */
@@ -49,7 +49,7 @@ public class Camera {
 
 	/**
 	 * Change the position of the camera by an offset.
-	 * 
+	 *
 	 * @param offsetX The offset on the x axis.
 	 * @param offsetY The offset on the y axis.
 	 * @param offsetZ The offset on the z axis.
@@ -74,7 +74,7 @@ public class Camera {
 
 	/**
 	 * Change the rotation of the camera by an offset in degrees.
-	 * 
+	 *
 	 * @param offsetX The offset around the x axis.
 	 * @param offsetY The offset around the y axis.
 	 * @param offsetZ The offset around the z axis.
@@ -87,7 +87,7 @@ public class Camera {
 
 	/**
 	 * Set the position of the camera.
-	 * 
+	 *
 	 * @param x The new x position.
 	 * @param y The new y position.
 	 * @param z The new z position.
@@ -100,7 +100,7 @@ public class Camera {
 
 	/**
 	 * Set the rotation of the camera.
-	 * 
+	 *
 	 * @param x The new x rotation.
 	 * @param y The new y rotation.
 	 * @param z The new z rotation.

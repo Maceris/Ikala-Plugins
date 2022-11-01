@@ -1,7 +1,7 @@
 package com.ikalagaming.graphics.graph;
 
 import com.ikalagaming.graphics.Rect2D;
-import com.ikalagaming.graphics.SceneItem;
+import com.ikalagaming.graphics.scene.SceneItem;
 
 import lombok.Getter;
 import org.joml.Vector3f;

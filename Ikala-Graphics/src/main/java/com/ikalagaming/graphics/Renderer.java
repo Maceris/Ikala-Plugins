@@ -1,13 +1,17 @@
 package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.exceptions.ShaderException;
-import com.ikalagaming.graphics.graph.Camera;
-import com.ikalagaming.graphics.graph.DirectionalLight;
 import com.ikalagaming.graphics.graph.Mesh;
-import com.ikalagaming.graphics.graph.PointLight;
 import com.ikalagaming.graphics.graph.ShaderProgram;
-import com.ikalagaming.graphics.graph.SpotLight;
 import com.ikalagaming.graphics.graph.Transformation;
+import com.ikalagaming.graphics.scene.Camera;
+import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.SceneItem;
+import com.ikalagaming.graphics.scene.SkyBox;
+import com.ikalagaming.graphics.scene.lights.DirectionalLight;
+import com.ikalagaming.graphics.scene.lights.PointLight;
+import com.ikalagaming.graphics.scene.lights.SceneLight;
+import com.ikalagaming.graphics.scene.lights.SpotLight;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.util.FileUtils;
@@ -18,6 +22,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL14;
 
 import java.util.List;
 import java.util.Map;
@@ -209,6 +215,9 @@ public class Renderer {
 	 * @param scene The scene to render.
 	 */
 	private void renderScene(Window window, Camera camera, Scene scene) {
+		GL11.glEnable(GL11.GL_BLEND);
+		GL14.glBlendEquation(GL14.GL_FUNC_ADD);
+		GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 		this.sceneShaderProgram.bind();
 
 		// Update the projection matrix
@@ -226,19 +235,25 @@ public class Renderer {
 		this.sceneShaderProgram
 			.setUniform(ShaderConstants.Uniform.Fragment.TEXTURE_SAMPLER, 0);
 
+		this.sceneShaderProgram.setUniform(ShaderConstants.Uniform.Fragment.FOG,
+			scene.getFog());
+
 		// Render each mesh with the associated game Items
 		Map<Mesh, List<SceneItem>> mapMeshes = scene.getMeshMap();
 		for (Mesh mesh : mapMeshes.keySet()) {
-			this.sceneShaderProgram.setUniform("material", mesh.getMaterial());
+			this.sceneShaderProgram.setUniform(
+				ShaderConstants.Uniform.Fragment.MATERIAL, mesh.getMaterial());
 			mesh.renderList(mapMeshes.get(mesh), (SceneItem gameItem) -> {
 				Matrix4f modelViewMatrix = this.transformation
 					.buildModelViewMatrix(gameItem, viewMatrix);
-				this.sceneShaderProgram.setUniform("modelViewMatrix",
+				this.sceneShaderProgram.setUniform(
+					ShaderConstants.Uniform.Vertex.MODEL_VIEW_MATRIX,
 					modelViewMatrix);
 			});
 		}
 
 		this.sceneShaderProgram.unbind();
+		GL11.glDisable(GL11.GL_BLEND);
 	}
 
 	/**
@@ -269,9 +284,6 @@ public class Renderer {
 			this.transformation.getModelViewMatrix(skyBox, viewMatrix);
 		this.skyBoxShaderProgram.setUniform(
 			ShaderConstants.Uniform.Vertex.MODEL_VIEW_MATRIX, modelViewMatrix);
-		this.skyBoxShaderProgram.setUniform(
-			ShaderConstants.Uniform.Fragment.AMBIENT_LIGHT,
-			scene.getSceneLight().getAmbientLight());
 
 		scene.getSkyBox().getMesh().render();
 
@@ -337,8 +349,8 @@ public class Renderer {
 		// Create lighting related uniforms
 		this.sceneShaderProgram
 			.createUniform(ShaderConstants.Uniform.Fragment.SPECULAR_POWER);
-		this.sceneShaderProgram
-			.createUniform(ShaderConstants.Uniform.Fragment.AMBIENT_LIGHT);
+		this.sceneShaderProgram.createAmbientLightUniform(
+			ShaderConstants.Uniform.Fragment.AMBIENT_LIGHT);
 		this.sceneShaderProgram.createPointLightListUniform(
 			ShaderConstants.Uniform.Fragment.POINT_LIGHTS,
 			ShaderConstants.Uniform.Fragment.MAX_POINT_LIGHTS);
@@ -347,6 +359,10 @@ public class Renderer {
 			ShaderConstants.Uniform.Fragment.MAX_SPOT_LIGHTS);
 		this.sceneShaderProgram.createDirectionalLightUniform(
 			ShaderConstants.Uniform.Fragment.DIRECTIONAL_LIGHT);
+
+		// Create fog uniform
+		this.sceneShaderProgram
+			.createFogUniform(ShaderConstants.Uniform.Fragment.FOG);
 	}
 
 	/**
@@ -369,7 +385,5 @@ public class Renderer {
 			.createUniform(ShaderConstants.Uniform.Vertex.MODEL_VIEW_MATRIX);
 		this.skyBoxShaderProgram
 			.createUniform(ShaderConstants.Uniform.Fragment.TEXTURE_SAMPLER);
-		this.skyBoxShaderProgram
-			.createUniform(ShaderConstants.Uniform.Fragment.AMBIENT_LIGHT);
 	}
 }

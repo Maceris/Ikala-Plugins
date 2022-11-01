@@ -1,6 +1,7 @@
-package com.ikalagaming.graphics;
+package com.ikalagaming.graphics.scene;
 
 import com.ikalagaming.graphics.graph.Mesh;
+import com.ikalagaming.graphics.scene.lights.SceneLight;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -40,6 +41,14 @@ public class Scene {
 	 * @return The lights used in the scene.
 	 */
 	private SceneLight sceneLight;
+
+	/**
+	 * The fog for the scene.
+	 *
+	 * @param fog The new fog settings to use.
+	 * @return The current fog settings.
+	 */
+	private Fog fog;
 
 	/**
 	 * The scene item meshes.

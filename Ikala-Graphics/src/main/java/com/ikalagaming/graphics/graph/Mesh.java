@@ -1,6 +1,6 @@
 package com.ikalagaming.graphics.graph;
 
-import com.ikalagaming.graphics.SceneItem;
+import com.ikalagaming.graphics.scene.SceneItem;
 
 import lombok.Getter;
 import lombok.Setter;

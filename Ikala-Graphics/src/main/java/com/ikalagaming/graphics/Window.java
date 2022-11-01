@@ -93,9 +93,9 @@ public class Window {
 		Callbacks.glfwFreeCallbacks(this.windowHandle);
 		GLFW.glfwDestroyWindow(this.windowHandle);
 		GLFWErrorCallback callback = GLFW.glfwSetErrorCallback(null);
-        if (callback != null) {
-            callback.free();
-        }
+		if (callback != null) {
+			callback.free();
+		}
 		this.windowHandle = MemoryUtil.NULL;
 		Window.log.debug(SafeResourceLoader.getString("WINDOW_DESTROYED",
 			GraphicsPlugin.getResourceBundle()));

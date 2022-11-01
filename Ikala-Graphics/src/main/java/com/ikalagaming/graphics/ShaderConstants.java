@@ -97,6 +97,28 @@ public class ShaderConstants {
 		 */
 		public static class Fragment {
 			/**
+			 * The ambient light.
+			 *
+			 * @author Ches Burks
+			 *
+			 */
+			public static class AmbientLight {
+				/**
+				 * The color of the light.
+				 */
+				public static final String COLOR = "color";
+				/**
+				 * The intensity, a number between 0 and 1.
+				 */
+				public static final String INTENSITY = "intensity";
+
+				/**
+				 * Private constructor so this class is not instantiated.
+				 */
+				private AmbientLight() {}
+			}
+
+			/**
 			 * Used to calculate the attenuation function of light. Controls the
 			 * way light falls off with distance. Calculated using the formula:
 			 *
@@ -149,6 +171,32 @@ public class ShaderConstants {
 				 * Private constructor so this class is not instantiated.
 				 */
 				private DirectionalLight() {}
+			}
+
+			/**
+			 * Fog to render over the scene.
+			 *
+			 * @author Ches Burks
+			 *
+			 */
+			public static class Fog {
+				/**
+				 * Whether the fog is enabled, 1 if enabled.
+				 */
+				public static final String ENABLED = "enabled";
+				/**
+				 * The base color of the fog.
+				 */
+				public static final String COLOR = "color";
+				/**
+				 * How dense the fog is.
+				 */
+				public static final String DENSITY = "density";
+
+				/**
+				 * Private constructor so this class is not instantiated.
+				 */
+				private Fog() {}
 			}
 
 			/**
@@ -249,7 +297,7 @@ public class ShaderConstants {
 			 */
 			public static final String TEXTURE_SAMPLER = "textureSampler";
 			/**
-			 * The ambient light color that affects every fragment the same way.
+			 * The ambient light that affects every fragment the same way.
 			 */
 			public static final String AMBIENT_LIGHT = "ambientLight";
 			/**
@@ -282,6 +330,12 @@ public class ShaderConstants {
 			 * @see DirectionalLight
 			 */
 			public static final String DIRECTIONAL_LIGHT = "directionalLight";
+			/**
+			 * Environmental fog.
+			 *
+			 * @see Fog
+			 */
+			public static final String FOG = "fog";
 			/**
 			 * The camera position in view space coordinates.
 			 */
