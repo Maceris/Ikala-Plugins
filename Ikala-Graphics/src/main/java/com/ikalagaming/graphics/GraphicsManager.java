@@ -163,7 +163,7 @@ public class GraphicsManager {
 		GraphicsManager.scene.setSkyBox(skyBox);
 
 		GraphicsManager.scene
-			.setFog(new Fog(true, new Vector3f(0.5f, 0.5f, 0.5f), 0.5f));
+			.setFog(new Fog(true, new Vector3f(0.5f, 0.5f, 0.5f), 0.2f));
 
 		GraphicsManager.setupLights();
 
