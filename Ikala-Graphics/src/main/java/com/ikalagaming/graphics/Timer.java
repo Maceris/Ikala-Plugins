@@ -4,9 +4,6 @@ import lombok.Getter;
 
 /**
  * A timer for determining time between events.
- *
- * @author Ches Burks
- *
  */
 public class Timer {
 

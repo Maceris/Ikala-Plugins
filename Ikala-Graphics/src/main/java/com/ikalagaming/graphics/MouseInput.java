@@ -11,13 +11,16 @@ import org.lwjgl.glfw.GLFW;
 
 /**
  * Handles mouse input for a window.
- *
- * @author Ches Burks
- *
  */
 public class MouseInput {
 
+	/**
+	 * The position the mouse was in last time we checked.
+	 */
 	private final Vector2d previousPos;
+	/**
+	 * The current position the mouse is in.
+	 */
 	private final Vector2d currentPos;
 
 	/**
@@ -34,7 +37,7 @@ public class MouseInput {
 	 * @return True if the left button is pressed, false if it is not.
 	 */
 	@Getter
-	private boolean leftButtonPressed = false;
+	private boolean leftButtonPressed;
 
 	/**
 	 * If the right button is currently pressed.
@@ -42,30 +45,35 @@ public class MouseInput {
 	 * @return True if the right button is pressed, false if it is not.
 	 */
 	@Getter
-	private boolean rightButtonPressed = false;
+	private boolean rightButtonPressed;
+	/**
+	 * Whether or not the mouse is currently in the window.
+	 *
+	 * @return True if the mouse is in the window, false if it is outside.
+	 */
+	@Getter
+	private boolean inWindow;
 
 	/**
 	 * Create a new object with default values.
+	 * 
+	 * @param windowHandle The handle of the window we are interacting with.
 	 */
-	public MouseInput() {
+	public MouseInput(long windowHandle) {
 		this.previousPos = new Vector2d(-1, -1);
 		this.currentPos = new Vector2d(0, 0);
 		this.displaceVector = new Vector2f();
-	}
-
-	/**
-	 * Initialize the mouse input tracking for a given window.
-	 *
-	 * @param window The window we will be interacting with.
-	 */
-	public void init(Window window) {
-		GLFW.glfwSetCursorPosCallback(window.getWindowHandle(),
-			(windowHandle, xpos, ypos) -> {
-				this.currentPos.x = xpos;
-				this.currentPos.y = ypos;
-			});
-		GLFW.glfwSetMouseButtonCallback(window.getWindowHandle(),
-			(windowHandle, button, action, mode) -> {
+		this.leftButtonPressed = false;
+		this.rightButtonPressed = false;
+		this.inWindow = false;
+		GLFW.glfwSetCursorPosCallback(windowHandle, (handle, xpos, ypos) -> {
+			this.currentPos.x = xpos;
+			this.currentPos.y = ypos;
+		});
+		GLFW.glfwSetCursorEnterCallback(windowHandle,
+			(handle, entered) -> this.inWindow = entered);
+		GLFW.glfwSetMouseButtonCallback(windowHandle,
+			(handle, button, action, mode) -> {
 				if (button == GLFW.GLFW_MOUSE_BUTTON_1) {
 					switch (action) {
 						case GLFW_PRESS:
@@ -97,25 +105,27 @@ public class MouseInput {
 					}
 				}
 			});
+
 	}
 
 	/**
 	 * Calculate input for a window.
-	 *
-	 * @param window The window we are interacting with.
 	 */
-	public void input(Window window) {
+	public void input() {
 		this.displaceVector.x = 0;
 		this.displaceVector.y = 0;
-		double deltax = this.currentPos.x - this.previousPos.x;
-		double deltay = this.currentPos.y - this.previousPos.y;
-		boolean rotateX = deltax != 0;
-		boolean rotateY = deltay != 0;
-		if (rotateX) {
-			this.displaceVector.y = (float) deltax;
-		}
-		if (rotateY) {
-			this.displaceVector.x = (float) deltay;
+
+		if (this.previousPos.x > 0 && this.previousPos.y > 0 && this.inWindow) {
+			double deltax = this.currentPos.x - this.previousPos.x;
+			double deltay = this.currentPos.y - this.previousPos.y;
+			boolean rotateX = deltax != 0;
+			boolean rotateY = deltay != 0;
+			if (rotateX) {
+				this.displaceVector.y = (float) deltax;
+			}
+			if (rotateY) {
+				this.displaceVector.x = (float) deltay;
+			}
 		}
 		this.previousPos.x = this.currentPos.x;
 		this.previousPos.y = this.currentPos.y;

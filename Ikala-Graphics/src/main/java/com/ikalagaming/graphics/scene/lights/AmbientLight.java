@@ -7,9 +7,6 @@ import org.joml.Vector3f;
 
 /**
  * Ambient lighting for a scene.
- *
- * @author Ches Burks
- *
  */
 @Getter
 @Setter
@@ -30,4 +27,23 @@ public class AmbientLight {
 	 * @return The ambient light intensity.
 	 */
 	private float intensity;
+
+	/**
+	 * Create an ambient light with default values.
+	 */
+	public AmbientLight() {
+		this(new Vector3f(1.0f, 1.0f, 1.0f), 1.0f);
+	}
+
+	/**
+	 * Set the color.
+	 *
+	 * @param r The red component.
+	 * @param g The green component.
+	 * @param b The blue component.
+	 */
+	public void setColor(float r, float g, float b) {
+		this.color.set(r, g, b);
+	}
+
 }

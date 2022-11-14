@@ -50,16 +50,16 @@ public class MeshException extends RuntimeException {
 	}
 
 	/**
-	 * Constructs a new runtime exception with the specified detailmessage,
-	 * cause, suppression enabled or disabled, and writablestack trace enabled
+	 * Constructs a new runtime exception with the specified detail message,
+	 * cause, suppression enabled or disabled, and writable stack trace enabled
 	 * or disabled.
 	 *
 	 * @param message The detail message.
 	 * @param cause The cause. (A null value is permitted,and indicates that the
 	 *            cause is nonexistent or unknown.)
-	 * @param enableSuppression Whether or not suppression is enabledor
+	 * @param enableSuppression Whether or not suppression is enabled or
 	 *            disabled.
-	 * @param writableStackTrace Whether or not the stack trace shouldbe
+	 * @param writableStackTrace Whether or not the stack trace should be
 	 *            writable.
 	 */
 	public MeshException(String message, Throwable cause,

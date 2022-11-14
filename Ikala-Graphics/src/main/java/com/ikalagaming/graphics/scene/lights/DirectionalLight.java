@@ -46,4 +46,26 @@ public class DirectionalLight {
 		this(new Vector3f(light.getColor()), new Vector3f(light.getDirection()),
 			light.getIntensity());
 	}
+
+	/**
+	 * Set the color.
+	 *
+	 * @param r The red component.
+	 * @param g The green component.
+	 * @param b The blue component.
+	 */
+	public void setColor(float r, float g, float b) {
+		this.color.set(r, g, b);
+	}
+
+	/**
+	 * Set the position.
+	 *
+	 * @param x The x position.
+	 * @param y The y position.
+	 * @param z The z position.
+	 */
+	public void setPosition(float x, float y, float z) {
+		this.direction.set(x, y, z);
+	}
 }

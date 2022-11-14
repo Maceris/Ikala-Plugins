@@ -8,9 +8,6 @@ import org.joml.Vector3f;
 
 /**
  * A mesh with position, scale, and rotation that shows up on the scene graph.
- *
- * @author Ches Burks
- *
  */
 @Getter
 public class SceneItem {
@@ -69,7 +66,7 @@ public class SceneItem {
 	 */
 	public void cleanup() {
 		if (this.mesh != null) {
-			this.mesh.cleanUp();
+			this.mesh.cleanup();
 		}
 	}
 

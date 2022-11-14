@@ -1,22 +1,22 @@
 package com.ikalagaming.graphics.exceptions;
 
 /**
- * There was an exception with creating a texture.
+ * There was an exception with models.
  *
  * @author Ches Burks
  *
  */
-public class TextureException extends RuntimeException {
+public class ModelException extends RuntimeException {
 
 	/**
 	 * Generated ID.
 	 */
-	private static final long serialVersionUID = 188700139445819342L;
+	private static final long serialVersionUID = -3010021069889019586L;
 
 	/**
 	 * Create an exception without any details.
 	 */
-	public TextureException() {
+	public ModelException() {
 		super();
 	}
 
@@ -28,7 +28,7 @@ public class TextureException extends RuntimeException {
 	 * @param message The detail message. The detail message is saved for later
 	 *            retrieval by the {@link #getMessage()} method.
 	 */
-	public TextureException(String message) {
+	public ModelException(String message) {
 		super(message);
 	}
 
@@ -45,7 +45,7 @@ public class TextureException extends RuntimeException {
 	 *            {@link #getCause()} method). (A null value is permitted, and
 	 *            indicates that the cause is nonexistent or unknown.)
 	 */
-	public TextureException(String message, Throwable cause) {
+	public ModelException(String message, Throwable cause) {
 		super(message, cause);
 	}
 
@@ -62,7 +62,7 @@ public class TextureException extends RuntimeException {
 	 * @param writableStackTrace Whether or not the stack trace should be
 	 *            writable.
 	 */
-	public TextureException(String message, Throwable cause,
+	public ModelException(String message, Throwable cause,
 		boolean enableSuppression, boolean writableStackTrace) {
 		super(message, cause, enableSuppression, writableStackTrace);
 	}
@@ -78,7 +78,7 @@ public class TextureException extends RuntimeException {
 	 *            {@link #getCause()} method). (A null value is permitted, and
 	 *            indicates that the cause is nonexistent or unknown.)
 	 */
-	public TextureException(Throwable cause) {
+	public ModelException(Throwable cause) {
 		super(cause);
 	}
 

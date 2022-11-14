@@ -7,9 +7,6 @@ import org.joml.Vector3f;
 
 /**
  * Fog configuration.
- *
- * @author Ches Burks
- *
  */
 @Getter
 @Setter
@@ -36,5 +33,14 @@ public class Fog {
 	 * @return The density of the fog.
 	 */
 	private float density;
+
+	/**
+	 * Set up fog.
+	 */
+	public Fog() {
+		active = false;
+		color = new Vector3f();
+		density = 0;
+	}
 
 }

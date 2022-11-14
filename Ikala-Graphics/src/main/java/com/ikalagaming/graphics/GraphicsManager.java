@@ -1,17 +1,18 @@
 package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.events.WindowCreated;
-import com.ikalagaming.graphics.exceptions.WindowCreationException;
-import com.ikalagaming.graphics.graph.Terrain;
+import com.ikalagaming.graphics.graph.Model;
+import com.ikalagaming.graphics.render.Render;
+import com.ikalagaming.graphics.scene.AnimationData;
+import com.ikalagaming.graphics.scene.Camera;
+import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Fog;
+import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.graphics.scene.SceneItem;
 import com.ikalagaming.graphics.scene.SkyBox;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
-import com.ikalagaming.graphics.scene.lights.PointLight;
-import com.ikalagaming.graphics.scene.lights.SceneLight;
-import com.ikalagaming.graphics.scene.lights.SpotLight;
+import com.ikalagaming.graphics.scene.lights.SceneLights;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -19,6 +20,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Vector2f;
 import org.joml.Vector3f;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.opengl.GL11;
@@ -28,9 +30,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Provides utilities for handling graphics.
- *
- * @author Ches Burks
- *
  */
 @Slf4j
 public class GraphicsManager {
@@ -39,28 +38,27 @@ public class GraphicsManager {
 
 	private static Scene scene;
 
-	private static Renderer renderer;
+	private static Render render;
 	private static CameraManager cameraManager;
 	private static Timer timer;
-	private static Terrain terrain;
+
+	private static final float MOUSE_SENSITIVITY = 0.1f;
+	private static final float MOVEMENT_SPEED = 0.005f;
 
 	/**
 	 * The target frames per second that we want to hit.
 	 */
 	public static final int TARGET_FPS = 60;
-
 	/**
 	 * The (fractional) number of seconds between frame renders at the target
 	 * FPS.
 	 */
 	private static final float FRAME_TIME = 1f / GraphicsManager.TARGET_FPS;
-
 	/**
 	 * The time when the next render call should happen to maintain the target
 	 * FPS.
 	 */
 	private static double nextRenderTime;
-
 	/**
 	 * The current time, stored here to prevent extra doubles.
 	 */
@@ -69,14 +67,6 @@ public class GraphicsManager {
 	 * The last time we rendered a frame, for calculating FPS.
 	 */
 	private static double lastTime;
-	/**
-	 * The location of the camera last time we rendered a frame.
-	 */
-	private static Vector3f lastCameraPosition = new Vector3f();
-	/**
-	 * The current camera position.
-	 */
-	private static Vector3f currentCameraPosition = new Vector3f();
 
 	/**
 	 * How many frames we rendered since we calculated FPS.
@@ -85,7 +75,6 @@ public class GraphicsManager {
 
 	@Getter(value = AccessLevel.PACKAGE)
 	private static AtomicBoolean shutdownFlag = new AtomicBoolean(false);
-
 	/**
 	 * Used to track the tick method reference in the framework.
 	 *
@@ -95,7 +84,6 @@ public class GraphicsManager {
 	@Getter(value = AccessLevel.PACKAGE)
 	@Setter(value = AccessLevel.PACKAGE)
 	private static UUID tickStageID;
-
 	/**
 	 * The window utility.
 	 *
@@ -104,10 +92,16 @@ public class GraphicsManager {
 	@Getter
 	private static Window window;
 
-	/**
-	 * The heads up display.
-	 */
-	private static DebugHud hud;
+	private static AnimationData animationData1;
+
+	private static AnimationData animationData2;
+
+	private static Entity cubeEntity1;
+
+	private static Entity cubeEntity2;
+
+	private static float lightAngle;
+	private static float rotation;
 
 	/**
 	 * Creates a graphics window, fires off a {@link WindowCreated} event. Won't
@@ -121,15 +115,18 @@ public class GraphicsManager {
 		}
 		GraphicsManager.shutdownFlag.set(false);
 
-		GraphicsManager.window = new Window("Ikala Gaming", 640, 480, false);
-		GraphicsManager.window.init();
+		Window.WindowOptions opts = new Window.WindowOptions();
+		opts.antiAliasing = true;
+		GraphicsManager.window = new Window("Ikala Gaming", opts, () -> {
+			GraphicsManager.resize();
+			return null;
+		});
 
 		GraphicsManager.log.debug(SafeResourceLoader.getString("WINDOW_CREATED",
 			GraphicsPlugin.getResourceBundle()));
 		new WindowCreated(GraphicsManager.window.getWindowHandle()).fire();
 
-		GraphicsManager.renderer = new Renderer();
-		GraphicsManager.renderer.init();
+		GraphicsManager.render = new Render(GraphicsManager.window);
 
 		GraphicsManager.log.debug(SafeResourceLoader
 			.getString("RENDERER_CREATED", GraphicsPlugin.getResourceBundle()));
@@ -137,43 +134,11 @@ public class GraphicsManager {
 		GraphicsManager.cameraManager =
 			new CameraManager(GraphicsManager.window);
 
-		GraphicsManager.scene = new Scene();
+		GraphicsManager.scene = new Scene(GraphicsManager.window.getWidth(),
+			GraphicsManager.window.getHeight());
 
-		float skyBoxScale = 50.0f;
-		float terrainScale = 100;
-		int terrainSize = 3;
-		float minY = -0.1f;
-		float maxY = 0.1f;
-		int textInc = 40;
-		try {
-			GraphicsManager.terrain =
-				new Terrain(terrainSize, terrainScale, minY, maxY,
-					"textures/heightmap.png", "textures/terrain.png", textInc);
-		}
-		catch (Exception e) {
-			throw new WindowCreationException(e);
-		}
-
-		GraphicsManager.scene
-			.setSceneItems(GraphicsManager.terrain.getSceneItems());
-
-		// Setup SkyBox
-		SkyBox skyBox = new SkyBox("/models/skybox.obj", "textures/skybox.png");
-		skyBox.setScale(skyBoxScale);
-		GraphicsManager.scene.setSkyBox(skyBox);
-
-		GraphicsManager.scene
-			.setFog(new Fog(true, new Vector3f(0.5f, 0.5f, 0.5f), 0.2f));
-
-		GraphicsManager.setupLights();
-
-		// HUD
-		try {
-			GraphicsManager.hud = new DebugHud();
-		}
-		catch (Exception e) {
-			throw new WindowCreationException(e);
-		}
+		GraphicsManager.init(GraphicsManager.window, GraphicsManager.scene,
+			GraphicsManager.render);
 
 		GraphicsManager.timer = new Timer();
 		GraphicsManager.timer.init();
@@ -183,29 +148,158 @@ public class GraphicsManager {
 	}
 
 	/**
-	 * Render to the screen.
+	 * Initialize the application.
+	 *
+	 * @param window The window we are displaying in.
+	 * @param scene The scene we are in.
+	 * @param render Render logic.
 	 */
-	private static void render() {
-		// clear the framebuffer
-		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+	@SuppressWarnings("hiding")
+	private static void init(Window window, Scene scene, Render render) {
+		String terrainModelId = "terrain";
+		Model terrainModel =
+			ModelLoader.loadModel(terrainModelId, "models/terrain/terrain.obj",
+				scene.getTextureCache(), scene.getMaterialCache(), false);
+		scene.addModel(terrainModel);
+		Entity terrainEntity = new Entity("terrainEntity", terrainModelId);
+		terrainEntity.setScale(100.0f);
+		terrainEntity.updateModelMatrix();
+		scene.addEntity(terrainEntity);
 
-		if (GraphicsManager.window.isResized()) {
-			GL11.glViewport(0, 0, GraphicsManager.window.getWidth(),
-				GraphicsManager.window.getHeight());
-			GraphicsManager.window.setResized(false);
+		String bobModelId = "bobModel";
+		Model bobModel =
+			ModelLoader.loadModel(bobModelId, "models/bob/boblamp.md5mesh",
+				scene.getTextureCache(), scene.getMaterialCache(), true);
+		scene.addModel(bobModel);
+		Entity bobEntity = new Entity("bobEntity-1", bobModelId);
+		bobEntity.setScale(0.05f);
+		bobEntity.updateModelMatrix();
+		GraphicsManager.animationData1 =
+			new AnimationData(bobModel.getAnimationList().get(0));
+		bobEntity.setAnimationData(GraphicsManager.animationData1);
+		scene.addEntity(bobEntity);
+
+		Entity bobEntity2 = new Entity("bobEntity-2", bobModelId);
+		bobEntity2.setPosition(2, 0, 0);
+		bobEntity2.setScale(0.025f);
+		bobEntity2.updateModelMatrix();
+		GraphicsManager.animationData2 =
+			new AnimationData(bobModel.getAnimationList().get(0));
+		bobEntity2.setAnimationData(GraphicsManager.animationData2);
+		scene.addEntity(bobEntity2);
+
+		Model cubeModel =
+			ModelLoader.loadModel("cube-model", "models/cube/cube.obj",
+				scene.getTextureCache(), scene.getMaterialCache(), false);
+		scene.addModel(cubeModel);
+		GraphicsManager.cubeEntity1 =
+			new Entity("cube-entity-1", cubeModel.getId());
+		GraphicsManager.cubeEntity1.setPosition(0, 2, -1);
+		GraphicsManager.cubeEntity1.updateModelMatrix();
+		scene.addEntity(GraphicsManager.cubeEntity1);
+
+		GraphicsManager.cubeEntity2 =
+			new Entity("cube-entity-2", cubeModel.getId());
+		GraphicsManager.cubeEntity2.setPosition(-2, 2, -1);
+		GraphicsManager.cubeEntity2.updateModelMatrix();
+		scene.addEntity(GraphicsManager.cubeEntity2);
+
+		render.setupData(scene);
+
+		SceneLights sceneLights = new SceneLights();
+		AmbientLight ambientLight = sceneLights.getAmbientLight();
+		ambientLight.setIntensity(0.5f);
+		ambientLight.setColor(0.3f, 0.3f, 0.3f);
+
+		DirectionalLight dirLight = sceneLights.getDirectionalLight();
+		dirLight.setPosition(0, 1, 0);
+		dirLight.setIntensity(1.0f);
+		scene.setSceneLights(sceneLights);
+
+		SkyBox skyBox = new SkyBox("models/skybox/skybox.obj",
+			scene.getTextureCache(), scene.getMaterialCache());
+		skyBox.getSkyBoxEntity().setScale(100);
+		skyBox.getSkyBoxEntity().updateModelMatrix();
+		scene.setSkyBox(skyBox);
+
+		scene.setFog(new Fog(true, new Vector3f(0.5f, 0.5f, 0.5f), 0.02f));
+
+		Camera camera = scene.getCamera();
+		camera.setPosition(-1.5f, 3.0f, 4.5f);
+		camera.addRotation((float) Math.toRadians(15.0f),
+			(float) Math.toRadians(390.f));
+
+		GraphicsManager.lightAngle = 45.001f;
+	}
+
+	/**
+	 * Process inputs.
+	 *
+	 * @param window The window we are in.
+	 * @param scene The scene we are drawing.
+	 * @param diffTimeMillis How long since the last input in milliseconds.
+	 * @param inputConsumed Whether the input has been processed.
+	 */
+	@SuppressWarnings("hiding")
+	private static void input(Window window, Scene scene, long diffTimeMillis,
+		boolean inputConsumed) {
+		float move = diffTimeMillis * GraphicsManager.MOVEMENT_SPEED;
+		Camera camera = scene.getCamera();
+		if (window.isKeyPressed(GLFW.GLFW_KEY_W)) {
+			camera.moveForward(move);
+		}
+		else if (window.isKeyPressed(GLFW.GLFW_KEY_S)) {
+			camera.moveBackwards(move);
+		}
+		if (window.isKeyPressed(GLFW.GLFW_KEY_A)) {
+			camera.moveLeft(move);
+		}
+		else if (window.isKeyPressed(GLFW.GLFW_KEY_D)) {
+			camera.moveRight(move);
+		}
+		if (window.isKeyPressed(GLFW.GLFW_KEY_LEFT)) {
+			GraphicsManager.lightAngle -= 2.5f;
+			if (GraphicsManager.lightAngle < -90) {
+				GraphicsManager.lightAngle = -90;
+			}
+		}
+		else if (window.isKeyPressed(GLFW.GLFW_KEY_RIGHT)) {
+			GraphicsManager.lightAngle += 2.5f;
+			if (GraphicsManager.lightAngle > 90) {
+				GraphicsManager.lightAngle = 90;
+			}
 		}
 
-		final float elapsedTime = GraphicsManager.timer.getElapsedTime();
+		MouseInput mouseInput = window.getMouseInput();
+		if (mouseInput.isRightButtonPressed()) {
+			Vector2f displVec = mouseInput.getDisplaceVector();
+			camera.addRotation(
+				(float) Math
+					.toRadians(-displVec.x * GraphicsManager.MOUSE_SENSITIVITY),
+				(float) Math.toRadians(
+					-displVec.y * GraphicsManager.MOUSE_SENSITIVITY));
+		}
 
-		GraphicsManager.cameraManager.processInput();
-		GraphicsManager.cameraManager.updateCamera(elapsedTime,
-			GraphicsManager.terrain);
+		SceneLights sceneLights = scene.getSceneLights();
+		DirectionalLight dirLight = sceneLights.getDirectionalLight();
+		double angRad = Math.toRadians(GraphicsManager.lightAngle);
+		dirLight.getDirection().z = (float) Math.sin(angRad);
+		dirLight.getDirection().y = (float) Math.cos(angRad);
+	}
 
-		GraphicsManager.updateHud(elapsedTime);
+	/**
+	 * Render to the screen.
+	 *
+	 * @param elapsedTime The time since the last render.
+	 */
+	private static void render(final float elapsedTime) {
+		// clear the frame buffer
+		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
 
-		GraphicsManager.renderer.render(GraphicsManager.window,
-			GraphicsManager.cameraManager.getCamera(), GraphicsManager.scene,
-			GraphicsManager.hud);
+		GraphicsManager.cameraManager.updateCamera(elapsedTime);
+
+		GraphicsManager.render.render(GraphicsManager.window,
+			GraphicsManager.scene);
 
 		GraphicsManager.window.update();
 
@@ -215,44 +309,11 @@ public class GraphicsManager {
 
 	}
 
-	/**
-	 * Set up the lights in the scene.
-	 */
-	private static void setupLights() {
-		SceneLight sceneLight = new SceneLight();
-
-		// Ambient light
-		sceneLight.setAmbientLight(
-			new AmbientLight(new Vector3f(0.3f, 0.3f, 0.3f), 0.5f));
-
-		// Point light
-		Vector3f lightColour = new Vector3f(1, 1, 1);
-		Vector3f lightPosition = new Vector3f(0, 0, 1);
-		PointLight pointLight =
-			new PointLight(lightColour, lightPosition, 1.0f);
-		PointLight.Attenuation att =
-			new PointLight.Attenuation(0.0f, 0.0f, 1.0f);
-		pointLight.setAttenuation(att);
-		sceneLight.setPointLightList(new PointLight[] {pointLight});
-
-		// Directional light
-		lightPosition = new Vector3f(-1, 0, 0);
-		lightColour = new Vector3f(1, 1, 1);
-		sceneLight.setDirectionalLight(
-			new DirectionalLight(lightColour, lightPosition, 0.5f));
-
-		// Spot light
-		lightPosition = new Vector3f(0, 0.0f, 10f);
-		pointLight = new PointLight(new Vector3f(1, 1, 1), lightPosition, 1.0f);
-		att = new PointLight.Attenuation(0.0f, 0.0f, 0.02f);
-		pointLight.setAttenuation(att);
-		Vector3f coneDir = new Vector3f(0, 0, -1);
-		float cutoff = (float) Math.cos(Math.toRadians(140));
-		SpotLight spotLight = new SpotLight(pointLight, coneDir, cutoff);
-		sceneLight.setSpotLightList(
-			new SpotLight[] {spotLight, new SpotLight(spotLight)});
-
-		GraphicsManager.scene.setSceneLight(sceneLight);
+	private static void resize() {
+		int width = GraphicsManager.window.getWidth();
+		int height = GraphicsManager.window.getHeight();
+		GraphicsManager.scene.resize(width, height);
+		GraphicsManager.render.resize(width, height);
 	}
 
 	/**
@@ -260,10 +321,7 @@ public class GraphicsManager {
 	 * they are destroyed.
 	 */
 	public static void terminate() {
-		GraphicsManager.renderer.cleanup();
-		for (SceneItem item : GraphicsManager.scene.getSceneItems()) {
-			item.cleanup();
-		}
+		GraphicsManager.render.cleanup();
 
 		if (null != GraphicsManager.window) {
 			GraphicsManager.window.destroy();
@@ -297,47 +355,53 @@ public class GraphicsManager {
 			return Launcher.STATUS_REQUEST_REMOVAL;
 		}
 
+		GuiInstance guiInstance = GraphicsManager.scene.getGuiInstance();
+
 		if (GraphicsManager.timer.getTime() >= GraphicsManager.nextRenderTime) {
-			GraphicsManager.render();
+			final float elapsedTime = GraphicsManager.timer.getElapsedTime();
+
+			boolean inputConsumed = guiInstance != null
+				? guiInstance.handleGuiInput(GraphicsManager.scene,
+					GraphicsManager.window)
+				: false;
+
+			GraphicsManager.input(GraphicsManager.window, GraphicsManager.scene,
+				(long) elapsedTime, inputConsumed);
+			GraphicsManager.update(GraphicsManager.window,
+				GraphicsManager.scene, (long) elapsedTime);
+
+			GraphicsManager.render(elapsedTime);
 		}
 
 		return Launcher.STATUS_OK;
 	}
 
-	private static void updateHud(final float elapsedTime) {
-		GraphicsManager.hud.updateSize(GraphicsManager.window);
-		GraphicsManager.hud.rotateCompass(
-			GraphicsManager.cameraManager.getCamera().getRotation().y);
-
-		// Calculate and render FPS
-		GraphicsManager.currentTime = GLFW.glfwGetTime();
-		GraphicsManager.framesSinceLastCalculation++;
-		if (GraphicsManager.currentTime - GraphicsManager.lastTime >= 1d) {
-			GraphicsManager.hud.setFPS(String.format("FPS: %.0f (%.2f ms)",
-				1000d / GraphicsManager.framesSinceLastCalculation,
-				elapsedTime * 1000));
-			GraphicsManager.framesSinceLastCalculation = 0;
-			GraphicsManager.lastTime = GLFW.glfwGetTime();
+	/**
+	 * Make game updates.
+	 *
+	 * @param window The window we are in.
+	 * @param scene The scene we are drawing.
+	 * @param diffTimeMillis Time since the last update in milliseconds.
+	 */
+	@SuppressWarnings("hiding")
+	private static void update(Window window, Scene scene,
+		long diffTimeMillis) {
+		GraphicsManager.animationData1.nextFrame();
+		if (diffTimeMillis % 2 == 0) {
+			GraphicsManager.animationData2.nextFrame();
 		}
 
-		Vector3f position =
-			GraphicsManager.cameraManager.getCamera().getPosition();
-		GraphicsManager.hud.setCameraPosition(
-			String.format("Camera Pos (x, y, z): (%.2f, %.2f, %.2f)",
-				position.x, position.y, position.z));
-		GraphicsManager.lastCameraPosition
-			.set(GraphicsManager.currentCameraPosition);
-		GraphicsManager.currentCameraPosition
-			.set(GraphicsManager.cameraManager.getCamera().getPosition());
+		GraphicsManager.rotation += 1.5;
+		if (GraphicsManager.rotation > 360) {
+			GraphicsManager.rotation = 0;
+		}
+		GraphicsManager.cubeEntity1.setRotation(1, 1, 1,
+			(float) Math.toRadians(GraphicsManager.rotation));
+		GraphicsManager.cubeEntity1.updateModelMatrix();
 
-		GraphicsManager.hud.setCameraSpeed(
-			String.format("Camera Speed (x, y, z): (%.2f, %.2f, %.2f)",
-				(GraphicsManager.currentCameraPosition.x
-					- GraphicsManager.lastCameraPosition.x) / elapsedTime,
-				(GraphicsManager.currentCameraPosition.y
-					- GraphicsManager.lastCameraPosition.y) / elapsedTime,
-				(GraphicsManager.currentCameraPosition.z
-					- GraphicsManager.lastCameraPosition.z) / elapsedTime));
+		GraphicsManager.cubeEntity2.setRotation(1, 1, 1,
+			(float) Math.toRadians(360 - GraphicsManager.rotation));
+		GraphicsManager.cubeEntity2.updateModelMatrix();
 	}
 
 	/**

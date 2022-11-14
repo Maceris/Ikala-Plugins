@@ -4,13 +4,11 @@ import com.ikalagaming.graphics.scene.Camera;
 import com.ikalagaming.graphics.scene.SceneItem;
 
 import org.joml.Matrix4f;
+import org.joml.Vector2f;
 import org.joml.Vector3f;
 
 /**
  * Bundles together the projection and world matrix.
- *
- * @author Ches Burks
- *
  */
 public class Transformation {
 
@@ -157,7 +155,7 @@ public class Transformation {
 	 */
 	public Matrix4f getViewMatrix(Camera camera) {
 		Vector3f cameraPos = camera.getPosition();
-		Vector3f rotation = camera.getRotation();
+		Vector2f rotation = camera.getRotation();
 
 		this.viewMatrix.identity();
 		/**

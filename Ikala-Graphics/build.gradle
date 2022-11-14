@@ -59,6 +59,10 @@ dependencies {
 	runtimeOnly "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-windows"
 	implementation "org.lwjgl:lwjgl-stb:${lwjglVersion}"
 	runtimeOnly "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-windows"
+	implementation "org.lwjgl:lwjgl-assimp:${lwjglVersion}"
+	runtimeOnly "org.lwjgl:lwjgl-assimp:${lwjglVersion}:natives-windows"
+	implementation "io.github.spair:imgui-java-binding:${imguiJavaVersion}"
+	runtimeOnly "io.github.spair:imgui-java-natives-windows:${imguiJavaVersion}"
 	
 	jarInclude "org.joml:joml:${jomlVersion}"
 	jarInclude "org.lwjgl:lwjgl:${lwjglVersion}"
@@ -69,6 +73,10 @@ dependencies {
 	jarInclude "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-windows"
 	jarInclude "org.lwjgl:lwjgl-stb:${lwjglVersion}"
 	jarInclude "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-windows"
+	jarInclude "org.lwjgl:lwjgl-assimp:${lwjglVersion}"
+	jarInclude "org.lwjgl:lwjgl-assimp:${lwjglVersion}:natives-windows"
+	jarInclude "io.github.spair:imgui-java-binding:${imguiJavaVersion}"
+	jarInclude "io.github.spair:imgui-java-natives-windows:${imguiJavaVersion}"
 
 	// Testing
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"

@@ -1,28 +1,54 @@
 package com.ikalagaming.graphics;
 
-import com.ikalagaming.graphics.exceptions.WindowCreationException;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.glfw.Callbacks;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWVidMode;
-import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.system.MemoryUtil;
 
+import java.util.concurrent.Callable;
+
 /**
  * Provides convenience methods for an OpenGL window.
- *
- * @author Ches Burks
- *
  */
 @Slf4j
 @Getter
 public class Window {
+
+	/**
+	 * Options for the window.
+	 */
+	public static class WindowOptions {
+		/**
+		 * Whether anti-aliasing is enabled.
+		 */
+		public boolean antiAliasing;
+		/**
+		 * Whether we want to use a compatible profile instead of the core one.
+		 */
+		public boolean compatibleProfile;
+		/**
+		 * The target frames per second, which relates to vsync.
+		 */
+		public int fps;
+		/**
+		 * The height of the window in pixels.
+		 */
+		public int height;
+		/**
+		 * The target updates per second.
+		 */
+		public int ups = GraphicsManager.TARGET_FPS;
+		/**
+		 * The width of the window in pixels.
+		 */
+		public int width;
+	}
 
 	/**
 	 * The OpenGL window handle.
@@ -30,12 +56,6 @@ public class Window {
 	 * @return The window handle.
 	 */
 	private long windowHandle;
-	/**
-	 * The title of the window.
-	 *
-	 * @return The window title.
-	 */
-	private final String title;
 	/**
 	 * The width of the window in pixels.
 	 *
@@ -49,37 +69,105 @@ public class Window {
 	 */
 	private int height;
 	/**
-	 * Whether or not the window has been resized.
-	 *
-	 * @return True if the window has been resized, false otherwise.
-	 * @param resized resized If the window has been resized.
+	 * Mouse input handler.
 	 */
-	@Getter
-	@Setter
-	private boolean resized;
+	private MouseInput mouseInput;
 	/**
-	 * If vSync is enabled.
-	 *
-	 * @return True if vSync is enabled.
-	 * @param vSync If vSync should be enabled.
+	 * The resize function to call.
 	 */
-	@Setter
-	private boolean vSync;
+	private Callable<Void> resizeFunc;
 
 	/**
 	 * Create a new window.
 	 *
-	 * @param title The title of the window to create.
-	 * @param width The width of the window in pixels.
-	 * @param height The height of the window in pixels.
-	 * @param vSync If we want vSync enabled or not.
+	 * @param title The title of the window to display.
+	 * @param opts Options for the window setup.
+	 * @param resizeFunc The funciton to call upon the window resizing.
 	 */
-	public Window(String title, int width, int height, boolean vSync) {
-		this.title = title;
-		this.width = width;
-		this.height = height;
-		this.vSync = vSync;
-		this.resized = false;
+	public Window(String title, WindowOptions opts, Callable<Void> resizeFunc) {
+		this.resizeFunc = resizeFunc;
+		/*
+		 * Setup an error callback. The default implementation will print the
+		 * error message in System.err.
+		 */
+		GLFWErrorCallback.createPrint(System.err).set();// NOSONAR
+		if (!GLFW.glfwInit()) {
+			Window.log.error(SafeResourceLoader.getString("GLFW_INIT_FAIL",
+				GraphicsPlugin.getResourceBundle()));
+			throw new IllegalStateException("Unable to initialize GLFW");
+		}
+
+		GLFW.glfwDefaultWindowHints();
+		GLFW.glfwWindowHint(GLFW.GLFW_VISIBLE, GL11.GL_FALSE);
+		GLFW.glfwWindowHint(GLFW.GLFW_RESIZABLE, GL11.GL_TRUE);
+
+		if (opts.antiAliasing) {
+			GLFW.glfwWindowHint(GLFW.GLFW_SAMPLES, 4);
+		}
+		GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR, 4);
+		GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MINOR, 6);
+		if (opts.compatibleProfile) {
+			GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_PROFILE,
+				GLFW.GLFW_OPENGL_COMPAT_PROFILE);
+		}
+		else {
+			GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_PROFILE,
+				GLFW.GLFW_OPENGL_CORE_PROFILE);
+			GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_FORWARD_COMPAT, GL11.GL_TRUE);
+		}
+
+		if (opts.width > 0 && opts.height > 0) {
+			this.width = opts.width;
+			this.height = opts.height;
+		}
+		else {
+			GLFW.glfwWindowHint(GLFW.GLFW_MAXIMIZED, GLFW.GLFW_TRUE);
+			GLFWVidMode vidMode =
+				GLFW.glfwGetVideoMode(GLFW.glfwGetPrimaryMonitor());
+			this.width = vidMode.width();
+			this.height = vidMode.height();
+		}
+
+		this.windowHandle = GLFW.glfwCreateWindow(this.width, this.height,
+			title, MemoryUtil.NULL, MemoryUtil.NULL);
+		if (this.windowHandle == MemoryUtil.NULL) {
+			throw new RuntimeException("Failed to create the GLFW window");
+		}
+
+		GLFW.glfwSetFramebufferSizeCallback(this.windowHandle,
+			(window, w, h) -> this.resized(w, h));
+
+		GLFW.glfwSetErrorCallback((int errorCode, long msgPtr) -> Window.log
+			.error("Error code [{}], msg [{]]", errorCode,
+				MemoryUtil.memUTF8(msgPtr)));
+
+		GLFW.glfwSetKeyCallback(this.windowHandle,
+			(window, key, scancode, action, mods) -> {
+				if (key == GLFW.GLFW_KEY_ESCAPE
+					&& action == GLFW.GLFW_RELEASE) {
+					// We will detect this in the rendering loop
+					GLFW.glfwSetWindowShouldClose(window, true);
+				}
+			});
+
+		GLFW.glfwMakeContextCurrent(this.windowHandle);
+
+		if (opts.fps > 0) {
+			GLFW.glfwSwapInterval(0);
+		}
+		else {
+			GLFW.glfwSwapInterval(1);
+		}
+
+		GLFW.glfwShowWindow(this.windowHandle);
+
+		int[] arrWidth = new int[1];
+		int[] arrHeight = new int[1];
+		GLFW.glfwGetFramebufferSize(this.windowHandle, arrWidth, arrHeight);
+		this.width = arrWidth[0];
+		this.height = arrHeight[0];
+
+		this.mouseInput = new MouseInput(this.windowHandle);
 	}
 
 	/**
@@ -102,104 +190,6 @@ public class Window {
 	}
 
 	/**
-	 * Initialize the window.
-	 */
-	public void init() {
-		/*
-		 * Setup an error callback. The default implementation will print the
-		 * error message in System.err.
-		 */
-		GLFWErrorCallback.createPrint(System.err).set();// NOSONAR
-		if (!GLFW.glfwInit()) {
-			Window.log.error(SafeResourceLoader.getString("GLFW_INIT_FAIL",
-				GraphicsPlugin.getResourceBundle()));
-			throw new IllegalStateException("Unable to initialize GLFW");
-		}
-
-		// Configure GLFW
-
-		// optional, the current window hints are already the default
-		GLFW.glfwDefaultWindowHints();
-		// the window will stay hidden after creation
-		GLFW.glfwWindowHint(GLFW.GLFW_VISIBLE, GLFW.GLFW_FALSE);
-		// the window will be resizable
-		GLFW.glfwWindowHint(GLFW.GLFW_RESIZABLE, GLFW.GLFW_TRUE);
-		GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR, 3);
-		GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MINOR, 2);
-		GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_PROFILE,
-			GLFW.GLFW_OPENGL_CORE_PROFILE);
-		GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_FORWARD_COMPAT, GLFW.GLFW_TRUE);
-
-		// Create the window
-		this.windowHandle = GLFW.glfwCreateWindow(this.width, this.height,
-			this.title, MemoryUtil.NULL, MemoryUtil.NULL);
-		if (MemoryUtil.NULL == this.windowHandle) {
-			Window.log.error(SafeResourceLoader.getString(
-				"WINDOW_ERROR_CREATION", GraphicsPlugin.getResourceBundle()));
-			throw new WindowCreationException();
-		}
-
-		// Setup resize callback
-		GLFW.glfwSetFramebufferSizeCallback(this.windowHandle,
-			(window, w, h) -> {
-				this.width = w;
-				this.height = h;
-				this.setResized(true);
-			});
-
-		/*
-		 * Setup a key callback. It will be called every time a key is pressed,
-		 * repeated or released.
-		 */
-		GLFW.glfwSetKeyCallback(this.windowHandle,
-			(window1, key, scancode, action, mods) -> {
-				if (key == GLFW.GLFW_KEY_ESCAPE
-					&& action == GLFW.GLFW_RELEASE) {
-					// We will detect this in the rendering loop
-					GLFW.glfwSetWindowShouldClose(window1, true);
-				}
-			});
-
-		// Get the resolution of the primary monitor
-		GLFWVidMode vidmode =
-			GLFW.glfwGetVideoMode(GLFW.glfwGetPrimaryMonitor());
-		// Center our window
-		GLFW.glfwSetWindowPos(this.windowHandle,
-			(vidmode.width() - this.width) / 2,
-			(vidmode.height() - this.height) / 2);
-
-		// Make the OpenGL context current
-		GLFW.glfwMakeContextCurrent(this.windowHandle);
-		// Enable v-sync
-		if (this.isVSync()) {
-			GLFW.glfwSwapInterval(1);
-		}
-
-		// Make the window visible
-		GLFW.glfwShowWindow(this.windowHandle);
-
-		/*
-		 * This line is critical for LWJGL's interoperation with GLFW's OpenGL
-		 * context, or any context that is managed externally. LWJGL detects the
-		 * context that is current in the current thread, creates the
-		 * GLCapabilities instance and makes the OpenGL bindings available for
-		 * use.
-		 */
-		GL.createCapabilities();
-
-		// Set the clear color
-		GL11.glClearColor(0f, 0f, 0f, 1.0f);
-		GL11.glEnable(GL11.GL_DEPTH_TEST);
-
-		// Support for transparencies
-		GL11.glEnable(GL11.GL_BLEND);
-		GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-
-		GL11.glEnable(GL11.GL_CULL_FACE);
-		GL11.glCullFace(GL11.GL_BACK);
-	}
-
-	/**
 	 * Checks if a key is pressed.
 	 *
 	 * @param keyCode The keycode to look for.
@@ -207,6 +197,32 @@ public class Window {
 	 */
 	public boolean isKeyPressed(int keyCode) {
 		return GLFW.glfwGetKey(this.windowHandle, keyCode) == GLFW.GLFW_PRESS;
+	}
+
+	/**
+	 * Poll for events and process input.
+	 */
+	public void pollEvents() {
+		GLFW.glfwPollEvents();
+		this.mouseInput.input();
+	}
+
+	/**
+	 * A callback for resizing the window.
+	 *
+	 * @param width The new width of the window.
+	 * @param height The new height of the window.
+	 */
+	@SuppressWarnings("hiding")
+	protected void resized(int width, int height) {
+		this.width = width;
+		this.height = height;
+		try {
+			this.resizeFunc.call();
+		}
+		catch (Exception excp) {
+			Window.log.error("Error calling resize callback", excp);
+		}
 	}
 
 	/**
@@ -223,11 +239,10 @@ public class Window {
 	}
 
 	/**
-	 * Swap buffers (render) and poll for events.
+	 * Render the window.
 	 */
 	public void update() {
 		GLFW.glfwSwapBuffers(this.windowHandle);
-		GLFW.glfwPollEvents();
 	}
 
 	/**
