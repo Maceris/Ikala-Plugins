@@ -18,8 +18,8 @@ import java.util.Arrays;
 @Getter
 public class GBuffer {
 	/**
-	 * The maximum number of textures, which are used for things like positions,
-	 * normals, diffuse, or a depth buffer.
+	 * The maximum number of textures, which are used for albedo, normals,
+	 * specular, and depth, respectively.
 	 */
 	private static final int TOTAL_TEXTURES = 4;
 

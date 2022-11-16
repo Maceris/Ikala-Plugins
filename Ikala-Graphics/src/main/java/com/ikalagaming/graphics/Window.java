@@ -86,11 +86,7 @@ public class Window {
 	 */
 	public Window(String title, WindowOptions opts, Callable<Void> resizeFunc) {
 		this.resizeFunc = resizeFunc;
-		/*
-		 * Setup an error callback. The default implementation will print the
-		 * error message in System.err.
-		 */
-		GLFWErrorCallback.createPrint(System.err).set();// NOSONAR
+
 		if (!GLFW.glfwInit()) {
 			Window.log.error(SafeResourceLoader.getString("GLFW_INIT_FAIL",
 				GraphicsPlugin.getResourceBundle()));
@@ -223,19 +219,6 @@ public class Window {
 		catch (Exception excp) {
 			Window.log.error("Error calling resize callback", excp);
 		}
-	}
-
-	/**
-	 * Sets the clear value for fixed-point and floating-point color buffers in
-	 * RGBA mode.
-	 *
-	 * @param r The red component.
-	 * @param g The green component.
-	 * @param b The blue component.
-	 * @param alpha The alpha component.
-	 */
-	public void setClearColor(float r, float g, float b, float alpha) {
-		GL11.glClearColor(r, g, b, alpha);
 	}
 
 	/**

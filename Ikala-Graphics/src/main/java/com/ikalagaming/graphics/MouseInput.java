@@ -5,7 +5,6 @@ import static org.lwjgl.glfw.GLFW.GLFW_RELEASE;
 import static org.lwjgl.glfw.GLFW.GLFW_REPEAT;
 
 import lombok.Getter;
-import org.joml.Vector2d;
 import org.joml.Vector2f;
 import org.lwjgl.glfw.GLFW;
 
@@ -17,11 +16,14 @@ public class MouseInput {
 	/**
 	 * The position the mouse was in last time we checked.
 	 */
-	private final Vector2d previousPos;
+	private final Vector2f previousPos;
 	/**
 	 * The current position the mouse is in.
+	 * 
+	 * @return The current position.
 	 */
-	private final Vector2d currentPos;
+	@Getter
+	private final Vector2f currentPos;
 
 	/**
 	 * The displacement vector for how a mouse has moved.
@@ -60,15 +62,16 @@ public class MouseInput {
 	 * @param windowHandle The handle of the window we are interacting with.
 	 */
 	public MouseInput(long windowHandle) {
-		this.previousPos = new Vector2d(-1, -1);
-		this.currentPos = new Vector2d(0, 0);
+		this.previousPos = new Vector2f(-1, -1);
+		this.currentPos = new Vector2f();
 		this.displaceVector = new Vector2f();
 		this.leftButtonPressed = false;
 		this.rightButtonPressed = false;
 		this.inWindow = false;
+
 		GLFW.glfwSetCursorPosCallback(windowHandle, (handle, xpos, ypos) -> {
-			this.currentPos.x = xpos;
-			this.currentPos.y = ypos;
+			this.currentPos.x = (float) xpos;
+			this.currentPos.y = (float) ypos;
 		});
 		GLFW.glfwSetCursorEnterCallback(windowHandle,
 			(handle, entered) -> this.inWindow = entered);

@@ -115,4 +115,26 @@ public class PointLight {
 		this(color, position, intensity);
 		this.attenuation = attenuation;
 	}
+	
+	/**
+	 * Set the position.
+	 *
+	 * @param x The x position.
+	 * @param y The y position.
+	 * @param z The z position.
+	 */
+	public void setPosition(float x, float y, float z) {
+		this.position.set(x, y, z);
+	}
+	
+	/**
+	 * Set the color.
+	 *
+	 * @param r The red component.
+	 * @param g The green component.
+	 * @param b The blue component.
+	 */
+	public void setColor(float r, float g, float b) {
+		this.color.set(r, g, b);
+	}
 }

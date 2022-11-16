@@ -134,7 +134,7 @@ public class GuiRender {
 		ImGuiIO io = ImGui.getIO();
 		this.scale.x = 2.0f / io.getDisplaySizeX();
 		this.scale.y = -2.0f / io.getDisplaySizeY();
-		this.uniformsMap.setUniform("scale", this.scale);
+		this.uniformsMap.setUniform(ShaderUniforms.GUI.SCALE, this.scale);
 
 		ImDrawData drawData = ImGui.getDrawData();
 		int numLists = drawData.getCmdListsCount();
@@ -158,7 +158,7 @@ public class GuiRender {
 					GL11.GL_UNSIGNED_SHORT, indices);
 			}
 		}
-
+		
 		GL11.glEnable(GL11.GL_DEPTH_TEST);
 		GL11.glEnable(GL11.GL_CULL_FACE);
 		GL11.glDisable(GL11.GL_BLEND);

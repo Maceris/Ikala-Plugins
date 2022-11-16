@@ -59,13 +59,13 @@ public class DirectionalLight {
 	}
 
 	/**
-	 * Set the position.
+	 * Set the direction.
 	 *
 	 * @param x The x position.
 	 * @param y The y position.
 	 * @param z The z position.
 	 */
-	public void setPosition(float x, float y, float z) {
+	public void setDirection(float x, float y, float z) {
 		this.direction.set(x, y, z);
 	}
 }

@@ -12,7 +12,9 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.SkyBox;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
+import com.ikalagaming.graphics.scene.lights.PointLight;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
+import com.ikalagaming.graphics.scene.lights.SpotLight;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -20,10 +22,8 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.joml.Vector2f;
 import org.joml.Vector3f;
 import org.lwjgl.glfw.GLFW;
-import org.lwjgl.opengl.GL11;
 
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -41,9 +41,6 @@ public class GraphicsManager {
 	private static Render render;
 	private static CameraManager cameraManager;
 	private static Timer timer;
-
-	private static final float MOUSE_SENSITIVITY = 0.1f;
-	private static final float MOVEMENT_SPEED = 0.005f;
 
 	/**
 	 * The target frames per second that we want to hit.
@@ -212,8 +209,19 @@ public class GraphicsManager {
 		ambientLight.setColor(0.3f, 0.3f, 0.3f);
 
 		DirectionalLight dirLight = sceneLights.getDirectionalLight();
-		dirLight.setPosition(0, 1, 0);
+		dirLight.setDirection(0, 1, 0);
 		dirLight.setIntensity(1.0f);
+
+		sceneLights.getPointLights().add(new PointLight(new Vector3f(1, 1, 1),
+			new Vector3f(0, 0, -1.4f), 1.0f));
+
+		sceneLights.getSpotLights()
+			.add(
+				new SpotLight(
+					new PointLight(new Vector3f(1, 1, 1),
+						new Vector3f(0, 0, -1.6f), 1.0f),
+					new Vector3f(0, 0, -1.4f), 1.0f));
+
 		scene.setSceneLights(sceneLights);
 
 		SkyBox skyBox = new SkyBox("models/skybox/skybox.obj",
@@ -230,61 +238,9 @@ public class GraphicsManager {
 			(float) Math.toRadians(390.f));
 
 		GraphicsManager.lightAngle = 45.001f;
-	}
 
-	/**
-	 * Process inputs.
-	 *
-	 * @param window The window we are in.
-	 * @param scene The scene we are drawing.
-	 * @param diffTimeMillis How long since the last input in milliseconds.
-	 * @param inputConsumed Whether the input has been processed.
-	 */
-	@SuppressWarnings("hiding")
-	private static void input(Window window, Scene scene, long diffTimeMillis,
-		boolean inputConsumed) {
-		float move = diffTimeMillis * GraphicsManager.MOVEMENT_SPEED;
-		Camera camera = scene.getCamera();
-		if (window.isKeyPressed(GLFW.GLFW_KEY_W)) {
-			camera.moveForward(move);
-		}
-		else if (window.isKeyPressed(GLFW.GLFW_KEY_S)) {
-			camera.moveBackwards(move);
-		}
-		if (window.isKeyPressed(GLFW.GLFW_KEY_A)) {
-			camera.moveLeft(move);
-		}
-		else if (window.isKeyPressed(GLFW.GLFW_KEY_D)) {
-			camera.moveRight(move);
-		}
-		if (window.isKeyPressed(GLFW.GLFW_KEY_LEFT)) {
-			GraphicsManager.lightAngle -= 2.5f;
-			if (GraphicsManager.lightAngle < -90) {
-				GraphicsManager.lightAngle = -90;
-			}
-		}
-		else if (window.isKeyPressed(GLFW.GLFW_KEY_RIGHT)) {
-			GraphicsManager.lightAngle += 2.5f;
-			if (GraphicsManager.lightAngle > 90) {
-				GraphicsManager.lightAngle = 90;
-			}
-		}
-
-		MouseInput mouseInput = window.getMouseInput();
-		if (mouseInput.isRightButtonPressed()) {
-			Vector2f displVec = mouseInput.getDisplaceVector();
-			camera.addRotation(
-				(float) Math
-					.toRadians(-displVec.x * GraphicsManager.MOUSE_SENSITIVITY),
-				(float) Math.toRadians(
-					-displVec.y * GraphicsManager.MOUSE_SENSITIVITY));
-		}
-
-		SceneLights sceneLights = scene.getSceneLights();
-		DirectionalLight dirLight = sceneLights.getDirectionalLight();
-		double angRad = Math.toRadians(GraphicsManager.lightAngle);
-		dirLight.getDirection().z = (float) Math.sin(angRad);
-		dirLight.getDirection().y = (float) Math.cos(angRad);
+		LightControls lightControls = new LightControls(scene);
+		scene.setGuiInstance(lightControls);
 	}
 
 	/**
@@ -293,14 +249,11 @@ public class GraphicsManager {
 	 * @param elapsedTime The time since the last render.
 	 */
 	private static void render(final float elapsedTime) {
-		// clear the frame buffer
-		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
-
 		GraphicsManager.cameraManager.updateCamera(elapsedTime);
 
 		GraphicsManager.render.render(GraphicsManager.window,
 			GraphicsManager.scene);
-
+		
 		GraphicsManager.window.update();
 
 		// Update the next time we should render a frame
@@ -354,23 +307,21 @@ public class GraphicsManager {
 			GraphicsManager.window = null;
 			return Launcher.STATUS_REQUEST_REMOVAL;
 		}
-
-		GuiInstance guiInstance = GraphicsManager.scene.getGuiInstance();
+		
+		GraphicsManager.window.pollEvents();
 
 		if (GraphicsManager.timer.getTime() >= GraphicsManager.nextRenderTime) {
 			final float elapsedTime = GraphicsManager.timer.getElapsedTime();
-
-			boolean inputConsumed = guiInstance != null
-				? guiInstance.handleGuiInput(GraphicsManager.scene,
-					GraphicsManager.window)
-				: false;
-
-			GraphicsManager.input(GraphicsManager.window, GraphicsManager.scene,
-				(long) elapsedTime, inputConsumed);
+			
+			GuiInstance guiInstance = GraphicsManager.scene.getGuiInstance();
+			if (guiInstance != null) {
+				guiInstance.handleGuiInput(GraphicsManager.scene,
+					GraphicsManager.window);
+			}
+			
+			GraphicsManager.render(elapsedTime);
 			GraphicsManager.update(GraphicsManager.window,
 				GraphicsManager.scene, (long) elapsedTime);
-
-			GraphicsManager.render(elapsedTime);
 		}
 
 		return Launcher.STATUS_OK;
@@ -402,6 +353,12 @@ public class GraphicsManager {
 		GraphicsManager.cubeEntity2.setRotation(1, 1, 1,
 			(float) Math.toRadians(360 - GraphicsManager.rotation));
 		GraphicsManager.cubeEntity2.updateModelMatrix();
+
+		SceneLights sceneLights = scene.getSceneLights();
+		DirectionalLight dirLight = sceneLights.getDirectionalLight();
+		double angRad = Math.toRadians(GraphicsManager.lightAngle);
+		dirLight.getDirection().z = (float) Math.sin(angRad);
+		dirLight.getDirection().y = (float) Math.cos(angRad);
 	}
 
 	/**

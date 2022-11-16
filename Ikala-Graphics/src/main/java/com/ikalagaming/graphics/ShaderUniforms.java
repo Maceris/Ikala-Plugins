@@ -410,11 +410,6 @@ public class ShaderUniforms {
 		}
 
 		/**
-		 * The camera position in view space coordinates.
-		 */
-		public static final String CAMERA_POSITION = "cameraPos";
-
-		/**
 		 * Stores data per entity needed for indirect drawing.
 		 */
 		public static final String DRAW_ELEMENTS = "drawElements";
@@ -432,11 +427,6 @@ public class ShaderUniforms {
 		 * Used to calculate the position when projected onto the screen space.
 		 */
 		public static final String PROJECTION_MATRIX = "projectionMatrix";
-		/**
-		 * The exponent used in manipulating the strength of the specular factor
-		 * based on camera direction.
-		 */
-		public static final String SPECULAR_POWER = "specularPower";
 		/**
 		 * Used to sample a 2d texture.
 		 */

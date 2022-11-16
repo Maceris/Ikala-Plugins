@@ -23,10 +23,6 @@ public class CameraManager {
 	 */
 	private static final float MOVE_SPEED_PER_SECOND = 5f;
 	/**
-	 * Mouse input information relating to the camera.
-	 */
-	private final MouseInput mouseInput;
-	/**
 	 * The camera for the window.
 	 *
 	 * @return The camera.
@@ -44,7 +40,6 @@ public class CameraManager {
 	 * @param window The window the camera renders to.
 	 */
 	public CameraManager(Window window) {
-		this.mouseInput = new MouseInput(window.getWindowHandle());
 		this.camera = new Camera();
 		this.window = window;
 	}
@@ -55,8 +50,6 @@ public class CameraManager {
 	 * @param deltaTime The fractional part of a second since the last update.
 	 */
 	public void updateCamera(float deltaTime) {
-		this.mouseInput.input();
-
 		if (this.window.isKeyPressed(GLFW_KEY_W)) {
 			this.camera
 				.moveForward(CameraManager.MOVE_SPEED_PER_SECOND * deltaTime);
@@ -82,8 +75,8 @@ public class CameraManager {
 		}
 
 		// Update camera based on mouse
-		if (this.mouseInput.isRightButtonPressed()) {
-			Vector2f rotVec = this.mouseInput.getDisplaceVector();
+		if (this.window.getMouseInput().isRightButtonPressed()) {
+			Vector2f rotVec = this.window.getMouseInput().getDisplaceVector();
 			this.camera.addRotation(rotVec.x * CameraManager.MOUSE_SENSITIVITY,
 				rotVec.y * CameraManager.MOUSE_SENSITIVITY);
 		}

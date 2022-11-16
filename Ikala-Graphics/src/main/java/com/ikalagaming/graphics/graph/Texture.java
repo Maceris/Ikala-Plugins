@@ -39,7 +39,7 @@ public class Texture {
 	 *
 	 * @return The texture ID for this texture.
 	 */
-	private int id;
+	private int textureId;
 	/**
 	 * The path to the file for the texture, from the resource directory.
 	 * 
@@ -82,7 +82,7 @@ public class Texture {
 
 			int width = w.get();
 			int height = h.get();
-			this.id = this.createTexture(width, height, buffer);
+			this.createTexture(width, height, buffer);
 			STBImage.stbi_image_free(buffer);
 		}
 		catch (TextureException e) {
@@ -97,14 +97,14 @@ public class Texture {
 	 * Bind the texture.
 	 */
 	public void bind() {
-		glBindTexture(GL_TEXTURE_2D, this.id);
+		glBindTexture(GL_TEXTURE_2D, this.textureId);
 	}
 
 	/**
 	 * Clean up this texture.
 	 */
 	public void cleanup() {
-		glDeleteTextures(this.id);
+		glDeleteTextures(this.textureId);
 	}
 
 	/**
@@ -115,10 +115,10 @@ public class Texture {
 	 * @param buffer The buffer that contains the texture information.
 	 * @return The texture ID.
 	 */
-	private int createTexture(int width, int height, ByteBuffer buffer) {
+	private void createTexture(int width, int height, ByteBuffer buffer) {
 		// Create a new OpenGL texture
-		int textureID = glGenTextures();
-		glBindTexture(GL_TEXTURE_2D, textureID);
+		textureId = glGenTextures();
+		glBindTexture(GL_TEXTURE_2D, textureId);
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
 		// Tell OpenGL how to unpack the RGBA bytes. Each component is 1 byte
@@ -134,8 +134,6 @@ public class Texture {
 			BORDER, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
 
 		glGenerateMipmap(GL_TEXTURE_2D);
-
-		return textureID;
 	}
 
 }

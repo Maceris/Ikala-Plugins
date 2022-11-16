@@ -72,4 +72,15 @@ public class SpotLight {
 	public final void setCutOffAngle(float cutOffAngle) {
 		this.setCutOff((float) Math.cos(Math.toRadians(cutOffAngle)));
 	}
+	
+	/**
+	 * Set the cone direction.
+	 *
+	 * @param x The x position.
+	 * @param y The y position.
+	 * @param z The z position.
+	 */
+	public void setConeDirection(float x, float y, float z) {
+		this.coneDirection.set(x, y, z);
+	}
 }
