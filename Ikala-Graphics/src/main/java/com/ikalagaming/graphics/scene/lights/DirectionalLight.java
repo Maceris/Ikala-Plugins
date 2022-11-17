@@ -38,16 +38,6 @@ public class DirectionalLight {
 	private float intensity;
 
 	/**
-	 * Create a new directional light by copying the values of another one.
-	 *
-	 * @param light The light to copy values from.
-	 */
-	public DirectionalLight(DirectionalLight light) {
-		this(new Vector3f(light.getColor()), new Vector3f(light.getDirection()),
-			light.getIntensity());
-	}
-
-	/**
 	 * Set the color.
 	 *
 	 * @param r The red component.

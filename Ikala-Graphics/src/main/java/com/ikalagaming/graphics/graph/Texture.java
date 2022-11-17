@@ -31,13 +31,10 @@ import java.nio.IntBuffer;
  * A texture.
  */
 @Slf4j
-@Getter
 public class Texture {
 
 	/**
 	 * The OpenGL Texture ID.
-	 *
-	 * @return The texture ID for this texture.
 	 */
 	private int textureId;
 	/**
@@ -46,6 +43,7 @@ public class Texture {
 	 * @return The path to the file, which might be empty if the texture was
 	 *         loaded from a buffer instead.
 	 */
+	@Getter
 	private final String texturePath;
 
 	/**

@@ -40,7 +40,6 @@ public class Fog {
 	public Fog() {
 		active = false;
 		color = new Vector3f();
-		density = 0;
 	}
 
 }

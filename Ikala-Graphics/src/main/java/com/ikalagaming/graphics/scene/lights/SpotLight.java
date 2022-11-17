@@ -35,6 +35,13 @@ public class SpotLight {
 	 * @return The cutoff in radians.
 	 */
 	private float cutOff;
+	/**
+	 * The angle where we cut the light off, in degrees.
+	 *
+	 * @param cutOff The new cutoff, in degrees.
+	 * @return The cutoff in degrees.
+	 */
+	private float cutOffAngle;
 
 	/**
 	 * Create a new spotlight.
@@ -53,24 +60,14 @@ public class SpotLight {
 	}
 
 	/**
-	 * Copy constructor.
-	 *
-	 * @param spotLight The spotlight to copy.
-	 */
-	public SpotLight(SpotLight spotLight) {
-		this(new PointLight(spotLight.getPointLight()),
-			new Vector3f(spotLight.getConeDirection()), 0);
-		this.setCutOff(spotLight.getCutOff());
-	}
-
-	/**
 	 * Set the cutoff angle, in degrees. Converted to cos(toRadians(angle in
 	 * degrees)).
 	 *
 	 * @param cutOffAngle The angle in degrees.
 	 */
 	public final void setCutOffAngle(float cutOffAngle) {
-		this.setCutOff((float) Math.cos(Math.toRadians(cutOffAngle)));
+		this.cutOffAngle = cutOffAngle;
+        cutOff = (float) Math.cos(Math.toRadians(cutOffAngle));
 	}
 	
 	/**

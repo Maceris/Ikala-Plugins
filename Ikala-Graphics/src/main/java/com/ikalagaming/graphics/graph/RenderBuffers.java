@@ -178,6 +178,9 @@ public class RenderBuffers {
 		GL30.glDeleteVertexArrays(this.animVaoId);
 	}
 
+	/**
+	 * Set up vertex attribute arrays.
+	 */
 	private void defineVertexAttribs() {
 		final int stride = 3 * 4 * 4 + 2 * 4;
 		int pointer = 0;

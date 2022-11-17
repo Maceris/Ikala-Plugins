@@ -54,6 +54,9 @@ public class ShaderProgram {
 		private final int shaderType;
 	}
 
+	/**
+	 * The Program ID for the program.
+	 */
 	@Getter
 	private final int programId;
 

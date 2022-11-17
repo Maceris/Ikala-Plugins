@@ -51,8 +51,8 @@ public class CascadeShadow {
 	 * https://johanmedestrom.wordpress.com/2016/03/18/opengl-cascaded-shadow-maps/
 	 * </p>
 	 * 
-	 * @param cascadeShadows
-	 * @param scene
+	 * @param cascadeShadows The shadows for the scene.
+	 * @param scene Thes cene.
 	 */
 	public static void updateCascadeShadows(List<CascadeShadow> cascadeShadows,
 		Scene scene) {

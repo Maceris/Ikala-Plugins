@@ -30,21 +30,29 @@ public class PointLight {
 		 */
 		private float constant;
 		/**
-		 * The linear component.
-		 *
-		 * @param linear The linear component.
-		 * @return The linear fall off with respect to distance.
-		 */
-		private float linear;
-		/**
 		 * The exponent component.
 		 *
 		 * @param exponent The exponent component.
 		 * @return The exponential fall off with respect to distance.
 		 */
 		private float exponent;
+		/**
+		 * The linear component.
+		 *
+		 * @param linear The linear component.
+		 * @return The linear fall off with respect to distance.
+		 */
+		private float linear;
+		
 	}
-
+	/**
+	 * Information about how the light attenuates.
+	 *
+	 * @param attenuation The new attenuation information.
+	 * @return The attenuation information.
+	 */
+	private Attenuation attenuation;
+	
 	/**
 	 * The color of the point light.
 	 *
@@ -52,7 +60,13 @@ public class PointLight {
 	 * @return The color.
 	 */
 	private Vector3f color;
-
+	/**
+	 * The intensity of the point light, between 0 and 1.
+	 *
+	 * @param intensity The new intensity.
+	 * @return The intensity of the point light.
+	 */
+	protected float intensity;
 	/**
 	 * The position of the point light.
 	 *
@@ -62,33 +76,6 @@ public class PointLight {
 	private Vector3f position;
 
 	/**
-	 * The intensity of the point light, between 0 and 1.
-	 *
-	 * @param intensity The new intensity.
-	 * @return The intensity of the point light.
-	 */
-	protected float intensity;
-
-	/**
-	 * Information about how the light attenuates.
-	 *
-	 * @param attenuation The new attenuation information.
-	 * @return The attenuation information.
-	 */
-	private Attenuation attenuation;
-
-	/**
-	 * Duplicate a point light.
-	 *
-	 * @param pointLight The point light we are cloning.
-	 */
-	public PointLight(PointLight pointLight) {
-		this(new Vector3f(pointLight.getColor()),
-			new Vector3f(pointLight.getPosition()), pointLight.getIntensity(),
-			pointLight.getAttenuation());
-	}
-
-	/**
 	 * Create a new point light with a constant attenuation.
 	 *
 	 * @param color The color of the light.
@@ -96,7 +83,7 @@ public class PointLight {
 	 * @param intensity The intensity of the light.
 	 */
 	public PointLight(Vector3f color, Vector3f position, float intensity) {
-		this.attenuation = new Attenuation(1, 0, 0);
+		this.attenuation = new Attenuation(0, 1, 0);
 		this.color = color;
 		this.position = position;
 		this.intensity = intensity;
