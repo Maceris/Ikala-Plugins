@@ -8,13 +8,13 @@ import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.graph.TextureCache;
 
 import lombok.Getter;
+import lombok.NonNull;
 
 /**
  * A sky box that provides a backdrop for the environment.
  */
 @Getter
 public class SkyBox {
-
 	/**
 	 * The material used to render the skybox.
 	 *
@@ -47,8 +47,9 @@ public class SkyBox {
 	 * @param textureCache The texture cache to use.
 	 * @param materialCache The texture cache to use.
 	 */
-	public SkyBox(String skyBoxModelPath, TextureCache textureCache,
-		MaterialCache materialCache) {
+	public SkyBox(@NonNull String skyBoxModelPath,
+		@NonNull TextureCache textureCache,
+		@NonNull MaterialCache materialCache) {
 		this.skyBoxModel = ModelLoader.loadModel("skybox-model",
 			skyBoxModelPath, textureCache, materialCache, false);
 		MeshData meshData = this.skyBoxModel.getMeshDataList().get(0);
@@ -65,5 +66,4 @@ public class SkyBox {
 	public void cleanuo() {
 		this.mesh.cleanup();
 	}
-
 }

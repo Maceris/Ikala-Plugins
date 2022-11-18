@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.scene.lights;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import org.joml.Vector3f;
 
@@ -18,8 +19,8 @@ public class AmbientLight {
 	 * @param color The base color.
 	 * @return The base color.
 	 */
+	@NonNull
 	private Vector3f color;
-
 	/**
 	 * How bright the ambient light is.
 	 *
@@ -45,5 +46,4 @@ public class AmbientLight {
 	public void setColor(float r, float g, float b) {
 		this.color.set(r, g, b);
 	}
-
 }

@@ -1,4 +1,4 @@
 /**
- * Classes for rendering different things.
+ * Rendering logic and stages.
  */
 package com.ikalagaming.graphics.render;

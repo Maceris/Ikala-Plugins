@@ -1,8 +1,10 @@
 package com.ikalagaming.graphics;
 
+import com.ikalagaming.graphics.exceptions.WindowCreationException;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.glfw.Callbacks;
 import org.lwjgl.glfw.GLFW;
@@ -84,13 +86,15 @@ public class Window {
 	 * @param opts Options for the window setup.
 	 * @param resizeFunc The funciton to call upon the window resizing.
 	 */
-	public Window(String title, WindowOptions opts, Callable<Void> resizeFunc) {
+	public Window(@NonNull String title, @NonNull WindowOptions opts,
+		@NonNull Callable<Void> resizeFunc) {
 		this.resizeFunc = resizeFunc;
 
 		if (!GLFW.glfwInit()) {
-			Window.log.error(SafeResourceLoader.getString("GLFW_INIT_FAIL",
-				GraphicsPlugin.getResourceBundle()));
-			throw new IllegalStateException("Unable to initialize GLFW");
+			String error = SafeResourceLoader.getString("GLFW_INIT_FAIL",
+				GraphicsPlugin.getResourceBundle());
+			Window.log.warn(error);
+			throw new WindowCreationException(error);
 		}
 
 		GLFW.glfwDefaultWindowHints();
@@ -127,7 +131,10 @@ public class Window {
 		this.windowHandle = GLFW.glfwCreateWindow(this.width, this.height,
 			title, MemoryUtil.NULL, MemoryUtil.NULL);
 		if (this.windowHandle == MemoryUtil.NULL) {
-			throw new RuntimeException("Failed to create the GLFW window");
+			String error = SafeResourceLoader.getString("WINDOW_ERROR_CREATION",
+				GraphicsPlugin.getResourceBundle());
+			Window.log.warn(error);
+			throw new WindowCreationException(error);
 		}
 
 		GLFW.glfwSetFramebufferSizeCallback(this.windowHandle,
@@ -200,7 +207,6 @@ public class Window {
 	 */
 	public void pollEvents() {
 		GLFW.glfwPollEvents();
-		this.mouseInput.input();
 	}
 
 	/**
@@ -217,7 +223,8 @@ public class Window {
 			this.resizeFunc.call();
 		}
 		catch (Exception excp) {
-			Window.log.error("Error calling resize callback", excp);
+			Window.log.warn(SafeResourceLoader.getString("RESIZE_ERROR",
+				GraphicsPlugin.getResourceBundle()), excp);
 		}
 	}
 

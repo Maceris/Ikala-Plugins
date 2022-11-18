@@ -11,6 +11,7 @@ import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.SkyBox;
 
+import lombok.NonNull;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
@@ -23,7 +24,7 @@ import java.util.List;
 /**
  * Handles rendering for the skybox.
  */
-public class SkyboxRender {
+public class SkyBoxRender {
 	/**
 	 * The shader program for the skybox.
 	 */
@@ -40,7 +41,7 @@ public class SkyboxRender {
 	/**
 	 * Set up the renderer.
 	 */
-	public SkyboxRender() {
+	public SkyBoxRender() {
 		List<ShaderProgram.ShaderModuleData> shaderModuleDataList =
 			new ArrayList<>();
 		shaderModuleDataList.add(new ShaderProgram.ShaderModuleData(
@@ -63,7 +64,7 @@ public class SkyboxRender {
 	 * Set up uniforms for the shader.
 	 */
 	private void createUniforms() {
-		this.uniformsMap = new UniformsMap(this.shaderProgram.getProgramId());
+		this.uniformsMap = new UniformsMap(this.shaderProgram.getProgramID());
 		this.uniformsMap.createUniform(ShaderUniforms.Skybox.PROJECTION_MATRIX);
 		this.uniformsMap.createUniform(ShaderUniforms.Skybox.VIEW_MATRIX);
 		this.uniformsMap.createUniform(ShaderUniforms.Skybox.MODEL_MATRIX);
@@ -77,7 +78,7 @@ public class SkyboxRender {
 	 *
 	 * @param scene The scene to render.
 	 */
-	public void render(Scene scene) {
+	public void render(@NonNull Scene scene) {
 		SkyBox skyBox = scene.getSkyBox();
 		if (skyBox == null) {
 			return;
@@ -85,7 +86,7 @@ public class SkyboxRender {
 		this.shaderProgram.bind();
 
 		this.uniformsMap.setUniform(ShaderUniforms.Skybox.PROJECTION_MATRIX,
-			scene.getProjection().getProjectionMatrix());
+			scene.getProjection().getProjMatrix());
 		this.viewMatrix.set(scene.getCamera().getViewMatrix());
 		this.viewMatrix.m30(0);
 		this.viewMatrix.m31(0);
@@ -109,7 +110,7 @@ public class SkyboxRender {
 				? 0
 				: 1);
 
-		GL30.glBindVertexArray(mesh.getVaoId());
+		GL30.glBindVertexArray(mesh.getVaoID());
 
 		this.uniformsMap.setUniform(ShaderUniforms.Skybox.MODEL_MATRIX,
 			skyBoxEntity.getModelMatrix());

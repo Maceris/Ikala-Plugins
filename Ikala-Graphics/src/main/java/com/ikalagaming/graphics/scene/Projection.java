@@ -22,41 +22,40 @@ public class Projection {
 	 * The near clipping plane distance, in world units.
 	 */
 	private static final float Z_NEAR = 0.01f;
-
 	/**
 	 * The inverse of the current projection matrix.
-	 * 
+	 *
 	 * @return The inverse projection matrix.
 	 */
-	private Matrix4f inverseProjectionMatrix;
+	private Matrix4f invProjMatrix;
 	/**
 	 * The current projection matrix.
-	 * 
+	 *
 	 * @return The projection matrix.
 	 */
-	private Matrix4f projectionMatrix;
+	private Matrix4f projMatrix;
 
 	/**
 	 * Create a new projection matrix.
-	 * 
+	 *
 	 * @param width The width of the screen in pixels.
 	 * @param height The height of the screen in pixels.
 	 */
 	public Projection(int width, int height) {
-		projectionMatrix = new Matrix4f();
-		inverseProjectionMatrix = new Matrix4f();
-		updateProjMatrix(width, height);
+		this.projMatrix = new Matrix4f();
+		this.invProjMatrix = new Matrix4f();
+		this.updateProjMatrix(width, height);
 	}
 
 	/**
 	 * Update the projection matrix to a new screen size.
-	 * 
+	 *
 	 * @param width The new width of the screen in pixels.
 	 * @param height The new height of the screen in pixels.
 	 */
 	public void updateProjMatrix(int width, int height) {
-		projectionMatrix.setPerspective(FOV, (float) width / height, Z_NEAR,
-			Z_FAR);
-		inverseProjectionMatrix.set(projectionMatrix).invert();
+		this.projMatrix.setPerspective(Projection.FOV, (float) width / height,
+			Projection.Z_NEAR, Projection.Z_FAR);
+		this.invProjMatrix.set(this.projMatrix).invert();
 	}
 }

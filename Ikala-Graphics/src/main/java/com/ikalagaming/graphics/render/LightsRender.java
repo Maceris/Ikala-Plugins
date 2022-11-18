@@ -2,7 +2,7 @@ package com.ikalagaming.graphics.render;
 
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.graph.CascadeShadow;
-import com.ikalagaming.graphics.graph.GBuffer;
+import com.ikalagaming.graphics.graph.GeometryBuffer;
 import com.ikalagaming.graphics.graph.QuadMesh;
 import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.UniformsMap;
@@ -14,6 +14,7 @@ import com.ikalagaming.graphics.scene.lights.PointLight;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
 import com.ikalagaming.graphics.scene.lights.SpotLight;
 
+import lombok.NonNull;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
@@ -77,7 +78,7 @@ public class LightsRender {
 	 * Set up the uniforms for the shader program.
 	 */
 	private void createUniforms() {
-		this.uniformsMap = new UniformsMap(this.shaderProgram.getProgramId());
+		this.uniformsMap = new UniformsMap(this.shaderProgram.getProgramID());
 		this.uniformsMap.createUniform(ShaderUniforms.Light.ALBEDO_SAMPLER);
 		this.uniformsMap.createUniform(ShaderUniforms.Light.NORMAL_SAMPLER);
 		this.uniformsMap.createUniform(ShaderUniforms.Light.SPECULAR_SAMPLER);
@@ -91,7 +92,7 @@ public class LightsRender {
 		this.uniformsMap.createUniform(ShaderUniforms.Light.AMBIENT_LIGHT + "."
 			+ ShaderUniforms.Light.AmbientLight.COLOR);
 
-		for (int i = 0; i < LightsRender.MAX_POINT_LIGHTS; i++) {
+		for (int i = 0; i < LightsRender.MAX_POINT_LIGHTS; ++i) {
 			String name = ShaderUniforms.Light.POINT_LIGHTS + "[" + i + "].";
 			this.uniformsMap
 				.createUniform(name + ShaderUniforms.Light.PointLight.POSITION);
@@ -109,7 +110,7 @@ public class LightsRender {
 				name + ShaderUniforms.Light.PointLight.ATTENUATION + "."
 					+ ShaderUniforms.Light.Attenuation.EXPONENT);
 		}
-		for (int i = 0; i < LightsRender.MAX_SPOT_LIGHTS; i++) {
+		for (int i = 0; i < LightsRender.MAX_SPOT_LIGHTS; ++i) {
 			String name = ShaderUniforms.Light.SPOT_LIGHTS + "[" + i + "].";
 			this.uniformsMap
 				.createUniform(name + ShaderUniforms.Light.SpotLight.POINT_LIGHT
@@ -152,7 +153,7 @@ public class LightsRender {
 		this.uniformsMap.createUniform(
 			ShaderUniforms.Light.FOG + "." + ShaderUniforms.Light.Fog.DENSITY);
 
-		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; i++) {
+		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
 			this.uniformsMap
 				.createUniform(ShaderUniforms.Light.SHADOW_MAP_PREFIX + i);
 			this.uniformsMap.createUniform(ShaderUniforms.Light.CASCADE_SHADOWS
@@ -171,16 +172,16 @@ public class LightsRender {
 	 * @param shadowRender The shadow renderer.
 	 * @param gBuffer The buffer for geometry data.
 	 */
-	public void render(Scene scene, ShadowRender shadowRender,
-		GBuffer gBuffer) {
+	public void render(@NonNull Scene scene, @NonNull ShadowRender shadowRender,
+		GeometryBuffer gBuffer) {
 		this.shaderProgram.bind();
 
 		this.updateLights(scene);
 
 		// Bind the G-Buffer textures
-		int[] textureIds = gBuffer.getTextureIds();
+		int[] textureIds = gBuffer.getTextureIDs();
 		if (textureIds != null) {
-			for (int i = 0; i < textureIds.length; i++) {
+			for (int i = 0; i < textureIds.length; ++i) {
 				GL13.glActiveTexture(GL13.GL_TEXTURE0 + i);
 				GL11.glBindTexture(GL11.GL_TEXTURE_2D, textureIds[i]);
 			}
@@ -190,7 +191,6 @@ public class LightsRender {
 		this.uniformsMap.setUniform(ShaderUniforms.Light.NORMAL_SAMPLER, 1);
 		this.uniformsMap.setUniform(ShaderUniforms.Light.SPECULAR_SAMPLER, 2);
 		this.uniformsMap.setUniform(ShaderUniforms.Light.DEPTH_SAMPLER, 3);
-
 		Fog fog = scene.getFog();
 		this.uniformsMap.setUniform(
 			ShaderUniforms.Light.FOG + "." + ShaderUniforms.Light.Fog.ENABLED,
@@ -204,7 +204,7 @@ public class LightsRender {
 
 		int start = 4;
 		List<CascadeShadow> cascadeShadows = shadowRender.getCascadeShadows();
-		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; i++) {
+		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
 			GL13.glActiveTexture(GL13.GL_TEXTURE0 + start + i);
 			this.uniformsMap.setUniform(
 				ShaderUniforms.Light.SHADOW_MAP_PREFIX + i, start + i);
@@ -222,12 +222,12 @@ public class LightsRender {
 
 		this.uniformsMap.setUniform(
 			ShaderUniforms.Light.INVERSE_PROJECTION_MATRIX,
-			scene.getProjection().getInverseProjectionMatrix());
+			scene.getProjection().getInvProjMatrix());
 		this.uniformsMap.setUniform(ShaderUniforms.Light.INVERSE_VIEW_MATRIX,
 			scene.getCamera().getInvViewMatrix());
 
-		GL30.glBindVertexArray(this.quadMesh.getVaoId());
-		GL11.glDrawElements(GL11.GL_TRIANGLES, this.quadMesh.getNumVertices(),
+		GL30.glBindVertexArray(this.quadMesh.getVaoID());
+		GL11.glDrawElements(GL11.GL_TRIANGLES, this.quadMesh.getVertexCount(),
 			GL11.GL_UNSIGNED_INT, 0);
 
 		this.shaderProgram.unbind();
@@ -238,7 +238,7 @@ public class LightsRender {
 	 *
 	 * @param scene The scene we are updating.
 	 */
-	private void updateLights(Scene scene) {
+	private void updateLights(@NonNull Scene scene) {
 		Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
 
 		SceneLights sceneLights = scene.getSceneLights();
@@ -252,7 +252,7 @@ public class LightsRender {
 				+ ShaderUniforms.Light.AmbientLight.COLOR,
 			ambientLight.getColor());
 
-		DirectionalLight dirLight = sceneLights.getDirectionalLight();
+		DirectionalLight dirLight = sceneLights.getDirLight();
 		Vector4f auxDir = new Vector4f(dirLight.getDirection(), 0);
 		auxDir.mul(viewMatrix);
 		Vector3f dir = new Vector3f(auxDir.x, auxDir.y, auxDir.z);
@@ -270,7 +270,7 @@ public class LightsRender {
 		List<PointLight> pointLights = sceneLights.getPointLights();
 		int numPointLights = pointLights.size();
 		PointLight pointLight;
-		for (int i = 0; i < LightsRender.MAX_POINT_LIGHTS; i++) {
+		for (int i = 0; i < LightsRender.MAX_POINT_LIGHTS; ++i) {
 			if (i < numPointLights) {
 				pointLight = pointLights.get(i);
 			}
@@ -284,7 +284,7 @@ public class LightsRender {
 		List<SpotLight> spotLights = sceneLights.getSpotLights();
 		int numSpotLights = spotLights.size();
 		SpotLight spotLight;
-		for (int i = 0; i < LightsRender.MAX_SPOT_LIGHTS; i++) {
+		for (int i = 0; i < LightsRender.MAX_SPOT_LIGHTS; ++i) {
 			if (i < numSpotLights) {
 				spotLight = spotLights.get(i);
 			}
@@ -303,8 +303,8 @@ public class LightsRender {
 	 * @param prefix The prefix for uniforms.
 	 * @param viewMatrix The view matrix.
 	 */
-	private void updatePointLight(PointLight pointLight, String prefix,
-		Matrix4f viewMatrix) {
+	private void updatePointLight(PointLight pointLight, @NonNull String prefix,
+		@NonNull Matrix4f viewMatrix) {
 		Vector4f aux = new Vector4f();
 		Vector3f lightPosition = new Vector3f();
 		Vector3f color = new Vector3f();
@@ -347,8 +347,8 @@ public class LightsRender {
 	 * @param prefix The prefix for uniform values.
 	 * @param viewMatrix The view matrix.
 	 */
-	private void updateSpotLight(SpotLight spotLight, String prefix,
-		Matrix4f viewMatrix) {
+	private void updateSpotLight(SpotLight spotLight, @NonNull String prefix,
+		@NonNull Matrix4f viewMatrix) {
 		PointLight pointLight = null;
 		Vector3f coneDirection = new Vector3f();
 		float cutoff = 0.0f;

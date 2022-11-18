@@ -11,14 +11,14 @@ import java.nio.ByteBuffer;
  * An array of textures for rendering cascaded shadow maps.
  */
 @Getter
-public class ArrTexture {
+public class ArrayOfTextures {
 
 	/**
 	 * The list of all texture IDs.
 	 *
 	 * @return The list of all texture IDs.
 	 */
-	private final int[] ids;
+	private final int[] IDs;
 
 	/**
 	 * Create an array of textures.
@@ -26,14 +26,16 @@ public class ArrTexture {
 	 * @param numTextures The number of textures to create.
 	 * @param width The width of each texture in pixels.
 	 * @param height The height of each texture in pixels.
-	 * @param pixelFormat The pixel format to use for the textures.
+	 * @param pixelFormat The pixel format to use for the textures for
+	 *            glTexImage2Ds.
 	 */
-	public ArrTexture(int numTextures, int width, int height, int pixelFormat) {
-		this.ids = new int[numTextures];
-		GL11.glGenTextures(this.ids);
+	public ArrayOfTextures(int numTextures, int width, int height,
+		int pixelFormat) {
+		this.IDs = new int[numTextures];
+		GL11.glGenTextures(this.IDs);
 
-		for (int i = 0; i < numTextures; i++) {
-			GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.ids[i]);
+		for (int i = 0; i < numTextures; ++i) {
+			GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.IDs[i]);
 			GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_DEPTH_COMPONENT,
 				width, height, 0, pixelFormat, GL11.GL_FLOAT,
 				(ByteBuffer) null);
@@ -54,7 +56,7 @@ public class ArrTexture {
 	 * Clean up all the textures.
 	 */
 	public void cleanup() {
-		for (int id : this.ids) {
+		for (int id : this.IDs) {
 			GL11.glDeleteTextures(id);
 		}
 	}

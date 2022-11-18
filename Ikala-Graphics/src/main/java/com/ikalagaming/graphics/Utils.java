@@ -6,10 +6,9 @@ import java.util.List;
  * Graphics related utility methods.
  */
 public class Utils {
-
 	/**
 	 * Clamps the float between the given values. NaN is considered less than
-	 * the min.
+	 * the minimum.
 	 *
 	 * @param value The value we are clamping.
 	 * @param min The smallest value it can be.
@@ -46,22 +45,7 @@ public class Utils {
 		return output;
 	}
 
-	/**
-	 * Convert a list of integers to an array, since there is no other easy way
-	 * to do this in Java.
-	 *
-	 * @param list The list of integers.
-	 * @return The list as an array.
-	 */
-	public static int[] listIntToArray(List<Integer> list) {
-		if (list == null) {
-			return new int[0];
-		}
-		int size = list.size();
-		int[] output = new int[size];
-		for (int i = 0; i < size; ++i) {
-			output[i] = list.get(i);
-		}
-		return output;
+	private Utils() {
+		// Utility class
 	}
 }

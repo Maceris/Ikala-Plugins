@@ -15,6 +15,7 @@ import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
@@ -48,13 +49,13 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Utility class for loading in models from file.
  */
 @Slf4j
 public class ModelLoader {
+
 	/**
 	 * Lists of weights and bones that affect the vertices, ordered by vertex
 	 * ID. Each vertex has {@link Mesh#MAX_WEIGHTS} entries in each list, and if
@@ -84,10 +85,10 @@ public class ModelLoader {
 		 * is the bone ID corresponding to the weight in the weight list at the
 		 * same position.
 		 *
-		 * @param boneIds The bone ID list.
+		 * @param boneIDs The bone ID list.
 		 * @return The bone ID list.
 		 */
-		final int[] boneIds;
+		final int[] boneIDs;
 	}
 
 	/**
@@ -100,10 +101,10 @@ public class ModelLoader {
 		 * The ID of the bone, based on the order the bones are read in by
 		 * Assimp.
 		 *
-		 * @param boneId The ID of the bone.
+		 * @param boneID The ID of the bone.
 		 * @return The ID of the bone.
 		 */
-		final int boneId;
+		final int boneID;
 		/**
 		 * The name of the bone as specified in the model.
 		 *
@@ -129,21 +130,21 @@ public class ModelLoader {
 		/**
 		 * Which bone we are interested in.
 		 *
-		 * @param boneId The ID of the bone.
+		 * @param boneID The ID of the bone.
 		 * @return The ID of the bone.
 		 */
-		final int boneId;
+		final int boneID;
 		/**
 		 * Which vertex we are interested in.
 		 *
-		 * @param boneId The ID of the vertex.
+		 * @param boneID The ID of the vertex.
 		 * @return The ID of the vertex.
 		 */
-		final int vertexId;
+		final int vertexID;
 		/**
 		 * How much the bone affects the vertex.
 		 *
-		 * @param boneId The weight of the bone on the vertex.
+		 * @param boneID The weight of the bone on the vertex.
 		 * @return The weight of the bone on the vertex.
 		 */
 		final float weight;
@@ -154,6 +155,9 @@ public class ModelLoader {
 	 */
 	public static final int MAX_BONES = 150;
 
+	/**
+	 * A 4x4 identity matrix.
+	 */
 	private static final Matrix4f IDENTITY_MATRIX = new Matrix4f();
 
 	/**
@@ -169,10 +173,12 @@ public class ModelLoader {
 	 * @param globalInverseTransform The inverse of the root node transformation
 	 *            matrix.
 	 */
-	private static void buildFrameMatrices(AIAnimation aiAnimation,
-		List<Bone> boneList, Model.AnimatedFrame animatedFrame, int frame,
-		Node node, Matrix4f parentTransformation,
-		Matrix4f globalInverseTransform) {
+	private static void buildFrameMatrices(@NonNull AIAnimation aiAnimation,
+		@NonNull List<Bone> boneList,
+		@NonNull Model.AnimatedFrame animatedFrame, int frame,
+		@NonNull Node node, @NonNull Matrix4f parentTransformation,
+		@NonNull Matrix4f globalInverseTransform) {
+
 		String nodeName = node.getName();
 		AINodeAnim aiNodeAnim =
 			ModelLoader.findAIAnimNode(aiAnimation, nodeName);
@@ -184,13 +190,12 @@ public class ModelLoader {
 		Matrix4f nodeGlobalTransform =
 			new Matrix4f(parentTransformation).mul(nodeTransform);
 
-		List<Bone> affectedBones =
-			boneList.stream().filter(b -> b.getBoneName().equals(nodeName))
-				.collect(Collectors.toList());
+		List<Bone> affectedBones = boneList.stream()
+			.filter(b -> b.getBoneName().equals(nodeName)).toList();
 		for (Bone bone : affectedBones) {
 			Matrix4f boneTransform = new Matrix4f(globalInverseTransform)
 				.mul(nodeGlobalTransform).mul(bone.getOffsetMatrix());
-			animatedFrame.getBonesMatrices()[bone.getBoneId()] = boneTransform;
+			animatedFrame.getBonesMatrices()[bone.getBoneID()] = boneTransform;
 		}
 
 		for (Node childNode : node.getChildren()) {
@@ -206,14 +211,15 @@ public class ModelLoader {
 	 * @param parentNode The parent node.
 	 * @return The converted node.
 	 */
-	private static Node buildNodesTree(AINode aiNode, Node parentNode) {
+	private static Node buildNodesTree(@NonNull AINode aiNode,
+		Node parentNode) {
 		String nodeName = aiNode.mName().dataString();
 		Node node = new Node(nodeName, parentNode,
 			ModelLoader.toMatrix(aiNode.mTransformation()));
 
 		int numChildren = aiNode.mNumChildren();
 		PointerBuffer aiChildren = aiNode.mChildren();
-		for (int i = 0; i < numChildren; i++) {
+		for (int i = 0; i < numChildren; ++i) {
 			AINode aiChildNode = AINode.create(aiChildren.get(i));
 			Node childNode = ModelLoader.buildNodesTree(aiChildNode, node);
 			node.addChild(childNode);
@@ -228,8 +234,8 @@ public class ModelLoader {
 	 * @param frame The frame number of the animation we are on.
 	 * @return The transformation matrix for the animation node.
 	 */
-	private static Matrix4f buildNodeTransformationMatrix(AINodeAnim aiNodeAnim,
-		int frame) {
+	private static Matrix4f buildNodeTransformationMatrix(
+		@NonNull AINodeAnim aiNodeAnim, int frame) {
 		AIVectorKey.Buffer positionKeys = aiNodeAnim.mPositionKeys();
 		AIVectorKey.Buffer scalingKeys = aiNodeAnim.mScalingKeys();
 		AIQuatKey.Buffer rotationKeys = aiNodeAnim.mRotationKeys();
@@ -270,11 +276,12 @@ public class ModelLoader {
 	 * @param aiAnimation The animation.
 	 * @return The maximum number of frames for the animation.
 	 */
-	private static int calcAnimationMaxFrames(AIAnimation aiAnimation) {
+	private static int
+		calcAnimationMaxFrames(@NonNull AIAnimation aiAnimation) {
 		int maxFrames = 0;
 		int numNodeAnims = aiAnimation.mNumChannels();
 		PointerBuffer aiChannels = aiAnimation.mChannels();
-		for (int i = 0; i < numNodeAnims; i++) {
+		for (int i = 0; i < numNodeAnims; ++i) {
 			AINodeAnim aiNodeAnim = AINodeAnim.create(aiChannels.get(i));
 			int numFrames = Math.max(
 				Math.max(aiNodeAnim.mNumPositionKeys(),
@@ -293,12 +300,12 @@ public class ModelLoader {
 	 * @param nodeName The node to look for.
 	 * @return The node we found, which might be null if it does not exist.
 	 */
-	private static AINodeAnim findAIAnimNode(AIAnimation aiAnimation,
-		String nodeName) {
+	private static AINodeAnim findAIAnimNode(@NonNull AIAnimation aiAnimation,
+		@NonNull String nodeName) {
 		AINodeAnim result = null;
 		int numAnimNodes = aiAnimation.mNumChannels();
 		PointerBuffer aiChannels = aiAnimation.mChannels();
-		for (int i = 0; i < numAnimNodes; i++) {
+		for (int i = 0; i < numAnimNodes; ++i) {
 			AINodeAnim aiNodeAnim = AINodeAnim.create(aiChannels.get(i));
 			if (nodeName.equals(aiNodeAnim.mNodeName().dataString())) {
 				result = aiNodeAnim;
@@ -318,10 +325,9 @@ public class ModelLoader {
 	 * @param animation Whether we want to set up vertices for animation.
 	 * @return The newly loaded model.
 	 */
-	public static Model loadModel(String modelId, String modelPath,
-		TextureCache textureCache, MaterialCache materialCache,
-		boolean animation) {
-
+	public static Model loadModel(@NonNull String modelId,
+		@NonNull String modelPath, @NonNull TextureCache textureCache,
+		@NonNull MaterialCache materialCache, boolean animation) {
 		return ModelLoader.loadModel(modelId, modelPath, textureCache,
 			materialCache,
 			/*
@@ -378,8 +384,9 @@ public class ModelLoader {
 	 *            import}.
 	 * @return The newly loaded model.
 	 */
-	public static Model loadModel(String modelId, String modelPath,
-		TextureCache textureCache, MaterialCache materialCache, int flags) {
+	public static Model loadModel(@NonNull String modelId,
+		@NonNull String modelPath, @NonNull TextureCache textureCache,
+		@NonNull MaterialCache materialCache, int flags) {
 		File file = PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
 			ResourceType.DATA, modelPath);
 		String fixedPath = file.getAbsolutePath();
@@ -403,7 +410,7 @@ public class ModelLoader {
 
 		int numMaterials = aiScene.mNumMaterials();
 		List<Material> materialList = new ArrayList<>();
-		for (int i = 0; i < numMaterials; i++) {
+		for (int i = 0; i < numMaterials; ++i) {
 			AIMaterial aiMaterial =
 				AIMaterial.create(aiScene.mMaterials().get(i));
 			Material material =
@@ -416,7 +423,7 @@ public class ModelLoader {
 		PointerBuffer aiMeshes = aiScene.mMeshes();
 		List<MeshData> meshDataList = new ArrayList<>();
 		List<Bone> boneList = new ArrayList<>();
-		for (int i = 0; i < numMeshes; i++) {
+		for (int i = 0; i < numMeshes; ++i) {
 			AIMesh aiMesh = AIMesh.create(aiMeshes.get(i));
 			MeshData meshData = ModelLoader.processMesh(aiMesh, boneList);
 			int materialIdx = aiMesh.mMaterialIndex();
@@ -456,15 +463,15 @@ public class ModelLoader {
 	 *            transformation relative to the parent.
 	 * @return The list of animations.
 	 */
-	private static List<Model.Animation> processAnimations(AIScene aiScene,
-		List<Bone> boneList, Node rootNode,
-		Matrix4f globalInverseTransformation) {
+	private static List<Model.Animation> processAnimations(
+		@NonNull AIScene aiScene, @NonNull List<Bone> boneList,
+		@NonNull Node rootNode, @NonNull Matrix4f globalInverseTransformation) {
 		List<Model.Animation> animations = new ArrayList<>();
 
 		// Process all animations
 		int numAnimations = aiScene.mNumAnimations();
 		PointerBuffer aiAnimations = aiScene.mAnimations();
-		for (int i = 0; i < numAnimations; i++) {
+		for (int i = 0; i < numAnimations; ++i) {
 			AIAnimation aiAnimation = AIAnimation.create(aiAnimations.get(i));
 			int maxFrames = ModelLoader.calcAnimationMaxFrames(aiAnimation);
 
@@ -499,7 +506,9 @@ public class ModelLoader {
 	 *            normals.
 	 * @return A list of x, y, z values (in that order) of all the bitangents.
 	 */
-	private static float[] processBitangents(AIMesh aiMesh, float[] normals) {
+	private static float[] processBitangents(@NonNull AIMesh aiMesh,
+		float[] normals) {
+
 		AIVector3D.Buffer buffer = aiMesh.mBitangents();
 		float[] data = new float[buffer.remaining() * 3];
 		int pos = 0;
@@ -529,19 +538,15 @@ public class ModelLoader {
 	 * @param boneList The list of bones, which is populated by this method.
 	 * @return The bone IDs and corresponding weight data affecting each vertex.
 	 */
-	private static AnimMeshData processBones(AIMesh aiMesh,
-		List<Bone> boneList) {
+	private static AnimMeshData processBones(@NonNull AIMesh aiMesh,
+		@NonNull List<Bone> boneList) {
 		List<Integer> boneIds = new ArrayList<>();
 		List<Float> weights = new ArrayList<>();
 
-		/*
-		 * A mapping from vertex ID to all the weights that apply to that
-		 * vertex.
-		 */
 		Map<Integer, List<VertexWeight>> weightSet = new HashMap<>();
 		int numBones = aiMesh.mNumBones();
 		PointerBuffer aiBones = aiMesh.mBones();
-		for (int i = 0; i < numBones; i++) {
+		for (int i = 0; i < numBones; ++i) {
 			AIBone aiBone = AIBone.create(aiBones.get(i));
 			int id = boneList.size();
 			Bone bone = new Bone(id, aiBone.mName().dataString(),
@@ -551,16 +556,16 @@ public class ModelLoader {
 			AIVertexWeight.Buffer aiWeights = aiBone.mWeights();
 			for (int j = 0; j < numWeights; j++) {
 				AIVertexWeight aiWeight = aiWeights.get(j);
-				VertexWeight vw = new VertexWeight(bone.getBoneId(),
+				VertexWeight vw = new VertexWeight(bone.getBoneID(),
 					aiWeight.mVertexId(), aiWeight.mWeight());
 				List<VertexWeight> vertexWeightList =
-					weightSet.computeIfAbsent(vw.getVertexId(), ArrayList::new);
+					weightSet.computeIfAbsent(vw.getVertexID(), ArrayList::new);
 				vertexWeightList.add(vw);
 			}
 		}
 
 		int numVertices = aiMesh.mNumVertices();
-		for (int i = 0; i < numVertices; i++) {
+		for (int i = 0; i < numVertices; ++i) {
 			List<VertexWeight> vertexWeightList = weightSet.get(i);
 			int size = vertexWeightList == null ? 0 : vertexWeightList.size();
 			for (int j = 0; j < Mesh.MAX_WEIGHTS; j++) {
@@ -572,7 +577,7 @@ public class ModelLoader {
 					@SuppressWarnings("null")
 					VertexWeight vw = vertexWeightList.get(j);
 					weights.add(vw.getWeight());
-					boneIds.add(vw.getBoneId());
+					boneIds.add(vw.getBoneID());
 				}
 				else {
 					weights.add(0.0f);
@@ -582,7 +587,7 @@ public class ModelLoader {
 		}
 
 		return new AnimMeshData(Utils.listFloatToArray(weights),
-			Utils.listIntToArray(boneIds));
+			boneIds.stream().mapToInt((Integer v) -> v).toArray());
 	}
 
 	/**
@@ -591,11 +596,11 @@ public class ModelLoader {
 	 * @param aiMesh The mesh to process.
 	 * @return The indices of all the faces.
 	 */
-	private static int[] processIndices(AIMesh aiMesh) {
+	private static int[] processIndices(@NonNull AIMesh aiMesh) {
 		List<Integer> indices = new ArrayList<>();
 		int numFaces = aiMesh.mNumFaces();
 		AIFace.Buffer aiFaces = aiMesh.mFaces();
-		for (int i = 0; i < numFaces; i++) {
+		for (int i = 0; i < numFaces; ++i) {
 			AIFace aiFace = aiFaces.get(i);
 			IntBuffer buffer = aiFace.mIndices();
 			while (buffer.remaining() > 0) {
@@ -617,8 +622,8 @@ public class ModelLoader {
 	 *            materials.
 	 * @return The material that we have processed.
 	 */
-	private static Material processMaterial(AIMaterial aiMaterial,
-		String modelDir, TextureCache textureCache) {
+	private static Material processMaterial(@NonNull AIMaterial aiMaterial,
+		@NonNull String modelDir, @NonNull TextureCache textureCache) {
 		Material material = new Material();
 		try (MemoryStack stack = MemoryStack.stackPush()) {
 			AIColor4D color = AIColor4D.create();
@@ -693,7 +698,8 @@ public class ModelLoader {
 	 * @return The mesh data populated from the mesh in a format easier to
 	 *         process and use with OpenGL.
 	 */
-	private static MeshData processMesh(AIMesh aiMesh, List<Bone> boneList) {
+	private static MeshData processMesh(@NonNull AIMesh aiMesh,
+		@NonNull List<Bone> boneList) {
 		float[] vertices = ModelLoader.processVertices(aiMesh);
 		float[] normals = ModelLoader.processNormals(aiMesh);
 		float[] tangents = ModelLoader.processTangents(aiMesh, normals);
@@ -718,7 +724,7 @@ public class ModelLoader {
 			new Vector3f(aabb.mMax().x(), aabb.mMax().y(), aabb.mMax().z());
 
 		return new MeshData(vertices, normals, tangents, bitangents, textCoords,
-			indices, animMeshData.boneIds, animMeshData.weights, aabbMin,
+			indices, animMeshData.boneIDs, animMeshData.weights, aabbMin,
 			aabbMax);
 	}
 
@@ -729,7 +735,7 @@ public class ModelLoader {
 	 * @param aiMesh The mesh to process.
 	 * @return A list of x, y, z values (in that order) of all the normals.
 	 */
-	private static float[] processNormals(AIMesh aiMesh) {
+	private static float[] processNormals(@NonNull AIMesh aiMesh) {
 		AIVector3D.Buffer buffer = aiMesh.mNormals();
 		float[] data = new float[buffer.remaining() * 3];
 		int pos = 0;
@@ -752,7 +758,9 @@ public class ModelLoader {
 	 *            normals.
 	 * @return A list of x, y, z values (in that order) of all the tangents.
 	 */
-	private static float[] processTangents(AIMesh aiMesh, float[] normals) {
+	private static float[] processTangents(@NonNull AIMesh aiMesh,
+		@NonNull float[] normals) {
+
 		AIVector3D.Buffer buffer = aiMesh.mTangents();
 		float[] data = new float[buffer.remaining() * 3];
 		int pos = 0;
@@ -782,7 +790,7 @@ public class ModelLoader {
 	 * @return An array of coordinate values for all texture coordinates, in x,
 	 *         y order.
 	 */
-	private static float[] processTextCoords(AIMesh aiMesh) {
+	private static float[] processTextCoords(@NonNull AIMesh aiMesh) {
 		AIVector3D.Buffer buffer = aiMesh.mTextureCoords(0);
 		if (buffer == null) {
 			return new float[] {};
@@ -804,7 +812,7 @@ public class ModelLoader {
 	 * @param aiMesh The mesh to process.
 	 * @return An array of coordinate values for all vertices, in x, y, z order.
 	 */
-	private static float[] processVertices(AIMesh aiMesh) {
+	private static float[] processVertices(@NonNull AIMesh aiMesh) {
 		AIVector3D.Buffer buffer = aiMesh.mVertices();
 		float[] data = new float[buffer.remaining() * 3];
 		int pos = 0;
@@ -824,7 +832,7 @@ public class ModelLoader {
 	 * @param aiMatrix4x4 The matrix from Assimp.
 	 * @return The converted matrix.
 	 */
-	private static Matrix4f toMatrix(AIMatrix4x4 aiMatrix4x4) {
+	private static Matrix4f toMatrix(@NonNull AIMatrix4x4 aiMatrix4x4) {
 		Matrix4f result = new Matrix4f();
 		result.m00(aiMatrix4x4.a1());
 		result.m10(aiMatrix4x4.a2());
@@ -842,6 +850,7 @@ public class ModelLoader {
 		result.m13(aiMatrix4x4.d2());
 		result.m23(aiMatrix4x4.d3());
 		result.m33(aiMatrix4x4.d4());
+
 		return result;
 	}
 
@@ -852,5 +861,4 @@ public class ModelLoader {
 		throw new UnsupportedOperationException(
 			"This utility class should not be instantiated");
 	}
-
 }

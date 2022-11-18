@@ -11,6 +11,7 @@ import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.Getter;
+import lombok.NonNull;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL20;
@@ -24,7 +25,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Handles rendering for shadows.
@@ -52,7 +52,7 @@ public class ShadowRender {
 	/**
 	 * A map from entity ID to its index in the draw elements uniform array.
 	 */
-	private Map<String, Integer> entitiesIdxMap;
+	private Map<String, Integer> entitiesIndexMap;
 	/**
 	 * The shader program for the shadow rendering.
 	 */
@@ -90,13 +90,12 @@ public class ShadowRender {
 		this.shadowBuffer = new ShadowBuffer();
 
 		this.cascadeShadows = new ArrayList<>();
-		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; i++) {
-			CascadeShadow cascadeShadow = new CascadeShadow();
-			this.cascadeShadows.add(cascadeShadow);
+		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+			this.cascadeShadows.add(new CascadeShadow());
 		}
 
 		this.createUniforms();
-		this.entitiesIdxMap = new HashMap<>();
+		this.entitiesIndexMap = new HashMap<>();
 	}
 
 	/**
@@ -113,17 +112,17 @@ public class ShadowRender {
 	 * Create the uniforms for the shadow shader.
 	 */
 	private void createUniforms() {
-		this.uniformsMap = new UniformsMap(this.shaderProgram.getProgramId());
+		this.uniformsMap = new UniformsMap(this.shaderProgram.getProgramID());
 		this.uniformsMap
 			.createUniform(ShaderUniforms.Shadow.PROJECTION_VIEW_MATRIX);
 
-		for (int i = 0; i < SceneRender.MAX_DRAW_ELEMENTS; i++) {
+		for (int i = 0; i < SceneRender.MAX_DRAW_ELEMENTS; ++i) {
 			String name = ShaderUniforms.Shadow.DRAW_ELEMENTS + "[" + i + "].";
 			this.uniformsMap.createUniform(
 				name + ShaderUniforms.Shadow.DrawElement.MODEL_MATRIX_INDEX);
 		}
 
-		for (int i = 0; i < SceneRender.MAX_ENTITIES; i++) {
+		for (int i = 0; i < SceneRender.MAX_ENTITIES; ++i) {
 			this.uniformsMap.createUniform(
 				ShaderUniforms.Shadow.MODEL_MATRICES + "[" + i + "]");
 		}
@@ -135,7 +134,8 @@ public class ShadowRender {
 	 * @param scene The scene we are rendering.
 	 * @param renderBuffers The buffers for indirect drawing of models.
 	 */
-	public void render(Scene scene, RenderBuffers renderBuffers) {
+	public void render(@NonNull Scene scene,
+		@NonNull RenderBuffers renderBuffers) {
 		CascadeShadow.updateCascadeShadows(this.cascadeShadows, scene);
 
 		GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER,
@@ -145,27 +145,27 @@ public class ShadowRender {
 
 		this.shaderProgram.bind();
 
-		int entityIdx = 0;
+		int entityIndex = 0;
 		for (Model model : scene.getModelMap().values()) {
 			List<Entity> entities = model.getEntitiesList();
 			for (Entity entity : entities) {
 				this.uniformsMap.setUniform(ShaderUniforms.Shadow.MODEL_MATRICES
-					+ "[" + entityIdx + "]", entity.getModelMatrix());
-				entityIdx++;
+					+ "[" + entityIndex + "]", entity.getModelMatrix());
+				entityIndex++;
 			}
 		}
 
-		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; i++) {
+		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
 			GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER,
 				GL30.GL_DEPTH_ATTACHMENT, GL11.GL_TEXTURE_2D,
-				this.shadowBuffer.getDepthMap().getIds()[i], 0);
+				this.shadowBuffer.getDepthMap().getIDs()[i], 0);
 			GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT);
 		}
 
 		// Static meshes
 		int drawElement = 0;
 		List<Model> modelList = scene.getModelMap().values().stream()
-			.filter(m -> !m.isAnimated()).collect(Collectors.toList());
+			.filter(m -> !m.isAnimated()).toList();
 		for (Model model : modelList) {
 			List<Entity> entities = model.getEntitiesList();
 			// We need uniforms for every entity for all the instances
@@ -177,18 +177,18 @@ public class ShadowRender {
 						+ drawElement + "].";
 					this.uniformsMap.setUniform(name
 						+ ShaderUniforms.Shadow.DrawElement.MODEL_MATRIX_INDEX,
-						this.entitiesIdxMap.get(entity.getId()));
+						this.entitiesIndexMap.get(entity.getEntityID()));
 					drawElement++;
 				}
 			}
 		}
 		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER,
 			this.staticRenderBufferHandle);
-		GL30.glBindVertexArray(renderBuffers.getStaticVaoId());
-		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; i++) {
+		GL30.glBindVertexArray(renderBuffers.getStaticVaoID());
+		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
 			GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER,
 				GL30.GL_DEPTH_ATTACHMENT, GL11.GL_TEXTURE_2D,
-				this.shadowBuffer.getDepthMap().getIds()[i], 0);
+				this.shadowBuffer.getDepthMap().getIDs()[i], 0);
 
 			CascadeShadow shadowCascade = this.cascadeShadows.get(i);
 			this.uniformsMap.setUniform(
@@ -202,7 +202,7 @@ public class ShadowRender {
 		// Animated meshes
 		drawElement = 0;
 		modelList = scene.getModelMap().values().stream()
-			.filter(Model::isAnimated).collect(Collectors.toList());
+			.filter(Model::isAnimated).toList();
 		for (Model model : modelList) {
 			for (RenderBuffers.MeshDrawData meshDrawData : model
 				.getMeshDrawDataList()) {
@@ -213,17 +213,17 @@ public class ShadowRender {
 					+ drawElement + "].";
 				this.uniformsMap.setUniform(
 					name + ShaderUniforms.Shadow.DrawElement.MODEL_MATRIX_INDEX,
-					this.entitiesIdxMap.get(entity.getId()));
+					this.entitiesIndexMap.get(entity.getEntityID()));
 				drawElement++;
 			}
 		}
 		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER,
 			this.animRenderBufferHandle);
-		GL30.glBindVertexArray(renderBuffers.getAnimVaoId());
-		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; i++) {
+		GL30.glBindVertexArray(renderBuffers.getAnimVaoID());
+		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
 			GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER,
 				GL30.GL_DEPTH_ATTACHMENT, GL11.GL_TEXTURE_2D,
-				this.shadowBuffer.getDepthMap().getIds()[i], 0);
+				this.shadowBuffer.getDepthMap().getIDs()[i], 0);
 
 			CascadeShadow shadowCascade = this.cascadeShadows.get(i);
 			this.uniformsMap.setUniform(
@@ -242,9 +242,9 @@ public class ShadowRender {
 	 *
 	 * @param scene The scene to render.
 	 */
-	private void setupAnimCommandBuffer(Scene scene) {
+	private void setupAnimCommandBuffer(@NonNull Scene scene) {
 		List<Model> modelList = scene.getModelMap().values().stream()
-			.filter(Model::isAnimated).collect(Collectors.toList());
+			.filter(Model::isAnimated).toList();
 		int numMeshes = 0;
 		for (Model model : modelList) {
 			numMeshes += model.getMeshDrawDataList().size();
@@ -289,7 +289,7 @@ public class ShadowRender {
 	 *
 	 * @param scene The scene to render.
 	 */
-	public void setupData(Scene scene) {
+	public void setupData(@NonNull Scene scene) {
 		this.setupEntitiesData(scene);
 		this.setupStaticCommandBuffer(scene);
 		this.setupAnimCommandBuffer(scene);
@@ -300,14 +300,14 @@ public class ShadowRender {
 	 *
 	 * @param scene The scene to render.
 	 */
-	private void setupEntitiesData(Scene scene) {
-		this.entitiesIdxMap.clear();
-		int entityIdx = 0;
+	private void setupEntitiesData(@NonNull Scene scene) {
+		this.entitiesIndexMap.clear();
+		int entityIndex = 0;
 		for (Model model : scene.getModelMap().values()) {
 			List<Entity> entities = model.getEntitiesList();
 			for (Entity entity : entities) {
-				this.entitiesIdxMap.put(entity.getId(), entityIdx);
-				entityIdx++;
+				this.entitiesIndexMap.put(entity.getEntityID(), entityIndex);
+				entityIndex++;
 			}
 		}
 	}
@@ -317,9 +317,9 @@ public class ShadowRender {
 	 *
 	 * @param scene The scene to render.
 	 */
-	private void setupStaticCommandBuffer(Scene scene) {
+	private void setupStaticCommandBuffer(@NonNull Scene scene) {
 		List<Model> modelList = scene.getModelMap().values().stream()
-			.filter(m -> !m.isAnimated()).collect(Collectors.toList());
+			.filter(m -> !m.isAnimated()).toList();
 		int numMeshes = 0;
 		for (Model model : scene.getModelMap().values()) {
 			numMeshes += model.getMeshDrawDataList().size();
@@ -360,4 +360,5 @@ public class ShadowRender {
 
 		MemoryUtil.memFree(commandBuffer);
 	}
+
 }

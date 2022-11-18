@@ -2,6 +2,8 @@ package com.ikalagaming.graphics;
 
 /**
  * Common definitions of the fields that we need when interacting with shaders.
+ * Located centrally so there is an official source of all uniforms shaders
+ * need, as well as documentation for what each uniform is used for.
  *
  * @author Ches Burks
  *

@@ -9,6 +9,7 @@ import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL20C;
@@ -58,7 +59,7 @@ public class ShaderProgram {
 	 * The Program ID for the program.
 	 */
 	@Getter
-	private final int programId;
+	private final int programID;
 
 	/**
 	 * Create a new shader program.
@@ -66,18 +67,23 @@ public class ShaderProgram {
 	 * @param shaderModuleDataList The list of shader modules for the program.
 	 * @throws ShaderException If an new program could not be created.
 	 */
-	public ShaderProgram(List<ShaderModuleData> shaderModuleDataList) {
-		this.programId = GL20.glCreateProgram();
-		if (this.programId == 0) {
-			throw new ShaderException("Could not create Shader");
+	public ShaderProgram(@NonNull List<ShaderModuleData> shaderModuleDataList) {
+		this.programID = GL20.glCreateProgram();
+		if (this.programID == 0) {
+			String error = SafeResourceLoader.getString("SHADER_ERROR_ZERO_ID",
+				GraphicsPlugin.getResourceBundle());
+			ShaderProgram.log.info(error);
+			throw new ShaderException(error);
 		}
 
 		List<Integer> shaderModules = new ArrayList<>();
 
-		shaderModuleDataList.forEach(s -> shaderModules.add(this.createShader(
-			FileUtils.readAsString(PluginFolder.getResource(
-				GraphicsPlugin.PLUGIN_NAME, ResourceType.DATA, s.shaderFile)),
-			s.shaderType)));
+		shaderModuleDataList
+			.forEach(data -> shaderModules.add(this.createShader(
+				FileUtils.readAsString(
+					PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
+						ResourceType.DATA, data.shaderFile)),
+				data.shaderType)));
 
 		this.link(shaderModules);
 	}
@@ -86,7 +92,7 @@ public class ShaderProgram {
 	 * Install this program as part of the current rendering state.
 	 */
 	public void bind() {
-		GL20.glUseProgram(this.programId);
+		GL20.glUseProgram(this.programID);
 	}
 
 	/**
@@ -94,8 +100,8 @@ public class ShaderProgram {
 	 */
 	public void cleanup() {
 		this.unbind();
-		if (this.programId != 0) {
-			GL20.glDeleteProgram(this.programId);
+		if (this.programID != 0) {
+			GL20.glDeleteProgram(this.programID);
 		}
 	}
 
@@ -108,27 +114,29 @@ public class ShaderProgram {
 	 * @throws ShaderException If there was an error creating or compiling the
 	 *             shader.
 	 */
-	protected int createShader(String shaderCode, int shaderType) {
+	protected int createShader(@NonNull String shaderCode, int shaderType) {
 		int shaderId = GL20.glCreateShader(shaderType);
 		if (shaderId == 0) {
-			ShaderProgram.log
-				.info(SafeResourceLoader.getString("SHADER_ERROR_CREATING",
-					GraphicsPlugin.getResourceBundle()), shaderType);
-			throw new ShaderException();
+			String error = SafeResourceLoader.getString("SHADER_ERROR_CREATING",
+				GraphicsPlugin.getResourceBundle());
+			ShaderProgram.log.info(error, shaderType);
+			throw new ShaderException(
+				error.replaceFirst("\\{\\}", "" + shaderType));
 		}
 
 		GL20.glShaderSource(shaderId, shaderCode);
 		GL20.glCompileShader(shaderId);
 
 		if (GL20.glGetShaderi(shaderId, GL20.GL_COMPILE_STATUS) == 0) {
-			String message = SafeResourceLoader.getString(
+			String error = SafeResourceLoader.getString(
 				"SHADER_ERROR_COMPILING", GraphicsPlugin.getResourceBundle());
-			ShaderProgram.log.info(message, shaderType);
-			throw new ShaderException(
-				message + " " + GL20.glGetShaderInfoLog(shaderId, 1024));
+			ShaderProgram.log.info(error,
+				GL20.glGetShaderInfoLog(shaderId, 1024));
+			throw new ShaderException(error.replaceFirst("\\{\\}",
+				GL20.glGetShaderInfoLog(shaderId, 1024)));
 		}
 
-		GL20.glAttachShader(this.programId, shaderId);
+		GL20.glAttachShader(this.programID, shaderId);
 
 		return shaderId;
 	}
@@ -138,15 +146,18 @@ public class ShaderProgram {
 	 *
 	 * @param shaderModules The modules to link.
 	 */
-	private void link(List<Integer> shaderModules) {
-		GL20.glLinkProgram(this.programId);
-		if (GL20.glGetProgrami(this.programId, GL20.GL_LINK_STATUS) == 0) {
-			// TODO localize
-			throw new RuntimeException("Error linking Shader code: "
-				+ GL20.glGetProgramInfoLog(this.programId, 1024));
+	private void link(@NonNull List<Integer> shaderModules) {
+		GL20.glLinkProgram(this.programID);
+		if (GL20.glGetProgrami(this.programID, GL20.GL_LINK_STATUS) == 0) {
+			String error = SafeResourceLoader.getString("SHADER_ERROR_LINKING",
+				GraphicsPlugin.getResourceBundle());
+			ShaderProgram.log.info(error,
+				GL20.glGetProgramInfoLog(this.programID, 1024));
+			throw new ShaderException(error.replaceFirst("\\{\\}",
+				GL20.glGetProgramInfoLog(this.programID, 1024)));
 		}
 
-		shaderModules.forEach(s -> GL20.glDetachShader(this.programId, s));
+		shaderModules.forEach(s -> GL20.glDetachShader(this.programID, s));
 		shaderModules.forEach(GL20::glDeleteShader);
 	}
 
@@ -161,14 +172,15 @@ public class ShaderProgram {
 	 * Validate the program.
 	 */
 	public void validate() {
-		GL20.glValidateProgram(this.programId);
-		if (GL20.glGetProgrami(this.programId, GL20.GL_VALIDATE_STATUS) == 0) {
-			ShaderProgram.log.warn(
+		GL20.glValidateProgram(this.programID);
+		if (GL20.glGetProgrami(this.programID, GL20.GL_VALIDATE_STATUS) == 0) {
+			String error =
 				SafeResourceLoader.getString("SHADER_ERROR_VALIDATION_WARNING",
-					GraphicsPlugin.getResourceBundle()),
-				GL20.glGetProgramInfoLog(this.programId, 1024));
-			throw new ShaderException("Error validating Shader code: "
-				+ GL20.glGetProgramInfoLog(this.programId, 1024));
+					GraphicsPlugin.getResourceBundle());
+			ShaderProgram.log.warn(error,
+				GL20.glGetProgramInfoLog(this.programID, 1024));
+			throw new ShaderException(error.replaceFirst("\\{\\}",
+				GL20.glGetProgramInfoLog(this.programID, 1024)));
 		}
 	}
 }

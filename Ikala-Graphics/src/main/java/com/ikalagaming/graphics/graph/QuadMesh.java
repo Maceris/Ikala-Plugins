@@ -23,40 +23,40 @@ public class QuadMesh {
 	 * @return The vertex count.
 	 */
 	@Getter
-	private int numVertices;
+	private int vertexCount;
 	/**
 	 * The Vertex Array Object for the mesh.
 	 *
 	 * @return The VAO.
 	 */
 	@Getter
-	private int vaoId;
+	private int vaoID;
 	/**
 	 * The list of VBOs created so we can clean them up.
 	 */
-	private List<Integer> vboIdList;
+	private List<Integer> vboIDList;
 
 	/**
 	 * Create a new quad mesh.
 	 */
 	public QuadMesh() {
 		try (MemoryStack stack = MemoryStack.stackPush()) {
-			this.vboIdList = new ArrayList<>();
+			this.vboIDList = new ArrayList<>();
 			float[] positions = new float[] {-1.0f, 1.0f, 0.0f, 1.0f, 1.0f,
 				0.0f, -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f,};
 			float[] textCoords =
 				new float[] {0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,};
 			int[] indices = new int[] {0, 2, 1, 1, 2, 3};
-			this.numVertices = indices.length;
+			this.vertexCount = indices.length;
 
-			this.vaoId = GL30.glGenVertexArrays();
-			GL30.glBindVertexArray(this.vaoId);
+			this.vaoID = GL30.glGenVertexArrays();
+			GL30.glBindVertexArray(this.vaoID);
 
 			// Positions VBO
 			int vboId = GL15.glGenBuffers();
-			this.vboIdList.add(vboId);
+			this.vboIDList.add(vboId);
 			FloatBuffer positionsBuffer = stack.callocFloat(positions.length);
-			positionsBuffer.put(positions);
+			positionsBuffer.put(0, positions);
 			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboId);
 			GL15.glBufferData(GL15.GL_ARRAY_BUFFER, positionsBuffer,
 				GL15.GL_STATIC_DRAW);
@@ -65,10 +65,10 @@ public class QuadMesh {
 
 			// Texture coordinates VBO
 			vboId = GL15.glGenBuffers();
-			this.vboIdList.add(vboId);
+			this.vboIDList.add(vboId);
 			FloatBuffer textCoordsBuffer =
 				MemoryUtil.memAllocFloat(textCoords.length);
-			textCoordsBuffer.put(textCoords);
+			textCoordsBuffer.put(0, textCoords);
 			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboId);
 			GL15.glBufferData(GL15.GL_ARRAY_BUFFER, textCoordsBuffer,
 				GL15.GL_STATIC_DRAW);
@@ -77,9 +77,9 @@ public class QuadMesh {
 
 			// Index VBO
 			vboId = GL15.glGenBuffers();
-			this.vboIdList.add(vboId);
+			this.vboIDList.add(vboId);
 			IntBuffer indicesBuffer = stack.callocInt(indices.length);
-			indicesBuffer.put(indices);
+			indicesBuffer.put(0, indices);
 			GL15.glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, vboId);
 			GL15.glBufferData(GL15.GL_ELEMENT_ARRAY_BUFFER, indicesBuffer,
 				GL15.GL_STATIC_DRAW);
@@ -93,8 +93,7 @@ public class QuadMesh {
 	 * Clean up the buffers.
 	 */
 	public void cleanup() {
-		this.vboIdList.stream().forEach(GL15::glDeleteBuffers);
-		GL30.glDeleteVertexArrays(this.vaoId);
+		this.vboIDList.stream().forEach(GL15::glDeleteBuffers);
+		GL30.glDeleteVertexArrays(this.vaoID);
 	}
-
 }

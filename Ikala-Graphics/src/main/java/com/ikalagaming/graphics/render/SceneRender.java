@@ -1,7 +1,8 @@
 package com.ikalagaming.graphics.render;
 
+import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
-import com.ikalagaming.graphics.graph.GBuffer;
+import com.ikalagaming.graphics.graph.GeometryBuffer;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.Model;
@@ -12,7 +13,9 @@ import com.ikalagaming.graphics.graph.TextureCache;
 import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.util.SafeResourceLoader;
 
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
@@ -28,7 +31,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Handles rendering for the scene geometry.
@@ -66,7 +68,7 @@ public class SceneRender {
 	/**
 	 * A map from entity ID to its index in the draw elements uniform array.
 	 */
-	private Map<String, Integer> entitiesIdxMap;
+	private Map<String, Integer> entitiesIndexMap;
 	/**
 	 * The shader program for the scene.
 	 */
@@ -96,7 +98,7 @@ public class SceneRender {
 			"shaders/scene.frag", GL20.GL_FRAGMENT_SHADER));
 		this.shaderProgram = new ShaderProgram(shaderModuleDataList);
 		this.createUniforms();
-		this.entitiesIdxMap = new HashMap<>();
+		this.entitiesIndexMap = new HashMap<>();
 	}
 
 	/**
@@ -112,16 +114,16 @@ public class SceneRender {
 	 * Set up the uniforms for the shader.
 	 */
 	private void createUniforms() {
-		this.uniformsMap = new UniformsMap(this.shaderProgram.getProgramId());
+		this.uniformsMap = new UniformsMap(this.shaderProgram.getProgramID());
 		this.uniformsMap.createUniform(ShaderUniforms.Scene.PROJECTION_MATRIX);
 		this.uniformsMap.createUniform(ShaderUniforms.Scene.VIEW_MATRIX);
 
-		for (int i = 0; i < SceneRender.MAX_TEXTURES; i++) {
+		for (int i = 0; i < SceneRender.MAX_TEXTURES; ++i) {
 			this.uniformsMap.createUniform(
 				ShaderUniforms.Scene.TEXTURE_SAMPLER + "[" + i + "]");
 		}
 
-		for (int i = 0; i < SceneRender.MAX_MATERIALS; i++) {
+		for (int i = 0; i < SceneRender.MAX_MATERIALS; ++i) {
 			String name = ShaderUniforms.Scene.MATERIALS + "[" + i + "].";
 			this.uniformsMap
 				.createUniform(name + ShaderUniforms.Scene.Material.DIFFUSE);
@@ -135,7 +137,7 @@ public class SceneRender {
 				name + ShaderUniforms.Scene.Material.TEXTURE_INDEX);
 		}
 
-		for (int i = 0; i < SceneRender.MAX_DRAW_ELEMENTS; i++) {
+		for (int i = 0; i < SceneRender.MAX_DRAW_ELEMENTS; ++i) {
 			String name = ShaderUniforms.Scene.DRAW_ELEMENTS + "[" + i + "].";
 			this.uniformsMap.createUniform(
 				name + ShaderUniforms.Scene.DrawElement.MODEL_MATRIX_INDEX);
@@ -143,7 +145,7 @@ public class SceneRender {
 				name + ShaderUniforms.Scene.DrawElement.MATERIAL_INDEX);
 		}
 
-		for (int i = 0; i < SceneRender.MAX_ENTITIES; i++) {
+		for (int i = 0; i < SceneRender.MAX_ENTITIES; ++i) {
 			this.uniformsMap.createUniform(
 				ShaderUniforms.Scene.MODEL_MATRICES + "[" + i + "]");
 		}
@@ -156,8 +158,8 @@ public class SceneRender {
 	 * @param renderBuffers The buffers for indirect drawing of models.
 	 * @param gBuffer The buffer for geometry data.
 	 */
-	public void render(Scene scene, RenderBuffers renderBuffers,
-		GBuffer gBuffer) {
+	public void render(@NonNull Scene scene,
+		@NonNull RenderBuffers renderBuffers, @NonNull GeometryBuffer gBuffer) {
 		GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER,
 			gBuffer.getGBufferId());
 		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
@@ -167,20 +169,21 @@ public class SceneRender {
 		this.shaderProgram.bind();
 
 		this.uniformsMap.setUniform(ShaderUniforms.Scene.PROJECTION_MATRIX,
-			scene.getProjection().getProjectionMatrix());
+			scene.getProjection().getProjMatrix());
 		this.uniformsMap.setUniform(ShaderUniforms.Scene.VIEW_MATRIX,
 			scene.getCamera().getViewMatrix());
 
 		TextureCache textureCache = scene.getTextureCache();
-		List<Texture> textures =
-			textureCache.getAll().stream().collect(Collectors.toList());
+		List<Texture> textures = textureCache.getAll().stream().toList();
 		int numTextures = textures.size();
 		if (numTextures > SceneRender.MAX_TEXTURES) {
 			SceneRender.log.warn(
-				"Only " + SceneRender.MAX_TEXTURES + " textures can be used");
+				SafeResourceLoader.getString("TOO_MANY_TEXTURES",
+					GraphicsPlugin.getResourceBundle()),
+				SceneRender.MAX_TEXTURES);
 		}
 		for (int i = 0; i < Math.min(SceneRender.MAX_TEXTURES,
-			numTextures); i++) {
+			numTextures); ++i) {
 			this.uniformsMap.setUniform(
 				ShaderUniforms.Scene.TEXTURE_SAMPLER + "[" + i + "]", i);
 			Texture texture = textures.get(i);
@@ -188,21 +191,20 @@ public class SceneRender {
 			texture.bind();
 		}
 
-		int entityIdx = 0;
+		int entityIndex = 0;
 		for (Model model : scene.getModelMap().values()) {
 			List<Entity> entities = model.getEntitiesList();
 			for (Entity entity : entities) {
-				this.uniformsMap.setUniform(
-					ShaderUniforms.Scene.MODEL_MATRICES + "[" + entityIdx + "]",
-					entity.getModelMatrix());
-				entityIdx++;
+				this.uniformsMap.setUniform(ShaderUniforms.Scene.MODEL_MATRICES
+					+ "[" + entityIndex + "]", entity.getModelMatrix());
+				entityIndex++;
 			}
 		}
 
 		// Static meshes
 		int drawElement = 0;
 		List<Model> modelList = scene.getModelMap().values().stream()
-			.filter(m -> !m.isAnimated()).collect(Collectors.toList());
+			.filter(m -> !m.isAnimated()).toList();
 		for (Model model : modelList) {
 			List<Entity> entities = model.getEntitiesList();
 			for (RenderBuffers.MeshDrawData meshDrawData : model
@@ -212,7 +214,7 @@ public class SceneRender {
 						+ drawElement + "].";
 					this.uniformsMap.setUniform(name
 						+ ShaderUniforms.Scene.DrawElement.MODEL_MATRIX_INDEX,
-						this.entitiesIdxMap.get(entity.getId()));
+						this.entitiesIndexMap.get(entity.getEntityID()));
 					this.uniformsMap.setUniform(
 						name + ShaderUniforms.Scene.DrawElement.MATERIAL_INDEX,
 						meshDrawData.getMaterialIndex());
@@ -222,14 +224,14 @@ public class SceneRender {
 		}
 		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER,
 			this.staticRenderBufferHandle);
-		GL30.glBindVertexArray(renderBuffers.getStaticVaoId());
+		GL30.glBindVertexArray(renderBuffers.getStaticVaoID());
 		GL43.glMultiDrawElementsIndirect(GL11.GL_TRIANGLES,
 			GL11.GL_UNSIGNED_INT, 0, this.staticDrawCount, 0);
 
 		// Animated meshes
 		drawElement = 0;
 		modelList = scene.getModelMap().values().stream()
-			.filter(Model::isAnimated).collect(Collectors.toList());
+			.filter(Model::isAnimated).toList();
 		for (Model model : modelList) {
 			for (RenderBuffers.MeshDrawData meshDrawData : model
 				.getMeshDrawDataList()) {
@@ -240,7 +242,7 @@ public class SceneRender {
 					+ drawElement + "].";
 				this.uniformsMap.setUniform(
 					name + ShaderUniforms.Scene.DrawElement.MODEL_MATRIX_INDEX,
-					this.entitiesIdxMap.get(entity.getId()));
+					this.entitiesIndexMap.get(entity.getEntityID()));
 				this.uniformsMap.setUniform(
 					name + ShaderUniforms.Scene.DrawElement.MATERIAL_INDEX,
 					meshDrawData.getMaterialIndex());
@@ -249,7 +251,7 @@ public class SceneRender {
 		}
 		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER,
 			this.animRenderBufferHandle);
-		GL30.glBindVertexArray(renderBuffers.getAnimVaoId());
+		GL30.glBindVertexArray(renderBuffers.getAnimVaoID());
 		GL43.glMultiDrawElementsIndirect(GL11.GL_TRIANGLES,
 			GL11.GL_UNSIGNED_INT, 0, this.animDrawCount, 0);
 
@@ -263,9 +265,9 @@ public class SceneRender {
 	 *
 	 * @param scene The scene to render.
 	 */
-	private void setupAnimCommandBuffer(Scene scene) {
+	private void setupAnimCommandBuffer(@NonNull Scene scene) {
 		List<Model> modelList = scene.getModelMap().values().stream()
-			.filter(Model::isAnimated).collect(Collectors.toList());
+			.filter(Model::isAnimated).toList();
 		int numMeshes = 0;
 		for (Model model : modelList) {
 			numMeshes += model.getMeshDrawDataList().size();
@@ -310,7 +312,7 @@ public class SceneRender {
 	 *
 	 * @param scene The scene to render.
 	 */
-	public void setupData(Scene scene) {
+	public void setupData(@NonNull Scene scene) {
 		this.setupEntitiesData(scene);
 		this.setupStaticCommandBuffer(scene);
 		this.setupAnimCommandBuffer(scene);
@@ -323,14 +325,14 @@ public class SceneRender {
 	 *
 	 * @param scene The scene to render.
 	 */
-	private void setupEntitiesData(Scene scene) {
-		this.entitiesIdxMap.clear();
-		int entityIdx = 0;
+	private void setupEntitiesData(@NonNull Scene scene) {
+		this.entitiesIndexMap.clear();
+		int entityIndex = 0;
 		for (Model model : scene.getModelMap().values()) {
 			List<Entity> entities = model.getEntitiesList();
 			for (Entity entity : entities) {
-				this.entitiesIdxMap.put(entity.getId(), entityIdx);
-				entityIdx++;
+				this.entitiesIndexMap.put(entity.getEntityID(), entityIndex);
+				entityIndex++;
 			}
 		}
 	}
@@ -341,25 +343,26 @@ public class SceneRender {
 	 * @param textureCache The texture cache.
 	 * @param materialCache The material cache.
 	 */
-	private void setupMaterialsUniform(TextureCache textureCache,
-		MaterialCache materialCache) {
-		List<Texture> textures =
-			textureCache.getAll().stream().collect(Collectors.toList());
+	private void setupMaterialsUniform(@NonNull TextureCache textureCache,
+		@NonNull MaterialCache materialCache) {
+		List<Texture> textures = textureCache.getAll().stream().toList();
 		int numTextures = textures.size();
 		if (numTextures > SceneRender.MAX_TEXTURES) {
 			SceneRender.log.warn(
-				"Only " + SceneRender.MAX_TEXTURES + " textures can be used");
+				SafeResourceLoader.getString("TOO_MANY_TEXTURES",
+					GraphicsPlugin.getResourceBundle()),
+				SceneRender.MAX_TEXTURES);
 		}
 		Map<String, Integer> texturePosMap = new HashMap<>();
 		for (int i = 0; i < Math.min(SceneRender.MAX_TEXTURES,
-			numTextures); i++) {
+			numTextures); ++i) {
 			texturePosMap.put(textures.get(i).getTexturePath(), i);
 		}
 
 		this.shaderProgram.bind();
 		List<Material> materialList = materialCache.getMaterialsList();
 		int numMaterials = materialList.size();
-		for (int i = 0; i < numMaterials; i++) {
+		for (int i = 0; i < numMaterials; ++i) {
 			Material material = materialCache.getMaterial(i);
 			String name = ShaderUniforms.Scene.MATERIALS + "[" + i + "].";
 			this.uniformsMap.setUniform(
@@ -372,18 +375,18 @@ public class SceneRender {
 				name + ShaderUniforms.Scene.Material.REFLECTANCE,
 				material.getReflectance());
 			String normalMapPath = material.getNormalMapPath();
-			int idx = 0;
+			int index = 0;
 			if (normalMapPath != null) {
-				idx = texturePosMap.computeIfAbsent(normalMapPath, k -> 0);
+				index = texturePosMap.computeIfAbsent(normalMapPath, k -> 0);
 			}
 			this.uniformsMap.setUniform(
-				name + ShaderUniforms.Scene.Material.NORMAL_MAP_INDEX, idx);
+				name + ShaderUniforms.Scene.Material.NORMAL_MAP_INDEX, index);
 			Texture texture =
 				textureCache.getTexture(material.getTexturePath());
-			idx =
+			index =
 				texturePosMap.computeIfAbsent(texture.getTexturePath(), k -> 0);
 			this.uniformsMap.setUniform(
-				name + ShaderUniforms.Scene.Material.TEXTURE_INDEX, idx);
+				name + ShaderUniforms.Scene.Material.TEXTURE_INDEX, index);
 		}
 		this.shaderProgram.unbind();
 	}
@@ -393,9 +396,9 @@ public class SceneRender {
 	 *
 	 * @param scene The scene to render.
 	 */
-	private void setupStaticCommandBuffer(Scene scene) {
+	private void setupStaticCommandBuffer(@NonNull Scene scene) {
 		List<Model> modelList = scene.getModelMap().values().stream()
-			.filter(m -> !m.isAnimated()).collect(Collectors.toList());
+			.filter(m -> !m.isAnimated()).toList();
 		int numMeshes = 0;
 		for (Model model : modelList) {
 			numMeshes += model.getMeshDrawDataList().size();

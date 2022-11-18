@@ -1,21 +1,12 @@
 package com.ikalagaming.graphics.graph;
 
-import static org.lwjgl.opengl.GL11.GL_FLOAT;
-import static org.lwjgl.opengl.GL15.GL_ARRAY_BUFFER;
-import static org.lwjgl.opengl.GL15.GL_ELEMENT_ARRAY_BUFFER;
-import static org.lwjgl.opengl.GL15.GL_STATIC_DRAW;
-import static org.lwjgl.opengl.GL15.glBindBuffer;
-import static org.lwjgl.opengl.GL15.glBufferData;
-import static org.lwjgl.opengl.GL15.glGenBuffers;
-import static org.lwjgl.opengl.GL20.glEnableVertexAttribArray;
-import static org.lwjgl.opengl.GL20.glVertexAttribPointer;
-import static org.lwjgl.opengl.GL30.glBindVertexArray;
-import static org.lwjgl.opengl.GL30.glDeleteVertexArrays;
-import static org.lwjgl.opengl.GL30.glGenVertexArrays;
-
 import lombok.Getter;
+import lombok.NonNull;
 import org.joml.Vector3f;
+import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL15;
+import org.lwjgl.opengl.GL20;
+import org.lwjgl.opengl.GL30;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
@@ -28,156 +19,157 @@ import java.util.List;
  * Given an array of positions, sets up data to load into graphics card.
  */
 public class Mesh {
-
 	/**
-	 * A list of vertex buffer objects for this mesh.
+	 * The maximum number of bone weights that can affect a vertex, the default
+	 * value used by Assimp when limiting bone weights.
 	 */
-	private List<Integer> vboIdList;
-
+	public static final int MAX_WEIGHTS = 4;
 	/**
-	 * The ID of the OpenGL vertex array object.
+	 * The max value (corner) of the axis-aligned bounding box that is generated
+	 * by Assimp.
 	 *
-	 * @return The VAO ID.
+	 * @return The max value of the AABB.
 	 */
 	@Getter
-	private final int vaoId;
-
+	private Vector3f aabbMax;
+	/**
+	 * The min value (corner) of the axis-aligned bounding box that is generated
+	 * by Assimp.
+	 *
+	 * @return The min value of the AABB.
+	 */
+	@Getter
+	private Vector3f aabbMin;
 	/**
 	 * The number of vertices in the mesh.
 	 *
 	 * @return The number of vertices.
 	 */
 	@Getter
-	private final int vertexCount;
-
+	private int vertexCount;
 	/**
-	 * The maximum number of bone weights that can affect a vertex, the default
-	 * value used by Assimp when limiting bone weights.
-	 */
-	public static final int MAX_WEIGHTS = 4;
-
-	/**
-	 * The max value (corner) of the axis-aligned bounding box that is generated
-	 * by Assimp.
-	 * 
-	 * @return The max value of the AABB.
+	 * The ID of the OpenGL vertex array object.
+	 *
+	 * @return The VAO ID.
 	 */
 	@Getter
-	private Vector3f aabbMax;
-
+	private int vaoID;
 	/**
-	 * The min value (corner) of the axis-aligned bounding box that is generated
-	 * by Assimp.
-	 * 
-	 * @return The min value of the AABB.
+	 * A list of vertex buffer objects for this mesh.
 	 */
-	@Getter
-	private Vector3f aabbMin;
+	private List<Integer> vboIDList;
 
 	/**
 	 * Create a mesh from raw mesh data.
-	 * 
+	 *
 	 * @param meshData The mesh data to load in.
 	 */
-	public Mesh(MeshData meshData) {
+	public Mesh(@NonNull MeshData meshData) {
 		try (MemoryStack stack = MemoryStack.stackPush()) {
 			this.aabbMin = meshData.getAabbMin();
 			this.aabbMax = meshData.getAabbMax();
-			vertexCount = meshData.getIndices().length;
-			vboIdList = new ArrayList<>();
+			this.vertexCount = meshData.getIndices().length;
+			this.vboIDList = new ArrayList<>();
 
-			vaoId = glGenVertexArrays();
-			glBindVertexArray(vaoId);
+			this.vaoID = GL30.glGenVertexArrays();
+			GL30.glBindVertexArray(this.vaoID);
 
 			// Positions VBO
-			int vboId = glGenBuffers();
-			vboIdList.add(vboId);
+			int vboID = GL15.glGenBuffers();
+			this.vboIDList.add(vboID);
 			FloatBuffer positionsBuffer =
 				stack.callocFloat(meshData.getPositions().length);
-			positionsBuffer.put(meshData.getPositions());
-			glBindBuffer(GL_ARRAY_BUFFER, vboId);
-			glBufferData(GL_ARRAY_BUFFER, positionsBuffer, GL_STATIC_DRAW);
-			glEnableVertexAttribArray(0);
-			glVertexAttribPointer(0, 3, GL_FLOAT, false, 0, 0);
+			positionsBuffer.put(0, meshData.getPositions());
+			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboID);
+			GL15.glBufferData(GL15.GL_ARRAY_BUFFER, positionsBuffer,
+				GL15.GL_STATIC_DRAW);
+			GL20.glEnableVertexAttribArray(0);
+			GL20.glVertexAttribPointer(0, 3, GL11.GL_FLOAT, false, 0, 0);
 
 			// Normals VBO
-			vboId = glGenBuffers();
-			vboIdList.add(vboId);
+			vboID = GL15.glGenBuffers();
+			this.vboIDList.add(vboID);
 			FloatBuffer normalsBuffer =
 				stack.callocFloat(meshData.getNormals().length);
-			normalsBuffer.put(meshData.getNormals());
-			glBindBuffer(GL_ARRAY_BUFFER, vboId);
-			glBufferData(GL_ARRAY_BUFFER, normalsBuffer, GL_STATIC_DRAW);
-			glEnableVertexAttribArray(1);
-			glVertexAttribPointer(1, 3, GL_FLOAT, false, 0, 0);
+			normalsBuffer.put(0, meshData.getNormals());
+			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboID);
+			GL15.glBufferData(GL15.GL_ARRAY_BUFFER, normalsBuffer,
+				GL15.GL_STATIC_DRAW);
+			GL20.glEnableVertexAttribArray(1);
+			GL20.glVertexAttribPointer(1, 3, GL11.GL_FLOAT, false, 0, 0);
 
 			// Tangents VBO
-			vboId = glGenBuffers();
-			vboIdList.add(vboId);
+			vboID = GL15.glGenBuffers();
+			this.vboIDList.add(vboID);
 			FloatBuffer tangentsBuffer =
 				stack.callocFloat(meshData.getTangents().length);
-			tangentsBuffer.put(meshData.getTangents());
-			glBindBuffer(GL_ARRAY_BUFFER, vboId);
-			glBufferData(GL_ARRAY_BUFFER, tangentsBuffer, GL_STATIC_DRAW);
-			glEnableVertexAttribArray(2);
-			glVertexAttribPointer(2, 3, GL_FLOAT, false, 0, 0);
+			tangentsBuffer.put(0, meshData.getTangents());
+			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboID);
+			GL15.glBufferData(GL15.GL_ARRAY_BUFFER, tangentsBuffer,
+				GL15.GL_STATIC_DRAW);
+			GL20.glEnableVertexAttribArray(2);
+			GL20.glVertexAttribPointer(2, 3, GL11.GL_FLOAT, false, 0, 0);
 
 			// Bitangents VBO
-			vboId = glGenBuffers();
-			vboIdList.add(vboId);
+			vboID = GL15.glGenBuffers();
+			this.vboIDList.add(vboID);
 			FloatBuffer bitangentsBuffer =
 				stack.callocFloat(meshData.getBitangents().length);
-			bitangentsBuffer.put(meshData.getBitangents());
-			glBindBuffer(GL_ARRAY_BUFFER, vboId);
-			glBufferData(GL_ARRAY_BUFFER, bitangentsBuffer, GL_STATIC_DRAW);
-			glEnableVertexAttribArray(3);
-			glVertexAttribPointer(3, 3, GL_FLOAT, false, 0, 0);
+			bitangentsBuffer.put(0, meshData.getBitangents());
+			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboID);
+			GL15.glBufferData(GL15.GL_ARRAY_BUFFER, bitangentsBuffer,
+				GL15.GL_STATIC_DRAW);
+			GL20.glEnableVertexAttribArray(3);
+			GL20.glVertexAttribPointer(3, 3, GL11.GL_FLOAT, false, 0, 0);
 
 			// Texture coordinates VBO
-			vboId = glGenBuffers();
-			vboIdList.add(vboId);
+			vboID = GL15.glGenBuffers();
+			this.vboIDList.add(vboID);
 			FloatBuffer textCoordsBuffer = MemoryUtil
 				.memAllocFloat(meshData.getTextureCoordinates().length);
-			textCoordsBuffer.put(meshData.getTextureCoordinates());
-			glBindBuffer(GL_ARRAY_BUFFER, vboId);
-			glBufferData(GL_ARRAY_BUFFER, textCoordsBuffer, GL_STATIC_DRAW);
-			glEnableVertexAttribArray(4);
-			glVertexAttribPointer(4, 2, GL_FLOAT, false, 0, 0);
+			textCoordsBuffer.put(0, meshData.getTextureCoordinates());
+			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboID);
+			GL15.glBufferData(GL15.GL_ARRAY_BUFFER, textCoordsBuffer,
+				GL15.GL_STATIC_DRAW);
+			GL20.glEnableVertexAttribArray(4);
+			GL20.glVertexAttribPointer(4, 2, GL11.GL_FLOAT, false, 0, 0);
 
 			// Bone weights
-			vboId = glGenBuffers();
-			vboIdList.add(vboId);
+			vboID = GL15.glGenBuffers();
+			this.vboIDList.add(vboID);
 			FloatBuffer weightsBuffer =
 				MemoryUtil.memAllocFloat(meshData.getWeights().length);
 			weightsBuffer.put(meshData.getWeights()).flip();
-			glBindBuffer(GL_ARRAY_BUFFER, vboId);
-			glBufferData(GL_ARRAY_BUFFER, weightsBuffer, GL_STATIC_DRAW);
-			glEnableVertexAttribArray(5);
-			glVertexAttribPointer(5, 4, GL_FLOAT, false, 0, 0);
+			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboID);
+			GL15.glBufferData(GL15.GL_ARRAY_BUFFER, weightsBuffer,
+				GL15.GL_STATIC_DRAW);
+			GL20.glEnableVertexAttribArray(5);
+			GL20.glVertexAttribPointer(5, 4, GL11.GL_FLOAT, false, 0, 0);
 
 			// Bone indices
-			vboId = glGenBuffers();
-			vboIdList.add(vboId);
+			vboID = GL15.glGenBuffers();
+			this.vboIDList.add(vboID);
 			IntBuffer boneIndicesBuffer =
 				MemoryUtil.memAllocInt(meshData.getBoneIndices().length);
 			boneIndicesBuffer.put(meshData.getBoneIndices()).flip();
-			glBindBuffer(GL_ARRAY_BUFFER, vboId);
-			glBufferData(GL_ARRAY_BUFFER, boneIndicesBuffer, GL_STATIC_DRAW);
-			glEnableVertexAttribArray(6);
-			glVertexAttribPointer(6, 4, GL_FLOAT, false, 0, 0);
+			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboID);
+			GL15.glBufferData(GL15.GL_ARRAY_BUFFER, boneIndicesBuffer,
+				GL15.GL_STATIC_DRAW);
+			GL20.glEnableVertexAttribArray(6);
+			GL20.glVertexAttribPointer(6, 4, GL11.GL_FLOAT, false, 0, 0);
 
 			// Index VBO
-			vboId = glGenBuffers();
-			vboIdList.add(vboId);
+			vboID = GL15.glGenBuffers();
+			this.vboIDList.add(vboID);
 			IntBuffer indicesBuffer =
 				stack.callocInt(meshData.getIndices().length);
-			indicesBuffer.put(meshData.getIndices());
-			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vboId);
-			glBufferData(GL_ELEMENT_ARRAY_BUFFER, indicesBuffer,
-				GL_STATIC_DRAW);
+			indicesBuffer.put(0, meshData.getIndices());
+			GL15.glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, vboID);
+			GL15.glBufferData(GL15.GL_ELEMENT_ARRAY_BUFFER, indicesBuffer,
+				GL15.GL_STATIC_DRAW);
 
-			glBindBuffer(GL_ARRAY_BUFFER, 0);
-			glBindVertexArray(0);
+			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
+			GL30.glBindVertexArray(0);
 		}
 	}
 
@@ -185,8 +177,7 @@ public class Mesh {
 	 * Clean the mesh up.
 	 */
 	public void cleanup() {
-		vboIdList.stream().forEach(GL15::glDeleteBuffers);
-		glDeleteVertexArrays(vaoId);
+		this.vboIDList.stream().forEach(GL15::glDeleteBuffers);
+		GL30.glDeleteVertexArrays(this.vaoID);
 	}
-
 }

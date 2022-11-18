@@ -34,51 +34,56 @@ public class TextureCache {
 	 * Create a new texture cache.
 	 */
 	public TextureCache() {
-		textureMap = new HashMap<>();
-		defaultTexture = new Texture(DEFAULT_TEXTURE_PATH);
-		textureMap.put(DEFAULT_TEXTURE_PATH, defaultTexture);
+		this.textureMap = new HashMap<>();
+		this.defaultTexture = new Texture(TextureCache.DEFAULT_TEXTURE_PATH);
+		this.textureMap.put(TextureCache.DEFAULT_TEXTURE_PATH,
+			this.defaultTexture);
 	}
 
 	/**
 	 * Clean up all the textures.
 	 */
 	public void cleanup() {
-		textureMap.values().stream().forEach(Texture::cleanup);
-		textureMap.clear();
+		this.textureMap.values().stream().forEach(Texture::cleanup);
+		this.textureMap.clear();
 	}
 
 	/**
-	 * Create a new texture if we don't already have one for the given path.
-	 * 
+	 * Create a new texture if we don't already have one for the given path. If
+	 * you pass in a null texture path, the default texture is returned.
+	 *
 	 * @param texturePath The name of the file for the texture, including full
 	 *            path.
 	 * @return The newly created texture.
 	 */
 	public Texture createTexture(String texturePath) {
-		return textureMap.computeIfAbsent(texturePath, Texture::new);
+		if (texturePath == null) {
+			return this.defaultTexture;
+		}
+		return this.textureMap.computeIfAbsent(texturePath, Texture::new);
 	}
 
 	/**
 	 * Return a collection of all textures in the cache.
-	 * 
+	 *
 	 * @return The actual textures in the cache.
 	 */
 	public Collection<Texture> getAll() {
-		return textureMap.values();
+		return this.textureMap.values();
 	}
 
 	/**
 	 * Fetch the texture if it exists, if there is no texture for the given path
 	 * then the default texture is used.
-	 * 
+	 *
 	 * @param texturePath The name of the file for the texture, including path
 	 *            from resource directory.
 	 * @return The texture for that path.
 	 */
 	public Texture getTexture(String texturePath) {
 		if (texturePath == null) {
-			return defaultTexture;
+			return this.defaultTexture;
 		}
-		return textureMap.getOrDefault(texturePath, defaultTexture);
+		return this.textureMap.getOrDefault(texturePath, this.defaultTexture);
 	}
 }

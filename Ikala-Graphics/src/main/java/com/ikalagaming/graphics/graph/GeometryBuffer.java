@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.graph;
 import com.ikalagaming.graphics.Window;
 
 import lombok.Getter;
+import lombok.NonNull;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
@@ -16,13 +17,12 @@ import java.util.Arrays;
  * A buffer for the geometry pass that is used for deferred shading.
  */
 @Getter
-public class GBuffer {
+public class GeometryBuffer {
 	/**
 	 * The maximum number of textures, which are used for albedo, normals,
 	 * specular, and depth, respectively.
 	 */
 	private static final int TOTAL_TEXTURES = 4;
-
 	/**
 	 * The frame buffer ID.
 	 *
@@ -40,7 +40,7 @@ public class GBuffer {
 	 *
 	 * @return The list of texture IDs.
 	 */
-	private int[] textureIds;
+	private int[] textureIDs;
 	/**
 	 * The width in pixels.
 	 *
@@ -53,20 +53,20 @@ public class GBuffer {
 	 *
 	 * @param window Window information to pull size details from.
 	 */
-	public GBuffer(Window window) {
+	public GeometryBuffer(@NonNull Window window) {
 		this.gBufferId = GL30.glGenFramebuffers();
 		GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, this.gBufferId);
 
-		this.textureIds = new int[GBuffer.TOTAL_TEXTURES];
-		GL11.glGenTextures(this.textureIds);
+		this.textureIDs = new int[GeometryBuffer.TOTAL_TEXTURES];
+		GL11.glGenTextures(this.textureIDs);
 
 		this.width = window.getWidth();
 		this.height = window.getHeight();
 
-		for (int i = 0; i < GBuffer.TOTAL_TEXTURES; i++) {
-			GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.textureIds[i]);
+		for (int i = 0; i < GeometryBuffer.TOTAL_TEXTURES; ++i) {
+			GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.textureIDs[i]);
 			int attachmentType;
-			if (i == GBuffer.TOTAL_TEXTURES - 1) {
+			if (i == GeometryBuffer.TOTAL_TEXTURES - 1) {
 				GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0,
 					GL30.GL_DEPTH_COMPONENT32F, this.width, this.height, 0,
 					GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, (ByteBuffer) null);
@@ -84,12 +84,12 @@ public class GBuffer {
 				GL11.GL_NEAREST);
 
 			GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, attachmentType,
-				GL11.GL_TEXTURE_2D, this.textureIds[i], 0);
+				GL11.GL_TEXTURE_2D, this.textureIDs[i], 0);
 		}
 
 		try (MemoryStack stack = MemoryStack.stackPush()) {
-			IntBuffer intBuff = stack.mallocInt(GBuffer.TOTAL_TEXTURES);
-			for (int i = 0; i < GBuffer.TOTAL_TEXTURES; i++) {
+			IntBuffer intBuff = stack.mallocInt(GeometryBuffer.TOTAL_TEXTURES);
+			for (int i = 0; i < GeometryBuffer.TOTAL_TEXTURES; ++i) {
 				intBuff.put(i, GL30.GL_COLOR_ATTACHMENT0 + i);
 			}
 			GL20.glDrawBuffers(intBuff);
@@ -101,9 +101,8 @@ public class GBuffer {
 	/**
 	 * Clean up the frame buffers and textures.
 	 */
-	public void cleanup() {
+	public void cleanUp() {
 		GL30.glDeleteFramebuffers(this.gBufferId);
-		Arrays.stream(this.textureIds).forEach(GL11::glDeleteTextures);
+		Arrays.stream(this.textureIDs).forEach(GL11::glDeleteTextures);
 	}
-
 }

@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.scene;
 
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
@@ -16,13 +17,21 @@ public class Entity {
 	 *
 	 * @return The unique ID.
 	 */
-	private final String id;
+	private final String entityID;
 	/**
 	 * A unique ID for the model associated to this entity.
 	 *
 	 * @return The model ID.
 	 */
-	private final String modelId;
+	private final String modelID;
+	/**
+	 * Animation data associated with the entity.
+	 *
+	 * @param animationData The new animation data.
+	 * @return The animation data.
+	 */
+	@Setter
+	private AnimationData animationData;
 	/**
 	 * The combined translation, rotation, and scale transformations.
 	 *
@@ -49,14 +58,6 @@ public class Entity {
 	 */
 	@Setter
 	private float scale;
-	/**
-	 * Animation data associated with the entity.
-	 *
-	 * @param animationData The new animation data.
-	 * @return The animation data.
-	 */
-	@Setter
-	private AnimationData animationData;
 
 	/**
 	 * Create a new entity.
@@ -64,9 +65,9 @@ public class Entity {
 	 * @param id The ID of the entity.
 	 * @param modelId The ID of the model associated with this entity.
 	 */
-	public Entity(String id, String modelId) {
-		this.id = id;
-		this.modelId = modelId;
+	public Entity(@NonNull String id, @NonNull String modelId) {
+		this.entityID = id;
+		this.modelID = modelId;
 		this.modelMatrix = new Matrix4f();
 		this.position = new Vector3f();
 		this.rotation = new Quaternionf();

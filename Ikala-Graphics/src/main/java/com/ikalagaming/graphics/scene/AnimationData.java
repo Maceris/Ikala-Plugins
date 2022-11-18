@@ -19,41 +19,40 @@ public class AnimationData {
 
 	static {
 		Matrix4f zeroMatrix = new Matrix4f().zero();
-		for (int i = 0; i < DEFAULT_BONES_MATRICES.length; i++) {
-			DEFAULT_BONES_MATRICES[i] = zeroMatrix;
+		for (int i = 0; i < AnimationData.DEFAULT_BONES_MATRICES.length; ++i) {
+			AnimationData.DEFAULT_BONES_MATRICES[i] = zeroMatrix;
 		}
 	}
-
 	/**
 	 * The current ongoing animation.
-	 * 
+	 *
 	 * @return The current animation details.
 	 */
 	private Model.Animation currentAnimation;
 	/**
 	 * The index of the current frame in the animation.
-	 * 
+	 *
 	 * @return The current frame index.
 	 */
 	private int currentFrameIndex;
 
 	/**
 	 * Create new animation data for the given animation.
-	 * 
+	 *
 	 * @param currentAnimation The animation we are tracking.
 	 */
 	public AnimationData(Model.Animation currentAnimation) {
-		currentFrameIndex = 0;
+		this.currentFrameIndex = 0;
 		this.currentAnimation = currentAnimation;
 	}
 
 	/**
 	 * Fetch the data associated with the current animation frame.
-	 * 
+	 *
 	 * @return The data for the current frame.
 	 */
 	public Model.AnimatedFrame getCurrentFrame() {
-		return currentAnimation.getFrames().get(currentFrameIndex);
+		return this.currentAnimation.getFrames().get(this.currentFrameIndex);
 	}
 
 	/**
@@ -61,22 +60,22 @@ public class AnimationData {
 	 * when we reach the end of the animation.
 	 */
 	public void nextFrame() {
-		int nextFrame = currentFrameIndex + 1;
-		if (nextFrame > currentAnimation.getFrames().size() - 1) {
-			currentFrameIndex = 0;
+		int nextFrame = this.currentFrameIndex + 1;
+		if (nextFrame > this.currentAnimation.getFrames().size() - 1) {
+			this.currentFrameIndex = 0;
 		}
 		else {
-			currentFrameIndex = nextFrame;
+			this.currentFrameIndex = nextFrame;
 		}
 	}
 
 	/**
 	 * Update the animation we are tracking and start at the beginning.
-	 * 
-	 * @param newAnimation The new animation we are tracking.
+	 *
+	 * @param currentAnimation The new animation we are tracking.
 	 */
-	public void setCurrentAnimation(Model.Animation newAnimation) {
-		currentFrameIndex = 0;
-		this.currentAnimation = newAnimation;
+	public void setCurrentAnimation(Model.Animation currentAnimation) {
+		this.currentFrameIndex = 0;
+		this.currentAnimation = currentAnimation;
 	}
 }

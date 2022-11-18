@@ -14,6 +14,7 @@ import imgui.ImFontAtlas;
 import imgui.ImGui;
 import imgui.ImGuiIO;
 import imgui.type.ImInt;
+import lombok.NonNull;
 import org.joml.Vector2f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL14;
@@ -52,10 +53,10 @@ public class GuiRender {
 
 	/**
 	 * Set up a new GUI renderer for the window.
-	 * 
+	 *
 	 * @param window The window we are rendering in.
 	 */
-	public GuiRender(Window window) {
+	public GuiRender(@NonNull Window window) {
 		List<ShaderProgram.ShaderModuleData> shaderModuleDataList =
 			new ArrayList<>();
 		shaderModuleDataList.add(new ShaderProgram.ShaderModuleData(
@@ -77,10 +78,10 @@ public class GuiRender {
 
 	/**
 	 * Set up imgui and create fonts, textures, meshes, etc.
-	 * 
+	 *
 	 * @param window The window we are using.
 	 */
-	private void createUIResources(Window window) {
+	private void createUIResources(@NonNull Window window) {
 		ImGui.createContext();
 
 		ImGuiIO imGuiIO = ImGui.getIO();
@@ -100,17 +101,17 @@ public class GuiRender {
 	 * Set up uniforms for the GUI shader.
 	 */
 	private void createUniforms() {
-		this.uniformsMap = new UniformsMap(this.shaderProgram.getProgramId());
+		this.uniformsMap = new UniformsMap(this.shaderProgram.getProgramID());
 		this.uniformsMap.createUniform(ShaderUniforms.GUI.SCALE);
 		this.scale = new Vector2f();
 	}
 
 	/**
 	 * Render the GUI over the given scene.
-	 * 
+	 *
 	 * @param scene The scene we are drawing.
 	 */
-	public void render(Scene scene) {
+	public void render(@NonNull Scene scene) {
 		GuiInstance guiInstance = scene.getGuiInstance();
 		if (guiInstance == null) {
 			return;
@@ -125,7 +126,7 @@ public class GuiRender {
 		GL11.glDisable(GL11.GL_DEPTH_TEST);
 		GL11.glDisable(GL11.GL_CULL_FACE);
 
-		GL30.glBindVertexArray(this.guiMesh.getVaoId());
+		GL30.glBindVertexArray(this.guiMesh.getVaoID());
 
 		GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, this.guiMesh.getVerticesVBO());
 		GL15.glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER,
@@ -138,7 +139,7 @@ public class GuiRender {
 
 		ImDrawData drawData = ImGui.getDrawData();
 		int numLists = drawData.getCmdListsCount();
-		for (int i = 0; i < numLists; i++) {
+		for (int i = 0; i < numLists; ++i) {
 			GL15.glBufferData(GL15.GL_ARRAY_BUFFER,
 				drawData.getCmdListVtxBufferData(i), GL15.GL_STREAM_DRAW);
 			GL15.glBufferData(GL15.GL_ELEMENT_ARRAY_BUFFER,
@@ -158,7 +159,7 @@ public class GuiRender {
 					GL11.GL_UNSIGNED_SHORT, indices);
 			}
 		}
-		
+
 		GL11.glEnable(GL11.GL_DEPTH_TEST);
 		GL11.glEnable(GL11.GL_CULL_FACE);
 		GL11.glDisable(GL11.GL_BLEND);
@@ -166,7 +167,7 @@ public class GuiRender {
 
 	/**
 	 * Update the GUI when the screen has been resized.
-	 * 
+	 *
 	 * @param width The new screen width, in pixels.
 	 * @param height The new screen height, in pixels.
 	 */

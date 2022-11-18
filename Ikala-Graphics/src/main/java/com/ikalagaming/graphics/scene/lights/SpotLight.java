@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.scene.lights;
 
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import org.joml.Vector3f;
 
@@ -11,22 +12,13 @@ import org.joml.Vector3f;
 @Setter
 public class SpotLight {
 	/**
-	 * The light information we are using, which we cut off everywhere except
-	 * the cone.
-	 *
-	 * @param pointLight The new light.
-	 * @return The light information.
-	 */
-	private PointLight pointLight;
-
-	/**
 	 * The direction the light is pointing towards.
 	 *
 	 * @param coneDirection The new direction.
 	 * @return The direction.
 	 */
+	@NonNull
 	private Vector3f coneDirection;
-
 	/**
 	 * The angle where we cut the light off, stored as cos(cut-off angle in
 	 * radians).
@@ -42,6 +34,15 @@ public class SpotLight {
 	 * @return The cutoff in degrees.
 	 */
 	private float cutOffAngle;
+	/**
+	 * The light information we are using, which we cut off everywhere except
+	 * the cone.
+	 *
+	 * @param pointLight The new light.
+	 * @return The light information.
+	 */
+	@NonNull
+	private PointLight pointLight;
 
 	/**
 	 * Create a new spotlight.
@@ -52,11 +53,23 @@ public class SpotLight {
 	 * @param cutOffAngle The angle in degrees we cut off the light at away from
 	 *            the direction.
 	 */
-	public SpotLight(PointLight pointLight, Vector3f coneDirection,
-		float cutOffAngle) {
+	public SpotLight(@NonNull PointLight pointLight,
+		@NonNull Vector3f coneDirection, float cutOffAngle) {
 		this.pointLight = pointLight;
 		this.coneDirection = coneDirection;
+		this.cutOffAngle = cutOffAngle;
 		this.setCutOffAngle(cutOffAngle);
+	}
+
+	/**
+	 * Set the cone direction.
+	 *
+	 * @param x The x position.
+	 * @param y The y position.
+	 * @param z The z position.
+	 */
+	public void setConeDirection(float x, float y, float z) {
+		this.coneDirection.set(x, y, z);
 	}
 
 	/**
@@ -67,17 +80,6 @@ public class SpotLight {
 	 */
 	public final void setCutOffAngle(float cutOffAngle) {
 		this.cutOffAngle = cutOffAngle;
-        cutOff = (float) Math.cos(Math.toRadians(cutOffAngle));
-	}
-	
-	/**
-	 * Set the cone direction.
-	 *
-	 * @param x The x position.
-	 * @param y The y position.
-	 * @param z The z position.
-	 */
-	public void setConeDirection(float x, float y, float z) {
-		this.coneDirection.set(x, y, z);
+		this.cutOff = (float) Math.cos(Math.toRadians(cutOffAngle));
 	}
 }

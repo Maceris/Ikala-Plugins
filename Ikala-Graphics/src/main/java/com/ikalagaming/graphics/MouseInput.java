@@ -12,42 +12,20 @@ import org.lwjgl.glfw.GLFW;
  * Handles mouse input for a window.
  */
 public class MouseInput {
-
-	/**
-	 * The position the mouse was in last time we checked.
-	 */
-	private final Vector2f previousPos;
 	/**
 	 * The current position the mouse is in.
-	 * 
+	 *
 	 * @return The current position.
 	 */
 	@Getter
-	private final Vector2f currentPos;
-
+	private Vector2f currentPos;
 	/**
 	 * The displacement vector for how a mouse has moved.
 	 *
 	 * @return the displacement vector.
 	 */
 	@Getter
-	private final Vector2f displaceVector;
-
-	/**
-	 * If the left button is currently pressed.
-	 *
-	 * @return True if the left button is pressed, false if it is not.
-	 */
-	@Getter
-	private boolean leftButtonPressed;
-
-	/**
-	 * If the right button is currently pressed.
-	 *
-	 * @return True if the right button is pressed, false if it is not.
-	 */
-	@Getter
-	private boolean rightButtonPressed;
+	private Vector2f displVec;
 	/**
 	 * Whether or not the mouse is currently in the window.
 	 *
@@ -55,16 +33,34 @@ public class MouseInput {
 	 */
 	@Getter
 	private boolean inWindow;
+	/**
+	 * If the left button is currently pressed.
+	 *
+	 * @return True if the left button is pressed, false if it is not.
+	 */
+	@Getter
+	private boolean leftButtonPressed;
+	/**
+	 * The position the mouse was in last time we checked.
+	 */
+	private Vector2f previousPos;
+	/**
+	 * If the right button is currently pressed.
+	 *
+	 * @return True if the right button is pressed, false if it is not.
+	 */
+	@Getter
+	private boolean rightButtonPressed;
 
 	/**
 	 * Create a new object with default values.
-	 * 
+	 *
 	 * @param windowHandle The handle of the window we are interacting with.
 	 */
 	public MouseInput(long windowHandle) {
 		this.previousPos = new Vector2f(-1, -1);
 		this.currentPos = new Vector2f();
-		this.displaceVector = new Vector2f();
+		this.displVec = new Vector2f();
 		this.leftButtonPressed = false;
 		this.rightButtonPressed = false;
 		this.inWindow = false;
@@ -108,30 +104,27 @@ public class MouseInput {
 					}
 				}
 			});
-
 	}
 
 	/**
 	 * Calculate input for a window.
 	 */
 	public void input() {
-		this.displaceVector.x = 0;
-		this.displaceVector.y = 0;
-
+		this.displVec.x = 0;
+		this.displVec.y = 0;
 		if (this.previousPos.x > 0 && this.previousPos.y > 0 && this.inWindow) {
 			double deltax = this.currentPos.x - this.previousPos.x;
 			double deltay = this.currentPos.y - this.previousPos.y;
 			boolean rotateX = deltax != 0;
 			boolean rotateY = deltay != 0;
 			if (rotateX) {
-				this.displaceVector.y = (float) deltax;
+				this.displVec.y = (float) deltax;
 			}
 			if (rotateY) {
-				this.displaceVector.x = (float) deltay;
+				this.displVec.x = (float) deltay;
 			}
 		}
 		this.previousPos.x = this.currentPos.x;
 		this.previousPos.y = this.currentPos.y;
 	}
-
 }

@@ -1,23 +1,18 @@
 package com.ikalagaming.graphics;
 
-import static org.lwjgl.glfw.GLFW.GLFW_KEY_A;
-import static org.lwjgl.glfw.GLFW.GLFW_KEY_D;
-import static org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_SHIFT;
-import static org.lwjgl.glfw.GLFW.GLFW_KEY_S;
-import static org.lwjgl.glfw.GLFW.GLFW_KEY_SPACE;
-import static org.lwjgl.glfw.GLFW.GLFW_KEY_W;
-
 import com.ikalagaming.graphics.scene.Camera;
 
 import lombok.Getter;
+import lombok.NonNull;
 import org.joml.Vector2f;
+import org.lwjgl.glfw.GLFW;
 
 /**
  * Handles the position and movement of the camera.
  */
 public class CameraManager {
 
-	private static final float MOUSE_SENSITIVITY = 0.2f;
+	private static final float MOUSE_SENSITIVITY = 0.02f;
 	/**
 	 * The speed in world units that the camera moves per second.
 	 */
@@ -37,10 +32,11 @@ public class CameraManager {
 	/**
 	 * Create a new camera manager for the given window.
 	 *
+	 * @param camera The camera we are managing.
 	 * @param window The window the camera renders to.
 	 */
-	public CameraManager(Window window) {
-		this.camera = new Camera();
+	public CameraManager(@NonNull Camera camera, @NonNull Window window) {
+		this.camera = camera;
 		this.window = window;
 	}
 
@@ -50,33 +46,33 @@ public class CameraManager {
 	 * @param deltaTime The fractional part of a second since the last update.
 	 */
 	public void updateCamera(float deltaTime) {
-		if (this.window.isKeyPressed(GLFW_KEY_W)) {
+		if (this.window.isKeyPressed(GLFW.GLFW_KEY_W)) {
 			this.camera
 				.moveForward(CameraManager.MOVE_SPEED_PER_SECOND * deltaTime);
 		}
-		if (this.window.isKeyPressed(GLFW_KEY_S)) {
+		if (this.window.isKeyPressed(GLFW.GLFW_KEY_S)) {
 			this.camera
 				.moveBackwards(CameraManager.MOVE_SPEED_PER_SECOND * deltaTime);
 		}
-		if (this.window.isKeyPressed(GLFW_KEY_A)) {
+		if (this.window.isKeyPressed(GLFW.GLFW_KEY_A)) {
 			this.camera
 				.moveLeft(CameraManager.MOVE_SPEED_PER_SECOND * deltaTime);
 		}
-		if (this.window.isKeyPressed(GLFW_KEY_D)) {
+		if (this.window.isKeyPressed(GLFW.GLFW_KEY_D)) {
 			this.camera
 				.moveRight(CameraManager.MOVE_SPEED_PER_SECOND * deltaTime);
 		}
-		if (this.window.isKeyPressed(GLFW_KEY_LEFT_SHIFT)) {
+		if (this.window.isKeyPressed(GLFW.GLFW_KEY_LEFT_SHIFT)) {
 			this.camera
 				.moveDown(CameraManager.MOVE_SPEED_PER_SECOND * deltaTime);
 		}
-		if (this.window.isKeyPressed(GLFW_KEY_SPACE)) {
+		if (this.window.isKeyPressed(GLFW.GLFW_KEY_SPACE)) {
 			this.camera.moveUp(CameraManager.MOVE_SPEED_PER_SECOND * deltaTime);
 		}
 
 		// Update camera based on mouse
 		if (this.window.getMouseInput().isRightButtonPressed()) {
-			Vector2f rotVec = this.window.getMouseInput().getDisplaceVector();
+			Vector2f rotVec = this.window.getMouseInput().getDisplVec();
 			this.camera.addRotation(rotVec.x * CameraManager.MOUSE_SENSITIVITY,
 				rotVec.y * CameraManager.MOUSE_SENSITIVITY);
 		}

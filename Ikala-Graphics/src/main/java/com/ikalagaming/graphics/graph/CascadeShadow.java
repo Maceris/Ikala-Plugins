@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.graph;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.Getter;
+import lombok.NonNull;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
@@ -20,26 +21,6 @@ public class CascadeShadow {
 	public static final int SHADOW_MAP_CASCADE_COUNT = 3;
 
 	/**
-	 * The light view and projection matrix.
-	 * 
-	 * @return The combined projection view matrix.
-	 */
-	private Matrix4f projViewMatrix;
-	/**
-	 * The distance to the split that this slice represents.
-	 * 
-	 * @return The split distance.
-	 */
-	private float splitDistance;
-
-	/**
-	 * Create a new cascade shadow.
-	 */
-	public CascadeShadow() {
-		projViewMatrix = new Matrix4f();
-	}
-
-	/**
 	 * <p>
 	 * Update the cascade shadows for the scene.
 	 * </p>
@@ -50,20 +31,21 @@ public class CascadeShadow {
 	 * which are based on
 	 * https://johanmedestrom.wordpress.com/2016/03/18/opengl-cascaded-shadow-maps/
 	 * </p>
-	 * 
-	 * @param cascadeShadows The shadows for the scene.
-	 * @param scene Thes cene.
+	 *
+	 * @param cascadeShadows The cascade shadows.
+	 * @param scene The scene.
 	 */
-	public static void updateCascadeShadows(List<CascadeShadow> cascadeShadows,
-		Scene scene) {
+	public static void updateCascadeShadows(
+		@NonNull List<CascadeShadow> cascadeShadows, @NonNull Scene scene) {
 		Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
-		Matrix4f projMatrix = scene.getProjection().getProjectionMatrix();
+		Matrix4f projMatrix = scene.getProjection().getProjMatrix();
 		Vector4f lightPos = new Vector4f(
-			scene.getSceneLights().getDirectionalLight().getDirection(), 0);
+			scene.getSceneLights().getDirLight().getDirection(), 0);
 
 		final float cascadeSplitLambda = 0.95f;
 
-		float[] cascadeSplits = new float[SHADOW_MAP_CASCADE_COUNT];
+		float[] cascadeSplits =
+			new float[CascadeShadow.SHADOW_MAP_CASCADE_COUNT];
 
 		final float nearClip = projMatrix.perspectiveNear();
 		final float farClip = projMatrix.perspectiveFar();
@@ -80,18 +62,19 @@ public class CascadeShadow {
 		 * presented in
 		 * https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch10.html
 		 */
-		for (int i = 0; i < SHADOW_MAP_CASCADE_COUNT; i++) {
-			float p = (i + 1) / (float) (SHADOW_MAP_CASCADE_COUNT);
-			float log = (float) (minZ * Math.pow(ratio, p));
-			float uniform = minZ + range * p;
+		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+			float power =
+				(i + 1) / (float) (CascadeShadow.SHADOW_MAP_CASCADE_COUNT);
+			float log = (float) (minZ * Math.pow(ratio, power));
+			float uniform = minZ + range * power;
 			float d = cascadeSplitLambda * (log - uniform) + uniform;
 			cascadeSplits[i] = (d - nearClip) / clipRange;
 		}
 
 		// Calculate orthographic projection matrix for each cascade
-		float lastSplitDist = 0.0f;
-		for (int i = 0; i < SHADOW_MAP_CASCADE_COUNT; i++) {
-			float splitDist = cascadeSplits[i];
+		float lastSplitDistance = 0.0f;
+		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+			float splitDistance = cascadeSplits[i];
 
 			Vector3f[] frustumCorners = new Vector3f[] {
 				new Vector3f(-1.0f, 1.0f, -1.0f),
@@ -100,36 +83,36 @@ public class CascadeShadow {
 				new Vector3f(-1.0f, -1.0f, -1.0f),
 				new Vector3f(-1.0f, 1.0f, 1.0f), new Vector3f(1.0f, 1.0f, 1.0f),
 				new Vector3f(1.0f, -1.0f, 1.0f),
-				new Vector3f(-1.0f, -1.0f, 1.0f),};
+				new Vector3f(-1.0f, -1.0f, 1.0f)};
 
 			// Project frustum corners into world space
-			Matrix4f invCam =
+			Matrix4f invertedCamera =
 				(new Matrix4f(projMatrix).mul(viewMatrix)).invert();
-			for (int j = 0; j < 8; j++) {
+			for (int j = 0; j < frustumCorners.length; ++j) {
 				Vector4f invCorner =
-					new Vector4f(frustumCorners[j], 1.0f).mul(invCam);
+					new Vector4f(frustumCorners[j], 1.0f).mul(invertedCamera);
 				frustumCorners[j] = new Vector3f(invCorner.x / invCorner.w,
 					invCorner.y / invCorner.w, invCorner.z / invCorner.w);
 			}
 
-			for (int j = 0; j < 4; j++) {
+			for (int j = 0; j < frustumCorners.length / 2; ++j) {
 				Vector3f dist =
 					new Vector3f(frustumCorners[j + 4]).sub(frustumCorners[j]);
 				frustumCorners[j + 4] = new Vector3f(frustumCorners[j])
-					.add(new Vector3f(dist).mul(splitDist));
+					.add(new Vector3f(dist).mul(splitDistance));
 				frustumCorners[j] = new Vector3f(frustumCorners[j])
-					.add(new Vector3f(dist).mul(lastSplitDist));
+					.add(new Vector3f(dist).mul(lastSplitDistance));
 			}
 
 			// Get frustum center
 			Vector3f frustumCenter = new Vector3f(0.0f);
-			for (int j = 0; j < 8; j++) {
+			for (int j = 0; j < frustumCorners.length; j++) {
 				frustumCenter.add(frustumCorners[j]);
 			}
 			frustumCenter.div(8.0f);
 
 			float radius = 0.0f;
-			for (int j = 0; j < 8; j++) {
+			for (int j = 0; j < frustumCorners.length; j++) {
 				float distance =
 					(new Vector3f(frustumCorners[j]).sub(frustumCenter))
 						.length();
@@ -140,11 +123,11 @@ public class CascadeShadow {
 			Vector3f maxExtents = new Vector3f(radius);
 			Vector3f minExtents = new Vector3f(maxExtents).mul(-1);
 
-			Vector3f lightDir =
+			Vector3f lightDirection =
 				(new Vector3f(lightPos.x, lightPos.y, lightPos.z).mul(-1))
 					.normalize();
 			Vector3f eye = new Vector3f(frustumCenter)
-				.sub(new Vector3f(lightDir).mul(-minExtents.z));
+				.sub(new Vector3f(lightDirection).mul(-minExtents.z));
 			Vector3f up = new Vector3f(0.0f, 1.0f, 0.0f);
 			Matrix4f lightViewMatrix =
 				new Matrix4f().lookAt(eye, frustumCenter, up);
@@ -155,11 +138,32 @@ public class CascadeShadow {
 			// Store split distance and matrix in cascade
 			CascadeShadow cascadeShadow = cascadeShadows.get(i);
 			cascadeShadow.splitDistance =
-				(nearClip + splitDist * clipRange) * -1.0f;
+				(nearClip + splitDistance * clipRange) * -1.0f;
 			cascadeShadow.projViewMatrix =
 				lightOrthoMatrix.mul(lightViewMatrix);
 
-			lastSplitDist = cascadeSplits[i];
+			lastSplitDistance = cascadeSplits[i];
 		}
 	}
+
+	/**
+	 * The light view and projection matrix.
+	 *
+	 * @return The combined projection view matrix.
+	 */
+	private Matrix4f projViewMatrix;
+	/**
+	 * The distance to the split that this slice represents.
+	 *
+	 * @return The split distance.
+	 */
+	private float splitDistance;
+
+	/**
+	 * Create a new cascade shadow.
+	 */
+	public CascadeShadow() {
+		this.projViewMatrix = new Matrix4f();
+	}
+
 }

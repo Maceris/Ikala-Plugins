@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NonNull;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL15;
@@ -18,12 +19,12 @@ import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Buffers for indirect drawing of models.
  */
 public class RenderBuffers {
+
 	/**
 	 * Data used for drawing animated meshes.
 	 */
@@ -117,7 +118,7 @@ public class RenderBuffers {
 	 * @return The VAO ID of the animated model data.
 	 */
 	@Getter
-	private int animVaoId;
+	private int animVaoID;
 	/**
 	 * The Vertex Buffer Object ID for binding poses, for animated models.
 	 *
@@ -148,39 +149,34 @@ public class RenderBuffers {
 	 */
 	@Getter
 	private int destAnimationBuffer;
-
 	/**
 	 * The Vertex Array Object ID, for static models.
 	 *
 	 * @return The VAO ID of the static model data.
 	 */
 	@Getter
-	private int staticVaoId;
-
+	private int staticVaoID;
 	/**
 	 * The list of Vertex Buffer Objects that this class set up.
 	 */
-	private List<Integer> vboIdList;
+	private List<Integer> vboIDList;
 
 	/**
 	 * Set up a new render buffer.
 	 */
 	public RenderBuffers() {
-		this.vboIdList = new ArrayList<>();
+		this.vboIDList = new ArrayList<>();
 	}
 
 	/**
 	 * Clean up all the data.
 	 */
 	public void cleanup() {
-		this.vboIdList.stream().forEach(GL15::glDeleteBuffers);
-		GL30.glDeleteVertexArrays(this.staticVaoId);
-		GL30.glDeleteVertexArrays(this.animVaoId);
+		this.vboIDList.stream().forEach(GL15::glDeleteBuffers);
+		GL30.glDeleteVertexArrays(this.staticVaoID);
+		GL30.glDeleteVertexArrays(this.animVaoID);
 	}
 
-	/**
-	 * Set up vertex attribute arrays.
-	 */
 	private void defineVertexAttribs() {
 		final int stride = 3 * 4 * 4 + 2 * 4;
 		int pointer = 0;
@@ -210,15 +206,15 @@ public class RenderBuffers {
 	 *
 	 * @param scene The scene to load models for.
 	 */
-	public void loadAnimatedModels(Scene scene) {
+	public void loadAnimatedModels(@NonNull Scene scene) {
 		List<Model> modelList = scene.getModelMap().values().stream()
-			.filter(Model::isAnimated).collect(Collectors.toList());
+			.filter(Model::isAnimated).toList();
 		this.loadBindingPoses(modelList);
 		this.loadBonesMatricesBuffer(modelList);
 		this.loadBonesIndicesWeights(modelList);
 
-		this.animVaoId = GL30.glGenVertexArrays();
-		GL30.glBindVertexArray(this.animVaoId);
+		this.animVaoID = GL30.glGenVertexArrays();
+		GL30.glBindVertexArray(this.animVaoID);
 		int positionsSize = 0;
 		int normalsSize = 0;
 		int textureCoordsSize = 0;
@@ -261,7 +257,7 @@ public class RenderBuffers {
 		}
 
 		this.destAnimationBuffer = GL15.glGenBuffers();
-		this.vboIdList.add(this.destAnimationBuffer);
+		this.vboIDList.add(this.destAnimationBuffer);
 		FloatBuffer meshesBuffer = MemoryUtil
 			.memAllocFloat(positionsSize + normalsSize * 3 + textureCoordsSize);
 		for (Model model : modelList) {
@@ -281,7 +277,7 @@ public class RenderBuffers {
 
 		// Index VBO
 		int vboId = GL15.glGenBuffers();
-		this.vboIdList.add(vboId);
+		this.vboIDList.add(vboId);
 		IntBuffer indicesBuffer = MemoryUtil.memAllocInt(indicesSize);
 		for (Model model : modelList) {
 			model.getEntitiesList().forEach(e -> {
@@ -306,7 +302,7 @@ public class RenderBuffers {
 	 *
 	 * @param modelList The modes to load binding pose information for.
 	 */
-	private void loadBindingPoses(List<Model> modelList) {
+	private void loadBindingPoses(@NonNull List<Model> modelList) {
 		int meshSize = 0;
 		for (Model model : modelList) {
 			for (MeshData meshData : model.getMeshDataList()) {
@@ -318,7 +314,7 @@ public class RenderBuffers {
 		}
 
 		this.bindingPosesBuffer = GL15.glGenBuffers();
-		this.vboIdList.add(this.bindingPosesBuffer);
+		this.vboIDList.add(this.bindingPosesBuffer);
 		FloatBuffer meshesBuffer = MemoryUtil.memAllocFloat(meshSize);
 		for (Model model : modelList) {
 			for (MeshData meshData : model.getMeshDataList()) {
@@ -342,7 +338,7 @@ public class RenderBuffers {
 	 * @param modelList The list of models to load bone index and weight
 	 *            information for.
 	 */
-	private void loadBonesIndicesWeights(List<Model> modelList) {
+	private void loadBonesIndicesWeights(@NonNull List<Model> modelList) {
 		int bufferSize = 0;
 		for (Model model : modelList) {
 			for (MeshData meshData : model.getMeshDataList()) {
@@ -372,7 +368,7 @@ public class RenderBuffers {
 		dataBuffer.flip();
 
 		this.bonesIndicesWeightsBuffer = GL15.glGenBuffers();
-		this.vboIdList.add(this.bonesIndicesWeightsBuffer);
+		this.vboIDList.add(this.bonesIndicesWeightsBuffer);
 		GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER,
 			this.bonesIndicesWeightsBuffer);
 		GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, dataBuffer,
@@ -388,7 +384,7 @@ public class RenderBuffers {
 	 * @param modelList The list of models to store bone matrices information
 	 *            for.
 	 */
-	private void loadBonesMatricesBuffer(List<Model> modelList) {
+	private void loadBonesMatricesBuffer(@NonNull List<Model> modelList) {
 		int bufferSize = 0;
 		for (Model model : modelList) {
 			List<Model.Animation> animationsList = model.getAnimationList();
@@ -402,7 +398,7 @@ public class RenderBuffers {
 		}
 
 		this.bonesMatricesBuffer = GL15.glGenBuffers();
-		this.vboIdList.add(this.bonesMatricesBuffer);
+		this.vboIDList.add(this.bonesMatricesBuffer);
 		ByteBuffer dataBuffer = MemoryUtil.memAlloc(bufferSize);
 		int matrixSize = 4 * 4 * 4;
 		for (Model model : modelList) {
@@ -434,11 +430,11 @@ public class RenderBuffers {
 	 *
 	 * @param scene The scene to load models for.
 	 */
-	public void loadStaticModels(Scene scene) {
+	public void loadStaticModels(@NonNull Scene scene) {
 		List<Model> modelList = scene.getModelMap().values().stream()
-			.filter(m -> !m.isAnimated()).collect(Collectors.toList());
-		this.staticVaoId = GL30.glGenVertexArrays();
-		GL30.glBindVertexArray(this.staticVaoId);
+			.filter(m -> !m.isAnimated()).toList();
+		this.staticVaoID = GL30.glGenVertexArrays();
+		GL30.glBindVertexArray(this.staticVaoID);
 		int positionsSize = 0;
 		int normalsSize = 0;
 		int textureCoordsSize = 0;
@@ -461,8 +457,8 @@ public class RenderBuffers {
 			}
 		}
 
-		int vboId = GL15.glGenBuffers();
-		this.vboIdList.add(vboId);
+		int vboID = GL15.glGenBuffers();
+		this.vboIDList.add(vboID);
 		FloatBuffer meshesBuffer = MemoryUtil
 			.memAllocFloat(positionsSize + normalsSize * 3 + textureCoordsSize);
 		for (Model model : modelList) {
@@ -471,7 +467,7 @@ public class RenderBuffers {
 			}
 		}
 		meshesBuffer.flip();
-		GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboId);
+		GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboID);
 		GL15.glBufferData(GL15.GL_ARRAY_BUFFER, meshesBuffer,
 			GL15.GL_STATIC_DRAW);
 		MemoryUtil.memFree(meshesBuffer);
@@ -479,8 +475,8 @@ public class RenderBuffers {
 		this.defineVertexAttribs();
 
 		// Index VBO
-		vboId = GL15.glGenBuffers();
-		this.vboIdList.add(vboId);
+		vboID = GL15.glGenBuffers();
+		this.vboIDList.add(vboID);
 		IntBuffer indicesBuffer = MemoryUtil.memAllocInt(indicesSize);
 		for (Model model : modelList) {
 			for (MeshData meshData : model.getMeshDataList()) {
@@ -488,7 +484,7 @@ public class RenderBuffers {
 			}
 		}
 		indicesBuffer.flip();
-		GL15.glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, vboId);
+		GL15.glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, vboID);
 		GL15.glBufferData(GL15.GL_ELEMENT_ARRAY_BUFFER, indicesBuffer,
 			GL15.GL_STATIC_DRAW);
 		MemoryUtil.memFree(indicesBuffer);
@@ -503,8 +499,8 @@ public class RenderBuffers {
 	 * @param meshesBuffer The buffer to populate.
 	 * @param meshData The data to fill the buffer with.
 	 */
-	private void populateMeshBuffer(FloatBuffer meshesBuffer,
-		MeshData meshData) {
+	private void populateMeshBuffer(@NonNull FloatBuffer meshesBuffer,
+		@NonNull MeshData meshData) {
 		float[] positions = meshData.getPositions();
 		float[] normals = meshData.getNormals();
 		float[] tangents = meshData.getTangents();
@@ -531,5 +527,4 @@ public class RenderBuffers {
 			meshesBuffer.put(textCoords[startTextCoord + 1]);
 		}
 	}
-
 }

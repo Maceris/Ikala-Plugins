@@ -1,15 +1,16 @@
 package com.ikalagaming.graphics;
 
+import com.ikalagaming.graphics.render.Render;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
-import com.ikalagaming.graphics.scene.lights.PointLight;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
-import com.ikalagaming.graphics.scene.lights.SpotLight;
 
 import imgui.ImGui;
 import imgui.ImGuiIO;
 import imgui.flag.ImGuiCond;
+import imgui.type.ImBoolean;
+import lombok.NonNull;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
 
@@ -20,32 +21,19 @@ public class LightControls implements GuiInstance {
 
 	private float[] ambientColor;
 	private float[] ambientFactor;
-	private float[] dirConeX;
-	private float[] dirConeY;
-	private float[] dirConeZ;
 	private float[] dirLightColor;
 	private float[] dirLightIntensity;
 	private float[] dirLightX;
 	private float[] dirLightY;
 	private float[] dirLightZ;
-	private float[] pointLightColor;
-	private float[] pointLightIntensity;
-	private float[] pointLightX;
-	private float[] pointLightY;
-	private float[] pointLightZ;
-	private float[] spotLightColor;
-	private float[] spotLightCuttoff;
-	private float[] spotLightIntensity;
-	private float[] spotLightX;
-	private float[] spotLightY;
-	private float[] spotLightZ;
+	private ImBoolean wireframe;
 
 	/**
 	 * Set up the light controls.
 	 *
 	 * @param scene The scene.
 	 */
-	public LightControls(Scene scene) {
+	public LightControls(@NonNull Scene scene) {
 		SceneLights sceneLights = scene.getSceneLights();
 		AmbientLight ambientLight = sceneLights.getAmbientLight();
 		Vector3f color = ambientLight.getColor();
@@ -53,44 +41,21 @@ public class LightControls implements GuiInstance {
 		this.ambientFactor = new float[] {ambientLight.getIntensity()};
 		this.ambientColor = new float[] {color.x, color.y, color.z};
 
-		PointLight pointLight = sceneLights.getPointLights().get(0);
-		color = pointLight.getColor();
-		Vector3f pos = pointLight.getPosition();
-		this.pointLightColor = new float[] {color.x, color.y, color.z};
-		this.pointLightX = new float[] {pos.x};
-		this.pointLightY = new float[] {pos.y};
-		this.pointLightZ = new float[] {pos.z};
-		this.pointLightIntensity = new float[] {pointLight.getIntensity()};
-
-		SpotLight spotLight = sceneLights.getSpotLights().get(0);
-		pointLight = spotLight.getPointLight();
-		color = pointLight.getColor();
-		pos = pointLight.getPosition();
-		this.spotLightColor = new float[] {color.x, color.y, color.z};
-		this.spotLightX = new float[] {pos.x};
-		this.spotLightY = new float[] {pos.y};
-		this.spotLightZ = new float[] {pos.z};
-		this.spotLightIntensity = new float[] {pointLight.getIntensity()};
-		this.spotLightCuttoff = new float[] {spotLight.getCutOff()};
-		Vector3f coneDir = spotLight.getConeDirection();
-		this.dirConeX = new float[] {coneDir.x};
-		this.dirConeY = new float[] {coneDir.y};
-		this.dirConeZ = new float[] {coneDir.z};
-
-		DirectionalLight dirLight = sceneLights.getDirectionalLight();
+		DirectionalLight dirLight = sceneLights.getDirLight();
 		color = dirLight.getColor();
-		pos = dirLight.getDirection();
+		Vector3f pos = dirLight.getDirection();
 		this.dirLightColor = new float[] {color.x, color.y, color.z};
 		this.dirLightX = new float[] {pos.x};
 		this.dirLightY = new float[] {pos.y};
 		this.dirLightZ = new float[] {pos.z};
 		this.dirLightIntensity = new float[] {dirLight.getIntensity()};
+		this.wireframe = new ImBoolean(false);
 	}
 
 	@Override
 	public void drawGui() {
 		ImGui.newFrame();
-		ImGui.setNextWindowPos(10, 10, ImGuiCond.Always);
+		ImGui.setNextWindowPos(10, 10, ImGuiCond.Once);
 		ImGui.setNextWindowSize(450, 400);
 
 		ImGui.begin("Lights controls");
@@ -98,39 +63,6 @@ public class LightControls implements GuiInstance {
 			ImGui.sliderFloat("Ambient factor", this.ambientFactor, 0.0f, 1.0f,
 				"%.2f");
 			ImGui.colorEdit3("Ambient color", this.ambientColor);
-		}
-
-		if (ImGui.collapsingHeader("Point Light")) {
-			ImGui.sliderFloat("Point Light - x", this.pointLightX, -10.0f,
-				10.0f, "%.2f");
-			ImGui.sliderFloat("Point Light - y", this.pointLightY, -10.0f,
-				10.0f, "%.2f");
-			ImGui.sliderFloat("Point Light - z", this.pointLightZ, -10.0f,
-				10.0f, "%.2f");
-			ImGui.colorEdit3("Point Light color", this.pointLightColor);
-			ImGui.sliderFloat("Point Light Intensity", this.pointLightIntensity,
-				0.0f, 1.0f, "%.2f");
-		}
-
-		if (ImGui.collapsingHeader("Spot Light")) {
-			ImGui.sliderFloat("Spot Light - x", this.spotLightX, -10.0f, 10.0f,
-				"%.2f");
-			ImGui.sliderFloat("Spot Light - y", this.spotLightY, -10.0f, 10.0f,
-				"%.2f");
-			ImGui.sliderFloat("Spot Light - z", this.spotLightZ, -10.0f, 10.0f,
-				"%.2f");
-			ImGui.colorEdit3("Spot Light color", this.spotLightColor);
-			ImGui.sliderFloat("Spot Light Intensity", this.spotLightIntensity,
-				0.0f, 1.0f, "%.2f");
-			ImGui.separator();
-			ImGui.sliderFloat("Spot Light cutoff", this.spotLightCuttoff, 0.0f,
-				360.0f, "%2.f");
-			ImGui.sliderFloat("Dir cone - x", this.dirConeX, -1.0f, 1.0f,
-				"%.2f");
-			ImGui.sliderFloat("Dir cone - y", this.dirConeY, -1.0f, 1.0f,
-				"%.2f");
-			ImGui.sliderFloat("Dir cone - z", this.dirConeZ, -1.0f, 1.0f,
-				"%.2f");
 		}
 
 		if (ImGui.collapsingHeader("Dir Light")) {
@@ -148,10 +80,22 @@ public class LightControls implements GuiInstance {
 
 		ImGui.showDemoWindow();
 
-		ImGui.setNextWindowPos(460, 10, ImGuiCond.Always);
+		ImGui.setNextWindowPos(460, 10, ImGuiCond.Once);
 		ImGui.setNextWindowSize(450, 400);
+		ImGui.begin("Debug");
 
-		ImGui.begin("Debugging");
+		ImGui.text(String.format("FPS: %d", GraphicsManager.lastFPS));
+
+		Vector2f rotation =
+			GraphicsManager.cameraManager.getCamera().getRotation();
+		ImGui.text(
+			String.format("Camera rotation: (%f, %f)", rotation.x, rotation.y));
+		Vector2f displ =
+			GraphicsManager.getWindow().getMouseInput().getDisplVec();
+		ImGui
+			.text(String.format("Displace vector: (%f, %f)", displ.x, displ.y));
+
+		ImGui.checkbox("Wireframe", this.wireframe);
 
 		ImGui.end();
 
@@ -160,13 +104,15 @@ public class LightControls implements GuiInstance {
 	}
 
 	@Override
-	public boolean handleGuiInput(Scene scene, Window window) {
+	public boolean handleGuiInput(@NonNull Scene scene,
+		@NonNull Window window) {
 		ImGuiIO imGuiIO = ImGui.getIO();
 		MouseInput mouseInput = window.getMouseInput();
 		Vector2f mousePos = mouseInput.getCurrentPos();
 		imGuiIO.setMousePos(mousePos.x, mousePos.y);
 		imGuiIO.setMouseDown(0, mouseInput.isLeftButtonPressed());
 		imGuiIO.setMouseDown(1, mouseInput.isRightButtonPressed());
+		Render.configuration.setWireframe(this.wireframe.get());
 
 		boolean consumed =
 			imGuiIO.getWantCaptureMouse() || imGuiIO.getWantCaptureKeyboard();
@@ -177,26 +123,8 @@ public class LightControls implements GuiInstance {
 			ambientLight.setColor(this.ambientColor[0], this.ambientColor[1],
 				this.ambientColor[2]);
 
-			PointLight pointLight = sceneLights.getPointLights().get(0);
-			pointLight.setPosition(this.pointLightX[0], this.pointLightY[0],
-				this.pointLightZ[0]);
-			pointLight.setColor(this.pointLightColor[0],
-				this.pointLightColor[1], this.pointLightColor[2]);
-			pointLight.setIntensity(this.pointLightIntensity[0]);
-
-			SpotLight spotLight = sceneLights.getSpotLights().get(0);
-			pointLight = spotLight.getPointLight();
-			pointLight.setPosition(this.spotLightX[0], this.spotLightY[0],
-				this.spotLightZ[0]);
-			pointLight.setColor(this.spotLightColor[0], this.spotLightColor[1],
-				this.spotLightColor[2]);
-			pointLight.setIntensity(this.spotLightIntensity[0]);
-			spotLight.setCutOffAngle(this.spotLightColor[0]);
-			spotLight.setConeDirection(this.dirConeX[0], this.dirConeY[0],
-				this.dirConeZ[0]);
-
-			DirectionalLight dirLight = sceneLights.getDirectionalLight();
-			dirLight.setDirection(this.dirLightX[0], this.dirLightY[0],
+			DirectionalLight dirLight = sceneLights.getDirLight();
+			dirLight.setPosition(this.dirLightX[0], this.dirLightY[0],
 				this.dirLightZ[0]);
 			dirLight.setColor(this.dirLightColor[0], this.dirLightColor[1],
 				this.dirLightColor[2]);

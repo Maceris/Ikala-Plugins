@@ -23,7 +23,7 @@ public class GuiMesh {
 	 *
 	 * @return The VAO ID.
 	 */
-	private int vaoId;
+	private int vaoID;
 	/**
 	 * The vertices VBO for this mesh.
 	 *
@@ -35,8 +35,8 @@ public class GuiMesh {
 	 * Create a new mesh and set it up for use with imgui.
 	 */
 	public GuiMesh() {
-		this.vaoId = GL30.glGenVertexArrays();
-		GL30.glBindVertexArray(this.vaoId);
+		this.vaoID = GL30.glGenVertexArrays();
+		GL30.glBindVertexArray(this.vaoID);
 
 		// Single VBO
 		this.verticesVBO = GL15.glGenBuffers();
@@ -63,7 +63,7 @@ public class GuiMesh {
 	public void cleanup() {
 		GL15.glDeleteBuffers(this.indicesVBO);
 		GL15.glDeleteBuffers(this.verticesVBO);
-		GL30.glDeleteVertexArrays(this.vaoId);
+		GL30.glDeleteVertexArrays(this.vaoID);
 	}
 
 }

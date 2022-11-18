@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.scene;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import org.joml.Vector3f;
 
@@ -25,6 +26,7 @@ public class Fog {
 	 * @param color The color of the fog.
 	 * @return The color of the fog.
 	 */
+	@NonNull
 	private Vector3f color;
 	/**
 	 * How thick the fog is, modeled as 1/(e^(distance*density)).
@@ -38,8 +40,7 @@ public class Fog {
 	 * Set up fog.
 	 */
 	public Fog() {
-		active = false;
-		color = new Vector3f();
+		this.active = false;
+		this.color = new Vector3f();
 	}
-
 }
