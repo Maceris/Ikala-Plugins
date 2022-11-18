@@ -30,17 +30,17 @@ public class PointLight {
 		 */
 		private float constant;
 		/**
-		 * The linear component.
-		 *
-		 * @param linear The linear component.
-		 * @return The linear fall off with respect to distance.
-		 */
-		private float exponent;
-		/**
 		 * The exponent component.
 		 *
 		 * @param exponent The exponent component.
 		 * @return The exponential fall off with respect to distance.
+		 */
+		private float exponent;
+		/**
+		 * The linear component.
+		 *
+		 * @param linear The linear component.
+		 * @return The linear fall off with respect to distance.
 		 */
 		private float linear;
 	}
