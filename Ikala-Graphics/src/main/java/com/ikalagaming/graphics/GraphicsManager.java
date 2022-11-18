@@ -40,17 +40,28 @@ public class GraphicsManager {
 	private static AtomicBoolean initialized = new AtomicBoolean(false);
 
 	/**
-	 * The scene we are rendering.
+	 * Whether we want to refresh the scene information.
 	 */
+	private static AtomicBoolean refreshRequested = new AtomicBoolean(false);
+
+	/**
+	 * The scene we are rendering.
+	 * 
+	 * @return The current scene.
+	 */
+	@Getter
 	private static Scene scene;
 	/**
 	 * The rendering handler.
 	 */
 	private static Render render;
 	/**
-	 * The camera manager
+	 * The camera manager.
+	 * 
+	 * @return The camera manager.
 	 */
-	static CameraManager cameraManager;
+	@Getter
+	private static CameraManager cameraManager;
 	/**
 	 * Used to track when we should render another frame.
 	 */
@@ -99,9 +110,12 @@ public class GraphicsManager {
 	 */
 	private static int framesSinceLastCalculation;
 	/**
-	 * The last recorded FPS.
+	 * The last recorded Frames Per Second.
+	 * 
+	 * @return The last known FPS.
 	 */
-	static int lastFPS;
+	@Getter
+	private static int lastFPS;
 
 	/**
 	 * Whether we should shut down.
@@ -237,7 +251,7 @@ public class GraphicsManager {
 		GraphicsManager.cubeEntity2.updateModelMatrix();
 		GraphicsManager.scene.addEntity(GraphicsManager.cubeEntity2);
 
-		GraphicsManager.render.setupData(GraphicsManager.scene);
+		refreshRenderData();
 
 		SceneLights sceneLights = new SceneLights();
 		AmbientLight ambientLight = sceneLights.getAmbientLight();
@@ -276,9 +290,14 @@ public class GraphicsManager {
 			(float) Math.toRadians(390.f));
 
 		GraphicsManager.lightAngle = 45.001f;
+	}
 
-		GraphicsManager.scene
-			.setGuiInstance(new LightControls(GraphicsManager.scene));
+	/**
+	 * Set up the render data after adding/removing renderables.
+	 */
+	public static void refreshRenderData() {
+		refreshRequested.set(true);
+
 	}
 
 	/**
@@ -377,6 +396,10 @@ public class GraphicsManager {
 			final float elapsedTime =
 				GraphicsManager.renderTimer.getElapsedTime();
 
+			if (refreshRequested.compareAndSet(true, false)) {
+				GraphicsManager.render.setupData(GraphicsManager.scene);
+			}
+
 			GraphicsManager.render(elapsedTime);
 			// Update the next time we should render a frame
 			GraphicsManager.nextRenderTime =
@@ -385,6 +408,15 @@ public class GraphicsManager {
 		}
 
 		return Launcher.STATUS_OK;
+	}
+
+	/**
+	 * Set the GUI instance to use.
+	 * 
+	 * @param gui The user interface.
+	 */
+	public static void setGUI(GuiInstance gui) {
+		scene.setGuiInstance(gui);
 	}
 
 	/**
