@@ -1,0 +1,5 @@
+rootProject.name = 'RPG-GUI'
+include ':Ikala-Core'
+project(':Ikala-Core').projectDir = new File('../../Ikala-Core')
+include ':Ikala-Graphics'
+project(':Ikala-Graphics').projectDir = new File('../Ikala-Graphics')

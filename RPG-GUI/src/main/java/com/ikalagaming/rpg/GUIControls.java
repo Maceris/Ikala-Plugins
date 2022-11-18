@@ -1,5 +1,9 @@
-package com.ikalagaming.graphics;
+package com.ikalagaming.rpg;
 
+import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.GuiInstance;
+import com.ikalagaming.graphics.MouseInput;
+import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.render.Render;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
@@ -17,7 +21,7 @@ import org.joml.Vector3f;
 /**
  * A GUI for manipulating lights
  */
-public class LightControls implements GuiInstance {
+public class GUIControls implements GuiInstance {
 
 	private float[] ambientColor;
 	private float[] ambientFactor;
@@ -33,7 +37,7 @@ public class LightControls implements GuiInstance {
 	 *
 	 * @param scene The scene.
 	 */
-	public LightControls(@NonNull Scene scene) {
+	public GUIControls(@NonNull Scene scene) {
 		SceneLights sceneLights = scene.getSceneLights();
 		AmbientLight ambientLight = sceneLights.getAmbientLight();
 		Vector3f color = ambientLight.getColor();
@@ -84,10 +88,10 @@ public class LightControls implements GuiInstance {
 		ImGui.setNextWindowSize(450, 400);
 		ImGui.begin("Debug");
 
-		ImGui.text(String.format("FPS: %d", GraphicsManager.lastFPS));
+		ImGui.text(String.format("FPS: %d", GraphicsManager.getLastFPS()));
 
 		Vector2f rotation =
-			GraphicsManager.cameraManager.getCamera().getRotation();
+			GraphicsManager.getCameraManager().getCamera().getRotation();
 		ImGui.text(
 			String.format("Camera rotation: (%f, %f)", rotation.x, rotation.y));
 		Vector2f displ =
