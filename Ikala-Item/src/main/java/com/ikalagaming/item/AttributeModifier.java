@@ -3,8 +3,10 @@ package com.ikalagaming.item;
 import com.ikalagaming.attributes.Attribute;
 import com.ikalagaming.item.enums.ModifierType;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.ToString;
 
 import javax.persistence.Column;
 import javax.persistence.EnumType;
@@ -16,8 +18,10 @@ import javax.persistence.Enumerated;
  * @author Ches Burks
  *
  */
+@EqualsAndHashCode
 @Getter
 @Setter
+@ToString
 public class AttributeModifier {
 	/**
 	 * The specific attribute this modifier affects.
@@ -55,5 +59,18 @@ public class AttributeModifier {
 	 * Construct a new attribute modifier.
 	 */
 	public AttributeModifier() {}
+
+	/**
+	 * Make a clone of this modifier.
+	 *
+	 * @return The copy with the same values.
+	 */
+	AttributeModifier copy() {
+		AttributeModifier clone = new AttributeModifier();
+		clone.setAttribute(this.getAttribute());
+		clone.setType(this.getType());
+		clone.setAmount(this.getAmount());
+		return clone;
+	}
 
 }

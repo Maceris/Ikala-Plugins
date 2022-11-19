@@ -6,6 +6,7 @@ import com.ikalagaming.item.enums.ModifierType;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.ToString;
 
 import javax.persistence.Column;
 import javax.persistence.EnumType;
@@ -20,6 +21,7 @@ import javax.persistence.Enumerated;
 @EqualsAndHashCode
 @Getter
 @Setter
+@ToString
 public class DamageModifier {
 	/**
 	 * The type of damage this modifier affects.
@@ -57,5 +59,18 @@ public class DamageModifier {
 	 * Construct a new damage modifier.
 	 */
 	public DamageModifier() {}
+
+	/**
+	 * Make a clone of this modifier.
+	 *
+	 * @return The copy with the same values.
+	 */
+	DamageModifier copy() {
+		DamageModifier clone = new DamageModifier();
+		clone.setDamageType(this.getDamageType());
+		clone.setType(this.getType());
+		clone.setAmount(this.getAmount());
+		return clone;
+	}
 
 }
