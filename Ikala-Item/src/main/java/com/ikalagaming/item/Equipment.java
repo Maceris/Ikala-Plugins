@@ -11,6 +11,7 @@ import lombok.Setter;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import javax.persistence.Column;
 import javax.persistence.Convert;
@@ -77,21 +78,33 @@ public class Equipment extends Item {
 	private transient ItemStats combinedStats;
 
 	/**
+	 * A unique identifier to refer to a specific piece of equipment, since they
+	 * are always unique and never stack.
+	 */
+	@Column(name = "UNIQUE_ID")
+	private UUID uniqueID = UUID.randomUUID();
+
+	/**
+	 * Construct a new equipment item.
+	 */
+	public Equipment() {}
+
+	/**
 	 * Return the combined stats that include all base item stats and affixes.
 	 * Calculates it if it has not been calculated yet, but caches the result.
-	 * 
+	 *
 	 * @return The total item stats.
 	 */
 	public ItemStats getCombinedStats() {
-		if (combinedStats != null) {
-			return combinedStats;
+		if (this.combinedStats != null) {
+			return this.combinedStats;
 		}
-		combinedStats = new ItemStats();
+		this.combinedStats = new ItemStats();
 		List<AttributeModifier> attributeBuffs =
-			combinedStats.getAttributeBuffs();
-		List<DamageModifier> damageBuffs = combinedStats.getDamageBuffs();
+			this.combinedStats.getAttributeBuffs();
+		List<DamageModifier> damageBuffs = this.combinedStats.getDamageBuffs();
 		List<DamageModifier> resistanceBuffs =
-			combinedStats.getResistanceBuffs();
+			this.combinedStats.getResistanceBuffs();
 
 		for (AttributeModifier modifier : this.getItemStats()
 			.getAttributeBuffs()) {
@@ -159,12 +172,7 @@ public class Equipment extends Item {
 				}
 			}
 		}
-		return combinedStats;
+		return this.combinedStats;
 	}
-
-	/**
-	 * Construct a new equipment item.
-	 */
-	public Equipment() {}
 
 }
