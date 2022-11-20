@@ -384,6 +384,10 @@ public class GraphicsManager {
 			}
 
 			GraphicsManager.update((long) elapsedTime);
+			
+			if (refreshRequested.compareAndSet(true, false)) {
+				GraphicsManager.render.setupData(GraphicsManager.scene);
+			}
 
 			// Update the next time we should update models
 			GraphicsManager.nextUpdateTime =
@@ -395,10 +399,6 @@ public class GraphicsManager {
 			.getTime() >= GraphicsManager.nextRenderTime) {
 			final float elapsedTime =
 				GraphicsManager.renderTimer.getElapsedTime();
-
-			if (refreshRequested.compareAndSet(true, false)) {
-				GraphicsManager.render.setupData(GraphicsManager.scene);
-			}
 
 			GraphicsManager.render(elapsedTime);
 			// Update the next time we should render a frame

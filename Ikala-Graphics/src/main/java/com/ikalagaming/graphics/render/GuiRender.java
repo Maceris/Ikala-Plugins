@@ -13,9 +13,11 @@ import imgui.ImDrawData;
 import imgui.ImFontAtlas;
 import imgui.ImGui;
 import imgui.ImGuiIO;
+import imgui.flag.ImGuiKey;
 import imgui.type.ImInt;
 import lombok.NonNull;
 import org.joml.Vector2f;
+import org.lwjgl.glfw.GLFW;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL14;
 import org.lwjgl.opengl.GL15;
@@ -87,6 +89,7 @@ public class GuiRender {
 		ImGuiIO imGuiIO = ImGui.getIO();
 		imGuiIO.setIniFilename(null);
 		imGuiIO.setDisplaySize(window.getWidth(), window.getHeight());
+		this.setUpImGuiKeys();
 
 		ImFontAtlas fontAtlas = ImGui.getIO().getFonts();
 		ImInt width = new ImInt();
@@ -174,5 +177,28 @@ public class GuiRender {
 	public void resize(int width, int height) {
 		ImGuiIO imGuiIO = ImGui.getIO();
 		imGuiIO.setDisplaySize(width, height);
+	}
+
+	/**
+	 * Set up nonstandard key codes to make sure they work.
+	 */
+	private void setUpImGuiKeys() {
+		ImGuiIO io = ImGui.getIO();
+		io.setKeyMap(ImGuiKey.Tab, GLFW.GLFW_KEY_TAB);
+		io.setKeyMap(ImGuiKey.LeftArrow, GLFW.GLFW_KEY_LEFT);
+		io.setKeyMap(ImGuiKey.RightArrow, GLFW.GLFW_KEY_RIGHT);
+		io.setKeyMap(ImGuiKey.UpArrow, GLFW.GLFW_KEY_UP);
+		io.setKeyMap(ImGuiKey.DownArrow, GLFW.GLFW_KEY_DOWN);
+		io.setKeyMap(ImGuiKey.PageUp, GLFW.GLFW_KEY_PAGE_UP);
+		io.setKeyMap(ImGuiKey.PageDown, GLFW.GLFW_KEY_PAGE_DOWN);
+		io.setKeyMap(ImGuiKey.Home, GLFW.GLFW_KEY_HOME);
+		io.setKeyMap(ImGuiKey.End, GLFW.GLFW_KEY_END);
+		io.setKeyMap(ImGuiKey.Insert, GLFW.GLFW_KEY_INSERT);
+		io.setKeyMap(ImGuiKey.Delete, GLFW.GLFW_KEY_DELETE);
+		io.setKeyMap(ImGuiKey.Backspace, GLFW.GLFW_KEY_BACKSPACE);
+		io.setKeyMap(ImGuiKey.Space, GLFW.GLFW_KEY_SPACE);
+		io.setKeyMap(ImGuiKey.Enter, GLFW.GLFW_KEY_ENTER);
+		io.setKeyMap(ImGuiKey.Escape, GLFW.GLFW_KEY_ESCAPE);
+		io.setKeyMap(ImGuiKey.KeyPadEnter, GLFW.GLFW_KEY_KP_ENTER);
 	}
 }

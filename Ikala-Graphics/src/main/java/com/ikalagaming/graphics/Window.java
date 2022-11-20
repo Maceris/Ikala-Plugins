@@ -3,6 +3,8 @@ package com.ikalagaming.graphics;
 import com.ikalagaming.graphics.exceptions.WindowCreationException;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import imgui.ImGui;
+import imgui.ImGuiIO;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -143,15 +145,35 @@ public class Window {
 		GLFW.glfwSetErrorCallback((int errorCode, long msgPtr) -> Window.log
 			.error("Error code [{}], msg [{]]", errorCode,
 				MemoryUtil.memUTF8(msgPtr)));
-
+		
 		GLFW.glfwSetKeyCallback(this.windowHandle,
 			(window, key, scancode, action, mods) -> {
-				if (key == GLFW.GLFW_KEY_ESCAPE
-					&& action == GLFW.GLFW_RELEASE) {
-					// We will detect this in the rendering loop
-					GLFW.glfwSetWindowShouldClose(window, true);
+				ImGuiIO io = ImGui.getIO();
+				if (action == GLFW.GLFW_PRESS) {
+					io.setKeysDown(key, true);
 				}
+				if (action == GLFW.GLFW_RELEASE) {
+					io.setKeysDown(key, false);
+				}
+				io.setKeyCtrl(io.getKeysDown(GLFW.GLFW_KEY_LEFT_CONTROL)
+					|| io.getKeysDown(GLFW.GLFW_KEY_RIGHT_CONTROL));
+				io.setKeyShift(io.getKeysDown(GLFW.GLFW_KEY_LEFT_SHIFT)
+					|| io.getKeysDown(GLFW.GLFW_KEY_RIGHT_SHIFT));
+				io.setKeyAlt(io.getKeysDown(GLFW.GLFW_KEY_LEFT_ALT)
+					|| io.getKeysDown(GLFW.GLFW_KEY_RIGHT_ALT));
+				io.setKeySuper(io.getKeysDown(GLFW.GLFW_KEY_LEFT_SUPER)
+					|| io.getKeysDown(GLFW.GLFW_KEY_RIGHT_SUPER));
 			});
+		GLFW.glfwSetScrollCallback(this.windowHandle,
+			(window, xOffset, yOffset) -> {
+				ImGuiIO io = ImGui.getIO();
+				io.setMouseWheelH((float) (io.getMouseWheelH() + xOffset));
+				io.setMouseWheel((float) (io.getMouseWheel() + yOffset));
+			});
+		GLFW.glfwSetCharCallback(this.windowHandle, (window, codepoint) -> {
+			ImGuiIO io = ImGui.getIO();
+			io.addInputCharacter(codepoint);
+		});
 
 		GLFW.glfwMakeContextCurrent(this.windowHandle);
 
@@ -199,6 +221,9 @@ public class Window {
 	 * @return True if the key is pressed, false if not.
 	 */
 	public boolean isKeyPressed(int keyCode) {
+		if (ImGui.getIO().getWantCaptureKeyboard()) {
+			return false;
+		}
 		return GLFW.glfwGetKey(this.windowHandle, keyCode) == GLFW.GLFW_PRESS;
 	}
 

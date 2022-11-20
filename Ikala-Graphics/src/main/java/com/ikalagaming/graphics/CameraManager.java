@@ -2,6 +2,7 @@ package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.scene.Camera;
 
+import imgui.ImGui;
 import lombok.Getter;
 import lombok.NonNull;
 import org.joml.Vector2f;
@@ -72,9 +73,12 @@ public class CameraManager {
 
 		// Update camera based on mouse
 		if (this.window.getMouseInput().isRightButtonPressed()) {
-			Vector2f rotVec = this.window.getMouseInput().getDisplVec();
-			this.camera.addRotation(rotVec.x * CameraManager.MOUSE_SENSITIVITY,
-				rotVec.y * CameraManager.MOUSE_SENSITIVITY);
+			if (!ImGui.getIO().getWantCaptureMouse()) {
+				Vector2f rotVec = this.window.getMouseInput().getDisplVec();
+				this.camera.addRotation(
+					rotVec.x * CameraManager.MOUSE_SENSITIVITY,
+					rotVec.y * CameraManager.MOUSE_SENSITIVITY);
+			}
 		}
 	}
 }

@@ -4,6 +4,7 @@ import com.ikalagaming.graphics.scene.Entity;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import org.joml.Matrix4f;
 
@@ -42,7 +43,7 @@ public class Model {
 		 *
 		 * @param bonesMatrices The bone transformation matrices.
 		 */
-		public AnimatedFrame(Matrix4f[] bonesMatrices) {
+		public AnimatedFrame(@NonNull Matrix4f[] bonesMatrices) {
 			this.bonesMatrices = bonesMatrices;
 		}
 
@@ -121,7 +122,7 @@ public class Model {
 	 * @param meshDataList The mesh data for this model .
 	 * @param animationList The animations for this model.
 	 */
-	public Model(String id, List<MeshData> meshDataList,
+	public Model(@NonNull String id, @NonNull List<MeshData> meshDataList,
 		List<Animation> animationList) {
 		this.entitiesList = new ArrayList<>();
 		this.id = id;
