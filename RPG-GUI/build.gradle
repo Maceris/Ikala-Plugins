@@ -46,7 +46,19 @@ idea {
 
 dependencies {
 	implementation project(':Ikala-Core')
-	implementation project(':Ikala-Graphics')
+	compileOnly project(':Ikala-Graphics')
+	compileOnly project(':Ikala-Item')
+	compileOnly project(':Ikala-Attributes')
+	compileOnly project(':Random')
+	compileOnly project(':Ikala-Database')
+	
+	implementation "org.joml:joml:${jomlVersion}"
+	implementation "org.lwjgl:lwjgl:${lwjglVersion}"
+	implementation "org.lwjgl:lwjgl-glfw:${lwjglVersion}"
+	implementation "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
+	implementation "org.lwjgl:lwjgl-stb:${lwjglVersion}"
+	implementation "org.lwjgl:lwjgl-assimp:${lwjglVersion}"
+	implementation "io.github.spair:imgui-java-binding:${imguiJavaVersion}"
 	
 	// Testing
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"

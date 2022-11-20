@@ -9,10 +9,29 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
+import com.ikalagaming.item.Accessory;
+import com.ikalagaming.item.Armor;
+import com.ikalagaming.item.AttributeModifier;
+import com.ikalagaming.item.Component;
+import com.ikalagaming.item.Consumable;
+import com.ikalagaming.item.DamageModifier;
+import com.ikalagaming.item.Equipment;
+import com.ikalagaming.item.Item;
+import com.ikalagaming.item.ItemStats;
+import com.ikalagaming.item.Weapon;
+import com.ikalagaming.item.enums.AccessoryType;
+import com.ikalagaming.item.enums.AffixType;
+import com.ikalagaming.item.enums.ArmorType;
+import com.ikalagaming.item.enums.ItemType;
+import com.ikalagaming.item.enums.ModifierType;
+import com.ikalagaming.item.enums.Quality;
+import com.ikalagaming.item.enums.WeaponType;
 
 import imgui.ImGui;
 import imgui.ImGuiIO;
+import imgui.flag.ImGuiCol;
 import imgui.flag.ImGuiCond;
+import imgui.flag.ImGuiTableFlags;
 import imgui.type.ImBoolean;
 import lombok.NonNull;
 import org.joml.Vector2f;
@@ -23,14 +42,126 @@ import org.joml.Vector3f;
  */
 public class GUIControls implements GuiInstance {
 
+	private static int INVENTORY_WIDTH = 10;
+	private static int INVENTORY_HEIGHT = 10;
+
+	/**
+	 * Draw a name including prefixes and affixes.
+	 *
+	 * @param equipment The equipment to draw a name for.
+	 */
+	private static void drawEquipmentName(Equipment equipment) {
+		ImGui.text("Name: ");
+		// Prefixes
+		equipment.getAffixes().stream()
+			.filter(affix -> AffixType.PREFIX.equals(affix.getAffixType()))
+			.forEach(prefix -> {
+				ImGui.sameLine();
+				ImGui.textColored(
+					GUIControls.getQualityColor(prefix.getQuality()),
+					prefix.getID() + " ");
+			});
+		ImGui.sameLine();
+		ImGui.textColored(GUIControls.getQualityColor(equipment.getQuality()),
+			equipment.getID());
+		// Suffixes
+		equipment.getAffixes().stream()
+			.filter(affix -> AffixType.SUFFIX.equals(affix.getAffixType()))
+			.forEach(suffix -> {
+				ImGui.sameLine();
+				ImGui.textColored(
+					GUIControls.getQualityColor(suffix.getQuality()),
+					" " + suffix.getID());
+			});
+	}
+
+	/**
+	 * Draw an item name, colored based on quality.
+	 *
+	 * @param item The item to draw a name for.
+	 */
+	private static void drawName(Item item) {
+		ImGui.text("Name: ");
+		ImGui.sameLine();
+		ImGui.textColored(GUIControls.getQualityColor(item.getQuality()),
+			item.getID());
+	}
+
+	private static int getQualityColor(Quality quality) {
+		switch (quality) {
+			case COMMON:
+				return ImGui.colorConvertFloat4ToU32(1f, 1f, 1f, 1f);
+			case EPIC:
+				return ImGui.colorConvertFloat4ToU32(1f, 0.6f, 0f, 1f);
+			case LEGENDARY:
+				return ImGui.colorConvertFloat4ToU32(1f, 0f, 1f, 1f);
+			case MAGIC:
+				return ImGui.colorConvertFloat4ToU32(1f, 0.9f, 0f, 1f);
+			case RARE:
+				return ImGui.colorConvertFloat4ToU32(0.3f, 0.3f, 1f, 1f);
+			case TRASH:
+			default:
+				return ImGui.colorConvertFloat4ToU32(0.3f, 0.3f, 0.3f, 1f);
+		}
+	}
+
+	private static void increaseIndent(int level) {
+		ImGui.setCursorPosX(
+			ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing() * level);
+	}
+
+	private static String modifierText(AttributeModifier modifier) {
+		StringBuilder result = new StringBuilder();
+		result.append(modifier.getAmount());
+		if (ModifierType.PERCENTAGE.equals(modifier.getType())) {
+			result.append("%%");
+		}
+		result.append(' ');
+		result.append(modifier.getAttribute().toString());
+		return result.toString();
+	}
+
+	private static String modifierText(DamageModifier modifier) {
+		StringBuilder result = new StringBuilder();
+		result.append(modifier.getAmount());
+		if (ModifierType.PERCENTAGE.equals(modifier.getType())) {
+			result.append("%%");
+		}
+		result.append(' ');
+		result.append(modifier.getDamageType().toString());
+		return result.toString();
+	}
+
 	private float[] ambientColor;
+
 	private float[] ambientFactor;
 	private float[] dirLightColor;
+
 	private float[] dirLightIntensity;
+
 	private float[] dirLightX;
 	private float[] dirLightY;
 	private float[] dirLightZ;
 	private ImBoolean wireframe;
+	private ImBoolean windowDemo;
+	private Weapon[][] hackyInventory;
+	private Accessory demoAccessory;
+	private Armor demoArmor;
+
+	private Component demoComponent;
+	private Consumable demoConsumable;
+
+	private Item demoJunk;
+
+	private Item demoMaterial;
+
+	private Item demoQuest;
+
+	private Weapon demoWeapon;
+
+	private ImBoolean windowInventory;
+
+	private ImBoolean windowItemCatalog;
 
 	/**
 	 * Set up the light controls.
@@ -54,38 +185,138 @@ public class GUIControls implements GuiInstance {
 		this.dirLightZ = new float[] {pos.z};
 		this.dirLightIntensity = new float[] {dirLight.getIntensity()};
 		this.wireframe = new ImBoolean(false);
+		this.hackyInventory =
+			new Weapon[GUIControls.INVENTORY_HEIGHT][GUIControls.INVENTORY_WIDTH];
+		for (int y = 0; y < GUIControls.INVENTORY_HEIGHT; ++y) {
+			for (int x = 0; x < GUIControls.INVENTORY_WIDTH; ++x) {
+				this.hackyInventory[y][x] = ItemGenerator.getWeapon();
+			}
+		}
+		this.windowInventory = new ImBoolean(false);
+		this.windowItemCatalog = new ImBoolean(false);
+		this.windowDemo = new ImBoolean(false);
+
+		this.demoAccessory = ItemGenerator.getAccessory();
+		this.demoArmor = ItemGenerator.getArmor();
+		this.demoComponent = ItemGenerator.getComponent();
+		this.demoConsumable = ItemGenerator.getConsumable();
+		this.demoJunk = ItemGenerator.getJunk();
+		this.demoMaterial = ItemGenerator.getMaterial();
+		this.demoQuest = ItemGenerator.getQuest();
+		this.demoWeapon = ItemGenerator.getWeapon();
+	}
+
+	/**
+	 * Draw details for an accessory.
+	 *
+	 * @param accessory The accessory to draw details for.
+	 */
+	private void drawAccessoryInfo(Accessory accessory) {
+		GUIControls.drawEquipmentName(accessory);
+		ImGui
+			.text("Accessory Type: " + accessory.getAccessoryType().toString());
+		this.drawEquipmentInfo(accessory);
+	}
+
+	/**
+	 * Draw details for armor.
+	 * 
+	 * @param armor The armor to draw details for.
+	 */
+	private void drawArmorInfo(Armor armor) {
+		GUIControls.drawEquipmentName(armor);
+		ImGui.text("Armor Type: " + armor.getArmorType().toString());
+		this.drawEquipmentInfo(armor);
+	}
+
+	/**
+	 * Draw component information.
+	 * 
+	 * @param component The component to draw details for.
+	 */
+	private void drawComponentInfo(Component component) {
+		GUIControls.drawName(component);
+		ImGui
+			.text("Component Type: " + component.getComponentType().toString());
+		this.drawItemStats(component.getItemStats());
+		ImGui.text("Can be applied to: ");
+		for (ItemType type : component.getItemCriteria().getItemTypes()) {
+			ImGui.bulletText(type.toString());
+			switch (type) {
+				case ACCESSORY:
+					for (AccessoryType subType : component.getItemCriteria()
+						.getAccessoryTypes()) {
+						GUIControls.increaseIndent(1);
+						ImGui.bulletText(subType.toString());
+					}
+					break;
+				case ARMOR:
+					for (ArmorType subType : component.getItemCriteria()
+						.getArmorTypes()) {
+						GUIControls.increaseIndent(1);
+						ImGui.bulletText(subType.toString());
+					}
+					break;
+				case WEAPON:
+					for (WeaponType subType : component.getItemCriteria()
+						.getWeaponTypes()) {
+						GUIControls.increaseIndent(1);
+						ImGui.bulletText(subType.toString());
+					}
+					break;
+				case COMPONENT:
+				case CONSUMABLE:
+				case JUNK:
+				case MATERIAL:
+				case QUEST:
+				default:
+					// Just list the type
+					break;
+			}
+		}
+	}
+
+	/**
+	 * Draw details for a consumable.
+	 * 
+	 * @param consumable The consumable.
+	 */
+	private void drawConsumableInfo(Consumable consumable) {
+		GUIControls.drawName(consumable);
+		ImGui.text(
+			"Consumable type: " + consumable.getConsumableType().toString());
+	}
+
+	/**
+	 * Draw details for equipment.
+	 * 
+	 * @param equipment The equipment to draw details for.
+	 */
+	private void drawEquipmentInfo(Equipment equipment) {
+		ImGui.text("Item Level: " + equipment.getItemLevel());
+		ImGui.text("Quality: ");
+		ImGui.sameLine();
+		ImGui.textColored(GUIControls.getQualityColor(equipment.getQuality()),
+			equipment.getQuality().toString());
+		ImGui.text("Level Requirement: " + equipment.getLevelRequirement());
+		ImGui.text("Attribute Requirements:");
+		for (AttributeModifier mod : equipment.getAttributeRequirements()) {
+			ImGui.bulletText(GUIControls.modifierText(mod));
+		}
+		ItemStats combinedStats = equipment.getCombinedStats();
+		this.drawItemStats(combinedStats);
 	}
 
 	@Override
 	public void drawGui() {
 		ImGui.newFrame();
+
+		if (this.windowDemo.get()) {
+			ImGui.showDemoWindow();
+		}
+
 		ImGui.setNextWindowPos(10, 10, ImGuiCond.Once);
-		ImGui.setNextWindowSize(450, 400);
-
-		ImGui.begin("Lights controls");
-		if (ImGui.collapsingHeader("Ambient Light")) {
-			ImGui.sliderFloat("Ambient factor", this.ambientFactor, 0.0f, 1.0f,
-				"%.2f");
-			ImGui.colorEdit3("Ambient color", this.ambientColor);
-		}
-
-		if (ImGui.collapsingHeader("Dir Light")) {
-			ImGui.sliderFloat("Dir Light - x", this.dirLightX, -1.0f, 1.0f,
-				"%.2f");
-			ImGui.sliderFloat("Dir Light - y", this.dirLightY, -1.0f, 1.0f,
-				"%.2f");
-			ImGui.sliderFloat("Dir Light - z", this.dirLightZ, -1.0f, 1.0f,
-				"%.2f");
-			ImGui.colorEdit3("Dir Light color", this.dirLightColor);
-			ImGui.sliderFloat("Dir Light Intensity", this.dirLightIntensity,
-				0.0f, 1.0f, "%.2f");
-		}
-		ImGui.end();
-
-		ImGui.showDemoWindow();
-
-		ImGui.setNextWindowPos(460, 10, ImGuiCond.Once);
-		ImGui.setNextWindowSize(450, 400);
+		ImGui.setNextWindowSize(450, 400, ImGuiCond.Once);
 		ImGui.begin("Debug");
 
 		ImGui.text(String.format("FPS: %d", GraphicsManager.getLastFPS()));
@@ -94,17 +325,171 @@ public class GUIControls implements GuiInstance {
 			GraphicsManager.getCameraManager().getCamera().getRotation();
 		ImGui.text(
 			String.format("Camera rotation: (%f, %f)", rotation.x, rotation.y));
-		Vector2f displ =
-			GraphicsManager.getWindow().getMouseInput().getDisplVec();
-		ImGui
-			.text(String.format("Displace vector: (%f, %f)", displ.x, displ.y));
+		MouseInput input = GraphicsManager.getWindow().getMouseInput();
+		ImGui.text(String.format("Mouse position: (%f, %f)",
+			input.getCurrentPos().x, input.getCurrentPos().y));
+		ImGui.text(String.format("Displace vector: (%f, %f)",
+			input.getDisplVec().x, input.getDisplVec().y));
 
 		ImGui.checkbox("Wireframe", this.wireframe);
+		ImGui.checkbox("Show Demo", this.windowDemo);
+		ImGui.checkbox("Show Inventory", this.windowInventory);
+		ImGui.checkbox("Show Item Catalog", this.windowItemCatalog);
 
+		if (ImGui.collapsingHeader("Lights controls")) {
+			if (ImGui.collapsingHeader("Ambient Light")) {
+				ImGui.sliderFloat("Ambient factor", this.ambientFactor, 0.0f,
+					1.0f, "%.2f");
+				ImGui.colorEdit3("Ambient color", this.ambientColor);
+			}
+
+			if (ImGui.collapsingHeader("Dir Light")) {
+				ImGui.sliderFloat("Dir Light - x", this.dirLightX, -1.0f, 1.0f,
+					"%.2f");
+				ImGui.sliderFloat("Dir Light - y", this.dirLightY, -1.0f, 1.0f,
+					"%.2f");
+				ImGui.sliderFloat("Dir Light - z", this.dirLightZ, -1.0f, 1.0f,
+					"%.2f");
+				ImGui.colorEdit3("Dir Light color", this.dirLightColor);
+				ImGui.sliderFloat("Dir Light Intensity", this.dirLightIntensity,
+					0.0f, 1.0f, "%.2f");
+			}
+		}
 		ImGui.end();
+
+		if (this.windowInventory.get()) {
+			this.drawInventory();
+		}
+		if (this.windowItemCatalog.get()) {
+			this.drawItemCatalog();
+		}
 
 		ImGui.endFrame();
 		ImGui.render();
+	}
+
+	private void drawInventory() {
+		ImGui.setNextWindowPos(200, 200, ImGuiCond.Once);
+		ImGui.setNextWindowSize(600, 600, ImGuiCond.Once);
+		ImGui.begin("Inventory");
+
+		if (ImGui.beginTable("InventoryGrid", 10,
+			ImGuiTableFlags.SizingFixedFit)) {
+			for (int x = 0; x < 10; ++x) {
+				ImGui.tableSetupColumn("", ImGuiTableFlags.Borders, 50);
+			}
+			for (int y = 0; y < GUIControls.INVENTORY_HEIGHT; ++y) {
+				ImGui.tableNextRow();
+				for (int x = 0; x < GUIControls.INVENTORY_WIDTH; ++x) {
+					ImGui.tableSetColumnIndex(x);
+					ImGui.pushStyleColor(ImGuiCol.Button,
+						GUIControls.getQualityColor(
+							this.hackyInventory[y][x].getQuality()));
+					ImGui.button(String.format("(%d, %d)", y, x), 50, 50);
+					ImGui.popStyleColor();
+					if (ImGui.isItemHovered()) {
+						ImGui.beginTooltip();
+						this.drawWeaponInfo(this.hackyInventory[y][x]);
+						ImGui.endTooltip();
+					}
+				}
+			}
+			ImGui.endTable();
+		}
+		ImGui.end();
+	}
+
+	private void drawItemCatalog() {
+		ImGui.setNextWindowPos(650, 10, ImGuiCond.Once);
+		ImGui.setNextWindowSize(600, 800, ImGuiCond.Once);
+		ImGui.begin("Item Catalog");
+
+		if (ImGui.beginTabBar("Catalog Bar")) {
+			if (ImGui.beginTabItem("Accessory")) {
+				this.drawAccessoryInfo(this.demoAccessory);
+				ImGui.endTabItem();
+			}
+			if (ImGui.beginTabItem("Armor")) {
+				this.drawArmorInfo(this.demoArmor);
+				ImGui.endTabItem();
+			}
+			if (ImGui.beginTabItem("Component")) {
+				this.drawComponentInfo(this.demoComponent);
+				ImGui.endTabItem();
+			}
+			if (ImGui.beginTabItem("Consumable")) {
+				this.drawConsumableInfo(this.demoConsumable);
+				ImGui.endTabItem();
+			}
+			if (ImGui.beginTabItem("Junk")) {
+				this.drawJunkInfo(this.demoJunk);
+				ImGui.endTabItem();
+			}
+			if (ImGui.beginTabItem("Material")) {
+				this.drawMaterialInfo(this.demoMaterial);
+				ImGui.endTabItem();
+			}
+			if (ImGui.beginTabItem("Quest")) {
+				this.drawQuestInfo(this.demoQuest);
+				ImGui.endTabItem();
+			}
+			if (ImGui.beginTabItem("Weapon")) {
+				this.drawWeaponInfo(this.demoWeapon);
+				ImGui.endTabItem();
+			}
+			ImGui.endTabBar();
+		}
+
+		ImGui.end();
+	}
+
+	/**
+	 * Draw item stats, used as part of drawing item details.
+	 *
+	 * @param itemStats The item stats to draw.
+	 */
+	private void drawItemStats(ItemStats itemStats) {
+		ImGui.text("Item Stats");
+		ImGui.bulletText("Damage Buffs");
+		for (DamageModifier mod : itemStats.getDamageBuffs()) {
+			GUIControls.increaseIndent(1);
+			ImGui.bulletText(GUIControls.modifierText(mod));
+		}
+		ImGui.bulletText("Resistance Buffs");
+		for (DamageModifier mod : itemStats.getResistanceBuffs()) {
+			GUIControls.increaseIndent(1);
+			ImGui.bulletText(GUIControls.modifierText(mod));
+		}
+		ImGui.bulletText("Attribute Buffs");
+		for (AttributeModifier mod : itemStats.getAttributeBuffs()) {
+			GUIControls.increaseIndent(1);
+			ImGui.bulletText(GUIControls.modifierText(mod));
+		}
+	}
+
+	private void drawJunkInfo(Item junk) {
+		GUIControls.drawName(junk);
+	}
+
+	private void drawMaterialInfo(Item material) {
+		GUIControls.drawName(material);
+	}
+
+	private void drawQuestInfo(Item quest) {
+		GUIControls.drawName(quest);
+	}
+
+	/**
+	 * Draw weapon info for the provided weapon.
+	 *
+	 * @param weapon The weapon to draw.
+	 */
+	private void drawWeaponInfo(Weapon weapon) {
+		GUIControls.drawEquipmentName(weapon);
+		ImGui.text("Weapon Type: " + weapon.getWeaponType().toString());
+		ImGui.text(
+			"Damage: " + weapon.getMinDamage() + "-" + weapon.getMaxDamage());
+		this.drawEquipmentInfo(weapon);
 	}
 
 	@Override

@@ -29,7 +29,7 @@ public class GUIEventListener implements Listener {
 	public void attachGUI() {
 		gui = new GUIControls(GraphicsManager.getScene());
 		GraphicsManager.setGUI(gui);
-		GraphicsManager.refreshRenderData();
+		//GraphicsManager.refreshRenderData();
 		log.debug(SafeResourceLoader.getString("GUI_ATTACHED",
 			GUIPlugin.getResourceBundle()));
 	}

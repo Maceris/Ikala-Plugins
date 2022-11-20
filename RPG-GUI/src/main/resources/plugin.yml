@@ -4,4 +4,4 @@ version: 0.0.1
 description: A GUI for the RPG
 authors: [maceris]
 main-class: com.ikalagaming.rpg.GUIPlugin
-dependencies: [Ikala-Graphics]
+dependencies: [Ikala-Graphics, Ikala-Item]
