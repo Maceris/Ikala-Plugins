@@ -177,7 +177,7 @@ class ItemGenerator {
 	public static Component getComponent() {
 		Component component = new Component();
 
-		component.setItemType(ItemType.ARMOR);
+		component.setItemType(ItemType.COMPONENT);
 		component.setItemLevel(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
 		component
 			.setQuality(ItemGenerator.random.selectEnumValue(Quality.class));
@@ -200,7 +200,7 @@ class ItemGenerator {
 	public static ComponentTemplate getComponentTemplate() {
 		ComponentTemplate component = new ComponentTemplate();
 
-		component.setItemType(ItemType.ARMOR);
+		component.setItemType(ItemType.COMPONENT);
 		component.setItemLevel(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
 		component
 			.setQuality(ItemGenerator.random.selectEnumValue(Quality.class));
