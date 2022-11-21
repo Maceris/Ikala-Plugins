@@ -177,4 +177,12 @@ public class ItemRoller {
 		return weapon;
 	}
 
+	/**
+	 * Private constructor so this is not instantiated.
+	 */
+	private ItemRoller() {
+		throw new UnsupportedOperationException(
+			"This utility class should not be instantiated");
+	}
+
 }
