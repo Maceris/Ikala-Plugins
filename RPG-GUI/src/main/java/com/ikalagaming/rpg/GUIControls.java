@@ -377,13 +377,14 @@ public class GUIControls implements GuiInstance {
 
 	private void drawInventory() {
 		ImGui.setNextWindowPos(200, 200, ImGuiCond.Once);
-		ImGui.setNextWindowSize(600, 600, ImGuiCond.Once);
+		ImGui.setNextWindowSize(610, 600, ImGuiCond.Once);
 		ImGui.begin("Inventory");
 
 		if (ImGui.beginTable("InventoryGrid", 10,
 			ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.Borders)) {
-			for (int x = 0; x < 10; ++x) {
-				ImGui.tableSetupColumn("", ImGuiTableFlags.Borders, 50);
+			for (int col = 0; col < GUIControls.INVENTORY_WIDTH; ++col) {
+				ImGui.tableSetupColumn("Column" + col, ImGuiTableFlags.Borders,
+					50);
 			}
 			int position;
 			for (int row = 0; row < GUIControls.INVENTORY_HEIGHT; ++row) {
