@@ -35,6 +35,7 @@ import imgui.ImGui;
 import imgui.ImGuiIO;
 import imgui.flag.ImGuiCol;
 import imgui.flag.ImGuiCond;
+import imgui.flag.ImGuiDragDropFlags;
 import imgui.flag.ImGuiTableFlags;
 import imgui.type.ImBoolean;
 import lombok.NonNull;
@@ -161,6 +162,7 @@ public class GUIControls implements GuiInstance {
 
 	private ImBoolean windowInventory;
 	private ImBoolean windowItemCatalog;
+	private InventoryDrag itemDragInfo;
 
 	/**
 	 * Set up the light controls.
@@ -189,7 +191,11 @@ public class GUIControls implements GuiInstance {
 
 		for (int row = 0; row < GUIControls.INVENTORY_HEIGHT; ++row) {
 			for (int col = 0; col < GUIControls.INVENTORY_WIDTH; ++col) {
-				this.inventory.addItem(ItemGenerator.getRandomItem());
+				if (Math.random() < 0.5) {
+					this.inventory.setItem(
+						GUIControls.INVENTORY_WIDTH * row + col,
+						ItemGenerator.getRandomItem(), 1);
+				}
 			}
 		}
 		this.windowInventory = new ImBoolean(false);
@@ -204,6 +210,7 @@ public class GUIControls implements GuiInstance {
 		this.demoMaterial = ItemGenerator.getMaterial();
 		this.demoQuest = ItemGenerator.getQuest();
 		this.demoWeapon = ItemGenerator.getWeapon();
+		this.itemDragInfo = new InventoryDrag();
 	}
 
 	/**
@@ -374,7 +381,7 @@ public class GUIControls implements GuiInstance {
 		ImGui.begin("Inventory");
 
 		if (ImGui.beginTable("InventoryGrid", 10,
-			ImGuiTableFlags.SizingFixedFit)) {
+			ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.Borders)) {
 			for (int x = 0; x < 10; ++x) {
 				ImGui.tableSetupColumn("", ImGuiTableFlags.Borders, 50);
 			}
@@ -384,48 +391,83 @@ public class GUIControls implements GuiInstance {
 				for (int col = 0; col < GUIControls.INVENTORY_WIDTH; ++col) {
 					ImGui.tableSetColumnIndex(col);
 					position = row * GUIControls.INVENTORY_WIDTH + col;
-					if (!this.inventory.hasItem(position)) {
-						continue;
-					}
-					Item item = this.inventory.getItem(position).get();
-					ImGui.pushStyleColor(ImGuiCol.Button,
-						GUIControls.getQualityColor(item.getQuality()));
-					ItemType type = item.getItemType();
-					ImGui.button(type.toString(), 50, 50);
-					ImGui.popStyleColor();
-					if (ImGui.isItemHovered()) {
-						ImGui.beginTooltip();
-						switch (type) {
-							case ACCESSORY:
-								this.drawAccessoryInfo((Accessory) item);
-								break;
-							case ARMOR:
-								this.drawArmorInfo((Armor) item);
-								break;
-							case COMPONENT:
-								this.drawComponentInfo((Component) item);
-								break;
-							case CONSUMABLE:
-								this.drawConsumableInfo((Consumable) item);
-								break;
-							case JUNK:
-								this.drawJunkInfo((Junk) item);
-								break;
-							case MATERIAL:
-								this.drawMaterialInfo((Material) item);
-								break;
-							case QUEST:
-								this.drawQuestInfo((Quest) item);
-								break;
-							case WEAPON:
-								this.drawWeaponInfo((Weapon) item);
-								break;
-							default:
-								ImGui.text("Unrecognized item type "
-									+ item.getItemType().toString());
-								break;
+
+					if (this.inventory.hasItem(position)) {
+						Item item = this.inventory.getItem(position).get();
+						ItemType type = item.getItemType();
+
+						ImGui.pushStyleColor(ImGuiCol.Button,
+							GUIControls.getQualityColor(item.getQuality()));
+						ImGui.button(type.toString(), 50, 50);
+						ImGui.popStyleColor();
+
+						if (ImGui
+							.beginDragDropSource(ImGuiDragDropFlags.None)) {
+							ImGui.setDragDropPayload("ItemDrag",
+								this.itemDragInfo);
+
+							this.itemDragInfo.setDragInProgress(true);
+							ImGui.text(this.inventory
+								.getItem(this.itemDragInfo.getSourceIndex())
+								.get().getID());
+							ImGui.endDragDropSource();
 						}
-						ImGui.endTooltip();
+					}
+					else {
+						ImGui.invisibleButton(
+							String.format("Invisible_%d_%d", row, col), 50, 50);
+					}
+					if (ImGui.beginDragDropTarget()) {
+						InventoryDrag payload = ImGui.acceptDragDropPayload(
+							"ItemDrag", InventoryDrag.class);
+						if (payload != null) {
+							payload.setDragInProgress(false);
+							this.inventory.swapSlots(payload.getSourceIndex(),
+								position);
+						}
+						ImGui.endDragDropTarget();
+					}
+					if (this.inventory.hasItem(position)) {
+						Item item = this.inventory.getItem(position).get();
+						ItemType type = item.getItemType();
+						if (ImGui.isItemHovered()) {
+							if (!ImGui.isMouseDown(0)) {
+								this.itemDragInfo.setDragInProgress(false);
+							}
+							this.itemDragInfo.setIndex(position);
+							ImGui.beginTooltip();
+							switch (type) {
+								case ACCESSORY:
+									this.drawAccessoryInfo((Accessory) item);
+									break;
+								case ARMOR:
+									this.drawArmorInfo((Armor) item);
+									break;
+								case COMPONENT:
+									this.drawComponentInfo((Component) item);
+									break;
+								case CONSUMABLE:
+									this.drawConsumableInfo((Consumable) item);
+									break;
+								case JUNK:
+									this.drawJunkInfo((Junk) item);
+									break;
+								case MATERIAL:
+									this.drawMaterialInfo((Material) item);
+									break;
+								case QUEST:
+									this.drawQuestInfo((Quest) item);
+									break;
+								case WEAPON:
+									this.drawWeaponInfo((Weapon) item);
+									break;
+								default:
+									ImGui.text("Unrecognized item type "
+										+ item.getItemType().toString());
+									break;
+							}
+							ImGui.endTooltip();
+						}
 					}
 				}
 			}
