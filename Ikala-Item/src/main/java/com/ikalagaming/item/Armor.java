@@ -7,8 +7,10 @@ import lombok.Getter;
 import lombok.Setter;
 
 import javax.persistence.Column;
+import javax.persistence.Entity;
 import javax.persistence.EnumType;
 import javax.persistence.Enumerated;
+import javax.persistence.Table;
 
 /**
  * Armor that is worn for protection or power.
@@ -19,8 +21,13 @@ import javax.persistence.Enumerated;
 @EqualsAndHashCode(callSuper = false)
 @Getter
 @Setter
+@Entity
+@Table(name = Armor.TABLE_NAME)
 public class Armor extends Equipment {
-
+	/**
+	 * The name of the table in the database.
+	 */
+	static final String TABLE_NAME = "ARMOR";
 	/**
 	 * What kind of armor this is.
 	 *

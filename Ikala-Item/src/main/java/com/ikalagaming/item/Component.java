@@ -10,8 +10,10 @@ import lombok.Setter;
 
 import javax.persistence.Column;
 import javax.persistence.Convert;
+import javax.persistence.Entity;
 import javax.persistence.EnumType;
 import javax.persistence.Enumerated;
+import javax.persistence.Table;
 
 /**
  * An item that slots into and empowers or modifies another item.
@@ -22,8 +24,13 @@ import javax.persistence.Enumerated;
 @EqualsAndHashCode(callSuper = false)
 @Getter
 @Setter
+@Entity
+@Table(name = Component.TABLE_NAME)
 public class Component extends Item {
-
+	/**
+	 * The name of the table in the database.
+	 */
+	static final String TABLE_NAME = "COMPONENT";
 	/**
 	 * What kind of component the item is.
 	 *

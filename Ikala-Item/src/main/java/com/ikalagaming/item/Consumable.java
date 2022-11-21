@@ -7,19 +7,26 @@ import lombok.Getter;
 import lombok.Setter;
 
 import javax.persistence.Column;
+import javax.persistence.Entity;
 import javax.persistence.EnumType;
 import javax.persistence.Enumerated;
+import javax.persistence.Table;
 
 /**
  * An item that is consumed by using it.
  *
  * @author Ches Burks
- *
  */
 @EqualsAndHashCode(callSuper = false)
 @Getter
 @Setter
+@Entity
+@Table(name = Consumable.TABLE_NAME)
 public class Consumable extends Item {
+	/**
+	 * The name of the table in the database.
+	 */
+	static final String TABLE_NAME = "CONSUMABLE";
 	/**
 	 * What kind of consumable this item is.
 	 *

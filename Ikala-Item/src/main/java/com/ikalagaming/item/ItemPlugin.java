@@ -14,9 +14,9 @@ public class ItemPlugin extends Plugin {
 	 */
 	public ItemPlugin() {}
 
-	@Override
-	public boolean onEnable() {
-		return true;
-	}
+	/**
+	 * The name of this plugin.
+	 */
+	public static final String PLUGIN_NAME = "Item-Plugin";
 
 }

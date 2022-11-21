@@ -360,8 +360,8 @@ class ItemGenerator {
 	 *
 	 * @return The randomly generated junk.
 	 */
-	public static Item getJunk() {
-		Item junk = new Item();
+	public static Junk getJunk() {
+		Junk junk = new Junk();
 		junk.setItemType(ItemType.JUNK);
 		junk.setItemLevel(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
 		junk.setQuality(Quality.TRASH);
@@ -375,8 +375,8 @@ class ItemGenerator {
 	 *
 	 * @return The randomly generated material.
 	 */
-	public static Item getMaterial() {
-		Item material = new Item();
+	public static Material getMaterial() {
+		Material material = new Material();
 		material.setItemType(ItemType.MATERIAL);
 		material.setItemLevel(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
 		material.setQuality(Quality.TRASH);
@@ -390,8 +390,8 @@ class ItemGenerator {
 	 *
 	 * @return The randomly generated quest item.
 	 */
-	public static Item getQuest() {
-		Item quest = new Item();
+	public static Quest getQuest() {
+		Quest quest = new Quest();
 		quest.setItemType(ItemType.QUEST);
 		quest.setItemLevel(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
 		quest.setQuality(Quality.TRASH);

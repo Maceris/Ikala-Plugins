@@ -15,16 +15,27 @@ import java.util.Optional;
 
 /**
  * Tools for reading from and writing to the database.
- * 
+ *
  * @author Ches Burks
  *
  */
 public class ItemPersistence {
 
+	private static final Table<?> AFFIX_TABLE =
+		DSL.table(DSL.name(Affix.TABLE_NAME));
+
 	private DSLContext context;
 
-	private static final Table<?> AFFIX_TABLE =
-		DSL.table(DSL.name(Affix.TABLE_NAME));;
+	/**
+	 * Fetch the affixes from the affix table.
+	 */
+	public void fetchAffix() {
+		Result<Record> affixes =
+			this.context.select().from(ItemPersistence.AFFIX_TABLE).fetch();
+		affixes.forEach(affix -> {
+			System.out.println(affix.formatJSON());
+		});
+	}
 
 	/**
 	 * Load the database context from the database plugin, for use in the rest
@@ -35,24 +46,6 @@ public class ItemPersistence {
 			PluginManager.getInstance().getPlugin("Ikala-Database");
 		Database database = ((DatabasePlugin) plugin.get()).getDatabase();
 		this.context = database.getContext();
-	}
-
-	/**
-	 * Save an affix to the affix table.
-	 */
-	public void saveAffix() {
-		Table<?> table = DSL.table(DSL.name(Affix.TABLE_NAME));
-		this.context.newRecord(table);
-	}
-
-	/**
-	 * Fetch the affixes from the affix table.
-	 */
-	public void fetchAffix() {
-		Result<Record> affixes = context.select().from(AFFIX_TABLE).fetch();
-		affixes.forEach(affix -> {
-			System.out.println(affix.formatJSON());
-		});
 	}
 
 }
