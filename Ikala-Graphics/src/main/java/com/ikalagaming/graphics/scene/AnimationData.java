@@ -1,3 +1,9 @@
+/*
+ * NOTICE: This file is a modified version of contents from
+ * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
+ * v2.0. Changes have been made related to formatting, functionality, and
+ * naming.
+ */
 package com.ikalagaming.graphics.scene;
 
 import com.ikalagaming.graphics.graph.Model;
