@@ -123,7 +123,7 @@ public class Database {
 		}
 		catch (SQLException e) {
 			Database.log.warn(SafeResourceLoader.getString("ERROR_CONNECTING",
-				resourceBundle));
+				resourceBundle), e);
 		}
 		context = DSL.using(connection, SQLDialect.H2);
 	}
