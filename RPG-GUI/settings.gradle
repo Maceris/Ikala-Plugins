@@ -13,3 +13,5 @@ include ':Random'
 project(':Random').projectDir = new File('../Random')
 include ':Ikala-Database'
 project(':Ikala-Database').projectDir = new File('../Ikala-Database')
+include ':Ikala-Inventory'
+project(':Ikala-Inventory').projectDir = new File('../Ikala-Inventory')

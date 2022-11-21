@@ -13,6 +13,9 @@ import com.ikalagaming.item.Equipment;
 import com.ikalagaming.item.Item;
 import com.ikalagaming.item.ItemCriteria;
 import com.ikalagaming.item.ItemStats;
+import com.ikalagaming.item.Junk;
+import com.ikalagaming.item.Material;
+import com.ikalagaming.item.Quest;
 import com.ikalagaming.item.Weapon;
 import com.ikalagaming.item.enums.AccessoryType;
 import com.ikalagaming.item.enums.AffixType;
@@ -372,8 +375,8 @@ class ItemGenerator {
 	 *
 	 * @return The randomly generated junk.
 	 */
-	public static Item getJunk() {
-		Item junk = new Item();
+	public static Junk getJunk() {
+		Junk junk = new Junk();
 		junk.setItemType(ItemType.JUNK);
 		junk.setItemLevel(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
 		junk.setQuality(Quality.TRASH);
@@ -387,8 +390,8 @@ class ItemGenerator {
 	 *
 	 * @return The randomly generated material.
 	 */
-	public static Item getMaterial() {
-		Item material = new Item();
+	public static Material getMaterial() {
+		Material material = new Material();
 		material.setItemType(ItemType.MATERIAL);
 		material.setItemLevel(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
 		material.setQuality(Quality.TRASH);
@@ -402,14 +405,41 @@ class ItemGenerator {
 	 *
 	 * @return The randomly generated quest item.
 	 */
-	public static Item getQuest() {
-		Item quest = new Item();
+	public static Quest getQuest() {
+		Quest quest = new Quest();
 		quest.setItemType(ItemType.QUEST);
 		quest.setItemLevel(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
 		quest.setQuality(Quality.TRASH);
 		quest.setID(quest.getItemType().getPrefix()
 			+ ItemGenerator.nextID.getAndIncrement());
 		return quest;
+	}
+
+	/**
+	 * Get a random item of any item type.
+	 *
+	 * @return The random item.
+	 */
+	public static Item getRandomItem() {
+		switch (ItemGenerator.random.selectEnumValue(ItemType.class)) {
+			case ACCESSORY:
+				return ItemGenerator.getAccessory();
+			case ARMOR:
+				return ItemGenerator.getArmor();
+			case COMPONENT:
+				return ItemGenerator.getComponent();
+			case CONSUMABLE:
+				return ItemGenerator.getConsumable();
+			case JUNK:
+				return ItemGenerator.getJunk();
+			case MATERIAL:
+				return ItemGenerator.getMaterial();
+			case QUEST:
+				return ItemGenerator.getQuest();
+			case WEAPON:
+			default:
+				return ItemGenerator.getWeapon();
+		}
 	}
 
 	/**

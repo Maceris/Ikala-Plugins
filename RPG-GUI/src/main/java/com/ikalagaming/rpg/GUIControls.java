@@ -9,6 +9,7 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
+import com.ikalagaming.inventory.Inventory;
 import com.ikalagaming.item.Accessory;
 import com.ikalagaming.item.Armor;
 import com.ikalagaming.item.AttributeModifier;
@@ -18,6 +19,9 @@ import com.ikalagaming.item.DamageModifier;
 import com.ikalagaming.item.Equipment;
 import com.ikalagaming.item.Item;
 import com.ikalagaming.item.ItemStats;
+import com.ikalagaming.item.Junk;
+import com.ikalagaming.item.Material;
+import com.ikalagaming.item.Quest;
 import com.ikalagaming.item.Weapon;
 import com.ikalagaming.item.enums.AccessoryType;
 import com.ikalagaming.item.enums.AffixType;
@@ -144,23 +148,18 @@ public class GUIControls implements GuiInstance {
 	private float[] dirLightZ;
 	private ImBoolean wireframe;
 	private ImBoolean windowDemo;
-	private Weapon[][] hackyInventory;
+	private Inventory inventory;
+
 	private Accessory demoAccessory;
 	private Armor demoArmor;
-
 	private Component demoComponent;
 	private Consumable demoConsumable;
-
-	private Item demoJunk;
-
-	private Item demoMaterial;
-
-	private Item demoQuest;
-
+	private Junk demoJunk;
+	private Material demoMaterial;
+	private Quest demoQuest;
 	private Weapon demoWeapon;
 
 	private ImBoolean windowInventory;
-
 	private ImBoolean windowItemCatalog;
 
 	/**
@@ -185,11 +184,12 @@ public class GUIControls implements GuiInstance {
 		this.dirLightZ = new float[] {pos.z};
 		this.dirLightIntensity = new float[] {dirLight.getIntensity()};
 		this.wireframe = new ImBoolean(false);
-		this.hackyInventory =
-			new Weapon[GUIControls.INVENTORY_HEIGHT][GUIControls.INVENTORY_WIDTH];
-		for (int y = 0; y < GUIControls.INVENTORY_HEIGHT; ++y) {
-			for (int x = 0; x < GUIControls.INVENTORY_WIDTH; ++x) {
-				this.hackyInventory[y][x] = ItemGenerator.getWeapon();
+		this.inventory = new Inventory(
+			GUIControls.INVENTORY_WIDTH * GUIControls.INVENTORY_HEIGHT);
+
+		for (int row = 0; row < GUIControls.INVENTORY_HEIGHT; ++row) {
+			for (int col = 0; col < GUIControls.INVENTORY_WIDTH; ++col) {
+				this.inventory.addItem(ItemGenerator.getRandomItem());
 			}
 		}
 		this.windowInventory = new ImBoolean(false);
@@ -220,7 +220,7 @@ public class GUIControls implements GuiInstance {
 
 	/**
 	 * Draw details for armor.
-	 * 
+	 *
 	 * @param armor The armor to draw details for.
 	 */
 	private void drawArmorInfo(Armor armor) {
@@ -231,7 +231,7 @@ public class GUIControls implements GuiInstance {
 
 	/**
 	 * Draw component information.
-	 * 
+	 *
 	 * @param component The component to draw details for.
 	 */
 	private void drawComponentInfo(Component component) {
@@ -278,7 +278,7 @@ public class GUIControls implements GuiInstance {
 
 	/**
 	 * Draw details for a consumable.
-	 * 
+	 *
 	 * @param consumable The consumable.
 	 */
 	private void drawConsumableInfo(Consumable consumable) {
@@ -289,7 +289,7 @@ public class GUIControls implements GuiInstance {
 
 	/**
 	 * Draw details for equipment.
-	 * 
+	 *
 	 * @param equipment The equipment to draw details for.
 	 */
 	private void drawEquipmentInfo(Equipment equipment) {
@@ -378,18 +378,53 @@ public class GUIControls implements GuiInstance {
 			for (int x = 0; x < 10; ++x) {
 				ImGui.tableSetupColumn("", ImGuiTableFlags.Borders, 50);
 			}
-			for (int y = 0; y < GUIControls.INVENTORY_HEIGHT; ++y) {
+			int position;
+			for (int row = 0; row < GUIControls.INVENTORY_HEIGHT; ++row) {
 				ImGui.tableNextRow();
-				for (int x = 0; x < GUIControls.INVENTORY_WIDTH; ++x) {
-					ImGui.tableSetColumnIndex(x);
+				for (int col = 0; col < GUIControls.INVENTORY_WIDTH; ++col) {
+					ImGui.tableSetColumnIndex(col);
+					position = row * GUIControls.INVENTORY_WIDTH + col;
+					if (!this.inventory.hasItem(position)) {
+						continue;
+					}
+					Item item = this.inventory.getItem(position).get();
 					ImGui.pushStyleColor(ImGuiCol.Button,
-						GUIControls.getQualityColor(
-							this.hackyInventory[y][x].getQuality()));
-					ImGui.button(String.format("(%d, %d)", y, x), 50, 50);
+						GUIControls.getQualityColor(item.getQuality()));
+					ItemType type = item.getItemType();
+					ImGui.button(type.toString(), 50, 50);
 					ImGui.popStyleColor();
 					if (ImGui.isItemHovered()) {
 						ImGui.beginTooltip();
-						this.drawWeaponInfo(this.hackyInventory[y][x]);
+						switch (type) {
+							case ACCESSORY:
+								this.drawAccessoryInfo((Accessory) item);
+								break;
+							case ARMOR:
+								this.drawArmorInfo((Armor) item);
+								break;
+							case COMPONENT:
+								this.drawComponentInfo((Component) item);
+								break;
+							case CONSUMABLE:
+								this.drawConsumableInfo((Consumable) item);
+								break;
+							case JUNK:
+								this.drawJunkInfo((Junk) item);
+								break;
+							case MATERIAL:
+								this.drawMaterialInfo((Material) item);
+								break;
+							case QUEST:
+								this.drawQuestInfo((Quest) item);
+								break;
+							case WEAPON:
+								this.drawWeaponInfo((Weapon) item);
+								break;
+							default:
+								ImGui.text("Unrecognized item type "
+									+ item.getItemType().toString());
+								break;
+						}
 						ImGui.endTooltip();
 					}
 				}
@@ -467,15 +502,15 @@ public class GUIControls implements GuiInstance {
 		}
 	}
 
-	private void drawJunkInfo(Item junk) {
+	private void drawJunkInfo(Junk junk) {
 		GUIControls.drawName(junk);
 	}
 
-	private void drawMaterialInfo(Item material) {
+	private void drawMaterialInfo(Material material) {
 		GUIControls.drawName(material);
 	}
 
-	private void drawQuestInfo(Item quest) {
+	private void drawQuestInfo(Quest quest) {
 		GUIControls.drawName(quest);
 	}
 
