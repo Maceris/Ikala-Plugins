@@ -294,7 +294,8 @@ public class Inventory extends Component<Inventory> {
 	}
 
 	/**
-	 * Forcibly clear and set the item in a given slot.
+	 * Forcibly clear and set the item in a given slot. If not stackable, we set
+	 * the item using {@link #setItem(int, Equipment)} instead.
 	 *
 	 * @param slotNumber The slot number to fill.
 	 * @param stackable The stackable item.
