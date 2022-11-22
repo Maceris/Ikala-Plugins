@@ -1,4 +1,4 @@
-package com.ikalagaming.rpg;
+package com.ikalagaming.rpg.windows;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -24,7 +24,7 @@ class InventoryDrag {
 
 	/**
 	 * Whether we are currently in the middle of a drag operation.
-	 * 
+	 *
 	 * @param dragInProgress Whether we have started a drag.
 	 * @return Whether we are currently already dragging an item.
 	 */
@@ -32,7 +32,7 @@ class InventoryDrag {
 
 	/**
 	 * Set the source index unless a drag is in progress.
-	 * 
+	 *
 	 * @param index The index we started dragging from.
 	 */
 	public void setIndex(int index) {

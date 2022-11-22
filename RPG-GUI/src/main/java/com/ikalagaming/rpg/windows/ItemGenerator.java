@@ -1,4 +1,4 @@
-package com.ikalagaming.rpg;
+package com.ikalagaming.rpg.windows;
 
 import com.ikalagaming.attributes.Attribute;
 import com.ikalagaming.attributes.DamageType;

@@ -17,6 +17,6 @@ public class ItemPlugin extends Plugin {
 	/**
 	 * The name of this plugin.
 	 */
-	public static final String PLUGIN_NAME = "Item-Plugin";
+	public static final String PLUGIN_NAME = "Ikala-Item";
 
 }

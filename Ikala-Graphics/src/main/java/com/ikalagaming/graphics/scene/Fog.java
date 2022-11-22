@@ -49,4 +49,15 @@ public class Fog {
 		this.active = false;
 		this.color = new Vector3f();
 	}
+
+	/**
+	 * Set the color.
+	 *
+	 * @param r The red component.
+	 * @param g The green component.
+	 * @param b The blue component.
+	 */
+	public void setColor(float r, float g, float b) {
+		this.color.set(r, g, b);
+	}
 }

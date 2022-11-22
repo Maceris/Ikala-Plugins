@@ -51,7 +51,7 @@ public class GuiRender {
 	 */
 	private ShaderProgram shaderProgram;
 	/**
-	 * The texture we render the UI to.
+	 * The texture we store font data in.
 	 */
 	private Texture texture;
 	/**

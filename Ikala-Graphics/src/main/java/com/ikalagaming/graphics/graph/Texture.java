@@ -25,9 +25,12 @@ import java.nio.IntBuffer;
  * A texture.
  */
 @Slf4j
+@Getter
 public class Texture {
 	/**
 	 * The OpenGL Texture ID.
+	 *
+	 * @return The texture ID.
 	 */
 	private int textureID;
 	/**
@@ -36,8 +39,19 @@ public class Texture {
 	 * @return The path to the file, which might be empty if the texture was
 	 *         loaded from a buffer instead.
 	 */
-	@Getter
 	private String texturePath;
+	/**
+	 * The width of the texture that was loaded.
+	 *
+	 * @return The width in pixels.
+	 */
+	private int width;
+	/**
+	 * The height of the texture that was loaded.
+	 *
+	 * @return The height in pixels.
+	 */
+	private int height;
 
 	/**
 	 * Load a texture directly from a byte buffer.
@@ -48,7 +62,9 @@ public class Texture {
 	 */
 	public Texture(int width, int height, @NonNull ByteBuffer buffer) {
 		this.texturePath = "";
-		this.generateTexture(width, height, buffer);
+		this.width = width;
+		this.height = height;
+		this.generateTexture(buffer);
 	}
 
 	/**
@@ -78,10 +94,10 @@ public class Texture {
 						"\\{\\}", STBImage.stbi_failure_reason()));
 			}
 
-			int width = w.get();
-			int height = h.get();
+			this.width = w.get();
+			this.height = h.get();
 
-			this.generateTexture(width, height, buffer);
+			this.generateTexture(buffer);
 
 			STBImage.stbi_image_free(buffer);
 		}
@@ -104,13 +120,10 @@ public class Texture {
 	/**
 	 * Create the a texture from a byte buffer.
 	 *
-	 * @param width The width of the texture in pixels.
-	 * @param height The height of the texture in pixels.
 	 * @param buffer The buffer that contains the texture information.
 	 * @return The texture ID.
 	 */
-	private void generateTexture(int width, int height,
-		@NonNull ByteBuffer buffer) {
+	private void generateTexture(@NonNull ByteBuffer buffer) {
 		this.textureID = GL11.glGenTextures();
 
 		GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.textureID);
@@ -119,8 +132,8 @@ public class Texture {
 			GL11.GL_NEAREST);
 		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER,
 			GL11.GL_NEAREST);
-		GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, width, height, 0,
-			GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, buffer);
+		GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, this.width,
+			this.height, 0, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, buffer);
 		GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
 	}
 }
