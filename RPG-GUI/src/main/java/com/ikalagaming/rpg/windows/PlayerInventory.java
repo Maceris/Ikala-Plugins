@@ -1,5 +1,6 @@
 package com.ikalagaming.rpg.windows;
 
+import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.inventory.Inventory;
 import com.ikalagaming.item.Accessory;
@@ -20,6 +21,7 @@ import imgui.flag.ImGuiCond;
 import imgui.flag.ImGuiDragDropFlags;
 import imgui.flag.ImGuiTableFlags;
 import lombok.NonNull;
+import lombok.Setter;
 
 /**
  * An inventory for items.
@@ -28,22 +30,56 @@ import lombok.NonNull;
  *
  */
 public class PlayerInventory implements GUIWindow {
-	private static int INVENTORY_WIDTH = 10;
-	private static int INVENTORY_HEIGHT = 10;
+	/**
+	 * The width of an item texture in pixels.
+	 */
+	private static final int ITEM_WIDTH = 16;
+	/**
+	 * The height of an item texture in pixels.
+	 */
+	private static final int ITEM_HEIGHT = 16;
+
+	/**
+	 * The number of slots in a row of the inventory.
+	 */
+	private static final int INVENTORY_WIDTH = 10;
+	/**
+	 * The number of slots in a column of the inventory.
+	 */
+	private static final int INVENTORY_HEIGHT = 10;
+
+	/**
+	 * The width of an inventory slot in pixels.
+	 */
+	private static final int SLOT_WIDTH = 50;
+
+	/**
+	 * The height of an inventory slot in pixels.
+	 */
+	private static final int SLOT_HEIGHT = 50;
+
 	private InventoryDrag itemDragInfo;
 	private Inventory inventory;
+
+	/**
+	 * The texture to use for items.
+	 *
+	 * @param itemTexture The texture to use.
+	 */
+	@Setter
+	private Texture itemTexture;
 
 	@Override
 	public void draw() {
 		ImGui.setNextWindowPos(200, 200, ImGuiCond.Once);
-		ImGui.setNextWindowSize(610, 600, ImGuiCond.Once);
+		ImGui.setNextWindowSize(650, 650, ImGuiCond.Once);
 		ImGui.begin("Inventory");
 
 		if (ImGui.beginTable("InventoryGrid", 10,
 			ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.Borders)) {
 			for (int col = 0; col < PlayerInventory.INVENTORY_WIDTH; ++col) {
 				ImGui.tableSetupColumn("Column" + col, ImGuiTableFlags.Borders,
-					50);
+					PlayerInventory.SLOT_WIDTH + 4);
 			}
 			int position;
 			for (int row = 0; row < PlayerInventory.INVENTORY_HEIGHT; ++row) {
@@ -55,11 +91,10 @@ public class PlayerInventory implements GUIWindow {
 
 					if (this.inventory.hasItem(position)) {
 						Item item = this.inventory.getItem(position).get();
-						ItemType type = item.getItemType();
 
 						ImGui.pushStyleColor(ImGuiCol.Button,
 							ItemRendering.getQualityColor(item.getQuality()));
-						ImGui.button(type.toString(), 50, 50);
+						this.drawItem(item, row, col);
 						ImGui.popStyleColor();
 
 						if (ImGui
@@ -76,7 +111,9 @@ public class PlayerInventory implements GUIWindow {
 					}
 					else {
 						ImGui.invisibleButton(
-							String.format("Invisible_%d_%d", row, col), 50, 50);
+							String.format("Invisible_%d_%d", row, col),
+							PlayerInventory.SLOT_WIDTH,
+							PlayerInventory.SLOT_HEIGHT);
 					}
 					if (ImGui.beginDragDropTarget()) {
 						InventoryDrag payload = ImGui.acceptDragDropPayload(
@@ -139,6 +176,187 @@ public class PlayerInventory implements GUIWindow {
 			ImGui.endTable();
 		}
 		ImGui.end();
+	}
+
+	/**
+	 * Draw an item from the spritesheet.
+	 *
+	 * @param item The item to draw.
+	 * @param row The row in the inventory, for naming things.
+	 * @param col The column in the inventory, for naming things.
+	 */
+	private void drawItem(@NonNull Item item, int row, int col) {
+		int uvUpperLeftX = 0;
+		int uvUpperLeftY = 0;
+		// Please have mercy on me.
+		switch (item.getItemType()) {
+			case ACCESSORY:
+				switch (((Accessory) item).getAccessoryType()) {
+					case AMULET:
+						uvUpperLeftX = 0;
+						uvUpperLeftY = 80;
+						break;
+					case BELT:
+						uvUpperLeftX = 256;
+						uvUpperLeftY = 80;
+						break;
+					case CAPE:
+						uvUpperLeftX = 416;
+						uvUpperLeftY = 256;
+						break;
+					case RING:
+						uvUpperLeftX = 224;
+						uvUpperLeftY = 64;
+						break;
+					case TRINKET:
+						uvUpperLeftX = 192;
+						uvUpperLeftY = 736;
+						break;
+					default:
+						break;
+				}
+				break;
+			case ARMOR:
+				switch (((Armor) item).getArmorType()) {
+					case CHEST:
+						uvUpperLeftX = 224;
+						uvUpperLeftY = 400;
+						break;
+					case FEET:
+						uvUpperLeftX = 272;
+						uvUpperLeftY = 400;
+						break;
+					case HANDS:
+						uvUpperLeftX = 256;
+						uvUpperLeftY = 400;
+						break;
+					case HEAD:
+						uvUpperLeftX = 208;
+						uvUpperLeftY = 400;
+						break;
+					case LEGS:
+						uvUpperLeftX = 240;
+						uvUpperLeftY = 400;
+						break;
+					case SHOULDERS:
+						uvUpperLeftX = 544;
+						uvUpperLeftY = 321;
+						break;
+					case WRIST:
+						uvUpperLeftX = 800;
+						uvUpperLeftY = 112;
+						break;
+					default:
+						break;
+				}
+				break;
+			case COMPONENT:
+				switch (((Component) item).getComponentType()) {
+					case AUGMENT:
+						uvUpperLeftX = 144;
+						uvUpperLeftY = 752;
+						break;
+					case GEM:
+						uvUpperLeftX = 224;
+						uvUpperLeftY = 720;
+						break;
+					default:
+						break;
+				}
+				break;
+			case CONSUMABLE:
+				switch (((Consumable) item).getConsumableType()) {
+					case BANDAGE:
+						uvUpperLeftX = 208;
+						uvUpperLeftY = 112;
+						break;
+					case DRINK:
+						uvUpperLeftX = 752;
+						uvUpperLeftY = 16;
+						break;
+					case ELIXIR:
+						uvUpperLeftX = 240;
+						uvUpperLeftY = 16;
+						break;
+					case FOOD:
+						uvUpperLeftX = 768;
+						uvUpperLeftY = 0;
+						break;
+					case POTION:
+						uvUpperLeftX = 16;
+						uvUpperLeftY = 16;
+						break;
+					case SCROLL:
+						uvUpperLeftX = 32;
+						uvUpperLeftY = 112;
+						break;
+					default:
+						break;
+				}
+				break;
+			case JUNK:
+				uvUpperLeftX = 16;
+				uvUpperLeftY = 704;
+				break;
+			case MATERIAL:
+				uvUpperLeftX = 944;
+				uvUpperLeftY = 128;
+				break;
+			case QUEST:
+				uvUpperLeftX = 48;
+				uvUpperLeftY = 112;
+				break;
+			case WEAPON:
+				switch (((Weapon) item).getWeaponType()) {
+					case OFF_HAND:
+						uvUpperLeftX = 96;
+						uvUpperLeftY = 96;
+						break;
+					case ONE_HANDED_MAGIC:
+						uvUpperLeftX = 384;
+						uvUpperLeftY = 560;
+						break;
+					case ONE_HANDED_MELEE:
+						uvUpperLeftX = 96;
+						uvUpperLeftY = 400;
+						break;
+					case ONE_HANDED_RANGED:
+						uvUpperLeftX = 464;
+						uvUpperLeftY = 144;
+						break;
+					case SHIELD:
+						uvUpperLeftX = 80;
+						uvUpperLeftY = 208;
+						break;
+					case TWO_HANDED_MAGIC:
+						uvUpperLeftX = 416;
+						uvUpperLeftY = 576;
+						break;
+					case TWO_HANDED_MELEE:
+						uvUpperLeftX = 144;
+						uvUpperLeftY = 400;
+						break;
+					case TWO_HANDED_RANGED:
+						uvUpperLeftX = 176;
+						uvUpperLeftY = 400;
+						break;
+					default:
+						break;
+				}
+				break;
+			default:
+				break;
+		}
+		int uvLowerRightX = uvUpperLeftX + PlayerInventory.ITEM_WIDTH;
+		int uvLowerRightY = uvUpperLeftY + PlayerInventory.ITEM_HEIGHT;
+		ImGui.pushID(String.format("Item_%d_%d", row, col));
+		ImGui.imageButton(this.itemTexture.getTextureID(),
+			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
+			((float) uvUpperLeftX) / this.itemTexture.getWidth(),
+			((float) uvUpperLeftY) / this.itemTexture.getHeight(),
+			((float) uvLowerRightX) / this.itemTexture.getWidth(),
+			((float) uvLowerRightY) / this.itemTexture.getHeight());
+		ImGui.popID();
 	}
 
 	@Override

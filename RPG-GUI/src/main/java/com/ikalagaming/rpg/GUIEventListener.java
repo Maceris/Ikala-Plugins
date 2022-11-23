@@ -7,11 +7,12 @@ import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.plugins.events.PluginEnabled;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 /**
  * Handle events for the GUI.
- * 
+ *
  * @author Ches Burks
  *
  */
@@ -21,22 +22,23 @@ public class GUIEventListener implements Listener {
 	/**
 	 * The GUI instance.
 	 */
+	@Getter
 	private GUIControls gui;
 
 	/**
 	 * Attach the GUI to the scene.
 	 */
 	public void attachGUI() {
-		gui = new GUIControls(GraphicsManager.getScene());
-		GraphicsManager.setGUI(gui);
-		//GraphicsManager.refreshRenderData();
-		log.debug(SafeResourceLoader.getString("GUI_ATTACHED",
+		this.gui = new GUIControls(GraphicsManager.getScene());
+		GraphicsManager.setGUI(this.gui);
+		// GraphicsManager.refreshRenderData();
+		GUIEventListener.log.debug(SafeResourceLoader.getString("GUI_ATTACHED",
 			GUIPlugin.getResourceBundle()));
 	}
 
 	/**
 	 * Attach the GUI once the graphics plugin is loaded.
-	 * 
+	 *
 	 * @param event The event.
 	 */
 	@EventHandler
@@ -44,6 +46,6 @@ public class GUIEventListener implements Listener {
 		if (!GraphicsPlugin.PLUGIN_NAME.equals(event.getPlugin())) {
 			return;
 		}
-		attachGUI();
+		this.attachGUI();
 	}
 }

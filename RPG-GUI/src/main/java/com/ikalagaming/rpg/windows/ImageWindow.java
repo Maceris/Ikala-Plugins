@@ -4,7 +4,6 @@ import com.ikalagaming.graphics.scene.Scene;
 
 import imgui.ImGui;
 import imgui.flag.ImGuiCond;
-import imgui.flag.ImGuiStyleVar;
 import imgui.type.ImInt;
 import lombok.NonNull;
 import org.lwjgl.opengl.GL11;
@@ -34,15 +33,13 @@ public class ImageWindow implements GUIWindow {
 			this.textureID.set(this.textureID.get() + 1);
 		}
 
-		ImGui.pushStyleVar(ImGuiStyleVar.FrameBorderSize, 1);
-		if (GL11.glIsTexture(this.textureID.get())) {
-			ImGui.image(this.textureID.get(), 100, 100);
+		final int id = this.textureID.get();
+		if (GL11.glIsTexture(id)) {
+			ImGui.image(id, 100, 100);
 		}
 		else {
 			ImGui.text("Not a texture!");
 		}
-
-		ImGui.popStyleVar();
 
 		ImGui.end();
 	}

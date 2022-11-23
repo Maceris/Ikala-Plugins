@@ -69,6 +69,15 @@ public class GUIControls implements GuiInstance {
 		this.windowImages.setup(scene);
 	}
 
+	/**
+	 * Clean up resources.
+	 */
+	void cleanup() {
+		if (this.itemTexture == null) {
+			this.itemTexture.cleanup();
+		}
+	}
+
 	private void drawDebugMenu() {
 		ImGui.setNextWindowPos(10, 10, ImGuiCond.Once);
 		ImGui.setNextWindowSize(450, 400, ImGuiCond.Once);
@@ -157,6 +166,9 @@ public class GUIControls implements GuiInstance {
 				.createTexture(PluginFolder.getResource(ItemPlugin.PLUGIN_NAME,
 					ResourceType.DATA, "item-spritesheet.png")
 					.getAbsolutePath());
+			GraphicsManager.getRender()
+				.recalculateMaterials(GraphicsManager.getScene());
+			this.windowInventory.setItemTexture(itemTexture);
 		}
 	}
 

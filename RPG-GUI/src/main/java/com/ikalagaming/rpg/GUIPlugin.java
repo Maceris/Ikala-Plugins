@@ -17,7 +17,7 @@ import java.util.Set;
 
 /**
  * A plugin that handles GUI.
- * 
+ *
  * @author Ches Burks
  *
  */
@@ -37,14 +37,21 @@ public class GUIPlugin extends Plugin {
 	@Setter
 	private static ResourceBundle resourceBundle;
 
+	private GUIEventListener listener;
 	private Set<Listener> listeners;
+
+	/**
+	 * You shouldn't be calling this manually.
+	 */
+	public GUIPlugin() {}
 
 	@Override
 	public Set<Listener> getListeners() {
 		if (this.listeners == null) {
 			this.listeners =
 				Collections.synchronizedSet(new HashSet<Listener>());
-			this.listeners.add(new GUIEventListener());
+			this.listener = new GUIEventListener();
+			this.listeners.add(this.listener);
 		}
 		return this.listeners;
 	}
@@ -57,19 +64,15 @@ public class GUIPlugin extends Plugin {
 		}
 		catch (MissingResourceException missingResource) {
 			// don't localize this since it would fail anyways
-			log.warn("Locale not found for RPG-GUI in onLoad()");
+			GUIPlugin.log.warn("Locale not found for RPG-GUI in onLoad()");
 		}
 		return true;
 	}
 
 	@Override
 	public boolean onUnload() {
+		this.listener.getGui().cleanup();
 		GraphicsPlugin.setResourceBundle(null);
 		return true;
 	}
-
-	/**
-	 * You shouldn't be calling this manually.
-	 */
-	public GUIPlugin() {}
 }
