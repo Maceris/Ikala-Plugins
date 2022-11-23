@@ -190,4 +190,13 @@ public class Render {
 		List<Model> modelList = new ArrayList<>(scene.getModelMap().values());
 		modelList.forEach(m -> m.getMeshDataList().clear());
 	}
+
+	/**
+	 * Set up uniforms for textures and materials.
+	 * 
+	 * @param scene The scene to render.
+	 */
+	public void recalculateMaterials(@NonNull Scene scene) {
+		this.sceneRender.recalculateMaterials(scene);
+	}
 }

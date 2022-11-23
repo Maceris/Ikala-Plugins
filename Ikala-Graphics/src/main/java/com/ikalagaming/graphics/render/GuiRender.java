@@ -19,6 +19,8 @@ import imgui.ImDrawData;
 import imgui.ImFontAtlas;
 import imgui.ImGui;
 import imgui.ImGuiIO;
+import imgui.ImVec2;
+import imgui.ImVec4;
 import imgui.flag.ImGuiKey;
 import imgui.type.ImInt;
 import lombok.NonNull;
@@ -53,7 +55,7 @@ public class GuiRender {
 	/**
 	 * The texture we store font data in.
 	 */
-	private Texture texture;
+	private Texture font;
 	/**
 	 * The uniforms for the shader program.
 	 */
@@ -81,7 +83,7 @@ public class GuiRender {
 	 */
 	public void cleanup() {
 		this.shaderProgram.cleanup();
-		this.texture.cleanup();
+		this.font.cleanup();
 	}
 
 	/**
@@ -101,7 +103,8 @@ public class GuiRender {
 		ImInt width = new ImInt();
 		ImInt height = new ImInt();
 		ByteBuffer buf = fontAtlas.getTexDataAsRGBA32(width, height);
-		this.texture = new Texture(width.get(), height.get(), buf);
+		this.font = new Texture(width.get(), height.get(), buf);
+		fontAtlas.setTexID(this.font.getTextureID());
 
 		this.guiMesh = new GuiMesh();
 	}
@@ -147,6 +150,11 @@ public class GuiRender {
 		this.uniformsMap.setUniform(ShaderUniforms.GUI.SCALE, this.scale);
 
 		ImDrawData drawData = ImGui.getDrawData();
+		ImVec2 bufScale = drawData.getFramebufferScale();
+		ImVec2 displSize = drawData.getDisplaySize();
+
+		int fbHeight = (int) (displSize.y * bufScale.y);
+
 		int numLists = drawData.getCmdListsCount();
 		for (int i = 0; i < numLists; ++i) {
 			GL15.glBufferData(GL15.GL_ARRAY_BUFFER,
@@ -163,7 +171,16 @@ public class GuiRender {
 				final int indices =
 					idxBufferOffset * ImDrawData.SIZEOF_IM_DRAW_IDX;
 
-				this.texture.bind();
+				int id = drawData.getCmdListCmdBufferTextureId(i, j);
+
+				ImVec4 clipRect = drawData.getCmdListCmdBufferClipRect(i, j);
+
+				GL11.glScissor((int) clipRect.x, (int) (fbHeight - clipRect.w),
+					(int) (clipRect.z - clipRect.x),
+					(int) (clipRect.w - clipRect.y));
+
+				GL11.glBindTexture(GL11.GL_TEXTURE_2D, id);
+
 				GL11.glDrawElements(GL11.GL_TRIANGLES, elemCount,
 					GL11.GL_UNSIGNED_SHORT, indices);
 			}

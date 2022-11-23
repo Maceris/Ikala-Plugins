@@ -322,6 +322,15 @@ public class SceneRender {
 		this.setupEntitiesData(scene);
 		this.setupStaticCommandBuffer(scene);
 		this.setupAnimCommandBuffer(scene);
+		this.recalculateMaterials(scene);
+	}
+
+	/**
+	 * Set up uniforms for textures and materials.
+	 * 
+	 * @param scene The scene to render.
+	 */
+	public void recalculateMaterials(@NonNull Scene scene) {
 		this.setupMaterialsUniform(scene.getTextureCache(),
 			scene.getMaterialCache());
 	}

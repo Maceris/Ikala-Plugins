@@ -53,7 +53,10 @@ public class GraphicsManager {
 	private static Scene scene;
 	/**
 	 * The rendering handler.
+	 * 
+	 * @return The render stages.
 	 */
+	@Getter
 	private static Render render;
 	/**
 	 * The camera manager.
@@ -384,7 +387,7 @@ public class GraphicsManager {
 			}
 
 			GraphicsManager.update((long) elapsedTime);
-			
+
 			if (refreshRequested.compareAndSet(true, false)) {
 				GraphicsManager.render.setupData(GraphicsManager.scene);
 			}
