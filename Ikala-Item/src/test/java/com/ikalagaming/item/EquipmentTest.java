@@ -63,99 +63,99 @@ class EquipmentTest {
 	void testCombineStats() {
 		Equipment equipment = new Equipment();
 
-		Affix affix1 = new Affix();
-		affix1.setAffixType(AffixType.PREFIX);
-		ItemStats stats1 = new ItemStats();
-		affix1.setItemStats(stats1);
+		Affix prefix = new Affix();
+		prefix.setAffixType(AffixType.PREFIX);
+		ItemStats prefixStats = new ItemStats();
+		prefix.setItemStats(prefixStats);
 
 		AttributeModifier charismaFlat1 = new AttributeModifier();
 		charismaFlat1.setAmount(1);
 		charismaFlat1.setAttribute(Attribute.CHARISMA);
 		charismaFlat1.setType(ModifierType.FLAT);
-		stats1.getAttributeBuffs().add(charismaFlat1);
+		prefixStats.getAttributeBuffs().add(charismaFlat1);
 		AttributeModifier charismaPercent1 = new AttributeModifier();
 		charismaPercent1.setAmount(2);
 		charismaPercent1.setAttribute(Attribute.CHARISMA);
 		charismaPercent1.setType(ModifierType.PERCENTAGE);
-		stats1.getAttributeBuffs().add(charismaPercent1);
+		prefixStats.getAttributeBuffs().add(charismaPercent1);
 		AttributeModifier dexFlat1 = new AttributeModifier();
 		dexFlat1.setAmount(3);
 		dexFlat1.setAttribute(Attribute.DEXTERITY);
 		dexFlat1.setType(ModifierType.FLAT);
-		stats1.getAttributeBuffs().add(dexFlat1);
+		prefixStats.getAttributeBuffs().add(dexFlat1);
 
 		DamageModifier fireDamageFlat1 = new DamageModifier();
 		fireDamageFlat1.setAmount(4);
 		fireDamageFlat1.setDamageType(DamageType.FIRE);
 		fireDamageFlat1.setType(ModifierType.FLAT);
-		stats1.getDamageBuffs().add(fireDamageFlat1);
+		prefixStats.getDamageBuffs().add(fireDamageFlat1);
 		DamageModifier fireDamagePercent1 = new DamageModifier();
 		fireDamagePercent1.setAmount(5);
 		fireDamagePercent1.setDamageType(DamageType.FIRE);
 		fireDamagePercent1.setType(ModifierType.PERCENTAGE);
-		stats1.getDamageBuffs().add(fireDamagePercent1);
+		prefixStats.getDamageBuffs().add(fireDamagePercent1);
 		DamageModifier poisonDamagePercent1 = new DamageModifier();
 		poisonDamagePercent1.setAmount(5);
 		poisonDamagePercent1.setDamageType(DamageType.POISON);
 		poisonDamagePercent1.setType(ModifierType.PERCENTAGE);
-		stats1.getDamageBuffs().add(poisonDamagePercent1);
+		prefixStats.getDamageBuffs().add(poisonDamagePercent1);
 
 		DamageModifier holyResistFlat1 = new DamageModifier();
 		holyResistFlat1.setAmount(4);
 		holyResistFlat1.setDamageType(DamageType.HOLY);
 		holyResistFlat1.setType(ModifierType.FLAT);
-		stats1.getResistanceBuffs().add(holyResistFlat1);
+		prefixStats.getResistanceBuffs().add(holyResistFlat1);
 		DamageModifier holyResistPercent1 = new DamageModifier();
 		holyResistPercent1.setAmount(5);
 		holyResistPercent1.setDamageType(DamageType.HOLY);
 		holyResistPercent1.setType(ModifierType.PERCENTAGE);
-		stats1.getResistanceBuffs().add(holyResistPercent1);
+		prefixStats.getResistanceBuffs().add(holyResistPercent1);
 		DamageModifier psychicResistPercent1 = new DamageModifier();
 		psychicResistPercent1.setAmount(5);
 		psychicResistPercent1.setDamageType(DamageType.PSYCHIC);
 		psychicResistPercent1.setType(ModifierType.PERCENTAGE);
-		stats1.getResistanceBuffs().add(psychicResistPercent1);
+		prefixStats.getResistanceBuffs().add(psychicResistPercent1);
 
-		Affix affix2 = new Affix();
-		affix2.setAffixType(AffixType.SUFFIX);
-		ItemStats stats2 = new ItemStats();
-		affix2.setItemStats(stats2);
+		Affix suffix = new Affix();
+		suffix.setAffixType(AffixType.SUFFIX);
+		ItemStats suffixStats = new ItemStats();
+		suffix.setItemStats(suffixStats);
 
 		AttributeModifier charismaFlat2 = new AttributeModifier();
 		charismaFlat2.setAmount(10);
 		charismaFlat2.setAttribute(Attribute.CHARISMA);
 		charismaFlat2.setType(ModifierType.FLAT);
-		stats2.getAttributeBuffs().add(charismaFlat2);
+		suffixStats.getAttributeBuffs().add(charismaFlat2);
 		AttributeModifier charismaPercent2 = new AttributeModifier();
 		charismaPercent2.setAmount(20);
 		charismaPercent2.setAttribute(Attribute.CHARISMA);
 		charismaPercent2.setType(ModifierType.PERCENTAGE);
-		stats2.getAttributeBuffs().add(charismaPercent2);
+		suffixStats.getAttributeBuffs().add(charismaPercent2);
 
 		DamageModifier fireDamageFlat2 = new DamageModifier();
 		fireDamageFlat2.setAmount(40);
 		fireDamageFlat2.setDamageType(DamageType.FIRE);
 		fireDamageFlat2.setType(ModifierType.FLAT);
-		stats2.getDamageBuffs().add(fireDamageFlat2);
+		suffixStats.getDamageBuffs().add(fireDamageFlat2);
 		DamageModifier fireDamagePercent2 = new DamageModifier();
 		fireDamagePercent2.setAmount(50);
 		fireDamagePercent2.setDamageType(DamageType.FIRE);
 		fireDamagePercent2.setType(ModifierType.PERCENTAGE);
-		stats2.getDamageBuffs().add(fireDamagePercent2);
+		suffixStats.getDamageBuffs().add(fireDamagePercent2);
 
 		DamageModifier holyResistFlat2 = new DamageModifier();
 		holyResistFlat2.setAmount(40);
 		holyResistFlat2.setDamageType(DamageType.HOLY);
 		holyResistFlat2.setType(ModifierType.FLAT);
-		stats2.getResistanceBuffs().add(holyResistFlat2);
+		suffixStats.getResistanceBuffs().add(holyResistFlat2);
 		DamageModifier psychicResistPercent2 = new DamageModifier();
 		psychicResistPercent2.setAmount(50);
 		psychicResistPercent2.setDamageType(DamageType.PSYCHIC);
 		psychicResistPercent2.setType(ModifierType.PERCENTAGE);
-		stats2.getResistanceBuffs().add(psychicResistPercent2);
+		suffixStats.getResistanceBuffs().add(psychicResistPercent2);
 
-		equipment.getAffixes().add(affix1);
-		equipment.getAffixes().add(affix2);
+		equipment.setPrefix(prefix);
+		equipment.setSuffix(suffix);
 
 		AttributeModifier charismaFlatEquip = new AttributeModifier();
 		charismaFlatEquip.setAmount(100);

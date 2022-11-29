@@ -1,8 +1,6 @@
 package com.ikalagaming.item.template;
 
-import com.ikalagaming.item.Affix;
 import com.ikalagaming.item.Item;
-import com.ikalagaming.item.persistence.AffixListConverter;
 import com.ikalagaming.item.persistence.AttributeModifierTemplateListConverter;
 import com.ikalagaming.item.persistence.ItemStatsTemplateConverter;
 
@@ -48,15 +46,6 @@ public class EquipmentTemplate extends Item {
 	@Convert(converter = AttributeModifierTemplateListConverter.class)
 	private List<AttributeModifierTemplate> attributeRequirements =
 		new ArrayList<>();
-	/**
-	 * The affixes for this equipment.
-	 *
-	 * @param affixes The affixes for this item.
-	 * @return The affixes for this item.
-	 */
-	@Column(name = "AFFIXES")
-	@Convert(converter = AffixListConverter.class)
-	private List<Affix> affixes = new ArrayList<>();
 
 	/**
 	 * Stat bonuses provided by the item.

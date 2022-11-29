@@ -37,7 +37,6 @@ public class ItemRoller {
 		modified.setLevelRequirement(template.getLevelRequirement());
 		modified.setItemStats(
 			ItemRoller.rollItemStats(template.getItemStatsTemplate()));
-		modified.setAffixes(template.getAffixes());
 	}
 
 	/**
@@ -104,7 +103,6 @@ public class ItemRoller {
 	 */
 	private static AttributeModifier
 		rollAttributeModifier(AttributeModifierTemplate template) {
-
 		AttributeModifier modifier = new AttributeModifier();
 		modifier.setAmount(ItemRoller.rollAmount(template.getAmount(),
 			template.getVariance()));

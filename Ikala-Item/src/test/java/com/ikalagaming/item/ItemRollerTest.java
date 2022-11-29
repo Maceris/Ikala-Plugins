@@ -152,14 +152,6 @@ class ItemRollerTest {
 		Assertions.assertEquals(template.getLevelRequirement(),
 			actual.getLevelRequirement());
 
-		// Check affix lists are the same
-		Assertions.assertEquals(template.getAffixes().size(),
-			actual.getAffixes().size());
-		Assertions
-			.assertTrue(template.getAffixes().containsAll(actual.getAffixes()));
-		Assertions
-			.assertTrue(actual.getAffixes().containsAll(template.getAffixes()));
-
 		ItemRollerTest.matchAttributeTemplateLists(
 			template.getAttributeRequirements(),
 			actual.getAttributeRequirements());

@@ -1,12 +1,12 @@
 package com.ikalagaming.item;
 
-import com.ikalagaming.item.persistence.AffixListConverter;
 import com.ikalagaming.item.persistence.AttributeModifierListConverter;
 import com.ikalagaming.item.persistence.ItemStatsConverter;
 
 import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 
 import java.util.ArrayList;
@@ -15,6 +15,8 @@ import java.util.UUID;
 
 import javax.persistence.Column;
 import javax.persistence.Convert;
+import javax.persistence.JoinColumn;
+import javax.persistence.ManyToOne;
 import javax.persistence.MappedSuperclass;
 import javax.persistence.Transient;
 
@@ -30,16 +32,6 @@ import javax.persistence.Transient;
 @MappedSuperclass
 public class Equipment extends Item {
 	/**
-	 * The level requirement required for using this equipment.
-	 *
-	 * @param levelRequirement The level that is required in order to equip this
-	 *            item.
-	 * @return The level that is required in order to equip this item.
-	 */
-	@Column(name = "LEVEL_REQUIREMENT")
-	private Integer levelRequirement;
-
-	/**
 	 * The minimum attribute values that are required for using this equipment.
 	 *
 	 * @param attributeRequirements The minimum attribute values that are
@@ -52,6 +44,42 @@ public class Equipment extends Item {
 	private List<AttributeModifier> attributeRequirements = new ArrayList<>();
 
 	/**
+	 * The augment used on the equipment.
+	 *
+	 * @param augment The augment on the equipment.
+	 * @return The augment on the equipment.
+	 */
+	@ManyToOne
+	@JoinColumn(name = "AUGMENT")
+	private Component augment;
+
+	@Transient
+	@EqualsAndHashCode.Exclude
+	@Setter(AccessLevel.NONE)
+	@Getter(AccessLevel.NONE)
+	private transient ItemStats combinedStats;
+
+	/**
+	 * The first gem slot for the equipment.
+	 *
+	 * @param gem1 The first gem attached to the equipment.
+	 * @return The first gem attached to the equipment.
+	 */
+	@ManyToOne
+	@JoinColumn(name = "GEM1")
+	private Component gem1;
+
+	/**
+	 * The second gem slot for the equipment.
+	 *
+	 * @param gem2 The second gem attached to the equipment.
+	 * @return The second gem attached to the equipment.
+	 */
+	@ManyToOne
+	@JoinColumn(name = "GEM2")
+	private Component gem2;
+
+	/**
 	 * Stat bonuses provided by the item.
 	 *
 	 * @param itemStats The stat bonuses provided by the item.
@@ -62,20 +90,34 @@ public class Equipment extends Item {
 	private ItemStats itemStats = new ItemStats();
 
 	/**
-	 * The affixes for this equipment.
+	 * The level requirement required for using this equipment.
 	 *
-	 * @param affixes The affixes for this item.
-	 * @return The affixes for this item.
+	 * @param levelRequirement The level that is required in order to equip this
+	 *            item.
+	 * @return The level that is required in order to equip this item.
 	 */
-	@Column(name = "AFFIXES")
-	@Convert(converter = AffixListConverter.class)
-	private List<Affix> affixes = new ArrayList<>();
+	@Column(name = "LEVEL_REQUIREMENT")
+	private Integer levelRequirement;
 
-	@Transient
-	@EqualsAndHashCode.Exclude
-	@Setter(AccessLevel.NONE)
-	@Getter(AccessLevel.NONE)
-	private transient ItemStats combinedStats;
+	/**
+	 * The prefix for this equipment.
+	 *
+	 * @param prefix The prefix for this item.
+	 * @return The prefix for this item.
+	 */
+	@ManyToOne
+	@JoinColumn(name = "PREFIX")
+	private Affix prefix;
+
+	/**
+	 * The suffix for this equipment.
+	 *
+	 * @param suffix The prefix for this item.
+	 * @return The suffix for this item.
+	 */
+	@ManyToOne
+	@JoinColumn(name = "SUFFIX")
+	private Affix suffix;
 
 	/**
 	 * A unique identifier to refer to a specific piece of equipment, since they
@@ -88,6 +130,69 @@ public class Equipment extends Item {
 	 * Construct a new equipment item.
 	 */
 	public Equipment() {}
+
+	/**
+	 * Add the stats from the given affix to the combined stats.
+	 *
+	 * @param newStats The stats to add.
+	 */
+	private void addStats(@NonNull ItemStats newStats) {
+
+		List<AttributeModifier> attributeBuffs =
+			this.combinedStats.getAttributeBuffs();
+		List<DamageModifier> damageBuffs = this.combinedStats.getDamageBuffs();
+		List<DamageModifier> resistanceBuffs =
+			this.combinedStats.getResistanceBuffs();
+
+		for (AttributeModifier newBuff : newStats.getAttributeBuffs()) {
+			boolean matched = false;
+			for (AttributeModifier existingBuff : attributeBuffs) {
+				if (existingBuff.getAttribute().equals(newBuff.getAttribute())
+					&& existingBuff.getType().equals(newBuff.getType())) {
+					existingBuff.setAmount(
+						existingBuff.getAmount() + newBuff.getAmount());
+					matched = true;
+					break;
+				}
+			}
+			if (!matched) {
+				attributeBuffs.add(newBuff.copy());
+			}
+		}
+
+		for (DamageModifier newBuff : newStats.getDamageBuffs()) {
+			boolean matched = false;
+			for (DamageModifier existingBuff : damageBuffs) {
+				if (existingBuff.getDamageType().equals(newBuff.getDamageType())
+					&& existingBuff.getType().equals(newBuff.getType())) {
+					existingBuff.setAmount(
+						existingBuff.getAmount() + newBuff.getAmount());
+					matched = true;
+					break;
+				}
+			}
+			if (!matched) {
+				damageBuffs.add(newBuff.copy());
+			}
+		}
+
+		for (DamageModifier newBuff : newStats.getResistanceBuffs()) {
+			boolean matched = false;
+			for (DamageModifier existingBuff : resistanceBuffs) {
+				if (!(existingBuff.getDamageType()
+					.equals(newBuff.getDamageType())
+					&& existingBuff.getType().equals(newBuff.getType()))) {
+					continue;
+				}
+				existingBuff
+					.setAmount(existingBuff.getAmount() + newBuff.getAmount());
+				matched = true;
+			}
+			if (!matched) {
+				resistanceBuffs.add(newBuff.copy());
+			}
+		}
+	}
 
 	/**
 	 * Return the combined stats that include all base item stats and affixes.
@@ -118,60 +223,22 @@ public class Equipment extends Item {
 			resistanceBuffs.add(modifier.copy());
 		}
 
-		for (Affix affix : this.getAffixes()) {
-			ItemStats affixStats = affix.getItemStats();
-
-			for (AttributeModifier newBuff : affixStats.getAttributeBuffs()) {
-				boolean matched = false;
-				for (AttributeModifier existingBuff : attributeBuffs) {
-					if (existingBuff.getAttribute()
-						.equals(newBuff.getAttribute())
-						&& existingBuff.getType().equals(newBuff.getType())) {
-						existingBuff.setAmount(
-							existingBuff.getAmount() + newBuff.getAmount());
-						matched = true;
-						break;
-					}
-				}
-				if (!matched) {
-					attributeBuffs.add(newBuff.copy());
-				}
-			}
-
-			for (DamageModifier newBuff : affixStats.getDamageBuffs()) {
-				boolean matched = false;
-				for (DamageModifier existingBuff : damageBuffs) {
-					if (existingBuff.getDamageType()
-						.equals(newBuff.getDamageType())
-						&& existingBuff.getType().equals(newBuff.getType())) {
-						existingBuff.setAmount(
-							existingBuff.getAmount() + newBuff.getAmount());
-						matched = true;
-						break;
-					}
-				}
-				if (!matched) {
-					damageBuffs.add(newBuff.copy());
-				}
-			}
-
-			for (DamageModifier newBuff : affixStats.getResistanceBuffs()) {
-				boolean matched = false;
-				for (DamageModifier existingBuff : resistanceBuffs) {
-					if (!(existingBuff.getDamageType()
-						.equals(newBuff.getDamageType())
-						&& existingBuff.getType().equals(newBuff.getType()))) {
-						continue;
-					}
-					existingBuff.setAmount(
-						existingBuff.getAmount() + newBuff.getAmount());
-					matched = true;
-				}
-				if (!matched) {
-					resistanceBuffs.add(newBuff.copy());
-				}
-			}
+		if (this.prefix != null) {
+			this.addStats(this.prefix.getItemStats());
 		}
+		if (this.suffix != null) {
+			this.addStats(this.suffix.getItemStats());
+		}
+		if (this.gem1 != null) {
+			this.addStats(this.gem1.getItemStats());
+		}
+		if (this.gem2 != null) {
+			this.addStats(this.gem2.getItemStats());
+		}
+		if (this.augment != null) {
+			this.addStats(this.augment.getItemStats());
+		}
+
 		return this.combinedStats;
 	}
 

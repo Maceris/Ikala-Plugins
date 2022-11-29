@@ -468,9 +468,29 @@ class ItemGenerator {
 		equipment
 			.setLevelRequirement(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
 		equipment.setItemStats(ItemGenerator.getItemStats());
-		List<Affix> affixes = new ArrayList<>();
-		affixes.add(ItemGenerator.getAffix());
-		equipment.setAffixes(affixes);
+		Affix affix = ItemGenerator.getAffix();
+		switch (affix.getAffixType()) {
+			case PREFIX:
+				equipment.setPrefix(affix);
+				break;
+			case SUFFIX:
+				equipment.setSuffix(affix);
+				break;
+			default:
+				break;
+		}
+
+		Component gem1 = ItemGenerator.getComponent();
+		gem1.setComponentType(ComponentType.GEM);
+		equipment.setGem1(gem1);
+
+		Component gem2 = ItemGenerator.getComponent();
+		gem2.setComponentType(ComponentType.GEM);
+		equipment.setGem1(gem2);
+
+		Component augment = ItemGenerator.getComponent();
+		augment.setComponentType(ComponentType.AUGMENT);
+		equipment.setGem1(augment);
 	}
 
 	/**
@@ -487,8 +507,5 @@ class ItemGenerator {
 		template
 			.setLevelRequirement(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
 		template.setItemStatsTemplate(ItemGenerator.getItemStatsTemplate());
-		List<Affix> affixes = new ArrayList<>();
-		affixes.add(ItemGenerator.getAffix());
-		template.setAffixes(affixes);
 	}
 }
