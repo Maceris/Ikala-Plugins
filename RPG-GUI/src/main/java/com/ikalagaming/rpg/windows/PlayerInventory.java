@@ -2,6 +2,7 @@ package com.ikalagaming.rpg.windows;
 
 import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.inventory.InvUtil;
 import com.ikalagaming.inventory.Inventory;
 import com.ikalagaming.item.Accessory;
 import com.ikalagaming.item.Armor;
@@ -71,7 +72,7 @@ public class PlayerInventory implements GUIWindow {
 
 	@Override
 	public void draw() {
-		ImGui.setNextWindowPos(200, 200, ImGuiCond.Once);
+		ImGui.setNextWindowPos(650, 200, ImGuiCond.Once);
 		ImGui.setNextWindowSize(650, 650, ImGuiCond.Once);
 		ImGui.begin("Inventory");
 
@@ -107,6 +108,22 @@ public class PlayerInventory implements GUIWindow {
 								.getItem(this.itemDragInfo.getSourceIndex())
 								.get().getID());
 							ImGui.endDragDropSource();
+						}
+
+						if (InvUtil.canStack(item)) {
+							float x = ImGui.getCursorScreenPosX();
+							float y = ImGui.getCursorScreenPosY() - 20;
+							final int count =
+								this.inventory.getItemCount(position);
+							final int digits =
+								Math.max(1, (int) Math.log10(count));
+
+							ImGui.getWindowDrawList().addRectFilled(x, y,
+								x + 10 * digits, y + 15,
+								ImGui.colorConvertFloat4ToU32(0f, 0f, 0f, 1f));
+							ImGui.getWindowDrawList().addText(x, y,
+								ImGui.colorConvertFloat4ToU32(1f, 1f, 1f, 1f),
+								count + "");
 						}
 					}
 					else {

@@ -20,7 +20,7 @@ public class ImageWindow implements GUIWindow {
 	@Override
 	public void draw() {
 		ImGui.setNextWindowPos(410, 10, ImGuiCond.Once);
-		ImGui.setNextWindowSize(800, 400, ImGuiCond.Once);
+		ImGui.setNextWindowSize(600, 500, ImGuiCond.Once);
 		ImGui.begin("Textures");
 
 		if (ImGui.arrowButton("Decr ID", 0)) {
@@ -35,7 +35,7 @@ public class ImageWindow implements GUIWindow {
 
 		final int id = this.textureID.get();
 		if (GL11.glIsTexture(id)) {
-			ImGui.image(id, 100, 100);
+			ImGui.image(id, 500, 500);
 		}
 		else {
 			ImGui.text("Not a texture!");
