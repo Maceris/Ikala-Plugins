@@ -3,7 +3,6 @@ package com.ikalagaming.item;
 import com.ikalagaming.item.template.AccessoryTemplate;
 import com.ikalagaming.item.template.ArmorTemplate;
 import com.ikalagaming.item.template.AttributeModifierTemplate;
-import com.ikalagaming.item.template.ComponentTemplate;
 import com.ikalagaming.item.template.DamageModifierTemplate;
 import com.ikalagaming.item.template.EquipmentTemplate;
 import com.ikalagaming.item.template.ItemStatsTemplate;
@@ -109,21 +108,6 @@ public class ItemRoller {
 		modifier.setAttribute(template.getAttribute());
 		modifier.setType(template.getType());
 		return modifier;
-	}
-
-	/**
-	 * Roll a component based on a template.
-	 *
-	 * @param template The template to generate a component from.
-	 * @return The newly generated component.
-	 */
-	public static Component rollComponent(ComponentTemplate template) {
-		Component component = new Component();
-		ItemRoller.copyItemFields(component, template);
-		component.setComponentType(template.getComponentType());
-		component
-			.setItemStats(ItemRoller.rollItemStats(template.getItemStats()));
-		return component;
 	}
 
 	/**

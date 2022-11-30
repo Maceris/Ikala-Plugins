@@ -3,7 +3,6 @@ package com.ikalagaming.item;
 import com.ikalagaming.item.template.AccessoryTemplate;
 import com.ikalagaming.item.template.ArmorTemplate;
 import com.ikalagaming.item.template.AttributeModifierTemplate;
-import com.ikalagaming.item.template.ComponentTemplate;
 import com.ikalagaming.item.template.DamageModifierTemplate;
 import com.ikalagaming.item.template.EquipmentTemplate;
 import com.ikalagaming.item.template.ItemStatsTemplate;
@@ -161,24 +160,6 @@ class ItemRollerTest {
 	}
 
 	/**
-	 * Match the fields between the two item criteria.
-	 *
-	 * @param expected The expected criteria.
-	 * @param actual The actual criteria.
-	 */
-	private static void matchItemCriteria(ItemCriteria expected,
-		ItemCriteria actual) {
-		ItemRollerTest.matchLists(expected.getAccessoryTypes(),
-			actual.getAccessoryTypes());
-		ItemRollerTest.matchLists(expected.getArmorTypes(),
-			actual.getArmorTypes());
-		ItemRollerTest.matchLists(expected.getItemTypes(),
-			actual.getItemTypes());
-		ItemRollerTest.matchLists(expected.getWeaponTypes(),
-			actual.getWeaponTypes());
-	}
-
-	/**
 	 * Match the item fields between the two items.
 	 *
 	 * @param expected The expected item.
@@ -209,19 +190,6 @@ class ItemRollerTest {
 	}
 
 	/**
-	 * Check that the two lists are equal.
-	 *
-	 * @param <T> The type of item in the list.
-	 * @param expected The expected list of items.
-	 * @param actual The actual list of items.
-	 */
-	private static <T> void matchLists(List<T> expected, List<T> actual) {
-		Assertions.assertEquals(expected.size(), actual.size());
-		Assertions.assertTrue(expected.containsAll(actual));
-		Assertions.assertTrue(actual.containsAll(expected));
-	}
-
-	/**
 	 * Roll an accessory from template and make sure the results are reasonable.
 	 */
 	@Test
@@ -242,22 +210,6 @@ class ItemRollerTest {
 		Armor armor = ItemRoller.rollArmor(template);
 		ItemRollerTest.matchEquipmentFields(template, armor);
 		Assertions.assertEquals(template.getArmorType(), armor.getArmorType());
-	}
-
-	/**
-	 * Roll a component from template and make sure the results are reasonable.
-	 */
-	@Test
-	void testRollComponent() {
-		ComponentTemplate template = ItemGenerator.getComponentTemplate();
-		Component component = ItemRoller.rollComponent(template);
-		ItemRollerTest.matchItemFields(template, component);
-		Assertions.assertEquals(template.getComponentType(),
-			component.getComponentType());
-		ItemRollerTest.matchItemStats(template.getItemStats(),
-			component.getItemStats());
-		ItemRollerTest.matchItemCriteria(template.getItemCriteria(),
-			component.getItemCriteria());
 	}
 
 	/**
