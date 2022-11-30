@@ -88,6 +88,7 @@ public class Render {
 		GL.createCapabilities();
 		GL11.glEnable(GL13.GL_MULTISAMPLE);
 		GL11.glEnable(GL11.GL_DEPTH_TEST);
+		GL11.glEnable(GL11.GL_CULL_FACE);
 
 		// Support for transparencies
 		GL11.glEnable(GL11.GL_BLEND);
