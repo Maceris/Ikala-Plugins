@@ -21,6 +21,7 @@ import imgui.flag.ImGuiCol;
 import imgui.flag.ImGuiCond;
 import imgui.flag.ImGuiDragDropFlags;
 import imgui.flag.ImGuiTableFlags;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 
@@ -60,6 +61,7 @@ public class PlayerInventory implements GUIWindow {
 	private static final int SLOT_HEIGHT = 50;
 
 	private InventoryDrag itemDragInfo;
+	@Getter
 	private Inventory inventory;
 
 	/**

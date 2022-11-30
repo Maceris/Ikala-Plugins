@@ -20,6 +20,11 @@ import com.ikalagaming.item.enums.ItemType;
 import com.ikalagaming.item.enums.ModifierType;
 import com.ikalagaming.item.enums.Quality;
 import com.ikalagaming.item.enums.WeaponType;
+import com.ikalagaming.item.template.AccessoryTemplate;
+import com.ikalagaming.item.template.AttributeModifierTemplate;
+import com.ikalagaming.item.template.DamageModifierTemplate;
+import com.ikalagaming.item.template.EquipmentTemplate;
+import com.ikalagaming.item.template.ItemStatsTemplate;
 
 import imgui.ImGui;
 
@@ -40,6 +45,18 @@ public class ItemRendering {
 		ImGui
 			.text("Accessory Type: " + accessory.getAccessoryType().toString());
 		ItemRendering.drawEquipmentInfo(accessory);
+	}
+
+	/**
+	 * Draw details for an accessory.
+	 *
+	 * @param accessory The accessory to draw details for.
+	 */
+	public static void drawAccessoryTemplateInfo(AccessoryTemplate accessory) {
+		ItemRendering.drawEquipmentTemplateName(accessory);
+		ImGui
+			.text("Accessory Type: " + accessory.getAccessoryType().toString());
+		ItemRendering.drawEquipmentTemplateInfo(accessory);
 	}
 
 	/**
@@ -135,6 +152,27 @@ public class ItemRendering {
 	}
 
 	/**
+	 * Draw details for equipment.
+	 *
+	 * @param equipment The equipment to draw details for.
+	 */
+	public static void drawEquipmentTemplateInfo(EquipmentTemplate equipment) {
+		ImGui.text("Item Level: " + equipment.getItemLevel());
+		ImGui.text("Quality: ");
+		ImGui.sameLine();
+		ImGui.textColored(ItemRendering.getQualityColor(equipment.getQuality()),
+			equipment.getQuality().toString());
+		ImGui.text("Level Requirement: " + equipment.getLevelRequirement());
+		ImGui.text("Attribute Requirements:");
+		for (AttributeModifierTemplate mod : equipment
+			.getAttributeRequirements()) {
+			ImGui.bulletText(
+				ItemRendering.modifierText(mod) + " +/- " + mod.getVariance());
+		}
+		ItemRendering.drawItemStatsTemplate(equipment.getItemStatsTemplate());
+	}
+
+	/**
 	 * Draw a name including prefixes and affixes.
 	 *
 	 * @param equipment The equipment to draw a name for.
@@ -161,6 +199,17 @@ public class ItemRendering {
 	}
 
 	/**
+	 * Draw a name including prefixes and affixes.
+	 *
+	 * @param equipment The equipment template to draw a name for.
+	 */
+	private static void drawEquipmentTemplateName(EquipmentTemplate equipment) {
+		ImGui.text("Name: ");
+		ImGui.textColored(ItemRendering.getQualityColor(equipment.getQuality()),
+			equipment.getID());
+	}
+
+	/**
 	 * Draw item stats, used as part of drawing item details.
 	 *
 	 * @param itemStats The item stats to draw.
@@ -184,6 +233,36 @@ public class ItemRendering {
 			ImGui.setCursorPosX(
 				ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing());
 			ImGui.bulletText(ItemRendering.modifierText(mod));
+		}
+	}
+
+	/**
+	 * Draw item stats template, used as part of drawing item details.
+	 *
+	 * @param itemStats The item stats template to draw.
+	 */
+	public static void drawItemStatsTemplate(ItemStatsTemplate itemStats) {
+		ImGui.text("Item Stats");
+		ImGui.bulletText("Damage Buffs");
+		for (DamageModifierTemplate mod : itemStats.getDamageBuffs()) {
+			ImGui.setCursorPosX(
+				ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing());
+			ImGui.bulletText(
+				ItemRendering.modifierText(mod) + " +/- " + mod.getVariance());
+		}
+		ImGui.bulletText("Resistance Buffs");
+		for (DamageModifierTemplate mod : itemStats.getResistanceBuffs()) {
+			ImGui.setCursorPosX(
+				ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing());
+			ImGui.bulletText(
+				ItemRendering.modifierText(mod) + " +/- " + mod.getVariance());
+		}
+		ImGui.bulletText("Attribute Buffs");
+		for (AttributeModifierTemplate mod : itemStats.getAttributeBuffs()) {
+			ImGui.setCursorPosX(
+				ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing());
+			ImGui.bulletText(
+				ItemRendering.modifierText(mod) + " +/- " + mod.getVariance());
 		}
 	}
 

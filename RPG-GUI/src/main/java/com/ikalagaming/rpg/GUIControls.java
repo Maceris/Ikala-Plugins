@@ -11,7 +11,7 @@ import com.ikalagaming.item.ItemPlugin;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.rpg.windows.ImageWindow;
-import com.ikalagaming.rpg.windows.ItemCatalog;
+import com.ikalagaming.rpg.windows.ItemCatalogWindow;
 import com.ikalagaming.rpg.windows.PlayerInventory;
 import com.ikalagaming.rpg.windows.SceneControls;
 
@@ -38,7 +38,7 @@ public class GUIControls implements GuiInstance {
 	private Texture itemTexture;
 
 	private PlayerInventory windowInventory;
-	private ItemCatalog windowCatalog;
+	private ItemCatalogWindow windowCatalog;
 	private SceneControls windowSceneControls;
 	private ImageWindow windowImages;
 
@@ -59,8 +59,9 @@ public class GUIControls implements GuiInstance {
 		this.windowInventory = new PlayerInventory();
 		this.windowInventory.setup(scene);
 
-		this.windowCatalog = new ItemCatalog();
+		this.windowCatalog = new ItemCatalogWindow();
 		this.windowCatalog.setup(scene);
+		this.windowCatalog.setInventory(this.windowInventory.getInventory());
 
 		this.windowSceneControls = new SceneControls();
 		this.windowSceneControls.setup(scene);
