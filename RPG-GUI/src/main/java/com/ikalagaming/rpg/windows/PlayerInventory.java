@@ -118,7 +118,7 @@ public class PlayerInventory implements GUIWindow {
 							final int count =
 								this.inventory.getItemCount(position);
 							final int digits =
-								Math.max(1, (int) Math.log10(count));
+								Math.max(1, (int) (Math.log10(count) + 1));
 
 							ImGui.getWindowDrawList().addRectFilled(x, y,
 								x + 10 * digits, y + 15,
