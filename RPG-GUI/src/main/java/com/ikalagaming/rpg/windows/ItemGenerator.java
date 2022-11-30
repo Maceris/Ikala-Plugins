@@ -29,7 +29,6 @@ import com.ikalagaming.item.enums.WeaponType;
 import com.ikalagaming.item.template.AccessoryTemplate;
 import com.ikalagaming.item.template.ArmorTemplate;
 import com.ikalagaming.item.template.AttributeModifierTemplate;
-import com.ikalagaming.item.template.ComponentTemplate;
 import com.ikalagaming.item.template.DamageModifierTemplate;
 import com.ikalagaming.item.template.EquipmentTemplate;
 import com.ikalagaming.item.template.ItemStatsTemplate;
@@ -203,29 +202,6 @@ class ItemGenerator {
 			+ ItemGenerator.nextID.getAndIncrement());
 		component.setItemStats(ItemGenerator.getItemStats());
 		component.setItemCriteria(ItemGenerator.getItemCriteria());
-
-		return component;
-	}
-
-	/**
-	 * Generate a random component template.
-	 *
-	 * @return The randomly generated component template.
-	 */
-	public static ComponentTemplate getComponentTemplate() {
-		ComponentTemplate component = new ComponentTemplate();
-
-		component.setItemType(ItemType.COMPONENT);
-		component.setItemLevel(Math.abs(ItemGenerator.rand.nextInt(99)) + 1);
-		component
-			.setQuality(ItemGenerator.random.selectEnumValue(Quality.class));
-		component.setComponentType(
-			ItemGenerator.random.selectEnumValue(ComponentType.class));
-		component.setID(component.getItemType().getPrefix()
-			+ component.getComponentType().getPrefix()
-			+ ItemGenerator.nextID.getAndIncrement());
-		component.setItemStats(ItemGenerator.getItemStatsTemplate());
-		component.setLevelRequirement(ItemGenerator.rand.nextInt(100));
 
 		return component;
 	}
