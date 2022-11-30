@@ -75,7 +75,7 @@ public class PlayerInventory implements GUIWindow {
 	@Override
 	public void draw() {
 		ImGui.setNextWindowPos(650, 200, ImGuiCond.Once);
-		ImGui.setNextWindowSize(650, 650, ImGuiCond.Once);
+		ImGui.setNextWindowSize(650, 750, ImGuiCond.Once);
 		ImGui.begin("Inventory");
 
 		if (ImGui.beginTable("InventoryGrid", 10,
@@ -194,6 +194,19 @@ public class PlayerInventory implements GUIWindow {
 			}
 			ImGui.endTable();
 		}
+
+		ImGui.button("Trash", PlayerInventory.SLOT_WIDTH,
+			PlayerInventory.SLOT_HEIGHT);
+		if (ImGui.beginDragDropTarget()) {
+			InventoryDrag payload =
+				ImGui.acceptDragDropPayload("ItemDrag", InventoryDrag.class);
+			if (payload != null) {
+				payload.setDragInProgress(false);
+				this.inventory.clearSlot(payload.getSourceIndex());
+			}
+			ImGui.endDragDropTarget();
+		}
+
 		ImGui.end();
 	}
 

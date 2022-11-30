@@ -5,6 +5,7 @@ import com.ikalagaming.inventory.Inventory;
 import com.ikalagaming.item.Armor;
 import com.ikalagaming.item.Component;
 import com.ikalagaming.item.Consumable;
+import com.ikalagaming.item.Item;
 import com.ikalagaming.item.ItemCatalog;
 import com.ikalagaming.item.ItemRoller;
 import com.ikalagaming.item.Junk;
@@ -26,7 +27,7 @@ import lombok.Setter;
  */
 public class ItemCatalogWindow implements GUIWindow {
 	/**
-	 * Show inventory full popup.
+	 * Show inventory full pop-up.
 	 */
 	private static void showInventoryFullPopup() {
 		if (ImGui.beginPopupModal("Full Inventory")) {
@@ -45,10 +46,9 @@ public class ItemCatalogWindow implements GUIWindow {
 	private Material demoMaterial;
 	private Quest demoQuest;
 	private Weapon demoWeapon;
-
 	private ItemCatalog catalog;
-	private int currentIndex;
 
+	private int currentIndex;
 	@Setter
 	private Inventory inventory;
 
@@ -92,10 +92,9 @@ public class ItemCatalogWindow implements GUIWindow {
 					ImGui.endDisabled();
 				}
 				ImGui.sameLine();
-				if (ImGui.button("Roll") && !this.inventory
-					.addItem(ItemRoller.rollAccessory(this.catalog
-						.getAccessoryTemplates().get(this.currentIndex)))) {
-					ImGui.openPopup("Full Inventory");
+				if (ImGui.button("Roll")) {
+					this.tryAddingItem(ItemRoller.rollAccessory(this.catalog
+						.getAccessoryTemplates().get(this.currentIndex)));
 				}
 				ItemCatalogWindow.showInventoryFullPopup();
 				ItemRendering.drawAccessoryTemplateInfo(this.catalog
@@ -156,5 +155,16 @@ public class ItemCatalogWindow implements GUIWindow {
 		this.catalog.getAccessoryTemplates()
 			.add(ItemGenerator.getAccessoryTemplate());
 
+	}
+
+	/**
+	 * Try to add an item to the inventory, and show a pop-up if it can't.
+	 *
+	 * @param item The item to try adding.
+	 */
+	private void tryAddingItem(Item item) {
+		if (!this.inventory.addItem(item)) {
+			ImGui.openPopup("Full Inventory");
+		}
 	}
 }
