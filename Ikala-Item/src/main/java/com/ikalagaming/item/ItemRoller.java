@@ -156,6 +156,7 @@ public class ItemRoller {
 		weapon.setMaxDamage(template.getMaxDamage());
 		weapon.setMinDamage(template.getMinDamage());
 		weapon.setWeaponType(template.getWeaponType());
+		weapon.setDamageType(template.getDamageType());
 		return weapon;
 	}
 

@@ -1,5 +1,6 @@
 package com.ikalagaming.item;
 
+import com.ikalagaming.attributes.DamageType;
 import com.ikalagaming.item.enums.WeaponType;
 
 import lombok.EqualsAndHashCode;
@@ -22,15 +23,13 @@ import javax.persistence.Enumerated;
 public class Weapon extends Equipment {
 
 	/**
-	 * The minimum damage that this weapon does, usually damage done per hit is
-	 * randomly distributed within a range of values.
+	 * The type of damage the weapon does.
 	 *
-	 * @param minDamage The lower bound of default damage for this type of
-	 *            weapon.
-	 * @return The lower bound of default damage for this type of weapon.
+	 * @param damageType The type of damage the weapon does.
+	 * @return The type of damage the weapon does.
 	 */
-	@Column(name = "MIN_DAMAGE")
-	private Integer minDamage;
+	@Column(name = "DAMAGE_TYPE")
+	private DamageType damageType;
 
 	/**
 	 * The maximum damage that this weapon does, usually damage done per hit is
@@ -42,6 +41,18 @@ public class Weapon extends Equipment {
 	 */
 	@Column(name = "MAX_DAMAGE")
 	private Integer maxDamage;
+
+	/**
+	 * The minimum damage that this weapon does, usually damage done per hit is
+	 * randomly distributed within a range of values.
+	 *
+	 * @param minDamage The lower bound of default damage for this type of
+	 *            weapon.
+	 * @return The lower bound of default damage for this type of weapon.
+	 */
+	@Column(name = "MIN_DAMAGE")
+	private Integer minDamage;
+
 	/**
 	 * What kind of weapon this is.
 	 *

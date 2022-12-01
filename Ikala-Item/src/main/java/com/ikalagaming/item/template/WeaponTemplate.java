@@ -1,5 +1,6 @@
 package com.ikalagaming.item.template;
 
+import com.ikalagaming.attributes.DamageType;
 import com.ikalagaming.item.enums.WeaponType;
 
 import lombok.EqualsAndHashCode;
@@ -20,6 +21,16 @@ import javax.persistence.Enumerated;
 @Getter
 @Setter
 public class WeaponTemplate extends EquipmentTemplate {
+
+	/**
+	 * The type of damage the weapon does.
+	 *
+	 * @param damageType The type of damage the weapon does.
+	 * @return The type of damage the weapon does.
+	 */
+	@Column(name = "DAMAGE_TYPE")
+	private DamageType damageType;
+
 	/**
 	 * The minimum damage that this weapon does, usually damage done per hit is
 	 * randomly distributed within a range of values.
