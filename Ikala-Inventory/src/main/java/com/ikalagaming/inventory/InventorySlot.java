@@ -14,7 +14,7 @@ import java.util.Optional;
  * @author Ches Burks
  *
  */
-public class InventorySlot {
+class InventorySlot {
 
 	/**
 	 * Combine items from the source slot into the destination slot. If the

@@ -3,7 +3,9 @@ package com.ikalagaming.inventory;
 import com.ikalagaming.item.Item;
 
 import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.Setter;
 
@@ -15,7 +17,9 @@ import lombok.Setter;
  */
 @Getter
 @Setter(value = AccessLevel.PACKAGE)
-public class ItemStack {
+@NoArgsConstructor
+@AllArgsConstructor
+class ItemStack {
 	/**
 	 * The item that is stored in the inventory slot.
 	 * 
@@ -45,5 +49,5 @@ public class ItemStack {
 		}
 		return stack1.item.getID().equals(stack2.item.getID());
 	}
-	
+
 }

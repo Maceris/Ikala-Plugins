@@ -154,6 +154,38 @@ public class Inventory extends Component<Inventory> {
 	}
 
 	/**
+	 * Checks if the two slots both have stackable items of the same type.
+	 *
+	 * @param first The first slot.
+	 * @param second The second slot.
+	 * @return Whether the slots could stack together, without taking into
+	 *         account stack size.
+	 */
+	public boolean areSameType(int first, int second) {
+		if (first < 0 || first > this.size || second < 0 || second > this.size
+			|| first == second) {
+			return false;
+		}
+
+		InventorySlot firstSlot = this.slots[first];
+		InventorySlot secondSlot = this.slots[second];
+
+		if (firstSlot.isEmpty() || secondSlot.isEmpty()
+			|| !firstSlot.isStackable() || !secondSlot.isStackable()) {
+			return false;
+		}
+
+		if (firstSlot.getItem().isEmpty() || secondSlot.getItem().isEmpty()) {
+			return false;
+		}
+
+		String firstID = firstSlot.getItem().get().getID();
+		String secondID = secondSlot.getItem().get().getID();
+
+		return firstID.equals(secondID);
+	}
+
+	/**
 	 * Checks if the inventory has room to fit the given item. If it's not
 	 * stackable it will only fit in an empty slot, but if stackable we also
 	 * check if there is a stack of the same item that can fit it.
@@ -229,6 +261,27 @@ public class Inventory extends Component<Inventory> {
 	}
 
 	/**
+	 * Combine two slots, both of which must contain stackable items that can
+	 * stack together or else nothing will happen.
+	 *
+	 * @param source The source slot.
+	 * @param destination The destination slot.
+	 * @return Whether the source slot is now empty.
+	 */
+	public boolean combineSlots(int source, int destination) {
+		if (source < 0 || source > this.size || destination < 0
+			|| destination > this.size || source == destination) {
+			return false;
+		}
+		if (InventorySlot.combine(this.slots[source],
+			this.slots[destination])) {
+			this.slots[source].clear();
+			return true;
+		}
+		return false;
+	}
+
+	/**
 	 * Fetch the item in a given slot. Invalid slots are considered empty.
 	 *
 	 * @param slotNumber The slot number to fetch.
@@ -253,6 +306,21 @@ public class Inventory extends Component<Inventory> {
 			return 0;
 		}
 		return this.slots[slotNumber].getCount();
+	}
+
+	/**
+	 * Whether there is an empty slot in the inventory.
+	 *
+	 * @return Whether there is an empty slot.
+	 */
+	public boolean hasEmptySlot() {
+		for (int i = 0; i < this.size; ++i) {
+			InventorySlot slot = this.slots[i];
+			if (slot.isEmpty()) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -312,6 +380,40 @@ public class Inventory extends Component<Inventory> {
 		stack.setItem(stackable);
 		stack.setCount(Math.min(count, InvUtil.maxStackSize(stackable)));
 		this.slots[slotNumber].setItemStack(stack);
+	}
+
+	/**
+	 * Split the stack at the specified position, removing the specified number
+	 * of items and placing them into a separate stack.
+	 *
+	 * @param slotNumber The slot we are splitting.
+	 * @param amountToRemove How many items to take out and put in a new stack.
+	 * @return Whether we could successfully split the stack.
+	 */
+	public boolean splitStack(int slotNumber, int amountToRemove) {
+		if (slotNumber < 0 || slotNumber > this.size) {
+			return false;
+		}
+		InventorySlot slot = this.slots[slotNumber];
+		if (!slot.isStackable()) {
+			return false;
+		}
+		Optional<ItemStack> maybeStack = slot.getItemStack();
+		if (maybeStack.isEmpty()) {
+			return false;
+		}
+		ItemStack oldStack = maybeStack.get();
+		if (oldStack.getCount() <= amountToRemove) {
+			return false;
+		}
+
+		ItemStack newStack = new ItemStack(oldStack.getItem(), amountToRemove);
+		if (!this.hasEmptySlot()) {
+			return false;
+		}
+		this.addToEmptySlot(newStack);
+		oldStack.setCount(oldStack.getCount() - amountToRemove);
+		return true;
 	}
 
 	/**
