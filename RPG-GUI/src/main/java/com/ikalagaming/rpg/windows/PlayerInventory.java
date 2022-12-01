@@ -13,7 +13,6 @@ import com.ikalagaming.item.Junk;
 import com.ikalagaming.item.Material;
 import com.ikalagaming.item.Quest;
 import com.ikalagaming.item.Weapon;
-import com.ikalagaming.item.enums.ItemType;
 import com.ikalagaming.rpg.utils.ItemRendering;
 
 import imgui.ImGui;
@@ -24,6 +23,8 @@ import imgui.flag.ImGuiTableFlags;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
+
+import java.util.Optional;
 
 /**
  * An inventory for items.
@@ -100,33 +101,8 @@ public class PlayerInventory implements GUIWindow {
 						this.drawItem(item, row, col);
 						ImGui.popStyleColor();
 
-						if (ImGui
-							.beginDragDropSource(ImGuiDragDropFlags.None)) {
-							ImGui.setDragDropPayload("ItemDrag",
-								this.itemDragInfo);
-
-							this.itemDragInfo.setDragInProgress(true);
-							ImGui.text(this.inventory
-								.getItem(this.itemDragInfo.getSourceIndex())
-								.get().getID());
-							ImGui.endDragDropSource();
-						}
-
-						if (InvUtil.canStack(item)) {
-							float x = ImGui.getCursorScreenPosX();
-							float y = ImGui.getCursorScreenPosY() - 20;
-							final int count =
-								this.inventory.getItemCount(position);
-							final int digits =
-								Math.max(1, (int) (Math.log10(count) + 1));
-
-							ImGui.getWindowDrawList().addRectFilled(x, y,
-								x + 10 * digits, y + 15,
-								ImGui.colorConvertFloat4ToU32(0f, 0f, 0f, 1f));
-							ImGui.getWindowDrawList().addText(x, y,
-								ImGui.colorConvertFloat4ToU32(1f, 1f, 1f, 1f),
-								count + "");
-						}
+						setupDragDropSource();
+						drawItemCount(position, item);
 					}
 					else {
 						ImGui.invisibleButton(
@@ -134,60 +110,27 @@ public class PlayerInventory implements GUIWindow {
 							PlayerInventory.SLOT_WIDTH,
 							PlayerInventory.SLOT_HEIGHT);
 					}
-					if (ImGui.beginDragDropTarget()) {
-						InventoryDrag payload = ImGui.acceptDragDropPayload(
-							"ItemDrag", InventoryDrag.class);
-						if (payload != null) {
-							payload.setDragInProgress(false);
-							this.inventory.swapSlots(payload.getSourceIndex(),
-								position);
-						}
-						ImGui.endDragDropTarget();
-					}
+
+					setupDragDropTarget(position);
+
 					if (this.inventory.hasItem(position)) {
 						Item item = this.inventory.getItem(position).get();
-						ItemType type = item.getItemType();
 						if (ImGui.isItemHovered()) {
 							if (!ImGui.isMouseDown(0)) {
 								this.itemDragInfo.setDragInProgress(false);
 							}
 							this.itemDragInfo.setIndex(position);
-							ImGui.beginTooltip();
-							switch (type) {
-								case ACCESSORY:
-									ItemRendering
-										.drawAccessoryInfo((Accessory) item);
-									break;
-								case ARMOR:
-									ItemRendering.drawArmorInfo((Armor) item);
-									break;
-								case COMPONENT:
-									ItemRendering
-										.drawComponentInfo((Component) item);
-									break;
-								case CONSUMABLE:
-									ItemRendering
-										.drawConsumableInfo((Consumable) item);
-									break;
-								case JUNK:
-									ItemRendering.drawJunkInfo((Junk) item);
-									break;
-								case MATERIAL:
-									ItemRendering
-										.drawMaterialInfo((Material) item);
-									break;
-								case QUEST:
-									ItemRendering.drawQuestInfo((Quest) item);
-									break;
-								case WEAPON:
-									ItemRendering.drawWeaponInfo((Weapon) item);
-									break;
-								default:
-									ImGui.text("Unrecognized item type "
-										+ item.getItemType().toString());
-									break;
+
+							if (InvUtil.canStack(item)
+								&& ImGui.isMouseClicked(1, false)) {
+								int maxCount =
+									this.inventory.getItemCount(position);
+								if (maxCount >= 2) {
+									this.inventory.splitStack(position,
+										maxCount / 2);
+								}
 							}
-							ImGui.endTooltip();
+							showToolTip(item);
 						}
 					}
 				}
@@ -208,6 +151,103 @@ public class PlayerInventory implements GUIWindow {
 		}
 
 		ImGui.end();
+	}
+
+	/**
+	 * Make the previous item into a drag drop target.
+	 * 
+	 * @param position The position in the inventory the target is in.
+	 */
+	private void setupDragDropTarget(int position) {
+		if (ImGui.beginDragDropTarget()) {
+			InventoryDrag payload =
+				ImGui.acceptDragDropPayload("ItemDrag", InventoryDrag.class);
+			if (payload != null) {
+				payload.setDragInProgress(false);
+
+				Optional<Item> maybeTargetItem =
+					this.inventory.getItem(position);
+				boolean sameType = this.inventory
+					.areSameType(payload.getSourceIndex(), position);
+				if (maybeTargetItem.isEmpty() || !sameType) {
+					this.inventory.swapSlots(payload.getSourceIndex(),
+						position);
+				}
+				else {
+					this.inventory.combineSlots(payload.getSourceIndex(),
+						position);
+				}
+			}
+			ImGui.endDragDropTarget();
+		}
+	}
+
+	/**
+	 * Make the previous item into a drag drop source.
+	 */
+	private void setupDragDropSource() {
+		if (ImGui.beginDragDropSource(ImGuiDragDropFlags.None)) {
+			ImGui.setDragDropPayload("ItemDrag", this.itemDragInfo);
+
+			this.itemDragInfo.setDragInProgress(true);
+			ImGui.text(this.inventory
+				.getItem(this.itemDragInfo.getSourceIndex()).get().getID());
+			ImGui.endDragDropSource();
+		}
+	}
+
+	/**
+	 * Show an information tool tip for the given item.
+	 * 
+	 * @param item The item we are drawing details for.
+	 */
+	private void showToolTip(Item item) {
+		ImGui.beginTooltip();
+		switch (item.getItemType()) {
+			case ACCESSORY:
+				ItemRendering.drawAccessoryInfo((Accessory) item);
+				break;
+			case ARMOR:
+				ItemRendering.drawArmorInfo((Armor) item);
+				break;
+			case COMPONENT:
+				ItemRendering.drawComponentInfo((Component) item);
+				break;
+			case CONSUMABLE:
+				ItemRendering.drawConsumableInfo((Consumable) item);
+				break;
+			case JUNK:
+				ItemRendering.drawJunkInfo((Junk) item);
+				break;
+			case MATERIAL:
+				ItemRendering.drawMaterialInfo((Material) item);
+				break;
+			case QUEST:
+				ItemRendering.drawQuestInfo((Quest) item);
+				break;
+			case WEAPON:
+				ItemRendering.drawWeaponInfo((Weapon) item);
+				break;
+			default:
+				ImGui.text(
+					"Unrecognized item type " + item.getItemType().toString());
+				break;
+		}
+		ImGui.endTooltip();
+	}
+
+	private void drawItemCount(int position, Item item) {
+		if (InvUtil.canStack(item)) {
+			float x = ImGui.getCursorScreenPosX();
+			float y = ImGui.getCursorScreenPosY() - 20;
+			final int count = this.inventory.getItemCount(position);
+			final int digits = Math.max(1, (int) (Math.log10(count) + 1));
+
+			ImGui.getWindowDrawList().addRectFilled(x, y, x + 10 * digits,
+				y + 15, ImGui.colorConvertFloat4ToU32(0f, 0f, 0f, 1f));
+			ImGui.getWindowDrawList().addText(x, y,
+				ImGui.colorConvertFloat4ToU32(1f, 1f, 1f, 1f), count + "");
+		}
 	}
 
 	/**
