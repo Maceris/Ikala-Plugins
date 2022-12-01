@@ -4,4 +4,4 @@ version: 0.0.1
 description: An inventory system
 authors: [maceris]
 main-class: com.ikalagaming.inventory.InventoryPlugin
-dependencies: [Ikala-Item]
+dependencies: [Ikala-Item, EntityComponentSystem]
