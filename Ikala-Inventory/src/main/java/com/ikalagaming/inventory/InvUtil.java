@@ -44,4 +44,12 @@ public class InvUtil {
 				return 1;
 		}
 	}
+
+	/**
+	 * Private constructor so this class is not instantiated.
+	 */
+	private InvUtil() {
+		throw new UnsupportedOperationException(
+			"This utility class should not be instantiated");
+	}
 }
