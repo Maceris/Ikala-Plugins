@@ -1,6 +1,7 @@
 package com.ikalagaming.item;
 
 import com.ikalagaming.attributes.DamageType;
+import com.ikalagaming.item.enums.ItemType;
 import com.ikalagaming.item.enums.WeaponType;
 
 import lombok.EqualsAndHashCode;
@@ -66,5 +67,7 @@ public class Weapon extends Equipment {
 	/**
 	 * Constructs a new weapon object.
 	 */
-	public Weapon() {}
+	public Weapon() {
+		this.setItemType(ItemType.WEAPON);
+	}
 }

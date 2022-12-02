@@ -1,6 +1,7 @@
 package com.ikalagaming.item;
 
 import com.ikalagaming.item.enums.ComponentType;
+import com.ikalagaming.item.enums.ItemType;
 import com.ikalagaming.item.persistence.ItemCriteriaConverter;
 import com.ikalagaming.item.persistence.ItemStatsConverter;
 
@@ -64,5 +65,7 @@ public class Component extends Item {
 	/**
 	 * Constructs a new component.
 	 */
-	public Component() {}
+	public Component() {
+		this.setItemType(ItemType.COMPONENT);
+	}
 }

@@ -1,6 +1,7 @@
 package com.ikalagaming.item;
 
 import com.ikalagaming.item.enums.AccessoryType;
+import com.ikalagaming.item.enums.ItemType;
 
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -41,5 +42,7 @@ public class Accessory extends Equipment {
 	/**
 	 * Construct a new accessory.
 	 */
-	public Accessory() {}
+	public Accessory() {
+		this.setItemType(ItemType.ACCESSORY);
+	}
 }

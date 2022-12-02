@@ -1,6 +1,7 @@
 package com.ikalagaming.item;
 
 import com.ikalagaming.item.enums.ArmorType;
+import com.ikalagaming.item.enums.ItemType;
 
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -41,5 +42,7 @@ public class Armor extends Equipment {
 	/**
 	 * Constructs a new armor item.
 	 */
-	public Armor() {}
+	public Armor() {
+		this.setItemType(ItemType.ARMOR);
+	}
 }

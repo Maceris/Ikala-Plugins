@@ -1,6 +1,7 @@
 package com.ikalagaming.item;
 
 import com.ikalagaming.item.enums.ConsumableType;
+import com.ikalagaming.item.enums.ItemType;
 
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -40,5 +41,7 @@ public class Consumable extends Item {
 	/**
 	 * Constructs a new consumable item.
 	 */
-	public Consumable() {}
+	public Consumable() {
+		this.setItemType(ItemType.CONSUMABLE);
+	}
 }

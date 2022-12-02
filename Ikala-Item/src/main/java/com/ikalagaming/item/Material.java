@@ -1,5 +1,7 @@
 package com.ikalagaming.item;
 
+import com.ikalagaming.item.enums.ItemType;
+
 import javax.persistence.Entity;
 import javax.persistence.Table;
 
@@ -17,4 +19,11 @@ public class Material extends Item {
 	 * The name of the table in the database.
 	 */
 	static final String TABLE_NAME = "MATERIAL";
+
+	/**
+	 * Construct a new material item.
+	 */
+	public Material() {
+		this.setItemType(ItemType.MATERIAL);
+	}
 }
