@@ -32,6 +32,10 @@ class InventorySlot {
 	 */
 	public static boolean combine(@NonNull InventorySlot source,
 		@NonNull InventorySlot destination) {
+		if (source == destination) {
+			// same slot object, don't do anything
+			return false;
+		}
 		if (source.isEmpty()) {
 			// Why did you call the method then?
 			return true;
@@ -74,6 +78,7 @@ class InventorySlot {
 		sourceStack.setCount(sourceStack.getCount() - itemsToTransfer);
 
 		if (sourceStack.getCount() <= 0) {
+			source.clear();
 			return true;
 		}
 
@@ -129,24 +134,13 @@ class InventorySlot {
 	private boolean empty;
 
 	/**
-	 * What slot number this is within its inventory.
-	 *
-	 * @return The slot number.
-	 */
-	@Getter
-	private final int slotNumber;
-
-	/**
 	 * Create a new empty inventory slot.
-	 *
-	 * @param slot The slot number within its inventory.
 	 */
-	public InventorySlot(int slot) {
+	public InventorySlot() {
 		this.empty = true;
 		this.stackable = false;
 		this.individual = null;
 		this.stack = null;
-		this.slotNumber = slot;
 	}
 
 	/**

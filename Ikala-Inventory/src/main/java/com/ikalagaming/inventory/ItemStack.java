@@ -4,6 +4,7 @@ import com.ikalagaming.item.Item;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
@@ -19,6 +20,7 @@ import lombok.Setter;
 @Setter(value = AccessLevel.PACKAGE)
 @NoArgsConstructor
 @AllArgsConstructor
+@EqualsAndHashCode
 class ItemStack {
 	/**
 	 * The item that is stored in the inventory slot.

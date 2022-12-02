@@ -38,7 +38,7 @@ public class Inventory extends Component<Inventory> {
 		this.size = size;
 		this.slots = new InventorySlot[size];
 		for (int i = 0; i < size; ++i) {
-			this.slots[i] = new InventorySlot(i);
+			this.slots[i] = new InventorySlot();
 		}
 	}
 
