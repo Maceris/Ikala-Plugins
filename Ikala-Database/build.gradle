@@ -107,6 +107,7 @@ tasks.named('clean') {
 	delete 'build/src-delomboked'
 	// tests generate this
 	delete 'logs'
+	delete 'bin'
 }
 
 tasks.named('jar') {

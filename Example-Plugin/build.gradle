@@ -44,6 +44,12 @@ idea {
     }
 }
 
+configurations {
+	provided
+	// Make compile extend from our provided configuration so that things added to bundled end up on the compile classpath
+	implementation.extendsFrom(provided)
+}
+
 dependencies {
 	implementation project(':Ikala-Core')
 
@@ -87,6 +93,14 @@ tasks.named('javadoc') {
 
 tasks.named('clean') {
 	delete 'build/src-delomboked'
+	delete 'bin'
 	// tests generate this
 	delete 'logs'
+}
+
+tasks.named('jar') {
+    from {
+        configurations.provided.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
