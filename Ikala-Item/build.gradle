@@ -54,6 +54,7 @@ dependencies {
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
 	testImplementation project(':Ikala-Attributes')
 	testImplementation project(':Random')
+	testImplementation project(':Ikala-Database')
 	
 	// lombok
 	compileOnly "org.projectlombok:lombok:${lombokVersion}"
