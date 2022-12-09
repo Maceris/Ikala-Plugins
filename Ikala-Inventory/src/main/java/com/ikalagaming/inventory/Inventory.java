@@ -3,9 +3,11 @@ package com.ikalagaming.inventory;
 import com.ikalagaming.ecs.Component;
 import com.ikalagaming.item.Equipment;
 import com.ikalagaming.item.Item;
+import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Optional;
 
@@ -15,6 +17,7 @@ import java.util.Optional;
  * @author Ches Burks
  *
  */
+@Slf4j
 public class Inventory extends Component<Inventory> {
 	/**
 	 * The size of the inventory.
@@ -32,9 +35,16 @@ public class Inventory extends Component<Inventory> {
 	/**
 	 * Create a new inventory of a given size.
 	 *
-	 * @param size The number of slots the invetory contains.
+	 * @param size The number of slots the inventory contains.
+	 * @throws IllegalArgumentException If the size is <= 0.
 	 */
 	public Inventory(final int size) {
+		if (size <= 0) {
+			String error = SafeResourceLoader.getString(
+				"INVALID_INVENTORY_SIZE", InventoryPlugin.getResourceBundle());
+			Inventory.log.warn(error);
+			throw new IllegalArgumentException(error);
+		}
 		this.size = size;
 		this.slots = new InventorySlot[size];
 		for (int i = 0; i < size; ++i) {
@@ -86,11 +96,20 @@ public class Inventory extends Component<Inventory> {
 	 * of the same item if possible, then the remainder will go into an empty
 	 * slot.
 	 *
-	 * @param stack The stack to add, which will be reduced and ideally empty
-	 *            after adding.
+	 * @param item The item to insert.
+	 * @param count How many of the items we want to add. If <= 0, nothing
+	 *            happens, and will be reduced to the max stack size if larger.
 	 * @return Whether we could add the items completely.
 	 */
-	public boolean addItemStack(@NonNull ItemStack stack) {
+	public boolean addItem(@NonNull Item item, final int count) {
+		if (count <= 0) {
+			return false;
+		}
+		if (!InvUtil.canStack(item)) {
+			return this.addItem(item);
+		}
+		ItemStack stack =
+			new ItemStack(item, Math.min(count, InvUtil.maxStackSize(item)));
 		if (!this.addToExistingStacks(stack)) {
 			// There is a remainder
 			return this.addToEmptySlot(stack);
@@ -218,21 +237,25 @@ public class Inventory extends Component<Inventory> {
 	/**
 	 * Checks if the inventory has room to fit the given item. If it's not
 	 * stackable it will only fit in an empty slot, but if stackable we also
-	 * check if there are stacks of the same item that can fit it.
+	 * check if there is a stack of the same item that can fit it.
 	 *
-	 * @param stack The item stack we are looking to insert.
+	 * @param item The item we are looking to insert.
+	 * @param amount How many of the item we want to add.
 	 * @return Whether the inventory has room to fit the given item.
 	 */
-	public boolean canFitItemStack(@NonNull ItemStack stack) {
-		final int maxStackSize = InvUtil.maxStackSize(stack.getItem());
-		int remainingAmount = stack.getCount();
+	public boolean canFitItem(@NonNull Item item, int amount) {
+		if (amount <= 0) {
+			return false;
+		}
+		final int maxStackSize = InvUtil.maxStackSize(item);
+		int remainingAmount = Math.min(amount, maxStackSize);
 		for (int i = 0; i < this.size; ++i) {
 			InventorySlot slot = this.slots[i];
 			if (slot.isEmpty()) {
 				return true;
 			}
 			if (!slot.isStackable()
-				|| !ItemStack.isSameType(stack, slot.getItemStack().get())) {
+				|| !item.getID().equals(slot.getItem().get().getID())) {
 				continue;
 			}
 
