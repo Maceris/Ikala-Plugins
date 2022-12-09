@@ -53,6 +53,7 @@ dependencies {
 	compileOnly project(':Ikala-Database')
 	compileOnly project(':Ikala-Inventory')
 	compileOnly project(':EntityComponentSystem')
+	compileOnly project(':Ikala-World')
 	
 	implementation "org.joml:joml:${jomlVersion}"
 	implementation "org.lwjgl:lwjgl:${lwjglVersion}"

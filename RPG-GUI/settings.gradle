@@ -15,3 +15,5 @@ include ':Ikala-Database'
 project(':Ikala-Database').projectDir = new File('../Ikala-Database')
 include ':Ikala-Inventory'
 project(':Ikala-Inventory').projectDir = new File('../Ikala-Inventory')
+include ':Ikala-World'
+project(':Ikala-World').projectDir = new File('../Ikala-World')
