@@ -58,7 +58,7 @@ public class AnimationData {
 	 * @return The data for the current frame.
 	 */
 	public Model.AnimatedFrame getCurrentFrame() {
-		return this.currentAnimation.getFrames().get(this.currentFrameIndex);
+		return this.currentAnimation.frames().get(this.currentFrameIndex);
 	}
 
 	/**
@@ -67,7 +67,7 @@ public class AnimationData {
 	 */
 	public void nextFrame() {
 		int nextFrame = this.currentFrameIndex + 1;
-		if (nextFrame > this.currentAnimation.getFrames().size() - 1) {
+		if (nextFrame > this.currentAnimation.frames().size() - 1) {
 			this.currentFrameIndex = 0;
 		}
 		else {
