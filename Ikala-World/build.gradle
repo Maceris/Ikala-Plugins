@@ -53,9 +53,20 @@ configurations {
 
 dependencies {
 	implementation project(':Ikala-Core')
+	
 	api "org.mapeditor:libtiled:${tiledVersion}"
 	provided "org.mapeditor:libtiled:${tiledVersion}"
-
+	
+	api "javax.xml.bind:jaxb-api:${jaxbAPIVersion}"
+	api "javax.activation:activation:${activationVersion}"
+	api "javax.annotation:javax.annotation-api:${javaxAnnotationVersion}"
+	api "org.glassfish.jaxb:jaxb-runtime:${jaxbRuntimeVersion}"
+	
+	provided "javax.xml.bind:jaxb-api:${jaxbAPIVersion}"
+	provided "javax.activation:activation:${activationVersion}"
+	provided "javax.annotation:javax.annotation-api:${javaxAnnotationVersion}"
+	provided "org.glassfish.jaxb:jaxb-runtime:${jaxbRuntimeVersion}"
+	
 	// Testing
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
 	

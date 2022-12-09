@@ -1,7 +1,6 @@
 package com.ikalagaming.world;
 
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.mapeditor.core.Map;
 
@@ -13,7 +12,6 @@ import org.mapeditor.core.Map;
  */
 @Getter
 @Setter
-@NoArgsConstructor
 public class Level {
 	/**
 	 * The unique name of the level.
@@ -21,7 +19,7 @@ public class Level {
 	 * @param levelName The new name.
 	 * @return The level name.
 	 */
-	private String levelName;
+	private final String levelName;
 
 	/**
 	 * The map that the level consists of.
@@ -30,5 +28,14 @@ public class Level {
 	 * @return The current map.
 	 */
 	private Map map;
-	
+
+	/**
+	 * Create a new level.
+	 * 
+	 * @param name The name of the level.
+	 */
+	public Level(String name) {
+		this.levelName = name;
+	}
+
 }

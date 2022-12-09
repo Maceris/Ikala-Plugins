@@ -1,5 +1,7 @@
 package com.ikalagaming.world.events;
 
+import com.ikalagaming.event.Event;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
@@ -11,7 +13,7 @@ import lombok.Getter;
  */
 @Getter
 @AllArgsConstructor
-public class LevelLoaded {
+public class LevelLoaded extends Event {
 	/**
 	 * The name of the level that was loaded.
 	 * 
