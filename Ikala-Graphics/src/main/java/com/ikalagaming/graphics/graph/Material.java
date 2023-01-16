@@ -87,4 +87,42 @@ public class Material {
 		this.specularColor = Material.DEFAULT_COLOR;
 		this.materialIndex = 0;
 	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if ((obj == null) || !(obj instanceof Material)) {
+			return false;
+		}
+		Material other = (Material) obj;
+
+		final float delta = 0.001f;
+		if (!this.ambientColor.equals(other.ambientColor, delta)) {
+			return false;
+		}
+		if (!this.diffuseColor.equals(other.diffuseColor, delta)) {
+			return false;
+		}
+		if (!this.specularColor.equals(other.specularColor, delta)) {
+			return false;
+		}
+		if (this.normalMapPath == null && other.normalMapPath != null) {
+			return false;
+		}
+		if (this.normalMapPath != null
+			&& !this.normalMapPath.equals(other.normalMapPath)) {
+			return false;
+		}
+		if (this.texturePath == null && other.texturePath != null) {
+			return false;
+		}
+		if (this.texturePath != null
+			&& !this.texturePath.equals(other.texturePath)) {
+			return false;
+		}
+		if (Math.abs(this.reflectance - other.reflectance) > delta) {
+			return false;
+		}
+
+		return true;
+	}
 }

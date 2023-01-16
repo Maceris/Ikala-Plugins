@@ -50,6 +50,8 @@ idea {
 
 dependencies {
 	implementation project(':Ikala-Core')
+	compileOnly project(':Ikala-World')
+	
 	implementation "org.joml:joml:${jomlVersion}"
 	implementation "org.lwjgl:lwjgl:${lwjglVersion}"
 	implementation "org.lwjgl:lwjgl-glfw:${lwjglVersion}"

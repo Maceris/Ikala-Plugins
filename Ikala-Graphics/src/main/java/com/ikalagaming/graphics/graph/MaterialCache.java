@@ -38,13 +38,20 @@ public class MaterialCache {
 	}
 
 	/**
-	 * Add a new material to the cache and give an index to the material.
+	 * Add a new material to the cache and give an index to the material. If we
+	 * can find a valid material that matches the provided one, we reuse that
+	 * one instead of adding a duplicate one.
 	 *
 	 * @param material The material to add to the cache.
 	 * @return The index of the newly added material, which is only valid within
 	 *         this cache instance.
 	 */
 	public int addMaterial(@NonNull Material material) {
+		for (Material mat : this.materialsList) {
+			if (mat.equals(material)) {
+				return mat.getMaterialIndex();
+			}
+		}
 		final int assignedIndex = this.materialsList.size();
 		this.materialsList.add(material);
 		material.setMaterialIndex(assignedIndex);

@@ -8,8 +8,8 @@ package com.ikalagaming.graphics.render;
 
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.GeometryBuffer;
-import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.graph.RenderBuffers;
+import com.ikalagaming.graphics.scene.EntityBatch;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.Getter;
@@ -21,8 +21,7 @@ import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL14;
 import org.lwjgl.opengl.GL30;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Renders things on the screen.
@@ -44,26 +43,32 @@ public class Render {
 	 * Rendering configurations.
 	 */
 	public static RenderConfig configuration = new RenderConfig();
+
 	/**
 	 * The animation render handler.
 	 */
 	private AnimationRender animationRender;
+
 	/**
 	 * Geometry buffer.
 	 */
 	private GeometryBuffer gBuffer;
+
 	/**
 	 * The GUI render handler.
 	 */
 	private GuiRender guiRender;
+
 	/**
 	 * The lights render handler.
 	 */
 	private LightsRender lightsRender;
+
 	/**
 	 * The buffers for indirect drawing of models.
 	 */
 	private RenderBuffers renderBuffers;
+
 	/**
 	 * The scene render handler.
 	 */
@@ -78,6 +83,13 @@ public class Render {
 	 * The skybox render handler.
 	 */
 	private SkyBoxRender skyBoxRender;
+
+	/**
+	 * Whether we have set up the buffers for the scene. If we have, but need to
+	 * set data up for the scene again, we will need to clear them out and start
+	 * over.
+	 */
+	private AtomicBoolean buffersPopulated;
 
 	/**
 	 * Set up a new rendering pipeline.
@@ -102,6 +114,7 @@ public class Render {
 		this.animationRender = new AnimationRender();
 		this.gBuffer = new GeometryBuffer(window);
 		this.renderBuffers = new RenderBuffers();
+		this.buffersPopulated = new AtomicBoolean();
 	}
 
 	/**
@@ -150,13 +163,30 @@ public class Render {
 	 * @param scene The scene to render.
 	 */
 	public void render(@NonNull Window window, @NonNull Scene scene) {
-		this.animationRender.render(scene, this.renderBuffers);
-		this.shadowRender.render(scene, this.renderBuffers);
+		this.animationRender.startRender(scene, this.renderBuffers);
+		for (EntityBatch batch : scene.getEntityBatches()) {
+			this.animationRender.render(batch, this.renderBuffers);
+		}
+		this.animationRender.endRender();
+
+		this.shadowRender.startRender(scene);
+		for (EntityBatch batch : scene.getEntityBatches()) {
+			this.shadowRender.render(scene, this.renderBuffers, batch);
+		}
+		this.shadowRender.endRender();
+
 		if (Render.configuration.isWireframe()) {
 			GL11.glPolygonMode(GL11.GL_FRONT_AND_BACK, GL11.GL_LINE);
 			GL11.glDisable(GL11.GL_TEXTURE_2D);
 		}
-		this.sceneRender.render(scene, this.renderBuffers, this.gBuffer);
+
+		this.sceneRender.startRender(scene, gBuffer);
+		for (EntityBatch batch : scene.getEntityBatches()) {
+			this.sceneRender.render(scene, this.renderBuffers, this.gBuffer,
+				batch);
+		}
+		this.sceneRender.endRender();
+
 		if (Render.configuration.isWireframe()) {
 			GL11.glPolygonMode(GL11.GL_FRONT_AND_BACK, GL11.GL_FILL);
 			GL11.glEnable(GL11.GL_TEXTURE_2D);
@@ -184,12 +214,14 @@ public class Render {
 	 * @param scene The scene to read models from.
 	 */
 	public void setupData(@NonNull Scene scene) {
+		if (this.buffersPopulated.compareAndSet(false, true)) {
+			this.renderBuffers.cleanup();
+		}
 		this.renderBuffers.loadStaticModels(scene);
 		this.renderBuffers.loadAnimatedModels(scene);
-		this.sceneRender.setupData(scene);
-		this.shadowRender.setupData(scene);
-		List<Model> modelList = new ArrayList<>(scene.getModelMap().values());
-		modelList.forEach(m -> m.getMeshDataList().clear());
+		// List<Model> modelList = new
+		// ArrayList<>(scene.getModelMap().values());
+		// modelList.forEach(m -> m.getMeshDataList().clear());
 	}
 
 	/**

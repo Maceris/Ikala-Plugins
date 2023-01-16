@@ -9,7 +9,6 @@ package com.ikalagaming.graphics.graph;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import org.joml.Matrix4f;
@@ -33,76 +32,25 @@ public class RenderBuffers {
 
 	/**
 	 * Data used for drawing animated meshes.
+	 * 
+	 * @param entity The entity associated with the model.
+	 * @param bindingPoseOffset The offset to the binding pose within the data.
+	 * @param weightsOffset The offset to the weight within the data.
 	 */
-	@Getter
-	@AllArgsConstructor
-	public static class AnimMeshDrawData {
-		/**
-		 * The entity associated with the model.
-		 *
-		 * @param The entity associated with the model.
-		 * @return The entity associated with the model.
-		 */
-		private final Entity entity;
-		/**
-		 * The offset to the binding pose within the data.
-		 *
-		 * @param The offset to the binding pose within the data.
-		 * @return The offset to the binding pose within the data.
-		 */
-		private final int bindingPoseOffset;
-		/**
-		 * The offset to the weight within the data.
-		 *
-		 * @param The offset to the weight within the data.
-		 * @return The offset to the weight within the data.
-		 */
-		private final int weightsOffset;
-	}
+	public record AnimMeshDrawData(Entity entity, int bindingPoseOffset,
+		int weightsOffset) {}
 
 	/**
 	 * Data used for drawing meshes.
+	 * 
+	 * @param sizeInBytes The size of the mesh in bytes.
+	 * @param materialIndex The material index that the mesh is associated with.
+	 * @param offset The offset in rows.
+	 * @param vertices The number of indices.
+	 * @param animMeshDrawData The animation mesh draw data.
 	 */
-	@Getter
-	@AllArgsConstructor
-	public static class MeshDrawData {
-		/**
-		 * The size of the mesh in bytes.
-		 *
-		 * @param sizeInBytes The size of the mesh in bytes.
-		 * @return The size.
-		 */
-		private final int sizeInBytes;
-		/**
-		 * The material index that the mesh is associated with.
-		 *
-		 * @param The material index that the mesh is associated with.
-		 * @return The material index.
-		 */
-		private final int materialIndex;
-		/**
-		 * The offset in the buffer containing the vertex information and
-		 * vertices, measured in vertices.
-		 *
-		 * @param offset The offset in rows.
-		 * @return The offset.
-		 */
-		private final int offset;
-		/**
-		 * The number of indices.
-		 *
-		 * @param vertices The number of indices.
-		 * @return The number of indices.
-		 */
-		private final int vertices;
-		/**
-		 * Animation mesh draw data, which is null for static meshes.
-		 *
-		 * @param The animation mesh draw data.
-		 * @return The animation mesh draw data.
-		 */
-		private final AnimMeshDrawData animMeshDrawData;
-
+	public record MeshDrawData(int sizeInBytes, int materialIndex, int offset,
+		int vertices, AnimMeshDrawData animMeshDrawData) {
 		/**
 		 * Set up mesh draw data for a mesh without animation draw data.
 		 *
@@ -208,7 +156,8 @@ public class RenderBuffers {
 	}
 
 	/**
-	 * Load models with animation information for a scene.
+	 * Load models with animation information for a scene. Make sure to clear
+	 * out the existing buffer data before doing this a second time.
 	 *
 	 * @param scene The scene to load models for.
 	 */
@@ -395,7 +344,7 @@ public class RenderBuffers {
 		for (Model model : modelList) {
 			List<Model.Animation> animationsList = model.getAnimationList();
 			for (Model.Animation animation : animationsList) {
-				List<Model.AnimatedFrame> frameList = animation.getFrames();
+				List<Model.AnimatedFrame> frameList = animation.frames();
 				for (Model.AnimatedFrame frame : frameList) {
 					Matrix4f[] matrices = frame.getBonesMatrices();
 					bufferSize += matrices.length * 64;
@@ -410,7 +359,7 @@ public class RenderBuffers {
 		for (Model model : modelList) {
 			List<Model.Animation> animationsList = model.getAnimationList();
 			for (Model.Animation animation : animationsList) {
-				List<Model.AnimatedFrame> frameList = animation.getFrames();
+				List<Model.AnimatedFrame> frameList = animation.frames();
 				for (Model.AnimatedFrame frame : frameList) {
 					frame.setOffset(dataBuffer.position() / matrixSize);
 					Matrix4f[] matrices = frame.getBonesMatrices();
@@ -418,7 +367,6 @@ public class RenderBuffers {
 						matrix.get(dataBuffer);
 						dataBuffer.position(dataBuffer.position() + matrixSize);
 					}
-					frame.clearData();
 				}
 			}
 		}
@@ -432,7 +380,8 @@ public class RenderBuffers {
 	}
 
 	/**
-	 * Load models with no animation information for a scene.
+	 * Load models with no animation information for a scene. Make sure to clear
+	 * out the existing buffer data before doing this a second time.
 	 *
 	 * @param scene The scene to load models for.
 	 */

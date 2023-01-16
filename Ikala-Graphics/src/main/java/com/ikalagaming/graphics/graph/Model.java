@@ -8,7 +8,6 @@ package com.ikalagaming.graphics.graph;
 
 import com.ikalagaming.graphics.scene.Entity;
 
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -52,43 +51,17 @@ public class Model {
 		public AnimatedFrame(@NonNull Matrix4f[] bonesMatrices) {
 			this.bonesMatrices = bonesMatrices;
 		}
-
-		/**
-		 * Clear the matrix data.
-		 */
-		public void clearData() {
-			this.bonesMatrices = null;
-		}
 	}
 
 	/**
 	 * A named animation.
+	 * 
+	 * @param name The name of the animation.
+	 * @param duration The duration.
+	 * @param frames The frames that make up the animation.
 	 */
-	@Getter
-	@AllArgsConstructor
-	public static class Animation {
-		/**
-		 * The name of the animation.
-		 *
-		 * @param name The name of the animation.
-		 * @return The name of the animation.
-		 */
-		private final String name;
-		/**
-		 * Duration of the animation in ticks.
-		 *
-		 * @param duration The duration.
-		 * @return The duration.
-		 */
-		private final double duration;
-		/**
-		 * A list of frame data.
-		 *
-		 * @param The frames that make up the animation.
-		 * @return The frames for the animation.
-		 */
-		private final List<AnimatedFrame> frames;
-	}
+	public record Animation(String name, double duration,
+		List<AnimatedFrame> frames) {}
 
 	/**
 	 * The ID for the model.

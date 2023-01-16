@@ -63,6 +63,8 @@ public class ShaderProgram {
 
 	/**
 	 * The Program ID for the program.
+	 * 
+	 * @return The opengl program ID.
 	 */
 	@Getter
 	private final int programID;

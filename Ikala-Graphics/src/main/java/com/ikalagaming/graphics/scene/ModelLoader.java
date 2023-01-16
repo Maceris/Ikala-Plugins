@@ -19,8 +19,6 @@ import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.util.SafeResourceLoader;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
@@ -67,94 +65,32 @@ public class ModelLoader {
 	 * ID. Each vertex has {@link Mesh#MAX_WEIGHTS} entries in each list, and if
 	 * there are less than that number of bones affecting the vertex, the
 	 * remaining positions are filled with zeroes.
+	 * 
+	 * Each index in the weights list is the weight corresponding to the bone ID
+	 * in the bone ID list at the same position.
+	 * 
+	 * @param weights The weight list.
+	 * @param boneIDs The bone ID list.
 	 */
-	@Getter
-	@AllArgsConstructor
-	public static class AnimMeshData {
-		/**
-		 * Lists of weights that affect the vertices, ordered by vertex ID. Each
-		 * vertex has {@link Mesh#MAX_WEIGHTS} entries in the list, and if there
-		 * are less than that number of bones affecting the vertex, the
-		 * remaining positions are filled with zeroes. Each index in this list
-		 * is the weight corresponding to the bone ID in the bone ID list at the
-		 * same position.
-		 *
-		 * @param weights The weight list.
-		 * @return The weight list.
-		 */
-		final float[] weights;
-		/**
-		 * Lists of bone IDs that affect the vertices, ordered by vertex ID.
-		 * Each vertex has {@link Mesh#MAX_WEIGHTS} entries in the list, and if
-		 * there are less than that number of bones affecting the vertex, the
-		 * remaining positions are filled with zeroes. Each index in this list
-		 * is the bone ID corresponding to the weight in the weight list at the
-		 * same position.
-		 *
-		 * @param boneIDs The bone ID list.
-		 * @return The bone ID list.
-		 */
-		final int[] boneIDs;
-	}
+	public record AnimMeshData(float[] weights, int[] boneIDs) {}
 
 	/**
 	 * A bone for animation.
+	 * 
+	 * @param boneID The ID of the bone.
+	 * @param boneName The name of the bone.
+	 * @param offsetMatrix The offset matrix for the bone.
 	 */
-	@Getter
-	@AllArgsConstructor
-	public static class Bone {
-		/**
-		 * The ID of the bone, based on the order the bones are read in by
-		 * Assimp.
-		 *
-		 * @param boneID The ID of the bone.
-		 * @return The ID of the bone.
-		 */
-		final int boneID;
-		/**
-		 * The name of the bone as specified in the model.
-		 *
-		 * @param boneName The name of the bone.
-		 * @return The name of the bone.
-		 */
-		final String boneName;
-		/**
-		 * Matrix that transforms from bone space to mesh space in bind pose.
-		 *
-		 * @param offsetMatrix The offset matrix for the bone.
-		 * @return The offset matrix for the bone.
-		 */
-		final Matrix4f offsetMatrix;
-	}
+	private record Bone(int boneID, String boneName, Matrix4f offsetMatrix) {}
 
 	/**
 	 * A mapping of how much a specific bone affects a specific vertex.
+	 * 
+	 * @param boneID The ID of the bone.
+	 * @param vertexID The ID of the vertex.
+	 * @param weight The weight of the bone on the vertex.
 	 */
-	@Getter
-	@AllArgsConstructor
-	public static class VertexWeight {
-		/**
-		 * Which bone we are interested in.
-		 *
-		 * @param boneID The ID of the bone.
-		 * @return The ID of the bone.
-		 */
-		final int boneID;
-		/**
-		 * Which vertex we are interested in.
-		 *
-		 * @param boneID The ID of the vertex.
-		 * @return The ID of the vertex.
-		 */
-		final int vertexID;
-		/**
-		 * How much the bone affects the vertex.
-		 *
-		 * @param boneID The weight of the bone on the vertex.
-		 * @return The weight of the bone on the vertex.
-		 */
-		final float weight;
-	}
+	private record VertexWeight(int boneID, int vertexID, float weight) {}
 
 	/**
 	 * The maximum number of bones that are allowed in a model.
@@ -197,11 +133,11 @@ public class ModelLoader {
 			new Matrix4f(parentTransformation).mul(nodeTransform);
 
 		List<Bone> affectedBones = boneList.stream()
-			.filter(b -> b.getBoneName().equals(nodeName)).toList();
+			.filter(b -> b.boneName().equals(nodeName)).toList();
 		for (Bone bone : affectedBones) {
 			Matrix4f boneTransform = new Matrix4f(globalInverseTransform)
-				.mul(nodeGlobalTransform).mul(bone.getOffsetMatrix());
-			animatedFrame.getBonesMatrices()[bone.getBoneID()] = boneTransform;
+				.mul(nodeGlobalTransform).mul(bone.offsetMatrix());
+			animatedFrame.getBonesMatrices()[bone.boneID()] = boneTransform;
 		}
 
 		for (Node childNode : node.getChildren()) {
@@ -415,14 +351,14 @@ public class ModelLoader {
 		}
 
 		int numMaterials = aiScene.mNumMaterials();
-		List<Material> materialList = new ArrayList<>();
+		List<Integer> materialList = new ArrayList<>();
 		for (int i = 0; i < numMaterials; ++i) {
 			AIMaterial aiMaterial =
 				AIMaterial.create(aiScene.mMaterials().get(i));
 			Material material =
 				ModelLoader.processMaterial(aiMaterial, modelDir, textureCache);
-			materialCache.addMaterial(material);
-			materialList.add(material);
+			int index = materialCache.addMaterial(material);
+			materialList.add(index);
 		}
 
 		int numMeshes = aiScene.mNumMeshes();
@@ -434,8 +370,7 @@ public class ModelLoader {
 			MeshData meshData = ModelLoader.processMesh(aiMesh, boneList);
 			int materialIdx = aiMesh.mMaterialIndex();
 			if (materialIdx >= 0 && materialIdx < materialList.size()) {
-				meshData.setMaterialIndex(
-					materialList.get(materialIdx).getMaterialIndex());
+				meshData.setMaterialIndex(materialList.get(materialIdx));
 			}
 			else {
 				meshData.setMaterialIndex(MaterialCache.DEFAULT_MATERIAL_INDEX);
@@ -562,10 +497,10 @@ public class ModelLoader {
 			AIVertexWeight.Buffer aiWeights = aiBone.mWeights();
 			for (int j = 0; j < numWeights; j++) {
 				AIVertexWeight aiWeight = aiWeights.get(j);
-				VertexWeight vw = new VertexWeight(bone.getBoneID(),
+				VertexWeight vw = new VertexWeight(bone.boneID(),
 					aiWeight.mVertexId(), aiWeight.mWeight());
 				List<VertexWeight> vertexWeightList =
-					weightSet.computeIfAbsent(vw.getVertexID(), ArrayList::new);
+					weightSet.computeIfAbsent(vw.vertexID(), ArrayList::new);
 				vertexWeightList.add(vw);
 			}
 		}
@@ -582,8 +517,8 @@ public class ModelLoader {
 					 */
 					@SuppressWarnings("null")
 					VertexWeight vw = vertexWeightList.get(j);
-					weights.add(vw.getWeight());
-					boneIds.add(vw.getBoneID());
+					weights.add(vw.weight());
+					boneIds.add(vw.boneID());
 				}
 				else {
 					weights.add(0.0f);

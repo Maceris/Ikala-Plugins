@@ -14,6 +14,7 @@ import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.ShadowBuffer;
 import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Entity;
+import com.ikalagaming.graphics.scene.EntityBatch;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.Getter;
@@ -135,31 +136,12 @@ public class ShadowRender {
 	}
 
 	/**
-	 * Render the shadows for the scene.
-	 *
-	 * @param scene The scene we are rendering.
-	 * @param renderBuffers The buffers for indirect drawing of models.
+	 * Set up before rendering.
+	 * 
+	 * @param scene The scene we will render.
 	 */
-	public void render(@NonNull Scene scene,
-		@NonNull RenderBuffers renderBuffers) {
+	public void startRender(@NonNull Scene scene) {
 		CascadeShadow.updateCascadeShadows(this.cascadeShadows, scene);
-
-		GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER,
-			this.shadowBuffer.getDepthMapFBO());
-		GL11.glViewport(0, 0, ShadowBuffer.SHADOW_MAP_WIDTH,
-			ShadowBuffer.SHADOW_MAP_HEIGHT);
-
-		this.shaderProgram.bind();
-
-		int entityIndex = 0;
-		for (Model model : scene.getModelMap().values()) {
-			List<Entity> entities = model.getEntitiesList();
-			for (Entity entity : entities) {
-				this.uniformsMap.setUniform(ShaderUniforms.Shadow.MODEL_MATRICES
-					+ "[" + entityIndex + "]", entity.getModelMatrix());
-				entityIndex++;
-			}
-		}
 
 		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
 			GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER,
@@ -167,14 +149,52 @@ public class ShadowRender {
 				this.shadowBuffer.getDepthMap().getIDs()[i], 0);
 			GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT);
 		}
+		this.shaderProgram.bind();
+	}
+
+	/**
+	 * Clean up after we are done rendering the scene.
+	 */
+	public void endRender() {
+		this.shaderProgram.unbind();
+	}
+
+	/**
+	 * Render the shadows for the scene.
+	 *
+	 * @param scene The scene we are rendering.
+	 * @param renderBuffers The buffers for indirect drawing of models.
+	 * @param batch The subset of entities to draw.
+	 */
+	public void render(@NonNull Scene scene,
+		@NonNull RenderBuffers renderBuffers, @NonNull EntityBatch batch) {
+
+		setupEntitiesData(batch);
+		setupAnimCommandBuffer(batch);
+		setupStaticCommandBuffer(batch);
+
+		GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER,
+			this.shadowBuffer.getDepthMapFBO());
+		GL11.glViewport(0, 0, ShadowBuffer.SHADOW_MAP_WIDTH,
+			ShadowBuffer.SHADOW_MAP_HEIGHT);
+
+		int entityIndex = 0;
+		for (Model model : batch.getModels()) {
+			List<Entity> entities = batch.get(model);
+			for (Entity entity : entities) {
+				this.uniformsMap.setUniform(ShaderUniforms.Shadow.MODEL_MATRICES
+					+ "[" + entityIndex + "]", entity.getModelMatrix());
+				entityIndex++;
+			}
+		}
 
 		// Static meshes
 		int drawElement = 0;
-		List<Model> modelList = scene.getModelMap().values().stream()
-			.filter(m -> !m.isAnimated()).toList();
+		List<Model> modelList =
+			batch.getModels().stream().filter(m -> !m.isAnimated()).toList();
 		for (Model model : modelList) {
-			List<Entity> entities = model.getEntitiesList();
-			// We need uniforms for every entity for all the instances
+			List<Entity> entities = batch.get(model);
+			// We need to draw every mesh for each entity
 			for (@SuppressWarnings("unused")
 			RenderBuffers.MeshDrawData meshDrawData : model
 				.getMeshDrawDataList()) {
@@ -207,14 +227,14 @@ public class ShadowRender {
 
 		// Animated meshes
 		drawElement = 0;
-		modelList = scene.getModelMap().values().stream()
-			.filter(Model::isAnimated).toList();
+		modelList =
+			batch.getModels().stream().filter(Model::isAnimated).toList();
 		for (Model model : modelList) {
 			for (RenderBuffers.MeshDrawData meshDrawData : model
 				.getMeshDrawDataList()) {
 				RenderBuffers.AnimMeshDrawData animMeshDrawData =
-					meshDrawData.getAnimMeshDrawData();
-				Entity entity = animMeshDrawData.getEntity();
+					meshDrawData.animMeshDrawData();
+				Entity entity = animMeshDrawData.entity();
 				String name = ShaderUniforms.Shadow.DRAW_ELEMENTS + "["
 					+ drawElement + "].";
 				this.uniformsMap.setUniform(
@@ -246,11 +266,11 @@ public class ShadowRender {
 	/**
 	 * Set up the command buffer for animated models.
 	 *
-	 * @param scene The scene to render.
+	 * @param batch The batch to render.
 	 */
-	private void setupAnimCommandBuffer(@NonNull Scene scene) {
-		List<Model> modelList = scene.getModelMap().values().stream()
-			.filter(Model::isAnimated).toList();
+	private void setupAnimCommandBuffer(@NonNull EntityBatch batch) {
+		List<Model> modelList =
+			batch.getModels().stream().filter(Model::isAnimated).toList();
 		int numMeshes = 0;
 		for (Model model : modelList) {
 			numMeshes += model.getMeshDrawDataList().size();
@@ -264,15 +284,15 @@ public class ShadowRender {
 			for (RenderBuffers.MeshDrawData meshDrawData : model
 				.getMeshDrawDataList()) {
 				// count
-				commandBuffer.putInt(meshDrawData.getVertices());
+				commandBuffer.putInt(meshDrawData.vertices());
 				// instanceCount
 				commandBuffer.putInt(1);
 				commandBuffer.putInt(firstIndex);
 				// baseVertex
-				commandBuffer.putInt(meshDrawData.getOffset());
+				commandBuffer.putInt(meshDrawData.offset());
 				commandBuffer.putInt(baseInstance);
 
-				firstIndex += meshDrawData.getVertices();
+				firstIndex += meshDrawData.vertices();
 				baseInstance++;
 			}
 		}
@@ -285,32 +305,21 @@ public class ShadowRender {
 		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER,
 			this.animRenderBufferHandle);
 		GL15.glBufferData(GL40.GL_DRAW_INDIRECT_BUFFER, commandBuffer,
-			GL15.GL_DYNAMIC_DRAW);
+			GL15.GL_STREAM_DRAW);
 
 		MemoryUtil.memFree(commandBuffer);
 	}
 
 	/**
-	 * Set up data for the scene to prepare for rendering.
-	 *
-	 * @param scene The scene to render.
-	 */
-	public void setupData(@NonNull Scene scene) {
-		this.setupEntitiesData(scene);
-		this.setupStaticCommandBuffer(scene);
-		this.setupAnimCommandBuffer(scene);
-	}
-
-	/**
 	 * Populate the the entities index map from the scene.
 	 *
-	 * @param scene The scene to render.
+	 * @param batch The entities to render.
 	 */
-	private void setupEntitiesData(@NonNull Scene scene) {
+	private void setupEntitiesData(@NonNull EntityBatch batch) {
 		this.entitiesIndexMap.clear();
 		int entityIndex = 0;
-		for (Model model : scene.getModelMap().values()) {
-			List<Entity> entities = model.getEntitiesList();
+		for (Model model : batch.getModels()) {
+			List<Entity> entities = batch.get(model);
 			for (Entity entity : entities) {
 				this.entitiesIndexMap.put(entity.getEntityID(), entityIndex);
 				entityIndex++;
@@ -321,13 +330,13 @@ public class ShadowRender {
 	/**
 	 * Set up the command buffer for static models.
 	 *
-	 * @param scene The scene to render.
+	 * @param batch The batch to render.
 	 */
-	private void setupStaticCommandBuffer(@NonNull Scene scene) {
-		List<Model> modelList = scene.getModelMap().values().stream()
-			.filter(m -> !m.isAnimated()).toList();
+	private void setupStaticCommandBuffer(@NonNull EntityBatch batch) {
+		List<Model> modelList =
+			batch.getModels().stream().filter(m -> !m.isAnimated()).toList();
 		int numMeshes = 0;
-		for (Model model : scene.getModelMap().values()) {
+		for (Model model : modelList) {
 			numMeshes += model.getMeshDrawDataList().size();
 		}
 
@@ -341,15 +350,15 @@ public class ShadowRender {
 			for (RenderBuffers.MeshDrawData meshDrawData : model
 				.getMeshDrawDataList()) {
 				// count
-				commandBuffer.putInt(meshDrawData.getVertices());
+				commandBuffer.putInt(meshDrawData.vertices());
 				// instanceCount
 				commandBuffer.putInt(numEntities);
 				commandBuffer.putInt(firstIndex);
 				// baseVertex
-				commandBuffer.putInt(meshDrawData.getOffset());
+				commandBuffer.putInt(meshDrawData.offset());
 				commandBuffer.putInt(baseInstance);
 
-				firstIndex += meshDrawData.getVertices();
+				firstIndex += meshDrawData.vertices();
 				baseInstance += entities.size();
 			}
 		}
@@ -362,7 +371,7 @@ public class ShadowRender {
 		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER,
 			this.staticRenderBufferHandle);
 		GL15.glBufferData(GL40.GL_DRAW_INDIRECT_BUFFER, commandBuffer,
-			GL15.GL_DYNAMIC_DRAW);
+			GL15.GL_STREAM_DRAW);
 
 		MemoryUtil.memFree(commandBuffer);
 	}

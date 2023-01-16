@@ -18,6 +18,7 @@ import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.graphics.graph.TextureCache;
 import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Entity;
+import com.ikalagaming.graphics.scene.EntityBatch;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -46,11 +47,11 @@ public class SceneRender {
 	/**
 	 * The maximum number of draw elements that we can process.
 	 */
-	public static final int MAX_DRAW_ELEMENTS = 100;
+	public static final int MAX_DRAW_ELEMENTS = 300;
 	/**
 	 * The maximum number of entities that we can process.
 	 */
-	public static final int MAX_ENTITIES = 50;
+	public static final int MAX_ENTITIES = 100;
 	/**
 	 * The size of a draw command.
 	 */
@@ -58,7 +59,7 @@ public class SceneRender {
 	/**
 	 * The maximum number of materials we can have.
 	 */
-	private static final int MAX_MATERIALS = 20;
+	private static final int MAX_MATERIALS = 30;
 	/**
 	 * The maximum number of textures we can have.
 	 */
@@ -155,6 +156,31 @@ public class SceneRender {
 			this.uniformsMap.createUniform(
 				ShaderUniforms.Scene.MODEL_MATRICES + "[" + i + "]");
 		}
+
+	}
+
+	/**
+	 * Set up before rendering the scene.
+	 * 
+	 * @param scene The scene to render.
+	 * @param gBuffer The buffer for geometry data.
+	 */
+	public void startRender(@NonNull Scene scene,
+		@NonNull GeometryBuffer gBuffer) {
+		GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER,
+			gBuffer.getGBufferId());
+		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+		GL11.glViewport(0, 0, gBuffer.getWidth(), gBuffer.getHeight());
+		GL11.glDisable(GL11.GL_BLEND);
+		this.shaderProgram.bind();
+	}
+
+	/**
+	 * Clean up after we are done rendering the scene.
+	 */
+	public void endRender() {
+		this.shaderProgram.unbind();
+		GL11.glEnable(GL11.GL_BLEND);
 	}
 
 	/**
@@ -163,16 +189,15 @@ public class SceneRender {
 	 * @param scene The scene to render.
 	 * @param renderBuffers The buffers for indirect drawing of models.
 	 * @param gBuffer The buffer for geometry data.
+	 * @param batch The subset of entities to draw.
 	 */
 	public void render(@NonNull Scene scene,
-		@NonNull RenderBuffers renderBuffers, @NonNull GeometryBuffer gBuffer) {
-		GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER,
-			gBuffer.getGBufferId());
-		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
-		GL11.glViewport(0, 0, gBuffer.getWidth(), gBuffer.getHeight());
-		GL11.glDisable(GL11.GL_BLEND);
+		@NonNull RenderBuffers renderBuffers, @NonNull GeometryBuffer gBuffer,
+		@NonNull EntityBatch batch) {
 
-		this.shaderProgram.bind();
+		setupEntitiesData(batch);
+		setupAnimCommandBuffer(batch);
+		setupStaticCommandBuffer(batch);
 
 		this.uniformsMap.setUniform(ShaderUniforms.Scene.PROJECTION_MATRIX,
 			scene.getProjection().getProjMatrix());
@@ -198,8 +223,8 @@ public class SceneRender {
 		}
 
 		int entityIndex = 0;
-		for (Model model : scene.getModelMap().values()) {
-			List<Entity> entities = model.getEntitiesList();
+		for (Model model : batch.getEntites().keySet()) {
+			List<Entity> entities = batch.getEntites().get(model);
 			for (Entity entity : entities) {
 				this.uniformsMap.setUniform(ShaderUniforms.Scene.MODEL_MATRICES
 					+ "[" + entityIndex + "]", entity.getModelMatrix());
@@ -209,10 +234,10 @@ public class SceneRender {
 
 		// Static meshes
 		int drawElement = 0;
-		List<Model> modelList = scene.getModelMap().values().stream()
+		List<Model> modelList = batch.getEntites().keySet().stream()
 			.filter(m -> !m.isAnimated()).toList();
 		for (Model model : modelList) {
-			List<Entity> entities = model.getEntitiesList();
+			List<Entity> entities = batch.getEntites().get(model);
 			for (RenderBuffers.MeshDrawData meshDrawData : model
 				.getMeshDrawDataList()) {
 				for (Entity entity : entities) {
@@ -223,7 +248,7 @@ public class SceneRender {
 						this.entitiesIndexMap.get(entity.getEntityID()));
 					this.uniformsMap.setUniform(
 						name + ShaderUniforms.Scene.DrawElement.MATERIAL_INDEX,
-						meshDrawData.getMaterialIndex());
+						meshDrawData.materialIndex());
 					drawElement++;
 				}
 			}
@@ -236,14 +261,14 @@ public class SceneRender {
 
 		// Animated meshes
 		drawElement = 0;
-		modelList = scene.getModelMap().values().stream()
+		modelList = batch.getEntites().keySet().stream()
 			.filter(Model::isAnimated).toList();
 		for (Model model : modelList) {
 			for (RenderBuffers.MeshDrawData meshDrawData : model
 				.getMeshDrawDataList()) {
 				RenderBuffers.AnimMeshDrawData animMeshDrawData =
-					meshDrawData.getAnimMeshDrawData();
-				Entity entity = animMeshDrawData.getEntity();
+					meshDrawData.animMeshDrawData();
+				Entity entity = animMeshDrawData.entity();
 				String name = ShaderUniforms.Scene.DRAW_ELEMENTS + "["
 					+ drawElement + "].";
 				this.uniformsMap.setUniform(
@@ -251,7 +276,7 @@ public class SceneRender {
 					this.entitiesIndexMap.get(entity.getEntityID()));
 				this.uniformsMap.setUniform(
 					name + ShaderUniforms.Scene.DrawElement.MATERIAL_INDEX,
-					meshDrawData.getMaterialIndex());
+					meshDrawData.materialIndex());
 				drawElement++;
 			}
 		}
@@ -262,18 +287,17 @@ public class SceneRender {
 			GL11.GL_UNSIGNED_INT, 0, this.animDrawCount, 0);
 
 		GL30.glBindVertexArray(0);
-		GL11.glEnable(GL11.GL_BLEND);
-		this.shaderProgram.unbind();
+
 	}
 
 	/**
 	 * Set up the command buffer for animated models.
 	 *
-	 * @param scene The scene to render.
+	 * @param batch The batch to render.
 	 */
-	private void setupAnimCommandBuffer(@NonNull Scene scene) {
-		List<Model> modelList = scene.getModelMap().values().stream()
-			.filter(Model::isAnimated).toList();
+	private void setupAnimCommandBuffer(@NonNull EntityBatch batch) {
+		List<Model> modelList =
+			batch.getModels().stream().filter(Model::isAnimated).toList();
 		int numMeshes = 0;
 		for (Model model : modelList) {
 			numMeshes += model.getMeshDrawDataList().size();
@@ -287,15 +311,15 @@ public class SceneRender {
 			for (RenderBuffers.MeshDrawData meshDrawData : model
 				.getMeshDrawDataList()) {
 				// count
-				commandBuffer.putInt(meshDrawData.getVertices());
+				commandBuffer.putInt(meshDrawData.vertices());
 				// instanceCount
 				commandBuffer.putInt(1);
 				commandBuffer.putInt(firstIndex);
 				// baseVertex
-				commandBuffer.putInt(meshDrawData.getOffset());
+				commandBuffer.putInt(meshDrawData.offset());
 				commandBuffer.putInt(baseInstance);
 
-				firstIndex += meshDrawData.getVertices();
+				firstIndex += meshDrawData.vertices();
 				baseInstance++;
 			}
 		}
@@ -308,7 +332,7 @@ public class SceneRender {
 		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER,
 			this.animRenderBufferHandle);
 		GL15.glBufferData(GL40.GL_DRAW_INDIRECT_BUFFER, commandBuffer,
-			GL15.GL_DYNAMIC_DRAW);
+			GL15.GL_STREAM_DRAW);
 
 		MemoryUtil.memFree(commandBuffer);
 	}
@@ -319,9 +343,6 @@ public class SceneRender {
 	 * @param scene The scene to render.
 	 */
 	public void setupData(@NonNull Scene scene) {
-		this.setupEntitiesData(scene);
-		this.setupStaticCommandBuffer(scene);
-		this.setupAnimCommandBuffer(scene);
 		this.recalculateMaterials(scene);
 	}
 
@@ -338,13 +359,13 @@ public class SceneRender {
 	/**
 	 * Populate the the entities index map from the scene.
 	 *
-	 * @param scene The scene to render.
+	 * @param batch The entities to render.
 	 */
-	private void setupEntitiesData(@NonNull Scene scene) {
+	private void setupEntitiesData(@NonNull EntityBatch batch) {
 		this.entitiesIndexMap.clear();
 		int entityIndex = 0;
-		for (Model model : scene.getModelMap().values()) {
-			List<Entity> entities = model.getEntitiesList();
+		for (Model model : batch.getModels()) {
+			List<Entity> entities = batch.get(model);
 			for (Entity entity : entities) {
 				this.entitiesIndexMap.put(entity.getEntityID(), entityIndex);
 				entityIndex++;
@@ -409,11 +430,11 @@ public class SceneRender {
 	/**
 	 * Set up the command buffer for static models.
 	 *
-	 * @param scene The scene to render.
+	 * @param batch The batch to render.
 	 */
-	private void setupStaticCommandBuffer(@NonNull Scene scene) {
-		List<Model> modelList = scene.getModelMap().values().stream()
-			.filter(m -> !m.isAnimated()).toList();
+	private void setupStaticCommandBuffer(@NonNull EntityBatch batch) {
+		List<Model> modelList =
+			batch.getModels().stream().filter(m -> !m.isAnimated()).toList();
 		int numMeshes = 0;
 		for (Model model : modelList) {
 			numMeshes += model.getMeshDrawDataList().size();
@@ -429,15 +450,15 @@ public class SceneRender {
 			for (RenderBuffers.MeshDrawData meshDrawData : model
 				.getMeshDrawDataList()) {
 				// count
-				commandBuffer.putInt(meshDrawData.getVertices());
+				commandBuffer.putInt(meshDrawData.vertices());
 				// instanceCount
 				commandBuffer.putInt(numEntities);
 				commandBuffer.putInt(firstIndex);
 				// baseVertex
-				commandBuffer.putInt(meshDrawData.getOffset());
+				commandBuffer.putInt(meshDrawData.offset());
 				commandBuffer.putInt(baseInstance);
 
-				firstIndex += meshDrawData.getVertices();
+				firstIndex += meshDrawData.vertices();
 				baseInstance += entities.size();
 			}
 		}
@@ -450,7 +471,7 @@ public class SceneRender {
 		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER,
 			this.staticRenderBufferHandle);
 		GL15.glBufferData(GL40.GL_DRAW_INDIRECT_BUFFER, commandBuffer,
-			GL15.GL_DYNAMIC_DRAW);
+			GL15.GL_STREAM_DRAW);
 
 		MemoryUtil.memFree(commandBuffer);
 	}

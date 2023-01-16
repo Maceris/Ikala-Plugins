@@ -13,6 +13,8 @@ import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
  * Something that is part of the 3D scene.
  */
@@ -64,6 +66,11 @@ public class Entity {
 	 */
 	@Setter
 	private float scale;
+
+	/**
+	 * Numbers for a unique entity name.
+	 */
+	public static final AtomicInteger NEXT_ID = new AtomicInteger();
 
 	/**
 	 * Create a new entity.
