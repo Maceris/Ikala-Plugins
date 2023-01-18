@@ -29,6 +29,8 @@ import org.joml.Vector2f;
 public class GUIControls implements GuiInstance {
 
 	private ImBoolean wireframe;
+	private ImBoolean wireframeOnlyBatch;
+	private int[] wireframeBatch;
 
 	private ImBoolean showWindowDemo;
 	private ImBoolean showWindowInventory;
@@ -52,6 +54,8 @@ public class GUIControls implements GuiInstance {
 	 */
 	public GUIControls(@NonNull Scene scene) {
 		this.wireframe = new ImBoolean(false);
+		this.wireframeOnlyBatch = new ImBoolean(false);
+		this.wireframeBatch = new int[] {0};
 
 		this.showWindowInventory = new ImBoolean(false);
 		this.showWindowItemCatalog = new ImBoolean(false);
@@ -72,7 +76,7 @@ public class GUIControls implements GuiInstance {
 
 		this.windowImages = new ImageWindow();
 		this.windowImages.setup(scene);
-		
+
 		this.windowLuaConsole = new LuaConsole();
 		this.windowLuaConsole.setup(scene);
 	}
@@ -104,6 +108,14 @@ public class GUIControls implements GuiInstance {
 			input.getDisplVec().x, input.getDisplVec().y));
 
 		ImGui.checkbox("Wireframe", this.wireframe);
+		if (this.wireframe.get()) {
+			ImGui.checkbox("Wireframe specific batch", this.wireframeOnlyBatch);
+			if (this.wireframeOnlyBatch.get()) {
+				ImGui.sliderInt("Wireframe batch", this.wireframeBatch, 0,
+					GraphicsManager.getScene().getEntityBatches().size() - 1);
+			}
+		}
+
 		ImGui.checkbox("Show Demo", this.showWindowDemo);
 		ImGui.checkbox("Show Inventory", this.showWindowInventory);
 		ImGui.checkbox("Show Item Catalog", this.showWindowItemCatalog);
@@ -156,6 +168,9 @@ public class GUIControls implements GuiInstance {
 		imGuiIO.setMouseDown(0, mouseInput.isLeftButtonPressed());
 		imGuiIO.setMouseDown(1, mouseInput.isRightButtonPressed());
 		Render.configuration.setWireframe(this.wireframe.get());
+		Render.configuration
+			.setWireframSpecificBatch(this.wireframeOnlyBatch.get());
+		Render.configuration.setBatchSelection(this.wireframeBatch[0]);
 
 		boolean consumed =
 			imGuiIO.getWantCaptureMouse() || imGuiIO.getWantCaptureKeyboard();
@@ -180,7 +195,7 @@ public class GUIControls implements GuiInstance {
 					.getAbsolutePath());
 			GraphicsManager.getRender()
 				.recalculateMaterials(GraphicsManager.getScene());
-			this.windowInventory.setItemTexture(itemTexture);
+			this.windowInventory.setItemTexture(this.itemTexture);
 		}
 	}
 

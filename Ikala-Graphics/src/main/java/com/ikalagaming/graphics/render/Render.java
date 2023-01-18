@@ -37,6 +37,14 @@ public class Render {
 		 * Enable wireframe.
 		 */
 		private boolean wireframe;
+		/**
+		 * Enable wireframe only on a specific render batch.
+		 */
+		private boolean wireframSpecificBatch;
+		/**
+		 * Which batch we are rendering as wireframe.
+		 */
+		private int batchSelection;
 	}
 
 	/**
@@ -157,6 +165,15 @@ public class Render {
 	}
 
 	/**
+	 * Set up uniforms for textures and materials.
+	 *
+	 * @param scene The scene to render.
+	 */
+	public void recalculateMaterials(@NonNull Scene scene) {
+		this.sceneRender.recalculateMaterials(scene);
+	}
+
+	/**
 	 * Render a scene on the window.
 	 *
 	 * @param window The window we are drawing in.
@@ -175,19 +192,32 @@ public class Render {
 		}
 		this.shadowRender.endRender();
 
-		if (Render.configuration.isWireframe()) {
+		if (Render.configuration.wireframe
+			&& !Render.configuration.wireframSpecificBatch) {
 			GL11.glPolygonMode(GL11.GL_FRONT_AND_BACK, GL11.GL_LINE);
 			GL11.glDisable(GL11.GL_TEXTURE_2D);
 		}
 
-		this.sceneRender.startRender(scene, gBuffer);
-		for (EntityBatch batch : scene.getEntityBatches()) {
+		this.sceneRender.startRender(scene, this.gBuffer);
+		for (int i = 0; i < scene.getEntityBatches().size(); ++i) {
+			EntityBatch batch = scene.getEntityBatches().get(i);
+			if (Render.configuration.wireframSpecificBatch
+				&& i == Render.configuration.batchSelection) {
+				GL11.glPolygonMode(GL11.GL_FRONT_AND_BACK, GL11.GL_LINE);
+				GL11.glDisable(GL11.GL_TEXTURE_2D);
+			}
 			this.sceneRender.render(scene, this.renderBuffers, this.gBuffer,
 				batch);
+			if (Render.configuration.wireframSpecificBatch
+				&& i == Render.configuration.batchSelection) {
+				GL11.glPolygonMode(GL11.GL_FRONT_AND_BACK, GL11.GL_FILL);
+				GL11.glEnable(GL11.GL_TEXTURE_2D);
+			}
 		}
 		this.sceneRender.endRender();
 
-		if (Render.configuration.isWireframe()) {
+		if (Render.configuration.wireframe
+			&& !Render.configuration.wireframSpecificBatch) {
 			GL11.glPolygonMode(GL11.GL_FRONT_AND_BACK, GL11.GL_FILL);
 			GL11.glEnable(GL11.GL_TEXTURE_2D);
 		}
@@ -224,14 +254,5 @@ public class Render {
 		// List<Model> modelList = new
 		// ArrayList<>(scene.getModelMap().values());
 		// modelList.forEach(m -> m.getMeshDataList().clear());
-	}
-
-	/**
-	 * Set up uniforms for textures and materials.
-	 * 
-	 * @param scene The scene to render.
-	 */
-	public void recalculateMaterials(@NonNull Scene scene) {
-		this.sceneRender.recalculateMaterials(scene);
 	}
 }
