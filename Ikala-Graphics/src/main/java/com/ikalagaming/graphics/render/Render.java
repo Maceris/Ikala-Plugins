@@ -219,6 +219,8 @@ public class Render {
 		}
 		this.renderBuffers.loadStaticModels(scene);
 		this.renderBuffers.loadAnimatedModels(scene);
+		this.sceneRender.setupData(scene);
+		this.shadowRender.setupData(scene);
 		// List<Model> modelList = new
 		// ArrayList<>(scene.getModelMap().values());
 		// modelList.forEach(m -> m.getMeshDataList().clear());

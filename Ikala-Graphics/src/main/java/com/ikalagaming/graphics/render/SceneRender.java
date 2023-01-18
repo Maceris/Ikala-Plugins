@@ -64,14 +64,7 @@ public class SceneRender {
 	 * The maximum number of textures we can have.
 	 */
 	private static final int MAX_TEXTURES = 16;
-	/**
-	 * How many animated model draw commands we have set up.
-	 */
-	private int animDrawCount;
-	/**
-	 * The animated render buffer ID.
-	 */
-	private int animRenderBufferHandle;
+
 	/**
 	 * A map from entity ID to its index in the draw elements uniform array.
 	 */
@@ -80,18 +73,15 @@ public class SceneRender {
 	 * The shader program for the scene.
 	 */
 	private ShaderProgram shaderProgram;
-	/**
-	 * How many static model draw commands we have set up.
-	 */
-	private int staticDrawCount;
-	/**
-	 * The static render buffer ID.
-	 */
-	private int staticRenderBufferHandle;
+
 	/**
 	 * The uniform map for the shader program.
 	 */
 	private UniformsMap uniformsMap;
+	/**
+	 * The buffers for the batches.
+	 */
+	private Map<EntityBatch, CommandBuffer> commandBuffers;
 
 	/**
 	 * Set up a new scene renderer.
@@ -106,6 +96,7 @@ public class SceneRender {
 		this.shaderProgram = new ShaderProgram(shaderModuleDataList);
 		this.createUniforms();
 		this.entitiesIndexMap = new HashMap<>();
+		this.commandBuffers = new HashMap<>();
 	}
 
 	/**
@@ -113,8 +104,15 @@ public class SceneRender {
 	 */
 	public void cleanup() {
 		this.shaderProgram.cleanup();
-		GL15.glDeleteBuffers(this.staticRenderBufferHandle);
-		GL15.glDeleteBuffers(this.animRenderBufferHandle);
+		this.clearCommandBuffers();
+	}
+
+	/**
+	 * Delete all the command buffers and empty the list.
+	 */
+	private void clearCommandBuffers() {
+		this.commandBuffers.values().forEach(CommandBuffer::cleanup);
+		this.commandBuffers.clear();
 	}
 
 	/**
@@ -160,27 +158,21 @@ public class SceneRender {
 	}
 
 	/**
-	 * Set up before rendering the scene.
-	 * 
-	 * @param scene The scene to render.
-	 * @param gBuffer The buffer for geometry data.
-	 */
-	public void startRender(@NonNull Scene scene,
-		@NonNull GeometryBuffer gBuffer) {
-		GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER,
-			gBuffer.getGBufferId());
-		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
-		GL11.glViewport(0, 0, gBuffer.getWidth(), gBuffer.getHeight());
-		GL11.glDisable(GL11.GL_BLEND);
-		this.shaderProgram.bind();
-	}
-
-	/**
 	 * Clean up after we are done rendering the scene.
 	 */
 	public void endRender() {
 		this.shaderProgram.unbind();
 		GL11.glEnable(GL11.GL_BLEND);
+	}
+
+	/**
+	 * Set up uniforms for textures and materials.
+	 *
+	 * @param scene The scene to render.
+	 */
+	public void recalculateMaterials(@NonNull Scene scene) {
+		this.setupMaterialsUniform(scene.getTextureCache(),
+			scene.getMaterialCache());
 	}
 
 	/**
@@ -194,10 +186,8 @@ public class SceneRender {
 	public void render(@NonNull Scene scene,
 		@NonNull RenderBuffers renderBuffers, @NonNull GeometryBuffer gBuffer,
 		@NonNull EntityBatch batch) {
-
-		setupEntitiesData(batch);
-		setupAnimCommandBuffer(batch);
-		setupStaticCommandBuffer(batch);
+		this.entitiesIndexMap.clear();
+		CommandBuffer buffers = this.commandBuffers.get(batch);
 
 		this.uniformsMap.setUniform(ShaderUniforms.Scene.PROJECTION_MATRIX,
 			scene.getProjection().getProjMatrix());
@@ -228,6 +218,7 @@ public class SceneRender {
 			for (Entity entity : entities) {
 				this.uniformsMap.setUniform(ShaderUniforms.Scene.MODEL_MATRICES
 					+ "[" + entityIndex + "]", entity.getModelMatrix());
+				this.entitiesIndexMap.put(entity.getEntityID(), entityIndex);
 				entityIndex++;
 			}
 		}
@@ -254,10 +245,10 @@ public class SceneRender {
 			}
 		}
 		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER,
-			this.staticRenderBufferHandle);
+			buffers.getStaticCommandBuffer());
 		GL30.glBindVertexArray(renderBuffers.getStaticVaoID());
 		GL43.glMultiDrawElementsIndirect(GL11.GL_TRIANGLES,
-			GL11.GL_UNSIGNED_INT, 0, this.staticDrawCount, 0);
+			GL11.GL_UNSIGNED_INT, 0, buffers.getStaticDrawCount(), 0);
 
 		// Animated meshes
 		drawElement = 0;
@@ -281,10 +272,10 @@ public class SceneRender {
 			}
 		}
 		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER,
-			this.animRenderBufferHandle);
+			buffers.getAnimatedCommandBuffer());
 		GL30.glBindVertexArray(renderBuffers.getAnimVaoID());
 		GL43.glMultiDrawElementsIndirect(GL11.GL_TRIANGLES,
-			GL11.GL_UNSIGNED_INT, 0, this.animDrawCount, 0);
+			GL11.GL_UNSIGNED_INT, 0, buffers.getAnimatedDrawCount(), 0);
 
 		GL30.glBindVertexArray(0);
 
@@ -294,8 +285,11 @@ public class SceneRender {
 	 * Set up the command buffer for animated models.
 	 *
 	 * @param batch The batch to render.
+	 * @param buffer The command buffer for this batch, which we want to
+	 *            populate.
 	 */
-	private void setupAnimCommandBuffer(@NonNull EntityBatch batch) {
+	private void setupAnimCommandBuffer(@NonNull EntityBatch batch,
+		@NonNull CommandBuffer buffer) {
 		List<Model> modelList =
 			batch.getModels().stream().filter(Model::isAnimated).toList();
 		int numMeshes = 0;
@@ -325,16 +319,16 @@ public class SceneRender {
 		}
 		commandBuffer.flip();
 
-		this.animDrawCount =
-			commandBuffer.remaining() / SceneRender.COMMAND_SIZE;
+		buffer.setAnimatedDrawCount(
+			commandBuffer.remaining() / SceneRender.COMMAND_SIZE);
 
-		this.animRenderBufferHandle = GL15.glGenBuffers();
-		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER,
-			this.animRenderBufferHandle);
+		int animRenderBufferHandle = GL15.glGenBuffers();
+		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER, animRenderBufferHandle);
 		GL15.glBufferData(GL40.GL_DRAW_INDIRECT_BUFFER, commandBuffer,
-			GL15.GL_STREAM_DRAW);
+			GL15.GL_DYNAMIC_DRAW);
 
 		MemoryUtil.memFree(commandBuffer);
+		buffer.setAnimatedCommandBuffer(animRenderBufferHandle);
 	}
 
 	/**
@@ -344,32 +338,20 @@ public class SceneRender {
 	 */
 	public void setupData(@NonNull Scene scene) {
 		this.recalculateMaterials(scene);
-	}
-
-	/**
-	 * Set up uniforms for textures and materials.
-	 * 
-	 * @param scene The scene to render.
-	 */
-	public void recalculateMaterials(@NonNull Scene scene) {
-		this.setupMaterialsUniform(scene.getTextureCache(),
-			scene.getMaterialCache());
-	}
-
-	/**
-	 * Populate the the entities index map from the scene.
-	 *
-	 * @param batch The entities to render.
-	 */
-	private void setupEntitiesData(@NonNull EntityBatch batch) {
-		this.entitiesIndexMap.clear();
-		int entityIndex = 0;
-		for (Model model : batch.getModels()) {
-			List<Entity> entities = batch.get(model);
-			for (Entity entity : entities) {
-				this.entitiesIndexMap.put(entity.getEntityID(), entityIndex);
-				entityIndex++;
-			}
+		this.clearCommandBuffers();
+		log.debug("We have " + scene.getEntityBatches().size() + " batches");
+		int i = 0;
+		for (EntityBatch batch : scene.getEntityBatches()) {
+			CommandBuffer buffers = new CommandBuffer();
+			this.setupAnimCommandBuffer(batch, buffers);
+			this.setupStaticCommandBuffer(batch, buffers);
+			this.commandBuffers.put(batch, buffers);
+			log.debug(i++ + " has " + batch.getModels().size() + " models:");
+			batch.getModels().forEach(model -> {
+				log.debug(String.format("%s has %d meshes and %d entitites",
+					model.getId(), model.getMeshDrawDataList().size(),
+					batch.get(model).size()));
+			});
 		}
 	}
 
@@ -431,10 +413,14 @@ public class SceneRender {
 	 * Set up the command buffer for static models.
 	 *
 	 * @param batch The batch to render.
+	 * @param buffer The command buffer for this batch, which we want to
+	 *            populate.
 	 */
-	private void setupStaticCommandBuffer(@NonNull EntityBatch batch) {
+	private void setupStaticCommandBuffer(@NonNull EntityBatch batch,
+		@NonNull CommandBuffer buffer) {
 		List<Model> modelList =
 			batch.getModels().stream().filter(m -> !m.isAnimated()).toList();
+
 		int numMeshes = 0;
 		for (Model model : modelList) {
 			numMeshes += model.getMeshDrawDataList().size();
@@ -445,7 +431,7 @@ public class SceneRender {
 		ByteBuffer commandBuffer =
 			MemoryUtil.memAlloc(numMeshes * SceneRender.COMMAND_SIZE);
 		for (Model model : modelList) {
-			List<Entity> entities = model.getEntitiesList();
+			List<Entity> entities = batch.get(model);
 			int numEntities = entities.size();
 			for (RenderBuffers.MeshDrawData meshDrawData : model
 				.getMeshDrawDataList()) {
@@ -464,15 +450,32 @@ public class SceneRender {
 		}
 		commandBuffer.flip();
 
-		this.staticDrawCount =
-			commandBuffer.remaining() / SceneRender.COMMAND_SIZE;
+		buffer.setStaticDrawCount(
+			commandBuffer.remaining() / SceneRender.COMMAND_SIZE);
 
-		this.staticRenderBufferHandle = GL15.glGenBuffers();
+		int staticRenderBufferHandle = GL15.glGenBuffers();
 		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER,
-			this.staticRenderBufferHandle);
+			staticRenderBufferHandle);
 		GL15.glBufferData(GL40.GL_DRAW_INDIRECT_BUFFER, commandBuffer,
-			GL15.GL_STREAM_DRAW);
+			GL15.GL_DYNAMIC_DRAW);
 
 		MemoryUtil.memFree(commandBuffer);
+		buffer.setStaticCommandBuffer(staticRenderBufferHandle);
+	}
+
+	/**
+	 * Set up before rendering the scene.
+	 *
+	 * @param scene The scene to render.
+	 * @param gBuffer The buffer for geometry data.
+	 */
+	public void startRender(@NonNull Scene scene,
+		@NonNull GeometryBuffer gBuffer) {
+		GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER,
+			gBuffer.getGBufferId());
+		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+		GL11.glViewport(0, 0, gBuffer.getWidth(), gBuffer.getHeight());
+		GL11.glDisable(GL11.GL_BLEND);
+		this.shaderProgram.bind();
 	}
 }
