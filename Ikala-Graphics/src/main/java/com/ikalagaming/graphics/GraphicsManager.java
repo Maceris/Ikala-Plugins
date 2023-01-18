@@ -305,7 +305,7 @@ public class GraphicsManager {
 		dirLight.setIntensity(1.0f);
 
 		sceneLights.getPointLights().add(new PointLight(new Vector3f(1, 1, 1),
-			new Vector3f(0, 0, -1.4f), 1.0f));
+			new Vector3f(0, 2.5f, -0.4f), 1.0f));
 
 		sceneLights.getSpotLights()
 			.add(
