@@ -161,8 +161,9 @@ public class SceneRender {
 	 * Clean up after we are done rendering the scene.
 	 */
 	public void endRender() {
-		this.shaderProgram.unbind();
+		GL30.glBindVertexArray(0);
 		GL11.glEnable(GL11.GL_BLEND);
+		this.shaderProgram.unbind();
 	}
 
 	/**
@@ -277,7 +278,7 @@ public class SceneRender {
 		GL43.glMultiDrawElementsIndirect(GL11.GL_TRIANGLES,
 			GL11.GL_UNSIGNED_INT, 0, buffers.getAnimatedDrawCount(), 0);
 
-		GL30.glBindVertexArray(0);
+		
 
 	}
 
@@ -448,8 +449,9 @@ public class SceneRender {
 				baseInstance += entities.size();
 			}
 		}
+		
 		commandBuffer.flip();
-
+		
 		buffer.setStaticDrawCount(
 			commandBuffer.remaining() / SceneRender.COMMAND_SIZE);
 
