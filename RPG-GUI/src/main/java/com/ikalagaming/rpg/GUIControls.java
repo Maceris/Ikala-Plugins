@@ -12,6 +12,7 @@ import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.rpg.windows.ImageWindow;
 import com.ikalagaming.rpg.windows.ItemCatalogWindow;
+import com.ikalagaming.rpg.windows.LuaConsole;
 import com.ikalagaming.rpg.windows.PlayerInventory;
 import com.ikalagaming.rpg.windows.SceneControls;
 
@@ -34,6 +35,7 @@ public class GUIControls implements GuiInstance {
 	private ImBoolean showWindowItemCatalog;
 	private ImBoolean showWindowSceneControls;
 	private ImBoolean showImageWindow;
+	private ImBoolean showLuaConsole;
 
 	private Texture itemTexture;
 
@@ -41,6 +43,7 @@ public class GUIControls implements GuiInstance {
 	private ItemCatalogWindow windowCatalog;
 	private SceneControls windowSceneControls;
 	private ImageWindow windowImages;
+	private LuaConsole windowLuaConsole;
 
 	/**
 	 * Set up the light controls.
@@ -55,6 +58,7 @@ public class GUIControls implements GuiInstance {
 		this.showWindowDemo = new ImBoolean(false);
 		this.showWindowSceneControls = new ImBoolean(false);
 		this.showImageWindow = new ImBoolean(false);
+		this.showLuaConsole = new ImBoolean(false);
 
 		this.windowInventory = new PlayerInventory();
 		this.windowInventory.setup(scene);
@@ -68,6 +72,9 @@ public class GUIControls implements GuiInstance {
 
 		this.windowImages = new ImageWindow();
 		this.windowImages.setup(scene);
+		
+		this.windowLuaConsole = new LuaConsole();
+		this.windowLuaConsole.setup(scene);
 	}
 
 	/**
@@ -102,6 +109,7 @@ public class GUIControls implements GuiInstance {
 		ImGui.checkbox("Show Item Catalog", this.showWindowItemCatalog);
 		ImGui.checkbox("Show Scene Controls", this.showWindowSceneControls);
 		ImGui.checkbox("Show Image Catalog", this.showImageWindow);
+		ImGui.checkbox("Show Lua Console", this.showLuaConsole);
 
 		ImGui.end();
 	}
@@ -129,6 +137,9 @@ public class GUIControls implements GuiInstance {
 		}
 		if (this.showImageWindow.get()) {
 			this.windowImages.draw();
+		}
+		if (this.showLuaConsole.get()) {
+			this.windowLuaConsole.draw();
 		}
 
 		ImGui.endFrame();
