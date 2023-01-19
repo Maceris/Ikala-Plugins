@@ -257,39 +257,39 @@ public class GraphicsManager {
 		Model floorModel =
 			ModelLoader.loadModel("floor_001", "models/dungeon/floor_001.obj",
 				GraphicsManager.getScene().getTextureCache(),
-				GraphicsManager.getScene().getMaterialCache(), true);
+				GraphicsManager.getScene().getMaterialCache(), false);
 		GraphicsManager.getScene().addModel(floorModel);
 
 		Model wallModel =
 			ModelLoader.loadModel("brick_wall", "models/dungeon/brick_wall.obj",
 				GraphicsManager.getScene().getTextureCache(),
-				GraphicsManager.getScene().getMaterialCache(), true);
+				GraphicsManager.getScene().getMaterialCache(), false);
 		GraphicsManager.getScene().addModel(wallModel);
 
 		Model wallCornerModel = ModelLoader.loadModel("brick_wall_corner",
 			"models/dungeon/brick_wall_corner.obj",
 			GraphicsManager.getScene().getTextureCache(),
-			GraphicsManager.getScene().getMaterialCache(), true);
+			GraphicsManager.getScene().getMaterialCache(), false);
 		GraphicsManager.getScene().addModel(wallCornerModel);
 
 		Model wallAllSidesModel = ModelLoader.loadModel("brick_wall_all_sides",
 			"models/dungeon/brick_wall_all_sides.obj",
 			GraphicsManager.getScene().getTextureCache(),
-			GraphicsManager.getScene().getMaterialCache(), true);
+			GraphicsManager.getScene().getMaterialCache(), false);
 		GraphicsManager.getScene().addModel(wallAllSidesModel);
 
 		Model wallOppositeSidesModel =
 			ModelLoader.loadModel("brick_wall_opposite_sides",
 				"models/dungeon/brick_wall_opposite_sides.obj",
 				GraphicsManager.getScene().getTextureCache(),
-				GraphicsManager.getScene().getMaterialCache(), true);
+				GraphicsManager.getScene().getMaterialCache(), false);
 		GraphicsManager.getScene().addModel(wallOppositeSidesModel);
 
 		Model wallThreeSidesModel =
 			ModelLoader.loadModel("brick_wall_three_sides",
 				"models/dungeon/brick_wall_three_sides.obj",
 				GraphicsManager.getScene().getTextureCache(),
-				GraphicsManager.getScene().getMaterialCache(), true);
+				GraphicsManager.getScene().getMaterialCache(), false);
 		GraphicsManager.getScene().addModel(wallThreeSidesModel);
 
 		SceneLights sceneLights = new SceneLights();
