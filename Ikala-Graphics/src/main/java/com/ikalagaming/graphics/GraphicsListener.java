@@ -37,14 +37,17 @@ public class GraphicsListener implements Listener {
 
 		Map map = level.getMap();
 
+		log.debug("Map is {}x{} and has {} layers", map.getWidth(),
+			map.getHeight(), map.getLayerCount());
+
 		for (int z = 0; z < map.getLayerCount(); ++z) {
 			if (!(map.getLayer(z) instanceof TileLayer)) {
 				continue;
 			}
 			TileLayer layer = (TileLayer) map.getLayer(z);
 
-			for (int y = 0; y < map.getWidth(); ++y) {
-				for (int x = 0; x < map.getHeight(); ++x) {
+			for (int y = 0; y < map.getHeight(); ++y) {
+				for (int x = 0; x < map.getWidth(); ++x) {
 					Tile tile = layer.getTileAt(x, y);
 
 					if (tile == null) {
