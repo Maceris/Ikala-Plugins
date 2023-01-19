@@ -292,9 +292,6 @@ public class GraphicsManager {
 				GraphicsManager.getScene().getMaterialCache(), true);
 		GraphicsManager.getScene().addModel(wallThreeSidesModel);
 
-		
-		GraphicsManager.render.setupData(GraphicsManager.scene);
-		
 		SceneLights sceneLights = new SceneLights();
 		AmbientLight ambientLight = sceneLights.getAmbientLight();
 		ambientLight.setIntensity(0.5f);
@@ -332,6 +329,8 @@ public class GraphicsManager {
 			(float) Math.toRadians(390.f));
 
 		GraphicsManager.lightAngle = 45.001f;
+		
+		GraphicsManager.render.setupData(GraphicsManager.scene);
 	}
 
 	/**

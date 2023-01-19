@@ -12,7 +12,6 @@ import com.ikalagaming.graphics.graph.RenderBuffers;
 import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Entity;
-import com.ikalagaming.graphics.scene.EntityBatch;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
@@ -74,12 +73,12 @@ public class AnimationRender {
 	}
 
 	/**
-	 * Set up before rendering the scene.
-	 * 
-	 * @param scene The scene to render.
+	 * Compute animation transformations for all animated models in the scene.
+	 *
+	 * @param scene The scene we are rendering.
 	 * @param renderBuffer The buffers for indirect drawing of models.
 	 */
-	public void startRender(@NonNull Scene scene,
+	public void render(@NonNull Scene scene,
 		@NonNull RenderBuffers renderBuffer) {
 		this.shaderProgram.bind();
 		GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, 0,
@@ -90,61 +89,47 @@ public class AnimationRender {
 			renderBuffer.getBonesMatricesBuffer());
 		GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, 3,
 			renderBuffer.getDestAnimationBuffer());
-	}
 
-	/**
-	 * Clean up after we are done rendering the scene.
-	 */
-	public void endRender() {
-		this.shaderProgram.unbind();
-	}
-
-	/**
-	 * Compute animation transformations for all animated models in the scene.
-	 *
-	 * @param batch The batch of entities we are rendering.
-	 * @param renderBuffer The buffers for indirect drawing of models.
-	 */
-	public void render(@NonNull EntityBatch batch,
-		@NonNull RenderBuffers renderBuffer) {
 		int dstOffset = 0;
-		for (Model model : batch.getModels()) {
-			if (model.isAnimated()) {
-				for (RenderBuffers.MeshDrawData meshDrawData : model
-					.getMeshDrawDataList()) {
-					RenderBuffers.AnimMeshDrawData animMeshDrawData =
-						meshDrawData.animMeshDrawData();
-					Entity entity = animMeshDrawData.entity();
-					Model.AnimatedFrame frame =
-						entity.getAnimationData().getCurrentFrame();
-					int groupSize = (int) Math
-						.ceil((float) meshDrawData.sizeInBytes() / (14 * 4));
-					this.uniformsMap.setUniform(
-						ShaderUniforms.Animation.DRAW_PARAMETERS + "."
-							+ ShaderUniforms.Animation.DrawParameters.SOURCE_OFFSET,
-						animMeshDrawData.bindingPoseOffset());
-					this.uniformsMap.setUniform(
-						ShaderUniforms.Animation.DRAW_PARAMETERS + "."
-							+ ShaderUniforms.Animation.DrawParameters.SOURCE_SIZE,
-						meshDrawData.sizeInBytes() / 4);
-					this.uniformsMap.setUniform(
-						ShaderUniforms.Animation.DRAW_PARAMETERS + "."
-							+ ShaderUniforms.Animation.DrawParameters.WEIGHTS_OFFSET,
-						animMeshDrawData.weightsOffset());
-					this.uniformsMap.setUniform(
-						ShaderUniforms.Animation.DRAW_PARAMETERS + "."
-							+ ShaderUniforms.Animation.DrawParameters.BONES_MATRICES_OFFSET,
-						frame.getOffset());
-					this.uniformsMap.setUniform(
-						ShaderUniforms.Animation.DRAW_PARAMETERS + "."
-							+ ShaderUniforms.Animation.DrawParameters.DESTINATION_OFFSET,
-						dstOffset);
-					GL43.glDispatchCompute(groupSize, 1, 1);
-					dstOffset += meshDrawData.sizeInBytes() / 4;
-				}
+		for (Model model : scene.getModelMap().values()) {
+			if (!model.isAnimated()) {
+				continue;
+			}
+			for (RenderBuffers.MeshDrawData meshDrawData : model
+				.getMeshDrawDataList()) {
+				RenderBuffers.AnimMeshDrawData animMeshDrawData =
+					meshDrawData.animMeshDrawData();
+				Entity entity = animMeshDrawData.entity();
+				Model.AnimatedFrame frame =
+					entity.getAnimationData().getCurrentFrame();
+				int groupSize = (int) Math
+					.ceil((float) meshDrawData.sizeInBytes() / (14 * 4));
+				this.uniformsMap.setUniform(
+					ShaderUniforms.Animation.DRAW_PARAMETERS + "."
+						+ ShaderUniforms.Animation.DrawParameters.SOURCE_OFFSET,
+					animMeshDrawData.bindingPoseOffset());
+				this.uniformsMap.setUniform(
+					ShaderUniforms.Animation.DRAW_PARAMETERS + "."
+						+ ShaderUniforms.Animation.DrawParameters.SOURCE_SIZE,
+					meshDrawData.sizeInBytes() / 4);
+				this.uniformsMap.setUniform(
+					ShaderUniforms.Animation.DRAW_PARAMETERS + "."
+						+ ShaderUniforms.Animation.DrawParameters.WEIGHTS_OFFSET,
+					animMeshDrawData.weightsOffset());
+				this.uniformsMap.setUniform(
+					ShaderUniforms.Animation.DRAW_PARAMETERS + "."
+						+ ShaderUniforms.Animation.DrawParameters.BONES_MATRICES_OFFSET,
+					frame.getOffset());
+				this.uniformsMap.setUniform(
+					ShaderUniforms.Animation.DRAW_PARAMETERS + "."
+						+ ShaderUniforms.Animation.DrawParameters.DESTINATION_OFFSET,
+					dstOffset);
+				GL43.glDispatchCompute(groupSize, 1, 1);
+				dstOffset += meshDrawData.sizeInBytes() / 4;
 			}
 		}
 
 		GL42.glMemoryBarrier(GL43.GL_SHADER_STORAGE_BARRIER_BIT);
+		this.shaderProgram.unbind();
 	}
 }

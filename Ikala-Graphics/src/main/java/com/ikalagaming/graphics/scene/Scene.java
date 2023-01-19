@@ -12,7 +12,6 @@ import com.ikalagaming.graphics.exceptions.ModelException;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.graph.TextureCache;
-import com.ikalagaming.graphics.render.SceneRender;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -21,9 +20,7 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -96,39 +93,6 @@ public class Scene {
 	 * @return The texture cache.
 	 */
 	private TextureCache textureCache;
-	/**
-	 * The batches of entities we will be rendering for this scene.
-	 */
-	@Getter
-	private List<EntityBatch> entityBatches;
-
-	/**
-	 * Set up the batches of entities to render.
-	 */
-	private void generateEntityBatches() {
-		entityBatches.clear();
-
-		EntityBatch batch = new EntityBatch();
-		entityBatches.add(batch);
-
-		int drawElementCount = 0;
-		for (Model model : this.modelMap.values()) {
-			List<Entity> entities = model.getEntitiesList();
-			int meshCount = model.getMeshDrawDataList().size();
-			for (Entity entity : entities) {
-				if (drawElementCount >= SceneRender.MAX_ENTITIES) {
-					// We filled up one batch, so start a new one
-					batch = new EntityBatch();
-					entityBatches.add(batch);
-					drawElementCount = 0;
-				}
-				batch.getEntites().computeIfAbsent(model, t -> {
-					return new ArrayList<>();
-				}).add(entity);
-				drawElementCount += meshCount;
-			}
-		}
-	}
 
 	/**
 	 * Set up a new scene.
@@ -143,7 +107,6 @@ public class Scene {
 		this.materialCache = new MaterialCache();
 		this.camera = new Camera();
 		this.fog = new Fog();
-		this.entityBatches = new ArrayList<>();
 	}
 
 	/**
@@ -165,7 +128,6 @@ public class Scene {
 				error.replaceFirst("\\{\\}", "" + modelId));
 		}
 		model.getEntitiesList().add(entity);
-		generateEntityBatches();
 	}
 
 	/**

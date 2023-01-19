@@ -356,28 +356,6 @@ public class ShaderUniforms {
 	 */
 	public static class Scene {
 		/**
-		 * Per-entity specific information.
-		 *
-		 * @author Ches Burks
-		 *
-		 */
-		public static class DrawElement {
-			/**
-			 * The index of the material.
-			 */
-			public static final String MATERIAL_INDEX = "materialIndex";
-			/**
-			 * The index of the model matrix.
-			 */
-			public static final String MODEL_MATRIX_INDEX = "modelMatrixIndex";
-
-			/**
-			 * Private constructor so this class is not instantiated.
-			 */
-			private DrawElement() {}
-		}
-
-		/**
 		 * Information about a material.
 		 *
 		 * @author Ches Burks
@@ -412,19 +390,11 @@ public class ShaderUniforms {
 		}
 
 		/**
-		 * Stores data per entity needed for indirect drawing.
-		 */
-		public static final String DRAW_ELEMENTS = "drawElements";
-		/**
 		 * Material characteristics.
 		 *
 		 * @see Material
 		 */
 		public static final String MATERIALS = "materials";
-		/**
-		 * Model matrices.
-		 */
-		public static final String MODEL_MATRICES = "modelMatrices";
 		/**
 		 * Used to calculate the position when projected onto the screen space.
 		 */
@@ -451,33 +421,6 @@ public class ShaderUniforms {
 	 *
 	 */
 	public static class Shadow {
-		/**
-		 * Per-entity specific information.
-		 *
-		 * @author Ches Burks
-		 *
-		 */
-		public static class DrawElement {
-			/**
-			 * The index of the model matrix.
-			 */
-			public static final String MODEL_MATRIX_INDEX = "modelMatrixIndex";
-
-			/**
-			 * Private constructor so this class is not instantiated.
-			 */
-			private DrawElement() {}
-		}
-
-		/**
-		 * Stores data per entity needed for indirect drawing.
-		 */
-		public static final String DRAW_ELEMENTS = "drawElements";
-		/**
-		 * Model matrices.
-		 */
-		public static final String MODEL_MATRICES = "modelMatrices";
-
 		/**
 		 * The combined projection and view matrix.
 		 */

@@ -8,8 +8,9 @@ package com.ikalagaming.graphics.render;
 
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.GeometryBuffer;
+import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.graph.RenderBuffers;
-import com.ikalagaming.graphics.scene.EntityBatch;
+import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.Getter;
@@ -19,8 +20,17 @@ import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL14;
+import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL30;
+import org.lwjgl.opengl.GL40;
+import org.lwjgl.opengl.GL43;
+import org.lwjgl.system.MemoryUtil;
 
+import java.nio.ByteBuffer;
+import java.nio.FloatBuffer;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -37,15 +47,30 @@ public class Render {
 		 * Enable wireframe.
 		 */
 		private boolean wireframe;
-		/**
-		 * Enable wireframe only on a specific render batch.
-		 */
-		private boolean wireframSpecificBatch;
-		/**
-		 * Which batch we are rendering as wireframe.
-		 */
-		private int batchSelection;
 	}
+
+	/**
+	 * The size of a draw command.
+	 */
+	private static final int COMMAND_SIZE = 5 * 4;
+	/**
+	 * The size of a draw element.
+	 */
+	private static final int DRAW_ELEMENT_SIZE = 2 * 4;
+
+	/**
+	 * The size of a model matrix.
+	 */
+	private static final int MODEL_MATRIX_SIZE = 4 * 16;
+	/**
+	 * The binding for the draw elements buffer SSBO.
+	 */
+	static final int DRAW_ELEMENT_BINDING = 1;
+
+	/**
+	 * The binding for the model matrices buffer SSBO.
+	 */
+	static final int MODEL_MATRICES_BINDING = 2;
 
 	/**
 	 * Rendering configurations.
@@ -98,6 +123,10 @@ public class Render {
 	 * over.
 	 */
 	private AtomicBoolean buffersPopulated;
+	/**
+	 * The buffers for the batches.
+	 */
+	CommandBuffer commandBuffers;
 
 	/**
 	 * Set up a new rendering pipeline.
@@ -123,6 +152,7 @@ public class Render {
 		this.gBuffer = new GeometryBuffer(window);
 		this.renderBuffers = new RenderBuffers();
 		this.buffersPopulated = new AtomicBoolean();
+		this.commandBuffers = new CommandBuffer();
 	}
 
 	/**
@@ -137,6 +167,7 @@ public class Render {
 		this.animationRender.cleanup();
 		this.gBuffer.cleanUp();
 		this.renderBuffers.cleanup();
+		this.commandBuffers.cleanup();
 	}
 
 	/**
@@ -180,44 +211,20 @@ public class Render {
 	 * @param scene The scene to render.
 	 */
 	public void render(@NonNull Window window, @NonNull Scene scene) {
-		this.animationRender.startRender(scene, this.renderBuffers);
-		for (EntityBatch batch : scene.getEntityBatches()) {
-			this.animationRender.render(batch, this.renderBuffers);
-		}
-		this.animationRender.endRender();
 
-		this.shadowRender.startRender(scene);
-		for (EntityBatch batch : scene.getEntityBatches()) {
-			this.shadowRender.render(scene, this.renderBuffers, batch);
-		}
-		this.shadowRender.endRender();
+		this.animationRender.render(scene, this.renderBuffers);
+		this.shadowRender.render(scene, this.renderBuffers,
+			this.commandBuffers);
 
-		if (Render.configuration.wireframe
-			&& !Render.configuration.wireframSpecificBatch) {
+		if (Render.configuration.wireframe) {
 			GL11.glPolygonMode(GL11.GL_FRONT_AND_BACK, GL11.GL_LINE);
 			GL11.glDisable(GL11.GL_TEXTURE_2D);
 		}
 
-		this.sceneRender.startRender(scene, this.gBuffer);
-		for (int i = 0; i < scene.getEntityBatches().size(); ++i) {
-			EntityBatch batch = scene.getEntityBatches().get(i);
-			if (Render.configuration.wireframSpecificBatch
-				&& i == Render.configuration.batchSelection) {
-				GL11.glPolygonMode(GL11.GL_FRONT_AND_BACK, GL11.GL_LINE);
-				GL11.glDisable(GL11.GL_TEXTURE_2D);
-			}
-			this.sceneRender.render(scene, this.renderBuffers, this.gBuffer,
-				batch);
-			if (Render.configuration.wireframSpecificBatch
-				&& i == Render.configuration.batchSelection) {
-				GL11.glPolygonMode(GL11.GL_FRONT_AND_BACK, GL11.GL_FILL);
-				GL11.glEnable(GL11.GL_TEXTURE_2D);
-			}
-		}
-		this.sceneRender.endRender();
+		this.sceneRender.render(scene, this.renderBuffers, this.gBuffer,
+			this.commandBuffers);
 
-		if (Render.configuration.wireframe
-			&& !Render.configuration.wireframSpecificBatch) {
+		if (Render.configuration.wireframe) {
 			GL11.glPolygonMode(GL11.GL_FRONT_AND_BACK, GL11.GL_FILL);
 			GL11.glEnable(GL11.GL_TEXTURE_2D);
 		}
@@ -239,6 +246,106 @@ public class Render {
 	}
 
 	/**
+	 * Set up the command buffer for animated models.
+	 *
+	 * @param scene The scene to render.
+	 */
+	private void setupAnimCommandBuffer(@NonNull Scene scene) {
+		List<Model> modelList = scene.getModelMap().values().stream()
+			.filter(Model::isAnimated).toList();
+
+		int numMeshes = 0;
+		int drawElementCount = 0;
+		for (Model model : modelList) {
+			numMeshes += model.getMeshDrawDataList().size();
+			drawElementCount += model.getEntitiesList().size()
+				* model.getMeshDrawDataList().size();
+		}
+
+		Map<String, Integer> entitiesIndexMap = new HashMap<>();
+
+		int entityIndex = 0;
+		for (Model model : scene.getModelMap().values()) {
+			List<Entity> entities = model.getEntitiesList();
+			for (Entity entity : entities) {
+				entitiesIndexMap.put(entity.getEntityID(), entityIndex);
+				entityIndex++;
+			}
+		}
+
+		// currently contains the size of the list of entities
+		FloatBuffer modelMatrices =
+			MemoryUtil.memAllocFloat(entityIndex * Render.MODEL_MATRIX_SIZE);
+
+		entityIndex = 0;
+		for (Model model : scene.getModelMap().values()) {
+			List<Entity> entities = model.getEntitiesList();
+			for (Entity entity : entities) {
+				entity.getModelMatrix().get(16 * entityIndex, modelMatrices);
+				entityIndex++;
+			}
+		}
+		int modelMatrixBuffer = GL15.glGenBuffers();
+		GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, modelMatrixBuffer);
+		GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, modelMatrices,
+			GL15.GL_STATIC_DRAW);
+		this.commandBuffers.setAnimatedModelMatricesBuffer(modelMatrixBuffer);
+		MemoryUtil.memFree(modelMatrices);
+
+		int firstIndex = 0;
+		int baseInstance = 0;
+		ByteBuffer commandBuffer =
+			MemoryUtil.memAlloc(numMeshes * Render.COMMAND_SIZE);
+		ByteBuffer drawElements =
+			MemoryUtil.memAlloc(drawElementCount * Render.DRAW_ELEMENT_SIZE);
+		for (Model model : modelList) {
+			List<Entity> entities = model.getEntitiesList();
+			for (RenderBuffers.MeshDrawData meshDrawData : model
+				.getMeshDrawDataList()) {
+				// count
+				commandBuffer.putInt(meshDrawData.vertices());
+				// instanceCount
+				commandBuffer.putInt(1);
+				commandBuffer.putInt(firstIndex);
+				// baseVertex
+				commandBuffer.putInt(meshDrawData.offset());
+				commandBuffer.putInt(baseInstance);
+
+				firstIndex += meshDrawData.vertices();
+				baseInstance++;
+
+				int materialIndex = meshDrawData.materialIndex();
+				for (Entity entity : entities) {
+					// model matrix index
+					drawElements
+						.putInt(entitiesIndexMap.get(entity.getEntityID()));
+					drawElements.putInt(materialIndex);
+				}
+			}
+		}
+		commandBuffer.flip();
+		drawElements.flip();
+
+		this.commandBuffers.setAnimatedDrawCount(
+			commandBuffer.remaining() / Render.COMMAND_SIZE);
+
+		int animRenderBufferHandle = GL15.glGenBuffers();
+		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER, animRenderBufferHandle);
+		GL15.glBufferData(GL40.GL_DRAW_INDIRECT_BUFFER, commandBuffer,
+			GL15.GL_DYNAMIC_DRAW);
+
+		MemoryUtil.memFree(commandBuffer);
+		this.commandBuffers.setAnimatedCommandBuffer(animRenderBufferHandle);
+
+		int drawElementBuffer = GL15.glGenBuffers();
+		GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, drawElementBuffer);
+		GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, drawElements,
+			GL15.GL_STATIC_DRAW);
+		this.commandBuffers.setAnimatedDrawElementBuffer(drawElementBuffer);
+		MemoryUtil.memFree(drawElements);
+	}
+
+	/**
 	 * Set up model data before rendering.
 	 *
 	 * @param scene The scene to read models from.
@@ -250,9 +357,106 @@ public class Render {
 		this.renderBuffers.loadStaticModels(scene);
 		this.renderBuffers.loadAnimatedModels(scene);
 		this.sceneRender.setupData(scene);
-		this.shadowRender.setupData(scene);
-		// List<Model> modelList = new
-		// ArrayList<>(scene.getModelMap().values());
-		// modelList.forEach(m -> m.getMeshDataList().clear());
+		this.setupAnimCommandBuffer(scene);
+		this.setupStaticCommandBuffer(scene);
+	}
+
+	/**
+	 * Set up the command buffer for static models.
+	 *
+	 * @param scene The scene to render.
+	 */
+	private void setupStaticCommandBuffer(@NonNull Scene scene) {
+		List<Model> modelList = scene.getModelMap().values().stream()
+			.filter(m -> !m.isAnimated()).toList();
+
+		int numMeshes = 0;
+		int totalEntities = 0;
+		int drawElementCount = 0;
+		for (Model model : modelList) {
+			numMeshes += model.getMeshDrawDataList().size();
+			drawElementCount += model.getEntitiesList().size()
+				* model.getMeshDrawDataList().size();
+			totalEntities += model.getEntitiesList().size();
+		}
+
+		Map<String, Integer> entitiesIndexMap = new HashMap<>();
+
+		// currently contains the size of the list of entities
+		FloatBuffer modelMatrices =
+			MemoryUtil.memAllocFloat(totalEntities * Render.MODEL_MATRIX_SIZE);
+
+		int entityIndex = 0;
+		for (Model model : scene.getModelMap().values()) {
+			List<Entity> entities = model.getEntitiesList();
+			for (Entity entity : entities) {
+				entity.getModelMatrix().get(16 * entityIndex, modelMatrices);
+				entitiesIndexMap.put(entity.getEntityID(), entityIndex);
+				entityIndex++;
+			}
+		}
+		int modelMatrixBuffer = GL15.glGenBuffers();
+		GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, modelMatrixBuffer);
+		GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, modelMatrices,
+			GL15.GL_STATIC_DRAW);
+		this.commandBuffers.setStaticModelMatricesBuffer(modelMatrixBuffer);
+		MemoryUtil.memFree(modelMatrices);
+
+		int firstIndex = 0;
+		int baseInstance = 0;
+		ByteBuffer commandBuffer =
+			MemoryUtil.memAlloc(numMeshes * Render.COMMAND_SIZE);
+		ByteBuffer drawElements =
+			MemoryUtil.memAlloc(drawElementCount * Render.DRAW_ELEMENT_SIZE);
+
+		for (Model model : modelList) {
+			List<Entity> entities = model.getEntitiesList();
+			int numEntities = entities.size();
+			for (RenderBuffers.MeshDrawData meshDrawData : model
+				.getMeshDrawDataList()) {
+				// count
+				commandBuffer.putInt(meshDrawData.vertices());
+				// instanceCount
+				commandBuffer.putInt(numEntities);
+				commandBuffer.putInt(firstIndex);
+				// baseVertex
+				commandBuffer.putInt(meshDrawData.offset());
+				commandBuffer.putInt(baseInstance);
+
+				firstIndex += meshDrawData.vertices();
+				baseInstance += numEntities;
+
+				int materialIndex = meshDrawData.materialIndex();
+				for (Entity entity : entities) {
+					// model matrix index
+					drawElements
+						.putInt(entitiesIndexMap.get(entity.getEntityID()));
+					drawElements.putInt(materialIndex);
+				}
+			}
+		}
+
+		commandBuffer.flip();
+		drawElements.flip();
+
+		this.commandBuffers.setStaticDrawCount(
+			commandBuffer.remaining() / Render.COMMAND_SIZE);
+
+		int staticRenderBufferHandle = GL15.glGenBuffers();
+		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER,
+			staticRenderBufferHandle);
+		GL15.glBufferData(GL40.GL_DRAW_INDIRECT_BUFFER, commandBuffer,
+			GL15.GL_DYNAMIC_DRAW);
+
+		MemoryUtil.memFree(commandBuffer);
+		this.commandBuffers.setStaticCommandBuffer(staticRenderBufferHandle);
+
+		int drawElementBuffer = GL15.glGenBuffers();
+		GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, drawElementBuffer);
+		GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, drawElements,
+			GL15.GL_STATIC_DRAW);
+		this.commandBuffers.setStaticDrawElementBuffer(drawElementBuffer);
+		MemoryUtil.memFree(drawElements);
+
 	}
 }

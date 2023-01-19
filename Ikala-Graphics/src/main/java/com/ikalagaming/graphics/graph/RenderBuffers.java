@@ -127,12 +127,13 @@ public class RenderBuffers {
 	 */
 	public void cleanup() {
 		this.vboIDList.stream().forEach(GL15::glDeleteBuffers);
+		this.vboIDList.clear();
 		GL30.glDeleteVertexArrays(this.staticVaoID);
 		GL30.glDeleteVertexArrays(this.animVaoID);
 	}
 
 	private void defineVertexAttribs() {
-		final int stride = 3 * 4 * 4 + 2 * 4;
+		final int stride = (3 * 4) * 4 + 2 * 4;
 		int pointer = 0;
 		// Positions
 		GL20.glEnableVertexAttribArray(0);
