@@ -22,6 +22,7 @@ import imgui.flag.ImGuiCond;
 import imgui.type.ImBoolean;
 import lombok.NonNull;
 import org.joml.Vector2f;
+import org.joml.Vector3f;
 
 /**
  * A GUI for manipulating lights
@@ -93,6 +94,10 @@ public class GUIControls implements GuiInstance {
 
 		ImGui.text(String.format("FPS: %d", GraphicsManager.getLastFPS()));
 
+		Vector3f position =
+			GraphicsManager.getCameraManager().getCamera().getPosition();
+		ImGui.text(String.format("Camera position: (%f, %f, %f)", position.x,
+			position.y, position.z));
 		Vector2f rotation =
 			GraphicsManager.getCameraManager().getCamera().getRotation();
 		ImGui.text(
