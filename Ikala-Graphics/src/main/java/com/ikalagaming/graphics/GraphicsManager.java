@@ -212,6 +212,7 @@ public class GraphicsManager {
 		GraphicsManager.scene.addModel(terrainModel);
 		Entity terrainEntity = new Entity("terrainEntity", terrainModelId);
 		terrainEntity.setScale(100.0f);
+		terrainEntity.setPosition(0, -1, 0);
 		terrainEntity.updateModelMatrix();
 		GraphicsManager.scene.addEntity(terrainEntity);
 
