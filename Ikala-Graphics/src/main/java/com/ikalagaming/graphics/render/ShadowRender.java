@@ -96,7 +96,6 @@ public class ShadowRender {
 	 * @param scene The scene we are rendering.
 	 * @param renderBuffers The buffers for indirect drawing of models.
 	 * @param commandBuffers The rendering command buffers.
-	 * @param batch The subset of entities to draw.
 	 */
 	public void render(@NonNull Scene scene,
 		@NonNull RenderBuffers renderBuffers,
@@ -143,10 +142,10 @@ public class ShadowRender {
 		// Animated meshes
 		GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER,
 			Render.DRAW_ELEMENT_BINDING,
-			commandBuffers.getStaticDrawElementBuffer());
+			commandBuffers.getAnimatedDrawElementBuffer());
 		GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER,
 			Render.MODEL_MATRICES_BINDING,
-			commandBuffers.getStaticModelMatricesBuffer());
+			commandBuffers.getAnimatedModelMatricesBuffer());
 		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER,
 			commandBuffers.getAnimatedCommandBuffer());
 		GL30.glBindVertexArray(renderBuffers.getAnimVaoID());

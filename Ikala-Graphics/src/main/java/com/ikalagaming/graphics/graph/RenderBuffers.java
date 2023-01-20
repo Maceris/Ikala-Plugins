@@ -182,9 +182,10 @@ public class RenderBuffers {
 		int weightsOffset = 0;
 		for (Model model : modelList) {
 			List<Entity> entities = model.getEntitiesList();
+			List<RenderBuffers.MeshDrawData> meshDrawDataList =
+				model.getMeshDrawDataList();
+			meshDrawDataList.clear();
 			for (Entity entity : entities) {
-				List<RenderBuffers.MeshDrawData> meshDrawDataList =
-					model.getMeshDrawDataList();
 				bindingPoseOffset = chunkBindingPoseOffset;
 				weightsOffset = chunkWeightsOffset;
 				for (MeshData meshData : model.getMeshDataList()) {
@@ -399,6 +400,7 @@ public class RenderBuffers {
 		for (Model model : modelList) {
 			List<RenderBuffers.MeshDrawData> meshDrawDataList =
 				model.getMeshDrawDataList();
+			meshDrawDataList.clear();
 			for (MeshData meshData : model.getMeshDataList()) {
 				positionsSize += meshData.getPositions().length;
 				normalsSize += meshData.getNormals().length;

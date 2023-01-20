@@ -61,7 +61,7 @@ public class Render {
 	/**
 	 * The size of a model matrix.
 	 */
-	private static final int MODEL_MATRIX_SIZE = 4 * 16;
+	private static final int MODEL_MATRIX_SIZE = 4 * 4;
 	/**
 	 * The binding for the draw elements buffer SSBO.
 	 */
@@ -255,41 +255,36 @@ public class Render {
 			.filter(Model::isAnimated).toList();
 
 		int numMeshes = 0;
+		int totalEntities = 0;
 		int drawElementCount = 0;
 		for (Model model : modelList) {
 			numMeshes += model.getMeshDrawDataList().size();
 			drawElementCount += model.getEntitiesList().size()
 				* model.getMeshDrawDataList().size();
+			totalEntities += model.getEntitiesList().size();
 		}
 
 		Map<String, Integer> entitiesIndexMap = new HashMap<>();
 
+		// currently contains the size of the list of entities
+		FloatBuffer modelMatrices =
+			MemoryUtil.memAllocFloat(totalEntities * Render.MODEL_MATRIX_SIZE);
+
 		int entityIndex = 0;
-		for (Model model : scene.getModelMap().values()) {
+		for (Model model : modelList) {
 			List<Entity> entities = model.getEntitiesList();
 			for (Entity entity : entities) {
+				entity.getModelMatrix()
+					.get(entityIndex * Render.MODEL_MATRIX_SIZE, modelMatrices);
 				entitiesIndexMap.put(entity.getEntityID(), entityIndex);
 				entityIndex++;
 			}
 		}
-
-		// currently contains the size of the list of entities
-		FloatBuffer modelMatrices =
-			MemoryUtil.memAllocFloat(entityIndex * Render.MODEL_MATRIX_SIZE);
-
-		entityIndex = 0;
-		for (Model model : scene.getModelMap().values()) {
-			List<Entity> entities = model.getEntitiesList();
-			for (Entity entity : entities) {
-				entity.getModelMatrix().get(16 * entityIndex, modelMatrices);
-				entityIndex++;
-			}
-		}
 		int modelMatrixBuffer = GL15.glGenBuffers();
+		this.commandBuffers.setAnimatedModelMatricesBuffer(modelMatrixBuffer);
 		GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, modelMatrixBuffer);
 		GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, modelMatrices,
 			GL15.GL_STATIC_DRAW);
-		this.commandBuffers.setAnimatedModelMatricesBuffer(modelMatrixBuffer);
 		MemoryUtil.memFree(modelMatrices);
 
 		int firstIndex = 0;
@@ -299,7 +294,6 @@ public class Render {
 		ByteBuffer drawElements =
 			MemoryUtil.memAlloc(drawElementCount * Render.DRAW_ELEMENT_SIZE);
 		for (Model model : modelList) {
-			List<Entity> entities = model.getEntitiesList();
 			for (RenderBuffers.MeshDrawData meshDrawData : model
 				.getMeshDrawDataList()) {
 				// count
@@ -314,13 +308,10 @@ public class Render {
 				firstIndex += meshDrawData.vertices();
 				baseInstance++;
 
-				int materialIndex = meshDrawData.materialIndex();
-				for (Entity entity : entities) {
-					// model matrix index
-					drawElements
-						.putInt(entitiesIndexMap.get(entity.getEntityID()));
-					drawElements.putInt(materialIndex);
-				}
+				Entity entity = meshDrawData.animMeshDrawData().entity();
+				// model matrix index
+				drawElements.putInt(entitiesIndexMap.get(entity.getEntityID()));
+				drawElements.putInt(meshDrawData.materialIndex());
 			}
 		}
 		commandBuffer.flip();
@@ -330,18 +321,17 @@ public class Render {
 			commandBuffer.remaining() / Render.COMMAND_SIZE);
 
 		int animRenderBufferHandle = GL15.glGenBuffers();
+		this.commandBuffers.setAnimatedCommandBuffer(animRenderBufferHandle);
 		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER, animRenderBufferHandle);
 		GL15.glBufferData(GL40.GL_DRAW_INDIRECT_BUFFER, commandBuffer,
 			GL15.GL_DYNAMIC_DRAW);
-
 		MemoryUtil.memFree(commandBuffer);
-		this.commandBuffers.setAnimatedCommandBuffer(animRenderBufferHandle);
 
 		int drawElementBuffer = GL15.glGenBuffers();
+		this.commandBuffers.setAnimatedDrawElementBuffer(drawElementBuffer);
 		GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, drawElementBuffer);
 		GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, drawElements,
 			GL15.GL_STATIC_DRAW);
-		this.commandBuffers.setAnimatedDrawElementBuffer(drawElementBuffer);
 		MemoryUtil.memFree(drawElements);
 	}
 
@@ -353,6 +343,7 @@ public class Render {
 	public void setupData(@NonNull Scene scene) {
 		if (this.buffersPopulated.compareAndSet(false, true)) {
 			this.renderBuffers.cleanup();
+			this.commandBuffers.cleanup();
 		}
 		this.renderBuffers.loadStaticModels(scene);
 		this.renderBuffers.loadAnimatedModels(scene);
@@ -387,19 +378,20 @@ public class Render {
 			MemoryUtil.memAllocFloat(totalEntities * Render.MODEL_MATRIX_SIZE);
 
 		int entityIndex = 0;
-		for (Model model : scene.getModelMap().values()) {
+		for (Model model : modelList) {
 			List<Entity> entities = model.getEntitiesList();
 			for (Entity entity : entities) {
-				entity.getModelMatrix().get(16 * entityIndex, modelMatrices);
+				entity.getModelMatrix()
+					.get(entityIndex * Render.MODEL_MATRIX_SIZE, modelMatrices);
 				entitiesIndexMap.put(entity.getEntityID(), entityIndex);
 				entityIndex++;
 			}
 		}
 		int modelMatrixBuffer = GL15.glGenBuffers();
+		this.commandBuffers.setStaticModelMatricesBuffer(modelMatrixBuffer);
 		GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, modelMatrixBuffer);
 		GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, modelMatrices,
 			GL15.GL_STATIC_DRAW);
-		this.commandBuffers.setStaticModelMatricesBuffer(modelMatrixBuffer);
 		MemoryUtil.memFree(modelMatrices);
 
 		int firstIndex = 0;
@@ -443,19 +435,18 @@ public class Render {
 			commandBuffer.remaining() / Render.COMMAND_SIZE);
 
 		int staticRenderBufferHandle = GL15.glGenBuffers();
+		this.commandBuffers.setStaticCommandBuffer(staticRenderBufferHandle);
 		GL15.glBindBuffer(GL40.GL_DRAW_INDIRECT_BUFFER,
 			staticRenderBufferHandle);
 		GL15.glBufferData(GL40.GL_DRAW_INDIRECT_BUFFER, commandBuffer,
 			GL15.GL_DYNAMIC_DRAW);
-
 		MemoryUtil.memFree(commandBuffer);
-		this.commandBuffers.setStaticCommandBuffer(staticRenderBufferHandle);
 
 		int drawElementBuffer = GL15.glGenBuffers();
+		this.commandBuffers.setStaticDrawElementBuffer(drawElementBuffer);
 		GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, drawElementBuffer);
 		GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, drawElements,
 			GL15.GL_STATIC_DRAW);
-		this.commandBuffers.setStaticDrawElementBuffer(drawElementBuffer);
 		MemoryUtil.memFree(drawElements);
 
 	}
