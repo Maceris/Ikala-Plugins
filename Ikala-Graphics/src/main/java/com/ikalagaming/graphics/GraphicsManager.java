@@ -325,12 +325,11 @@ public class GraphicsManager {
 			.setFog(new Fog(true, new Vector3f(0.5f, 0.5f, 0.5f), 0.02f));
 
 		Camera camera = GraphicsManager.scene.getCamera();
-		camera.setPosition(-1.5f, 3.0f, 4.5f);
-		camera.addRotation((float) Math.toRadians(15.0f),
-			(float) Math.toRadians(390.f));
+		camera.setPosition(-11f, 11f, 0f);
+		camera.addRotation(0.42f, 1.92f);
 
 		GraphicsManager.lightAngle = 45.001f;
-		
+
 		GraphicsManager.render.setupData(GraphicsManager.scene);
 	}
 
