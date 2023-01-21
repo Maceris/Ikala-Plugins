@@ -211,6 +211,7 @@ public class Render {
 	 * @param scene The scene to render.
 	 */
 	public void render(@NonNull Window window, @NonNull Scene scene) {
+		this.updateModelMatrices(scene);
 
 		this.animationRender.render(scene, this.renderBuffers);
 		this.shadowRender.render(scene, this.renderBuffers,
@@ -448,6 +449,57 @@ public class Render {
 		GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, drawElements,
 			GL15.GL_STATIC_DRAW);
 		MemoryUtil.memFree(drawElements);
+
+	}
+
+	/**
+	 * Take alist of models and upload the model matrices to the appropriate
+	 * buffer.
+	 *
+	 * @param models The list of models.
+	 * @param bufferID The opengl ID of the buffer we want to buffer data to.
+	 */
+	private void updateModelBuffer(List<Model> models, int bufferID) {
+		int totalEntities = 0;
+		for (Model model : models) {
+			totalEntities += model.getEntitiesList().size();
+		}
+
+		// currently contains the size of the list of entities
+		FloatBuffer modelMatrices =
+			MemoryUtil.memAllocFloat(totalEntities * Render.MODEL_MATRIX_SIZE);
+
+		int entityIndex = 0;
+		for (Model model : models) {
+			List<Entity> entities = model.getEntitiesList();
+			for (Entity entity : entities) {
+				entity.getModelMatrix()
+					.get(entityIndex * Render.MODEL_MATRIX_SIZE, modelMatrices);
+				entityIndex++;
+			}
+		}
+		GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, bufferID);
+		GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, modelMatrices,
+			GL15.GL_STATIC_DRAW);
+		MemoryUtil.memFree(modelMatrices);
+	}
+
+	/**
+	 * Update the model matrices buffers for all the scene objects.
+	 *
+	 * @param scene The scene we are rendering.
+	 */
+	private void updateModelMatrices(@NonNull Scene scene) {
+		List<Model> animatedList = scene.getModelMap().values().stream()
+			.filter(Model::isAnimated).toList();
+		int animatedBuffer =
+			this.commandBuffers.getAnimatedModelMatricesBuffer();
+		this.updateModelBuffer(animatedList, animatedBuffer);
+
+		List<Model> staticList = scene.getModelMap().values().stream()
+			.filter(m -> !m.isAnimated()).toList();
+		int staticBuffer = this.commandBuffers.getStaticModelMatricesBuffer();
+		this.updateModelBuffer(staticList, staticBuffer);
 
 	}
 }
