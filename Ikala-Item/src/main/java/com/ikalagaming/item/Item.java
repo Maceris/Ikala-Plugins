@@ -21,7 +21,7 @@ import javax.persistence.MappedSuperclass;
 @Getter
 @Setter
 @MappedSuperclass
-public class Item {
+public abstract class Item {
 	/**
 	 * The category of the item, such as a weapon or consumable.
 	 *

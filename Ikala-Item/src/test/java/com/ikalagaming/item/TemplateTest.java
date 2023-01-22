@@ -3,6 +3,7 @@ package com.ikalagaming.item;
 import com.ikalagaming.item.template.AccessoryTemplate;
 import com.ikalagaming.item.template.ArmorTemplate;
 import com.ikalagaming.item.template.WeaponTemplate;
+import com.ikalagaming.item.testing.ItemGenerator;
 
 import com.google.gson.Gson;
 import org.junit.jupiter.api.Assertions;

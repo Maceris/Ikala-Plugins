@@ -14,6 +14,7 @@ import com.ikalagaming.item.Junk;
 import com.ikalagaming.item.Material;
 import com.ikalagaming.item.Quest;
 import com.ikalagaming.item.Weapon;
+import com.ikalagaming.item.testing.ItemGenerator;
 import com.ikalagaming.rpg.utils.ItemRendering;
 
 import imgui.ImGui;

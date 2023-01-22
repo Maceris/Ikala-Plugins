@@ -10,6 +10,7 @@ import com.ikalagaming.item.template.AccessoryTemplate;
 import com.ikalagaming.item.template.ArmorTemplate;
 import com.ikalagaming.item.template.EquipmentTemplate;
 import com.ikalagaming.item.template.WeaponTemplate;
+import com.ikalagaming.item.testing.ItemGenerator;
 import com.ikalagaming.rpg.utils.ItemRendering;
 
 import imgui.ImGui;

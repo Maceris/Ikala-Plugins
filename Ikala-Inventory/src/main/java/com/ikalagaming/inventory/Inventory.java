@@ -181,12 +181,15 @@ public class Inventory extends Component<Inventory> {
 	 *         account stack size.
 	 */
 	public boolean areSameType(int first, int second) {
-		if (first < 0 || first > this.size || second < 0 || second > this.size
-			|| first == second) {
+		if (first < 0 || first >= this.size || second < 0
+			|| second >= this.size) {
 			return false;
 		}
 
 		InventorySlot firstSlot = this.slots[first];
+		if (first == second) {
+			return firstSlot.isStackable();
+		}
 		InventorySlot secondSlot = this.slots[second];
 
 		if (firstSlot.isEmpty() || secondSlot.isEmpty()
@@ -247,20 +250,26 @@ public class Inventory extends Component<Inventory> {
 		if (amount <= 0) {
 			return false;
 		}
+		// If we straight up don't have enough slots in the inventory, bail
+		if (!InvUtil.canStack(item) && amount > this.size) {
+			return false;
+		}
 		final int maxStackSize = InvUtil.maxStackSize(item);
-		int remainingAmount = Math.min(amount, maxStackSize);
+		int remainingAmount = amount;
 		for (int i = 0; i < this.size; ++i) {
 			InventorySlot slot = this.slots[i];
-			if (slot.isEmpty()) {
-				return true;
-			}
-			if (!slot.isStackable()
-				|| !item.getID().equals(slot.getItem().get().getID())) {
+			if (!(slot.isEmpty() || (slot.isStackable()
+				&& item.getID().equals(slot.getItem().get().getID())))) {
+				/*
+				 * If the slot is filled, and it's either unstackable or
+				 * different, we keep going.
+				 */
 				continue;
 			}
 
-			int roomInSlot =
-				maxStackSize - slot.getItemStack().get().getCount();
+			Optional<ItemStack> stack = slot.getItemStack();
+			int amountInSlot = stack.isPresent() ? stack.get().getCount() : 0;
+			int roomInSlot = maxStackSize - amountInSlot;
 			if (roomInSlot >= remainingAmount) {
 				return true;
 			}
@@ -268,7 +277,7 @@ public class Inventory extends Component<Inventory> {
 				remainingAmount -= roomInSlot;
 			}
 		}
-		return false;
+		return remainingAmount <= 0;
 	}
 
 	/**
@@ -292,8 +301,8 @@ public class Inventory extends Component<Inventory> {
 	 * @return Whether the source slot is now empty.
 	 */
 	public boolean combineSlots(int source, int destination) {
-		if (source < 0 || source > this.size || destination < 0
-			|| destination > this.size || source == destination) {
+		if (source < 0 || source >= this.size || destination < 0
+			|| destination >= this.size || source == destination) {
 			return false;
 		}
 		if (InventorySlot.combine(this.slots[source],
@@ -379,7 +388,10 @@ public class Inventory extends Component<Inventory> {
 	 * @param nonStackable The stackable item.
 	 * @see #setItem(int, Item, int)
 	 */
-	public void setItem(int slotNumber, Equipment nonStackable) {
+	public void setItem(int slotNumber, @NonNull Equipment nonStackable) {
+		if (slotNumber < 0 || slotNumber >= this.size) {
+			return;
+		}
 		this.slots[slotNumber].clear();
 		this.slots[slotNumber].setItem(nonStackable);
 	}
@@ -390,10 +402,18 @@ public class Inventory extends Component<Inventory> {
 	 *
 	 * @param slotNumber The slot number to fill.
 	 * @param stackable The stackable item.
-	 * @param count The number of items in the stack.
+	 * @param count The number of items in the stack. If <=0, does nothing, and
+	 *            will be capped at the maximum stack size for the given type of
+	 *            item.
 	 * @see #setItem(int, Equipment)
 	 */
-	public void setItem(int slotNumber, Item stackable, int count) {
+	public void setItem(int slotNumber, @NonNull Item stackable, int count) {
+		if (slotNumber < 0 || slotNumber >= this.size) {
+			return;
+		}
+		if (count <= 0) {
+			return;
+		}
 		if (!InvUtil.canStack(stackable)) {
 			this.setItem(slotNumber, (Equipment) stackable);
 			return;
@@ -414,7 +434,7 @@ public class Inventory extends Component<Inventory> {
 	 * @return Whether we could successfully split the stack.
 	 */
 	public boolean splitStack(int slotNumber, int amountToRemove) {
-		if (slotNumber < 0 || slotNumber > this.size) {
+		if (slotNumber < 0 || slotNumber >= this.size) {
 			return false;
 		}
 		InventorySlot slot = this.slots[slotNumber];
@@ -447,7 +467,7 @@ public class Inventory extends Component<Inventory> {
 	 * @param second The second slot.
 	 */
 	public void swapSlots(int first, int second) {
-		if (first < 0 || first > this.size || second < 0 || second > this.size
+		if (first < 0 || first >= this.size || second < 0 || second >= this.size
 			|| first == second) {
 			return;
 		}

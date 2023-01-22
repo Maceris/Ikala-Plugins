@@ -7,6 +7,7 @@ import com.ikalagaming.item.template.DamageModifierTemplate;
 import com.ikalagaming.item.template.EquipmentTemplate;
 import com.ikalagaming.item.template.ItemStatsTemplate;
 import com.ikalagaming.item.template.WeaponTemplate;
+import com.ikalagaming.item.testing.ItemGenerator;
 
 import com.google.gson.Gson;
 import org.junit.jupiter.api.Assertions;

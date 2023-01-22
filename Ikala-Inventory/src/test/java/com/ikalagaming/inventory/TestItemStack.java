@@ -1,6 +1,7 @@
 package com.ikalagaming.inventory;
 
 import com.ikalagaming.event.EventManager;
+import com.ikalagaming.item.Consumable;
 import com.ikalagaming.item.Item;
 import com.ikalagaming.item.enums.ItemType;
 import com.ikalagaming.plugins.PluginManager;
@@ -45,13 +46,13 @@ class TestItemStack {
 	 */
 	@Test
 	void testIsSameType() {
-		Item item1 = new Item();
+		Item item1 = new Consumable();
 		item1.setID("Common ID");
 		item1.setItemType(ItemType.CONSUMABLE);
-		Item item2 = new Item();
+		Item item2 = new Consumable();
 		item2.setID("Common ID");
 		item2.setItemType(ItemType.CONSUMABLE);
-		Item different = new Item();
+		Item different = new Consumable();
 		different.setID("Different ID");
 		different.setItemType(ItemType.CONSUMABLE);
 

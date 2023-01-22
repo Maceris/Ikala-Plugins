@@ -1,5 +1,7 @@
 package com.ikalagaming.item;
 
+import com.ikalagaming.item.testing.ItemGenerator;
+
 import com.google.gson.Gson;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -69,8 +71,8 @@ class ItemTest {
 	@Test
 	void testJunkPersistence() {
 		Gson gson = new Gson();
-		Item junk = ItemGenerator.getJunk();
-		Item parsed = gson.fromJson(gson.toJson(junk), Item.class);
+		Junk junk = ItemGenerator.getJunk();
+		Junk parsed = gson.fromJson(gson.toJson(junk), Junk.class);
 		Assertions.assertEquals(junk, parsed);
 	}
 
@@ -81,8 +83,8 @@ class ItemTest {
 	@Test
 	void testMaterialPersistence() {
 		Gson gson = new Gson();
-		Item material = ItemGenerator.getMaterial();
-		Item parsed = gson.fromJson(gson.toJson(material), Item.class);
+		Material material = ItemGenerator.getMaterial();
+		Material parsed = gson.fromJson(gson.toJson(material), Material.class);
 		Assertions.assertEquals(material, parsed);
 	}
 
@@ -93,8 +95,8 @@ class ItemTest {
 	@Test
 	void testQuestPersistence() {
 		Gson gson = new Gson();
-		Item quest = ItemGenerator.getQuest();
-		Item parsed = gson.fromJson(gson.toJson(quest), Item.class);
+		Quest quest = ItemGenerator.getQuest();
+		Quest parsed = gson.fromJson(gson.toJson(quest), Quest.class);
 		Assertions.assertEquals(quest, parsed);
 	}
 

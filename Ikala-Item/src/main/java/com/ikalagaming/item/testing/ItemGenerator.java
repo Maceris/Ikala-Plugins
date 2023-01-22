@@ -1,7 +1,22 @@
-package com.ikalagaming.item;
+package com.ikalagaming.item.testing;
 
 import com.ikalagaming.attributes.Attribute;
 import com.ikalagaming.attributes.DamageType;
+import com.ikalagaming.item.Accessory;
+import com.ikalagaming.item.Affix;
+import com.ikalagaming.item.Armor;
+import com.ikalagaming.item.AttributeModifier;
+import com.ikalagaming.item.Component;
+import com.ikalagaming.item.Consumable;
+import com.ikalagaming.item.DamageModifier;
+import com.ikalagaming.item.Equipment;
+import com.ikalagaming.item.Item;
+import com.ikalagaming.item.ItemCriteria;
+import com.ikalagaming.item.ItemStats;
+import com.ikalagaming.item.Junk;
+import com.ikalagaming.item.Material;
+import com.ikalagaming.item.Quest;
+import com.ikalagaming.item.Weapon;
 import com.ikalagaming.item.enums.AccessoryType;
 import com.ikalagaming.item.enums.AffixType;
 import com.ikalagaming.item.enums.ArmorType;
@@ -31,7 +46,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author Ches Burks
  *
  */
-class ItemGenerator {
+public class ItemGenerator {
 	private static Random rand = new Random();
 	private static RandomGen random = new RandomGen();
 	private static AtomicInteger nextID = new AtomicInteger();
@@ -190,7 +205,6 @@ class ItemGenerator {
 
 		return component;
 	}
-
 
 	/**
 	 * Generate a random consumable.
@@ -375,6 +389,33 @@ class ItemGenerator {
 		quest.setID(quest.getItemType().getPrefix()
 			+ ItemGenerator.nextID.getAndIncrement());
 		return quest;
+	}
+
+	/**
+	 * Get a random item of any item type.
+	 *
+	 * @return The random item.
+	 */
+	public static Item getRandomItem() {
+		switch (ItemGenerator.random.selectEnumValue(ItemType.class)) {
+			case ACCESSORY:
+				return ItemGenerator.getAccessory();
+			case ARMOR:
+				return ItemGenerator.getArmor();
+			case COMPONENT:
+				return ItemGenerator.getComponent();
+			case CONSUMABLE:
+				return ItemGenerator.getConsumable();
+			case JUNK:
+				return ItemGenerator.getJunk();
+			case MATERIAL:
+				return ItemGenerator.getMaterial();
+			case QUEST:
+				return ItemGenerator.getQuest();
+			case WEAPON:
+			default:
+				return ItemGenerator.getWeapon();
+		}
 	}
 
 	/**
