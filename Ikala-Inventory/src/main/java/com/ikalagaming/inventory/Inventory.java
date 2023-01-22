@@ -434,11 +434,14 @@ public class Inventory extends Component<Inventory> {
 	 * @return Whether we could successfully split the stack.
 	 */
 	public boolean splitStack(int slotNumber, int amountToRemove) {
-		if (slotNumber < 0 || slotNumber >= this.size) {
+		if (slotNumber < 0 || slotNumber >= this.size || amountToRemove <= 0) {
 			return false;
 		}
 		InventorySlot slot = this.slots[slotNumber];
 		if (!slot.isStackable()) {
+			return false;
+		}
+		if (!this.hasEmptySlot()) {
 			return false;
 		}
 		Optional<ItemStack> maybeStack = slot.getItemStack();
@@ -449,11 +452,7 @@ public class Inventory extends Component<Inventory> {
 		if (oldStack.getCount() <= amountToRemove) {
 			return false;
 		}
-
 		ItemStack newStack = new ItemStack(oldStack.getItem(), amountToRemove);
-		if (!this.hasEmptySlot()) {
-			return false;
-		}
 		this.addToEmptySlot(newStack);
 		oldStack.setCount(oldStack.getCount() - amountToRemove);
 		return true;

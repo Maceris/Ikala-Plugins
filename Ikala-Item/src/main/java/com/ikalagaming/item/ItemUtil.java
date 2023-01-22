@@ -4,15 +4,26 @@ import lombok.NonNull;
 
 /**
  * Utilities related to items.
- * 
+ *
  * @author Ches Burks
  *
  */
 public class ItemUtil {
 	/**
+	 * Coordinates within an item texture where the item icon is found.
+	 *
+	 * @param x0 The upper left x coordinate.
+	 * @param y0 The upper left y coordinate.
+	 * @param x1 The lower right x coordinate.
+	 * @param y1 The lower right y coordinate.
+	 */
+	public static record ImageCoordinates(int x0, int y0, int x1, int y1) {}
+
+	/**
 	 * The width of an item texture in pixels.
 	 */
 	private static final int ITEM_WIDTH = 16;
+
 	/**
 	 * The height of an item texture in pixels.
 	 */
@@ -21,7 +32,7 @@ public class ItemUtil {
 	/**
 	 * Return the texture coordinates within the item sprite sheet for the given
 	 * item.
-	 * 
+	 *
 	 * @param item The item we are looking for.
 	 * @return The texture coordinates on the item sprite sheet.
 	 */
@@ -189,18 +200,9 @@ public class ItemUtil {
 		}
 
 		return new ImageCoordinates(uvUpperLeftX, uvUpperLeftY,
-			uvUpperLeftX + ITEM_WIDTH, uvUpperLeftY + ITEM_HEIGHT);
+			uvUpperLeftX + ItemUtil.ITEM_WIDTH,
+			uvUpperLeftY + ItemUtil.ITEM_HEIGHT);
 	}
-
-	/**
-	 * Coordinates within an item texture where the item icon is found.
-	 * 
-	 * @param x0 The upper left x coordinate.
-	 * @param y0 The upper left y coordinate.
-	 * @param x1 The lower right x coordinate.
-	 * @param y1 The lower right y coordinate.
-	 */
-	public static record ImageCoordinates(int x0, int y0, int x1, int y1) {}
 
 	/**
 	 * Private constructor so this class is not instantiated.

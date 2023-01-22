@@ -6,14 +6,19 @@ import com.ikalagaming.item.Item;
 import com.ikalagaming.item.testing.ItemGenerator;
 import com.ikalagaming.plugins.PluginManager;
 
+import lombok.NonNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 /**
  * Tests for the inventory class.
- * 
+ *
  * @author Ches Burks
  *
  */
@@ -43,21 +48,34 @@ class TestInventory {
 	}
 
 	/**
-	 * Tests the constructor.
+	 * Check the status of the whole inventory based on what we expect to be
+	 * there.
+	 *
+	 * @param inventory The inventory to check.
+	 * @param expectedItems The items we expect in each slot.
+	 * @param expectedAmounts The amounts we expect in each slot.
 	 */
-	@Test
-	void testConstructor() {
-		Assertions.assertThrows(IllegalArgumentException.class, () -> {
-			@SuppressWarnings("unused")
-			Inventory ignored = new Inventory(-1);
-		});
-		Assertions.assertThrows(IllegalArgumentException.class, () -> {
-			@SuppressWarnings("unused")
-			Inventory ignored = new Inventory(0);
-		});
+	private void checkStacks(@NonNull Inventory inventory,
+		@NonNull List<Item> expectedItems,
+		@NonNull List<Integer> expectedAmounts) {
+		// Might as well fail instead of throwing an exception
+		Assertions.assertTrue(expectedItems.size() == expectedAmounts.size());
+		Assertions.assertTrue(expectedItems.size() == inventory.getSize());
 
-		Inventory inventory = new Inventory(1);
-		Assertions.assertNotNull(inventory);
+		for (int i = 0; i < expectedItems.size(); ++i) {
+			Item item = expectedItems.get(i);
+			int count = expectedAmounts.get(i);
+			if (item == null) {
+				Assertions.assertTrue(inventory.isEmpty(i));
+				Assertions.assertTrue(inventory.getItem(i).isEmpty());
+				Assertions.assertEquals(0, inventory.getItemCount(i));
+			}
+			else {
+				Assertions.assertFalse(inventory.isEmpty(i));
+				Assertions.assertEquals(item, inventory.getItem(i).get());
+				Assertions.assertEquals(count, inventory.getItemCount(i));
+			}
+		}
 	}
 
 	/**
@@ -253,8 +271,133 @@ class TestInventory {
 		Assertions.assertTrue(inventory.isEmpty(1));
 	}
 
+	/**
+	 * Test combining slots.
+	 */
 	@Test
-	void testCombineSlots() {}
+	void testCombineSlots() {
+		Inventory inventory = new Inventory(6);
+		Equipment first = ItemGenerator.getArmor();
+		Item second = ItemGenerator.getQuest();
+		Item third = ItemGenerator.getConsumable();
+
+		inventory.setItem(0, first);
+		inventory.setItem(1, second, 5);
+		inventory.setItem(2, third, 11);
+		inventory.setItem(5, second, 2);
+
+		// Easy boundary tests
+		Assertions.assertFalse(inventory.combineSlots(-1, 1));
+		Assertions.assertFalse(inventory.combineSlots(-1, 6));
+		Assertions.assertFalse(inventory.combineSlots(1, -1));
+		Assertions.assertFalse(inventory.combineSlots(1, 6));
+		Assertions.assertFalse(inventory.combineSlots(6, -1));
+		Assertions.assertFalse(inventory.combineSlots(6, 1));
+
+		// same slot
+		Assertions.assertFalse(inventory.combineSlots(1, 1));
+		Assertions.assertFalse(inventory.combineSlots(2, 2));
+
+		// Unstackable
+		Assertions.assertFalse(inventory.combineSlots(1, 2));
+		Assertions.assertFalse(inventory.combineSlots(2, 1));
+
+		// stackable
+		Assertions.assertTrue(inventory.splitStack(1, 3));
+		Assertions.assertTrue(inventory.splitStack(2, 9));
+
+		Assertions.assertEquals(2, inventory.getItemCount(1));
+		Assertions.assertEquals(2, inventory.getItemCount(2));
+		Assertions.assertEquals(3, inventory.getItemCount(3));
+		Assertions.assertEquals(9, inventory.getItemCount(4));
+		Assertions.assertEquals(2, inventory.getItemCount(5));
+
+		Assertions.assertEquals(second, inventory.getItem(1).get());
+		Assertions.assertEquals(third, inventory.getItem(2).get());
+		Assertions.assertEquals(second, inventory.getItem(3).get());
+		Assertions.assertEquals(third, inventory.getItem(4).get());
+		Assertions.assertEquals(second, inventory.getItem(5).get());
+
+		Assertions.assertTrue(inventory.combineSlots(5, 3));
+		Assertions.assertEquals(2, inventory.getItemCount(1));
+		Assertions.assertEquals(2, inventory.getItemCount(2));
+		Assertions.assertEquals(5, inventory.getItemCount(3));
+		Assertions.assertEquals(9, inventory.getItemCount(4));
+		Assertions.assertEquals(0, inventory.getItemCount(5));
+		Assertions.assertTrue(inventory.isEmpty(5));
+
+		Assertions.assertEquals(second, inventory.getItem(1).get());
+		Assertions.assertEquals(third, inventory.getItem(2).get());
+		Assertions.assertEquals(second, inventory.getItem(3).get());
+		Assertions.assertEquals(third, inventory.getItem(4).get());
+		Assertions.assertTrue(inventory.getItem(5).isEmpty());
+
+		Assertions.assertTrue(inventory.combineSlots(3, 1));
+		Assertions.assertEquals(7, inventory.getItemCount(1));
+		Assertions.assertEquals(2, inventory.getItemCount(2));
+		Assertions.assertEquals(0, inventory.getItemCount(3));
+		Assertions.assertEquals(9, inventory.getItemCount(4));
+		Assertions.assertEquals(0, inventory.getItemCount(5));
+		Assertions.assertTrue(inventory.isEmpty(3));
+		Assertions.assertTrue(inventory.isEmpty(5));
+
+		Assertions.assertEquals(second, inventory.getItem(1).get());
+		Assertions.assertEquals(third, inventory.getItem(2).get());
+		Assertions.assertTrue(inventory.getItem(3).isEmpty());
+		Assertions.assertEquals(third, inventory.getItem(4).get());
+		Assertions.assertTrue(inventory.getItem(5).isEmpty());
+
+		Assertions.assertTrue(inventory.combineSlots(4, 2));
+		Assertions.assertEquals(7, inventory.getItemCount(1));
+		Assertions.assertEquals(11, inventory.getItemCount(2));
+		Assertions.assertEquals(0, inventory.getItemCount(3));
+		Assertions.assertEquals(0, inventory.getItemCount(4));
+		Assertions.assertEquals(0, inventory.getItemCount(5));
+		Assertions.assertTrue(inventory.isEmpty(3));
+		Assertions.assertTrue(inventory.isEmpty(4));
+		Assertions.assertTrue(inventory.isEmpty(5));
+
+		Assertions.assertEquals(second, inventory.getItem(1).get());
+		Assertions.assertEquals(third, inventory.getItem(2).get());
+		Assertions.assertTrue(inventory.getItem(3).isEmpty());
+		Assertions.assertTrue(inventory.getItem(4).isEmpty());
+		Assertions.assertTrue(inventory.getItem(5).isEmpty());
+
+		Assertions.assertTrue(inventory.combineSlots(1, 4));
+		Assertions.assertTrue(inventory.combineSlots(2, 5));
+		Assertions.assertEquals(0, inventory.getItemCount(1));
+		Assertions.assertEquals(0, inventory.getItemCount(2));
+		Assertions.assertEquals(0, inventory.getItemCount(3));
+		Assertions.assertEquals(7, inventory.getItemCount(4));
+		Assertions.assertEquals(11, inventory.getItemCount(5));
+		Assertions.assertTrue(inventory.isEmpty(1));
+		Assertions.assertTrue(inventory.isEmpty(2));
+		Assertions.assertTrue(inventory.isEmpty(3));
+
+		Assertions.assertEquals(second, inventory.getItem(4).get());
+		Assertions.assertEquals(third, inventory.getItem(5).get());
+		Assertions.assertTrue(inventory.getItem(1).isEmpty());
+		Assertions.assertTrue(inventory.getItem(2).isEmpty());
+		Assertions.assertTrue(inventory.getItem(3).isEmpty());
+	}
+
+	/**
+	 * Tests the constructor.
+	 */
+	@Test
+	void testConstructor() {
+		Assertions.assertThrows(IllegalArgumentException.class, () -> {
+			@SuppressWarnings("unused")
+			Inventory ignored = new Inventory(-1);
+		});
+		Assertions.assertThrows(IllegalArgumentException.class, () -> {
+			@SuppressWarnings("unused")
+			Inventory ignored = new Inventory(0);
+		});
+
+		Inventory inventory = new Inventory(1);
+		Assertions.assertNotNull(inventory);
+	}
 
 	/**
 	 * Tests fetching items from the inventory.
@@ -300,8 +443,50 @@ class TestInventory {
 		Assertions.assertTrue(inventory.getItem(5).isEmpty());
 	}
 
+	/**
+	 * Check the item counts.
+	 */
 	@Test
-	void testGetItemCount() {}
+	void testGetItemCount() {
+		Inventory inventory = new Inventory(5);
+
+		// Edge cases
+		Assertions.assertEquals(0, inventory.getItemCount(-1));
+		Assertions.assertEquals(0, inventory.getItemCount(5));
+
+		// Normal stacks
+		Item stackable = ItemGenerator.getQuest();
+		inventory.setItem(0, stackable, InvUtil.maxStackSize(stackable));
+		Assertions.assertEquals(InvUtil.maxStackSize(stackable),
+			inventory.getItemCount(0));
+		inventory.setItem(1, stackable, 1);
+		Assertions.assertEquals(1, inventory.getItemCount(1));
+		inventory.setItem(2, stackable, 5);
+		Assertions.assertEquals(5, inventory.getItemCount(2));
+
+		Equipment unstackable = ItemGenerator.getWeapon();
+		inventory.setItem(3, unstackable);
+		Assertions.assertEquals(1, inventory.getItemCount(3));
+
+		// Try force overwriting
+		inventory.setItem(1, unstackable);
+		Assertions.assertEquals(1, inventory.getItemCount(1));
+
+		inventory.setItem(3, stackable, 4);
+		Assertions.assertEquals(4, inventory.getItemCount(3));
+	}
+
+	/**
+	 * Test the get size method.
+	 */
+	@Test
+	void testGetSize() {
+		Inventory inventory = new Inventory(1);
+		Assertions.assertEquals(1, inventory.getSize());
+
+		inventory = new Inventory(999);
+		Assertions.assertEquals(999, inventory.getSize());
+	}
 
 	/**
 	 * Tests logic for checking empty slots.
@@ -416,22 +601,138 @@ class TestInventory {
 		Assertions.assertEquals(5, inventory.getItemCount(1));
 	}
 
-	@Test
-	void testSplitStack() {}
-
-	@Test
-	void testSwapSlots() {}
-
 	/**
-	 * Test the get size method.
+	 * Test splitting stacks.
 	 */
 	@Test
-	void testGetSize() {
-		Inventory inventory = new Inventory(1);
-		Assertions.assertEquals(1, inventory.getSize());
+	void testSplitStack() {
+		Inventory inventory = new Inventory(5);
+		Equipment first = ItemGenerator.getArmor();
+		Item second = ItemGenerator.getQuest();
+		Item third = ItemGenerator.getConsumable();
 
-		inventory = new Inventory(999);
-		Assertions.assertEquals(999, inventory.getSize());
+		inventory.setItem(0, first);
+		inventory.setItem(1, second, 5);
+		inventory.setItem(2, third, 11);
+
+		// Easy boundary tests
+		Assertions.assertFalse(inventory.splitStack(-1, 1));
+		Assertions.assertFalse(inventory.splitStack(6, 1));
+		Assertions.assertFalse(inventory.splitStack(2, -1));
+		Assertions.assertFalse(inventory.splitStack(2, 0));
+
+		// Unstackable
+		Assertions.assertFalse(inventory.splitStack(0, 1));
+		Assertions.assertFalse(inventory.splitStack(0, 2));
+
+		// stackable
+		Assertions.assertTrue(inventory.splitStack(1, 3));
+		Assertions.assertEquals(2, inventory.getItemCount(1));
+		Assertions.assertEquals(3, inventory.getItemCount(3));
+		Assertions.assertEquals(second, inventory.getItem(1).get());
+		Assertions.assertEquals(second, inventory.getItem(3).get());
+
+		Assertions.assertTrue(inventory.splitStack(2, 9));
+		Assertions.assertEquals(2, inventory.getItemCount(2));
+		Assertions.assertEquals(9, inventory.getItemCount(4));
+		Assertions.assertEquals(third, inventory.getItem(2).get());
+		Assertions.assertEquals(third, inventory.getItem(4).get());
+
+		// Full inventory
+		Assertions.assertFalse(inventory.splitStack(2, 1));
+		Assertions.assertFalse(inventory.splitStack(3, 1));
+		Assertions.assertFalse(inventory.splitStack(4, 1));
+
+	}
+
+	/**
+	 * Test swapping items around.
+	 */
+	@Test
+	void testSwapSlots() {
+		Inventory inventory = new Inventory(6);
+		Equipment first = ItemGenerator.getArmor();
+		Equipment second = ItemGenerator.getArmor();
+		Item third = ItemGenerator.getQuest();
+		Item fourth = ItemGenerator.getConsumable();
+
+		List<Item> expectedItems =
+			new ArrayList<>(List.of(first, second, third, fourth));
+		expectedItems.add(null);
+		expectedItems.add(null);
+		List<Integer> expectedCounts =
+			new ArrayList<>(List.of(1, 1, 5, 11, 0, 0));
+		inventory.setItem(0, first);
+		inventory.setItem(1, second);
+		inventory.setItem(2, third, 5);
+		inventory.setItem(3, fourth, 11);
+
+		// Sanity check our starting state, before the wild swaps start
+		Assertions.assertNotNull(inventory.getItem(0));
+		Assertions.assertNotNull(inventory.getItem(1));
+		Assertions.assertNotNull(inventory.getItem(2));
+		Assertions.assertNotNull(inventory.getItem(3));
+		Assertions.assertNotNull(inventory.getItem(4));
+		Assertions.assertNotNull(inventory.getItem(5));
+
+		Assertions.assertEquals(first, inventory.getItem(0).get());
+		Assertions.assertEquals(second, inventory.getItem(1).get());
+		Assertions.assertEquals(third, inventory.getItem(2).get());
+		Assertions.assertEquals(fourth, inventory.getItem(3).get());
+		Assertions.assertTrue(inventory.getItem(4).isEmpty());
+		Assertions.assertTrue(inventory.getItem(5).isEmpty());
+
+		// Swap two stackables
+		inventory.swapSlots(0, 1);
+		// now 2s, 1s, 3u, 4u, _, _
+		Collections.swap(expectedItems, 0, 1);
+		Collections.swap(expectedCounts, 0, 1);
+		this.checkStacks(inventory, expectedItems, expectedCounts);
+
+		// Swap unstackables
+		inventory.swapSlots(3, 2);
+		// now 2s, 1s, 4u, 3u, _, _
+		Collections.swap(expectedItems, 3, 2);
+		Collections.swap(expectedCounts, 3, 2);
+		this.checkStacks(inventory, expectedItems, expectedCounts);
+
+		// Swap stackable and empty slot
+		inventory.swapSlots(1, 4);
+		// now 2s, _, 4u, 3u, 1s, _
+		Collections.swap(expectedItems, 1, 4);
+		Collections.swap(expectedCounts, 1, 4);
+		this.checkStacks(inventory, expectedItems, expectedCounts);
+
+		// Swap stackable and unstackable
+		inventory.swapSlots(0, 2);
+		// now 4u, _, 2s, 3u, 1s, _
+		Collections.swap(expectedItems, 0, 2);
+		Collections.swap(expectedCounts, 0, 2);
+		this.checkStacks(inventory, expectedItems, expectedCounts);
+
+		// Swap empty slot and unstackable
+		inventory.swapSlots(5, 3);
+		// now 4u, _, 2s, _, 1s, 3u
+		Collections.swap(expectedItems, 5, 3);
+		Collections.swap(expectedCounts, 5, 3);
+		this.checkStacks(inventory, expectedItems, expectedCounts);
+
+		// Swap empty slots
+		inventory.swapSlots(1, 3);
+		// now 4u, _, 2s, _, 1s, 3u
+		Collections.swap(expectedItems, 1, 3);
+		Collections.swap(expectedCounts, 1, 3);
+		this.checkStacks(inventory, expectedItems, expectedCounts);
+
+		// invalid swaps
+		inventory.swapSlots(0, 0);
+		inventory.swapSlots(0, -1);
+		inventory.swapSlots(2, 99);
+		inventory.swapSlots(-1, 99);
+		inventory.swapSlots(98, -1);
+		inventory.swapSlots(-1, 4);
+		inventory.swapSlots(99, 5);
+		this.checkStacks(inventory, expectedItems, expectedCounts);
 	}
 
 }
