@@ -3,14 +3,22 @@ package com.ikalagaming.graphics;
 import com.ikalagaming.event.EventHandler;
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.graphics.scene.Entity;
+import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.world.Level;
 import com.ikalagaming.world.WorldManager;
 import com.ikalagaming.world.events.LevelLoaded;
 
+import com.google.gson.Gson;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Vector3f;
+import org.mapeditor.core.CustomClass;
+import org.mapeditor.core.CustomClass.Member;
 import org.mapeditor.core.Map;
 import org.mapeditor.core.Tile;
 import org.mapeditor.core.TileLayer;
+
+import java.awt.Color;
+import java.util.Optional;
 
 /**
  * Event listeners for the graphics plugin.
@@ -22,14 +30,86 @@ import org.mapeditor.core.TileLayer;
 public class GraphicsListener implements Listener {
 
 	/**
-	 * Load models for a layer.
+	 * Load the directional light from properties.
 	 * 
+	 * @param map The map to load from.
+	 */
+	private static void loadDirectionalLight(Map map) {
+		String dirLightText =
+			map.getProperties().getProperty("Directional Light");
+
+		Gson gson = new Gson();
+		CustomClass dirLightTemp =
+			gson.fromJson(dirLightText, CustomClass.class);
+
+		Vector3f color =
+			GraphicsListener.toVector3f(dirLightTemp.getColor("Color"));
+
+		Vector3f direction =
+			GraphicsListener.toVector3f(dirLightTemp.getMember("Direction"));
+
+		float intensity = dirLightTemp.getFloat("Intensity");
+
+		DirectionalLight dirLight =
+			new DirectionalLight(color, direction, intensity);
+		GraphicsManager.getScene().getSceneLights().setDirLight(dirLight);
+	}
+
+	/**
+	 * Convert a color to a vector3f.
+	 *
+	 * @param color Optionally, a member containing the color.
+	 * @return A default color, or what parts we could decode which deviated
+	 *         from the defaults.
+	 */
+	private static Vector3f toVector3f(Color color) {
+		Vector3f result = new Vector3f(1, 1, 1);
+		result.x = color.getRed() / 255f;
+		result.y = color.getGreen() / 255f;
+		result.z = color.getBlue() / 255f;
+		return result;
+	}
+
+	/**
+	 * Convert a Vector3f class to an actual Vector3f.
+	 *
+	 * @param vector The hypothetical vector.
+	 * @return A default vector, or what parts we could decode that deviated
+	 *         from the defaults.
+	 */
+	private static Vector3f toVector3f(Optional<Member> vector) {
+		Vector3f result = new Vector3f();
+		if (vector.isEmpty()) {
+			return result;
+		}
+		CustomClass vectorDetails = vector.get().getChild();
+
+		Optional<Member> x = vectorDetails.getMember("X");
+		Optional<Member> y = vectorDetails.getMember("Y");
+		Optional<Member> z = vectorDetails.getMember("Z");
+
+		if (x.isPresent()) {
+			result.x = Float.parseFloat(x.get().getValue());
+		}
+		if (y.isPresent()) {
+			result.y = Float.parseFloat(y.get().getValue());
+		}
+		if (z.isPresent()) {
+			result.z = Float.parseFloat(z.get().getValue());
+		}
+		return result;
+	}
+
+	/**
+	 * Load models for a layer.
+	 *
 	 * @param event The event.
 	 */
 	@EventHandler
 	public void onLevelLoaded(LevelLoaded event) {
 		if (!GraphicsManager.initialized.get()) {
-			log.warn("Loading level before initializing graphics!");
+			GraphicsListener.log
+				.warn("Loading level before initializing graphics!");
 			return;
 		}
 
@@ -37,8 +117,10 @@ public class GraphicsListener implements Listener {
 
 		Map map = level.getMap();
 
-		log.debug("Map is {}x{} and has {} layers", map.getWidth(),
-			map.getHeight(), map.getLayerCount());
+		GraphicsListener.log.debug("Map is {}x{} and has {} layers",
+			map.getWidth(), map.getHeight(), map.getLayerCount());
+
+		GraphicsListener.loadDirectionalLight(map);
 
 		for (int z = 0; z < map.getLayerCount(); ++z) {
 			if (!(map.getLayer(z) instanceof TileLayer)) {
@@ -145,4 +227,5 @@ public class GraphicsListener implements Listener {
 		}
 		GraphicsManager.refreshRenderData();
 	}
+
 }
