@@ -58,6 +58,6 @@ public class SceneLights {
 		this.pointLights = new ArrayList<>();
 		this.spotLights = new ArrayList<>();
 		this.dirLight = new DirectionalLight(new Vector3f(1, 1, 1),
-			new Vector3f(0, 1, 0), 1.0f);
+			new Vector3f(0, 1, 0), 0f);
 	}
 }
