@@ -20,7 +20,8 @@ import org.joml.Vector3f;
 @AllArgsConstructor
 public class DirectionalLight {
 	/**
-	 * The color of the light.
+	 * The color of the light. x, y, and z correspond to r, g, and b
+	 * respectively.
 	 *
 	 * @param color The new color.
 	 * @return The color of the light.
