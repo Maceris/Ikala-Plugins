@@ -1,29 +1,32 @@
-# Example-Plugin
+# Ikala-World
 
-This plugin is an example of what plugins look like and a template for
-creating new plugins.
+A plugin that handles maps and the world.
 
-## Building
 
-This plugin uses Gradle to build. To build you will need Ikala-Core downloaded
-as well, in the same folder that the Ikala-Plugins folder was downloaded. To 
-build this you will need to run `./gradlew clean build` from the command
-line.
+## Map Format
 
-## Making your own plugin
+This plugin uses the [Tiled Map Editor](https://www.mapeditor.org/) for a standard map format. We use some custom classes in the maps so that most of what we need in a level can be encoded in the maps.
 
-This project uses the standard Gradle folder structure. It has been configured 
-so that you can run `./gradlew eclipse` to set up for import into Eclipse, 
-or `./gradlew idea` to set up for IntelliJ.
 
-For your own plugin, you'll need to configure:
+### Custom Types
 
-- The root project name in `settings.gradle`
-- The plugin details in `src/test/resources/plugin.yml`
-- Dependency information in `build.gradle` and `gradle.properties`
+Custom types are listed in bold, with their properties and corresponding types listed below.
 
-Additionally while the `plugin.yml` file is important for a plugin to be
-loaded, it's also where name and version information is pulled when generating
-the distributable jars so it is very important to update that information.
+**Vector3f**
+* X (float)
+* Y (float)
+* Z (float)
 
-You will also want to update this file and `CHANGELOG.md` to contain your own information.
+**Point Light**
+* Color (color)
+* Position (float)
+
+**Spot Light**
+* Cone Direction (Vector3f)
+* Cutoff Angle (float)
+* Point Light (Point Light)
+
+**Directional Light**
+* Color (color)
+* Direction (Vector3f)
+* Intensity (float)

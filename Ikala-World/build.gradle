@@ -54,9 +54,6 @@ configurations {
 dependencies {
 	implementation project(':Ikala-Core')
 	
-	api "org.mapeditor:libtiled:${tiledVersion}"
-	provided "org.mapeditor:libtiled:${tiledVersion}"
-	
 	api "javax.xml.bind:jaxb-api:${jaxbAPIVersion}"
 	api "javax.activation:activation:${activationVersion}"
 	api "javax.annotation:javax.annotation-api:${javaxAnnotationVersion}"
