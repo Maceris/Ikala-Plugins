@@ -144,10 +144,6 @@ public class GraphicsManager {
 
 	private static AnimationData animationData1;
 	private static AnimationData animationData2;
-	private static Entity cubeEntity1;
-	private static Entity cubeEntity2;
-	private static float lightAngle;
-	private static float rotation;
 
 	/**
 	 * Creates a graphics window, fires off a {@link WindowCreated} event. Won't
@@ -239,22 +235,6 @@ public class GraphicsManager {
 		bobEntity2.setAnimationData(GraphicsManager.animationData2);
 		GraphicsManager.scene.addEntity(bobEntity2);
 
-		Model cubeModel = ModelLoader.loadModel("cube-model",
-			"models/cube/cube.obj", GraphicsManager.scene.getTextureCache(),
-			GraphicsManager.scene.getMaterialCache(), false);
-		GraphicsManager.scene.addModel(cubeModel);
-		GraphicsManager.cubeEntity1 =
-			new Entity("cube-entity-1", cubeModel.getId());
-		GraphicsManager.cubeEntity1.setPosition(0, 2, -1);
-		GraphicsManager.cubeEntity1.updateModelMatrix();
-		GraphicsManager.scene.addEntity(GraphicsManager.cubeEntity1);
-
-		GraphicsManager.cubeEntity2 =
-			new Entity("cube-entity-2", cubeModel.getId());
-		GraphicsManager.cubeEntity2.setPosition(-2, 2, -1);
-		GraphicsManager.cubeEntity2.updateModelMatrix();
-		GraphicsManager.scene.addEntity(GraphicsManager.cubeEntity2);
-
 		Model floorModel =
 			ModelLoader.loadModel("floor_001", "models/dungeon/floor_001.obj",
 				GraphicsManager.getScene().getTextureCache(),
@@ -298,10 +278,6 @@ public class GraphicsManager {
 		ambientLight.setIntensity(0.5f);
 		ambientLight.setColor(0.3f, 0.3f, 0.3f);
 
-		DirectionalLight dirLight = sceneLights.getDirLight();
-		dirLight.setPosition(0, 1, 0);
-		dirLight.setIntensity(1.0f);
-
 		sceneLights.getPointLights().add(new PointLight(new Vector3f(1, 1, 1),
 			new Vector3f(0, 2.5f, -0.4f), 1.0f));
 
@@ -327,8 +303,6 @@ public class GraphicsManager {
 		Camera camera = GraphicsManager.scene.getCamera();
 		camera.setPosition(-11f, 11f, 0f);
 		camera.addRotation(0.42f, 1.92f);
-
-		GraphicsManager.lightAngle = 45.001f;
 
 		GraphicsManager.render.setupData(GraphicsManager.scene);
 	}
@@ -469,24 +443,6 @@ public class GraphicsManager {
 		if (diffTimeMillis % 2 == 0) {
 			GraphicsManager.animationData2.nextFrame();
 		}
-
-		GraphicsManager.rotation += 1.5;
-		if (GraphicsManager.rotation > 360) {
-			GraphicsManager.rotation = 0;
-		}
-		GraphicsManager.cubeEntity1.setRotation(1, 1, 1,
-			(float) Math.toRadians(GraphicsManager.rotation));
-		GraphicsManager.cubeEntity1.updateModelMatrix();
-
-		GraphicsManager.cubeEntity2.setRotation(1, 1, 1,
-			(float) Math.toRadians(360 - GraphicsManager.rotation));
-		GraphicsManager.cubeEntity2.updateModelMatrix();
-
-		SceneLights sceneLights = GraphicsManager.scene.getSceneLights();
-		DirectionalLight dirLight = sceneLights.getDirLight();
-		double angRad = Math.toRadians(GraphicsManager.lightAngle);
-		dirLight.getDirection().z = (float) Math.sin(angRad);
-		dirLight.getDirection().y = (float) Math.cos(angRad);
 	}
 
 	/**
