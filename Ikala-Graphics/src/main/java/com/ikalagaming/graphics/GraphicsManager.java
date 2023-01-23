@@ -11,7 +11,6 @@ import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.SkyBox;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
-import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.scene.lights.PointLight;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
 import com.ikalagaming.graphics.scene.lights.SpotLight;
@@ -76,9 +75,9 @@ public class GraphicsManager {
 	/**
 	 * The target frames per second that we want to hit.
 	 */
-	public static final int TARGET_FPS = 60;
+	public static final int TARGET_FPS = 144;
 	/**
-	 * The target frames per second that we want to hit.
+	 * The target updates per second that we want to hit.
 	 */
 	public static final int TARGET_UPS = 60;
 	/**
@@ -159,6 +158,7 @@ public class GraphicsManager {
 
 		Window.WindowOptions opts = new Window.WindowOptions();
 		opts.antiAliasing = true;
+		opts.fps = 144;
 		GraphicsManager.window = new Window("Ikala Gaming", opts, () -> {
 			GraphicsManager.resize();
 			return null;
