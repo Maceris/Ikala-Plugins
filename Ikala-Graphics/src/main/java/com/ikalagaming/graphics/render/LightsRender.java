@@ -39,11 +39,11 @@ public class LightsRender {
 	/**
 	 * The maximum number of point lights that are allowed.
 	 */
-	private static final int MAX_POINT_LIGHTS = 5;
+	private static final int MAX_POINT_LIGHTS = 50;
 	/**
 	 * The maximum number of spot lights that are allowed.
 	 */
-	private static final int MAX_SPOT_LIGHTS = 5;
+	private static final int MAX_SPOT_LIGHTS = 50;
 	/**
 	 * The shader program for rendering lights.
 	 */
