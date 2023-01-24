@@ -31,6 +31,20 @@ public class CustomClass {
 	@NoArgsConstructor
 	public static class Member {
 		/**
+		 * Utility method to convert a string to a color.
+		 *
+		 * @param color The color, in #aarrggbb format that Tiled defaults to.
+		 * @return The color object.
+		 */
+		public static Color stringToColor(@NonNull String color) {
+			int a = Integer.parseInt(color.substring(1, 3), 16);
+			int r = Integer.parseInt(color.substring(3, 5), 16);
+			int g = Integer.parseInt(color.substring(5, 7), 16);
+			int b = Integer.parseInt(color.substring(7, 9), 16);
+			return new Color(r, g, b, a);
+		}
+
+		/**
 		 * The name of the member.
 		 */
 		@NonNull
@@ -62,6 +76,7 @@ public class CustomClass {
 		 * The enum type, which only exists if this is an enum.
 		 */
 		private String enumType;
+
 		/**
 		 * The child contents, which only exists if this is a class.
 		 */
@@ -117,11 +132,7 @@ public class CustomClass {
 		 * @return The value as a color.
 		 */
 		public Color toColor() {
-			int a = Integer.parseInt(this.value.substring(1, 3), 16);
-			int r = Integer.parseInt(this.value.substring(3, 5), 16);
-			int g = Integer.parseInt(this.value.substring(5, 7), 16);
-			int b = Integer.parseInt(this.value.substring(7, 9), 16);
-			return new Color(r, g, b, a);
+			return Member.stringToColor(this.value);
 		}
 
 		/**
