@@ -58,6 +58,7 @@ public class MapObject extends MapObjectData implements Cloneable {
 	private boolean flipHorizontal;
 	private boolean flipVertical;
 	private boolean flipDiagonal;
+	private String clazz;
 
 	/**
 	 * Constructor for MapObject.
@@ -106,6 +107,15 @@ public class MapObject extends MapObjectData implements Cloneable {
 	 */
 	public Rectangle2D.Double getBounds() {
 		return new Rectangle2D.Double(this.x, this.y, this.width, this.height);
+	}
+
+	/**
+	 * Get the value of the class that the map object is classified as.
+	 *
+	 * @return The class in the map file.
+	 */
+	public String getClassValue() {
+		return this.clazz;
 	}
 
 	public boolean getFlipDiagonal() {
@@ -191,6 +201,15 @@ public class MapObject extends MapObjectData implements Cloneable {
 		this.y = bounds.getY();
 		this.width = bounds.getWidth();
 		this.height = bounds.getHeight();
+	}
+
+	/**
+	 * Setter for the field <code>class</code>.
+	 *
+	 * @param clazz a String object.
+	 */
+	public void setClass(String clazz) {
+		this.clazz = clazz;
 	}
 
 	public void setFlipDiagonal(boolean flip) {

@@ -757,6 +757,7 @@ public class TMXMapReader {
 		final String name = TMXMapReader.getAttributeValue(t, "name");
 		final String type = TMXMapReader.getAttributeValue(t, "type");
 		final String gid = TMXMapReader.getAttributeValue(t, "gid");
+		final String clazz = TMXMapReader.getAttributeValue(t, "class");
 		final double x = TMXMapReader.getDoubleAttribute(t, "x", 0);
 		final double y = TMXMapReader.getDoubleAttribute(t, "y", 0);
 		final double width = TMXMapReader.getDoubleAttribute(t, "width", 0);
@@ -774,6 +775,9 @@ public class TMXMapReader {
 		}
 		if (type != null) {
 			obj.setType(type);
+		}
+		if (clazz != null) {
+			obj.setClass(clazz);
 		}
 		if (gid != null) {
 			long tileId = Long.parseLong(gid);

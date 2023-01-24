@@ -282,7 +282,7 @@ public class GraphicsListener implements Listener {
 				ObjectGroup group = (ObjectGroup) genericLayer;
 
 				for (MapObject object : group.getObjects()) {
-					if ("Light".equals(object.getName())) {
+					if ("Point Light".equals(object.getClassValue())) {
 						this.createLight(object);
 					}
 				}

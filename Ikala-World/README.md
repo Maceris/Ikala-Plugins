@@ -30,3 +30,8 @@ Custom types are listed in bold, with their properties and corresponding types l
 * Color (color)
 * Direction (Vector3f)
 * Intensity (float)
+
+### Map elements
+Objects with the Point Light class will be loaded in as point lights.
+
+If the map properties contains a Directional Light, that will be used when the map is loaded to set up the directional lighting.
