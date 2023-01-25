@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 
+import java.awt.image.BufferedImage;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -91,6 +92,79 @@ public class RandomGen {
 			cdf[i] = total;
 		}
 		return cdf;
+	}
+
+	/**
+	 * Create an image containing simplex noise. Please keep the sizes
+	 * reasonable.
+	 *
+	 * @param width The width of the image.
+	 * @param height The height of the image.
+	 * @return The noise, or an empty image if you give weird height and width
+	 *         values.
+	 */
+	public BufferedImage generateSimplexNoise(int width, int height) {
+		final int frequency = 5;
+		final double noiseAmplitude = 1;
+		return this.generateSimplexNoise(width, height, frequency,
+			noiseAmplitude);
+	}
+
+	/**
+	 * Generate simplex noise with specific parameters.
+	 *
+	 * @param width The width of the image.
+	 * @param height The height of the image.
+	 * @param frequency The base frequency for the noise. A reasonable example
+	 *            is 5, should be > 1.
+	 * @param noiseAmplitude The maximum amplitude for the noise. Should be
+	 *            between 0 and 1 inclusive.
+	 * @return The noise, or an empty image if you give weird values.
+	 */
+	public BufferedImage generateSimplexNoise(int width, int height,
+		int frequency, double noiseAmplitude) {
+		BufferedImage result =
+			new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+		if (width <= 0 || height <= 0 || frequency <= 0 || noiseAmplitude <= 0
+			|| noiseAmplitude > 1) {
+			return result;
+		}
+
+		OpenSimplexNoise noise =
+			new OpenSimplexNoise(RandomGen.random.nextLong());
+
+		int[] rawData = new int[width * height];
+
+		int x;
+		int y;
+		double nx;
+		double ny;
+		double pixelValue;
+		int pixelTemp;
+		for (y = 0; y < height; ++y) {
+			for (x = 0; x < width; ++x) {
+				nx = ((double) x) / width - 0.5;
+				ny = ((double) y) / height - 0.5;
+				// output is from -1 to 1
+				pixelValue =
+					noiseAmplitude * noise.eval(frequency * nx, frequency * ny);
+				pixelValue += noiseAmplitude * 0.5
+					* noise.eval(frequency * 2 * nx, frequency * 2 * ny);
+				pixelValue += noiseAmplitude * 0.25
+					* noise.eval(frequency * 4 * nx, frequency * 4 * ny);
+				pixelValue /= noiseAmplitude + noiseAmplitude * 0.5
+					+ noiseAmplitude * 0.25;
+				// we map it from 0 to 1
+				pixelValue = (pixelValue + 1d) / 2d;
+				// Map to [0,255)
+				pixelTemp = (int) (pixelValue * 255);
+				// fill out R, G, and B to pixelTemps least significant byte
+				rawData[width * y + x] =
+					pixelTemp << 16 | pixelTemp << 8 | pixelTemp;
+			}
+		}
+		result.setRGB(0, 0, width, height, rawData, 0, width);
+		return result;
 	}
 
 	/**
