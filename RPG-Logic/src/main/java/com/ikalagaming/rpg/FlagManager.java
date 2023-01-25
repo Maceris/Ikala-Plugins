@@ -1,9 +1,6 @@
 package com.ikalagaming.rpg;
 
-import com.ikalagaming.scripting.ScriptHook;
-
 import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -15,10 +12,18 @@ import java.util.Map;
  * @author Ches Burks
  *
  */
-@Slf4j
 public class FlagManager {
 	private static Map<String, Integer> flags =
 		Collections.synchronizedMap(new HashMap<>());
+
+	/**
+	 * Unsets a flag.
+	 *
+	 * @param flag The flag to clear.
+	 */
+	public static void clearFlag(@NonNull String flag) {
+		FlagManager.flags.remove(flag);
+	}
 
 	/**
 	 * Fetches the value of a flag, assuming it exists. If a flag does not
@@ -30,7 +35,6 @@ public class FlagManager {
 	 * @return The value of the flag, or 0 if it does not exist.
 	 * @see #hasFlag(String)
 	 */
-	@ScriptHook
 	public static int getFlag(@NonNull String flag) {
 		return FlagManager.flags.getOrDefault(flag, 0);
 	}
@@ -42,7 +46,6 @@ public class FlagManager {
 	 * @return True if the flag is set to any value, false if it is not set.
 	 * @see #getFlag(String)
 	 */
-	@ScriptHook
 	public static boolean hasFlag(@NonNull String flag) {
 		return FlagManager.flags.containsKey(flag);
 	}
@@ -54,7 +57,6 @@ public class FlagManager {
 	 * @param flag The flag we want to set.
 	 * @see #setFlag(String, int)
 	 */
-	@ScriptHook
 	public static void setFlag(@NonNull String flag) {
 		FlagManager.flags.computeIfAbsent(flag, ignored -> 1);
 	}
@@ -66,15 +68,7 @@ public class FlagManager {
 	 * @param value The value to set for the flag.
 	 * @see #setFlag(String)
 	 */
-	@ScriptHook
 	public static void setFlag(@NonNull String flag, int value) {
 		FlagManager.flags.put(flag, value);
-	}
-
-	/**
-	 * Delete this.
-	 */
-	public static void test() {
-		log.warn("Ooops this shouldn't be visible");
 	}
 }
