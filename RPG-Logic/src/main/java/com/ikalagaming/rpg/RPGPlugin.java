@@ -18,13 +18,13 @@ public class RPGPlugin extends Plugin {
 
 	@Override
 	public boolean onEnable() {
-		Engine.registerHooks(FlagManager.class);
+		Engine.registerClass(FlagManager.class);
 		return true;
 	}
 
 	@Override
 	public boolean onDisable() {
-		Engine.unregisterHooks(FlagManager.class);
+		Engine.unregisterClass(FlagManager.class);
 		return true;
 	}
 }
