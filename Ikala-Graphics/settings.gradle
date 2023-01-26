@@ -3,3 +3,5 @@ include ':Ikala-Core'
 project(':Ikala-Core').projectDir = new File('../../Ikala-Core')
 include ':Ikala-World'
 project(':Ikala-World').projectDir = new File('../Ikala-World')
+include ':Random'
+project(':Random').projectDir = new File('../Random')
