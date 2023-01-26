@@ -1,7 +1,5 @@
 package com.ikalagaming.random;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
 import lombok.NonNull;
 
 import java.awt.image.BufferedImage;
@@ -20,25 +18,25 @@ import java.util.SplittableRandom;
  */
 public class RandomGen {
 
-	@AllArgsConstructor
-	@Getter
-	private static class Interval {
-		private double start;
-		private double end;
-	}
+	/**
+	 * An interval along a number line.
+	 *
+	 * @author Ches Burks
+	 * @param start The start of the interval.
+	 * @param end The end of the interval.
+	 *
+	 */
+	private record Interval(double start, double end) {}
 
 	/**
 	 * Used for selecting items from a list up to a certain weight.
 	 *
 	 * @author Ches Burks
+	 * @param index The index that the weight is associated with.
+	 * @param weight The weight of the index.
 	 * @see RandomGen#selectUpToWeight(int[], int)
 	 */
-	@AllArgsConstructor
-	@Getter
-	private static class WeightEntry {
-		private int index;
-		private int weight;
-	}
+	private record WeightEntry(int index, int weight) {}
 
 	private static SplittableRandom random;
 
@@ -50,6 +48,27 @@ public class RandomGen {
 		catch (NoSuchAlgorithmException e) {
 			RandomGen.random = new SplittableRandom();
 		}
+	}
+
+	/**
+	 * If there is a tile set to 1 at the position, used for generating height
+	 * maps.
+	 *
+	 * @param map The map.
+	 * @param x The x position.
+	 * @param y The x position.
+	 * @return If x and y are a a tile with the value 1.
+	 */
+	private static boolean hasTile(int[][] map, int x, int y) {
+		if (map == null || y < 0 || y >= map.length || map[y] == null) {
+			return false;
+		}
+		int[] row = map[y];
+		if (x < 0 || x >= row.length) {
+			return false;
+		}
+
+		return row[x] == 1;
 	}
 
 	/**
@@ -92,6 +111,232 @@ public class RandomGen {
 			cdf[i] = total;
 		}
 		return cdf;
+	}
+
+	/**
+	 * WIP code that takes a tile map and combines it with noise to generate a
+	 * terrain height map that blends in to the surrounding tiles.
+	 *
+	 * @return The generated height map image.
+	 */
+	public BufferedImage generateHeightMap() {
+		final int MAP_WIDTH = 20;
+		final int MAP_HEIGHT = 20;
+		final int TILE_SIZE = 32;
+
+		BufferedImage tiles = new BufferedImage(MAP_WIDTH * TILE_SIZE,
+			MAP_HEIGHT * TILE_SIZE, BufferedImage.TYPE_INT_RGB);
+
+		BufferedImage combined = new BufferedImage(MAP_WIDTH * TILE_SIZE,
+			MAP_HEIGHT * TILE_SIZE, BufferedImage.TYPE_INT_RGB);
+
+		BufferedImage noise = this.generateSimplexNoise(MAP_WIDTH * TILE_SIZE,
+			MAP_HEIGHT * TILE_SIZE, 10, 0.25);
+
+		// create map
+		int[][] map = new int[MAP_HEIGHT][];
+		int x, y;
+		for (y = 0; y < MAP_HEIGHT; ++y) {
+			map[y] = new int[MAP_WIDTH];
+			for (x = 0; x < MAP_WIDTH; ++x) {
+				if (RandomGen.random.nextInt(10) <= 5) {
+					map[y][x] = 1;
+				}
+			}
+		}
+
+		int[][] pointsOfInterest = new int[MAP_HEIGHT * 2 + 2][];
+		for (y = 0; y < pointsOfInterest.length; ++y) {
+			pointsOfInterest[y] = new int[MAP_WIDTH * 2 + 2];
+		}
+
+		int xCoord, yCoord;
+		for (y = 0; y < (MAP_HEIGHT + 1) * TILE_SIZE; y += TILE_SIZE / 2) {
+			for (x = 0; x < (MAP_WIDTH + 1) * TILE_SIZE; x += TILE_SIZE / 2) {
+				xCoord = x == 0 ? -1 : (x - 1) / TILE_SIZE;
+				yCoord = y == 0 ? -1 : (y - 1) / TILE_SIZE;
+				if (x % TILE_SIZE == 0 && y % TILE_SIZE == 0) {
+					if (RandomGen.hasTile(map, xCoord, yCoord)
+						&& RandomGen.hasTile(map, xCoord, yCoord + 1)
+						&& RandomGen.hasTile(map, xCoord + 1, yCoord)
+						&& RandomGen.hasTile(map, xCoord + 1, yCoord + 1)) {
+						pointsOfInterest[y / (TILE_SIZE / 2)][x
+							/ (TILE_SIZE / 2)] = 255;
+					}
+					else {
+						pointsOfInterest[y / (TILE_SIZE / 2)][x
+							/ (TILE_SIZE / 2)] = 0;
+					}
+				}
+				else if (x % TILE_SIZE == 0) {
+					if (RandomGen.hasTile(map, xCoord, yCoord)
+						&& RandomGen.hasTile(map, xCoord + 1, yCoord)) {
+						pointsOfInterest[y / (TILE_SIZE / 2)][x
+							/ (TILE_SIZE / 2)] = 255;
+					}
+					else {
+						pointsOfInterest[y / (TILE_SIZE / 2)][x
+							/ (TILE_SIZE / 2)] = 0;
+					}
+				}
+				else if (y % TILE_SIZE == 0) {
+					if (RandomGen.hasTile(map, xCoord, yCoord)
+						&& RandomGen.hasTile(map, xCoord, yCoord + 1)) {
+						pointsOfInterest[y / (TILE_SIZE / 2)][x
+							/ (TILE_SIZE / 2)] = 255;
+					}
+					else {
+						pointsOfInterest[y / (TILE_SIZE / 2)][x
+							/ (TILE_SIZE / 2)] = 0;
+					}
+				}
+				else {
+					if (RandomGen.hasTile(map, xCoord, yCoord)) {
+						pointsOfInterest[y / (TILE_SIZE / 2)][x
+							/ (TILE_SIZE / 2)] = 255;
+					}
+					else {
+						pointsOfInterest[y / (TILE_SIZE / 2)][x
+							/ (TILE_SIZE / 2)] = 0;
+					}
+				}
+			}
+		}
+
+		// point 1 we are interpolating between
+		int p1x, p1y;
+		// point 2 we are interpolating between
+		int p2x, p2y;
+		// point 3 we are interpolating between
+		int p3x, p3y;
+
+		// actual pixel x and y we are at, within the tile
+		int px, py;
+		// the values we are interpolating between
+		int v1, v2, v3, totalValue;
+		// Relative weights of the three nodes
+		double w1, w2, w3;
+		int poiX, poiY;
+		for (y = 0; y < MAP_HEIGHT; ++y) {
+			for (x = 0; x < MAP_WIDTH; ++x) {
+				if (!RandomGen.hasTile(map, x, y)) {
+					continue;
+				}
+				p3x = TILE_SIZE / 2;
+				p3y = TILE_SIZE / 2;
+				poiX = (x + 1) * 2 - 1;
+				poiY = (y + 1) * 2 - 1;
+				v3 = pointsOfInterest[poiY][poiX];
+				for (py = 0; py < TILE_SIZE; ++py) {
+					for (px = 0; px < TILE_SIZE; ++px) {
+						if (px < TILE_SIZE / 2 && py < TILE_SIZE / 2) {
+							// Top left quadrant
+							p1x = 0;
+							p1y = 0;
+							v1 = pointsOfInterest[poiY - 1][poiX - 1];
+
+							if (py < px) {
+								// upper triangle
+								p2x = TILE_SIZE / 2;
+								p2y = 0;
+								v2 = pointsOfInterest[poiY - 1][poiX];
+							}
+							else {
+								// lower triangle
+								p2x = 0;
+								p2y = TILE_SIZE / 2;
+								v2 = pointsOfInterest[poiY][poiX - 1];
+							}
+						}
+						else if (px >= TILE_SIZE / 2 && py < TILE_SIZE / 2) {
+							// Top right quadrant
+							p1x = TILE_SIZE;
+							p1y = 0;
+							v1 = pointsOfInterest[poiY - 1][poiX + 1];
+							if (TILE_SIZE - py < px) {
+								// lower triangle
+								p2x = TILE_SIZE;
+								p2y = TILE_SIZE / 2;
+								v2 = pointsOfInterest[poiY][poiX + 1];
+							}
+							else {
+								// upper triangle
+								p2x = TILE_SIZE / 2;
+								p2y = 0;
+								v2 = pointsOfInterest[poiY - 1][poiX];
+							}
+						}
+						else if (px < TILE_SIZE / 2 && py >= TILE_SIZE / 2) {
+							// Bottom left quadrant
+							p1x = 0;
+							p1y = TILE_SIZE;
+							v1 = pointsOfInterest[poiY + 1][poiX - 1];
+							if (TILE_SIZE - py < px) {
+								// lower triangle
+								p2x = TILE_SIZE / 2;
+								p2y = TILE_SIZE;
+								v2 = pointsOfInterest[poiY + 1][poiX];
+							}
+							else {
+								// upper triangle
+								p2x = 0;
+								p2y = TILE_SIZE / 2;
+								v2 = pointsOfInterest[poiY][poiX - 1];
+							}
+						}
+						else if (px >= TILE_SIZE / 2 && py >= TILE_SIZE / 2) {
+							// Bottom right quadrant
+							p1x = TILE_SIZE;
+							p1y = TILE_SIZE;
+							v1 = pointsOfInterest[poiY + 1][poiX + 1];
+							if (py < px) {
+								// upper triangle
+								p2x = TILE_SIZE;
+								p2y = TILE_SIZE / 2;
+								v2 = pointsOfInterest[poiY][poiX + 1];
+							}
+							else {
+								// lower triangle
+								p2x = TILE_SIZE / 2;
+								p2y = TILE_SIZE;
+								v2 = pointsOfInterest[poiY + 1][poiX];
+							}
+						}
+						else {
+							continue;
+						}
+
+						w1 = ((double) (p2y - p3y) * (px - p3x)
+							+ (p3x - p2x) * (py - p3y))
+							/ (((p2y - p3y) * (p1x - p3x))
+								+ ((p3x - p2x) * (p1y - p3y)));
+						w2 = ((double) ((p3y - p1y) * (px - p3x))
+							+ ((p1x - p3x) * (py - p3y)))
+							/ (((p2y - p3y) * (p1x - p3x))
+								+ ((p3x - p2x) * (p1y - p3y)));
+						w1 /= 2;
+						w2 /= 2;
+						w3 = 1 - w1 - w2;
+
+						totalValue = (int) (w1 * v1 + w2 * v2 + w3 * v3);
+						tiles.setRGB(x * TILE_SIZE + px, y * TILE_SIZE + py,
+							totalValue << 16 | totalValue << 8 | totalValue);
+					}
+				}
+			}
+		}
+
+		int pixel;
+		float amplitude;
+		for (y = 0; y < MAP_HEIGHT * TILE_SIZE; ++y) {
+			for (x = 0; x < MAP_WIDTH * TILE_SIZE; ++x) {
+				amplitude = (tiles.getRGB(x, y) & 0xFF) / 255f;
+				pixel = (int) ((noise.getRGB(x, y) & 0xFF) * amplitude);
+				combined.setRGB(x, y, (pixel << 16) + (pixel << 8) + pixel);
+			}
+		}
+
+		return combined;
 	}
 
 	/**
@@ -257,8 +502,8 @@ public class RandomGen {
 
 		return Arrays.binarySearch(intervals,
 			new Interval(selection, selection), (b, a) -> {
-				int startCompare = Double.compare(a.getStart(), b.getStart());
-				int endCompare = Double.compare(a.getEnd(), b.getEnd());
+				int startCompare = Double.compare(a.start(), b.start());
+				int endCompare = Double.compare(a.end(), b.end());
 
 				if (startCompare > 0 && endCompare >= 0) {
 					return -1;
@@ -342,7 +587,7 @@ public class RandomGen {
 
 			// get rid of any values that are too expensive to select
 			validChoices
-				.removeIf(entry -> entry.getWeight() > weightBecauseLambdas);
+				.removeIf(entry -> entry.weight() > weightBecauseLambdas);
 			// if we can't make any more valid choices, then bail
 			int size = validChoices.size();
 			if (size == 0) {
@@ -350,8 +595,8 @@ public class RandomGen {
 			}
 			WeightEntry selection =
 				validChoices.get(RandomGen.random.nextInt(size));
-			remainingWeight -= Math.abs(selection.getWeight());
-			selections.add(selection.getIndex());
+			remainingWeight -= Math.abs(selection.weight());
+			selections.add(selection.index());
 		}
 
 		int[] values = new int[selections.size()];
@@ -398,7 +643,7 @@ public class RandomGen {
 
 			// get rid of any values that are too expensive to select
 			validChoices
-				.removeIf(entry -> entry.getWeight() > weightBecauseLambdas);
+				.removeIf(entry -> entry.weight() > weightBecauseLambdas);
 			// if we can't make any more valid choices, then bail
 			int size = validChoices.size();
 			if (size == 0) {
@@ -406,8 +651,8 @@ public class RandomGen {
 			}
 			WeightEntry selection =
 				validChoices.get(RandomGen.random.nextInt(size));
-			remainingWeight -= Math.abs(selection.getWeight());
-			selections.add(selection.getIndex());
+			remainingWeight -= Math.abs(selection.weight());
+			selections.add(selection.index());
 		}
 
 		return selections;
