@@ -6,6 +6,7 @@
  */
 package com.ikalagaming.graphics.render;
 
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.GeometryBuffer;
 import com.ikalagaming.graphics.graph.Model;
@@ -18,6 +19,7 @@ import lombok.NonNull;
 import lombok.Setter;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL12;
 import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL14;
 import org.lwjgl.opengl.GL15;
@@ -47,6 +49,11 @@ public class Render {
 		 * Enable wireframe.
 		 */
 		private boolean wireframe;
+
+		/**
+		 * Post-processing filter.
+		 */
+		private boolean filter;
 	}
 
 	/**
@@ -118,6 +125,11 @@ public class Render {
 	private SkyBoxRender skyBoxRender;
 
 	/**
+	 * Render a filter on top of the final result.
+	 */
+	private FilterRender filterRender;
+
+	/**
 	 * Whether we have set up the buffers for the scene. If we have, but need to
 	 * set data up for the scene again, we will need to clear them out and start
 	 * over.
@@ -127,6 +139,10 @@ public class Render {
 	 * The buffers for the batches.
 	 */
 	CommandBuffer commandBuffers;
+
+	private int screenRBO;
+	private int screenRBODepth;
+	private int screenTexture;
 
 	/**
 	 * Set up a new rendering pipeline.
@@ -149,10 +165,45 @@ public class Render {
 		this.shadowRender = new ShadowRender();
 		this.lightsRender = new LightsRender();
 		this.animationRender = new AnimationRender();
+		this.filterRender = new FilterRender();
 		this.gBuffer = new GeometryBuffer(window);
 		this.renderBuffers = new RenderBuffers();
 		this.buffersPopulated = new AtomicBoolean();
 		this.commandBuffers = new CommandBuffer();
+
+		GL13.glActiveTexture(GL13.GL_TEXTURE0);
+		this.screenTexture = GL11.glGenTextures();
+		GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.screenTexture);
+		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER,
+			GL11.GL_LINEAR);
+		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER,
+			GL11.GL_LINEAR);
+		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S,
+			GL12.GL_CLAMP_TO_EDGE);
+		GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T,
+			GL12.GL_CLAMP_TO_EDGE);
+		GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA,
+			GraphicsManager.getWindow().getWidth(),
+			GraphicsManager.getWindow().getHeight(), 0, GL11.GL_RGBA,
+			GL11.GL_UNSIGNED_BYTE, 0);
+		GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+
+		this.screenRBODepth = GL30.glGenRenderbuffers();
+		GL30.glBindRenderbuffer(GL30.GL_RENDERBUFFER, this.screenRBODepth);
+		GL30.glRenderbufferStorage(GL30.GL_RENDERBUFFER,
+			GL14.GL_DEPTH_COMPONENT16, GraphicsManager.getWindow().getWidth(),
+			GraphicsManager.getWindow().getHeight());
+		GL30.glBindRenderbuffer(GL30.GL_RENDERBUFFER, 0);
+
+		this.screenRBO = GL30.glGenFramebuffers();
+		GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, this.screenRBO);
+		GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER,
+			GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, this.screenTexture,
+			0);
+		GL30.glFramebufferRenderbuffer(GL30.GL_FRAMEBUFFER,
+			GL30.GL_DEPTH_ATTACHMENT, GL30.GL_RENDERBUFFER,
+			this.screenRBODepth);
+		GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
 	}
 
 	/**
@@ -165,9 +216,13 @@ public class Render {
 		this.shadowRender.cleanup();
 		this.lightsRender.cleanup();
 		this.animationRender.cleanup();
+		this.filterRender.cleanup();
 		this.gBuffer.cleanUp();
 		this.renderBuffers.cleanup();
 		this.commandBuffers.cleanup();
+		GL30.glDeleteRenderbuffers(this.screenRBODepth);
+		GL30.glDeleteFramebuffers(this.screenRBO);
+		GL11.glDeleteTextures(this.screenTexture);
 	}
 
 	/**
@@ -175,6 +230,9 @@ public class Render {
 	 */
 	private void lightRenderFinish() {
 		GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+		GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
+		GL30.glBindRenderbuffer(GL30.GL_RENDERBUFFER, 0);
+		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
 	}
 
 	/**
@@ -183,16 +241,18 @@ public class Render {
 	 * @param window The window we are rendering in.
 	 */
 	private void lightRenderStart(@NonNull Window window) {
-		GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
+		GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, this.screenRBO);
+		GL30.glBindRenderbuffer(GL30.GL_RENDERBUFFER, this.screenRBODepth);
+
+		GL13.glActiveTexture(GL13.GL_TEXTURE0);
+		GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.screenTexture);
+
 		GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
 		GL11.glViewport(0, 0, window.getWidth(), window.getHeight());
 
 		GL11.glEnable(GL11.GL_BLEND);
 		GL14.glBlendEquation(GL14.GL_FUNC_ADD);
 		GL11.glBlendFunc(GL11.GL_ONE, GL11.GL_ONE);
-
-		GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER,
-			this.gBuffer.getGBufferId());
 	}
 
 	/**
@@ -233,6 +293,9 @@ public class Render {
 		this.lightsRender.render(scene, this.shadowRender, this.gBuffer);
 		this.skyBoxRender.render(scene);
 		this.lightRenderFinish();
+
+		this.filterRender.render(scene, this.screenTexture,
+			Render.configuration.filter);
 		this.guiRender.render(scene);
 	}
 
@@ -244,6 +307,17 @@ public class Render {
 	 */
 	public void resize(int width, int height) {
 		this.guiRender.resize(width, height);
+
+		// Resize the screen space texture
+		GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.screenTexture);
+		GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, width, height, 0,
+			GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, 0);
+		GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+
+		GL30.glBindRenderbuffer(GL30.GL_RENDERBUFFER, this.screenRBODepth);
+		GL30.glRenderbufferStorage(GL30.GL_RENDERBUFFER,
+			GL14.GL_DEPTH_COMPONENT16, width, height);
+		GL30.glBindRenderbuffer(GL30.GL_RENDERBUFFER, 0);
 	}
 
 	/**

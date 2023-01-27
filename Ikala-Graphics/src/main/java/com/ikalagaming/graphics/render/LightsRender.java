@@ -179,7 +179,7 @@ public class LightsRender {
 	 * @param gBuffer The buffer for geometry data.
 	 */
 	public void render(@NonNull Scene scene, @NonNull ShadowRender shadowRender,
-		GeometryBuffer gBuffer) {
+		@NonNull GeometryBuffer gBuffer) {
 		this.shaderProgram.bind();
 
 		this.updateLights(scene);

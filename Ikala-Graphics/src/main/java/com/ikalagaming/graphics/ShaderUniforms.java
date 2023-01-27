@@ -67,6 +67,24 @@ public class ShaderUniforms {
 	}
 
 	/**
+	 * Post-processing filter variables.
+	 *
+	 * @author Ches Burks
+	 *
+	 */
+	public static class Filter {
+		/**
+		 * The texture containing the rendered scene.
+		 */
+		public static final String SCREEN_TEXTURE = "screenTexture";
+
+		/**
+		 * Private constructor so this class is not instantiated.
+		 */
+		private Filter() {}
+	}
+
+	/**
 	 * GUI shader variables.
 	 *
 	 * @author Ches Burks

@@ -106,16 +106,15 @@ public class ShadowRender {
 			this.shadowBuffer.getDepthMapFBO());
 		GL11.glViewport(0, 0, ShadowBuffer.SHADOW_MAP_WIDTH,
 			ShadowBuffer.SHADOW_MAP_HEIGHT);
-		
+
 		this.shaderProgram.bind();
-		
+
 		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
 			GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER,
 				GL30.GL_DEPTH_ATTACHMENT, GL11.GL_TEXTURE_2D,
 				this.shadowBuffer.getDepthMap().getIDs()[i], 0);
 			GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT);
 		}
-		
 
 		// Static meshes
 		GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER,

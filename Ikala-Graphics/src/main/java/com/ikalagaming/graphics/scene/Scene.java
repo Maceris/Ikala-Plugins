@@ -20,8 +20,8 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * A scene to be rendered, containing the items and lighting.
@@ -101,7 +101,7 @@ public class Scene {
 	 * @param height The screen height, in pixels.
 	 */
 	public Scene(int width, int height) {
-		this.modelMap = new HashMap<>();
+		this.modelMap = new ConcurrentHashMap<>();
 		this.projection = new Projection(width, height);
 		this.textureCache = new TextureCache();
 		this.materialCache = new MaterialCache();
