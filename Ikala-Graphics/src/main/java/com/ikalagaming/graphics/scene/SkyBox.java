@@ -6,6 +6,7 @@
  */
 package com.ikalagaming.graphics.scene;
 
+import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.Mesh;
@@ -56,8 +57,10 @@ public class SkyBox {
 	public SkyBox(@NonNull String skyBoxModelPath,
 		@NonNull TextureCache textureCache,
 		@NonNull MaterialCache materialCache) {
-		this.skyBoxModel = ModelLoader.loadModel("skybox-model",
-			skyBoxModelPath, textureCache, materialCache, false);
+		this.skyBoxModel =
+			ModelLoader.loadModel(new ModelLoader.ModelLoadRequest(
+				"skybox-model", GraphicsPlugin.PLUGIN_NAME, skyBoxModelPath,
+				textureCache, materialCache, false));
 		MeshData meshData = this.skyBoxModel.getMeshDataList().get(0);
 		this.material = materialCache.getMaterial(meshData.getMaterialIndex());
 		this.mesh = new Mesh(meshData);

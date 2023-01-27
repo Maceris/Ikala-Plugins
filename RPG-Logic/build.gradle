@@ -52,6 +52,10 @@ configurations {
 
 dependencies {
 	implementation project(':Ikala-Core')
+	compileOnly project(':Ikala-World')
+	compileOnly project(':Ikala-Graphics')
+	
+	implementation "org.joml:joml:${jomlVersion}"
 
 	// Testing
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"

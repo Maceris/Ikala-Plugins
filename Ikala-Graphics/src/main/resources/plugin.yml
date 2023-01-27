@@ -4,4 +4,4 @@ version: 0.0.2
 description: A graphics plugin
 authors: [maceris]
 main-class: com.ikalagaming.graphics.GraphicsPlugin
-dependencies: [Ikala-World, Random]
+dependencies: [Random]

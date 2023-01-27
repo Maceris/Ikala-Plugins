@@ -45,21 +45,21 @@ public class GraphicsManager {
 
 	/**
 	 * The scene we are rendering.
-	 * 
+	 *
 	 * @return The current scene.
 	 */
 	@Getter
 	private static Scene scene;
 	/**
 	 * The rendering handler.
-	 * 
+	 *
 	 * @return The render stages.
 	 */
 	@Getter
 	private static Render render;
 	/**
 	 * The camera manager.
-	 * 
+	 *
 	 * @return The camera manager.
 	 */
 	@Getter
@@ -113,7 +113,7 @@ public class GraphicsManager {
 	private static int framesSinceLastCalculation;
 	/**
 	 * The last recorded Frames Per Second.
-	 * 
+	 *
 	 * @return The last known FPS.
 	 */
 	@Getter
@@ -201,30 +201,34 @@ public class GraphicsManager {
 	 */
 	private static void init() {
 		String terrainModelId = "terrain";
-		Model terrainModel =
-			ModelLoader.loadModel(terrainModelId, "models/terrain/terrain.obj",
-				GraphicsManager.scene.getTextureCache(),
-				GraphicsManager.scene.getMaterialCache(), false);
-		GraphicsManager.scene.addModel(terrainModel);
+		Model terrain = ModelLoader
+			.loadModel(new ModelLoader.ModelLoadRequest(terrainModelId,
+				GraphicsPlugin.PLUGIN_NAME, "models/terrain/terrain.obj",
+				GraphicsManager.getScene().getTextureCache(),
+				GraphicsManager.getScene().getMaterialCache(), false));
+		GraphicsManager.getScene().addModel(terrain);
+
 		Entity terrainEntity = new Entity("terrainEntity", terrainModelId);
 		terrainEntity.setScale(100.0f);
 		terrainEntity.setPosition(0, -1, 0);
 		terrainEntity.updateModelMatrix();
-		GraphicsManager.scene.addEntity(terrainEntity);
+		GraphicsManager.getScene().addEntity(terrainEntity);
 
 		String bobModelId = "bobModel";
 		Model bobModel =
-			ModelLoader.loadModel(bobModelId, "models/bob/boblamp.md5mesh",
-				GraphicsManager.scene.getTextureCache(),
-				GraphicsManager.scene.getMaterialCache(), true);
-		GraphicsManager.scene.addModel(bobModel);
+			ModelLoader.loadModel(new ModelLoader.ModelLoadRequest(bobModelId,
+				GraphicsPlugin.PLUGIN_NAME, "models/bob/boblamp.md5mesh",
+				GraphicsManager.getScene().getTextureCache(),
+				GraphicsManager.getScene().getMaterialCache(), true));
+		GraphicsManager.getScene().addModel(bobModel);
+
 		Entity bobEntity = new Entity("bobEntity-1", bobModelId);
 		bobEntity.setScale(0.05f);
 		bobEntity.updateModelMatrix();
 		GraphicsManager.animationData1 =
 			new AnimationData(bobModel.getAnimationList().get(0));
 		bobEntity.setAnimationData(GraphicsManager.animationData1);
-		GraphicsManager.scene.addEntity(bobEntity);
+		GraphicsManager.getScene().addEntity(bobEntity);
 
 		Entity bobEntity2 = new Entity("bobEntity-2", bobModelId);
 		bobEntity2.setPosition(2, 0, 0);
@@ -233,45 +237,7 @@ public class GraphicsManager {
 		GraphicsManager.animationData2 =
 			new AnimationData(bobModel.getAnimationList().get(0));
 		bobEntity2.setAnimationData(GraphicsManager.animationData2);
-		GraphicsManager.scene.addEntity(bobEntity2);
-
-		Model floorModel =
-			ModelLoader.loadModel("floor_001", "models/dungeon/floor_001.obj",
-				GraphicsManager.getScene().getTextureCache(),
-				GraphicsManager.getScene().getMaterialCache(), false);
-		GraphicsManager.getScene().addModel(floorModel);
-
-		Model wallModel =
-			ModelLoader.loadModel("brick_wall", "models/dungeon/brick_wall.obj",
-				GraphicsManager.getScene().getTextureCache(),
-				GraphicsManager.getScene().getMaterialCache(), false);
-		GraphicsManager.getScene().addModel(wallModel);
-
-		Model wallCornerModel = ModelLoader.loadModel("brick_wall_corner",
-			"models/dungeon/brick_wall_corner.obj",
-			GraphicsManager.getScene().getTextureCache(),
-			GraphicsManager.getScene().getMaterialCache(), false);
-		GraphicsManager.getScene().addModel(wallCornerModel);
-
-		Model wallAllSidesModel = ModelLoader.loadModel("brick_wall_all_sides",
-			"models/dungeon/brick_wall_all_sides.obj",
-			GraphicsManager.getScene().getTextureCache(),
-			GraphicsManager.getScene().getMaterialCache(), false);
-		GraphicsManager.getScene().addModel(wallAllSidesModel);
-
-		Model wallOppositeSidesModel =
-			ModelLoader.loadModel("brick_wall_opposite_sides",
-				"models/dungeon/brick_wall_opposite_sides.obj",
-				GraphicsManager.getScene().getTextureCache(),
-				GraphicsManager.getScene().getMaterialCache(), false);
-		GraphicsManager.getScene().addModel(wallOppositeSidesModel);
-
-		Model wallThreeSidesModel =
-			ModelLoader.loadModel("brick_wall_three_sides",
-				"models/dungeon/brick_wall_three_sides.obj",
-				GraphicsManager.getScene().getTextureCache(),
-				GraphicsManager.getScene().getMaterialCache(), false);
-		GraphicsManager.getScene().addModel(wallThreeSidesModel);
+		GraphicsManager.getScene().addEntity(bobEntity2);
 
 		SceneLights sceneLights = new SceneLights();
 		AmbientLight ambientLight = sceneLights.getAmbientLight();
@@ -308,10 +274,19 @@ public class GraphicsManager {
 	}
 
 	/**
+	 * Whether we are currently initialized.
+	 *
+	 * @return If we have already set up the window.
+	 */
+	public static boolean isInitialized() {
+		return GraphicsManager.initialized.get();
+	}
+
+	/**
 	 * Set up the render data after adding/removing renderables.
 	 */
 	public static void refreshRenderData() {
-		refreshRequested.set(true);
+		GraphicsManager.refreshRequested.set(true);
 	}
 
 	/**
@@ -340,6 +315,15 @@ public class GraphicsManager {
 		int height = GraphicsManager.window.getHeight();
 		GraphicsManager.scene.resize(width, height);
 		GraphicsManager.render.resize(width, height);
+	}
+
+	/**
+	 * Set the GUI instance to use.
+	 *
+	 * @param gui The user interface.
+	 */
+	public static void setGUI(GuiInstance gui) {
+		GraphicsManager.scene.setGuiInstance(gui);
 	}
 
 	/**
@@ -383,6 +367,8 @@ public class GraphicsManager {
 
 		GraphicsManager.window.pollEvents();
 
+		ModelLoader.loadModel();
+
 		if (GraphicsManager.updateTimer
 			.getTime() >= GraphicsManager.nextUpdateTime) {
 			final float elapsedTime =
@@ -399,7 +385,7 @@ public class GraphicsManager {
 
 			GraphicsManager.update((long) elapsedTime);
 
-			if (refreshRequested.compareAndSet(true, false)) {
+			if (GraphicsManager.refreshRequested.compareAndSet(true, false)) {
 				GraphicsManager.render.setupData(GraphicsManager.scene);
 			}
 
@@ -422,15 +408,6 @@ public class GraphicsManager {
 		}
 
 		return Launcher.STATUS_OK;
-	}
-
-	/**
-	 * Set the GUI instance to use.
-	 * 
-	 * @param gui The user interface.
-	 */
-	public static void setGUI(GuiInstance gui) {
-		scene.setGuiInstance(gui);
 	}
 
 	/**

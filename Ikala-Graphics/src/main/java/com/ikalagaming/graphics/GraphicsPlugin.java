@@ -4,7 +4,6 @@ import com.ikalagaming.event.Listener;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
-import com.ikalagaming.world.WorldManager;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -47,7 +46,6 @@ public class GraphicsPlugin extends Plugin {
 		if (this.listeners == null) {
 			this.listeners =
 				Collections.synchronizedSet(new HashSet<Listener>());
-			this.listeners.add(new GraphicsListener());
 		}
 
 		return this.listeners;
@@ -65,7 +63,6 @@ public class GraphicsPlugin extends Plugin {
 		GraphicsManager.createWindow();
 		UUID stageID = Launcher.addMainThreadStage(GraphicsManager::tick);
 		GraphicsManager.setTickStageID(stageID);
-		WorldManager.getInstance().loadLevel("default");
 		return true;
 	}
 

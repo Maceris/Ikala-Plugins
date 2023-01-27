@@ -4,3 +4,7 @@ version: 0.0.1-alpha
 description: Handles RPG game logic
 authors: [maceris]
 main-class: com.ikalagaming.rpg.RPGPlugin
+dependencies:
+  - Ikala-Graphics
+  - Ikala-World
+  - Random

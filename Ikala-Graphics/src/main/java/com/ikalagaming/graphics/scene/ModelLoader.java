@@ -6,6 +6,7 @@
  */
 package com.ikalagaming.graphics.scene;
 
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Utils;
 import com.ikalagaming.graphics.exceptions.ModelException;
@@ -50,9 +51,11 @@ import java.io.File;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentLinkedDeque;
 
 /**
  * Utility class for loading in models from file.
@@ -61,36 +64,121 @@ import java.util.Map;
 public class ModelLoader {
 
 	/**
+	 * Information needed to load a model.
+	 *
+	 * @param modelId The ID to supply the model.
+	 * @param pluginName The plugin that contains the model.
+	 * @param modelPath The path to the model from the resource directory.
+	 * @param textureCache The texture cache so we can reuse textures.
+	 * @param materialCache The material cache so we can reuse materials.
+	 * @param animation Whether we want to set up vertices for animation.
+	 * @param flags Post processing flags for
+	 *            {@link Assimp#aiImportFile(CharSequence, int) Assimp file
+	 *            import}.
+	 */
+	public static record ModelLoadRequest(@NonNull String modelId,
+		@NonNull String pluginName, @NonNull String modelPath,
+		@NonNull TextureCache textureCache,
+		@NonNull MaterialCache materialCache, boolean animation, int flags) {
+
+		/**
+		 * Load a model using some standard post processing flags, and return
+		 * it.
+		 *
+		 * @param modelId The ID to supply the model.
+		 * @param pluginName The plugin that contains the model.
+		 * @param modelPath The path to the model from the resource directory.
+		 * @param textureCache The texture cache so we can reuse textures.
+		 * @param materialCache The material cache so we can reuse materials.
+		 * @param animation Whether we want to set up vertices for animation.
+		 */
+		public ModelLoadRequest(@NonNull String modelId,
+			@NonNull String pluginName, @NonNull String modelPath,
+			@NonNull TextureCache textureCache,
+			@NonNull MaterialCache materialCache, boolean animation) {
+			this(modelId, pluginName, modelPath, textureCache, materialCache,
+				animation, /*
+							 * Generates smooth normals for all vertices in the
+							 * mesh unless the normals are already there at the
+							 * time this flag is evaluated.
+							 */
+				Assimp.aiProcess_GenSmoothNormals
+					/*
+					 * Reduces number of vertices by reusing identical vertices
+					 * between faces
+					 */
+					| Assimp.aiProcess_JoinIdenticalVertices
+					/*
+					 * Splits all the faces into triangles in case it uses quads
+					 * or other geometry
+					 */
+					| Assimp.aiProcess_Triangulate
+					/*
+					 * Tries to fix normals that point inwards by reversing them
+					 */
+					| Assimp.aiProcess_FixInfacingNormals
+					/*
+					 * Used for lighting, calculates tangents and bitangents
+					 * from normals.
+					 */
+					| Assimp.aiProcess_CalcTangentSpace
+					/*
+					 * Limits the number of bone weights that affect any
+					 * particular vertex. The default bone weight limit is 4.
+					 */
+					| Assimp.aiProcess_LimitBoneWeights
+					/*
+					 * Generates axis-aligned bounding volume.
+					 */
+					| Assimp.aiProcess_GenBoundingBoxes
+					/*
+					 * Transforms the data so the model is moved to the origin
+					 * and coordinates are fixed to match the OpenGL coordinate
+					 * system. It interferes with animation so we skip this part
+					 * if the model is animated.
+					 */
+					| (animation ? 0 : Assimp.aiProcess_PreTransformVertices));
+		}
+	}
+
+	/**
 	 * Lists of weights and bones that affect the vertices, ordered by vertex
 	 * ID. Each vertex has {@link Mesh#MAX_WEIGHTS} entries in each list, and if
 	 * there are less than that number of bones affecting the vertex, the
 	 * remaining positions are filled with zeroes.
-	 * 
+	 *
 	 * Each index in the weights list is the weight corresponding to the bone ID
 	 * in the bone ID list at the same position.
-	 * 
+	 *
 	 * @param weights The weight list.
 	 * @param boneIDs The bone ID list.
 	 */
-	public record AnimMeshData(float[] weights, int[] boneIDs) {}
+	public static record AnimMeshData(float[] weights, int[] boneIDs) {}
 
 	/**
 	 * A bone for animation.
-	 * 
+	 *
 	 * @param boneID The ID of the bone.
 	 * @param boneName The name of the bone.
 	 * @param offsetMatrix The offset matrix for the bone.
 	 */
-	private record Bone(int boneID, String boneName, Matrix4f offsetMatrix) {}
+	private static record Bone(int boneID, String boneName,
+		Matrix4f offsetMatrix) {}
 
 	/**
 	 * A mapping of how much a specific bone affects a specific vertex.
-	 * 
+	 *
 	 * @param boneID The ID of the bone.
 	 * @param vertexID The ID of the vertex.
 	 * @param weight The weight of the bone on the vertex.
 	 */
 	private record VertexWeight(int boneID, int vertexID, float weight) {}
+
+	/**
+	 * The list of models we have queued up to load.
+	 */
+	private static Deque<ModelLoadRequest> loadQueue =
+		new ConcurrentLinkedDeque<>();
 
 	/**
 	 * The maximum number of bones that are allowed in a model.
@@ -258,79 +346,35 @@ public class ModelLoader {
 	}
 
 	/**
-	 * Load a model using some standard post processing flags, and return it.
+	 * Check how many models there are left to load.
 	 *
-	 * @param modelId The ID to supply the model.
-	 * @param modelPath The path to the model from the resource directory.
-	 * @param textureCache The texture cache so we can reuse textures.
-	 * @param materialCache The material cache so we can reuse materials.
-	 * @param animation Whether we want to set up vertices for animation.
-	 * @return The newly loaded model.
+	 * @return The size of the model loading queue.
 	 */
-	public static Model loadModel(@NonNull String modelId,
-		@NonNull String modelPath, @NonNull TextureCache textureCache,
-		@NonNull MaterialCache materialCache, boolean animation) {
-		return ModelLoader.loadModel(modelId, modelPath, textureCache,
-			materialCache,
-			/*
-			 * Generates smooth normals for all vertices in the mesh unless the
-			 * normals are already there at the time this flag is evaluated.
-			 */
-			Assimp.aiProcess_GenSmoothNormals
-				/*
-				 * Reduces number of vertices by reusing identical vertices
-				 * between faces
-				 */
-				| Assimp.aiProcess_JoinIdenticalVertices
-				/*
-				 * Splits all the faces into triangles in case it uses quads or
-				 * other geometry
-				 */
-				| Assimp.aiProcess_Triangulate
-				/*
-				 * Tries to fix normals that point inwards by reversing them
-				 */
-				| Assimp.aiProcess_FixInfacingNormals
-				/*
-				 * Used for lighting, calculates tangents and bitangents from
-				 * normals.
-				 */
-				| Assimp.aiProcess_CalcTangentSpace
-				/*
-				 * Limits the number of bone weights that affect any particular
-				 * vertex. The default bone weight limit is 4.
-				 */
-				| Assimp.aiProcess_LimitBoneWeights
-				/*
-				 * Generates axis-aligned bounding volume.
-				 */
-				| Assimp.aiProcess_GenBoundingBoxes
-				/*
-				 * Transforms the data so the model is moved to the origin and
-				 * coordinates are fixed to match the OpenGL coordinate system.
-				 * It interferes with animation so we skip this part if the
-				 * model is animated.
-				 */
-				| (animation ? 0 : Assimp.aiProcess_PreTransformVertices));
+	public static int getLoadQueueLength() {
+		return ModelLoader.loadQueue.size();
 	}
 
 	/**
-	 * Load a model and return it.
+	 * Load a model from the model loading queue. Does nothing if the queue is
+	 * empty.
+	 */
+	public static void loadModel() {
+		if (ModelLoader.loadQueue.isEmpty()) {
+			return;
+		}
+		Model loaded = ModelLoader.loadModel(ModelLoader.loadQueue.poll());
+		GraphicsManager.getScene().addModel(loaded);
+	}
+
+	/**
+	 * Load a model right now and return it.
 	 *
-	 * @param modelId The ID to supply the model.
-	 * @param modelPath The path to the model from the resource directory.
-	 * @param textureCache The texture cache so we can reuse textures.
-	 * @param materialCache The material cache so we can reuse materials.
-	 * @param flags Post processing flags for
-	 *            {@link Assimp#aiImportFile(CharSequence, int) Assimp file
-	 *            import}.
+	 * @param request Data required to load the model.
 	 * @return The newly loaded model.
 	 */
-	public static Model loadModel(@NonNull String modelId,
-		@NonNull String modelPath, @NonNull TextureCache textureCache,
-		@NonNull MaterialCache materialCache, int flags) {
-		File file = PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
-			ResourceType.DATA, modelPath);
+	public static Model loadModel(ModelLoadRequest request) {
+		File file = PluginFolder.getResource(request.pluginName(),
+			ResourceType.DATA, request.modelPath());
 		String fixedPath = file.getAbsolutePath();
 
 		if (!file.exists()) {
@@ -342,7 +386,7 @@ public class ModelLoader {
 		}
 		String modelDir = file.getParent();
 
-		AIScene aiScene = Assimp.aiImportFile(fixedPath, flags);
+		AIScene aiScene = Assimp.aiImportFile(fixedPath, request.flags());
 		if (aiScene == null) {
 			String error = SafeResourceLoader.getString("MODEL_ERROR_LOADING",
 				GraphicsPlugin.getResourceBundle());
@@ -355,9 +399,9 @@ public class ModelLoader {
 		for (int i = 0; i < numMaterials; ++i) {
 			AIMaterial aiMaterial =
 				AIMaterial.create(aiScene.mMaterials().get(i));
-			Material material =
-				ModelLoader.processMaterial(aiMaterial, modelDir, textureCache);
-			int index = materialCache.addMaterial(material);
+			Material material = ModelLoader.processMaterial(aiMaterial,
+				modelDir, request.textureCache());
+			int index = request.materialCache().addMaterial(material);
 			materialList.add(index);
 		}
 
@@ -391,7 +435,16 @@ public class ModelLoader {
 
 		Assimp.aiReleaseImport(aiScene);
 
-		return new Model(modelId, meshDataList, animations);
+		return new Model(request.modelId(), meshDataList, animations);
+	}
+
+	/**
+	 * Put in a request to load a model later, on the main thread.
+	 *
+	 * @param request The details about what model to load.
+	 */
+	public static void loadModelLater(ModelLoadRequest request) {
+		ModelLoader.loadQueue.add(request);
 	}
 
 	/**

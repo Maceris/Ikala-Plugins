@@ -1,10 +1,14 @@
-package com.ikalagaming.graphics;
+package com.ikalagaming.rpg;
 
 import com.ikalagaming.event.EventHandler;
 import com.ikalagaming.event.Listener;
+import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
+import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.scene.lights.PointLight;
+import com.ikalagaming.plugins.events.AllPluginsEnabled;
 import com.ikalagaming.world.Level;
 import com.ikalagaming.world.WorldManager;
 import com.ikalagaming.world.events.LevelLoaded;
@@ -33,7 +37,7 @@ import java.util.Optional;
  *
  */
 @Slf4j
-public class GraphicsListener implements Listener {
+public class GeneralListener implements Listener {
 
 	private static Gson gson = new Gson();
 
@@ -73,13 +77,13 @@ public class GraphicsListener implements Listener {
 			map.getProperties().getProperty("Directional Light");
 
 		CustomClass dirLightTemp =
-			gson.fromJson(dirLightText, CustomClass.class);
+			GeneralListener.gson.fromJson(dirLightText, CustomClass.class);
 
 		Vector3f color =
-			GraphicsListener.toVector3f(dirLightTemp.getColor("Color"));
+			GeneralListener.toVector3f(dirLightTemp.getColor("Color"));
 
 		Vector3f direction =
-			GraphicsListener.toVector3f(dirLightTemp.getMember("Direction"));
+			GeneralListener.toVector3f(dirLightTemp.getMember("Direction"));
 
 		float intensity = dirLightTemp.getFloat("Intensity");
 
@@ -132,6 +136,8 @@ public class GraphicsListener implements Listener {
 		}
 		return result;
 	}
+
+	private boolean modelsLoaded = false;
 
 	/**
 	 * Create an entity corresponding to a tile.
@@ -206,12 +212,12 @@ public class GraphicsListener implements Listener {
 		}
 		else {
 			CustomClass pos =
-				GraphicsListener.gson.fromJson(posString, CustomClass.class);
+				GeneralListener.gson.fromJson(posString, CustomClass.class);
 			Member fakeParent = new Member(pos.getName(), "class", "Position");
 			fakeParent.setChild(pos);
 			posMember = Optional.of(fakeParent);
 		}
-		Vector3f position = GraphicsListener.toVector3f(posMember);
+		Vector3f position = GeneralListener.toVector3f(posMember);
 		position.x *= 2f;
 		position.y *= 2f;
 		position.z *= 2f;
@@ -221,12 +227,67 @@ public class GraphicsListener implements Listener {
 		position.z = position.y;
 		position.y = temp;
 
-		PointLight light = new PointLight(GraphicsListener.toVector3f(color),
+		PointLight light = new PointLight(GeneralListener.toVector3f(color),
 			position, intensity);
-		GraphicsListener.log.debug(
+		GeneralListener.log.debug(
 			"Created a light at ({}, {}, {}), with intensity {}", position.x,
 			position.y, position.z, intensity);
 		GraphicsManager.getScene().getSceneLights().getPointLights().add(light);
+	}
+
+	/**
+	 * Load all the appropriate models to the scene.
+	 */
+	private void loadModels() {
+		if (this.modelsLoaded) {
+			return;
+		}
+
+		Model model =
+			ModelLoader.loadModel(new ModelLoader.ModelLoadRequest("floor_001",
+				RPGPlugin.PLUGIN_NAME, "models/dungeon/floor_001.obj",
+				GraphicsManager.getScene().getTextureCache(),
+				GraphicsManager.getScene().getMaterialCache(), false));
+		GraphicsManager.getScene().addModel(model);
+
+		model =
+			ModelLoader.loadModel(new ModelLoader.ModelLoadRequest("brick_wall",
+				RPGPlugin.PLUGIN_NAME, "models/dungeon/brick_wall.obj",
+				GraphicsManager.getScene().getTextureCache(),
+				GraphicsManager.getScene().getMaterialCache(), false));
+		GraphicsManager.getScene().addModel(model);
+
+		model = ModelLoader
+			.loadModel(new ModelLoader.ModelLoadRequest("brick_wall_corner",
+				RPGPlugin.PLUGIN_NAME, "models/dungeon/brick_wall_corner.obj",
+				GraphicsManager.getScene().getTextureCache(),
+				GraphicsManager.getScene().getMaterialCache(), false));
+		GraphicsManager.getScene().addModel(model);
+
+		model = ModelLoader.loadModel(new ModelLoader.ModelLoadRequest(
+			"brick_wall_all_sides", RPGPlugin.PLUGIN_NAME,
+			"models/dungeon/brick_wall_all_sides.obj",
+			GraphicsManager.getScene().getTextureCache(),
+			GraphicsManager.getScene().getMaterialCache(), false));
+		GraphicsManager.getScene().addModel(model);
+
+		model = ModelLoader.loadModel(new ModelLoader.ModelLoadRequest(
+			"brick_wall_opposite_sides", RPGPlugin.PLUGIN_NAME,
+			"models/dungeon/brick_wall_opposite_sides.obj",
+			GraphicsManager.getScene().getTextureCache(),
+			GraphicsManager.getScene().getMaterialCache(), false));
+		GraphicsManager.getScene().addModel(model);
+
+		model = ModelLoader.loadModel(new ModelLoader.ModelLoadRequest(
+			"brick_wall_three_sides", RPGPlugin.PLUGIN_NAME,
+			"models/dungeon/brick_wall_three_sides.obj",
+			GraphicsManager.getScene().getTextureCache(),
+			GraphicsManager.getScene().getMaterialCache(), false));
+		GraphicsManager.getScene().addModel(model);
+
+		this.modelsLoaded = true;
+
+		GraphicsManager.refreshRenderData();
 	}
 
 	/**
@@ -244,12 +305,22 @@ public class GraphicsListener implements Listener {
 				if (tile == null) {
 					continue;
 				}
-				float rotation = GraphicsListener.getRotation(layer, x, y);
+				float rotation = GeneralListener.getRotation(layer, x, y);
 
 				int id = tile.getId();
 				this.addTile(id, x, y, z, rotation);
 			}
 		}
+	}
+
+	/**
+	 * Kick off things once the game has actually finished booting up.
+	 *
+	 * @param event The event indicating all plugins are enabled.
+	 */
+	@EventHandler
+	public void onGameStarting(AllPluginsEnabled event) {
+		WorldManager.getInstance().loadLevel("default");
 	}
 
 	/**
@@ -259,26 +330,34 @@ public class GraphicsListener implements Listener {
 	 */
 	@EventHandler
 	public void onLevelLoaded(LevelLoaded event) {
-		if (!GraphicsManager.initialized.get()) {
-			GraphicsListener.log
+		if (!GraphicsManager.isInitialized()) {
+			GeneralListener.log
 				.warn("Loading level before initializing graphics!");
 			return;
 		}
+		this.loadModels();
 
+		Optional<Level> maybeLevel =
+			WorldManager.getInstance().getCurrentLevel();
+
+		if (maybeLevel.isEmpty()) {
+			GeneralListener.log.warn("Loading invalid level!");
+			return;
+		}
 		Level level = WorldManager.getInstance().getCurrentLevel().get();
 
 		Map map = level.getMap();
 
-		GraphicsListener.log.debug("Map is {}x{} and has {} layers",
+		GeneralListener.log.debug("Map is {}x{} and has {} layers",
 			map.getWidth(), map.getHeight(), map.getLayerCount());
 
-		GraphicsListener.loadDirectionalLight(map);
+		GeneralListener.loadDirectionalLight(map);
 
 		for (int z = 0; z < map.getLayerCount(); ++z) {
 			MapLayer genericLayer = map.getLayer(z);
 
 			if (genericLayer instanceof ObjectGroup) {
-				GraphicsListener.log.debug("We have an object group.");
+				GeneralListener.log.debug("We have an object group.");
 				ObjectGroup group = (ObjectGroup) genericLayer;
 
 				for (MapObject object : group.getObjects()) {
