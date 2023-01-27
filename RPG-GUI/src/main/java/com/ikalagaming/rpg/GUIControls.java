@@ -42,7 +42,10 @@ public class GUIControls implements GuiInstance {
 
 	private PlayerInventory windowInventory;
 	private ItemCatalogWindow windowCatalog;
-	private SceneControls windowSceneControls;
+	/**
+	 * The scene controls.
+	 */
+	SceneControls windowSceneControls;
 	private ImageWindow windowImages;
 	private LuaConsole windowLuaConsole;
 
