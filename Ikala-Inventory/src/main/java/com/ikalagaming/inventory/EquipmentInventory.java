@@ -10,46 +10,89 @@ import lombok.NonNull;
 /**
  * The "body slots" for an entity, where armor, accessories, and weapons are
  * stored when in use.
- * 
+ *
  * @author Ches Burks
  *
  */
-public class EquipmentInventory {
-	private InventorySlot chest;
-	private InventorySlot feet;
-	private InventorySlot hands;
-	private InventorySlot head;
-	private InventorySlot legs;
-	private InventorySlot shoulders;
-	private InventorySlot wrist;
-	private InventorySlot amulet;
-	private InventorySlot belt;
-	private InventorySlot cape;
-	private InventorySlot ringLeft;
-	private InventorySlot ringRight;
-	private InventorySlot trinket;
-	private InventorySlot mainHand;
-	private InventorySlot offHand;
+public class EquipmentInventory extends Inventory {
+
+	/**
+	 * The specific slots that we have. The position in this enum also uniquely
+	 * describes that slots position in the inventory. Be careful modifying or
+	 * reordering this, or saves will break.
+	 *
+	 * @author Ches Burks
+	 *
+	 */
+	public enum Slots {
+		/**
+		 * Stores an amulet.
+		 */
+		AMULET,
+		/**
+		 * Stores a belt.
+		 */
+		BELT,
+		/**
+		 * Stores a cape.
+		 */
+		CAPE,
+		/**
+		 * Stores chest armor.
+		 */
+		CHEST,
+		/**
+		 * Stores foot armor.
+		 */
+		FEET,
+		/**
+		 * Stores hand armor.
+		 */
+		HANDS,
+		/**
+		 * Stores head armor.
+		 */
+		HEAD,
+		/**
+		 * Stores leg armor.
+		 */
+		LEGS,
+		/**
+		 * Stores a one-handed or two-handed weapon. Two-handed weapons would
+		 * prevent use of the off-hand.
+		 */
+		MAIN_HAND,
+		/**
+		 * Stores one-handed weapons, shields, orbs, etc.
+		 */
+		OFF_HAND,
+		/**
+		 * Stores a ring.
+		 */
+		RING_LEFT,
+		/**
+		 * Stores a ring.
+		 */
+		RING_RIGHT,
+		/**
+		 * Stores shoulder armor.
+		 */
+		SHOULDERS,
+		/**
+		 * Stores trinkets.
+		 */
+		TRINKET,
+		/**
+		 * Stores wrist armor.
+		 */
+		WRIST;
+	}
 
 	/**
 	 * Construct a new equipment inventory.
 	 */
 	public EquipmentInventory() {
-		this.chest = new InventorySlot();
-		this.feet = new InventorySlot();
-		this.hands = new InventorySlot();
-		this.head = new InventorySlot();
-		this.legs = new InventorySlot();
-		this.shoulders = new InventorySlot();
-		this.wrist = new InventorySlot();
-		this.amulet = new InventorySlot();
-		this.belt = new InventorySlot();
-		this.cape = new InventorySlot();
-		this.ringLeft = new InventorySlot();
-		this.ringRight = new InventorySlot();
-		this.trinket = new InventorySlot();
-		this.mainHand = new InventorySlot();
-		this.offHand = new InventorySlot();
+		super(Slots.values().length);
 	}
 
 	/**
@@ -58,22 +101,23 @@ public class EquipmentInventory {
 	 * @param item The item to store.
 	 * @return Whether the appropriate slot is empty.
 	 */
+	@Override
 	public boolean canFitItem(@NonNull Item item) {
 		switch (item.getItemType()) {
 			case ACCESSORY:
 				Accessory accessory = (Accessory) item;
 				switch (accessory.getAccessoryType()) {
 					case AMULET:
-						return this.amulet.isEmpty();
+						return this.isEmpty(Slots.AMULET.ordinal());
 					case BELT:
-						return this.belt.isEmpty();
+						return this.isEmpty(Slots.BELT.ordinal());
 					case CAPE:
-						return this.cape.isEmpty();
+						return this.isEmpty(Slots.CAPE.ordinal());
 					case RING:
-						return this.ringLeft.isEmpty()
-							|| this.ringRight.isEmpty();
+						return this.isEmpty(Slots.RING_LEFT.ordinal())
+							|| this.isEmpty(Slots.RING_RIGHT.ordinal());
 					case TRINKET:
-						return this.trinket.isEmpty();
+						return this.isEmpty(Slots.TRINKET.ordinal());
 					default:
 						return false;
 				}
@@ -81,19 +125,19 @@ public class EquipmentInventory {
 				Armor armor = (Armor) item;
 				switch (armor.getArmorType()) {
 					case CHEST:
-						return this.chest.isEmpty();
+						return this.isEmpty(Slots.CHEST.ordinal());
 					case FEET:
-						return this.feet.isEmpty();
+						return this.isEmpty(Slots.FEET.ordinal());
 					case HANDS:
-						return this.hands.isEmpty();
+						return this.isEmpty(Slots.HANDS.ordinal());
 					case HEAD:
-						return this.head.isEmpty();
+						return this.isEmpty(Slots.HEAD.ordinal());
 					case LEGS:
-						return this.legs.isEmpty();
+						return this.isEmpty(Slots.LEGS.ordinal());
 					case SHOULDERS:
-						return this.shoulders.isEmpty();
+						return this.isEmpty(Slots.SHOULDERS.ordinal());
 					case WRIST:
-						return this.wrist.isEmpty();
+						return this.isEmpty(Slots.WRIST.ordinal());
 					default:
 						return false;
 				}
@@ -102,19 +146,19 @@ public class EquipmentInventory {
 				switch (weapon.getWeaponType()) {
 					case OFF_HAND:
 					case SHIELD:
-						return this.offHand.isEmpty()
+						return this.isEmpty(Slots.OFF_HAND.ordinal())
 							&& !this.holdingTwoHanded();
 					case ONE_HANDED_MAGIC:
 					case ONE_HANDED_MELEE:
 					case ONE_HANDED_RANGED:
-						return this.mainHand.isEmpty()
-							|| (this.offHand.isEmpty()
+						return this.isEmpty(Slots.MAIN_HAND.ordinal())
+							|| (this.isEmpty(Slots.OFF_HAND.ordinal())
 								&& !this.holdingTwoHanded());
 					case TWO_HANDED_MAGIC:
 					case TWO_HANDED_MELEE:
 					case TWO_HANDED_RANGED:
-						return this.mainHand.isEmpty()
-							&& this.offHand.isEmpty();
+						return this.isEmpty(Slots.MAIN_HAND.ordinal())
+							&& this.isEmpty(Slots.OFF_HAND.ordinal());
 					default:
 						return false;
 				}
@@ -135,11 +179,11 @@ public class EquipmentInventory {
 	 * @return Whether a two handed weapon is being held.
 	 */
 	private boolean holdingTwoHanded() {
-		if (this.mainHand.isEmpty()) {
+		if (this.isEmpty(Slots.MAIN_HAND.ordinal())) {
 			return false;
 		}
 
-		Weapon main = (Weapon) this.mainHand.getItem().get();
+		Weapon main = (Weapon) this.getItem(Slots.MAIN_HAND.ordinal()).get();
 		switch (main.getWeaponType()) {
 			case OFF_HAND:
 			case ONE_HANDED_MAGIC:
@@ -156,74 +200,74 @@ public class EquipmentInventory {
 	}
 
 	/**
-	 * Check if we can store the item in the inventory.
+	 * Store the item in the inventory. If it can't fit, it won't be stored
+	 * there.
 	 *
 	 * @param item The item to store.
-	 * @return Whether the appropriate slot is empty.
 	 */
-	public boolean storeItem(@NonNull Item item) {
+	public void storeItem(@NonNull Item item) {
 		if (!this.canFitItem(item)) {
-			return false;
+			return;
 		}
 		switch (item.getItemType()) {
 			case ACCESSORY:
 				Accessory accessory = (Accessory) item;
 				switch (accessory.getAccessoryType()) {
 					case AMULET:
-						return this.amulet.setItem(accessory);
+						this.setItem(Slots.AMULET.ordinal(), accessory);
 					case BELT:
-						return this.belt.setItem(accessory);
+						this.setItem(Slots.BELT.ordinal(), accessory);
 					case CAPE:
-						return this.cape.setItem(accessory);
+						this.setItem(Slots.CAPE.ordinal(), accessory);
 					case RING:
-						if (this.ringLeft.isEmpty()) {
-							return this.ringLeft.setItem(accessory);
+						if (this.isEmpty(Slots.RING_LEFT.ordinal())) {
+							this.setItem(Slots.RING_LEFT.ordinal(), accessory);
 						}
-						return this.ringRight.setItem(accessory);
+						this.setItem(Slots.RING_RIGHT.ordinal(), accessory);
 					case TRINKET:
-						return this.trinket.setItem(accessory);
+						this.setItem(Slots.TRINKET.ordinal(), accessory);
 					default:
-						return false;
+						return;
 				}
 			case ARMOR:
 				Armor armor = (Armor) item;
 				switch (armor.getArmorType()) {
 					case CHEST:
-						return this.chest.setItem(armor);
+						this.setItem(Slots.CHEST.ordinal(), armor);
 					case FEET:
-						return this.feet.setItem(armor);
+						this.setItem(Slots.FEET.ordinal(), armor);
 					case HANDS:
-						return this.hands.setItem(armor);
+						this.setItem(Slots.HANDS.ordinal(), armor);
 					case HEAD:
-						return this.head.setItem(armor);
+						this.setItem(Slots.HEAD.ordinal(), armor);
 					case LEGS:
-						return this.legs.setItem(armor);
+						this.setItem(Slots.LEGS.ordinal(), armor);
 					case SHOULDERS:
-						return this.shoulders.setItem(armor);
+						this.setItem(Slots.SHOULDERS.ordinal(), armor);
 					case WRIST:
-						return this.wrist.setItem(armor);
+						this.setItem(Slots.WRIST.ordinal(), armor);
 					default:
-						return false;
+						return;
 				}
 			case WEAPON:
 				Weapon weapon = (Weapon) item;
 				switch (weapon.getWeaponType()) {
 					case OFF_HAND:
 					case SHIELD:
-						return this.offHand.setItem(weapon);
+						this.setItem(Slots.OFF_HAND.ordinal(), weapon);
 					case ONE_HANDED_MAGIC:
 					case ONE_HANDED_MELEE:
 					case ONE_HANDED_RANGED:
-						if (this.mainHand.isEmpty()) {
-							return this.mainHand.setItem(weapon);
+						if (this.isEmpty(Slots.MAIN_HAND.ordinal())) {
+							this.setItem(Slots.MAIN_HAND.ordinal(), weapon);
 						}
-						return this.offHand.setItem(weapon);
+						this.setItem(Slots.OFF_HAND.ordinal(), weapon);
 					case TWO_HANDED_MAGIC:
 					case TWO_HANDED_MELEE:
 					case TWO_HANDED_RANGED:
-						return this.mainHand.setItem(weapon);
+						this.setItem(Slots.MAIN_HAND.ordinal(), weapon);
 					default:
-						return false;
+						return;
 				}
 			case COMPONENT:
 			case CONSUMABLE:
@@ -231,7 +275,6 @@ public class EquipmentInventory {
 			case MATERIAL:
 			case QUEST:
 			default:
-				return false;
 		}
 	}
 

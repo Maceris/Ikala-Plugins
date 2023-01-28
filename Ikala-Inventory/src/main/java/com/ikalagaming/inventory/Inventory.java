@@ -20,6 +20,26 @@ import java.util.Optional;
 @Slf4j
 public class Inventory extends Component<Inventory> {
 	/**
+	 * Swap slots between inventories. If they are the same inventory and slot,
+	 * or either is an invalid slot number, nothing happens.
+	 *
+	 * @param firstInventory The first inventory.
+	 * @param firstSlot The slot within the first inventory.
+	 * @param secondInventory The second inventory.
+	 * @param secondSlot The slot within the second inventory.
+	 */
+	public static void swapSlots(@NonNull Inventory firstInventory,
+		int firstSlot, @NonNull Inventory secondInventory, int secondSlot) {
+		if (firstSlot < 0 || firstSlot >= firstInventory.size || secondSlot < 0
+			|| secondSlot >= secondInventory.size
+			|| (firstInventory == secondInventory && firstSlot == secondSlot)) {
+			return;
+		}
+		InventorySlot.swapContents(firstInventory.slots[firstSlot],
+			secondInventory.slots[secondSlot]);
+	}
+
+	/**
 	 * The size of the inventory.
 	 *
 	 * @return The number of inventory slots in the inventory.
@@ -247,11 +267,8 @@ public class Inventory extends Component<Inventory> {
 	 * @return Whether the inventory has room to fit the given item.
 	 */
 	public boolean canFitItem(@NonNull Item item, int amount) {
-		if (amount <= 0) {
-			return false;
-		}
 		// If we straight up don't have enough slots in the inventory, bail
-		if (!InvUtil.canStack(item) && amount > this.size) {
+		if ((amount <= 0) || (!InvUtil.canStack(item) && amount > this.size)) {
 			return false;
 		}
 		final int maxStackSize = InvUtil.maxStackSize(item);
@@ -408,10 +425,7 @@ public class Inventory extends Component<Inventory> {
 	 * @see #setItem(int, Equipment)
 	 */
 	public void setItem(int slotNumber, @NonNull Item stackable, int count) {
-		if (slotNumber < 0 || slotNumber >= this.size) {
-			return;
-		}
-		if (count <= 0) {
+		if (slotNumber < 0 || slotNumber >= this.size || (count <= 0)) {
 			return;
 		}
 		if (!InvUtil.canStack(stackable)) {
@@ -438,10 +452,7 @@ public class Inventory extends Component<Inventory> {
 			return false;
 		}
 		InventorySlot slot = this.slots[slotNumber];
-		if (!slot.isStackable()) {
-			return false;
-		}
-		if (!this.hasEmptySlot()) {
+		if (!slot.isStackable() || !this.hasEmptySlot()) {
 			return false;
 		}
 		Optional<ItemStack> maybeStack = slot.getItemStack();
