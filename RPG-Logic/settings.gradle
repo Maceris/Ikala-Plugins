@@ -1,10 +1,14 @@
 rootProject.name = 'RPG-Logic'
 include ':Ikala-Core'
 project(':Ikala-Core').projectDir = new File('../../Ikala-Core')
-include ':Ikala-World'
-project(':Ikala-World').projectDir = new File('../Ikala-World')
+include ':EntityComponentSystem'
+project(':EntityComponentSystem').projectDir = new File('../EntityComponentSystem')
 include ':Ikala-Graphics'
 project(':Ikala-Graphics').projectDir = new File('../Ikala-Graphics')
+include ':Ikala-Inventory'
+project(':Ikala-Inventory').projectDir = new File('../Ikala-Inventory')
+include ':Ikala-World'
+project(':Ikala-World').projectDir = new File('../Ikala-World')
 include ':Random'
 project(':Random').projectDir = new File('../Random')
 

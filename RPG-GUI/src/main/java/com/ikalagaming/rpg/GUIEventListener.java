@@ -60,5 +60,6 @@ public class GUIEventListener implements Listener {
 		log.debug(SafeResourceLoader.getString("SCENE_CONTROLS",
 			GUIPlugin.getResourceBundle()));
 		this.gui.windowSceneControls.setup(GraphicsManager.getScene());
+		this.gui.windowInventory.setup(GraphicsManager.getScene());
 	}
 }

@@ -17,3 +17,5 @@ include ':Ikala-Inventory'
 project(':Ikala-Inventory').projectDir = new File('../Ikala-Inventory')
 include ':Ikala-World'
 project(':Ikala-World').projectDir = new File('../Ikala-World')
+include ':RPG-Logic'
+project(':RPG-Logic').projectDir = new File('../RPG-Logic')

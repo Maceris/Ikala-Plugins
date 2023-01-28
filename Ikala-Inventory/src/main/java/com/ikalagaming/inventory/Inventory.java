@@ -1,8 +1,11 @@
 package com.ikalagaming.inventory;
 
 import com.ikalagaming.ecs.Component;
+import com.ikalagaming.item.Accessory;
+import com.ikalagaming.item.Armor;
 import com.ikalagaming.item.Equipment;
 import com.ikalagaming.item.Item;
+import com.ikalagaming.item.Weapon;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.Getter;
@@ -19,6 +22,134 @@ import java.util.Optional;
  */
 @Slf4j
 public class Inventory extends Component<Inventory> {
+	/**
+	 * The specific equipment slots that we have. The position in this enum also
+	 * uniquely describes that slots position in the inventory. Be careful
+	 * modifying or reordering this, or saves will break.
+	 *
+	 * @author Ches Burks
+	 *
+	 */
+	public enum EquipmentSlot {
+		/**
+		 * Stores an amulet.
+		 */
+		AMULET,
+		/**
+		 * Stores a belt.
+		 */
+		BELT,
+		/**
+		 * Stores a cape.
+		 */
+		CAPE,
+		/**
+		 * Stores chest armor.
+		 */
+		CHEST,
+		/**
+		 * Stores foot armor.
+		 */
+		FEET,
+		/**
+		 * Stores hand armor.
+		 */
+		HANDS,
+		/**
+		 * Stores head armor.
+		 */
+		HEAD,
+		/**
+		 * Stores leg armor.
+		 */
+		LEGS,
+		/**
+		 * Stores a one-handed or two-handed weapon. Two-handed weapons would
+		 * prevent use of the off-hand.
+		 */
+		MAIN_HAND,
+		/**
+		 * Stores one-handed weapons, shields, orbs, etc.
+		 */
+		OFF_HAND,
+		/**
+		 * Stores a ring.
+		 */
+		RING_LEFT,
+		/**
+		 * Stores a ring.
+		 */
+		RING_RIGHT,
+		/**
+		 * Stores shoulder armor.
+		 */
+		SHOULDERS,
+		/**
+		 * Stores trinkets.
+		 */
+		TRINKET,
+		/**
+		 * Stores wrist armor.
+		 */
+		WRIST;
+	}
+
+	/**
+	 * Swap slots between inventories. If invalid or the same exact slots are
+	 * provided, nothing happens.
+	 *
+	 * @param firstInventory The first inventory.
+	 * @param firstSlot The slot within the first inventory.
+	 * @param secondInventory The second inventory.
+	 * @param secondSlot The slot within the second inventory.
+	 */
+	public static void swapSlots(@NonNull Inventory firstInventory,
+		@NonNull EquipmentSlot firstSlot, @NonNull Inventory secondInventory,
+		@NonNull EquipmentSlot secondSlot) {
+		if (firstInventory == secondInventory && firstSlot.equals(secondSlot)) {
+			return;
+		}
+		InventorySlot.swapContents(
+			firstInventory.equipmentSlots[firstSlot.ordinal()],
+			secondInventory.equipmentSlots[secondSlot.ordinal()]);
+	}
+
+	/**
+	 * Swap slots between inventories. If invalid slots are provided, nothing
+	 * happens.
+	 *
+	 * @param firstInventory The first inventory.
+	 * @param firstSlot The equipment slot within the first inventory.
+	 * @param secondInventory The second inventory.
+	 * @param secondSlot The slot within the second inventory.
+	 */
+	public static void swapSlots(@NonNull Inventory firstInventory,
+		@NonNull EquipmentSlot firstSlot, @NonNull Inventory secondInventory,
+		int secondSlot) {
+		// This is a convenience method, just call the other one.
+		Inventory.swapSlots(secondInventory, secondSlot, firstInventory,
+			firstSlot);
+	}
+
+	/**
+	 * Swap slots between inventories. If invalid slots are provided, nothing
+	 * happens.
+	 *
+	 * @param firstInventory The first inventory.
+	 * @param firstSlot The slot within the first inventory.
+	 * @param secondInventory The second inventory.
+	 * @param secondSlot The equipment slot within the second inventory.
+	 */
+	public static void swapSlots(@NonNull Inventory firstInventory,
+		int firstSlot, @NonNull Inventory secondInventory,
+		@NonNull EquipmentSlot secondSlot) {
+		if (firstSlot < 0 || firstSlot >= firstInventory.size) {
+			return;
+		}
+		InventorySlot.swapContents(firstInventory.slots[firstSlot],
+			secondInventory.equipmentSlots[secondSlot.ordinal()]);
+	}
+
 	/**
 	 * Swap slots between inventories. If they are the same inventory and slot,
 	 * or either is an invalid slot number, nothing happens.
@@ -53,6 +184,11 @@ public class Inventory extends Component<Inventory> {
 	private InventorySlot[] slots;
 
 	/**
+	 * Slots to store equipment.
+	 */
+	private InventorySlot[] equipmentSlots;
+
+	/**
 	 * Create a new inventory of a given size.
 	 *
 	 * @param size The number of slots the inventory contains.
@@ -69,6 +205,10 @@ public class Inventory extends Component<Inventory> {
 		this.slots = new InventorySlot[size];
 		for (int i = 0; i < size; ++i) {
 			this.slots[i] = new InventorySlot();
+		}
+		this.equipmentSlots = new InventorySlot[EquipmentSlot.values().length];
+		for (int i = 0; i < this.equipmentSlots.length; ++i) {
+			this.equipmentSlots[i] = new InventorySlot();
 		}
 	}
 
@@ -228,6 +368,82 @@ public class Inventory extends Component<Inventory> {
 	}
 
 	/**
+	 * Check if we can store the item in the equipment inventory slots.
+	 *
+	 * @param item The item to store.
+	 * @return Whether the appropriate slot is empty.
+	 */
+	public boolean canEquip(@NonNull Item item) {
+		switch (item.getItemType()) {
+			case ACCESSORY:
+				Accessory accessory = (Accessory) item;
+				switch (accessory.getAccessoryType()) {
+					case AMULET:
+						return this.isEmpty(EquipmentSlot.AMULET);
+					case BELT:
+						return this.isEmpty(EquipmentSlot.BELT);
+					case CAPE:
+						return this.isEmpty(EquipmentSlot.CAPE);
+					case RING:
+						return this.isEmpty(EquipmentSlot.RING_LEFT)
+							|| this.isEmpty(EquipmentSlot.RING_RIGHT);
+					case TRINKET:
+						return this.isEmpty(EquipmentSlot.TRINKET);
+					default:
+						return false;
+				}
+			case ARMOR:
+				Armor armor = (Armor) item;
+				switch (armor.getArmorType()) {
+					case CHEST:
+						return this.isEmpty(EquipmentSlot.CHEST);
+					case FEET:
+						return this.isEmpty(EquipmentSlot.FEET);
+					case HANDS:
+						return this.isEmpty(EquipmentSlot.HANDS);
+					case HEAD:
+						return this.isEmpty(EquipmentSlot.HEAD);
+					case LEGS:
+						return this.isEmpty(EquipmentSlot.LEGS);
+					case SHOULDERS:
+						return this.isEmpty(EquipmentSlot.SHOULDERS);
+					case WRIST:
+						return this.isEmpty(EquipmentSlot.WRIST);
+					default:
+						return false;
+				}
+			case WEAPON:
+				Weapon weapon = (Weapon) item;
+				switch (weapon.getWeaponType()) {
+					case OFF_HAND:
+					case SHIELD:
+						return this.isEmpty(EquipmentSlot.OFF_HAND)
+							&& !this.holdingTwoHanded();
+					case ONE_HANDED_MAGIC:
+					case ONE_HANDED_MELEE:
+					case ONE_HANDED_RANGED:
+						return this.isEmpty(EquipmentSlot.MAIN_HAND)
+							|| (this.isEmpty(EquipmentSlot.OFF_HAND)
+								&& !this.holdingTwoHanded());
+					case TWO_HANDED_MAGIC:
+					case TWO_HANDED_MELEE:
+					case TWO_HANDED_RANGED:
+						return this.isEmpty(EquipmentSlot.MAIN_HAND)
+							&& this.isEmpty(EquipmentSlot.OFF_HAND);
+					default:
+						return false;
+				}
+			case COMPONENT:
+			case CONSUMABLE:
+			case JUNK:
+			case MATERIAL:
+			case QUEST:
+			default:
+				return false;
+		}
+	}
+
+	/**
 	 * Checks if the inventory has room to fit the given item. If it's not
 	 * stackable it will only fit in an empty slot, but if stackable we also
 	 * check if there is a stack of the same item that can fit it.
@@ -331,6 +547,96 @@ public class Inventory extends Component<Inventory> {
 	}
 
 	/**
+	 * Stores the item in the appropriate equipment slot, unless there is
+	 * already something there or it's not something we can equip.
+	 *
+	 * @param item The item to store.
+	 */
+	public void equipItem(@NonNull Item item) {
+		if (!this.canFitItem(item)) {
+			return;
+		}
+		switch (item.getItemType()) {
+			case ACCESSORY:
+				Accessory accessory = (Accessory) item;
+				switch (accessory.getAccessoryType()) {
+					case AMULET:
+						this.setItem(EquipmentSlot.AMULET, accessory);
+					case BELT:
+						this.setItem(EquipmentSlot.BELT, accessory);
+					case CAPE:
+						this.setItem(EquipmentSlot.CAPE, accessory);
+					case RING:
+						if (this.isEmpty(EquipmentSlot.RING_LEFT)) {
+							this.setItem(EquipmentSlot.RING_LEFT, accessory);
+						}
+						this.setItem(EquipmentSlot.RING_RIGHT, accessory);
+					case TRINKET:
+						this.setItem(EquipmentSlot.TRINKET, accessory);
+					default:
+						return;
+				}
+			case ARMOR:
+				Armor armor = (Armor) item;
+				switch (armor.getArmorType()) {
+					case CHEST:
+						this.setItem(EquipmentSlot.CHEST, armor);
+					case FEET:
+						this.setItem(EquipmentSlot.FEET, armor);
+					case HANDS:
+						this.setItem(EquipmentSlot.HANDS, armor);
+					case HEAD:
+						this.setItem(EquipmentSlot.HEAD, armor);
+					case LEGS:
+						this.setItem(EquipmentSlot.LEGS, armor);
+					case SHOULDERS:
+						this.setItem(EquipmentSlot.SHOULDERS, armor);
+					case WRIST:
+						this.setItem(EquipmentSlot.WRIST, armor);
+					default:
+						return;
+				}
+			case WEAPON:
+				Weapon weapon = (Weapon) item;
+				switch (weapon.getWeaponType()) {
+					case OFF_HAND:
+					case SHIELD:
+						this.setItem(EquipmentSlot.OFF_HAND, weapon);
+					case ONE_HANDED_MAGIC:
+					case ONE_HANDED_MELEE:
+					case ONE_HANDED_RANGED:
+						if (this.isEmpty(EquipmentSlot.MAIN_HAND)) {
+							this.setItem(EquipmentSlot.MAIN_HAND, weapon);
+						}
+						this.setItem(EquipmentSlot.OFF_HAND, weapon);
+					case TWO_HANDED_MAGIC:
+					case TWO_HANDED_MELEE:
+					case TWO_HANDED_RANGED:
+						this.setItem(EquipmentSlot.MAIN_HAND, weapon);
+					default:
+						return;
+				}
+			case COMPONENT:
+			case CONSUMABLE:
+			case JUNK:
+			case MATERIAL:
+			case QUEST:
+			default:
+		}
+	}
+
+	/**
+	 * Fetch the item in a given slot. Invalid slots are considered empty.
+	 *
+	 * @param slot The equipment slot.
+	 *
+	 * @return The item in that slot, or an empty optional if there is none.
+	 */
+	public Optional<Item> getItem(@NonNull EquipmentSlot slot) {
+		return this.equipmentSlots[slot.ordinal()].getItem();
+	}
+
+	/**
 	 * Fetch the item in a given slot. Invalid slots are considered empty.
 	 *
 	 * @param slotNumber The slot number to fetch.
@@ -384,6 +690,44 @@ public class Inventory extends Component<Inventory> {
 	}
 
 	/**
+	 * Check if there is a two handed weapon being held. These are held in the
+	 * main hand but prevent holding anything in the off hand.
+	 *
+	 * @return Whether a two handed weapon is being held.
+	 */
+	private boolean holdingTwoHanded() {
+		if (this.isEmpty(EquipmentSlot.MAIN_HAND)) {
+			return false;
+		}
+
+		Weapon main = (Weapon) this.getItem(EquipmentSlot.MAIN_HAND).get();
+		switch (main.getWeaponType()) {
+			case OFF_HAND:
+			case ONE_HANDED_MAGIC:
+			case ONE_HANDED_MELEE:
+			case ONE_HANDED_RANGED:
+			case SHIELD:
+			default:
+				return false;
+			case TWO_HANDED_MAGIC:
+			case TWO_HANDED_MELEE:
+			case TWO_HANDED_RANGED:
+				return true;
+		}
+	}
+
+	/**
+	 * Check if a slot is empty. Invalid slot numbers are considered empty, as
+	 * that's easier than throwing exceptions.
+	 *
+	 * @param slot The equipment slot.
+	 * @return Whether the slot number is empty.
+	 */
+	private boolean isEmpty(@NonNull EquipmentSlot slot) {
+		return this.equipmentSlots[slot.ordinal()].isEmpty();
+	}
+
+	/**
 	 * Check if a slot is empty. Invalid slot numbers are considered empty, as
 	 * that's easier than throwing exceptions.
 	 *
@@ -396,6 +740,18 @@ public class Inventory extends Component<Inventory> {
 			return true;
 		}
 		return this.slots[slotNumber].isEmpty();
+	}
+
+	/**
+	 * Forcibly clear and set the item in a given slot.
+	 *
+	 * @param slot The equipment slot.
+	 * @param nonStackable The stackable item.
+	 */
+	private void setItem(@NonNull EquipmentSlot slot,
+		@NonNull Equipment nonStackable) {
+		this.equipmentSlots[slot.ordinal()].clear();
+		this.equipmentSlots[slot.ordinal()].setItem(nonStackable);
 	}
 
 	/**

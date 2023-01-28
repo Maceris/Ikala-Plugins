@@ -40,7 +40,10 @@ public class GUIControls implements GuiInstance {
 
 	private Texture itemTexture;
 
-	private PlayerInventory windowInventory;
+	/**
+	 * The inventory window.
+	 */
+	PlayerInventory windowInventory;
 	private ItemCatalogWindow windowCatalog;
 	/**
 	 * The scene controls.
@@ -65,14 +68,12 @@ public class GUIControls implements GuiInstance {
 		this.showLuaConsole = new ImBoolean(false);
 
 		this.windowInventory = new PlayerInventory();
-		this.windowInventory.setup(scene);
 
 		this.windowCatalog = new ItemCatalogWindow();
 		this.windowCatalog.setup(scene);
 		this.windowCatalog.setInventory(this.windowInventory.getInventory());
 
 		this.windowSceneControls = new SceneControls();
-		this.windowSceneControls.setup(scene);
 
 		this.windowImages = new ImageWindow();
 		this.windowImages.setup(scene);

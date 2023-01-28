@@ -1,5 +1,6 @@
 package com.ikalagaming.rpg.windows;
 
+import com.ikalagaming.ecs.ECSManager;
 import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.inventory.InvUtil;
@@ -18,7 +19,10 @@ import com.ikalagaming.item.enums.AccessoryType;
 import com.ikalagaming.item.enums.ArmorType;
 import com.ikalagaming.item.enums.WeaponType;
 import com.ikalagaming.item.testing.ItemGenerator;
+import com.ikalagaming.rpg.GUIPlugin;
+import com.ikalagaming.rpg.GameManager;
 import com.ikalagaming.rpg.utils.ItemRendering;
+import com.ikalagaming.util.SafeResourceLoader;
 
 import imgui.ImGui;
 import imgui.flag.ImGuiCol;
@@ -29,8 +33,10 @@ import imgui.flag.ImGuiTableFlags;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * An inventory for items.
@@ -38,6 +44,7 @@ import java.util.Optional;
  * @author Ches Burks
  *
  */
+@Slf4j
 public class PlayerInventory implements GUIWindow {
 	/**
 	 * The number of slots in a row of the inventory.
@@ -346,8 +353,26 @@ public class PlayerInventory implements GUIWindow {
 	@Override
 	public void setup(@NonNull Scene scene) {
 		this.itemDragInfo = new InventoryDrag();
-		this.inventory = new Inventory(
-			PlayerInventory.INVENTORY_WIDTH * PlayerInventory.INVENTORY_HEIGHT);
+		UUID player = GameManager.getPlayer();
+
+		if (player == null) {
+			this.inventory = new Inventory(INVENTORY_HEIGHT * INVENTORY_WIDTH);
+			log.warn(SafeResourceLoader.getString("INVALID_INVENTORY",
+				GUIPlugin.getResourceBundle()));
+		}
+		else {
+			Optional<Inventory> inventoryMaybe =
+				ECSManager.getComponent(player, Inventory.class);
+			if (inventoryMaybe.isEmpty()) {
+				this.inventory =
+					new Inventory(INVENTORY_HEIGHT * INVENTORY_WIDTH);
+				log.warn(SafeResourceLoader.getString("INVALID_INVENTORY",
+					GUIPlugin.getResourceBundle()));
+			}
+			else {
+				this.inventory = inventoryMaybe.get();
+			}
+		}
 
 		for (int row = 0; row < PlayerInventory.INVENTORY_HEIGHT; ++row) {
 			for (int col = 0; col < PlayerInventory.INVENTORY_WIDTH; ++col) {

@@ -338,6 +338,8 @@ public class GeneralListener implements Listener {
 	@EventHandler
 	public void onGameStarting(AllPluginsEnabled event) {
 		WorldManager.getInstance().loadLevel("default");
+		// TODO load player instead of creating
+		GameManager.createPlayer();
 	}
 
 	/**
