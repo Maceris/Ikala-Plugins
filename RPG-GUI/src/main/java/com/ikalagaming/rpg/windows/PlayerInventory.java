@@ -14,6 +14,9 @@ import com.ikalagaming.item.Junk;
 import com.ikalagaming.item.Material;
 import com.ikalagaming.item.Quest;
 import com.ikalagaming.item.Weapon;
+import com.ikalagaming.item.enums.AccessoryType;
+import com.ikalagaming.item.enums.ArmorType;
+import com.ikalagaming.item.enums.WeaponType;
 import com.ikalagaming.item.testing.ItemGenerator;
 import com.ikalagaming.rpg.utils.ItemRendering;
 
@@ -21,6 +24,7 @@ import imgui.ImGui;
 import imgui.flag.ImGuiCol;
 import imgui.flag.ImGuiCond;
 import imgui.flag.ImGuiDragDropFlags;
+import imgui.flag.ImGuiTableColumnFlags;
 import imgui.flag.ImGuiTableFlags;
 import lombok.Getter;
 import lombok.NonNull;
@@ -47,12 +51,14 @@ public class PlayerInventory implements GUIWindow {
 	/**
 	 * The width of an inventory slot in pixels.
 	 */
-	private static final int SLOT_WIDTH = 50;
+	private static final int SLOT_WIDTH = 25;
 
 	/**
 	 * The height of an inventory slot in pixels.
 	 */
-	private static final int SLOT_HEIGHT = 50;
+	private static final int SLOT_HEIGHT = 25;
+
+	private static final int SLOT_PADDING = 4;
 
 	private InventoryDrag itemDragInfo;
 	@Getter
@@ -72,11 +78,14 @@ public class PlayerInventory implements GUIWindow {
 		ImGui.setNextWindowSize(650, 750, ImGuiCond.Once);
 		ImGui.begin("Inventory");
 
+		this.drawEquipmentSlots();
+
 		if (ImGui.beginTable("InventoryGrid", 10,
-			ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.Borders)) {
+			ImGuiTableFlags.NoHostExtendX | ImGuiTableFlags.Borders)) {
 			for (int col = 0; col < PlayerInventory.INVENTORY_WIDTH; ++col) {
-				ImGui.tableSetupColumn("Column" + col, ImGuiTableFlags.Borders,
-					PlayerInventory.SLOT_WIDTH + 4);
+				ImGui.tableSetupColumn("Column" + col,
+					ImGuiTableColumnFlags.WidthFixed,
+					PlayerInventory.SLOT_WIDTH + PlayerInventory.SLOT_PADDING);
 			}
 			int position;
 			for (int row = 0; row < PlayerInventory.INVENTORY_HEIGHT; ++row) {
@@ -94,8 +103,8 @@ public class PlayerInventory implements GUIWindow {
 						this.drawItem(item, row, col);
 						ImGui.popStyleColor();
 
-						setupDragDropSource();
-						drawItemCount(position, item);
+						this.setupDragDropSource();
+						this.drawItemCount(position, item);
 					}
 					else {
 						ImGui.invisibleButton(
@@ -104,7 +113,7 @@ public class PlayerInventory implements GUIWindow {
 							PlayerInventory.SLOT_HEIGHT);
 					}
 
-					setupDragDropTarget(position);
+					this.setupDragDropTarget(position);
 
 					if (this.inventory.hasItem(position)) {
 						Item item = this.inventory.getItem(position).get();
@@ -123,7 +132,7 @@ public class PlayerInventory implements GUIWindow {
 										maxCount / 2);
 								}
 							}
-							showToolTip(item);
+							this.showToolTip(item);
 						}
 					}
 				}
@@ -146,9 +155,228 @@ public class PlayerInventory implements GUIWindow {
 		ImGui.end();
 	}
 
+	private void drawEquipmentSlots() {
+		ItemUtil.ImageCoordinates coordinates =
+			ItemUtil.getSlotTextureCoordinates(AccessoryType.TRINKET);
+		ImGui.pushID("Trinket Slot");
+		ImGui.imageButton(this.itemTexture.getTextureID(),
+			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
+			((float) coordinates.x0()) / this.itemTexture.getWidth(),
+			((float) coordinates.y0()) / this.itemTexture.getHeight(),
+			((float) coordinates.x1()) / this.itemTexture.getWidth(),
+			((float) coordinates.y1()) / this.itemTexture.getHeight());
+		ImGui.popID();
+		ImGui.sameLine();
+		coordinates = ItemUtil.getSlotTextureCoordinates(ArmorType.HEAD);
+		ImGui.pushID("Head Slot");
+		ImGui.imageButton(this.itemTexture.getTextureID(),
+			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
+			((float) coordinates.x0()) / this.itemTexture.getWidth(),
+			((float) coordinates.y0()) / this.itemTexture.getHeight(),
+			((float) coordinates.x1()) / this.itemTexture.getWidth(),
+			((float) coordinates.y1()) / this.itemTexture.getHeight());
+		ImGui.popID();
+		ImGui.sameLine();
+		coordinates = ItemUtil.getSlotTextureCoordinates(ArmorType.SHOULDERS);
+		ImGui.pushID("Shoulders Slot");
+		ImGui.imageButton(this.itemTexture.getTextureID(),
+			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
+			((float) coordinates.x0()) / this.itemTexture.getWidth(),
+			((float) coordinates.y0()) / this.itemTexture.getHeight(),
+			((float) coordinates.x1()) / this.itemTexture.getWidth(),
+			((float) coordinates.y1()) / this.itemTexture.getHeight());
+		ImGui.popID();
+
+		coordinates = ItemUtil.getSlotTextureCoordinates(AccessoryType.AMULET);
+		ImGui.pushID("Amulet Slot");
+		ImGui.imageButton(this.itemTexture.getTextureID(),
+			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
+			((float) coordinates.x0()) / this.itemTexture.getWidth(),
+			((float) coordinates.y0()) / this.itemTexture.getHeight(),
+			((float) coordinates.x1()) / this.itemTexture.getWidth(),
+			((float) coordinates.y1()) / this.itemTexture.getHeight());
+		ImGui.popID();
+		ImGui.sameLine();
+		coordinates = ItemUtil.getSlotTextureCoordinates(ArmorType.CHEST);
+		ImGui.pushID("Chest Slot");
+		ImGui.imageButton(this.itemTexture.getTextureID(),
+			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
+			((float) coordinates.x0()) / this.itemTexture.getWidth(),
+			((float) coordinates.y0()) / this.itemTexture.getHeight(),
+			((float) coordinates.x1()) / this.itemTexture.getWidth(),
+			((float) coordinates.y1()) / this.itemTexture.getHeight());
+		ImGui.popID();
+		ImGui.sameLine();
+		coordinates = ItemUtil.getSlotTextureCoordinates(AccessoryType.CAPE);
+		ImGui.pushID("Cape Slot");
+		ImGui.imageButton(this.itemTexture.getTextureID(),
+			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
+			((float) coordinates.x0()) / this.itemTexture.getWidth(),
+			((float) coordinates.y0()) / this.itemTexture.getHeight(),
+			((float) coordinates.x1()) / this.itemTexture.getWidth(),
+			((float) coordinates.y1()) / this.itemTexture.getHeight());
+		ImGui.popID();
+
+		coordinates = ItemUtil.getSlotTextureCoordinates(ArmorType.WRIST);
+		ImGui.pushID("Wrist Slot");
+		ImGui.imageButton(this.itemTexture.getTextureID(),
+			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
+			((float) coordinates.x0()) / this.itemTexture.getWidth(),
+			((float) coordinates.y0()) / this.itemTexture.getHeight(),
+			((float) coordinates.x1()) / this.itemTexture.getWidth(),
+			((float) coordinates.y1()) / this.itemTexture.getHeight());
+		ImGui.popID();
+		ImGui.sameLine();
+		coordinates = ItemUtil.getSlotTextureCoordinates(AccessoryType.BELT);
+		ImGui.pushID("Belt Slot");
+		ImGui.imageButton(this.itemTexture.getTextureID(),
+			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
+			((float) coordinates.x0()) / this.itemTexture.getWidth(),
+			((float) coordinates.y0()) / this.itemTexture.getHeight(),
+			((float) coordinates.x1()) / this.itemTexture.getWidth(),
+			((float) coordinates.y1()) / this.itemTexture.getHeight());
+		ImGui.popID();
+		ImGui.sameLine();
+		coordinates = ItemUtil.getSlotTextureCoordinates(AccessoryType.TRINKET);
+		ImGui.pushID("Cape Slot");
+		ImGui.imageButton(this.itemTexture.getTextureID(),
+			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
+			((float) coordinates.x0()) / this.itemTexture.getWidth(),
+			((float) coordinates.y0()) / this.itemTexture.getHeight(),
+			((float) coordinates.x1()) / this.itemTexture.getWidth(),
+			((float) coordinates.y1()) / this.itemTexture.getHeight());
+		ImGui.popID();
+
+		coordinates =
+			ItemUtil.getSlotTextureCoordinates(WeaponType.ONE_HANDED_MELEE);
+		ImGui.pushID("Main Hand Slot");
+		ImGui.imageButton(this.itemTexture.getTextureID(),
+			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
+			((float) coordinates.x0()) / this.itemTexture.getWidth(),
+			((float) coordinates.y0()) / this.itemTexture.getHeight(),
+			((float) coordinates.x1()) / this.itemTexture.getWidth(),
+			((float) coordinates.y1()) / this.itemTexture.getHeight());
+		ImGui.popID();
+		ImGui.sameLine();
+		coordinates = ItemUtil.getSlotTextureCoordinates(ArmorType.LEGS);
+		ImGui.pushID("Legs Slot");
+		ImGui.imageButton(this.itemTexture.getTextureID(),
+			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
+			((float) coordinates.x0()) / this.itemTexture.getWidth(),
+			((float) coordinates.y0()) / this.itemTexture.getHeight(),
+			((float) coordinates.x1()) / this.itemTexture.getWidth(),
+			((float) coordinates.y1()) / this.itemTexture.getHeight());
+		ImGui.popID();
+		ImGui.sameLine();
+		coordinates = ItemUtil.getSlotTextureCoordinates(WeaponType.OFF_HAND);
+		ImGui.pushID("Off Hand Slot");
+		ImGui.imageButton(this.itemTexture.getTextureID(),
+			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
+			((float) coordinates.x0()) / this.itemTexture.getWidth(),
+			((float) coordinates.y0()) / this.itemTexture.getHeight(),
+			((float) coordinates.x1()) / this.itemTexture.getWidth(),
+			((float) coordinates.y1()) / this.itemTexture.getHeight());
+		ImGui.popID();
+
+		coordinates = ItemUtil.getSlotTextureCoordinates(AccessoryType.RING);
+		ImGui.pushID("Right Ring Slot");
+		ImGui.imageButton(this.itemTexture.getTextureID(),
+			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
+			((float) coordinates.x0()) / this.itemTexture.getWidth(),
+			((float) coordinates.y0()) / this.itemTexture.getHeight(),
+			((float) coordinates.x1()) / this.itemTexture.getWidth(),
+			((float) coordinates.y1()) / this.itemTexture.getHeight());
+		ImGui.popID();
+		ImGui.sameLine();
+		coordinates = ItemUtil.getSlotTextureCoordinates(ArmorType.FEET);
+		ImGui.pushID("Feet Slot");
+		ImGui.imageButton(this.itemTexture.getTextureID(),
+			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
+			((float) coordinates.x0()) / this.itemTexture.getWidth(),
+			((float) coordinates.y0()) / this.itemTexture.getHeight(),
+			((float) coordinates.x1()) / this.itemTexture.getWidth(),
+			((float) coordinates.y1()) / this.itemTexture.getHeight());
+		ImGui.popID();
+		ImGui.sameLine();
+		coordinates = ItemUtil.getSlotTextureCoordinates(AccessoryType.RING);
+		ImGui.pushID("Left Ring Slot");
+		ImGui.imageButton(this.itemTexture.getTextureID(),
+			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
+			((float) coordinates.x0()) / this.itemTexture.getWidth(),
+			((float) coordinates.y0()) / this.itemTexture.getHeight(),
+			((float) coordinates.x1()) / this.itemTexture.getWidth(),
+			((float) coordinates.y1()) / this.itemTexture.getHeight());
+		ImGui.popID();
+	}
+
+	/**
+	 * Draw an item from the spritesheet.
+	 *
+	 * @param item The item to draw.
+	 * @param row The row in the inventory, for naming things.
+	 * @param col The column in the inventory, for naming things.
+	 */
+	private void drawItem(@NonNull Item item, int row, int col) {
+		ItemUtil.ImageCoordinates coordinates =
+			ItemUtil.getTextureCoordinates(item);
+		ImGui.pushID(String.format("Item_%d_%d", row, col));
+		ImGui.imageButton(this.itemTexture.getTextureID(),
+			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
+			((float) coordinates.x0()) / this.itemTexture.getWidth(),
+			((float) coordinates.y0()) / this.itemTexture.getHeight(),
+			((float) coordinates.x1()) / this.itemTexture.getWidth(),
+			((float) coordinates.y1()) / this.itemTexture.getHeight());
+		ImGui.popID();
+	}
+
+	private void drawItemCount(int position, Item item) {
+		if (InvUtil.canStack(item)) {
+			float x = ImGui.getCursorScreenPosX();
+			float y = ImGui.getCursorScreenPosY() - 20;
+			final int count = this.inventory.getItemCount(position);
+			final int digits = Math.max(1, (int) (Math.log10(count) + 1));
+
+			ImGui.getWindowDrawList().addRectFilled(x, y, x + 10 * digits,
+				y + 15, ImGui.colorConvertFloat4ToU32(0f, 0f, 0f, 1f));
+			ImGui.getWindowDrawList().addText(x, y,
+				ImGui.colorConvertFloat4ToU32(1f, 1f, 1f, 1f), count + "");
+		}
+	}
+
+	@Override
+	public void setup(@NonNull Scene scene) {
+		this.itemDragInfo = new InventoryDrag();
+		this.inventory = new Inventory(
+			PlayerInventory.INVENTORY_WIDTH * PlayerInventory.INVENTORY_HEIGHT);
+
+		for (int row = 0; row < PlayerInventory.INVENTORY_HEIGHT; ++row) {
+			for (int col = 0; col < PlayerInventory.INVENTORY_WIDTH; ++col) {
+				if (Math.random() < 0.5) {
+					this.inventory.setItem(
+						PlayerInventory.INVENTORY_WIDTH * row + col,
+						ItemGenerator.getRandomItem(), 1);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Make the previous item into a drag drop source.
+	 */
+	private void setupDragDropSource() {
+		if (ImGui.beginDragDropSource(ImGuiDragDropFlags.None)) {
+			ImGui.setDragDropPayload("ItemDrag", this.itemDragInfo);
+
+			this.itemDragInfo.setDragInProgress(true);
+			ImGui.text(this.inventory
+				.getItem(this.itemDragInfo.getSourceIndex()).get().getID());
+			ImGui.endDragDropSource();
+		}
+	}
+
 	/**
 	 * Make the previous item into a drag drop target.
-	 * 
+	 *
 	 * @param position The position in the inventory the target is in.
 	 */
 	private void setupDragDropTarget(int position) {
@@ -176,22 +404,8 @@ public class PlayerInventory implements GUIWindow {
 	}
 
 	/**
-	 * Make the previous item into a drag drop source.
-	 */
-	private void setupDragDropSource() {
-		if (ImGui.beginDragDropSource(ImGuiDragDropFlags.None)) {
-			ImGui.setDragDropPayload("ItemDrag", this.itemDragInfo);
-
-			this.itemDragInfo.setDragInProgress(true);
-			ImGui.text(this.inventory
-				.getItem(this.itemDragInfo.getSourceIndex()).get().getID());
-			ImGui.endDragDropSource();
-		}
-	}
-
-	/**
 	 * Show an information tool tip for the given item.
-	 * 
+	 *
 	 * @param item The item we are drawing details for.
 	 */
 	private void showToolTip(Item item) {
@@ -227,56 +441,5 @@ public class PlayerInventory implements GUIWindow {
 				break;
 		}
 		ImGui.endTooltip();
-	}
-
-	private void drawItemCount(int position, Item item) {
-		if (InvUtil.canStack(item)) {
-			float x = ImGui.getCursorScreenPosX();
-			float y = ImGui.getCursorScreenPosY() - 20;
-			final int count = this.inventory.getItemCount(position);
-			final int digits = Math.max(1, (int) (Math.log10(count) + 1));
-
-			ImGui.getWindowDrawList().addRectFilled(x, y, x + 10 * digits,
-				y + 15, ImGui.colorConvertFloat4ToU32(0f, 0f, 0f, 1f));
-			ImGui.getWindowDrawList().addText(x, y,
-				ImGui.colorConvertFloat4ToU32(1f, 1f, 1f, 1f), count + "");
-		}
-	}
-
-	/**
-	 * Draw an item from the spritesheet.
-	 *
-	 * @param item The item to draw.
-	 * @param row The row in the inventory, for naming things.
-	 * @param col The column in the inventory, for naming things.
-	 */
-	private void drawItem(@NonNull Item item, int row, int col) {
-		ItemUtil.ImageCoordinates coordinates =
-			ItemUtil.getTextureCoordinates(item);
-		ImGui.pushID(String.format("Item_%d_%d", row, col));
-		ImGui.imageButton(this.itemTexture.getTextureID(),
-			PlayerInventory.SLOT_WIDTH, PlayerInventory.SLOT_HEIGHT,
-			((float) coordinates.x0()) / this.itemTexture.getWidth(),
-			((float) coordinates.y0()) / this.itemTexture.getHeight(),
-			((float) coordinates.x1()) / this.itemTexture.getWidth(),
-			((float) coordinates.y1()) / this.itemTexture.getHeight());
-		ImGui.popID();
-	}
-
-	@Override
-	public void setup(@NonNull Scene scene) {
-		this.itemDragInfo = new InventoryDrag();
-		this.inventory = new Inventory(
-			PlayerInventory.INVENTORY_WIDTH * PlayerInventory.INVENTORY_HEIGHT);
-
-		for (int row = 0; row < PlayerInventory.INVENTORY_HEIGHT; ++row) {
-			for (int col = 0; col < PlayerInventory.INVENTORY_WIDTH; ++col) {
-				if (Math.random() < 0.5) {
-					this.inventory.setItem(
-						PlayerInventory.INVENTORY_WIDTH * row + col,
-						ItemGenerator.getRandomItem(), 1);
-				}
-			}
-		}
 	}
 }
