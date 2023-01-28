@@ -204,6 +204,23 @@ public class GeneralListener implements Listener {
 			intensity = Float.parseFloat(intensityString);
 		}
 
+		Vector3f position = this.extractPosition(props);
+
+		PointLight light = new PointLight(GeneralListener.toVector3f(color),
+			position, intensity);
+		GeneralListener.log.debug(
+			"Created a light at ({}, {}, {}), with intensity {}", position.x,
+			position.y, position.z, intensity);
+		GraphicsManager.getScene().getSceneLights().getPointLights().add(light);
+	}
+
+	/**
+	 * Extract the position from the properties of an object on the map.
+	 *
+	 * @param props The properties of the item.
+	 * @return The position in world coordinates.
+	 */
+	private Vector3f extractPosition(Properties props) {
 		String posString = props.getProperty("Position");
 
 		Optional<Member> posMember;
@@ -226,13 +243,7 @@ public class GeneralListener implements Listener {
 		float temp = position.z;
 		position.z = position.y;
 		position.y = temp;
-
-		PointLight light = new PointLight(GeneralListener.toVector3f(color),
-			position, intensity);
-		GeneralListener.log.debug(
-			"Created a light at ({}, {}, {}), with intensity {}", position.x,
-			position.y, position.z, intensity);
-		GraphicsManager.getScene().getSceneLights().getPointLights().add(light);
+		return position;
 	}
 
 	/**
@@ -283,6 +294,12 @@ public class GeneralListener implements Listener {
 			"models/dungeon/brick_wall_three_sides.obj",
 			GraphicsManager.getScene().getTextureCache(),
 			GraphicsManager.getScene().getMaterialCache(), false));
+		GraphicsManager.getScene().addModel(model);
+
+		model = ModelLoader.loadModel(new ModelLoader.ModelLoadRequest("player",
+			RPGPlugin.PLUGIN_NAME, "models/characters/human_male.obj",
+			GraphicsManager.getScene().getTextureCache(),
+			GraphicsManager.getScene().getMaterialCache(), true));
 		GraphicsManager.getScene().addModel(model);
 
 		this.modelsLoaded = true;
@@ -363,6 +380,22 @@ public class GeneralListener implements Listener {
 				for (MapObject object : group.getObjects()) {
 					if ("Point Light".equals(object.getClassValue())) {
 						this.createLight(object);
+					}
+					else if ("Spawn".equals(object.getName())) {
+						Vector3f position =
+							this.extractPosition(object.getProperties());
+						Entity player = new Entity(
+							"player_" + Entity.NEXT_ID.getAndIncrement(),
+							"player");
+						player.setScale(0.6f);
+						player.setRotation(0f, 1f, 0f, 0f);
+						player.setPosition(position.x, position.y, position.z);
+						player.updateModelMatrix();
+						GraphicsManager.getScene().addEntity(player);
+
+						GeneralListener.log.debug(
+							"Created a player at ({}, {}, {})", position.x,
+							position.y, position.z);
 					}
 				}
 				continue;
