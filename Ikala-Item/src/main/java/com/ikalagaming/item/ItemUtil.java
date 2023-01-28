@@ -1,5 +1,9 @@
 package com.ikalagaming.item;
 
+import com.ikalagaming.item.enums.AccessoryType;
+import com.ikalagaming.item.enums.ArmorType;
+import com.ikalagaming.item.enums.WeaponType;
+
 import lombok.NonNull;
 
 /**
@@ -28,6 +32,136 @@ public class ItemUtil {
 	 * The height of an item texture in pixels.
 	 */
 	private static final int ITEM_HEIGHT = 16;
+
+	/**
+	 * Return the texture coordinates for icons representing slots for
+	 * equipment.
+	 *
+	 * @param type The type of accessory.
+	 *
+	 * @return The texture coordinates for that type of item.
+	 */
+	public static ImageCoordinates
+		getSlotTextureCoordinates(@NonNull AccessoryType type) {
+		int uvUpperLeftX = 0;
+		int uvUpperLeftY = 0;
+		switch (type) {
+			case AMULET:
+				uvUpperLeftX = 608;
+				uvUpperLeftY = 288;
+				break;
+			case BELT:
+				uvUpperLeftX = 624;
+				uvUpperLeftY = 304;
+				break;
+			case CAPE:
+				uvUpperLeftX = 640;
+				uvUpperLeftY = 288;
+				break;
+			case RING:
+				uvUpperLeftX = 608;
+				uvUpperLeftY = 336;
+				break;
+			case TRINKET:
+				uvUpperLeftX = 608;
+				uvUpperLeftY = 272;
+				break;
+			default:
+				break;
+		}
+
+		return new ImageCoordinates(uvUpperLeftX, uvUpperLeftY,
+			uvUpperLeftX + ItemUtil.ITEM_WIDTH,
+			uvUpperLeftY + ItemUtil.ITEM_HEIGHT);
+	}
+
+	/**
+	 * Return the texture coordinates for icons representing slots for
+	 * equipment.
+	 *
+	 * @param type The type of armor.
+	 *
+	 * @return The texture coordinates for that type of item.
+	 */
+	public static ImageCoordinates
+		getSlotTextureCoordinates(@NonNull ArmorType type) {
+		int uvUpperLeftX = 0;
+		int uvUpperLeftY = 0;
+
+		switch (type) {
+			case CHEST:
+				uvUpperLeftX = 624;
+				uvUpperLeftY = 288;
+				break;
+			case FEET:
+				uvUpperLeftX = 624;
+				uvUpperLeftY = 336;
+				break;
+			case HANDS:
+				uvUpperLeftX = 640;
+				uvUpperLeftY = 304;
+				break;
+			case HEAD:
+				uvUpperLeftX = 624;
+				uvUpperLeftY = 272;
+				break;
+			case LEGS:
+				uvUpperLeftX = 624;
+				uvUpperLeftY = 320;
+				break;
+			case SHOULDERS:
+				uvUpperLeftX = 640;
+				uvUpperLeftY = 272;
+				break;
+			case WRIST:
+				uvUpperLeftX = 608;
+				uvUpperLeftY = 304;
+				break;
+			default:
+				break;
+		}
+
+		return new ImageCoordinates(uvUpperLeftX, uvUpperLeftY,
+			uvUpperLeftX + ItemUtil.ITEM_WIDTH,
+			uvUpperLeftY + ItemUtil.ITEM_HEIGHT);
+	}
+
+	/**
+	 * Return the texture coordinates for icons representing slots for
+	 * equipment.
+	 *
+	 * @param type The type of weapon.
+	 *
+	 * @return The texture coordinates for that type of item.
+	 */
+	public static ImageCoordinates
+		getSlotTextureCoordinates(@NonNull WeaponType type) {
+		int uvUpperLeftX = 0;
+		int uvUpperLeftY = 0;
+
+		switch (type) {
+			case OFF_HAND:
+			case SHIELD:
+				uvUpperLeftX = 608;
+				uvUpperLeftY = 320;
+				break;
+			case ONE_HANDED_MAGIC:
+			case ONE_HANDED_MELEE:
+			case ONE_HANDED_RANGED:
+			case TWO_HANDED_MAGIC:
+			case TWO_HANDED_MELEE:
+			case TWO_HANDED_RANGED:
+				uvUpperLeftX = 640;
+				uvUpperLeftY = 320;
+				break;
+			default:
+				break;
+		}
+
+		return new ImageCoordinates(uvUpperLeftX, uvUpperLeftY,
+			uvUpperLeftX + ItemUtil.ITEM_WIDTH,
+			uvUpperLeftY + ItemUtil.ITEM_HEIGHT);
+	}
 
 	/**
 	 * Return the texture coordinates within the item sprite sheet for the given
