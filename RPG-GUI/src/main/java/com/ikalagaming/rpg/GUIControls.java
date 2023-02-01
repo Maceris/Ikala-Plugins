@@ -37,8 +37,11 @@ public class GUIControls implements GuiInstance {
 	private ImBoolean showWindowSceneControls;
 	private ImBoolean showImageWindow;
 	private ImBoolean showLuaConsole;
+	private ImBoolean showDialogue;
 
 	private Texture itemTexture;
+
+	private boolean dialogueSetUp = false;
 
 	/**
 	 * The inventory window.
@@ -66,6 +69,7 @@ public class GUIControls implements GuiInstance {
 		this.showWindowSceneControls = new ImBoolean(false);
 		this.showImageWindow = new ImBoolean(false);
 		this.showLuaConsole = new ImBoolean(false);
+		this.showDialogue = new ImBoolean(false);
 
 		this.windowInventory = new PlayerInventory();
 
@@ -119,6 +123,7 @@ public class GUIControls implements GuiInstance {
 		ImGui.checkbox("Show Scene Controls", this.showWindowSceneControls);
 		ImGui.checkbox("Show Image Catalog", this.showImageWindow);
 		ImGui.checkbox("Show Lua Console", this.showLuaConsole);
+		ImGui.checkbox("Show Dialogue", this.showDialogue);
 
 		ImGui.end();
 	}
@@ -149,6 +154,9 @@ public class GUIControls implements GuiInstance {
 		}
 		if (this.showLuaConsole.get()) {
 			this.windowLuaConsole.draw();
+		}
+		if (this.showDialogue.get()) {
+			Dialogue.renderWindow();
 		}
 
 		ImGui.endFrame();
@@ -190,6 +198,25 @@ public class GUIControls implements GuiInstance {
 			GraphicsManager.getRender()
 				.recalculateMaterials(GraphicsManager.getScene());
 			this.windowInventory.setItemTexture(this.itemTexture);
+		}
+		if (!dialogueSetUp) {
+			dialogueSetUp = true;
+			Dialogue.leftChat("Hi there!");
+			Dialogue.rightChat("Hello!");
+			Dialogue.centerText("You leave.");
+			Dialogue.text(
+				"This is a sample window. It can contain a lot of text in it, hypothetically. "
+					+ "We probably want some kind of text wrapping, but also "
+					+ "I would imagine a scroll bar or something.");
+			Dialogue.divider();
+			Dialogue.text("We also might have options to select.");
+			Dialogue.option("Multiple choice options");
+			Dialogue.option("Or maybe just single choice");
+			Dialogue.option("Close window??");
+			for (int i = 0; i < 20; ++i) {
+				Dialogue.leftChat("Stop repeating yourself!");
+				Dialogue.rightChat(String.format("I am not x%d!", i));
+			}
 		}
 	}
 
