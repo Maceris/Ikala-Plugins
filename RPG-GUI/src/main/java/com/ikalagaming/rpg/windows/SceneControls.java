@@ -74,6 +74,10 @@ public class SceneControls implements GUIWindow {
 	public void handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
 		SceneLights sceneLights = scene.getSceneLights();
 		AmbientLight ambientLight = sceneLights.getAmbientLight();
+		if (this.ambientFactor == null) {
+			// we haven't been set up yet
+			return;
+		}
 		ambientLight.setIntensity(this.ambientFactor[0]);
 		ambientLight.setColor(this.ambientColor[0], this.ambientColor[1],
 			this.ambientColor[2]);
