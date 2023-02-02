@@ -3,10 +3,16 @@ include ':Ikala-Core'
 project(':Ikala-Core').projectDir = new File('../../Ikala-Core')
 include ':EntityComponentSystem'
 project(':EntityComponentSystem').projectDir = new File('../EntityComponentSystem')
+include ':Ikala-Attributes'
+project(':Ikala-Attributes').projectDir = new File('../Ikala-Attributes')
+include ':Ikala-Database'
+project(':Ikala-Database').projectDir = new File('../Ikala-Database')
 include ':Ikala-Graphics'
 project(':Ikala-Graphics').projectDir = new File('../Ikala-Graphics')
 include ':Ikala-Inventory'
 project(':Ikala-Inventory').projectDir = new File('../Ikala-Inventory')
+include ':Ikala-Item'
+project(':Ikala-Item').projectDir = new File('../Ikala-Item')
 include ':Ikala-World'
 project(':Ikala-World').projectDir = new File('../Ikala-World')
 include ':Random'
