@@ -77,6 +77,10 @@ public enum TokenType {
 	 * ")"
 	 */
 	RIGHT_PARENTHESIS,
+	/**
+	 * ";", for the for loops, not to end statements.
+	 */
+	SEMICOLON,
 	// Multiple character tokens
 	/**
 	 * "[]" for declaring an array.

@@ -279,6 +279,9 @@ public class Lexer {
 			case ':':
 				this.addToken(TokenType.COLON);
 				break;
+			case ';':
+				this.addToken(TokenType.SEMICOLON);
+				break;
 			case '!':
 				this.addToken(
 					this.match('=') ? TokenType.NOT_EQUAL : TokenType.NOT);

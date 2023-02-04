@@ -61,6 +61,8 @@ class TestLexer {
 		expected.add(TokenType.RIGHT_BRACKET);
 		programBuilder.append(')');
 		expected.add(TokenType.RIGHT_PARENTHESIS);
+		programBuilder.append(';');
+		expected.add(TokenType.SEMICOLON);
 
 		// multiple character tokens
 		programBuilder.append("[]");
