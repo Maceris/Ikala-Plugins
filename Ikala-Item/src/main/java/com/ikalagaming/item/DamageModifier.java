@@ -8,10 +8,6 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 
-import javax.persistence.Column;
-import javax.persistence.EnumType;
-import javax.persistence.Enumerated;
-
 /**
  * Tracks modification of damage, or damage resistance.
  *
@@ -29,8 +25,6 @@ public class DamageModifier {
 	 * @param damageType The damage type this modifies.
 	 * @return The damage type this modifies.
 	 */
-	@Column(name = "DAMAGE_TYPE")
-	@Enumerated(EnumType.STRING)
 	private DamageType damageType;
 
 	/**
@@ -42,8 +36,6 @@ public class DamageModifier {
 	 * @return The way that this affects the base value of the stat/concept it
 	 *         modifies.
 	 */
-	@Column(name = "MODIFIER_TYPE")
-	@Enumerated(EnumType.STRING)
 	private ModifierType type;
 	/**
 	 * The amount the damage is or is modified by, where the type decides if
@@ -52,7 +44,6 @@ public class DamageModifier {
 	 * @param amount The new amount.
 	 * @return The amount of the damage or damage modification.
 	 */
-	@Column(name = "AMOUNT")
 	private Integer amount;
 
 	/**

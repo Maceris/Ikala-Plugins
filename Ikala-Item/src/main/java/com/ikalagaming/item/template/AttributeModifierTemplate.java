@@ -6,8 +6,6 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
-import javax.persistence.Column;
-
 /**
  * Tracks modification of an attribute.
  *
@@ -27,7 +25,6 @@ public class AttributeModifierTemplate extends AttributeModifier {
 	 * @param variance The percentage variance.
 	 * @return The percentage variance in the base amount.
 	 */
-	@Column(name = "VARIANCE")
 	private Integer variance;
 
 	/**

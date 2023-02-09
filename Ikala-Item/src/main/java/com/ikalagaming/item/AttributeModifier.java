@@ -8,10 +8,6 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 
-import javax.persistence.Column;
-import javax.persistence.EnumType;
-import javax.persistence.Enumerated;
-
 /**
  * Tracks modification of an attribute.
  *
@@ -29,8 +25,6 @@ public class AttributeModifier {
 	 * @param attribute The attribute this modifies.
 	 * @return The attribute this modifies.
 	 */
-	@Column(name = "ATTRIBUTE")
-	@Enumerated(EnumType.STRING)
 	private Attribute attribute;
 
 	/**
@@ -42,8 +36,6 @@ public class AttributeModifier {
 	 * @return The way that this affects the base value of the stat/concept it
 	 *         modifies.
 	 */
-	@Column(name = "TYPE")
-	@Enumerated(EnumType.STRING)
 	private ModifierType type;
 	/**
 	 * The amount the attribute is modified by, where the type decides if this
@@ -52,7 +44,6 @@ public class AttributeModifier {
 	 * @param amount The new amount.
 	 * @return The amount the attribute is modified by.
 	 */
-	@Column(name = "AMOUNT")
 	private Integer amount;
 
 	/**

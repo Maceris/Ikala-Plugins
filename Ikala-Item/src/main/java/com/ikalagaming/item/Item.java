@@ -8,6 +8,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 import javax.persistence.Column;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
 import javax.persistence.Id;
 import javax.persistence.MappedSuperclass;
 
@@ -29,6 +31,7 @@ public abstract class Item {
 	 * @return The type of the item, like a weapon or consumable.
 	 */
 	@Column(name = "ITEM_TYPE")
+	@Enumerated(EnumType.STRING)
 	private ItemType itemType;
 
 	/**
@@ -49,6 +52,7 @@ public abstract class Item {
 	 * @return The quality of the item.
 	 */
 	@Column(name = "QUALITY")
+	@Enumerated(EnumType.STRING)
 	private Quality quality;
 	/**
 	 * The expected level that this item should drop in. Level 10 items would be

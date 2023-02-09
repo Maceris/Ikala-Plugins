@@ -9,8 +9,10 @@ import lombok.Getter;
 import lombok.Setter;
 
 import javax.persistence.Column;
+import javax.persistence.Entity;
 import javax.persistence.EnumType;
 import javax.persistence.Enumerated;
+import javax.persistence.Table;
 
 /**
  * A specific weapon with stats.
@@ -21,8 +23,14 @@ import javax.persistence.Enumerated;
 @EqualsAndHashCode(callSuper = false)
 @Getter
 @Setter
+@Entity
+@Table(name = Weapon.TABLE_NAME)
 public class Weapon extends Equipment {
-
+	/**
+	 * The name of the table in the database.
+	 */
+	static final String TABLE_NAME = "WEAPON";
+	
 	/**
 	 * The type of damage the weapon does.
 	 *
