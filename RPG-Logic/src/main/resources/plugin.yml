@@ -5,6 +5,9 @@ description: Handles RPG game logic
 authors: [maceris]
 main-class: com.ikalagaming.rpg.RPGPlugin
 dependencies:
+  - EntityComponentSystem
+  - Ikala-Database
   - Ikala-Graphics
+  - Ikala-Inventory
   - Ikala-World
   - Random

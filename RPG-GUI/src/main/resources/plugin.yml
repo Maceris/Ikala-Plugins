@@ -5,10 +5,10 @@ description: A GUI for the RPG
 authors: [maceris]
 main-class: com.ikalagaming.rpg.GUIPlugin
 dependencies:
-  - Ikala-Graphics
-  - Ikala-Item
-  - Ikala-Attributes
-  - Random
-  - Ikala-Database
-  - Ikala-Inventory
   - EntityComponentSystem
+  - Ikala-Attributes
+  - Ikala-Database
+  - Ikala-Graphics
+  - Ikala-Inventory
+  - Ikala-Item
+  - Random
