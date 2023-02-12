@@ -105,7 +105,6 @@ public class Database {
 	 */
 	@Synchronized
 	public void createConnection() {
-
 		try {
 			/*
 			 * Not useless. Loads the driver in so that the connection can find
@@ -117,6 +116,7 @@ public class Database {
 			Database.log.warn(SafeResourceLoader
 				.getString("ERROR_SETTING_UP_DRIVER", resourceBundle));
 		}
+		
 		try {
 			connection =
 				DriverManager.getConnection(this.connectionString, "sa", "");
@@ -125,6 +125,7 @@ public class Database {
 			Database.log.warn(SafeResourceLoader.getString("ERROR_CONNECTING",
 				resourceBundle), e);
 		}
+		log.debug("Created connection to database");
 		context = DSL.using(connection, SQLDialect.H2);
 	}
 

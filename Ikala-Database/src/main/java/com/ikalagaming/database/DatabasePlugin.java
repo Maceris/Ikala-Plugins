@@ -5,6 +5,7 @@ import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.plugins.Plugin;
 
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 
@@ -14,6 +15,7 @@ import java.io.File;
  * @author Ches Burks
  *
  */
+@Slf4j
 public class DatabasePlugin extends Plugin {
 	/**
 	 * The name of the plugin in Java for convenience, should match the name in
@@ -32,10 +34,16 @@ public class DatabasePlugin extends Plugin {
 	}
 
 	@Override
-	public boolean onEnable() {
+	public boolean onLoad() {
 		File db = PluginFolder.getResource(DatabasePlugin.PLUGIN_NAME,
 			ResourceType.DATA, "mainDatabase");
 		this.database = new Database(db.getAbsolutePath());
+		log.debug("Database object created for {}", db.getAbsolutePath());
+		return true;
+	}
+
+	@Override
+	public boolean onEnable() {
 		this.database.createConnection();
 		return true;
 	}
