@@ -6,20 +6,20 @@
  */
 package com.ikalagaming.graphics.scene;
 
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.GuiInstance;
-import com.ikalagaming.graphics.exceptions.ModelException;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.graph.TextureCache;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
-import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
 
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -27,7 +27,6 @@ import java.util.concurrent.ConcurrentHashMap;
  * A scene to be rendered, containing the items and lighting.
  */
 @Getter
-@Slf4j
 public class Scene {
 	/**
 	 * The camera for the scene.
@@ -107,7 +106,14 @@ public class Scene {
 		this.materialCache = new MaterialCache();
 		this.camera = new Camera();
 		this.fog = new Fog();
+		this.entityQueue = Collections.synchronizedList(new LinkedList<>());
 	}
+
+	/**
+	 * A list of entities that we tried to add, but did not yet have models
+	 * loaded.
+	 */
+	private List<Entity> entityQueue;
 
 	/**
 	 * Add an entity to the scene.
@@ -121,13 +127,11 @@ public class Scene {
 		String modelId = entity.getModelID();
 		Model model = this.modelMap.get(modelId);
 		if (model == null) {
-			String error = SafeResourceLoader.getString("MODEL_MISSING",
-				GraphicsPlugin.getResourceBundle());
-			Scene.log.info(error, modelId);
-			throw new ModelException(
-				error.replaceFirst("\\{\\}", "" + modelId));
+			entityQueue.add(entity);
 		}
-		model.getEntitiesList().add(entity);
+		else {
+			model.getEntitiesList().add(entity);
+		}
 	}
 
 	/**
@@ -137,6 +141,14 @@ public class Scene {
 	 */
 	public void addModel(@NonNull Model model) {
 		this.modelMap.put(model.getId(), model);
+		for (Iterator<Entity> iter = this.entityQueue.iterator(); iter
+			.hasNext();) {
+			Entity current = iter.next();
+			if (model.getId().equals(current.getModelID())) {
+				model.getEntitiesList().add(current);
+				iter.remove();
+			}
+		}
 	}
 
 	/**
