@@ -15,6 +15,7 @@ import java.util.UUID;
 
 import javax.persistence.Column;
 import javax.persistence.Convert;
+import javax.persistence.Id;
 import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
 import javax.persistence.MappedSuperclass;
@@ -124,6 +125,7 @@ public class Equipment extends Item {
 	 * are always unique and never stack.
 	 */
 	@Column(name = "UNIQUE_ID")
+	@Id
 	private UUID uniqueID = UUID.randomUUID();
 
 	/**
