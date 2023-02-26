@@ -27,7 +27,7 @@ public class DatabasePlugin extends Plugin {
 	private Database database;
 
 	@Override
-	public boolean onDisable() {
+	public boolean onUnload() {
 		this.database.closeConnection();
 		this.database = null;
 		return true;
@@ -39,11 +39,6 @@ public class DatabasePlugin extends Plugin {
 			ResourceType.DATA, "mainDatabase");
 		this.database = new Database(db.getAbsolutePath());
 		log.debug("Database object created for {}", db.getAbsolutePath());
-		return true;
-	}
-
-	@Override
-	public boolean onEnable() {
 		this.database.createConnection();
 		return true;
 	}

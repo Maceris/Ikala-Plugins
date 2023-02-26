@@ -1,15 +1,11 @@
 package com.ikalagaming.database;
 
-import com.ikalagaming.database.query.Column;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.Synchronized;
 import lombok.extern.slf4j.Slf4j;
-import org.jooq.Constraint;
-import org.jooq.CreateTableColumnStep;
 import org.jooq.DSLContext;
 import org.jooq.SQLDialect;
 import org.jooq.impl.DSL;
@@ -17,7 +13,7 @@ import org.jooq.impl.DSL;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.List;
+import java.util.Properties;
 import java.util.ResourceBundle;
 
 /**
@@ -105,6 +101,12 @@ public class Database {
 	 */
 	@Synchronized
 	public void createConnection() {
+		if (connection != null) {
+			log.warn(SafeResourceLoader.getString("DUPLICATE_CONNECTION",
+				resourceBundle));
+			return;
+		}
+
 		try {
 			/*
 			 * Not useless. Loads the driver in so that the connection can find
@@ -118,8 +120,14 @@ public class Database {
 		}
 		
 		try {
+			DriverManager.setLoginTimeout(5);
+			Properties props = new Properties();
+			props.put("user", "sa");
+			props.put("password", "");
+			props.put("connectTimeout", "5000");
+			props.put("socketTimeout", "5000");
 			connection =
-				DriverManager.getConnection(this.connectionString, "sa", "");
+				DriverManager.getConnection(this.connectionString, props);
 		}
 		catch (SQLException e) {
 			Database.log.warn(SafeResourceLoader.getString("ERROR_CONNECTING",
@@ -127,30 +135,6 @@ public class Database {
 		}
 		log.debug("Created connection to database");
 		context = DSL.using(connection, SQLDialect.H2);
-	}
-
-	/**
-	 * Create a table in the database.
-	 *
-	 * @param name The name of the table.
-	 * @param columns The columns to have in the table.
-	 * @param constraints Constraints to apply in the table.
-	 * @throws InvalidConnectionException If there is no connection open.
-	 */
-	@Synchronized
-	public void createTable(@NonNull String name, List<Column> columns,
-		List<Constraint> constraints) {
-		/*
-		 * We end with an execute call but have no way to convince the linter
-		 * that this won't go wrong. To the linters credit, something may go
-		 * wrong.
-		 */
-		CreateTableColumnStep currentStep = startQuery().createTable(name);// NOSONAR
-		for (Column c : columns) {
-			currentStep = currentStep.column(c.getName(), c.getType());
-		}
-		currentStep.constraints(constraints);
-		currentStep.execute();
 	}
 
 	/**
