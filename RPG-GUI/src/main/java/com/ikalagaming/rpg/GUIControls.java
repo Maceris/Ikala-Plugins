@@ -10,14 +10,18 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.item.ItemPlugin;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
+import com.ikalagaming.launcher.events.Shutdown;
+import com.ikalagaming.rpg.windows.IkScriptDebugger;
 import com.ikalagaming.rpg.windows.ImageWindow;
 import com.ikalagaming.rpg.windows.ItemCatalogWindow;
 import com.ikalagaming.rpg.windows.LuaConsole;
 import com.ikalagaming.rpg.windows.PlayerInventory;
 import com.ikalagaming.rpg.windows.SceneControls;
 
+import imgui.ImColor;
 import imgui.ImGui;
 import imgui.ImGuiIO;
+import imgui.flag.ImGuiCol;
 import imgui.flag.ImGuiCond;
 import imgui.type.ImBoolean;
 import lombok.NonNull;
@@ -35,6 +39,7 @@ public class GUIControls implements GuiInstance {
 	private ImBoolean showWindowInventory;
 	private ImBoolean showWindowItemCatalog;
 	private ImBoolean showWindowSceneControls;
+	private ImBoolean showIkScriptDebugger;
 	private ImBoolean showImageWindow;
 	private ImBoolean showLuaConsole;
 	private ImBoolean showDialogue;
@@ -53,6 +58,7 @@ public class GUIControls implements GuiInstance {
 	 */
 	SceneControls windowSceneControls;
 	private ImageWindow windowImages;
+	private IkScriptDebugger ikScriptDebugger;
 	private LuaConsole windowLuaConsole;
 
 	/**
@@ -67,6 +73,7 @@ public class GUIControls implements GuiInstance {
 		this.showWindowItemCatalog = new ImBoolean(false);
 		this.showWindowDemo = new ImBoolean(false);
 		this.showWindowSceneControls = new ImBoolean(false);
+		this.showIkScriptDebugger = new ImBoolean(false);
 		this.showImageWindow = new ImBoolean(false);
 		this.showLuaConsole = new ImBoolean(false);
 		this.showDialogue = new ImBoolean(false);
@@ -81,6 +88,9 @@ public class GUIControls implements GuiInstance {
 
 		this.windowImages = new ImageWindow();
 		this.windowImages.setup(scene);
+
+		this.ikScriptDebugger = new IkScriptDebugger();
+		this.ikScriptDebugger.setup(scene);
 
 		this.windowLuaConsole = new LuaConsole();
 		this.windowLuaConsole.setup(scene);
@@ -116,14 +126,27 @@ public class GUIControls implements GuiInstance {
 		ImGui.text(String.format("Displace vector: (%f, %f)",
 			input.getDisplVec().x, input.getDisplVec().y));
 
+		ImGui.text(String.format("Current window position: (%f, %f)",
+			ImGui.getWindowPosX(), ImGui.getWindowPosY()));
+		ImGui.text(String.format("Current window size: (%f, %f)",
+			ImGui.getWindowSizeX(), ImGui.getWindowSizeY()));
+
 		ImGui.checkbox("Wireframe", this.wireframe);
 		ImGui.checkbox("Show Demo", this.showWindowDemo);
 		ImGui.checkbox("Show Inventory", this.showWindowInventory);
 		ImGui.checkbox("Show Item Catalog", this.showWindowItemCatalog);
 		ImGui.checkbox("Show Scene Controls", this.showWindowSceneControls);
 		ImGui.checkbox("Show Image Catalog", this.showImageWindow);
+		ImGui.checkbox("Show Ikala Script Debugger", this.showIkScriptDebugger);
 		ImGui.checkbox("Show Lua Console", this.showLuaConsole);
 		ImGui.checkbox("Show Dialogue", this.showDialogue);
+
+		ImGui.pushStyleColor(ImGuiCol.Button,
+			ImColor.floatToColor(1f, 0.1f, 0.1f));
+		if (ImGui.button("Quit Game")) {
+			new Shutdown().fire();
+		}
+		ImGui.popStyleColor();
 
 		ImGui.end();
 	}
@@ -148,6 +171,9 @@ public class GUIControls implements GuiInstance {
 		}
 		if (this.showWindowSceneControls.get()) {
 			this.windowSceneControls.draw();
+		}
+		if (this.showIkScriptDebugger.get()) {
+			this.ikScriptDebugger.draw();
 		}
 		if (this.showImageWindow.get()) {
 			this.windowImages.draw();
