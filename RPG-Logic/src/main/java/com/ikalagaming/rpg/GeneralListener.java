@@ -296,11 +296,10 @@ public class GeneralListener implements Listener {
 			GraphicsManager.getScene().getMaterialCache(), false));
 		GraphicsManager.getScene().addModel(model);
 
-		model = ModelLoader.loadModel(new ModelLoader.ModelLoadRequest("player",
-			RPGPlugin.PLUGIN_NAME, "models/characters/human_male.obj",
+		ModelLoader.loadModelLater(new ModelLoader.ModelLoadRequest("player",
+			RPGPlugin.PLUGIN_NAME, "models/characters/human_male.md5mesh",
 			GraphicsManager.getScene().getTextureCache(),
 			GraphicsManager.getScene().getMaterialCache(), true));
-		GraphicsManager.getScene().addModel(model);
 
 		this.modelsLoaded = true;
 
