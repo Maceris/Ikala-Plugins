@@ -23,7 +23,7 @@ import java.util.Arrays;
  * A buffer for the geometry pass that is used for deferred shading.
  */
 @Getter
-public class GeometryBuffer {
+public class GBuffer {
 	/**
 	 * The maximum number of textures, which are used for albedo, normals,
 	 * specular, and depth, respectively.
@@ -59,20 +59,20 @@ public class GeometryBuffer {
 	 *
 	 * @param window Window information to pull size details from.
 	 */
-	public GeometryBuffer(@NonNull Window window) {
+	public GBuffer(@NonNull Window window) {
 		this.gBufferId = GL30.glGenFramebuffers();
 		GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, this.gBufferId);
 
-		this.textureIDs = new int[GeometryBuffer.TOTAL_TEXTURES];
+		this.textureIDs = new int[GBuffer.TOTAL_TEXTURES];
 		GL11.glGenTextures(this.textureIDs);
 
 		this.width = window.getWidth();
 		this.height = window.getHeight();
 
-		for (int i = 0; i < GeometryBuffer.TOTAL_TEXTURES; ++i) {
+		for (int i = 0; i < GBuffer.TOTAL_TEXTURES; ++i) {
 			GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.textureIDs[i]);
 			int attachmentType;
-			if (i == GeometryBuffer.TOTAL_TEXTURES - 1) {
+			if (i == GBuffer.TOTAL_TEXTURES - 1) {
 				GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0,
 					GL30.GL_DEPTH_COMPONENT32F, this.width, this.height, 0,
 					GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, (ByteBuffer) null);
@@ -94,8 +94,8 @@ public class GeometryBuffer {
 		}
 
 		try (MemoryStack stack = MemoryStack.stackPush()) {
-			IntBuffer intBuff = stack.mallocInt(GeometryBuffer.TOTAL_TEXTURES);
-			for (int i = 0; i < GeometryBuffer.TOTAL_TEXTURES; ++i) {
+			IntBuffer intBuff = stack.mallocInt(GBuffer.TOTAL_TEXTURES);
+			for (int i = 0; i < GBuffer.TOTAL_TEXTURES; ++i) {
 				intBuff.put(i, GL30.GL_COLOR_ATTACHMENT0 + i);
 			}
 			GL20.glDrawBuffers(intBuff);

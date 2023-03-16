@@ -8,7 +8,7 @@ package com.ikalagaming.graphics.render;
 
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.graph.CascadeShadow;
-import com.ikalagaming.graphics.graph.GeometryBuffer;
+import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.QuadMesh;
 import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.UniformsMap;
@@ -179,7 +179,7 @@ public class LightsRender {
 	 * @param gBuffer The buffer for geometry data.
 	 */
 	public void render(@NonNull Scene scene, @NonNull ShadowRender shadowRender,
-		@NonNull GeometryBuffer gBuffer) {
+		@NonNull GBuffer gBuffer) {
 		this.shaderProgram.bind();
 
 		this.updateLights(scene);

@@ -8,7 +8,7 @@ package com.ikalagaming.graphics.render;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
-import com.ikalagaming.graphics.graph.GeometryBuffer;
+import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.RenderBuffers;
@@ -136,7 +136,7 @@ public class SceneRender {
 	 * @param commandBuffers The render command buffers.
 	 */
 	public void render(@NonNull Scene scene,
-		@NonNull RenderBuffers renderBuffers, @NonNull GeometryBuffer gBuffer,
+		@NonNull RenderBuffers renderBuffers, @NonNull GBuffer gBuffer,
 		@NonNull CommandBuffer commandBuffers) {
 
 		GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER,

@@ -8,7 +8,7 @@ package com.ikalagaming.graphics.render;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.graph.GeometryBuffer;
+import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.graph.RenderBuffers;
 import com.ikalagaming.graphics.scene.Entity;
@@ -92,7 +92,7 @@ public class Render {
 	/**
 	 * Geometry buffer.
 	 */
-	private GeometryBuffer gBuffer;
+	private GBuffer gBuffer;
 
 	/**
 	 * The GUI render handler.
@@ -166,7 +166,7 @@ public class Render {
 		this.lightsRender = new LightsRender();
 		this.animationRender = new AnimationRender();
 		this.filterRender = new FilterRender();
-		this.gBuffer = new GeometryBuffer(window);
+		this.gBuffer = new GBuffer(window);
 		this.renderBuffers = new RenderBuffers();
 		this.buffersPopulated = new AtomicBoolean();
 		this.commandBuffers = new CommandBuffer();
