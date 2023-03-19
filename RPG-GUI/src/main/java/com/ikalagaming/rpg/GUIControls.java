@@ -11,6 +11,7 @@ import com.ikalagaming.item.ItemPlugin;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.launcher.events.Shutdown;
+import com.ikalagaming.rpg.windows.DebugWindow;
 import com.ikalagaming.rpg.windows.IkScriptDebugger;
 import com.ikalagaming.rpg.windows.ImageWindow;
 import com.ikalagaming.rpg.windows.ItemCatalogWindow;
@@ -22,23 +23,23 @@ import imgui.ImColor;
 import imgui.ImGui;
 import imgui.ImGuiIO;
 import imgui.flag.ImGuiCol;
-import imgui.flag.ImGuiCond;
 import imgui.type.ImBoolean;
 import lombok.NonNull;
 import org.joml.Vector2f;
-import org.joml.Vector3f;
 
 /**
  * A GUI for manipulating lights
  */
 public class GUIControls implements GuiInstance {
 
+	private ImBoolean filterEnabled;
 	private ImBoolean wireframe;
 
-	private ImBoolean showWindowDemo;
-	private ImBoolean showWindowInventory;
-	private ImBoolean showWindowItemCatalog;
-	private ImBoolean showWindowSceneControls;
+	private ImBoolean showDebugWindow;
+	private ImBoolean showDemo;
+	private ImBoolean showInventory;
+	private ImBoolean showItemCatalog;
+	private ImBoolean showSceneControls;
 	private ImBoolean showIkScriptDebugger;
 	private ImBoolean showImageWindow;
 	private ImBoolean showLuaConsole;
@@ -60,6 +61,7 @@ public class GUIControls implements GuiInstance {
 	private ImageWindow windowImages;
 	private IkScriptDebugger ikScriptDebugger;
 	private LuaConsole windowLuaConsole;
+	private DebugWindow windowDebug;
 
 	/**
 	 * Set up the light controls.
@@ -68,21 +70,26 @@ public class GUIControls implements GuiInstance {
 	 */
 	public GUIControls(@NonNull Scene scene) {
 		this.wireframe = new ImBoolean(false);
+		this.filterEnabled = new ImBoolean(false);
 
-		this.showWindowInventory = new ImBoolean(false);
-		this.showWindowItemCatalog = new ImBoolean(false);
-		this.showWindowDemo = new ImBoolean(false);
-		this.showWindowSceneControls = new ImBoolean(false);
+		this.showDebugWindow = new ImBoolean(true);
+		this.showDemo = new ImBoolean(false);
+		this.showDialogue = new ImBoolean(false);
 		this.showIkScriptDebugger = new ImBoolean(false);
 		this.showImageWindow = new ImBoolean(false);
+		this.showInventory = new ImBoolean(false);
+		this.showItemCatalog = new ImBoolean(false);
 		this.showLuaConsole = new ImBoolean(false);
-		this.showDialogue = new ImBoolean(false);
+		this.showSceneControls = new ImBoolean(false);
 
 		this.windowInventory = new PlayerInventory();
 
 		this.windowCatalog = new ItemCatalogWindow();
 		this.windowCatalog.setup(scene);
 		this.windowCatalog.setInventory(this.windowInventory.getInventory());
+
+		this.windowDebug = new DebugWindow();
+		this.windowDebug.setup(scene);
 
 		this.windowSceneControls = new SceneControls();
 
@@ -105,71 +112,56 @@ public class GUIControls implements GuiInstance {
 		}
 	}
 
-	private void drawDebugMenu() {
-		ImGui.setNextWindowPos(10, 10, ImGuiCond.Once);
-		ImGui.setNextWindowSize(450, 400, ImGuiCond.Once);
-		ImGui.begin("Debug");
-
-		ImGui.text(String.format("FPS: %d", GraphicsManager.getLastFPS()));
-
-		Vector3f position =
-			GraphicsManager.getCameraManager().getCamera().getPosition();
-		ImGui.text(String.format("Camera position: (%f, %f, %f)", position.x,
-			position.y, position.z));
-		Vector2f rotation =
-			GraphicsManager.getCameraManager().getCamera().getRotation();
-		ImGui.text(
-			String.format("Camera rotation: (%f, %f)", rotation.x, rotation.y));
-		MouseInput input = GraphicsManager.getWindow().getMouseInput();
-		ImGui.text(String.format("Mouse position: (%f, %f)",
-			input.getCurrentPos().x, input.getCurrentPos().y));
-		ImGui.text(String.format("Displace vector: (%f, %f)",
-			input.getDisplVec().x, input.getDisplVec().y));
-
-		ImGui.text(String.format("Current window position: (%f, %f)",
-			ImGui.getWindowPosX(), ImGui.getWindowPosY()));
-		ImGui.text(String.format("Current window size: (%f, %f)",
-			ImGui.getWindowSizeX(), ImGui.getWindowSizeY()));
-
-		ImGui.checkbox("Wireframe", this.wireframe);
-		ImGui.checkbox("Show Demo", this.showWindowDemo);
-		ImGui.checkbox("Show Inventory", this.showWindowInventory);
-		ImGui.checkbox("Show Item Catalog", this.showWindowItemCatalog);
-		ImGui.checkbox("Show Scene Controls", this.showWindowSceneControls);
-		ImGui.checkbox("Show Image Catalog", this.showImageWindow);
-		ImGui.checkbox("Show Ikala Script Debugger", this.showIkScriptDebugger);
-		ImGui.checkbox("Show Lua Console", this.showLuaConsole);
-		ImGui.checkbox("Show Dialogue", this.showDialogue);
-
-		ImGui.pushStyleColor(ImGuiCol.Button,
-			ImColor.floatToColor(1f, 0.1f, 0.1f));
-		if (ImGui.button("Quit Game")) {
-			new Shutdown().fire();
-		}
-		ImGui.popStyleColor();
-
-		ImGui.end();
-	}
-
 	@Override
 	public void drawGui() {
 		this.oneTimeSetups();
 
 		ImGui.newFrame();
 
-		if (this.showWindowDemo.get()) {
+		if (ImGui.beginMainMenuBar()) {
+			if (ImGui.beginMenu("Windows")) {
+				ImGui.checkbox("Debug", this.showDebugWindow);
+				ImGui.checkbox("Demo", this.showDemo);
+				ImGui.checkbox("Inventory", this.showInventory);
+				ImGui.checkbox("Item Catalog", this.showItemCatalog);
+				ImGui.checkbox("Scene Controls", this.showSceneControls);
+				ImGui.checkbox("Image Catalog", this.showImageWindow);
+				ImGui.checkbox("Ikala Script Debugger",
+					this.showIkScriptDebugger);
+				ImGui.checkbox("Lua Console", this.showLuaConsole);
+				ImGui.checkbox("Dialogue", this.showDialogue);
+				ImGui.endMenu();
+			}
+
+			if (ImGui.beginMenu("Render Controls")) {
+				ImGui.checkbox("Wireframe", this.wireframe);
+				ImGui.checkbox("Filter Enabled", this.filterEnabled);
+				ImGui.endMenu();
+			}
+			ImGui.pushStyleColor(ImGuiCol.Text,
+				ImColor.floatToColor(1f, 0.1f, 0.1f));
+			if (ImGui.menuItem("Quit Game")) {
+				new Shutdown().fire();
+			}
+			ImGui.popStyleColor();
+
+			ImGui.endMainMenuBar();
+		}
+
+		if (this.showDemo.get()) {
 			ImGui.showDemoWindow();
 		}
+		if (this.showDebugWindow.get()) {
+			this.windowDebug.draw();
+		}
 
-		this.drawDebugMenu();
-
-		if (this.showWindowInventory.get()) {
+		if (this.showInventory.get()) {
 			this.windowInventory.draw();
 		}
-		if (this.showWindowItemCatalog.get()) {
+		if (this.showItemCatalog.get()) {
 			this.windowCatalog.draw();
 		}
-		if (this.showWindowSceneControls.get()) {
+		if (this.showSceneControls.get()) {
 			this.windowSceneControls.draw();
 		}
 		if (this.showIkScriptDebugger.get()) {
@@ -199,6 +191,7 @@ public class GUIControls implements GuiInstance {
 		imGuiIO.setMouseDown(0, mouseInput.isLeftButtonPressed());
 		imGuiIO.setMouseDown(1, mouseInput.isRightButtonPressed());
 		Render.configuration.setWireframe(this.wireframe.get());
+		Render.configuration.setFilter(this.filterEnabled.get());
 
 		boolean consumed =
 			imGuiIO.getWantCaptureMouse() || imGuiIO.getWantCaptureKeyboard();

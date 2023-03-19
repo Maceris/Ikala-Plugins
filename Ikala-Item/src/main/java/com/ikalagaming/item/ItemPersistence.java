@@ -6,11 +6,11 @@ import com.ikalagaming.plugins.Plugin;
 import com.ikalagaming.plugins.PluginManager;
 
 import org.jooq.DSLContext;
-import org.jooq.Record;
-import org.jooq.Result;
 import org.jooq.Table;
 import org.jooq.impl.DSL;
 
+import java.lang.annotation.Annotation;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -30,11 +30,27 @@ public class ItemPersistence {
 	 * Fetch the affixes from the affix table.
 	 */
 	public void fetchAffix() {
-		Result<Record> affixes =
-			this.context.select().from(ItemPersistence.AFFIX_TABLE).fetch();
-		affixes.forEach(affix -> {
-			System.out.println(affix.formatJSON());
+		ItemCatalog catalog = ItemCatalog.getInstance();
+		
+		List<org.jooq.Record> affixes = this.context.select()
+			.from(ItemPersistence.AFFIX_TABLE).fetch();
+		
+		affixes.forEach(record -> {
+			Affix affix = new Affix();
+			
+			catalog.getAffixes().add(affix);
 		});
+	}
+	
+	private static <T> T recordConverter(org.jooq.Record record, Class<T> clazz) {
+		
+		Annotation[] annotations = clazz.getAnnotations();
+		if (annotations.length == 0) {
+			return null;
+		}
+		
+		
+		return null;
 	}
 
 	/**

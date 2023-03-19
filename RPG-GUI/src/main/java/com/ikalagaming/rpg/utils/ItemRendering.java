@@ -9,6 +9,7 @@ import com.ikalagaming.item.Consumable;
 import com.ikalagaming.item.DamageModifier;
 import com.ikalagaming.item.Equipment;
 import com.ikalagaming.item.Item;
+import com.ikalagaming.item.ItemCriteria;
 import com.ikalagaming.item.ItemStats;
 import com.ikalagaming.item.Junk;
 import com.ikalagaming.item.Material;
@@ -50,7 +51,7 @@ public class ItemRendering {
 	}
 
 	/**
-	 * Draw details for an accessory.
+	 * Draw details for an accessory Template.
 	 *
 	 * @param accessory The accessory to draw details for.
 	 */
@@ -59,6 +60,26 @@ public class ItemRendering {
 		ImGui
 			.text("Accessory Type: " + accessory.getAccessoryType().toString());
 		ItemRendering.drawEquipmentTemplateInfo(accessory);
+	}
+
+	/**
+	 * Draw details for an affix by itself.
+	 *
+	 * @param affix The affix to draw details for.
+	 */
+	public static void drawAffix(Affix affix) {
+		ImGui.text("Name: ");
+		ImGui.sameLine();
+		ImGui.textColored(ItemRendering.getQualityColor(affix.getQuality()),
+			affix.getID());
+		ImGui.text("Quality: ");
+		ImGui.sameLine();
+		ImGui.textColored(ItemRendering.getQualityColor(affix.getQuality()),
+			affix.getQuality().toString());
+		ImGui.text("Affix Type: " + affix.getAffixType().toString());
+		ImGui.text("Level Requirement: " + affix.getLevelRequirement());
+		ItemRendering.drawItemStats(affix.getItemStats());
+		ItemRendering.drawItemCriteria(affix.getItemCriteria());
 	}
 
 	/**
@@ -191,7 +212,7 @@ public class ItemRendering {
 	}
 
 	/**
-	 * Draw details for equipment.
+	 * Draw details for equipment template.
 	 *
 	 * @param equipment The equipment to draw details for.
 	 */
@@ -220,6 +241,45 @@ public class ItemRendering {
 		ImGui.text("Name: ");
 		ImGui.textColored(ItemRendering.getQualityColor(equipment.getQuality()),
 			equipment.getID());
+	}
+
+	/**
+	 * Draw item criteria, used as part of components/affixes.
+	 *
+	 * @param itemCriteria The item criteria to draw.
+	 */
+	private static void drawItemCriteria(ItemCriteria itemCriteria) {
+		ImGui.text("Item Criteria");
+
+		ImGui.bulletText("Item Types");
+		for (ItemType type : itemCriteria.getItemTypes()) {
+			ImGui.setCursorPosX(
+				ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing());
+			ImGui.bulletText(type.toString());
+
+			if (type == ItemType.ACCESSORY) {
+				for (AccessoryType accessory : itemCriteria
+					.getAccessoryTypes()) {
+					ImGui.setCursorPosX(ImGui.getCursorPosX()
+						+ ImGui.getTreeNodeToLabelSpacing() * 2);
+					ImGui.bulletText(accessory.toString());
+				}
+			}
+			else if (type == ItemType.ARMOR) {
+				for (ArmorType armor : itemCriteria.getArmorTypes()) {
+					ImGui.setCursorPosX(ImGui.getCursorPosX()
+						+ ImGui.getTreeNodeToLabelSpacing() * 2);
+					ImGui.bulletText(armor.toString());
+				}
+			}
+			else if (type == ItemType.WEAPON) {
+				for (WeaponType weapon : itemCriteria.getWeaponTypes()) {
+					ImGui.setCursorPosX(ImGui.getCursorPosX()
+						+ ImGui.getTreeNodeToLabelSpacing() * 2);
+					ImGui.bulletText(weapon.toString());
+				}
+			}
+		}
 	}
 
 	/**

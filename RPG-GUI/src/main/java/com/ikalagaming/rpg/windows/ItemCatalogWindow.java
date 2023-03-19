@@ -2,9 +2,11 @@ package com.ikalagaming.rpg.windows;
 
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.inventory.Inventory;
+import com.ikalagaming.item.Affix;
 import com.ikalagaming.item.Equipment;
 import com.ikalagaming.item.Item;
 import com.ikalagaming.item.ItemCatalog;
+import com.ikalagaming.item.ItemPersistence;
 import com.ikalagaming.item.ItemRoller;
 import com.ikalagaming.item.template.AccessoryTemplate;
 import com.ikalagaming.item.template.ArmorTemplate;
@@ -57,11 +59,11 @@ public class ItemCatalogWindow implements GUIWindow {
 	@Override
 	public void draw() {
 		ImGui.setNextWindowPos(650, 10, ImGuiCond.Once);
-		ImGui.setNextWindowSize(600, 800, ImGuiCond.Once);
+		ImGui.setNextWindowSize(700, 800, ImGuiCond.Once);
 		ImGui.begin("Item Catalog");
 
 		if (ImGui.beginTabBar("Catalog Bar")) {
-			if (ImGui.beginTabItem("Accessory")) {
+			if (ImGui.beginTabItem("Accessory Template")) {
 				if (ImGui.isItemClicked()) {
 					this.currentIndex = 0;
 				}
@@ -75,7 +77,19 @@ public class ItemCatalogWindow implements GUIWindow {
 			if (ImGui.isItemClicked()) {
 				this.currentIndex = 0;
 			}
-			if (ImGui.beginTabItem("Armor")) {
+			if (ImGui.beginTabItem("Affix")) {
+				if (ImGui.isItemClicked()) {
+					this.currentIndex = 0;
+				}
+				Affix affix =
+					this.catalog.getAffixes().get(this.currentIndex);
+				ItemRendering.drawAffix(affix);
+				ImGui.endTabItem();
+			}
+			if (ImGui.isItemClicked()) {
+				this.currentIndex = 0;
+			}
+			if (ImGui.beginTabItem("Armor Template")) {
 				if (ImGui.isItemClicked()) {
 					this.currentIndex = 0;
 				}
@@ -149,7 +163,7 @@ public class ItemCatalogWindow implements GUIWindow {
 			if (ImGui.isItemClicked()) {
 				this.currentIndex = 0;
 			}
-			if (ImGui.beginTabItem("Weapon")) {
+			if (ImGui.beginTabItem("Weapon Template")) {
 				if (ImGui.isItemClicked()) {
 					this.currentIndex = 0;
 				}
@@ -241,6 +255,11 @@ public class ItemCatalogWindow implements GUIWindow {
 	@Override
 	public void setup(@NonNull Scene scene) {
 		this.catalog = ItemCatalog.getInstance();
+
+		ItemPersistence persist = new ItemPersistence();
+
+		persist.loadContext();
+		persist.fetchAffix();
 
 		this.catalog.getAccessoryTemplates()
 			.add(ItemGenerator.getAccessoryTemplate());

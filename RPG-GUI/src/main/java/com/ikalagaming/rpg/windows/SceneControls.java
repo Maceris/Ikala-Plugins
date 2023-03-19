@@ -1,7 +1,6 @@
 package com.ikalagaming.rpg.windows;
 
 import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.render.Render;
 import com.ikalagaming.graphics.scene.Fog;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
@@ -35,8 +34,6 @@ public class SceneControls implements GUIWindow {
 	private float[] dirLightY;
 	private float[] dirLightZ;
 
-	private ImBoolean filterEnabled;
-
 	@Override
 	public void draw() {
 		ImGui.setNextWindowPos(200, 200, ImGuiCond.Once);
@@ -66,7 +63,7 @@ public class SceneControls implements GUIWindow {
 			ImGui.sliderFloat("Fog Density", this.fogDensity, 0f, 1.0f, "%.2f");
 			ImGui.treePop();
 		}
-		ImGui.checkbox("Filter Enabled", this.filterEnabled);
+
 		ImGui.end();
 	}
 
@@ -93,8 +90,6 @@ public class SceneControls implements GUIWindow {
 		fog.setActive(this.fogEnabled.get());
 		fog.setColor(this.fogColor[0], this.fogColor[1], this.fogColor[2]);
 		fog.setDensity(this.fogDensity[0]);
-
-		Render.configuration.setFilter(this.filterEnabled.get());
 	}
 
 	@Override
@@ -120,7 +115,5 @@ public class SceneControls implements GUIWindow {
 			new float[] {fog.getColor().x, fog.getColor().y, fog.getColor().z};
 		this.fogEnabled = new ImBoolean(fog.isActive());
 		this.fogDensity = new float[] {fog.getDensity()};
-
-		this.filterEnabled = new ImBoolean();
 	}
 }

@@ -125,7 +125,7 @@ public class Dialogue {
 	 * Draw the window using ImGui.
 	 */
 	public static void renderWindow() {
-		ImGui.setNextWindowPos(410, 10, ImGuiCond.Once);
+		ImGui.setNextWindowPos(470, 30, ImGuiCond.Once);
 		ImGui.setNextWindowSize(600, 500, ImGuiCond.Once);
 		ImGui.begin("Dialogue", Dialogue.windowOpen,
 			ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize);
