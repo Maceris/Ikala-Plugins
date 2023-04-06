@@ -7,12 +7,14 @@ import com.ikalagaming.scripting.IkalaScriptLexer;
 import com.ikalagaming.scripting.IkalaScriptParser;
 import com.ikalagaming.scripting.IkalaScriptParser.CompilationUnitContext;
 import com.ikalagaming.scripting.ast.AbstractSyntaxTree;
+import com.ikalagaming.scripting.ast.CompilationUnit;
 
 import imgui.ImGui;
 import imgui.ImGuiIO;
 import imgui.callback.ImStrConsumer;
 import imgui.callback.ImStrSupplier;
 import imgui.flag.ImGuiCond;
+import imgui.flag.ImGuiWindowFlags;
 import imgui.type.ImString;
 import lombok.NonNull;
 import org.antlr.v4.runtime.BufferedTokenStream;
@@ -30,14 +32,29 @@ import org.lwjgl.glfw.GLFW;
 public class IkScriptDebugger implements GUIWindow {
 
 	private ImString scriptContents;
-	private ImString parsedTree;
+	private ImString AST;
 
 	@Override
 	public void draw() {
-		ImGui.setNextWindowPos(600, 15, ImGuiCond.Once);
-		ImGui.setNextWindowSize(830, 590, ImGuiCond.Once);
-		ImGui.begin("Ikala Script Console");
+		ImGui.setNextWindowPos(477, 30, ImGuiCond.Once);
+		ImGui.setNextWindowSize(1260, 590, ImGuiCond.Once);
+		ImGui.begin("Ikala Script Console",
+			ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
 
+		this.drawCompilerHalf();
+		ImGui.sameLine();
+		this.drawRuntimeHalf();
+
+		ImGui.end();
+	}
+
+	/**
+	 * Draw the compiler debugger half.
+	 */
+	private void drawCompilerHalf() {
+		ImGui.beginChild("Compiler Half", ImGui.getWindowWidth() / 2,
+			ImGui.getWindowHeight(), false,
+			ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
 		ImGui.textWrapped(
 			"This is a console for testing the Ikala scripting language");
 
@@ -48,15 +65,29 @@ public class IkScriptDebugger implements GUIWindow {
 		if (ImGui.button("Parse")) {
 			this.parse();
 		}
-
 		ImGui.sameLine();
-		if (ImGui.button("Copy result to clipboard")) {
-			ImGui.setClipboardText(parsedTree.get());
+		if (ImGui.button("Copy AST to clipboard")) {
+			ImGui.setClipboardText(this.AST.get());
 		}
 
-		ImGui.inputTextMultiline("Parsed", this.parsedTree);
+		if (this.AST.isNotEmpty()) {
+			ImGui.separator();
+			ImGui.beginChild("Abstract Syntax Tree");
+			ImGui.textWrapped(this.AST.get());
+			ImGui.endChild();
+			ImGui.separator();
+		}
 
-		ImGui.end();
+		ImGui.endChild();
+	}
+
+	/**
+	 * Draw the script runtime half.
+	 */
+	private void drawRuntimeHalf() {
+		ImGui.beginChild("Runtime Half", 0, ImGui.getWindowHeight());
+		ImGui.textWrapped("This is where we will debug the runtime");
+		ImGui.endChild();
 	}
 
 	@Override
@@ -74,15 +105,17 @@ public class IkScriptDebugger implements GUIWindow {
 
 		CompilationUnitContext context = parser.compilationUnit();
 
-		this.parsedTree.set(context.toStringTree(parser));
-		
-		AbstractSyntaxTree.process(context);
+		CompilationUnit ast = AbstractSyntaxTree.process(context);
+		ast.processTreeTypes();
+		ast.validateTree();
+		this.AST.set(ast.toString());
 	}
 
 	@Override
 	public void setup(@NonNull Scene scene) {
 		this.scriptContents = new ImString(500);
-		this.parsedTree = new ImString(2000);
+		this.AST = new ImString(2000);
+		this.scriptContents.set("for (int i = 0; i < 10; ++i){}");
 
 		long windowHandle = GraphicsManager.getWindow().getWindowHandle();
 		ImGuiIO io = ImGui.getIO();
