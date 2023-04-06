@@ -2,7 +2,9 @@ package com.ikalagaming.rpg;
 
 import imgui.ImGui;
 import imgui.ImVec2;
+import imgui.flag.ImGuiCol;
 import imgui.flag.ImGuiCond;
+import imgui.flag.ImGuiStyleVar;
 import imgui.flag.ImGuiWindowFlags;
 import imgui.type.ImBoolean;
 import lombok.NonNull;
@@ -134,6 +136,9 @@ public class Dialogue {
 		ImGui.beginChild("DialogueText", 0,
 			ImGui.getContentRegionMaxY() - ImGui.getTextLineHeightWithSpacing()
 				* (Dialogue.options.size() + 1));
+		ImGui.pushStyleVar(ImGuiStyleVar.FrameRounding, 10f);
+		ImGui.pushStyleVar(ImGuiStyleVar.DisabledAlpha, 1f);
+		ImGui.beginDisabled();
 		synchronized (Dialogue.lines) {
 			for (ChatLine line : Dialogue.lines) {
 				switch (line.type) {
@@ -144,13 +149,23 @@ public class Dialogue {
 						ImGui.text(line.text);
 						break;
 					case CHAT_LEFT:
-						ImGui.text(line.text);
+						ImGui.pushStyleColor(ImGuiCol.Button, 1f, 0.2f, 0.2f,
+							1f);
+
+						ImGui.button(line.text);
+						ImGui.popStyleColor();
+						// ImGui.text(line.text);
 						break;
 					case CHAT_RIGHT:
 						width = ImGui.getContentRegionMaxX();
 						ImGui.calcTextSize(textSize, line.text);
-						ImGui.setCursorPosX(width - textSize.x);
-						ImGui.text(line.text);
+						ImGui.setCursorPosX(
+							Math.max(width - (textSize.x + 8), 0));
+						ImGui.pushStyleColor(ImGuiCol.Button, 0.2f, 0.2f, 1f,
+							1f);
+						ImGui.button(line.text);
+						ImGui.popStyleColor();
+						// ImGui.text(line.text);
 						break;
 					case TEXT:
 					default:
@@ -162,6 +177,9 @@ public class Dialogue {
 				}
 			}
 		}
+		ImGui.endDisabled();
+		ImGui.popStyleVar();
+		ImGui.popStyleVar();
 		ImGui.endChild();
 
 		ImGui.separator();
