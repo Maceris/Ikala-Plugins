@@ -6,7 +6,10 @@
  */
 package com.ikalagaming.graphics;
 
+import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.graphics.exceptions.WindowCreationException;
+import com.ikalagaming.launcher.PluginFolder;
+import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import imgui.ImGui;
@@ -17,10 +20,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.glfw.Callbacks;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWErrorCallback;
+import org.lwjgl.glfw.GLFWImage;
 import org.lwjgl.glfw.GLFWVidMode;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.stb.STBImage;
+import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
+import java.io.File;
+import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 import java.util.concurrent.Callable;
 
 /**
@@ -151,7 +160,7 @@ public class Window {
 		GLFW.glfwSetErrorCallback((int errorCode, long msgPtr) -> Window.log
 			.error("Error code [{}], msg [{]]", errorCode,
 				MemoryUtil.memUTF8(msgPtr)));
-		
+
 		GLFW.glfwSetKeyCallback(this.windowHandle,
 			(window, key, scancode, action, mods) -> {
 				ImGuiIO io = ImGui.getIO();
@@ -190,6 +199,8 @@ public class Window {
 			GLFW.glfwSwapInterval(1);
 		}
 
+		setWindowIcon();
+
 		GLFW.glfwShowWindow(this.windowHandle);
 
 		int[] arrWidth = new int[1];
@@ -199,6 +210,49 @@ public class Window {
 		this.height = arrHeight[0];
 
 		this.mouseInput = new MouseInput(this.windowHandle);
+	}
+
+	/**
+	 * Set up the window icon.
+	 */
+	private void setWindowIcon() {
+		File icon = PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
+			ResourceType.DATA, "textures/game_icon.png");
+
+		String iconPath = icon.getAbsolutePath();
+		if (!icon.exists()) {
+			Window.log.warn(
+				SafeResourceLoader.getString("ICON_MISSING",
+					GraphicsPlugin.getResourceBundle()),
+				icon.getAbsolutePath());
+			return;
+		}
+
+		try (MemoryStack stack = MemoryStack.stackPush()) {
+			IntBuffer w = stack.mallocInt(1);
+			IntBuffer h = stack.mallocInt(1);
+			IntBuffer channels = stack.mallocInt(1);
+
+			ByteBuffer buffer = STBImage.stbi_load(iconPath, w, h, channels, 4);
+			if (buffer == null) {
+				String error =
+					SafeResourceLoader.getString("TEXTURE_ERROR_LOADING",
+						GraphicsPlugin.getResourceBundle());
+				log.info(error, iconPath, STBImage.stbi_failure_reason());
+				throw new TextureException(
+					error.replaceFirst("\\{\\}", iconPath).replaceFirst(
+						"\\{\\}", STBImage.stbi_failure_reason()));
+			}
+			GLFWImage.Buffer iconBuffer = GLFWImage.create(1);
+			GLFWImage iconImage =
+				GLFWImage.create().set(w.get(), h.get(), buffer);
+			iconBuffer.put(0, iconImage);
+
+			GLFW.glfwSetWindowIcon(windowHandle, iconBuffer);
+
+			STBImage.stbi_image_free(buffer);
+		}
+
 	}
 
 	/**
