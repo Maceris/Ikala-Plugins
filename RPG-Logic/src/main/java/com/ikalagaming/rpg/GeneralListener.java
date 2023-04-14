@@ -389,7 +389,10 @@ public class GeneralListener implements Listener {
 							"player_" + Entity.NEXT_ID.getAndIncrement(),
 							"player");
 						player.setScale(0.6f);
-						player.setRotation(0f, 1f, 0f, 0f);
+						player.setRotation(1f, 0f, 0f,
+							(float) -Math.toRadians(90));
+						player.addRotation(0f, 1f, 0f,
+							(float) Math.toRadians(90));
 						player.setPosition(position.x, position.y, position.z);
 						player.updateModelMatrix();
 						GraphicsManager.getScene().addEntity(player);
