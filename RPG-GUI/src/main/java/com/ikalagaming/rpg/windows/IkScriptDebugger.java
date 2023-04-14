@@ -8,6 +8,10 @@ import com.ikalagaming.scripting.IkalaScriptParser;
 import com.ikalagaming.scripting.IkalaScriptParser.CompilationUnitContext;
 import com.ikalagaming.scripting.ast.AbstractSyntaxTree;
 import com.ikalagaming.scripting.ast.CompilationUnit;
+import com.ikalagaming.scripting.ast.visitors.OptimizationPass;
+import com.ikalagaming.scripting.ast.visitors.TreeValidator;
+import com.ikalagaming.scripting.ast.visitors.TypePreprocessor;
+import com.ikalagaming.scripting.interpreter.InstructionGenerator;
 
 import imgui.ImGui;
 import imgui.ImGuiIO;
@@ -104,11 +108,23 @@ public class IkScriptDebugger implements GUIWindow {
 		IkalaScriptParser parser = new IkalaScriptParser(tokenStream);
 
 		CompilationUnitContext context = parser.compilationUnit();
-
 		CompilationUnit ast = AbstractSyntaxTree.process(context);
-		ast.processTreeTypes();
-		ast.validateTree();
-		this.AST.set(ast.toString());
+
+		TypePreprocessor processor = new TypePreprocessor();
+		processor.processTreeTypes(ast);
+
+		TreeValidator validator = new TreeValidator();
+		if (validator.validate(ast)) {
+			OptimizationPass optimizer = new OptimizationPass();
+			optimizer.optimize(ast);
+
+			InstructionGenerator gen = new InstructionGenerator();
+			gen.process(ast);
+			this.AST.set(ast.toString());
+		}
+		else {
+			this.AST.set("Invalid tree!");
+		}
 	}
 
 	@Override
