@@ -1,0 +1,4 @@
+---
+log-string: 'Hello world!'
+standard-settings:
+  printMessage: true
