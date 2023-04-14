@@ -37,6 +37,7 @@ package com.ikalagaming.random;
  * Visually isotropic coherent noise algorithm based on the simplectic
  * honeycomb.
  */
+@SuppressWarnings("javadoc")
 public class OpenSimplexNoise {
 
 	public static class Grad2 {
@@ -75,7 +76,6 @@ public class OpenSimplexNoise {
 
 	private static final double SQUISH_CONSTANT_3D = 1.0 / 3; // (Math.sqrt(3+1)-1)/3;
 
-	private static final double STRETCH_CONSTANT_4D = -0.138196601125011; // (1/Math.sqrt(4+1)-1)/4;
 	private static final double SQUISH_CONSTANT_4D = 0.309016994374947; // (Math.sqrt(4+1)-1)/4;
 
 	private static final long DEFAULT_SEED = 0;
