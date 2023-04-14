@@ -19,4 +19,9 @@ public class AttributesPlugin extends Plugin {
 	 * Calling the constructor should be dealt with by the framework.
 	 */
 	public AttributesPlugin() {}
+
+	@Override
+	public String getName() {
+		return AttributesPlugin.PLUGIN_NAME;
+	}
 }

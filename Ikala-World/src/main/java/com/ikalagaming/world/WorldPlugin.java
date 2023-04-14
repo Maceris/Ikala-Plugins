@@ -29,4 +29,9 @@ public class WorldPlugin extends Plugin {
 		return this.listeners;
 	}
 
+	@Override
+	public String getName() {
+		return WorldPlugin.PLUGIN_NAME;
+	}
+
 }

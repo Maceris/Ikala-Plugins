@@ -27,10 +27,8 @@ public class DatabasePlugin extends Plugin {
 	private Database database;
 
 	@Override
-	public boolean onUnload() {
-		this.database.closeConnection();
-		this.database = null;
-		return true;
+	public String getName() {
+		return DatabasePlugin.PLUGIN_NAME;
 	}
 
 	@Override
@@ -38,8 +36,16 @@ public class DatabasePlugin extends Plugin {
 		File db = PluginFolder.getResource(DatabasePlugin.PLUGIN_NAME,
 			ResourceType.DATA, "mainDatabase");
 		this.database = new Database(db.getAbsolutePath());
-		log.debug("Database object created for {}", db.getAbsolutePath());
+		DatabasePlugin.log.debug("Database object created for {}",
+			db.getAbsolutePath());
 		this.database.createConnection();
+		return true;
+	}
+
+	@Override
+	public boolean onUnload() {
+		this.database.closeConnection();
+		this.database = null;
 		return true;
 	}
 }

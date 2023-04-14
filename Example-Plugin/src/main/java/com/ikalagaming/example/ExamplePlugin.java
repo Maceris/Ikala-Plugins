@@ -34,6 +34,11 @@ public class ExamplePlugin extends Plugin {
 	}
 
 	@Override
+	public String getName() {
+		return ExamplePlugin.PLUGIN_NAME;
+	}
+
+	@Override
 	public boolean onEnable() {
 		ExamplePlugin.log.info("Hello world! The example plugin is loaded.");
 		return true;

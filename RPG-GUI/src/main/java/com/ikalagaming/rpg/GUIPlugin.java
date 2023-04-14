@@ -57,6 +57,11 @@ public class GUIPlugin extends Plugin {
 	}
 
 	@Override
+	public String getName() {
+		return GUIPlugin.PLUGIN_NAME;
+	}
+
+	@Override
 	public boolean onLoad() {
 		try {
 			GUIPlugin.setResourceBundle(ResourceBundle.getBundle(

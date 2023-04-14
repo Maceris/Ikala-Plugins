@@ -48,6 +48,11 @@ public class InventoryPlugin extends Plugin {
 	}
 
 	@Override
+	public String getName() {
+		return InventoryPlugin.PLUGIN_NAME;
+	}
+
+	@Override
 	public boolean onLoad() {
 		try {
 			InventoryPlugin.setResourceBundle(ResourceBundle.getBundle(

@@ -19,4 +19,9 @@ public class ItemPlugin extends Plugin {
 	 */
 	public ItemPlugin() {}
 
+	@Override
+	public String getName() {
+		return ItemPlugin.PLUGIN_NAME;
+	}
+
 }

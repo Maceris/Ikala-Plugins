@@ -35,14 +35,19 @@ public class RPGPlugin extends Plugin {
 	}
 
 	@Override
-	public boolean onEnable() {
-		Engine.registerClass(FlagManager.class);
-		return true;
+	public String getName() {
+		return RPGPlugin.PLUGIN_NAME;
 	}
 
 	@Override
 	public boolean onDisable() {
 		Engine.unregisterClass(FlagManager.class);
+		return true;
+	}
+
+	@Override
+	public boolean onEnable() {
+		Engine.registerClass(FlagManager.class);
 		return true;
 	}
 }

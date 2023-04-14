@@ -52,6 +52,11 @@ public class GraphicsPlugin extends Plugin {
 	}
 
 	@Override
+	public String getName() {
+		return GraphicsPlugin.PLUGIN_NAME;
+	}
+
+	@Override
 	public boolean onDisable() {
 		GraphicsManager.getShutdownFlag().set(true);
 		Launcher.removeMainThreadStage(GraphicsManager.getTickStageID());
