@@ -21,6 +21,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Getter
 public class Entity {
 	/**
+	 * Numbers for a unique entity name.
+	 */
+	public static final AtomicInteger NEXT_ID = new AtomicInteger();
+	/**
 	 * A unique ID.
 	 *
 	 * @return The unique ID.
@@ -59,6 +63,12 @@ public class Entity {
 	 */
 	private Quaternionf rotation;
 	/**
+	 * Used to modify rotations. We just keep around an instance to avoid object
+	 * creation every time we rotate a model.
+	 */
+	private Quaternionf delta;
+
+	/**
 	 * The scale factor.
 	 *
 	 * @param scale The new scale.
@@ -66,11 +76,6 @@ public class Entity {
 	 */
 	@Setter
 	private float scale;
-
-	/**
-	 * Numbers for a unique entity name.
-	 */
-	public static final AtomicInteger NEXT_ID = new AtomicInteger();
 
 	/**
 	 * Create a new entity.
@@ -84,7 +89,21 @@ public class Entity {
 		this.modelMatrix = new Matrix4f();
 		this.position = new Vector3f();
 		this.rotation = new Quaternionf();
+		this.delta = new Quaternionf();
 		this.scale = 1;
+	}
+
+	/**
+	 * Add to the rotation.
+	 *
+	 * @param x The x component of the rotation axis.
+	 * @param y The y component of the rotation axis.
+	 * @param z The z component of the rotation axis.
+	 * @param angle The angle in radians.
+	 */
+	public void addRotation(float x, float y, float z, float angle) {
+		this.delta.fromAxisAngleRad(x, y, z, angle);
+		this.delta.mul(this.rotation, this.rotation);
 	}
 
 	/**
