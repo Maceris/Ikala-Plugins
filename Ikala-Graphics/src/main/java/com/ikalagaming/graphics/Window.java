@@ -10,6 +10,8 @@ import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.graphics.exceptions.WindowCreationException;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
+import com.ikalagaming.plugins.config.ConfigManager;
+import com.ikalagaming.plugins.config.PluginConfig;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import imgui.ImGui;
@@ -216,8 +218,11 @@ public class Window {
 	 * Set up the window icon.
 	 */
 	private void setWindowIcon() {
+		PluginConfig config =
+			ConfigManager.loadConfig(GraphicsPlugin.PLUGIN_NAME);
+
 		File icon = PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
-			ResourceType.DATA, "textures/game_icon.png");
+			ResourceType.DATA, config.getString("icon-path"));
 
 		String iconPath = icon.getAbsolutePath();
 		if (!icon.exists()) {
