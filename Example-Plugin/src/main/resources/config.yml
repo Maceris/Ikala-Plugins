@@ -2,3 +2,4 @@
 log-string: 'Hello world!'
 standard-settings:
   printMessage: true
+  other-string: 'test string'
