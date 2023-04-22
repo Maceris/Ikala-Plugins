@@ -244,9 +244,8 @@ public class Window {
 					SafeResourceLoader.getString("TEXTURE_ERROR_LOADING",
 						GraphicsPlugin.getResourceBundle());
 				log.info(error, iconPath, STBImage.stbi_failure_reason());
-				throw new TextureException(
-					error.replaceFirst("\\{\\}", iconPath).replaceFirst(
-						"\\{\\}", STBImage.stbi_failure_reason()));
+				throw new TextureException(SafeResourceLoader.format(error,
+					iconPath, STBImage.stbi_failure_reason()));
 			}
 			GLFWImage.Buffer iconBuffer = GLFWImage.create(1);
 			GLFWImage iconImage =
