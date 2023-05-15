@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.scripting.IkalaScriptLexer;
 import com.ikalagaming.scripting.IkalaScriptParser;
 import com.ikalagaming.scripting.IkalaScriptParser.CompilationUnitContext;
+import com.ikalagaming.scripting.ParserErrorListener;
 import com.ikalagaming.scripting.ast.AbstractSyntaxTree;
 import com.ikalagaming.scripting.ast.CompilationUnit;
 import com.ikalagaming.scripting.ast.visitors.OptimizationPass;
@@ -90,10 +91,10 @@ public class IkScriptDebugger implements GUIWindow {
 				break;
 			case IMMEDIATE, VARIABLE:
 			default:
-				value = loc.value().toString();
+				value = loc.value() == null ? "null" : loc.value().toString();
 				break;
 		}
-		return String.format(" (%c) %s", type, value);
+		return String.format(" <%c> %s", type, value);
 	}
 
 	/**
@@ -196,7 +197,7 @@ public class IkScriptDebugger implements GUIWindow {
 				ImGui.popStyleColor();
 			}
 		}
-		// Instructions
+		// end Instructions
 		ImGui.endChild();
 		ImGui.sameLine();
 		ImGui.beginChild("Registers", ImGui.getWindowWidth() / 3, height, true);
@@ -204,14 +205,14 @@ public class IkScriptDebugger implements GUIWindow {
 			ImGui.textWrapped(String.format("%s: %s", entry.getKey(),
 				entry.getValue().toString()));
 		}
-		// Registers
+		// end Registers
 		ImGui.endChild();
 		ImGui.sameLine();
 		ImGui.beginChild("Stack", ImGui.getWindowWidth() / 3, height, true);
 		for (var entry : this.runtime.getStack()) {
 			ImGui.textWrapped(IkScriptDebugger.format(entry));
 		}
-		// Stack
+		// end Stack
 		ImGui.endChild();
 		ImGui.popStyleVar();
 
@@ -223,14 +224,30 @@ public class IkScriptDebugger implements GUIWindow {
 	 * Parse the input and put the resulting string tree in the output.
 	 */
 	private void parse() {
+		final String INVALID = "Invalid tree!";
 		CharStream stream = CharStreams.fromString(this.scriptContents.get());
 
+		ParserErrorListener errorListener = new ParserErrorListener();
+
 		IkalaScriptLexer lexer = new IkalaScriptLexer(stream);
+		lexer.removeErrorListeners();
+		lexer.addErrorListener(errorListener);
 		TokenStream tokenStream = new BufferedTokenStream(lexer);
 		IkalaScriptParser parser = new IkalaScriptParser(tokenStream);
+		parser.removeErrorListeners();
+		parser.addErrorListener(errorListener);
 
 		CompilationUnitContext context = parser.compilationUnit();
+		if (errorListener.getErrorCount() > 0) {
+			this.ast.set(INVALID);
+			return;
+		}
+
 		CompilationUnit program = AbstractSyntaxTree.process(context);
+		if (program.isInvalid()) {
+			this.ast.set(INVALID);
+			return;
+		}
 
 		TypePreprocessor processor = new TypePreprocessor();
 		processor.processTreeTypes(program);
@@ -244,7 +261,8 @@ public class IkScriptDebugger implements GUIWindow {
 			this.ast.set(program.toString());
 		}
 		else {
-			this.ast.set("Invalid tree!");
+			this.ast.set(INVALID);
+			return;
 		}
 
 		List<Instruction> instructions = this.generator.process(program);
