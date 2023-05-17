@@ -6,34 +6,41 @@
  */
 package com.ikalagaming.graphics.render;
 
+import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.graph.QuadMesh;
 import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.launcher.PluginFolder;
+import com.ikalagaming.launcher.PluginFolder.ResourceType;
+import com.ikalagaming.plugins.config.ConfigManager;
+import com.ikalagaming.plugins.config.PluginConfig;
+import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
 
+import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Handle light rendering.
  */
+@Slf4j
 public class FilterRender {
 
 	/**
-	 * The shader program for rendering a sobel edge filter.
+	 * A map of filter shaders that have been picked up from a filters folder.
 	 */
-	private final ShaderProgram sobelShader;
-	/**
-	 * The shader program for rendering the scene unmodified.
-	 */
-	private final ShaderProgram noFilterShader;
+	private Map<String, ShaderProgram> shaders;
 
 	/**
 	 * A mesh for rendering lighting onto.
@@ -48,22 +55,81 @@ public class FilterRender {
 	 * Set up the light renderer.
 	 */
 	public FilterRender() {
+		this.shaders = new HashMap<>();
+
+		PluginConfig config =
+			ConfigManager.loadConfig(GraphicsPlugin.PLUGIN_NAME);
+
+		String folderPath = config.getString("filters-folder");
+		File filtersFolder = PluginFolder.getResource(
+			GraphicsPlugin.PLUGIN_NAME, ResourceType.DATA, folderPath);
+
+		if (!filtersFolder.exists()) {
+			FilterRender.log.warn(
+				SafeResourceLoader.getString("FILTERS_FOLDER_MISSING",
+					GraphicsPlugin.getResourceBundle()),
+				filtersFolder.getAbsolutePath());
+			return;
+		}
+		if (!folderPath.endsWith(File.separator)) {
+			folderPath = folderPath.concat(File.separator);
+		}
+
 		List<ShaderProgram.ShaderModuleData> shaderModuleDataList =
 			new ArrayList<>();
-		shaderModuleDataList.add(new ShaderProgram.ShaderModuleData(
-			"shaders/filters/sobel.vert", GL20.GL_VERTEX_SHADER));
-		shaderModuleDataList.add(new ShaderProgram.ShaderModuleData(
-			"shaders/filters/sobel.frag", GL20.GL_FRAGMENT_SHADER));
-		this.sobelShader = new ShaderProgram(shaderModuleDataList);
 
-		shaderModuleDataList.clear();
-		shaderModuleDataList.add(new ShaderProgram.ShaderModuleData(
-			"shaders/filters/nofilter.vert", GL20.GL_VERTEX_SHADER));
-		shaderModuleDataList.add(new ShaderProgram.ShaderModuleData(
-			"shaders/filters/nofilter.frag", GL20.GL_FRAGMENT_SHADER));
-		this.noFilterShader = new ShaderProgram(shaderModuleDataList);
+		for (File vert : filtersFolder
+			.listFiles((dir, name) -> name.endsWith(".vert"))) {
+			shaderModuleDataList.clear();
+			String name = vert.getName();
+			// Strip file ending
+			name = name.substring(0, name.indexOf('.'));
+			File frag = new File(filtersFolder, name.concat(".frag"));
+			if (!frag.exists()) {
+				FilterRender.log.debug(
+					SafeResourceLoader.getString("FILTER_MISSING_FRAGMENT",
+						GraphicsPlugin.getResourceBundle()),
+					name);
+				continue;
+			}
+
+			shaderModuleDataList.add(new ShaderProgram.ShaderModuleData(
+				folderPath.concat(vert.getName()), GL20.GL_VERTEX_SHADER));
+			shaderModuleDataList.add(new ShaderProgram.ShaderModuleData(
+				folderPath.concat(frag.getName()), GL20.GL_FRAGMENT_SHADER));
+			ShaderProgram fullProgram = new ShaderProgram(shaderModuleDataList);
+
+			// Clean up names
+			name = name.replaceAll("[^a-zA-Z0-9_-]+", "");
+			this.shaders.put(name, fullProgram);
+			FilterRender.log.debug(SafeResourceLoader.getString(
+				"FILTER_REGISTERED", GraphicsPlugin.getResourceBundle()), name);
+		}
+
+		final String defaultFilter = config.getString("default-filter");
+		if (!this.shaders.containsKey(defaultFilter)) {
+			FilterRender.log
+				.warn(SafeResourceLoader.getString("DEFAULT_FILTER_MISSING",
+					GraphicsPlugin.getResourceBundle()), defaultFilter);
+
+			Render.configuration.setFilterNames(new String[0]);
+			Render.configuration.setSelectedFilter(0);
+			return;
+		}
 		this.quadMesh = new QuadMesh();
-		this.createUniforms();
+		this.createUniforms(defaultFilter);
+
+		String[] names = this.shaders.keySet().toArray(new String[0]);
+
+		int defaultIndex = 0;
+		for (int i = 0; i < names.length; ++i) {
+			if (defaultFilter.equals(names[i])) {
+				defaultIndex = i;
+				break;
+			}
+		}
+		Render.configuration.setFilterNames(names);
+		Render.configuration.setSelectedFilter(defaultIndex);
 	}
 
 	/**
@@ -71,15 +137,19 @@ public class FilterRender {
 	 */
 	public void cleanup() {
 		this.quadMesh.cleanup();
-		this.sobelShader.cleanup();
-		this.noFilterShader.cleanup();
+		this.shaders.forEach((name, program) -> program.cleanup());
+		this.shaders.clear();
 	}
 
 	/**
 	 * Set up the uniforms for the shader program.
+	 *
+	 * @param defaultFilter The name of the default shader, which should have
+	 *            the standard uniforms.
 	 */
-	private void createUniforms() {
-		this.uniformsMap = new UniformsMap(this.sobelShader.getProgramID());
+	private void createUniforms(@NonNull final String defaultFilter) {
+		this.uniformsMap =
+			new UniformsMap(this.shaders.get(defaultFilter).getProgramID());
 		this.uniformsMap.createUniform(ShaderUniforms.Filter.SCREEN_TEXTURE);
 	}
 
@@ -88,18 +158,15 @@ public class FilterRender {
 	 *
 	 * @param scene The scene we are rendering.
 	 * @param screenTexture The screen texture for post-processing.
-	 * @param applyFilter If we actually want to render with a filter.
 	 */
-	public void render(@NonNull Scene scene, int screenTexture,
-		boolean applyFilter) {
+	public void render(@NonNull Scene scene, int screenTexture) {
 		GL11.glDepthMask(false);
 
-		if (applyFilter) {
-			this.sobelShader.bind();
-		}
-		else {
-			this.noFilterShader.bind();
-		}
+		String name = Render.configuration.getFilterNames()[Render.configuration
+			.getSelectedFilter()];
+		ShaderProgram program = this.shaders.get(name);
+
+		program.bind();
 
 		GL13.glActiveTexture(GL13.GL_TEXTURE0);
 		GL11.glBindTexture(GL11.GL_TEXTURE_2D, screenTexture);
@@ -110,12 +177,7 @@ public class FilterRender {
 		GL11.glDrawElements(GL11.GL_TRIANGLES, this.quadMesh.getVertexCount(),
 			GL11.GL_UNSIGNED_INT, 0);
 
-		if (applyFilter) {
-			this.sobelShader.unbind();
-		}
-		else {
-			this.noFilterShader.unbind();
-		}
+		program.unbind();
 
 		GL11.glDepthMask(true);
 	}

@@ -58,11 +58,13 @@ public class UniformsMap {
 		int uniformLocation =
 			GL20.glGetUniformLocation(this.programID, uniformName);
 		if (uniformLocation < 0) {
+
 			String error = SafeResourceLoader.getString("UNIFORM_MISSING",
 				GraphicsPlugin.getResourceBundle());
 			UniformsMap.log.info(error, uniformName, this.programID);
-			throw new ShaderException(error.replaceFirst("\\{\\}", uniformName)
-				.replaceFirst("\\{\\}", "" + this.programID));
+
+			throw new ShaderException(SafeResourceLoader.format(error,
+				uniformName, this.programID + ""));
 		}
 		this.uniforms.put(uniformName, uniformLocation);
 	}
@@ -81,7 +83,7 @@ public class UniformsMap {
 				"UNIFORM_LOCATION_MISSING", GraphicsPlugin.getResourceBundle());
 			UniformsMap.log.info(error, uniformName, this.programID);
 			throw new ShaderException(
-				error.replaceFirst("\\{\\}", uniformName));
+				SafeResourceLoader.format(error, uniformName));
 		}
 		return location.intValue();
 	}

@@ -7,13 +7,16 @@
 package com.ikalagaming.graphics.render;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.graph.RenderBuffers;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.util.SafeResourceLoader;
 
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -51,9 +54,32 @@ public class Render {
 		private boolean wireframe;
 
 		/**
-		 * Post-processing filter.
+		 * Post-processing filter that has been selected.
 		 */
-		private boolean filter;
+		private int selectedFilter;
+
+		/**
+		 * The list of filter names that are available. We use an array to make
+		 * ImGui access easier.
+		 */
+		@Setter(value = AccessLevel.PACKAGE)
+		private String[] filterNames;
+
+		/**
+		 * Sets the post-processing filter. Must be a valid index in the array
+		 * of filters or an exception will be thrown.
+		 * 
+		 * @param newFilter The index of the filter to use.
+		 */
+		public void setSelectedFilter(int newFilter) {
+			if (newFilter < 0 || newFilter > filterNames.length) {
+				throw new IllegalArgumentException(SafeResourceLoader
+					.getStringFormatted("ILLEGAL_FILTER_SELECTION",
+						GraphicsPlugin.getResourceBundle(), newFilter + "",
+						filterNames.length + ""));
+			}
+			selectedFilter = newFilter;
+		}
 	}
 
 	/**
@@ -82,7 +108,7 @@ public class Render {
 	/**
 	 * Rendering configurations.
 	 */
-	public static RenderConfig configuration = new RenderConfig();
+	public static final RenderConfig configuration = new RenderConfig();
 
 	/**
 	 * The animation render handler.
@@ -294,8 +320,7 @@ public class Render {
 		this.skyBoxRender.render(scene);
 		this.lightRenderFinish();
 
-		this.filterRender.render(scene, this.screenTexture,
-			Render.configuration.filter);
+		this.filterRender.render(scene, this.screenTexture);
 		this.guiRender.render(scene);
 	}
 
