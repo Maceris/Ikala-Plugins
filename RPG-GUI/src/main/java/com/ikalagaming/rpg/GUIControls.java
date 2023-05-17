@@ -24,6 +24,7 @@ import imgui.ImGui;
 import imgui.ImGuiIO;
 import imgui.flag.ImGuiCol;
 import imgui.type.ImBoolean;
+import imgui.type.ImInt;
 import lombok.NonNull;
 import org.joml.Vector2f;
 
@@ -32,7 +33,7 @@ import org.joml.Vector2f;
  */
 public class GUIControls implements GuiInstance {
 
-	private ImBoolean filterEnabled;
+	private ImInt selectedFilter;
 	private ImBoolean wireframe;
 
 	private ImBoolean showDebugWindow;
@@ -70,7 +71,8 @@ public class GUIControls implements GuiInstance {
 	 */
 	public GUIControls(@NonNull Scene scene) {
 		this.wireframe = new ImBoolean(false);
-		this.filterEnabled = new ImBoolean(false);
+		this.selectedFilter =
+			new ImInt(Render.configuration.getSelectedFilter());
 
 		this.showDebugWindow = new ImBoolean(true);
 		this.showDemo = new ImBoolean(false);
@@ -135,7 +137,8 @@ public class GUIControls implements GuiInstance {
 
 			if (ImGui.beginMenu("Render Controls")) {
 				ImGui.checkbox("Wireframe", this.wireframe);
-				ImGui.checkbox("Filter Enabled", this.filterEnabled);
+				ImGui.listBox("Filter", selectedFilter,
+					Render.configuration.getFilterNames());
 				ImGui.endMenu();
 			}
 			ImGui.pushStyleColor(ImGuiCol.Text,
@@ -191,7 +194,7 @@ public class GUIControls implements GuiInstance {
 		imGuiIO.setMouseDown(0, mouseInput.isLeftButtonPressed());
 		imGuiIO.setMouseDown(1, mouseInput.isRightButtonPressed());
 		Render.configuration.setWireframe(this.wireframe.get());
-		Render.configuration.setFilter(this.filterEnabled.get());
+		Render.configuration.setSelectedFilter(selectedFilter.get());
 
 		boolean consumed =
 			imGuiIO.getWantCaptureMouse() || imGuiIO.getWantCaptureKeyboard();
