@@ -160,11 +160,8 @@ public class TagManager {
 	 */
 	public static boolean load() {
 		// Short-circuiting will stop execution if one fails
-		if (!TagManager.loadTags() || !TagManager.loadMaterials()
-			|| !TagManager.loadNouns()) {
-			return false;
-		}
-		return true;
+		return TagManager.loadTags() && TagManager.loadMaterials()
+			&& TagManager.loadNouns();
 	}
 
 	/**
