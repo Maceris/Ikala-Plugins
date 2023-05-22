@@ -8,11 +8,14 @@ import com.ikalagaming.scripting.IkalaScriptParser.CompilationUnitContext;
 import com.ikalagaming.scripting.ParserErrorListener;
 import com.ikalagaming.scripting.ast.AbstractSyntaxTree;
 import com.ikalagaming.scripting.ast.CompilationUnit;
+import com.ikalagaming.scripting.ast.visitors.NodeAnnotationPass;
 import com.ikalagaming.scripting.ast.visitors.OptimizationPass;
 import com.ikalagaming.scripting.ast.visitors.TreeValidator;
 import com.ikalagaming.scripting.ast.visitors.TypePreprocessor;
 import com.ikalagaming.scripting.interpreter.Instruction;
 import com.ikalagaming.scripting.interpreter.InstructionGenerator;
+import com.ikalagaming.scripting.interpreter.InstructionType;
+import com.ikalagaming.scripting.interpreter.MemArea;
 import com.ikalagaming.scripting.interpreter.MemLocation;
 import com.ikalagaming.scripting.interpreter.MemoryItem;
 import com.ikalagaming.scripting.interpreter.ScriptRuntime;
@@ -51,6 +54,14 @@ public class IkScriptDebugger implements GUIWindow {
 	 * @return The string form.
 	 */
 	private static String format(Instruction i) {
+		if (i.type() == InstructionType.CALL) {
+			String object =
+				i.firstLocation().area() == MemArea.IMMEDIATE ? "static."
+					: "object.";
+			return String.format("%s%s(%s)", object,
+				i.firstLocation().value().toString(),
+				i.secondLocation().value().toString());
+		}
 		return String.format("%s%s%s%s", i.type().toString(),
 			i.firstLocation() == null ? ""
 				: IkScriptDebugger.format(i.firstLocation()),
@@ -256,6 +267,9 @@ public class IkScriptDebugger implements GUIWindow {
 			OptimizationPass optimizer = new OptimizationPass();
 			optimizer.optimize(program);
 
+			NodeAnnotationPass annotator = new NodeAnnotationPass();
+			annotator.annotate(program);
+
 			InstructionGenerator gen = new InstructionGenerator();
 			gen.process(program);
 			this.ast.set(program.toString());
@@ -280,7 +294,11 @@ public class IkScriptDebugger implements GUIWindow {
 	public void setup(@NonNull Scene scene) {
 		this.scriptContents = new ImString(500);
 		this.ast = new ImString(2000);
-		this.scriptContents.set("for (int i = 0; i < 10; ++i){}");
+
+		String contents = """
+			for (int i = 0; i < 10; ++i) {}
+			""";
+		this.scriptContents.set(contents);
 		this.validator = new TreeValidator();
 		this.generator = new InstructionGenerator();
 
@@ -301,6 +319,5 @@ public class IkScriptDebugger implements GUIWindow {
 				GLFW.glfwSetClipboardString(windowHandle, str);
 			}
 		});
-
 	}
 }
