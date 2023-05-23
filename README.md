@@ -14,6 +14,7 @@ Each plugin will likely have it's own README, but below are high level descripti
 * `Ikala-Inventory` - An RPG inventory system, using items from the item plugin.
 * `Ikala-Item` - An extensible item plugin.
 * `Ikala-World` - A game world with maps and their contents.
+* `Language` -  Provides a natural language system for interacting with games
 * `Random` - Provides random generation utilities.
 * `TestPlugins` - An assortment of plugins for unit testing the Plugin Management system.
 * `RPG-GUI` - A Graphical User Interface relating to RPGs.
