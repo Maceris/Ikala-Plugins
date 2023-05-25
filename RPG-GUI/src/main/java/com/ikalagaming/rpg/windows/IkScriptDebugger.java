@@ -263,6 +263,8 @@ public class IkScriptDebugger implements GUIWindow {
 		TypePreprocessor processor = new TypePreprocessor();
 		processor.processTreeTypes(program);
 
+		List<Instruction> instructions;
+
 		if (this.validator.validate(program)) {
 			OptimizationPass optimizer = new OptimizationPass();
 			optimizer.optimize(program);
@@ -270,8 +272,7 @@ public class IkScriptDebugger implements GUIWindow {
 			NodeAnnotationPass annotator = new NodeAnnotationPass();
 			annotator.annotate(program);
 
-			InstructionGenerator gen = new InstructionGenerator();
-			gen.process(program);
+			instructions = this.generator.process(program);
 			this.ast.set(program.toString());
 		}
 		else {
@@ -279,7 +280,6 @@ public class IkScriptDebugger implements GUIWindow {
 			return;
 		}
 
-		List<Instruction> instructions = this.generator.process(program);
 		this.runtime = new ScriptRuntime(instructions);
 
 		this.instructionStrings = new ArrayList<>();
@@ -296,7 +296,11 @@ public class IkScriptDebugger implements GUIWindow {
 		this.ast = new ImString(2000);
 
 		String contents = """
-			for (int i = 0; i < 10; ++i) {}
+			int i= 0;
+			string result;
+			if (i % 3 == 0 && i % 5 == 0) {
+				result = "FizzBuzz";
+			}
 			""";
 		this.scriptContents.set(contents);
 		this.validator = new TreeValidator();
