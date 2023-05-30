@@ -77,13 +77,19 @@ Nouns inherit all the tags from the material and tags, with duplicate tags remov
 
 They have a couple of entries, at least one of which should be filled out.
 
+* `cases` - Differing cases of the noun, as key value pairs. The keys will be the name of the case, and the value is the string form for that case.
 * `material` - The material that the noun is primarily made of
+* `plural` - Keys from number to the word for plural forms. If we provide 2, then 2 or more will be referred to by that, there may be multiple numbers for languages that have multiple plural words for things.
 * `tags` - A list of tags that apply to the noun
 
 Here is an example structure.
 
 ```
 burger:
+  cases:
+    possessive: 'burger\'s'
+  plural:
+    2: 'burgers'
   tags:
     - 'food'
 gun:
@@ -97,3 +103,104 @@ sword:
 ### Verbs
 
 Verbs are structured in a YAML file format.
+
+
+### Pronouns
+
+Pronouns are structured in a YAML file format.
+
+We identify pronouns by Gender, Number, and Animation. The available grammatical genders are masculine, feminine, and neuter. Numbers are singular, and plural. Animations are animate and inanimate. This may not cover every language, but should be enough for the majority of common languages.
+
+The file is listed by pronoun, containing the following elements:
+
+* `GNAs` -  These are either
+    * A list of three letter representations of GNA in that order, like `asn` for animate, singular, and neuter or `ipm` for inanimate, plural, and masculine. 
+    * The value `all`, indicating any combination of gender, number, and animation are valid.
+
+Example:
+
+```
+it:
+  GNAs:
+    - ism
+    - isf
+    - isn
+him:
+  GNAs:
+    - asm
+her:
+  GNAs:
+    - asf
+them:
+  GNAs:
+    - asn
+    - apm
+    - apf
+    - apn
+    - ipm
+    - ipf
+    - ipn
+
+```
+
+### Descriptors
+
+Descriptors are used as determiners or articles, occurring with nouns and noun phrases to indicate ownership or reference.
+
+* `GNAs` -  These are either
+    * A list of three letter representations of GNA in that order, like `asn` for animate, singular, and neuter or `ipm` for inanimate, plural, and masculine. 
+    * The value `all`, indicating any combination of gender, number, and animation are valid.
+* `type` - One of
+    * `possessive` - used for possessive pronouns
+    * `definite` - used for definite articles
+    * `indefinite` - Used for indefinite articles
+* `owner` - The owner of the object this refers to, one of:
+    * `player` - Owned by the player
+    * `non_player` - Not owned by the player, but still posessive
+    * Any pronoun, such as `him` - Owned by the target of said pronoun
+    * `null` - Not relevant, usually articles
+
+Example:
+
+```
+my:
+  GNAs: all
+  type: possessive
+   owner: player
+these:
+  GNAs:
+    - apm
+    - apf
+    - apn
+    - ipm
+    - ipf
+    - ipn
+  type: possessive
+  owner: player
+that:
+  GNAs: all
+  type: possessive
+  owner: non_player
+his:
+  GNAs: all
+  type: possessive
+  owner: him
+her:
+  GNAs: all
+  type: possessive
+  owner: her
+the:
+  GNAs: all
+  type: definite
+  owner: null
+a:
+  GNAs:
+    - asm
+    - asf
+    - asn
+    - ism
+    - isf
+    - isn
+  type: indefinite
+  owner: null
+```
