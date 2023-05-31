@@ -17,7 +17,9 @@ import java.util.LinkedList;
 import java.util.List;
 
 /**
- * Information required to draw a dialogue window.
+ * Information required to draw a dialogue window. It is expected that only one
+ * script be interacting with dialogue at a time, and that there is only ever
+ * one on screen at a time at most.
  *
  * @author Ches Burks
  *
@@ -140,6 +142,7 @@ public class Dialogue {
 	 * Add a new user-selectable option to the window.
 	 *
 	 * @param text The text to show.
+	 * @see #getLastDialogueSelection()
 	 */
 	public static void option(@NonNull String text) {
 		Dialogue.options.add(text);
@@ -205,8 +208,8 @@ public class Dialogue {
 		ImGui.separator();
 		synchronized (Dialogue.options) {
 			for (int i = 0; i < Dialogue.options.size(); ++i) {
-				if (ImGui.selectable(String.format("option %d - %s", i + 1,
-					Dialogue.options.get(i)))) {
+				if (ImGui
+					.selectable(String.format("%s", Dialogue.options.get(i)))) {
 					Dialogue.lastDialogueSelection = i;
 					ScriptManager.resume("Dialogue");
 				}
