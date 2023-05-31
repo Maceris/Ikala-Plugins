@@ -6,6 +6,7 @@ import com.ikalagaming.scripting.IkalaScriptLexer;
 import com.ikalagaming.scripting.IkalaScriptParser;
 import com.ikalagaming.scripting.IkalaScriptParser.CompilationUnitContext;
 import com.ikalagaming.scripting.ParserErrorListener;
+import com.ikalagaming.scripting.ScriptManager;
 import com.ikalagaming.scripting.ast.AbstractSyntaxTree;
 import com.ikalagaming.scripting.ast.CompilationUnit;
 import com.ikalagaming.scripting.ast.visitors.NodeAnnotationPass;
@@ -159,6 +160,10 @@ public class IkScriptDebugger implements GUIWindow {
 			this.parse();
 		}
 		ImGui.sameLine();
+		if (ImGui.button("Execute in background")) {
+			ScriptManager.runScript(this.scriptContents.get());
+		}
+		ImGui.sameLine();
 		if (ImGui.button("Copy AST to clipboard")) {
 			ImGui.setClipboardText(this.ast.get());
 		}
@@ -292,15 +297,43 @@ public class IkScriptDebugger implements GUIWindow {
 
 	@Override
 	public void setup(@NonNull Scene scene) {
-		this.scriptContents = new ImString(500);
+		this.scriptContents = new ImString(5000);
 		this.ast = new ImString(2000);
 
 		String contents = """
-			int i= 0;
-			string result;
-			if (i % 3 == 0 && i % 5 == 0) {
-				result = "FizzBuzz";
+			clearDialogue();
+			leftChat("Hi!");
+			rightChat("... Oh");
+			option("okay");
+			option("stop trying to make fetch happen!");
+			showDialogue();
+			yield("Dialogue");
+			int choice = getLastDialogueSelection();
+			clearDialogue();
+
+			switch(choice) {
+				case 0:
+					goto okay;
+				case 1:
+					goto fetch;
+				default:
+					goto end;
 			}
+
+			okay:
+			rightChat("Okay.");
+			leftChat("Wow, rude");
+			goto end;
+
+			fetch:
+			rightChat("Stop trying to make fetch happen!");
+			leftChat("Don't tell me what to do, mom!");
+			goto end;
+
+			end:
+			option("Leave");
+			yield("Dialogue");
+			hideDialogue();
 			""";
 		this.scriptContents.set(contents);
 		this.validator = new TreeValidator();

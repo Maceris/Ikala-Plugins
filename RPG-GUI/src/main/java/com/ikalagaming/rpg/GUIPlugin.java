@@ -4,6 +4,7 @@ import com.ikalagaming.event.Listener;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
+import com.ikalagaming.scripting.ScriptManager;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -40,11 +41,6 @@ public class GUIPlugin extends Plugin {
 	private GUIEventListener listener;
 	private Set<Listener> listeners;
 
-	/**
-	 * You shouldn't be calling this manually.
-	 */
-	public GUIPlugin() {}
-
 	@Override
 	public Set<Listener> getListeners() {
 		if (this.listeners == null) {
@@ -59,6 +55,18 @@ public class GUIPlugin extends Plugin {
 	@Override
 	public String getName() {
 		return GUIPlugin.PLUGIN_NAME;
+	}
+
+	@Override
+	public boolean onDisable() {
+		ScriptManager.unregisterClass(Dialogue.class);
+		return true;
+	}
+
+	@Override
+	public boolean onEnable() {
+		ScriptManager.registerClass(Dialogue.class);
+		return true;
 	}
 
 	@Override

@@ -44,7 +44,6 @@ public class GUIControls implements GuiInstance {
 	private ImBoolean showIkScriptDebugger;
 	private ImBoolean showImageWindow;
 	private ImBoolean showLuaConsole;
-	private ImBoolean showDialogue;
 
 	private Texture itemTexture;
 
@@ -76,7 +75,6 @@ public class GUIControls implements GuiInstance {
 
 		this.showDebugWindow = new ImBoolean(true);
 		this.showDemo = new ImBoolean(false);
-		this.showDialogue = new ImBoolean(false);
 		this.showIkScriptDebugger = new ImBoolean(false);
 		this.showImageWindow = new ImBoolean(false);
 		this.showInventory = new ImBoolean(false);
@@ -109,7 +107,7 @@ public class GUIControls implements GuiInstance {
 	 * Clean up resources.
 	 */
 	void cleanup() {
-		if (this.itemTexture == null) {
+		if (this.itemTexture != null) {
 			this.itemTexture.cleanup();
 		}
 	}
@@ -131,13 +129,13 @@ public class GUIControls implements GuiInstance {
 				ImGui.checkbox("Ikala Script Debugger",
 					this.showIkScriptDebugger);
 				ImGui.checkbox("Lua Console", this.showLuaConsole);
-				ImGui.checkbox("Dialogue", this.showDialogue);
+				ImGui.checkbox("Dialogue", Dialogue.windowOpen);
 				ImGui.endMenu();
 			}
 
 			if (ImGui.beginMenu("Render Controls")) {
 				ImGui.checkbox("Wireframe", this.wireframe);
-				ImGui.listBox("Filter", selectedFilter,
+				ImGui.listBox("Filter", this.selectedFilter,
 					Render.configuration.getFilterNames());
 				ImGui.endMenu();
 			}
@@ -151,34 +149,7 @@ public class GUIControls implements GuiInstance {
 			ImGui.endMainMenuBar();
 		}
 
-		if (this.showDemo.get()) {
-			ImGui.showDemoWindow();
-		}
-		if (this.showDebugWindow.get()) {
-			this.windowDebug.draw();
-		}
-
-		if (this.showInventory.get()) {
-			this.windowInventory.draw();
-		}
-		if (this.showItemCatalog.get()) {
-			this.windowCatalog.draw();
-		}
-		if (this.showSceneControls.get()) {
-			this.windowSceneControls.draw();
-		}
-		if (this.showIkScriptDebugger.get()) {
-			this.ikScriptDebugger.draw();
-		}
-		if (this.showImageWindow.get()) {
-			this.windowImages.draw();
-		}
-		if (this.showLuaConsole.get()) {
-			this.windowLuaConsole.draw();
-		}
-		if (this.showDialogue.get()) {
-			Dialogue.renderWindow();
-		}
+		this.showWindows();
 
 		ImGui.endFrame();
 		ImGui.render();
@@ -194,7 +165,7 @@ public class GUIControls implements GuiInstance {
 		imGuiIO.setMouseDown(0, mouseInput.isLeftButtonPressed());
 		imGuiIO.setMouseDown(1, mouseInput.isRightButtonPressed());
 		Render.configuration.setWireframe(this.wireframe.get());
-		Render.configuration.setSelectedFilter(selectedFilter.get());
+		Render.configuration.setSelectedFilter(this.selectedFilter.get());
 
 		boolean consumed =
 			imGuiIO.getWantCaptureMouse() || imGuiIO.getWantCaptureKeyboard();
@@ -221,8 +192,8 @@ public class GUIControls implements GuiInstance {
 				.recalculateMaterials(GraphicsManager.getScene());
 			this.windowInventory.setItemTexture(this.itemTexture);
 		}
-		if (!dialogueSetUp) {
-			dialogueSetUp = true;
+		if (!this.dialogueSetUp) {
+			this.dialogueSetUp = true;
 			Dialogue.leftChat("Hi there!");
 			Dialogue.rightChat("Hello!");
 			Dialogue.centerText("You leave.");
@@ -239,6 +210,40 @@ public class GUIControls implements GuiInstance {
 				Dialogue.leftChat("Stop repeating yourself!");
 				Dialogue.rightChat(String.format("I am not x%d!", i));
 			}
+		}
+	}
+
+	/**
+	 * Render whichever windows are applicable.
+	 */
+	private void showWindows() {
+		if (this.showDemo.get()) {
+			ImGui.showDemoWindow();
+		}
+		if (this.showDebugWindow.get()) {
+			this.windowDebug.draw();
+		}
+
+		if (this.showInventory.get()) {
+			this.windowInventory.draw();
+		}
+		if (this.showItemCatalog.get()) {
+			this.windowCatalog.draw();
+		}
+		if (this.showSceneControls.get()) {
+			this.windowSceneControls.draw();
+		}
+		if (this.showIkScriptDebugger.get()) {
+			this.ikScriptDebugger.draw();
+		}
+		if (this.showImageWindow.get()) {
+			this.windowImages.draw();
+		}
+		if (this.showLuaConsole.get()) {
+			this.windowLuaConsole.draw();
+		}
+		if (Dialogue.windowOpen.get()) {
+			Dialogue.renderWindow();
 		}
 	}
 

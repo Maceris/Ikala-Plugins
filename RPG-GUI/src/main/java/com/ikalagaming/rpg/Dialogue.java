@@ -1,5 +1,7 @@
 package com.ikalagaming.rpg;
 
+import com.ikalagaming.scripting.ScriptManager;
+
 import imgui.ImGui;
 import imgui.ImVec2;
 import imgui.flag.ImGuiCol;
@@ -7,6 +9,7 @@ import imgui.flag.ImGuiCond;
 import imgui.flag.ImGuiStyleVar;
 import imgui.flag.ImGuiWindowFlags;
 import imgui.type.ImBoolean;
+import lombok.Getter;
 import lombok.NonNull;
 
 import java.util.Collections;
@@ -78,7 +81,15 @@ public class Dialogue {
 	/**
 	 * Whether the window is open.
 	 */
-	private static ImBoolean windowOpen = new ImBoolean(false);
+	static ImBoolean windowOpen = new ImBoolean(false);
+
+	/**
+	 * The last selection that was made.
+	 *
+	 * @return The last selection.
+	 */
+	@Getter
+	private static int lastDialogueSelection;
 
 	/**
 	 * Add a line of centered text, used to describe things like actions between
@@ -93,9 +104,13 @@ public class Dialogue {
 	/**
 	 * Clear out all of the lines and options, to prepare for a new window.
 	 */
-	public static void clearWindow() {
-		Dialogue.lines.clear();
-		Dialogue.options.clear();
+	public static void clearDialogue() {
+		synchronized (Dialogue.lines) {
+			Dialogue.lines.clear();
+		}
+		synchronized (Dialogue.options) {
+			Dialogue.options.clear();
+		}
 	}
 
 	/**
@@ -103,6 +118,13 @@ public class Dialogue {
 	 */
 	public static void divider() {
 		Dialogue.lines.add(new ChatLine(TextType.DIVIDER, ""));
+	}
+
+	/**
+	 * Hide the dialogue window.
+	 */
+	public static void hideDialogue() {
+		Dialogue.windowOpen.set(false);
 	}
 
 	/**
@@ -154,7 +176,6 @@ public class Dialogue {
 
 						ImGui.button(line.text);
 						ImGui.popStyleColor();
-						// ImGui.text(line.text);
 						break;
 					case CHAT_RIGHT:
 						width = ImGui.getContentRegionMaxX();
@@ -165,14 +186,13 @@ public class Dialogue {
 							1f);
 						ImGui.button(line.text);
 						ImGui.popStyleColor();
-						// ImGui.text(line.text);
+						break;
+					case DIVIDER:
+						ImGui.separator();
 						break;
 					case TEXT:
 					default:
 						ImGui.textWrapped(line.text);
-						break;
-					case DIVIDER:
-						ImGui.separator();
 						break;
 				}
 			}
@@ -185,8 +205,11 @@ public class Dialogue {
 		ImGui.separator();
 		synchronized (Dialogue.options) {
 			for (int i = 0; i < Dialogue.options.size(); ++i) {
-				ImGui.selectable(String.format("option %d - %s", i + 1,
-					Dialogue.options.get(i)));
+				if (ImGui.selectable(String.format("option %d - %s", i + 1,
+					Dialogue.options.get(i)))) {
+					Dialogue.lastDialogueSelection = i;
+					ScriptManager.resume("Dialogue");
+				}
 			}
 		}
 
@@ -203,6 +226,13 @@ public class Dialogue {
 	}
 
 	/**
+	 * Show the dialogue window.
+	 */
+	public static void showDialogue() {
+		Dialogue.windowOpen.set(true);
+	}
+
+	/**
 	 * Add a line of regular text, like context, scene description, etc.
 	 *
 	 * @param text The text to show.
@@ -210,5 +240,4 @@ public class Dialogue {
 	public static void text(@NonNull String text) {
 		Dialogue.lines.add(new ChatLine(TextType.TEXT, text));
 	}
-
 }
