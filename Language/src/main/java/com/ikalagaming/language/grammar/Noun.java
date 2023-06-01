@@ -16,4 +16,5 @@ import java.util.List;
  * @param tags Tags that are related to the noun, possibly in addition to those
  *            inherited from the material.
  */
-public record Noun(@NonNull String name, Material material, List<Tag> tags) {}
+public record Noun(@NonNull String name, Material material,
+	@NonNull List<Tag> tags) {}

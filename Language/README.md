@@ -109,7 +109,7 @@ Verbs are structured in a YAML file format.
 
 Pronouns are structured in a YAML file format.
 
-We identify pronouns by Gender, Number, and Animation. The available grammatical genders are masculine, feminine, and neuter. Numbers are singular, and plural. Animations are animate and inanimate. This may not cover every language, but should be enough for the majority of common languages.
+We identify pronouns by Gender, Number, and Animation (referred to as GNA). The available grammatical genders are masculine, feminine, and neuter. Numbers are singular, and plural. Animations are animate and inanimate. This may not cover every language, but should be enough for the majority of common languages.
 
 The file is listed by pronoun, containing the following elements:
 
@@ -156,7 +156,7 @@ Descriptors are used as determiners or articles, occurring with nouns and noun p
     * `indefinite` - Used for indefinite articles
 * `owner` - The owner of the object this refers to, one of:
     * `player` - Owned by the player
-    * `non_player` - Not owned by the player, but still posessive
+    * `non_player` - Not owned by the player, but still possessive
     * Any pronoun, such as `him` - Owned by the target of said pronoun
     * `null` - Not relevant, usually articles
 
