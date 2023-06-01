@@ -1,5 +1,24 @@
 # Language
 
+## Files
+
+There are several data files that need to be set up. Details about the contents are detailed elsewhere in this document, but here we will list out the files that will be required, located in the data folder for this plugin.
+
+When we say &lt;locale&gt; below, we mean a code that represents a language and country. The format would be a lowercase (ISO 639) language code, an underscore, then an uppercase (ISO 3166) country code. For example, `en_US`, or `fr_CA`. We look for a country code and language first, but if we can't find it, we will try to check for just the language like `en`.
+
+* `tags.yml` - Stores tags used to encode information about nouns
+* `tags_&lt;locale&gt;.txt` - Used to localize the tags
+* `materials.yml` - Specifies materials, used to group tags together
+* `nouns.yml` - Specifies what nouns exist in the game
+* `nouns_&lt;locale&gt;.txt` - Used to localize nouns
+* `verbs.yml` - Specifies which verbs are possible in the game
+* `verbs_&lt;locale&gt;.txt` - Used to localize verbs
+* `properties.yml` - Specifies properties that entities can have
+* `properties_&lt;locale&gt;.txt` - Used to localize properties
+* `grammar_&lt;locale&gt;.txt` - Specifies the grammar for this language
+* `pronouns_&lt;locale&gt;.txt` - Specifies the pronouns for this language
+* `descriptors_&lt;locale&gt;.txt` - Specifies descriptors for this language
+
 ## Tags
 
 Tags are structured in a simple YAML file format. Each tag is an entry in the YAML, with 
@@ -77,19 +96,13 @@ Nouns inherit all the tags from the material and tags, with duplicate tags remov
 
 They have a couple of entries, at least one of which should be filled out.
 
-* `cases` - Differing cases of the noun, as key value pairs. The keys will be the name of the case, and the value is the string form for that case.
 * `material` - The material that the noun is primarily made of
-* `plural` - Keys from number to the word for plural forms. If we provide 2, then 2 or more will be referred to by that, there may be multiple numbers for languages that have multiple plural words for things.
 * `tags` - A list of tags that apply to the noun
 
 Here is an example structure.
 
 ```
 burger:
-  cases:
-    possessive: 'burger\'s'
-  plural:
-    2: 'burgers'
   tags:
     - 'food'
 gun:
