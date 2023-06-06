@@ -81,9 +81,10 @@ public class ItemCatalogWindow implements GUIWindow {
 				if (ImGui.isItemClicked()) {
 					this.currentIndex = 0;
 				}
-				Affix affix =
-					this.catalog.getAffixes().get(this.currentIndex);
-				ItemRendering.drawAffix(affix);
+				List<Affix> affixes = this.catalog.getAffixes();
+				this.drawListButtons(affixes);
+				ImGui.sameLine();
+				ItemRendering.drawAffix(affixes.get(this.currentIndex));
 				ImGui.endTabItem();
 			}
 			if (ImGui.isItemClicked()) {
@@ -189,7 +190,7 @@ public class ItemCatalogWindow implements GUIWindow {
 	 * @param <T> The type of items we are choosing from.
 	 * @param items The list of items we are choosing from.
 	 */
-	private <T extends Item> void drawListButtons(List<T> items) {
+	private <T> void drawListButtons(List<T> items) {
 		final int maxIndex = items.size() - 1;
 
 		final boolean decreaseDisabled = this.currentIndex <= 0;

@@ -39,6 +39,42 @@ import imgui.ImGui;
  */
 public class ItemRendering {
 	/**
+	 * The color to use for common items names or borders.
+	 */
+	private static final int COLOR_COMMON =
+		ImGui.colorConvertFloat4ToU32(1f, 1f, 1f, 1f);
+
+	/**
+	 * The color to use for epic items names or borders.
+	 */
+	private static final int COLOR_EPIC =
+		ImGui.colorConvertFloat4ToU32(1f, 0.6f, 0f, 1f);
+
+	/**
+	 * The color to use for legendary items names or borders.
+	 */
+	private static final int COLOR_LEGENDARY =
+		ImGui.colorConvertFloat4ToU32(1f, 0f, 1f, 1f);
+
+	/**
+	 * The color to use for magic items names or borders.
+	 */
+	private static final int COLOR_MAGIC =
+		ImGui.colorConvertFloat4ToU32(1f, 0.9f, 0f, 1f);
+
+	/**
+	 * The color to use for rare items names or borders.
+	 */
+	private static final int COLOR_RARE =
+		ImGui.colorConvertFloat4ToU32(0.3f, 0.3f, 1f, 1f);
+
+	/**
+	 * The color to use for trash items names or borders.
+	 */
+	private static final int COLOR_TRASH =
+		ImGui.colorConvertFloat4ToU32(0.3f, 0.3f, 0.3f, 1f);
+
+	/**
 	 * Draw details for an accessory.
 	 *
 	 * @param accessory The accessory to draw details for.
@@ -74,12 +110,21 @@ public class ItemRendering {
 			affix.getID());
 		ImGui.text("Quality: ");
 		ImGui.sameLine();
-		ImGui.textColored(ItemRendering.getQualityColor(affix.getQuality()),
-			affix.getQuality().toString());
+		if (affix.getQuality() != null) {
+			ImGui.textColored(ItemRendering.getQualityColor(affix.getQuality()),
+				affix.getQuality().toString());
+		}
+		else {
+			ImGui.text("(missing)");
+		}
 		ImGui.text("Affix Type: " + affix.getAffixType().toString());
 		ImGui.text("Level Requirement: " + affix.getLevelRequirement());
-		ItemRendering.drawItemStats(affix.getItemStats());
-		ItemRendering.drawItemCriteria(affix.getItemCriteria());
+		if (affix.getItemStats() != null) {
+			ItemRendering.drawItemStats(affix.getItemStats());
+		}
+		if (affix.getItemCriteria() != null) {
+			ItemRendering.drawItemCriteria(affix.getItemCriteria());
+		}
 	}
 
 	/**
@@ -411,20 +456,23 @@ public class ItemRendering {
 	 * @return The associated color for names or borders.
 	 */
 	public static int getQualityColor(Quality quality) {
+		if (quality == null) {
+			return ItemRendering.COLOR_COMMON;
+		}
 		switch (quality) {
 			case COMMON:
-				return ImGui.colorConvertFloat4ToU32(1f, 1f, 1f, 1f);
+				return ItemRendering.COLOR_COMMON;
 			case EPIC:
-				return ImGui.colorConvertFloat4ToU32(1f, 0.6f, 0f, 1f);
+				return ItemRendering.COLOR_EPIC;
 			case LEGENDARY:
-				return ImGui.colorConvertFloat4ToU32(1f, 0f, 1f, 1f);
+				return ItemRendering.COLOR_LEGENDARY;
 			case MAGIC:
-				return ImGui.colorConvertFloat4ToU32(1f, 0.9f, 0f, 1f);
+				return ItemRendering.COLOR_MAGIC;
 			case RARE:
-				return ImGui.colorConvertFloat4ToU32(0.3f, 0.3f, 1f, 1f);
+				return ItemRendering.COLOR_RARE;
 			case TRASH:
 			default:
-				return ImGui.colorConvertFloat4ToU32(0.3f, 0.3f, 0.3f, 1f);
+				return ItemRendering.COLOR_TRASH;
 		}
 	}
 
