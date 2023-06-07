@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.scene.lights.PointLight;
+import com.ikalagaming.graphics.scene.lights.SpotLight;
 import com.ikalagaming.plugins.events.AllPluginsEnabled;
 import com.ikalagaming.world.Level;
 import com.ikalagaming.world.WorldManager;
@@ -186,7 +187,69 @@ public class GeneralListener implements Listener {
 
 	}
 
-	private void createLight(MapObject object) {
+	private void createSpotLight(MapObject object) {
+		Properties props = object.getProperties();
+
+		String pointLightString = props.getProperty("Point Light");
+
+		CustomClass pointLightInfo =
+			GeneralListener.gson.fromJson(pointLightString, CustomClass.class);
+
+		Optional<Member> maybePos = pointLightInfo.getMember("Position");
+
+		Vector3f position = new Vector3f();
+		if (maybePos.isPresent()) {
+			CustomClass posMember = maybePos.get().getChild();
+			position.set(posMember.getFloat("X"), posMember.getFloat("Y"),
+				posMember.getFloat("Z"));
+		}
+		position.x *= 2f;
+		position.y *= 2f;
+		position.z *= 2f;
+
+		// Swap z and y coordinates because opengl is weird
+		float temp = position.z;
+		position.z = position.y;
+		position.y = temp;
+
+		PointLight pointLight = new PointLight(
+			GeneralListener.toVector3f(pointLightInfo.getColor("Color")),
+			position, pointLightInfo.getFloat("Intensity"));
+		
+		float cutoff = 360f;
+
+		String cutoffString = props.getProperty("Cutoff Angle");
+		if (cutoffString != null) {
+			cutoff = Float.parseFloat(cutoffString);
+		}
+
+		String posString = props.getProperty("Cone Direction");
+
+		Optional<Member> dirMember;
+		if (posString == null) {
+			dirMember = Optional.empty();
+		}
+		else {
+			CustomClass dir =
+				GeneralListener.gson.fromJson(posString, CustomClass.class);
+			Member fakeParent =
+				new Member(dir.getName(), "class", "Cone Direction");
+			fakeParent.setChild(dir);
+			dirMember = Optional.of(fakeParent);
+		}
+
+		Vector3f direction = GeneralListener.toVector3f(dirMember);
+		SpotLight light = new SpotLight(pointLight, direction, cutoff);
+
+		GeneralListener.log.debug(
+			"Created a spot light at ({}, {}, {}), with direction ({}, {}, {}), angle {}, and intensity {}",
+			pointLight.getPosition().x, pointLight.getPosition().y,
+			pointLight.getPosition().z, direction.x, direction.y, direction.z,
+			cutoff, pointLight.getIntensity());
+		GraphicsManager.getScene().getSceneLights().getSpotLights().add(light);
+	}
+
+	private void createPointLight(MapObject object) {
 		Properties props = object.getProperties();
 
 		String colorString = props.getProperty("Color");
@@ -208,9 +271,11 @@ public class GeneralListener implements Listener {
 
 		PointLight light = new PointLight(GeneralListener.toVector3f(color),
 			position, intensity);
+
 		GeneralListener.log.debug(
-			"Created a light at ({}, {}, {}), with intensity {}", position.x,
-			position.y, position.z, intensity);
+			"Created a point light at ({}, {}, {}), with intensity {}",
+			position.x, position.y, position.z, light.getIntensity());
+
 		GraphicsManager.getScene().getSceneLights().getPointLights().add(light);
 	}
 
@@ -297,7 +362,7 @@ public class GeneralListener implements Listener {
 		GraphicsManager.getScene().addModel(model);
 
 		ModelLoader.loadModelLater(new ModelLoader.ModelLoadRequest("player",
-			RPGPlugin.PLUGIN_NAME, "models/characters/human_male.md5mesh",
+			RPGPlugin.PLUGIN_NAME, "models/characters/stickman.obj",
 			GraphicsManager.getScene().getTextureCache(),
 			GraphicsManager.getScene().getMaterialCache(), true));
 
@@ -362,7 +427,7 @@ public class GeneralListener implements Listener {
 			GeneralListener.log.warn("Loading invalid level!");
 			return;
 		}
-		Level level = WorldManager.getInstance().getCurrentLevel().get();
+		Level level = maybeLevel.get();
 
 		Map map = level.getMap();
 
@@ -374,13 +439,15 @@ public class GeneralListener implements Listener {
 		for (int z = 0; z < map.getLayerCount(); ++z) {
 			MapLayer genericLayer = map.getLayer(z);
 
-			if (genericLayer instanceof ObjectGroup) {
+			if (genericLayer instanceof ObjectGroup group) {
 				GeneralListener.log.debug("We have an object group.");
-				ObjectGroup group = (ObjectGroup) genericLayer;
 
 				for (MapObject object : group.getObjects()) {
 					if ("Point Light".equals(object.getClassValue())) {
-						this.createLight(object);
+						this.createPointLight(object);
+					}
+					else if ("Spot Light".equals(object.getClassValue())) {
+						this.createSpotLight(object);
 					}
 					else if ("Spawn".equals(object.getName())) {
 						Vector3f position =
@@ -388,11 +455,7 @@ public class GeneralListener implements Listener {
 						Entity player = new Entity(
 							"player_" + Entity.NEXT_ID.getAndIncrement(),
 							"player");
-						player.setScale(0.6f);
-						player.setRotation(1f, 0f, 0f,
-							(float) -Math.toRadians(90));
-						player.addRotation(0f, 1f, 0f,
-							(float) Math.toRadians(90));
+						player.setScale(0.4f);
 						player.setPosition(position.x, position.y, position.z);
 						player.updateModelMatrix();
 						GraphicsManager.getScene().addEntity(player);
@@ -404,9 +467,8 @@ public class GeneralListener implements Listener {
 				}
 				continue;
 			}
-			if (genericLayer instanceof TileLayer) {
-				this.loadTileLayer(map, (TileLayer) genericLayer, z);
-				continue;
+			if (genericLayer instanceof TileLayer tileLayer) {
+				this.loadTileLayer(map, tileLayer, z);
 			}
 		}
 		GraphicsManager.refreshRenderData();
