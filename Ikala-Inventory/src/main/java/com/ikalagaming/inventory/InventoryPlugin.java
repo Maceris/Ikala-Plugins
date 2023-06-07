@@ -65,5 +65,4 @@ public class InventoryPlugin extends Plugin {
 		}
 		return true;
 	}
-
 }

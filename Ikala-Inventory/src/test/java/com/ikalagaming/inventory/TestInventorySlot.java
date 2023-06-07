@@ -15,8 +15,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.Optional;
-
 /**
  * Tests for Item Stacks.
  *
@@ -49,133 +47,226 @@ class TestInventorySlot {
 
 	/**
 	 * Test the {@link InventorySlot#combine(InventorySlot, InventorySlot)}
-	 * method.
+	 * method for when we can transfer a whole stack.
 	 */
 	@Test
-	void testCombine() {
+	void testCombineCompleteTransfer() {
+		Item firstItem = new Junk();
+		firstItem.setID("Item ID");
+		ItemStack firstStack = new ItemStack(firstItem, 2);
+		InventorySlot firstSlot = new InventorySlot();
+		firstSlot.setItemStack(firstStack);
+
+		Item secondItem = new Junk();
+		secondItem.setID("Item ID");
+		ItemStack secondStack =
+			new ItemStack(secondItem, InvUtil.maxStackSize(secondItem));
+		InventorySlot secondSlot = new InventorySlot();
+		secondSlot.setItemStack(secondStack);
+
+		firstStack.setCount(4);
+		secondStack.setCount(2);
+		Assertions.assertTrue(InventorySlot.combine(firstSlot, secondSlot));
+		Assertions.assertEquals(0, firstSlot.getCount());
+		Assertions.assertTrue(firstSlot.isEmpty());
+		Assertions.assertNull(firstSlot.getItemStack());
+		Assertions.assertEquals(6, secondSlot.getCount());
+		Assertions.assertFalse(secondSlot.isEmpty());
+		Assertions.assertNotNull(secondSlot.getItemStack());
+		Assertions.assertEquals(secondSlot.getItemStack().getItem().getID(),
+			secondItem.getID());
+	}
+
+	/**
+	 * Test the {@link InventorySlot#combine(InventorySlot, InventorySlot)}
+	 * method for when we are trying to combine different types of items.
+	 */
+	@Test
+	void testCombineDifferentTypes() {
+		Item firstItem = new Junk();
+		firstItem.setID("Item ID");
+		ItemStack firstStack = new ItemStack(firstItem, 2);
+		InventorySlot firstSlot = new InventorySlot();
+		firstSlot.setItemStack(firstStack);
+
+		Item secondItem = new Material();
+		secondItem.setID("Another ID");
+		ItemStack secondStack = new ItemStack(secondItem, 5);
+		InventorySlot secondSlot = new InventorySlot();
+		secondSlot.setItemStack(secondStack);
+		Assertions.assertFalse(InventorySlot.combine(firstSlot, secondSlot));
+		Assertions.assertEquals(2, firstSlot.getCount());
+		Assertions.assertFalse(firstSlot.isEmpty());
+		Assertions.assertNotNull(firstSlot.getItemStack());
+		Assertions.assertEquals(firstSlot.getItemStack().getItem().getID(),
+			firstItem.getID());
+		Assertions.assertEquals(5, secondSlot.getCount());
+		Assertions.assertFalse(secondSlot.isEmpty());
+		Assertions.assertNotNull(secondSlot.getItemStack());
+		Assertions.assertEquals(secondSlot.getItemStack().getItem().getID(),
+			secondItem.getID());
+	}
+
+	/**
+	 * Test the {@link InventorySlot#combine(InventorySlot, InventorySlot)}
+	 * method for when we have an empty destination.
+	 */
+	@Test
+	void testCombineEmptyDestination() {
 		Item firstItem = new Junk();
 		firstItem.setID("Item ID");
 		ItemStack firstStack = new ItemStack(firstItem, 1);
 		InventorySlot firstSlot = new InventorySlot();
 		firstSlot.setItemStack(firstStack);
 
+		InventorySlot secondSlot = new InventorySlot();
+
+		Assertions.assertTrue(InventorySlot.combine(firstSlot, secondSlot));
+		Assertions.assertEquals(1, secondSlot.getCount());
+		Assertions.assertFalse(secondSlot.isEmpty());
+		Assertions.assertNotNull(secondSlot.getItemStack());
+		Assertions.assertEquals(secondSlot.getItemStack().getItem().getID(),
+			firstItem.getID());
+		Assertions.assertTrue(firstSlot.isEmpty());
+		Assertions.assertEquals(0, firstSlot.getCount());
+	}
+
+	/**
+	 * Test the {@link InventorySlot#combine(InventorySlot, InventorySlot)}
+	 * method for when we have an empty source slot.
+	 */
+	@Test
+	void testCombineEmptySource() {
+		Item firstItem = new Junk();
+		firstItem.setID("Item ID");
+		ItemStack firstStack = new ItemStack(firstItem, 1);
+		InventorySlot firstSlot = new InventorySlot();
+		firstSlot.setItemStack(firstStack);
+
+		InventorySlot secondSlot = new InventorySlot();
+		Assertions.assertTrue(InventorySlot.combine(secondSlot, firstSlot));
+		Assertions.assertEquals(1, firstStack.getCount());
+		Assertions.assertFalse(firstSlot.isEmpty());
+		Assertions.assertNotNull(firstSlot.getItemStack());
+		Assertions.assertEquals(firstSlot.getItemStack().getItem().getID(),
+			firstItem.getID());
+	}
+
+	/**
+	 * Test the {@link InventorySlot#combine(InventorySlot, InventorySlot)}
+	 * method for when we have a full destination.
+	 */
+	@Test
+	void testCombineFullDestination() {
+		Item firstItem = new Junk();
+		firstItem.setID("Item ID");
+		ItemStack firstStack = new ItemStack(firstItem, 2);
+		InventorySlot firstSlot = new InventorySlot();
+		firstSlot.setItemStack(firstStack);
+
 		Item secondItem = new Junk();
 		secondItem.setID("Item ID");
-		ItemStack secondStack = new ItemStack(secondItem, 2);
+		ItemStack secondStack =
+			new ItemStack(secondItem, InvUtil.maxStackSize(secondItem));
 		InventorySlot secondSlot = new InventorySlot();
 		secondSlot.setItemStack(secondStack);
 
-		Accessory differentItem = new Accessory();
-		differentItem.setID("Not Stackable");
-		InventorySlot differentSlot = new InventorySlot();
-		differentSlot.setItem(differentItem);
+		Assertions.assertFalse(InventorySlot.combine(firstSlot, secondSlot));
+		Assertions.assertEquals(2, firstSlot.getCount());
+		Assertions.assertFalse(firstSlot.isEmpty());
+		Assertions.assertNotNull(firstSlot.getItemStack());
+		Assertions.assertEquals(firstSlot.getItemStack().getItem().getID(),
+			firstItem.getID());
+		Assertions.assertEquals(InvUtil.maxStackSize(secondItem),
+			secondSlot.getCount());
+		Assertions.assertFalse(secondSlot.isEmpty());
+		Assertions.assertNotNull(secondSlot.getItemStack());
+		Assertions.assertEquals(secondSlot.getItemStack().getItem().getID(),
+			secondItem.getID());
+	}
 
-		// same object
+	/**
+	 * Test the {@link InventorySlot#combine(InventorySlot, InventorySlot)}
+	 * method for non-stackable items.
+	 */
+	@Test
+	void testCombineNonStackables() {
+		Item firstItem = new Junk();
+		firstItem.setID("Item ID");
+		ItemStack firstStack = new ItemStack(firstItem, 2);
+		InventorySlot firstSlot = new InventorySlot();
+		firstSlot.setItemStack(firstStack);
+
+		Accessory secondItem = new Accessory();
+		secondItem.setID("Not Stackable");
+		InventorySlot secondSlot = new InventorySlot();
+		secondSlot.setItem(secondItem);
+
+		Assertions.assertFalse(InventorySlot.combine(firstSlot, secondSlot));
+		Assertions.assertEquals(2, firstSlot.getCount());
+		Assertions.assertFalse(firstSlot.isEmpty());
+		Assertions.assertNotNull(firstSlot.getItemStack());
+		Assertions.assertEquals(firstSlot.getItemStack().getItem().getID(),
+			firstItem.getID());
+		Assertions.assertFalse(secondSlot.isEmpty());
+		Assertions.assertNotNull(secondSlot.getItem());
+		Assertions.assertEquals(secondItem.getID(),
+			secondSlot.getItem().getID());
+	}
+
+	/**
+	 * Test the {@link InventorySlot#combine(InventorySlot, InventorySlot)}
+	 * method for when we can only partially transfer items.
+	 */
+	@Test
+	void testCombinePartialTransfer() {
+		Item firstItem = new Junk();
+		firstItem.setID("Item ID");
+		ItemStack firstStack = new ItemStack(firstItem, 2);
+		InventorySlot firstSlot = new InventorySlot();
+		firstSlot.setItemStack(firstStack);
+
+		Item secondItem = new Junk();
+		secondItem.setID("Item ID");
+		ItemStack secondStack =
+			new ItemStack(secondItem, InvUtil.maxStackSize(secondItem));
+		InventorySlot secondSlot = new InventorySlot();
+		secondSlot.setItemStack(secondStack);
+
+		firstStack.setCount(5);
+		secondStack.setCount(InvUtil.maxStackSize(secondItem) - 2);
+		Assertions.assertFalse(InventorySlot.combine(firstSlot, secondSlot));
+		Assertions.assertEquals(3, firstSlot.getCount());
+		Assertions.assertFalse(firstSlot.isEmpty());
+		Assertions.assertNotNull(firstSlot.getItemStack());
+		Assertions.assertEquals(firstSlot.getItemStack().getItem().getID(),
+			firstItem.getID());
+		Assertions.assertEquals(InvUtil.maxStackSize(secondItem),
+			secondSlot.getCount());
+		Assertions.assertFalse(secondSlot.isEmpty());
+		Assertions.assertNotNull(secondSlot.getItemStack());
+		Assertions.assertEquals(secondSlot.getItemStack().getItem().getID(),
+			secondItem.getID());
+	}
+
+	/**
+	 * Test the {@link InventorySlot#combine(InventorySlot, InventorySlot)}
+	 * method for when we try and transfer a stack to itself.
+	 */
+	@Test
+	void testCombineSameObject() {
+		Item firstItem = new Junk();
+		firstItem.setID("Item ID");
+		ItemStack firstStack = new ItemStack(firstItem, 1);
+		InventorySlot firstSlot = new InventorySlot();
+		firstSlot.setItemStack(firstStack);
+
 		Assertions.assertFalse(InventorySlot.combine(firstSlot, firstSlot));
 		Assertions.assertEquals(1, firstStack.getCount());
 		Assertions.assertFalse(firstSlot.isEmpty());
-		Assertions.assertTrue(firstSlot.getItemStack().isPresent());
-		Assertions.assertTrue(firstSlot.getItemStack().get().getItem().getID()
-			.equals(firstItem.getID()));
-
-		// source empty
-		InventorySlot thirdSlot = new InventorySlot();
-		Assertions.assertTrue(InventorySlot.combine(thirdSlot, firstSlot));
-		Assertions.assertEquals(1, firstStack.getCount());
-		Assertions.assertFalse(firstSlot.isEmpty());
-		Assertions.assertTrue(firstSlot.getItemStack().isPresent());
-		Assertions.assertTrue(firstSlot.getItemStack().get().getItem().getID()
-			.equals(firstItem.getID()));
-
-		// destination empty
-		Assertions.assertTrue(InventorySlot.combine(firstSlot, thirdSlot));
-		Assertions.assertEquals(1, thirdSlot.getCount());
-		Assertions.assertFalse(thirdSlot.isEmpty());
-		Assertions.assertTrue(thirdSlot.getItemStack().isPresent());
-		Assertions.assertTrue(thirdSlot.getItemStack().get().getItem().getID()
-			.equals(firstItem.getID()));
-		Assertions.assertTrue(firstSlot.isEmpty());
-		Assertions.assertEquals(0, firstSlot.getCount());
-
-		// either one not stackable
-		Assertions
-			.assertFalse(InventorySlot.combine(secondSlot, differentSlot));
-		Assertions.assertEquals(2, secondSlot.getCount());
-		Assertions.assertFalse(secondSlot.isEmpty());
-		Assertions.assertTrue(secondSlot.getItemStack().isPresent());
-		Assertions.assertTrue(secondSlot.getItemStack().get().getItem().getID()
-			.equals(secondItem.getID()));
-		Assertions.assertFalse(differentSlot.isEmpty());
-		Assertions.assertTrue(differentSlot.getItem().isPresent());
-		Assertions.assertTrue(differentItem.getID()
-			.equals(differentSlot.getItem().get().getID()));
-
-		// different item types
-		Item fourthItem = new Material();
-		fourthItem.setID("Another ID");
-		ItemStack fourthStack = new ItemStack(fourthItem, 5);
-		InventorySlot fourthSlot = new InventorySlot();
-		fourthSlot.setItemStack(fourthStack);
-		Assertions.assertFalse(InventorySlot.combine(secondSlot, fourthSlot));
-		Assertions.assertEquals(2, secondSlot.getCount());
-		Assertions.assertFalse(secondSlot.isEmpty());
-		Assertions.assertTrue(secondSlot.getItemStack().isPresent());
-		Assertions.assertTrue(secondSlot.getItemStack().get().getItem().getID()
-			.equals(secondItem.getID()));
-		Assertions.assertEquals(5, fourthSlot.getCount());
-		Assertions.assertFalse(fourthSlot.isEmpty());
-		Assertions.assertTrue(fourthSlot.getItemStack().isPresent());
-		Assertions.assertTrue(fourthSlot.getItemStack().get().getItem().getID()
-			.equals(fourthItem.getID()));
-
-		// destination full
-		Item fifthItem = new Junk();
-		fifthItem.setID("Item ID");
-		ItemStack fifthStack =
-			new ItemStack(fifthItem, InvUtil.maxStackSize(fifthItem));
-		InventorySlot fifthSlot = new InventorySlot();
-		fifthSlot.setItemStack(fifthStack);
-		Assertions.assertFalse(InventorySlot.combine(secondSlot, fifthSlot));
-		Assertions.assertEquals(2, secondSlot.getCount());
-		Assertions.assertFalse(secondSlot.isEmpty());
-		Assertions.assertTrue(secondSlot.getItemStack().isPresent());
-		Assertions.assertTrue(secondSlot.getItemStack().get().getItem().getID()
-			.equals(secondItem.getID()));
-		Assertions.assertEquals(InvUtil.maxStackSize(fifthItem),
-			fifthSlot.getCount());
-		Assertions.assertFalse(fifthSlot.isEmpty());
-		Assertions.assertTrue(fifthSlot.getItemStack().isPresent());
-		Assertions.assertTrue(fifthSlot.getItemStack().get().getItem().getID()
-			.equals(fifthItem.getID()));
-
-		// partial transfer
-		secondStack.setCount(5);
-		fifthStack.setCount(InvUtil.maxStackSize(fifthItem) - 2);
-		Assertions.assertFalse(InventorySlot.combine(secondSlot, fifthSlot));
-		Assertions.assertEquals(3, secondSlot.getCount());
-		Assertions.assertFalse(secondSlot.isEmpty());
-		Assertions.assertTrue(secondSlot.getItemStack().isPresent());
-		Assertions.assertTrue(secondSlot.getItemStack().get().getItem().getID()
-			.equals(secondItem.getID()));
-		Assertions.assertEquals(InvUtil.maxStackSize(fifthItem),
-			fifthSlot.getCount());
-		Assertions.assertFalse(fifthSlot.isEmpty());
-		Assertions.assertTrue(fifthSlot.getItemStack().isPresent());
-		Assertions.assertTrue(fifthSlot.getItemStack().get().getItem().getID()
-			.equals(fifthItem.getID()));
-
-		// complete transfer
-		secondStack.setCount(4);
-		fifthStack.setCount(2);
-		Assertions.assertTrue(InventorySlot.combine(secondSlot, fifthSlot));
-		Assertions.assertEquals(0, secondSlot.getCount());
-		Assertions.assertTrue(secondSlot.isEmpty());
-		Assertions.assertTrue(secondSlot.getItemStack().isEmpty());
-		Assertions.assertEquals(6, fifthSlot.getCount());
-		Assertions.assertFalse(fifthSlot.isEmpty());
-		Assertions.assertTrue(fifthSlot.getItemStack().isPresent());
-		Assertions.assertTrue(fifthSlot.getItemStack().get().getItem().getID()
-			.equals(fifthItem.getID()));
+		Assertions.assertNotNull(firstSlot.getItemStack());
+		Assertions.assertEquals(firstSlot.getItemStack().getItem().getID(),
+			firstItem.getID());
 	}
 
 	/**
@@ -208,38 +299,33 @@ class TestInventorySlot {
 	void testGetItem() {
 		InventorySlot slot = new InventorySlot();
 
-		Optional<Item> maybeItem;
+		Item item;
 
-		maybeItem = slot.getItem();
-		Assertions.assertNotNull(maybeItem);
-		Assertions.assertTrue(maybeItem.isEmpty());
+		item = slot.getItem();
+		Assertions.assertNull(item);
 
 		Material material = new Material();
 		material.setID("Material ID");
 		ItemStack stack = new ItemStack(material, 4);
 		slot.setItemStack(stack);
-		maybeItem = slot.getItem();
-		Assertions.assertNotNull(maybeItem);
-		Assertions.assertTrue(maybeItem.isPresent());
-		Assertions.assertEquals(material.getID(), maybeItem.get().getID());
+		item = slot.getItem();
+		Assertions.assertNotNull(item);
+		Assertions.assertEquals(material.getID(), item.getID());
 
 		slot.clear();
-		maybeItem = slot.getItem();
-		Assertions.assertNotNull(maybeItem);
-		Assertions.assertTrue(maybeItem.isEmpty());
+		item = slot.getItem();
+		Assertions.assertNull(item);
 
 		Armor armor = new Armor();
 		armor.setID("Armor ID");
 		slot.setItem(armor);
-		maybeItem = slot.getItem();
-		Assertions.assertNotNull(maybeItem);
-		Assertions.assertTrue(maybeItem.isPresent());
-		Assertions.assertEquals(armor.getID(), maybeItem.get().getID());
+		item = slot.getItem();
+		Assertions.assertNotNull(item);
+		Assertions.assertEquals(armor.getID(), item.getID());
 
 		slot.clear();
-		maybeItem = slot.getItem();
-		Assertions.assertNotNull(maybeItem);
-		Assertions.assertTrue(maybeItem.isEmpty());
+		item = slot.getItem();
+		Assertions.assertNull(item);
 	}
 
 	/**
@@ -249,39 +335,33 @@ class TestInventorySlot {
 	void testGetItemStack() {
 		InventorySlot slot = new InventorySlot();
 
-		Optional<ItemStack> maybeItemStack;
+		ItemStack itemStack;
 
-		maybeItemStack = slot.getItemStack();
-		Assertions.assertNotNull(maybeItemStack);
-		Assertions.assertTrue(maybeItemStack.isEmpty());
+		itemStack = slot.getItemStack();
+		Assertions.assertNull(itemStack);
 
 		Material material = new Material();
 		material.setID("Material ID");
 		ItemStack stack = new ItemStack(material, 4);
 		slot.setItemStack(stack);
-		maybeItemStack = slot.getItemStack();
-		Assertions.assertNotNull(maybeItemStack);
-		Assertions.assertTrue(maybeItemStack.isPresent());
-		ItemStack stored = maybeItemStack.get();
-		Assertions.assertTrue(ItemStack.isSameType(stack, stored));
-		Assertions.assertTrue(stack.equals(stored));
+		itemStack = slot.getItemStack();
+		Assertions.assertNotNull(itemStack);
+		Assertions.assertTrue(ItemStack.isSameType(stack, itemStack));
+		Assertions.assertEquals(stack, itemStack);
 
 		slot.clear();
-		maybeItemStack = slot.getItemStack();
-		Assertions.assertNotNull(maybeItemStack);
-		Assertions.assertTrue(maybeItemStack.isEmpty());
+		itemStack = slot.getItemStack();
+		Assertions.assertNull(itemStack);
 
 		Armor armor = new Armor();
 		armor.setID("Armor ID");
 		slot.setItem(armor);
-		maybeItemStack = slot.getItemStack();
-		Assertions.assertNotNull(maybeItemStack);
-		Assertions.assertTrue(maybeItemStack.isEmpty());
+		itemStack = slot.getItemStack();
+		Assertions.assertNull(itemStack);
 
 		slot.clear();
-		maybeItemStack = slot.getItemStack();
-		Assertions.assertNotNull(maybeItemStack);
-		Assertions.assertTrue(maybeItemStack.isEmpty());
+		itemStack = slot.getItemStack();
+		Assertions.assertNull(itemStack);
 	}
 
 	/**
@@ -345,14 +425,14 @@ class TestInventorySlot {
 		Assertions.assertFalse(secondSlot.isEmpty());
 		Assertions.assertTrue(secondSlot.isStackable());
 		Assertions.assertFalse(firstSlot.isStackable());
-		Assertions.assertTrue(
-			firstSlot.getItem().get().getID().equals(secondItem.getID()));
-		Assertions.assertTrue(
-			secondSlot.getItem().get().getID().equals(firstItem.getID()));
-		Assertions.assertTrue(firstSlot.getItemStack().isEmpty());
-		Assertions.assertTrue(secondSlot.getItemStack().isPresent());
-		Assertions.assertTrue(secondSlot.getItemStack().get().getItem().getID()
-			.equals(firstItem.getID()));
+		Assertions.assertEquals(firstSlot.getItem().getID(),
+			secondItem.getID());
+		Assertions.assertEquals(secondSlot.getItem().getID(),
+			firstItem.getID());
+		Assertions.assertNull(firstSlot.getItemStack());
+		Assertions.assertNotNull(secondSlot.getItemStack());
+		Assertions.assertEquals(secondSlot.getItemStack().getItem().getID(),
+			firstItem.getID());
 
 		// swap back to be less confusing
 		InventorySlot.swapContents(firstSlot, secondSlot);
@@ -364,11 +444,10 @@ class TestInventorySlot {
 		Assertions.assertFalse(emptySlot.isEmpty());
 		Assertions.assertFalse(firstSlot.isStackable());
 		Assertions.assertTrue(emptySlot.isStackable());
-		Assertions.assertTrue(
-			emptySlot.getItem().get().getID().equals(firstItem.getID()));
-		Assertions.assertTrue(firstSlot.getItem().isEmpty());
-		Assertions.assertTrue(emptySlot.getItemStack().isPresent());
-		Assertions.assertTrue(emptySlot.getItemStack().get().getItem().getID()
-			.equals(firstItem.getID()));
+		Assertions.assertEquals(emptySlot.getItem().getID(), firstItem.getID());
+		Assertions.assertNull(firstSlot.getItem());
+		Assertions.assertNotNull(emptySlot.getItemStack());
+		Assertions.assertEquals(emptySlot.getItemStack().getItem().getID(),
+			firstItem.getID());
 	}
 }

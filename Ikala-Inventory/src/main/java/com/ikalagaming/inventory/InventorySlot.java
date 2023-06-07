@@ -6,14 +6,13 @@ import com.ikalagaming.item.Item;
 import lombok.Getter;
 import lombok.NonNull;
 
-import java.util.Optional;
-
 /**
  * A single slot within an inventory that may or may not contain an item.
  *
  * @author Ches Burks
  *
  */
+@Getter
 class InventorySlot {
 
 	/**
@@ -50,8 +49,8 @@ class InventorySlot {
 			return false;
 		}
 
-		Item sourceItem = source.getItem().get();
-		Item destItem = destination.getItem().get();
+		Item sourceItem = source.getItem();
+		Item destItem = destination.getItem();
 
 		if (!sourceItem.getID().equals(destItem.getID())) {
 			return false;
@@ -59,8 +58,8 @@ class InventorySlot {
 
 		final int maxStackSize = InvUtil.maxStackSize(destItem);
 
-		ItemStack sourceStack = source.getItemStack().get();
-		ItemStack destStack = destination.getItemStack().get();
+		ItemStack sourceStack = source.getItemStack();
+		ItemStack destStack = destination.getItemStack();
 
 		if (destStack.getCount() >= maxStackSize) {
 			return false;
@@ -109,9 +108,18 @@ class InventorySlot {
 		slot2.empty = tempEmpty;
 	}
 
+	/**
+	 * The item stack, which is only present if this is not empty and contains a
+	 * stackable item.
+	 *
+	 * @return The item stack, or null if empty or non-stackable.
+	 */
 	private ItemStack stack;
 	/**
-	 * The individual item, which is null if
+	 * The individual item, which is only present if this is not empty and
+	 * contains a non-stackable item.
+	 *
+	 * @return The item, or null if
 	 */
 	private Equipment individual;
 
@@ -121,7 +129,6 @@ class InventorySlot {
 	 *
 	 * @return Whether the slot contains an item stack.
 	 */
-	@Getter
 	private boolean stackable;
 
 	/**
@@ -130,7 +137,6 @@ class InventorySlot {
 	 *
 	 * @return Whether the slot is empty.
 	 */
-	@Getter
 	private boolean empty;
 
 	/**
@@ -171,31 +177,31 @@ class InventorySlot {
 	/**
 	 * Fetch the item that this slot contains.
 	 *
-	 * @return An optional containing the item, or an empty optional if this
-	 *         slot has nothing in it.
+	 * @return The item, which is either what is contained by the stack for
+	 *         stackable items, or the non-stackable item. Null for empty slots.
 	 * @see #getItemStack()
 	 */
-	public Optional<Item> getItem() {
+	public Item getItem() {
 		if (this.isEmpty()) {
-			return Optional.empty();
+			return null;
 		}
 		if (this.isStackable()) {
-			return Optional.ofNullable(this.stack.getItem());
+			return this.stack.getItem();
 		}
-		return Optional.ofNullable(this.individual);
+		return this.individual;
 	}
 
 	/**
 	 * Fetch the item stack that this slot contains, if it's stackable. If the
-	 * slot is empty or not stackable, this will return an empty optional.
+	 * slot is empty or not stackable, this will return null.
 	 *
-	 * @return The item stack, or an empty optional.
+	 * @return The item stack, or null.
 	 */
-	public Optional<ItemStack> getItemStack() {
+	public ItemStack getItemStack() {
 		if (this.isEmpty() || !this.isStackable()) {
-			return Optional.empty();
+			return null;
 		}
-		return Optional.ofNullable(this.stack);
+		return this.stack;
 	}
 
 	/**

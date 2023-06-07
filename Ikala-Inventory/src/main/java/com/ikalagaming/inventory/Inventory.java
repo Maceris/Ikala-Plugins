@@ -8,6 +8,7 @@ import com.ikalagaming.item.Item;
 import com.ikalagaming.item.Weapon;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,7 @@ import java.util.Optional;
  *
  */
 @Slf4j
+@EqualsAndHashCode(callSuper = false)
 public class Inventory extends Component<Inventory> {
 	/**
 	 * The specific equipment slots that we have. The position in this enum also
@@ -192,7 +194,7 @@ public class Inventory extends Component<Inventory> {
 	 * Create a new inventory of a given size.
 	 *
 	 * @param size The number of slots the inventory contains.
-	 * @throws IllegalArgumentException If the size is <= 0.
+	 * @throws IllegalArgumentException If the size is less than or equal to 0.
 	 */
 	public Inventory(final int size) {
 		if (size <= 0) {
@@ -236,13 +238,15 @@ public class Inventory extends Component<Inventory> {
 			if (!slot.isStackable() || !InvUtil.canStack(item)) {
 				continue;
 			}
-			Item stackItem = slot.getItem().get();
+
+			Item stackItem = slot.getItem();
 			if (!stackItem.getID().equals(item.getID())) {
 				// Different items
 				continue;
 			}
+
 			int maxStack = InvUtil.maxStackSize(stackItem);
-			ItemStack slotStack = slot.getItemStack().get();
+			ItemStack slotStack = slot.getItemStack();
 			if (slotStack.getCount() < maxStack) {
 				slotStack.setCount(slotStack.getCount() + 1);
 				return true;
@@ -257,8 +261,9 @@ public class Inventory extends Component<Inventory> {
 	 * slot.
 	 *
 	 * @param item The item to insert.
-	 * @param count How many of the items we want to add. If <= 0, nothing
-	 *            happens, and will be reduced to the max stack size if larger.
+	 * @param count How many of the items we want to add. If less than or equal
+	 *            to 0, nothing happens, and will be reduced to the max stack
+	 *            size if larger.
 	 * @return Whether we could add the items completely.
 	 */
 	public boolean addItem(@NonNull Item item, final int count) {
@@ -314,11 +319,11 @@ public class Inventory extends Component<Inventory> {
 		for (int i = 0; i < this.size; ++i) {
 			InventorySlot slot = this.slots[i];
 			if (slot.isEmpty() || !slot.isStackable()
-				|| !ItemStack.isSameType(stack, slot.getItemStack().get())) {
+				|| !ItemStack.isSameType(stack, slot.getItemStack())) {
 				continue;
 			}
 
-			ItemStack slotStack = slot.getItemStack().get();
+			ItemStack slotStack = slot.getItemStack();
 
 			final int itemsToTransfer =
 				Math.min(stack.getCount(), maxStackSize - slotStack.getCount());
@@ -357,12 +362,8 @@ public class Inventory extends Component<Inventory> {
 			return false;
 		}
 
-		if (firstSlot.getItem().isEmpty() || secondSlot.getItem().isEmpty()) {
-			return false;
-		}
-
-		String firstID = firstSlot.getItem().get().getID();
-		String secondID = secondSlot.getItem().get().getID();
+		String firstID = firstSlot.getItem().getID();
+		String secondID = secondSlot.getItem().getID();
 
 		return firstID.equals(secondID);
 	}
@@ -415,29 +416,20 @@ public class Inventory extends Component<Inventory> {
 			case WEAPON:
 				Weapon weapon = (Weapon) item;
 				switch (weapon.getWeaponType()) {
-					case OFF_HAND:
-					case SHIELD:
+					case OFF_HAND, SHIELD:
 						return this.isEmpty(EquipmentSlot.OFF_HAND)
 							&& !this.holdingTwoHanded();
-					case ONE_HANDED_MAGIC:
-					case ONE_HANDED_MELEE:
-					case ONE_HANDED_RANGED:
+					case ONE_HANDED_MAGIC, ONE_HANDED_MELEE, ONE_HANDED_RANGED:
 						return this.isEmpty(EquipmentSlot.MAIN_HAND)
 							|| (this.isEmpty(EquipmentSlot.OFF_HAND)
 								&& !this.holdingTwoHanded());
-					case TWO_HANDED_MAGIC:
-					case TWO_HANDED_MELEE:
-					case TWO_HANDED_RANGED:
+					case TWO_HANDED_MAGIC, TWO_HANDED_MELEE, TWO_HANDED_RANGED:
 						return this.isEmpty(EquipmentSlot.MAIN_HAND)
 							&& this.isEmpty(EquipmentSlot.OFF_HAND);
 					default:
 						return false;
 				}
-			case COMPONENT:
-			case CONSUMABLE:
-			case JUNK:
-			case MATERIAL:
-			case QUEST:
+			case COMPONENT, CONSUMABLE, JUNK, MATERIAL, QUEST:
 			default:
 				return false;
 		}
@@ -460,13 +452,13 @@ public class Inventory extends Component<Inventory> {
 			if (!slot.isStackable() || !InvUtil.canStack(item)) {
 				continue;
 			}
-			Item stackItem = slot.getItem().get();
+			Item stackItem = slot.getItem();
 			if (!stackItem.getID().equals(item.getID())) {
 				// Different items
 				continue;
 			}
 			int maxStack = InvUtil.maxStackSize(stackItem);
-			if (slot.getItemStack().get().getCount() < maxStack) {
+			if (slot.getItemStack().getCount() < maxStack) {
 				return true;
 			}
 		}
@@ -492,7 +484,7 @@ public class Inventory extends Component<Inventory> {
 		for (int i = 0; i < this.size; ++i) {
 			InventorySlot slot = this.slots[i];
 			if (!(slot.isEmpty() || (slot.isStackable()
-				&& item.getID().equals(slot.getItem().get().getID())))) {
+				&& item.getID().equals(slot.getItem().getID())))) {
 				/*
 				 * If the slot is filled, and it's either unstackable or
 				 * different, we keep going.
@@ -500,8 +492,8 @@ public class Inventory extends Component<Inventory> {
 				continue;
 			}
 
-			Optional<ItemStack> stack = slot.getItemStack();
-			int amountInSlot = stack.isPresent() ? stack.get().getCount() : 0;
+			ItemStack stack = slot.getItemStack();
+			int amountInSlot = stack != null ? stack.getCount() : 0;
 			int roomInSlot = maxStackSize - amountInSlot;
 			if (roomInSlot >= remainingAmount) {
 				return true;
@@ -562,17 +554,23 @@ public class Inventory extends Component<Inventory> {
 				switch (accessory.getAccessoryType()) {
 					case AMULET:
 						this.setItem(EquipmentSlot.AMULET, accessory);
+						return;
 					case BELT:
 						this.setItem(EquipmentSlot.BELT, accessory);
+						return;
 					case CAPE:
 						this.setItem(EquipmentSlot.CAPE, accessory);
+						return;
 					case RING:
 						if (this.isEmpty(EquipmentSlot.RING_LEFT)) {
 							this.setItem(EquipmentSlot.RING_LEFT, accessory);
+							return;
 						}
 						this.setItem(EquipmentSlot.RING_RIGHT, accessory);
+						return;
 					case TRINKET:
 						this.setItem(EquipmentSlot.TRINKET, accessory);
+						return;
 					default:
 						return;
 				}
@@ -581,59 +579,62 @@ public class Inventory extends Component<Inventory> {
 				switch (armor.getArmorType()) {
 					case CHEST:
 						this.setItem(EquipmentSlot.CHEST, armor);
+						return;
 					case FEET:
 						this.setItem(EquipmentSlot.FEET, armor);
+						return;
 					case HANDS:
 						this.setItem(EquipmentSlot.HANDS, armor);
+						return;
 					case HEAD:
 						this.setItem(EquipmentSlot.HEAD, armor);
+						return;
 					case LEGS:
 						this.setItem(EquipmentSlot.LEGS, armor);
+						return;
 					case SHOULDERS:
 						this.setItem(EquipmentSlot.SHOULDERS, armor);
+						return;
 					case WRIST:
 						this.setItem(EquipmentSlot.WRIST, armor);
+						return;
 					default:
 						return;
 				}
 			case WEAPON:
 				Weapon weapon = (Weapon) item;
 				switch (weapon.getWeaponType()) {
-					case OFF_HAND:
-					case SHIELD:
+					case OFF_HAND, SHIELD:
 						this.setItem(EquipmentSlot.OFF_HAND, weapon);
-					case ONE_HANDED_MAGIC:
-					case ONE_HANDED_MELEE:
-					case ONE_HANDED_RANGED:
+						return;
+					case ONE_HANDED_MAGIC, ONE_HANDED_MELEE, ONE_HANDED_RANGED:
 						if (this.isEmpty(EquipmentSlot.MAIN_HAND)) {
 							this.setItem(EquipmentSlot.MAIN_HAND, weapon);
+							return;
 						}
 						this.setItem(EquipmentSlot.OFF_HAND, weapon);
-					case TWO_HANDED_MAGIC:
-					case TWO_HANDED_MELEE:
-					case TWO_HANDED_RANGED:
+						return;
+					case TWO_HANDED_MAGIC, TWO_HANDED_MELEE, TWO_HANDED_RANGED:
 						this.setItem(EquipmentSlot.MAIN_HAND, weapon);
+						return;
 					default:
 						return;
 				}
-			case COMPONENT:
-			case CONSUMABLE:
-			case JUNK:
-			case MATERIAL:
-			case QUEST:
+			case COMPONENT, CONSUMABLE, JUNK, MATERIAL, QUEST:
 			default:
 		}
 	}
 
 	/**
-	 * Fetch the item in a given slot. Invalid slots are considered empty.
+	 * Fetch the item in a given slot.
 	 *
 	 * @param slot The equipment slot.
 	 *
 	 * @return The item in that slot, or an empty optional if there is none.
 	 */
 	public Optional<Item> getItem(@NonNull EquipmentSlot slot) {
-		return this.equipmentSlots[slot.ordinal()].getItem();
+		return Optional
+			.ofNullable(this.equipmentSlots[slot.ordinal()].getItem());
 	}
 
 	/**
@@ -646,7 +647,7 @@ public class Inventory extends Component<Inventory> {
 		if (slotNumber < 0 || slotNumber >= this.size) {
 			return Optional.empty();
 		}
-		return this.slots[slotNumber].getItem();
+		return Optional.ofNullable(this.slots[slotNumber].getItem());
 	}
 
 	/**
@@ -696,23 +697,20 @@ public class Inventory extends Component<Inventory> {
 	 * @return Whether a two handed weapon is being held.
 	 */
 	private boolean holdingTwoHanded() {
-		if (this.isEmpty(EquipmentSlot.MAIN_HAND)) {
+		InventorySlot slot =
+			this.equipmentSlots[EquipmentSlot.MAIN_HAND.ordinal()];
+		if (slot.isEmpty()) {
 			return false;
 		}
 
-		Weapon main = (Weapon) this.getItem(EquipmentSlot.MAIN_HAND).get();
+		Weapon main = (Weapon) slot.getItem();
 		switch (main.getWeaponType()) {
-			case OFF_HAND:
-			case ONE_HANDED_MAGIC:
-			case ONE_HANDED_MELEE:
-			case ONE_HANDED_RANGED:
-			case SHIELD:
+			case TWO_HANDED_MAGIC, TWO_HANDED_MELEE, TWO_HANDED_RANGED:
+				return true;
+			case OFF_HAND, ONE_HANDED_MAGIC, ONE_HANDED_MELEE,
+				ONE_HANDED_RANGED, SHIELD:
 			default:
 				return false;
-			case TWO_HANDED_MAGIC:
-			case TWO_HANDED_MELEE:
-			case TWO_HANDED_RANGED:
-				return true;
 		}
 	}
 
@@ -775,9 +773,9 @@ public class Inventory extends Component<Inventory> {
 	 *
 	 * @param slotNumber The slot number to fill.
 	 * @param stackable The stackable item.
-	 * @param count The number of items in the stack. If <=0, does nothing, and
-	 *            will be capped at the maximum stack size for the given type of
-	 *            item.
+	 * @param count The number of items in the stack. If less than or equal to
+	 *            0, does nothing, and will be capped at the maximum stack size
+	 *            for the given type of item.
 	 * @see #setItem(int, Equipment)
 	 */
 	public void setItem(int slotNumber, @NonNull Item stackable, int count) {
@@ -808,20 +806,16 @@ public class Inventory extends Component<Inventory> {
 			return false;
 		}
 		InventorySlot slot = this.slots[slotNumber];
-		if (!slot.isStackable() || !this.hasEmptySlot()) {
+		if (slot.isEmpty() || !slot.isStackable() || !this.hasEmptySlot()) {
 			return false;
 		}
-		Optional<ItemStack> maybeStack = slot.getItemStack();
-		if (maybeStack.isEmpty()) {
+		ItemStack stack = slot.getItemStack();
+		if (stack.getCount() <= amountToRemove) {
 			return false;
 		}
-		ItemStack oldStack = maybeStack.get();
-		if (oldStack.getCount() <= amountToRemove) {
-			return false;
-		}
-		ItemStack newStack = new ItemStack(oldStack.getItem(), amountToRemove);
+		ItemStack newStack = new ItemStack(stack.getItem(), amountToRemove);
 		this.addToEmptySlot(newStack);
-		oldStack.setCount(oldStack.getCount() - amountToRemove);
+		stack.setCount(stack.getCount() - amountToRemove);
 		return true;
 	}
 

@@ -12,7 +12,7 @@ import lombok.Setter;
 
 /**
  * A stack of stackable items. Non-stackable items are handled differently.
- * 
+ *
  * @author Ches Burks
  *
  */
@@ -23,22 +23,9 @@ import lombok.Setter;
 @EqualsAndHashCode
 class ItemStack {
 	/**
-	 * The item that is stored in the inventory slot.
-	 * 
-	 * @return The item that is stacked.
-	 */
-	private Item item;
-	/**
-	 * The current number of items stored in this slot.
-	 * 
-	 * @return The current stack size.
-	 */
-	private int count;
-
-	/**
 	 * Check if two item stacks are the same type of item. If either is null,
 	 * checks whether they both are.
-	 * 
+	 *
 	 * @param stack1 The first stack.
 	 * @param stack2 The second stack.
 	 * @return Whether the stacks are of the same item.
@@ -51,5 +38,19 @@ class ItemStack {
 		}
 		return stack1.item.getID().equals(stack2.item.getID());
 	}
+
+	/**
+	 * The item that is stored in the inventory slot.
+	 *
+	 * @return The item that is stacked.
+	 */
+	private Item item;
+
+	/**
+	 * The current number of items stored in this slot.
+	 *
+	 * @return The current stack size.
+	 */
+	private int count;
 
 }
