@@ -20,7 +20,7 @@ import javax.persistence.Table;
  * @author Ches Burks
  *
  */
-@EqualsAndHashCode(callSuper = false)
+@EqualsAndHashCode(callSuper = true)
 @Getter
 @Setter
 @Entity

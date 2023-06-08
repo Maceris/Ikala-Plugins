@@ -27,7 +27,7 @@ import javax.persistence.Transient;
  * @author Ches Burks
  *
  */
-@EqualsAndHashCode(callSuper = false)
+@EqualsAndHashCode(callSuper = true)
 @Getter
 @Setter
 @MappedSuperclass
@@ -129,26 +129,16 @@ public class Equipment extends Item {
 	private UUID uniqueID = UUID.randomUUID();
 
 	/**
-	 * Construct a new equipment item.
-	 */
-	public Equipment() {}
-
-	/**
-	 * Add the stats from the given affix to the combined stats.
+	 * Go through a new set of stats and add them to the combined stats
+	 * attribute buffs list.
 	 *
-	 * @param newStats The stats to add.
+	 * @param newStats The stats we are adding to this item.
 	 */
-	private void addStats(@NonNull ItemStats newStats) {
-
-		List<AttributeModifier> attributeBuffs =
-			this.combinedStats.getAttributeBuffs();
-		List<DamageModifier> damageBuffs = this.combinedStats.getDamageBuffs();
-		List<DamageModifier> resistanceBuffs =
-			this.combinedStats.getResistanceBuffs();
-
+	private void addAttributeBuffs(ItemStats newStats) {
 		for (AttributeModifier newBuff : newStats.getAttributeBuffs()) {
 			boolean matched = false;
-			for (AttributeModifier existingBuff : attributeBuffs) {
+			for (AttributeModifier existingBuff : this.combinedStats
+				.getAttributeBuffs()) {
 				if (existingBuff.getAttribute().equals(newBuff.getAttribute())
 					&& existingBuff.getType().equals(newBuff.getType())) {
 					existingBuff.setAmount(
@@ -158,13 +148,22 @@ public class Equipment extends Item {
 				}
 			}
 			if (!matched) {
-				attributeBuffs.add(newBuff.copy());
+				this.combinedStats.getAttributeBuffs().add(newBuff.copy());
 			}
 		}
+	}
 
+	/**
+	 * Go through a new set of stats and add them to the combined stats damage
+	 * buffs list.
+	 *
+	 * @param newStats The stats we are adding to this item.
+	 */
+	private void addDamageBuffs(ItemStats newStats) {
 		for (DamageModifier newBuff : newStats.getDamageBuffs()) {
 			boolean matched = false;
-			for (DamageModifier existingBuff : damageBuffs) {
+			for (DamageModifier existingBuff : this.combinedStats
+				.getDamageBuffs()) {
 				if (existingBuff.getDamageType().equals(newBuff.getDamageType())
 					&& existingBuff.getType().equals(newBuff.getType())) {
 					existingBuff.setAmount(
@@ -174,13 +173,22 @@ public class Equipment extends Item {
 				}
 			}
 			if (!matched) {
-				damageBuffs.add(newBuff.copy());
+				this.combinedStats.getDamageBuffs().add(newBuff.copy());
 			}
 		}
+	}
 
+	/**
+	 * Go through a new set of stats and add them to the combined stats
+	 * resistance buffs list.
+	 *
+	 * @param newStats The stats we are adding to this item.
+	 */
+	private void addResistanceBuffs(ItemStats newStats) {
 		for (DamageModifier newBuff : newStats.getResistanceBuffs()) {
 			boolean matched = false;
-			for (DamageModifier existingBuff : resistanceBuffs) {
+			for (DamageModifier existingBuff : this.combinedStats
+				.getResistanceBuffs()) {
 				if (!(existingBuff.getDamageType()
 					.equals(newBuff.getDamageType())
 					&& existingBuff.getType().equals(newBuff.getType()))) {
@@ -191,9 +199,21 @@ public class Equipment extends Item {
 				matched = true;
 			}
 			if (!matched) {
-				resistanceBuffs.add(newBuff.copy());
+				this.combinedStats.getResistanceBuffs().add(newBuff.copy());
 			}
 		}
+	}
+
+	/**
+	 * Add the stats from the given affix to the combined stats.
+	 *
+	 * @param newStats The stats to add.
+	 */
+	private void addStats(@NonNull ItemStats newStats) {
+
+		this.addAttributeBuffs(newStats);
+		this.addDamageBuffs(newStats);
+		this.addResistanceBuffs(newStats);
 	}
 
 	/**
