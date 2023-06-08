@@ -1,12 +1,20 @@
 package com.ikalagaming.inventory;
 
 import com.ikalagaming.event.EventManager;
+import com.ikalagaming.inventory.Inventory.EquipmentSlot;
+import com.ikalagaming.item.Accessory;
+import com.ikalagaming.item.Armor;
 import com.ikalagaming.item.Equipment;
 import com.ikalagaming.item.Item;
+import com.ikalagaming.item.Weapon;
+import com.ikalagaming.item.enums.AccessoryType;
+import com.ikalagaming.item.enums.ArmorType;
+import com.ikalagaming.item.enums.WeaponType;
 import com.ikalagaming.item.testing.ItemGenerator;
 import com.ikalagaming.plugins.PluginManager;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -14,7 +22,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Tests for the inventory class.
@@ -22,6 +32,7 @@ import java.util.List;
  * @author Ches Burks
  *
  */
+@Slf4j
 class TestInventory {
 
 	/**
@@ -59,8 +70,8 @@ class TestInventory {
 		@NonNull List<Item> expectedItems,
 		@NonNull List<Integer> expectedAmounts) {
 		// Might as well fail instead of throwing an exception
-		Assertions.assertTrue(expectedItems.size() == expectedAmounts.size());
-		Assertions.assertTrue(expectedItems.size() == inventory.getSize());
+		Assertions.assertEquals(expectedItems.size(), expectedAmounts.size());
+		Assertions.assertEquals(expectedItems.size(), inventory.getSize());
 
 		for (int i = 0; i < expectedItems.size(); ++i) {
 			Item item = expectedItems.get(i);
@@ -397,6 +408,137 @@ class TestInventory {
 
 		Inventory inventory = new Inventory(1);
 		Assertions.assertNotNull(inventory);
+	}
+
+	/**
+	 * Test adding and removing equipment.
+	 */
+	@Test
+	void testEquipment() {
+		Map<Equipment, Inventory.EquipmentSlot> equipment = new HashMap<>();
+
+		Accessory amulet = ItemGenerator.getAccessory();
+		amulet.setAccessoryType(AccessoryType.AMULET);
+		equipment.put(amulet, EquipmentSlot.AMULET);
+
+		Accessory belt = ItemGenerator.getAccessory();
+		belt.setAccessoryType(AccessoryType.BELT);
+		equipment.put(belt, EquipmentSlot.BELT);
+
+		Accessory cape = ItemGenerator.getAccessory();
+		cape.setAccessoryType(AccessoryType.CAPE);
+		equipment.put(cape, EquipmentSlot.CAPE);
+
+		Accessory ring1 = ItemGenerator.getAccessory();
+		ring1.setAccessoryType(AccessoryType.RING);
+		equipment.put(ring1, EquipmentSlot.RING_RIGHT);
+
+		Accessory ring2 = ItemGenerator.getAccessory();
+		ring2.setAccessoryType(AccessoryType.RING);
+		equipment.put(ring2, EquipmentSlot.RING_RIGHT);
+
+		Accessory trinket = ItemGenerator.getAccessory();
+		trinket.setAccessoryType(AccessoryType.TRINKET);
+		equipment.put(trinket, EquipmentSlot.TRINKET);
+
+		Armor chest = ItemGenerator.getArmor();
+		chest.setArmorType(ArmorType.CHEST);
+		equipment.put(chest, EquipmentSlot.CHEST);
+
+		Armor feet = ItemGenerator.getArmor();
+		feet.setArmorType(ArmorType.FEET);
+		equipment.put(feet, EquipmentSlot.FEET);
+
+		Armor hands = ItemGenerator.getArmor();
+		hands.setArmorType(ArmorType.HANDS);
+		equipment.put(hands, EquipmentSlot.HANDS);
+
+		Armor head = ItemGenerator.getArmor();
+		head.setArmorType(ArmorType.HEAD);
+		equipment.put(head, EquipmentSlot.HEAD);
+
+		Armor legs = ItemGenerator.getArmor();
+		legs.setArmorType(ArmorType.LEGS);
+		equipment.put(legs, EquipmentSlot.LEGS);
+
+		Armor shoulders = ItemGenerator.getArmor();
+		shoulders.setArmorType(ArmorType.SHOULDERS);
+		equipment.put(shoulders, EquipmentSlot.SHOULDERS);
+
+		Armor wrist = ItemGenerator.getArmor();
+		wrist.setArmorType(ArmorType.WRIST);
+		equipment.put(wrist, EquipmentSlot.WRIST);
+
+		Weapon mainHand = ItemGenerator.getWeapon();
+		mainHand.setWeaponType(WeaponType.ONE_HANDED_MELEE);
+		equipment.put(mainHand, EquipmentSlot.MAIN_HAND);
+
+		Weapon offHand = ItemGenerator.getWeapon();
+		offHand.setWeaponType(WeaponType.SHIELD);
+		equipment.put(offHand, EquipmentSlot.OFF_HAND);
+
+		boolean placedRing = false;
+		Inventory inventory = new Inventory(1);
+
+		for (var entry : equipment.entrySet()) {
+			EquipmentSlot slot = entry.getValue();
+			if (slot.equals(EquipmentSlot.RING_RIGHT)) {
+				// HashMap randomizes items, we don't know which is first
+				if (placedRing) {
+					slot = EquipmentSlot.RING_LEFT;
+				}
+				placedRing = true;
+			}
+			TestInventory.log.info("Adding item to slot {}", slot);
+			Assertions.assertTrue(inventory.isEmpty(slot),
+				"Slot should start empty for " + slot);
+			Assertions.assertFalse(inventory.hasItem(slot),
+				"Slot should start without item for " + slot);
+			Assertions.assertTrue(inventory.canEquip(entry.getKey()),
+				"We should be able to equip " + slot);
+			Assertions.assertTrue(inventory.equip(entry.getKey()),
+				"We should successfully equip " + slot);
+
+			Assertions.assertFalse(inventory.isEmpty(slot),
+				"Slot should not be empty after equiping " + slot);
+			Assertions.assertTrue(inventory.hasItem(slot),
+				"Slot should not have item after equiping " + slot);
+		}
+
+		for (EquipmentSlot slot : EquipmentSlot.values()) {
+			Assertions.assertTrue(inventory.hasItem(slot),
+				"Inventory should have an item in the slot " + slot);
+		}
+
+		for (var entry : equipment.entrySet()) {
+			Assertions.assertFalse(inventory.canEquip(entry.getKey()),
+				"Full equipment inventory should not be able to equip "
+					+ entry.getValue());
+		}
+
+		placedRing = false;
+		for (var entry : equipment.entrySet()) {
+			EquipmentSlot slot = entry.getValue();
+			if (slot.equals(EquipmentSlot.RING_RIGHT)) {
+				// HashMap randomizes items, we don't know which is first
+				if (placedRing) {
+					slot = EquipmentSlot.RING_LEFT;
+				}
+				placedRing = true;
+			}
+			inventory.clearSlot(slot);
+			Assertions.assertTrue(inventory.isEmpty(slot),
+				"cleared slot should be empty for " + slot);
+			Assertions.assertFalse(inventory.hasItem(slot),
+				"cleared slot should not have an item for " + slot);
+			Assertions.assertTrue(inventory.canEquip(entry.getKey()),
+				"cleared slot should be free to eqiup a " + slot);
+		}
+
+		for (EquipmentSlot slot : EquipmentSlot.values()) {
+			Assertions.assertFalse(inventory.hasItem(slot),
+				"Inventory should not have an item in the slot " + slot);
+		}
 	}
 
 	/**

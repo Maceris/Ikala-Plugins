@@ -386,8 +386,8 @@ public class Inventory extends Component<Inventory> {
 					case CAPE:
 						return this.isEmpty(EquipmentSlot.CAPE);
 					case RING:
-						return this.isEmpty(EquipmentSlot.RING_LEFT)
-							|| this.isEmpty(EquipmentSlot.RING_RIGHT);
+						return this.isEmpty(EquipmentSlot.RING_RIGHT)
+							|| this.isEmpty(EquipmentSlot.RING_LEFT);
 					case TRINKET:
 						return this.isEmpty(EquipmentSlot.TRINKET);
 					default:
@@ -506,6 +506,15 @@ public class Inventory extends Component<Inventory> {
 	}
 
 	/**
+	 * Clear the given equipment slot, rendering it empty.
+	 *
+	 * @param slot The equipment slot to clear.
+	 */
+	public void clearSlot(@NonNull EquipmentSlot slot) {
+		this.equipmentSlots[slot.ordinal()].clear();
+	}
+
+	/**
 	 * Clear the slot at the given index, rendering it empty.
 	 *
 	 * @param slotNumber The slot number to clear.
@@ -536,6 +545,102 @@ public class Inventory extends Component<Inventory> {
 			return true;
 		}
 		return false;
+	}
+
+	/**
+	 * Attempt to wear equipment.
+	 *
+	 * @param equipment The equipment to wear.
+	 * @return True if we were successful, false if we could not equip the item.
+	 * @see #canEquip(Item)
+	 */
+	public boolean equip(@NonNull Equipment equipment) {
+		if (!this.canEquip(equipment)) {
+			return false;
+		}
+		switch (equipment.getItemType()) {
+			case ACCESSORY:
+				Accessory accessory = (Accessory) equipment;
+				return this.equipAccessory(accessory);
+			case ARMOR:
+				Armor armor = (Armor) equipment;
+				return this.equipArmor(armor);
+			case WEAPON:
+				Weapon weapon = (Weapon) equipment;
+				return this.equipWeapon(weapon);
+			case COMPONENT, CONSUMABLE, JUNK, MATERIAL, QUEST:
+			default:
+				return false;
+		}
+	}
+
+	/**
+	 * Attempt to equip an accessory. Assumes we already checked whether we
+	 * could fit the item.
+	 *
+	 * @param accessory The accessory to equip.
+	 * @return Whether we could equip the accessory.
+	 */
+	private boolean equipAccessory(Accessory accessory) {
+		switch (accessory.getAccessoryType()) {
+			case AMULET:
+				this.setItem(EquipmentSlot.AMULET, accessory);
+				return true;
+			case BELT:
+				this.setItem(EquipmentSlot.BELT, accessory);
+				return true;
+			case CAPE:
+				this.setItem(EquipmentSlot.CAPE, accessory);
+				return true;
+			case RING:
+				if (this.isEmpty(EquipmentSlot.RING_RIGHT)) {
+					this.setItem(EquipmentSlot.RING_RIGHT, accessory);
+				}
+				else {
+					this.setItem(EquipmentSlot.RING_LEFT, accessory);
+				}
+				return true;
+			case TRINKET:
+				this.setItem(EquipmentSlot.TRINKET, accessory);
+				return true;
+			default:
+				return false;
+		}
+	}
+
+	/**
+	 * Attempt to equip armor. Assumes we already checked whether we could fit
+	 * the item.
+	 *
+	 * @param armor The armor to equip.
+	 * @return Whether we could equip the armor.
+	 */
+	private boolean equipArmor(Armor armor) {
+		switch (armor.getArmorType()) {
+			case CHEST:
+				this.setItem(EquipmentSlot.CHEST, armor);
+				return true;
+			case FEET:
+				this.setItem(EquipmentSlot.FEET, armor);
+				return true;
+			case HANDS:
+				this.setItem(EquipmentSlot.HANDS, armor);
+				return true;
+			case HEAD:
+				this.setItem(EquipmentSlot.HEAD, armor);
+				return true;
+			case LEGS:
+				this.setItem(EquipmentSlot.LEGS, armor);
+				return true;
+			case SHOULDERS:
+				this.setItem(EquipmentSlot.SHOULDERS, armor);
+				return true;
+			case WRIST:
+				this.setItem(EquipmentSlot.WRIST, armor);
+				return true;
+			default:
+				return false;
+		}
 	}
 
 	/**
@@ -626,6 +731,34 @@ public class Inventory extends Component<Inventory> {
 	}
 
 	/**
+	 * Attempt to equip a weapon. Assumes we already checked whether we could
+	 * fit the item.
+	 *
+	 * @param weapon The weapon to equip.
+	 * @return Whether we could equip the weapon.
+	 */
+	private boolean equipWeapon(Weapon weapon) {
+		switch (weapon.getWeaponType()) {
+			case OFF_HAND, SHIELD:
+				this.setItem(EquipmentSlot.OFF_HAND, weapon);
+				return true;
+			case ONE_HANDED_MAGIC, ONE_HANDED_MELEE, ONE_HANDED_RANGED:
+				if (this.isEmpty(EquipmentSlot.MAIN_HAND)) {
+					this.setItem(EquipmentSlot.MAIN_HAND, weapon);
+				}
+				else {
+					this.setItem(EquipmentSlot.OFF_HAND, weapon);
+				}
+				return true;
+			case TWO_HANDED_MAGIC, TWO_HANDED_MELEE, TWO_HANDED_RANGED:
+				this.setItem(EquipmentSlot.MAIN_HAND, weapon);
+				return true;
+			default:
+				return false;
+		}
+	}
+
+	/**
 	 * Fetch the item in a given slot.
 	 *
 	 * @param slot The equipment slot.
@@ -680,6 +813,17 @@ public class Inventory extends Component<Inventory> {
 	}
 
 	/**
+	 * Convenience method for {@code !isEmpty(slot)}.
+	 *
+	 * @param slot The equipment slot.
+	 * @return Whether there is an item in the given slot.
+	 * @see #isEmpty(EquipmentSlot)
+	 */
+	public boolean hasItem(@NonNull EquipmentSlot slot) {
+		return !this.isEmpty(slot);
+	}
+
+	/**
 	 * Convenience method for {@code !isEmpty(slotNumber)}.
 	 *
 	 * @param slotNumber The inventory slot number.
@@ -715,13 +859,12 @@ public class Inventory extends Component<Inventory> {
 	}
 
 	/**
-	 * Check if a slot is empty. Invalid slot numbers are considered empty, as
-	 * that's easier than throwing exceptions.
+	 * Check if a slot is empty.
 	 *
 	 * @param slot The equipment slot.
 	 * @return Whether the slot number is empty.
 	 */
-	private boolean isEmpty(@NonNull EquipmentSlot slot) {
+	public boolean isEmpty(@NonNull EquipmentSlot slot) {
 		return this.equipmentSlots[slot.ordinal()].isEmpty();
 	}
 
@@ -746,7 +889,7 @@ public class Inventory extends Component<Inventory> {
 	 * @param slot The equipment slot.
 	 * @param nonStackable The stackable item.
 	 */
-	private void setItem(@NonNull EquipmentSlot slot,
+	public void setItem(@NonNull EquipmentSlot slot,
 		@NonNull Equipment nonStackable) {
 		this.equipmentSlots[slot.ordinal()].clear();
 		this.equipmentSlots[slot.ordinal()].setItem(nonStackable);
