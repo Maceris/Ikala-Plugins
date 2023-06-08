@@ -478,7 +478,7 @@ class TestInventory {
 		equipment.put(offHand, EquipmentSlot.OFF_HAND);
 
 		boolean placedRing = false;
-		Inventory inventory = new Inventory(1);
+		Inventory inventory = new Inventory(1, true);
 
 		for (var entry : equipment.entrySet()) {
 			EquipmentSlot slot = entry.getValue();
