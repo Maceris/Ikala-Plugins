@@ -254,6 +254,23 @@ class TestInventory {
 	}
 
 	/**
+	 * Test whether we can store equipment.
+	 */
+	@Test
+	void testCanStoreEquipment() {
+		Inventory noEquipment = new Inventory(5);
+		Inventory withEquipment = new Inventory(5, true);
+
+		Assertions.assertFalse(noEquipment.canStoreEquipment());
+		Assertions.assertTrue(withEquipment.canStoreEquipment());
+
+		Item accessory = ItemGenerator.getAccessory();
+
+		Assertions.assertFalse(noEquipment.canEquip(accessory));
+		Assertions.assertTrue(withEquipment.canEquip(accessory));
+	}
+
+	/**
 	 * Test clearing out inventory slots.
 	 */
 	@Test
@@ -875,6 +892,108 @@ class TestInventory {
 		inventory.swapSlots(-1, 4);
 		inventory.swapSlots(99, 5);
 		this.checkStacks(inventory, expectedItems, expectedCounts);
+	}
+
+	/**
+	 * Test whether we can store equipment.
+	 */
+	@Test
+	void testWeapons() {
+		Inventory inventory = new Inventory(5, true);
+
+		Weapon offHand = ItemGenerator.getWeapon();
+		offHand.setWeaponType(WeaponType.OFF_HAND);
+
+		Weapon oneHandMagic = ItemGenerator.getWeapon();
+		oneHandMagic.setWeaponType(WeaponType.ONE_HANDED_MAGIC);
+
+		Weapon oneHandMelee = ItemGenerator.getWeapon();
+		oneHandMelee.setWeaponType(WeaponType.ONE_HANDED_MELEE);
+
+		Weapon oneHandRanged = ItemGenerator.getWeapon();
+		oneHandRanged.setWeaponType(WeaponType.ONE_HANDED_RANGED);
+
+		Weapon shield = ItemGenerator.getWeapon();
+		shield.setWeaponType(WeaponType.SHIELD);
+
+		Weapon twoHandMagic = ItemGenerator.getWeapon();
+		twoHandMagic.setWeaponType(WeaponType.TWO_HANDED_MAGIC);
+
+		Weapon twoHandMelee = ItemGenerator.getWeapon();
+		twoHandMelee.setWeaponType(WeaponType.TWO_HANDED_MELEE);
+
+		Weapon twoHandRanged = ItemGenerator.getWeapon();
+		twoHandRanged.setWeaponType(WeaponType.TWO_HANDED_RANGED);
+
+		final Item[] offHanded = {offHand, shield};
+		final Item[] oneHanded = {oneHandMagic, oneHandMelee, oneHandRanged};
+		final Item[] twoHanded = {twoHandMagic, twoHandMelee, twoHandRanged};
+
+		// one two-handed weapon
+		for (Item weapon : twoHanded) {
+			Assertions.assertTrue(inventory.equip(weapon));
+			for (Item second : offHanded) {
+				Assertions.assertFalse(inventory.canEquip(second));
+				Assertions.assertFalse(inventory.equip(second));
+			}
+			for (Item second : oneHanded) {
+				Assertions.assertFalse(inventory.canEquip(second));
+				Assertions.assertFalse(inventory.equip(second));
+			}
+			for (Item second : twoHanded) {
+				Assertions.assertFalse(inventory.canEquip(second));
+				Assertions.assertFalse(inventory.equip(second));
+			}
+			inventory.clearSlot(EquipmentSlot.MAIN_HAND);
+		}
+
+		// one one-handed weapon in main hand
+		for (Item weapon : oneHanded) {
+			Assertions.assertTrue(inventory.equip(weapon));
+			for (Item second : offHanded) {
+				// one one-handed weapon and one off-handed item
+				Assertions.assertTrue(inventory.canEquip(second));
+				Assertions.assertTrue(inventory.equip(second));
+				inventory.clearSlot(EquipmentSlot.OFF_HAND);
+			}
+			for (Item second : oneHanded) {
+				// two one-handed weapons
+				Assertions.assertTrue(inventory.canEquip(second));
+				Assertions.assertTrue(inventory.equip(second));
+				inventory.clearSlot(EquipmentSlot.OFF_HAND);
+			}
+			for (Item second : twoHanded) {
+				Assertions.assertFalse(inventory.canEquip(second));
+				Assertions.assertFalse(inventory.equip(second));
+			}
+			inventory.clearSlot(EquipmentSlot.MAIN_HAND);
+		}
+
+		// one off-handed item
+		for (Item weapon : offHanded) {
+			Assertions.assertTrue(inventory.equip(weapon));
+			for (Item second : offHanded) {
+				Assertions.assertFalse(inventory.canEquip(second));
+				Assertions.assertFalse(inventory.equip(second));
+			}
+			for (Item second : oneHanded) {
+				Assertions.assertTrue(inventory.canEquip(second));
+				Assertions.assertTrue(inventory.equip(second));
+				inventory.clearSlot(EquipmentSlot.MAIN_HAND);
+			}
+			for (Item second : twoHanded) {
+				Assertions.assertFalse(inventory.canEquip(second));
+				Assertions.assertFalse(inventory.equip(second));
+			}
+			inventory.clearSlot(EquipmentSlot.OFF_HAND);
+		}
+
+		// one one-handed weapon in off hand
+		Assertions.assertTrue(inventory.equip(oneHandRanged));
+		Assertions.assertTrue(inventory.equip(oneHandMelee));
+		inventory.clearSlot(EquipmentSlot.MAIN_HAND);
+		Assertions.assertTrue(inventory.hasItem(EquipmentSlot.OFF_HAND));
+		Assertions.assertTrue(inventory.equip(oneHandMagic));
 	}
 
 }

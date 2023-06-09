@@ -850,7 +850,7 @@ public class Inventory extends Component<Inventory> {
 	}
 
 	/**
-	 * Forcibly clear and set the item in a given slot.
+	 * Forcibly clear and set the item in a given slot, ignoring all rules.
 	 *
 	 * @param slot The equipment slot.
 	 * @param nonStackable The stackable item.
