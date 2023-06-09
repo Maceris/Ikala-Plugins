@@ -97,25 +97,73 @@ public class Inventory extends Component<Inventory> {
 	}
 
 	/**
-	 * Swap slots between inventories. If invalid or the same exact slots are
-	 * provided, nothing happens.
+	 * Check if the given slot is a valid location for the given item. Null
+	 * items are considered fine for any slot, as in theory any slot can be
+	 * empty.
 	 *
-	 * @param firstInventory The first inventory.
-	 * @param firstSlot The slot within the first inventory.
-	 * @param secondInventory The second inventory.
-	 * @param secondSlot The slot within the second inventory.
+	 * @param slot The equipment slot.
+	 * @param item The item to store.
+	 * @return Whether that slot is a reasonable place for the item.
 	 */
-	public static void swapSlots(@NonNull Inventory firstInventory,
-		@NonNull EquipmentSlot firstSlot, @NonNull Inventory secondInventory,
-		@NonNull EquipmentSlot secondSlot) {
-		if ((firstInventory == secondInventory && firstSlot.equals(secondSlot))
-			|| !firstInventory.canStoreEquipment
-			|| !secondInventory.canStoreEquipment) {
-			return;
+	public static boolean isValidSlot(@NonNull EquipmentSlot slot, Item item) {
+		if (item == null) {
+			return true;
 		}
-		InventorySlot.swapContents(
-			firstInventory.equipmentSlots[firstSlot.ordinal()],
-			secondInventory.equipmentSlots[secondSlot.ordinal()]);
+		switch (item.getItemType()) {
+			case ACCESSORY:
+				Accessory accessory = (Accessory) item;
+				switch (accessory.getAccessoryType()) {
+					case AMULET:
+						return EquipmentSlot.AMULET.equals(slot);
+					case BELT:
+						return EquipmentSlot.BELT.equals(slot);
+					case CAPE:
+						return EquipmentSlot.CAPE.equals(slot);
+					case RING:
+						return EquipmentSlot.RING_RIGHT.equals(slot)
+							|| EquipmentSlot.RING_LEFT.equals(slot);
+					case TRINKET:
+						return EquipmentSlot.TRINKET.equals(slot);
+					default:
+						return false;
+				}
+			case ARMOR:
+				Armor armor = (Armor) item;
+				switch (armor.getArmorType()) {
+					case CHEST:
+						return EquipmentSlot.CHEST.equals(slot);
+					case FEET:
+						return EquipmentSlot.FEET.equals(slot);
+					case HANDS:
+						return EquipmentSlot.HANDS.equals(slot);
+					case HEAD:
+						return EquipmentSlot.HEAD.equals(slot);
+					case LEGS:
+						return EquipmentSlot.LEGS.equals(slot);
+					case SHOULDERS:
+						return EquipmentSlot.SHOULDERS.equals(slot);
+					case WRIST:
+						return EquipmentSlot.WRIST.equals(slot);
+					default:
+						return false;
+				}
+			case WEAPON:
+				Weapon weapon = (Weapon) item;
+				switch (weapon.getWeaponType()) {
+					case OFF_HAND, SHIELD:
+						return EquipmentSlot.OFF_HAND.equals(slot);
+					case ONE_HANDED_MAGIC, ONE_HANDED_MELEE, ONE_HANDED_RANGED:
+						return EquipmentSlot.MAIN_HAND.equals(slot)
+							|| EquipmentSlot.OFF_HAND.equals(slot);
+					case TWO_HANDED_MAGIC, TWO_HANDED_MELEE, TWO_HANDED_RANGED:
+						return EquipmentSlot.MAIN_HAND.equals(slot);
+					default:
+						return false;
+				}
+			case COMPONENT, CONSUMABLE, JUNK, MATERIAL, QUEST:
+			default:
+				return false;
+		}
 	}
 
 	/**
@@ -151,9 +199,11 @@ public class Inventory extends Component<Inventory> {
 		int firstSlot, @NonNull Inventory secondInventory,
 		@NonNull EquipmentSlot secondSlot) {
 		if (firstSlot < 0 || firstSlot >= firstInventory.size
-			|| !secondInventory.canStoreEquipment) {
+			|| !secondInventory.canStoreEquipment || !Inventory.isValidSlot(secondSlot,
+			firstInventory.slots[firstSlot].getItem())) {
 			return;
 		}
+
 		InventorySlot.swapContents(firstInventory.slots[firstSlot],
 			secondInventory.equipmentSlots[secondSlot.ordinal()]);
 	}
@@ -176,6 +226,26 @@ public class Inventory extends Component<Inventory> {
 		}
 		InventorySlot.swapContents(firstInventory.slots[firstSlot],
 			secondInventory.slots[secondSlot]);
+	}
+
+	/**
+	 * Swap slots between inventories. If invalid or the same exact slots are
+	 * provided, nothing happens.
+	 *
+	 * @param firstInventory The first inventory.
+	 * @param secondInventory The second inventory.
+	 * @param slotType The type of slot to swap.
+	 */
+	public static void swapSlots(@NonNull Inventory firstInventory,
+		@NonNull Inventory secondInventory, @NonNull EquipmentSlot slotType) {
+		if (firstInventory == secondInventory
+			|| !firstInventory.canStoreEquipment
+			|| !secondInventory.canStoreEquipment) {
+			return;
+		}
+		InventorySlot.swapContents(
+			firstInventory.equipmentSlots[slotType.ordinal()],
+			secondInventory.equipmentSlots[slotType.ordinal()]);
 	}
 
 	/**
@@ -596,10 +666,7 @@ public class Inventory extends Component<Inventory> {
 	 * @see #canEquip(Item)
 	 */
 	public boolean equip(@NonNull Item equipment) {
-		if (!this.canStoreEquipment) {
-			return false;
-		}
-		if (!this.canEquip(equipment)) {
+		if (!this.canStoreEquipment || !this.canEquip(equipment)) {
 			return false;
 		}
 		switch (equipment.getItemType()) {

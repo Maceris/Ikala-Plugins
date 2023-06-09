@@ -805,6 +805,217 @@ class TestInventory {
 	}
 
 	/**
+	 * Test
+	 * {@link Inventory#swapSlots(Inventory, EquipmentSlot, Inventory, EquipmentSlot)}.
+	 */
+	@Test
+	void testSwapEquipmentSlots() {
+		Inventory inventory1 = new Inventory(2, true);
+		Inventory inventory2 = new Inventory(2, true);
+		Armor armor1 = ItemGenerator.getArmor();
+		armor1.setArmorType(ArmorType.HEAD);
+		Armor armor2 = ItemGenerator.getArmor();
+		armor2.setArmorType(ArmorType.HEAD);
+
+		inventory1.setItem(EquipmentSlot.HEAD, armor1);
+		inventory2.setItem(EquipmentSlot.HEAD, armor2);
+
+		Assertions.assertEquals(armor1.getID(),
+			inventory1.getItem(EquipmentSlot.HEAD).get().getID());
+		Assertions.assertEquals(armor2.getID(),
+			inventory2.getItem(EquipmentSlot.HEAD).get().getID());
+
+		Inventory.swapSlots(inventory1, inventory2, EquipmentSlot.HEAD);
+		Assertions.assertEquals(armor2.getID(),
+			inventory1.getItem(EquipmentSlot.HEAD).get().getID());
+		Assertions.assertEquals(armor1.getID(),
+			inventory2.getItem(EquipmentSlot.HEAD).get().getID());
+
+		Inventory.swapSlots(inventory1, inventory2, EquipmentSlot.MAIN_HAND);
+		Assertions.assertEquals(armor2.getID(),
+			inventory1.getItem(EquipmentSlot.HEAD).get().getID());
+		Assertions.assertEquals(armor1.getID(),
+			inventory2.getItem(EquipmentSlot.HEAD).get().getID());
+	}
+
+	/**
+	 * Test
+	 * {@link Inventory#swapSlots(Inventory, EquipmentSlot, Inventory, EquipmentSlot)}.
+	 */
+	@Test
+	void testSwapEquipmentSlotsNegative() {
+		Inventory inventory1 = new Inventory(2, true);
+		Inventory inventory2 = new Inventory(2, false);
+
+		Armor armor1 = ItemGenerator.getArmor();
+		armor1.setArmorType(ArmorType.HEAD);
+
+		inventory1.setItem(EquipmentSlot.HEAD, armor1);
+
+		Assertions.assertEquals(armor1.getID(),
+			inventory1.getItem(EquipmentSlot.HEAD).get().getID());
+
+		Inventory.swapSlots(inventory1, inventory2, EquipmentSlot.HEAD);
+		Assertions.assertEquals(armor1.getID(),
+			inventory1.getItem(EquipmentSlot.HEAD).get().getID());
+		Inventory.swapSlots(inventory2, inventory1, EquipmentSlot.HEAD);
+		Assertions.assertEquals(armor1.getID(),
+			inventory1.getItem(EquipmentSlot.HEAD).get().getID());
+	}
+
+	/**
+	 * Test
+	 * {@link Inventory#swapSlots(Inventory, EquipmentSlot, Inventory, int)}.
+	 */
+	@Test
+	void testSwapEquipmentSlotWithInventory() {
+		Inventory inventory = new Inventory(6, true);
+		Armor armor1 = ItemGenerator.getArmor();
+		armor1.setArmorType(ArmorType.HEAD);
+		Armor armor2 = ItemGenerator.getArmor();
+		armor2.setArmorType(ArmorType.HEAD);
+		Equipment weapon = ItemGenerator.getWeapon();
+		Item consumable = ItemGenerator.getConsumable();
+
+		Assertions.assertTrue(inventory.addItem(armor1));
+		Assertions.assertTrue(inventory.addItem(armor2));
+		Assertions.assertTrue(inventory.addItem(weapon));
+		Assertions.assertTrue(inventory.addItem(consumable));
+
+		// Put on armor 1
+		Inventory.swapSlots(inventory, EquipmentSlot.HEAD, inventory, 0);
+		Assertions.assertTrue(inventory.isEmpty(0));
+		Assertions.assertFalse(inventory.isEmpty(EquipmentSlot.HEAD));
+		Assertions.assertEquals(
+			inventory.getItem(EquipmentSlot.HEAD).get().getID(),
+			armor1.getID());
+
+		// Swap armor 2 and armor 1 so we are wearing armor 2 now
+		Inventory.swapSlots(inventory, EquipmentSlot.HEAD, inventory, 1);
+		Assertions.assertFalse(inventory.isEmpty(1));
+		Assertions.assertFalse(inventory.isEmpty(EquipmentSlot.HEAD));
+		Assertions.assertEquals(
+			inventory.getItem(EquipmentSlot.HEAD).get().getID(),
+			armor2.getID());
+		Assertions.assertEquals(inventory.getItem(1).get().getID(),
+			armor1.getID());
+
+		// Swap empty slot 0 and armor 2
+		Inventory.swapSlots(inventory, EquipmentSlot.HEAD, inventory, 0);
+		Assertions.assertFalse(inventory.isEmpty(0));
+		Assertions.assertTrue(inventory.isEmpty(EquipmentSlot.HEAD));
+		Assertions.assertEquals(inventory.getItem(0).get().getID(),
+			armor2.getID());
+
+		// Try and swap a weapon and the head slot
+		Inventory.swapSlots(inventory, EquipmentSlot.HEAD, inventory, 2);
+		Assertions.assertFalse(inventory.isEmpty(2));
+		Assertions.assertTrue(inventory.isEmpty(EquipmentSlot.HEAD));
+		Assertions.assertEquals(inventory.getItem(2).get().getID(),
+			weapon.getID());
+
+		// Try and swap a consumable and the head slot
+		Inventory.swapSlots(inventory, EquipmentSlot.HEAD, inventory, 3);
+		Assertions.assertFalse(inventory.isEmpty(3));
+		Assertions.assertTrue(inventory.isEmpty(EquipmentSlot.HEAD));
+		Assertions.assertEquals(inventory.getItem(3).get().getID(),
+			consumable.getID());
+	}
+
+	/**
+	 * Test negative cases for
+	 * {@link Inventory#swapSlots(Inventory, EquipmentSlot, Inventory, int)}.
+	 */
+	@Test
+	void testSwapEquipmentSlotWithInventoryNegative() {
+		Inventory inventory1 = new Inventory(6, true);
+		Armor armor1 = ItemGenerator.getArmor();
+		armor1.setArmorType(ArmorType.HEAD);
+
+		Assertions.assertTrue(inventory1.addItem(armor1));
+
+		Inventory.swapSlots(inventory1, EquipmentSlot.WRIST, inventory1, -1);
+		Inventory.swapSlots(inventory1, EquipmentSlot.WRIST, inventory1, 6);
+
+		Inventory inventory2 = new Inventory(6, false);
+		Inventory.swapSlots(inventory2, EquipmentSlot.HEAD, inventory1, 0);
+		Assertions.assertTrue(inventory1.hasItem(0));
+	}
+
+	/**
+	 * Test
+	 * {@link Inventory#swapSlots(Inventory, int, Inventory, EquipmentSlot)}.
+	 */
+	@Test
+	void testSwapInventoryWithEquipmentSlot() {
+		Inventory inventory = new Inventory(6, true);
+		Armor armor1 = ItemGenerator.getArmor();
+		armor1.setArmorType(ArmorType.HEAD);
+		Armor armor2 = ItemGenerator.getArmor();
+		armor2.setArmorType(ArmorType.HEAD);
+		Equipment weapon = ItemGenerator.getWeapon();
+		Item consumable = ItemGenerator.getConsumable();
+
+		Assertions.assertTrue(inventory.addItem(armor1));
+		Assertions.assertTrue(inventory.addItem(armor2));
+		Assertions.assertTrue(inventory.addItem(weapon));
+		Assertions.assertTrue(inventory.addItem(consumable));
+
+		Inventory.swapSlots(inventory, 0, inventory, EquipmentSlot.HEAD);
+		Assertions.assertTrue(inventory.isEmpty(0));
+		Assertions.assertFalse(inventory.isEmpty(EquipmentSlot.HEAD));
+		Assertions.assertEquals(
+			inventory.getItem(EquipmentSlot.HEAD).get().getID(),
+			armor1.getID());
+
+		Inventory.swapSlots(inventory, 1, inventory, EquipmentSlot.HEAD);
+		Assertions.assertFalse(inventory.isEmpty(1));
+		Assertions.assertFalse(inventory.isEmpty(EquipmentSlot.HEAD));
+		Assertions.assertEquals(
+			inventory.getItem(EquipmentSlot.HEAD).get().getID(),
+			armor2.getID());
+		Assertions.assertEquals(inventory.getItem(1).get().getID(),
+			armor1.getID());
+
+		Inventory.swapSlots(inventory, 0, inventory, EquipmentSlot.HEAD);
+		Assertions.assertFalse(inventory.isEmpty(0));
+		Assertions.assertTrue(inventory.isEmpty(EquipmentSlot.HEAD));
+		Assertions.assertEquals(inventory.getItem(0).get().getID(),
+			armor2.getID());
+
+		Inventory.swapSlots(inventory, 2, inventory, EquipmentSlot.HEAD);
+		Assertions.assertFalse(inventory.isEmpty(2));
+		Assertions.assertTrue(inventory.isEmpty(EquipmentSlot.HEAD));
+		Assertions.assertEquals(inventory.getItem(2).get().getID(),
+			weapon.getID());
+
+		Inventory.swapSlots(inventory, 3, inventory, EquipmentSlot.HEAD);
+		Assertions.assertFalse(inventory.isEmpty(3));
+		Assertions.assertTrue(inventory.isEmpty(EquipmentSlot.HEAD));
+		Assertions.assertEquals(inventory.getItem(3).get().getID(),
+			consumable.getID());
+	}
+
+	/**
+	 * Test negative cases for
+	 * {@link Inventory#swapSlots(Inventory, int, Inventory, EquipmentSlot)}.
+	 */
+	@Test
+	void testSwapInventoryWithEquipmentSlotNegative() {
+		Inventory inventory1 = new Inventory(6, true);
+		Armor armor1 = ItemGenerator.getArmor();
+		armor1.setArmorType(ArmorType.HEAD);
+
+		Assertions.assertTrue(inventory1.addItem(armor1));
+		Inventory.swapSlots(inventory1, -1, inventory1, EquipmentSlot.HEAD);
+		Inventory.swapSlots(inventory1, 6, inventory1, EquipmentSlot.HEAD);
+
+		Inventory inventory2 = new Inventory(6, false);
+		Inventory.swapSlots(inventory1, 0, inventory2, EquipmentSlot.HEAD);
+		Assertions.assertTrue(inventory1.hasItem(0));
+	}
+
+	/**
 	 * Test swapping items around.
 	 */
 	@Test
