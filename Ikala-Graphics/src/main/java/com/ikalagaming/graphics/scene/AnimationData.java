@@ -20,7 +20,7 @@ public class AnimationData {
 	 * The default bone matrices for an animation, which are all zero matrices.
 	 * There is one for each (potential) bone in a model.
 	 */
-	public static final Matrix4f[] DEFAULT_BONES_MATRICES =
+	protected static final Matrix4f[] DEFAULT_BONES_MATRICES =
 		new Matrix4f[ModelLoader.MAX_BONES];
 
 	static {
