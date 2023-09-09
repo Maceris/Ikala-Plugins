@@ -1,6 +1,0 @@
----
-name: Language
-version: 0.0.1-alpha
-description: Provides a natural language system for interacting with the game
-authors: [maceris]
-main-class: com.ikalagaming.language.LanguagePlugin
