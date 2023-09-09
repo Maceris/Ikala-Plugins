@@ -128,7 +128,7 @@ public class Render {
 	/**
 	 * The lights render handler.
 	 */
-	private LightRender lightsRender;
+	private LightRender lightRender;
 
 	/**
 	 * The buffers for indirect drawing of models.
@@ -189,7 +189,7 @@ public class Render {
 		this.guiRender = new GuiRender(window);
 		this.skyBoxRender = new SkyBoxRender();
 		this.shadowRender = new ShadowRender();
-		this.lightsRender = new LightRender();
+		this.lightRender = new LightRender();
 		this.animationRender = new AnimationRender();
 		this.filterRender = new FilterRender();
 		this.gBuffer = new GBuffer(window);
@@ -240,7 +240,7 @@ public class Render {
 		this.guiRender.cleanup();
 		this.skyBoxRender.cleanup();
 		this.shadowRender.cleanup();
-		this.lightsRender.cleanup();
+		this.lightRender.cleanup();
 		this.animationRender.cleanup();
 		this.filterRender.cleanup();
 		this.gBuffer.cleanUp();
@@ -316,7 +316,7 @@ public class Render {
 			GL11.glEnable(GL11.GL_TEXTURE_2D);
 		}
 		this.lightRenderStart(window);
-		this.lightsRender.render(scene, this.shadowRender, this.gBuffer);
+		this.lightRender.render(scene, this.shadowRender, this.gBuffer);
 		this.skyBoxRender.render(scene);
 		this.lightRenderFinish();
 
