@@ -5,7 +5,7 @@ import lombok.Setter;
 import org.lwjgl.opengl.GL15;
 
 /**
- * References to buffers for rendering entitites, so we can cache the buffers.
+ * References to buffers for rendering entities, so we can cache the buffers.
  *
  * @author Ches Burks
  *
