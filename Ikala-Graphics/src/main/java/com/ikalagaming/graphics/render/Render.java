@@ -128,7 +128,7 @@ public class Render {
 	/**
 	 * The lights render handler.
 	 */
-	private LightsRender lightsRender;
+	private LightRender lightsRender;
 
 	/**
 	 * The buffers for indirect drawing of models.
@@ -189,7 +189,7 @@ public class Render {
 		this.guiRender = new GuiRender(window);
 		this.skyBoxRender = new SkyBoxRender();
 		this.shadowRender = new ShadowRender();
-		this.lightsRender = new LightsRender();
+		this.lightsRender = new LightRender();
 		this.animationRender = new AnimationRender();
 		this.filterRender = new FilterRender();
 		this.gBuffer = new GBuffer(window);

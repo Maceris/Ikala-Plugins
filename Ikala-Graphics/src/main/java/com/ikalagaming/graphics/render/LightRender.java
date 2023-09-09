@@ -35,7 +35,7 @@ import java.util.List;
 /**
  * Handle light rendering.
  */
-public class LightsRender {
+public class LightRender {
 	/**
 	 * The maximum number of point lights that are allowed.
 	 */
@@ -60,7 +60,7 @@ public class LightsRender {
 	/**
 	 * Set up the light renderer.
 	 */
-	public LightsRender() {
+	public LightRender() {
 		List<ShaderProgram.ShaderModuleData> shaderModuleDataList =
 			new ArrayList<>();
 		shaderModuleDataList.add(new ShaderProgram.ShaderModuleData(
@@ -98,7 +98,7 @@ public class LightsRender {
 		this.uniformsMap.createUniform(ShaderUniforms.Light.AMBIENT_LIGHT + "."
 			+ ShaderUniforms.Light.AmbientLight.COLOR);
 
-		for (int i = 0; i < LightsRender.MAX_POINT_LIGHTS; ++i) {
+		for (int i = 0; i < LightRender.MAX_POINT_LIGHTS; ++i) {
 			String name = ShaderUniforms.Light.POINT_LIGHTS + "[" + i + "].";
 			this.uniformsMap
 				.createUniform(name + ShaderUniforms.Light.PointLight.POSITION);
@@ -116,7 +116,7 @@ public class LightsRender {
 				name + ShaderUniforms.Light.PointLight.ATTENUATION + "."
 					+ ShaderUniforms.Light.Attenuation.EXPONENT);
 		}
-		for (int i = 0; i < LightsRender.MAX_SPOT_LIGHTS; ++i) {
+		for (int i = 0; i < LightRender.MAX_SPOT_LIGHTS; ++i) {
 			String name = ShaderUniforms.Light.SPOT_LIGHTS + "[" + i + "].";
 			this.uniformsMap
 				.createUniform(name + ShaderUniforms.Light.SpotLight.POINT_LIGHT
@@ -276,7 +276,7 @@ public class LightsRender {
 		List<PointLight> pointLights = sceneLights.getPointLights();
 		int numPointLights = pointLights.size();
 		PointLight pointLight;
-		for (int i = 0; i < LightsRender.MAX_POINT_LIGHTS; ++i) {
+		for (int i = 0; i < LightRender.MAX_POINT_LIGHTS; ++i) {
 			if (i < numPointLights) {
 				pointLight = pointLights.get(i);
 			}
@@ -290,7 +290,7 @@ public class LightsRender {
 		List<SpotLight> spotLights = sceneLights.getSpotLights();
 		int numSpotLights = spotLights.size();
 		SpotLight spotLight;
-		for (int i = 0; i < LightsRender.MAX_SPOT_LIGHTS; ++i) {
+		for (int i = 0; i < LightRender.MAX_SPOT_LIGHTS; ++i) {
 			if (i < numSpotLights) {
 				spotLight = spotLights.get(i);
 			}
