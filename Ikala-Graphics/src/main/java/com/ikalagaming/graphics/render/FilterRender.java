@@ -32,7 +32,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Handle light rendering.
+ * Handle post-processing filters.
  */
 @Slf4j
 public class FilterRender {
@@ -43,7 +43,7 @@ public class FilterRender {
 	private Map<String, ShaderProgram> shaders;
 
 	/**
-	 * A mesh for rendering lighting onto.
+	 * A mesh for rendering the scene onto.
 	 */
 	private QuadMesh quadMesh;
 	/**
@@ -52,7 +52,7 @@ public class FilterRender {
 	private UniformsMap uniformsMap;
 
 	/**
-	 * Set up the light renderer.
+	 * Set up the filter renderer.
 	 */
 	public FilterRender() {
 		this.shaders = new HashMap<>();
