@@ -74,7 +74,6 @@ public class Scene {
 	 * @param sceneLights The lights to render with.
 	 * @return The lights used in the scene.
 	 */
-	@Setter
 	@NonNull
 	private SceneLights sceneLights;
 	/**
@@ -104,6 +103,7 @@ public class Scene {
 		this.projection = new Projection(width, height);
 		this.textureCache = new TextureCache();
 		this.materialCache = new MaterialCache();
+		this.sceneLights = new SceneLights();
 		this.camera = new Camera();
 		this.fog = new Fog();
 		this.entityQueue = Collections.synchronizedList(new LinkedList<>());

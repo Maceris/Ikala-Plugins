@@ -239,7 +239,7 @@ public class GraphicsManager {
 		bobEntity2.setAnimationData(GraphicsManager.animationData2);
 		GraphicsManager.getScene().addEntity(bobEntity2);
 
-		SceneLights sceneLights = new SceneLights();
+		SceneLights sceneLights = GraphicsManager.scene.getSceneLights();
 		AmbientLight ambientLight = sceneLights.getAmbientLight();
 		ambientLight.setIntensity(0.5f);
 		ambientLight.setColor(0.3f, 0.3f, 0.3f);
@@ -253,8 +253,6 @@ public class GraphicsManager {
 					new PointLight(new Vector3f(1, 1, 1),
 						new Vector3f(0, 0, -1.6f), 1.0f),
 					new Vector3f(0, 0, -1.4f), 1.0f));
-
-		GraphicsManager.scene.setSceneLights(sceneLights);
 
 		SkyBox skyBox = new SkyBox("models/skybox/skybox.obj",
 			GraphicsManager.scene.getTextureCache(),
