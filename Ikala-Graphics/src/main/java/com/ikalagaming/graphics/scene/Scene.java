@@ -119,8 +119,6 @@ public class Scene {
 	 * Add an entity to the scene.
 	 *
 	 * @param entity The entity to add.
-	 * @throws RuntimeException If the entity does not have a valid model ID
-	 *             that exists in the model map.
 	 * @see #addModel(Model)
 	 */
 	public void addEntity(@NonNull Entity entity) {
