@@ -148,12 +148,9 @@ public class Camera {
 	private void recalculate() {
 		this.rotation.x = Utils.clampFloat(this.rotation.x,
 			(float) Math.toRadians(-90), (float) Math.toRadians(90));
-		while (this.rotation.y < 0) {
-			this.rotation.y += Camera.TWO_PI;
-		}
-		while (this.rotation.y > Camera.TWO_PI) {
-			this.rotation.y -= Camera.TWO_PI;
-		}
+
+		this.rotation.y %= Camera.TWO_PI;
+		this.rotation.y = (this.rotation.y + Camera.TWO_PI) % Camera.TWO_PI;
 
 		this.viewMatrix.identity().rotateX(this.rotation.x)
 			.rotateY(this.rotation.y)
