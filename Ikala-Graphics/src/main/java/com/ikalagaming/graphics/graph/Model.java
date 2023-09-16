@@ -22,7 +22,7 @@ import java.util.List;
 @Getter
 public class Model {
 	/**
-	 * A single key frame of the animation, which is defines transformations to
+	 * A single key frame of the animation, which defines transformations to
 	 * apply to the bones.
 	 *
 	 */
