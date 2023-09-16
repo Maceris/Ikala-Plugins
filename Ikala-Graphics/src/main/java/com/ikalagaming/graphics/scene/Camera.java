@@ -82,8 +82,8 @@ public class Camera {
 	 * @param inc The amount to move by.
 	 */
 	public void moveBackwards(float inc) {
-		this.viewMatrix.positiveZ(this.temp).negate().mul(inc);
-		this.position.sub(this.temp);
+		this.invViewMatrix.transformDirection(0, 0, 1, this.temp);
+		this.position.add(this.temp.mul(inc));
 		this.recalculate();
 	}
 
@@ -93,8 +93,8 @@ public class Camera {
 	 * @param inc The amount to move by.
 	 */
 	public void moveDown(float inc) {
-		this.viewMatrix.positiveY(this.temp).mul(inc);
-		this.position.sub(this.temp);
+		this.invViewMatrix.transformDirection(0, 1, 0, this.temp);
+		this.position.sub(this.temp.mul(inc));
 		this.recalculate();
 	}
 
@@ -104,8 +104,8 @@ public class Camera {
 	 * @param inc The amount to move by.
 	 */
 	public void moveForward(float inc) {
-		this.viewMatrix.positiveZ(this.temp).negate().mul(inc);
-		this.position.add(this.temp);
+		this.invViewMatrix.transformDirection(0, 0, 1, this.temp);
+		this.position.sub(this.temp.mul(inc));
 		this.recalculate();
 	}
 
@@ -115,8 +115,8 @@ public class Camera {
 	 * @param inc The amount to move by.
 	 */
 	public void moveLeft(float inc) {
-		this.viewMatrix.positiveX(this.temp).mul(inc);
-		this.position.sub(this.temp);
+		this.invViewMatrix.transformDirection(1, 0, 0, this.temp);
+		this.position.sub(this.temp.mul(inc));
 		this.recalculate();
 	}
 
@@ -126,8 +126,8 @@ public class Camera {
 	 * @param inc The amount to move by.
 	 */
 	public void moveRight(float inc) {
-		this.viewMatrix.positiveX(this.temp).mul(inc);
-		this.position.add(this.temp);
+		this.invViewMatrix.transformDirection(1, 0, 0, this.temp);
+		this.position.add(this.temp.mul(inc));
 		this.recalculate();
 	}
 
@@ -137,8 +137,8 @@ public class Camera {
 	 * @param inc The amount to move by.
 	 */
 	public void moveUp(float inc) {
-		this.viewMatrix.positiveY(this.temp).mul(inc);
-		this.position.add(this.temp);
+		this.invViewMatrix.transformDirection(0, 1, 0, this.temp);
+		this.position.add(this.temp.mul(inc));
 		this.recalculate();
 	}
 
