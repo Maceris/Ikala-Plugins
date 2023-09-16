@@ -22,12 +22,9 @@ public class Camera {
 	 */
 	private static final float TWO_PI = (float) Math.PI * 2;
 	/**
-	 * The direction the camera is facing.
-	 *
-	 * @return The direction
+	 * Used to calculate movements.
 	 */
-	@Getter
-	private Vector3f direction;
+	private Vector3f temp;
 	/**
 	 * The inverse of the view matrix.
 	 *
@@ -43,20 +40,12 @@ public class Camera {
 	@Getter
 	private Vector3f position;
 	/**
-	 * The direction that is considered right, relative to the camera.
-	 */
-	private Vector3f right;
-	/**
 	 * The rotation of the camera.
 	 *
 	 * @return The rotation vector.
 	 */
 	@Getter
 	private Vector2f rotation;
-	/**
-	 * The direction that is considered up, relative to the camera.
-	 */
-	private Vector3f up;
 	/**
 	 * The view matrix.
 	 *
@@ -69,9 +58,7 @@ public class Camera {
 	 * Creates a new camera with default values.
 	 */
 	public Camera() {
-		this.direction = new Vector3f();
-		this.right = new Vector3f();
-		this.up = new Vector3f();
+		this.temp = new Vector3f();
 		this.position = new Vector3f();
 		this.viewMatrix = new Matrix4f();
 		this.invViewMatrix = new Matrix4f();
@@ -95,8 +82,8 @@ public class Camera {
 	 * @param inc The amount to move by.
 	 */
 	public void moveBackwards(float inc) {
-		this.viewMatrix.positiveZ(this.direction).negate().mul(inc);
-		this.position.sub(this.direction);
+		this.viewMatrix.positiveZ(this.temp).negate().mul(inc);
+		this.position.sub(this.temp);
 		this.recalculate();
 	}
 
@@ -106,8 +93,8 @@ public class Camera {
 	 * @param inc The amount to move by.
 	 */
 	public void moveDown(float inc) {
-		this.viewMatrix.positiveY(this.up).mul(inc);
-		this.position.sub(this.up);
+		this.viewMatrix.positiveY(this.temp).mul(inc);
+		this.position.sub(this.temp);
 		this.recalculate();
 	}
 
@@ -117,8 +104,8 @@ public class Camera {
 	 * @param inc The amount to move by.
 	 */
 	public void moveForward(float inc) {
-		this.viewMatrix.positiveZ(this.direction).negate().mul(inc);
-		this.position.add(this.direction);
+		this.viewMatrix.positiveZ(this.temp).negate().mul(inc);
+		this.position.add(this.temp);
 		this.recalculate();
 	}
 
@@ -128,8 +115,8 @@ public class Camera {
 	 * @param inc The amount to move by.
 	 */
 	public void moveLeft(float inc) {
-		this.viewMatrix.positiveX(this.right).mul(inc);
-		this.position.sub(this.right);
+		this.viewMatrix.positiveX(this.temp).mul(inc);
+		this.position.sub(this.temp);
 		this.recalculate();
 	}
 
@@ -139,8 +126,8 @@ public class Camera {
 	 * @param inc The amount to move by.
 	 */
 	public void moveRight(float inc) {
-		this.viewMatrix.positiveX(this.right).mul(inc);
-		this.position.add(this.right);
+		this.viewMatrix.positiveX(this.temp).mul(inc);
+		this.position.add(this.temp);
 		this.recalculate();
 	}
 
@@ -150,8 +137,8 @@ public class Camera {
 	 * @param inc The amount to move by.
 	 */
 	public void moveUp(float inc) {
-		this.viewMatrix.positiveY(this.up).mul(inc);
-		this.position.add(this.up);
+		this.viewMatrix.positiveY(this.temp).mul(inc);
+		this.position.add(this.temp);
 		this.recalculate();
 	}
 
