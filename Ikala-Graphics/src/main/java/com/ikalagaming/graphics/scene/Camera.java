@@ -68,8 +68,8 @@ public class Camera {
 	/**
 	 * Add rotation to the current rotation.
 	 *
-	 * @param x The x (roll) rotation increment.
-	 * @param y The y (pitch) rotation increment.
+	 * @param x The x (pitch) rotation increment.
+	 * @param y The y (yaw) rotation increment.
 	 */
 	public void addRotation(float x, float y) {
 		this.rotation.add(x, y);
@@ -173,8 +173,8 @@ public class Camera {
 	/**
 	 * Set the rotation of the camera.
 	 *
-	 * @param x The new x (roll) rotation.
-	 * @param y The new y (pitch) rotation.
+	 * @param x The new x (pitch) rotation.
+	 * @param y The new y (yaw) rotation.
 	 */
 	public void setRotation(float x, float y) {
 		this.rotation.set(x, y);
