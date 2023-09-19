@@ -166,8 +166,19 @@ public class Render {
 	 */
 	CommandBuffer commandBuffers;
 
-	private int screenRBO;
+	/**
+	 * The Frame Buffer Object for the pre-filter render target.
+	 */
+	private int screenFBO;
+	
+	/**
+	 * The depth RBO for the pre-filter render target.
+	 */
 	private int screenRBODepth;
+	
+	/**
+	 * The texture ID we render to before applying filters.
+	 */
 	private int screenTexture;
 
 	/**
@@ -221,8 +232,8 @@ public class Render {
 			GraphicsManager.getWindow().getHeight());
 		GL30.glBindRenderbuffer(GL30.GL_RENDERBUFFER, 0);
 
-		this.screenRBO = GL30.glGenFramebuffers();
-		GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, this.screenRBO);
+		this.screenFBO = GL30.glGenFramebuffers();
+		GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, this.screenFBO);
 		GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER,
 			GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, this.screenTexture,
 			0);
@@ -247,7 +258,7 @@ public class Render {
 		this.renderBuffers.cleanup();
 		this.commandBuffers.cleanup();
 		GL30.glDeleteRenderbuffers(this.screenRBODepth);
-		GL30.glDeleteFramebuffers(this.screenRBO);
+		GL30.glDeleteFramebuffers(this.screenFBO);
 		GL11.glDeleteTextures(this.screenTexture);
 	}
 
@@ -267,7 +278,7 @@ public class Render {
 	 * @param window The window we are rendering in.
 	 */
 	private void lightRenderStart(@NonNull Window window) {
-		GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, this.screenRBO);
+		GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, this.screenFBO);
 		GL30.glBindRenderbuffer(GL30.GL_RENDERBUFFER, this.screenRBODepth);
 
 		GL13.glActiveTexture(GL13.GL_TEXTURE0);
@@ -552,7 +563,7 @@ public class Render {
 	}
 
 	/**
-	 * Take alist of models and upload the model matrices to the appropriate
+	 * Take a list of models and upload the model matrices to the appropriate
 	 * buffer.
 	 *
 	 * @param models The list of models.
