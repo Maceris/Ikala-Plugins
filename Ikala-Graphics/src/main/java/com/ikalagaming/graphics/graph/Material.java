@@ -39,15 +39,6 @@ public class Material {
 	@NonNull
 	private Vector4f diffuseColor;
 	/**
-	 * A mesh uses only a single material, so if an imported model uses multiple
-	 * materials, the import splits up the mesh. This value is used as to index
-	 * into the scene's material list.
-	 *
-	 * @param materialIndex The index to use.
-	 * @return The material index.
-	 */
-	private int materialIndex;
-	/**
 	 * The path to the normal map for this material, from the resource
 	 * directory.
 	 *
@@ -85,7 +76,6 @@ public class Material {
 		this.diffuseColor = Material.DEFAULT_COLOR;
 		this.ambientColor = Material.DEFAULT_COLOR;
 		this.specularColor = Material.DEFAULT_COLOR;
-		this.materialIndex = 0;
 	}
 
 	@Override

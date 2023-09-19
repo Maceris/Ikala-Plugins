@@ -47,14 +47,13 @@ public class MaterialCache {
 	 *         this cache instance.
 	 */
 	public int addMaterial(@NonNull Material material) {
-		for (Material mat : this.materialsList) {
-			if (mat.equals(material)) {
-				return mat.getMaterialIndex();
+		for (int i = 0; i < this.materialsList.size(); ++i) {
+			if (material.equals(this.materialsList.get(i))) {
+				return i;
 			}
 		}
 		final int assignedIndex = this.materialsList.size();
 		this.materialsList.add(material);
-		material.setMaterialIndex(assignedIndex);
 		return assignedIndex;
 	}
 
