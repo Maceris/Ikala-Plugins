@@ -90,7 +90,7 @@ public class Material {
 
 	@Override
 	public boolean equals(Object obj) {
-		if ((obj == null) || !(obj instanceof Material)) {
+		if (!(obj instanceof Material)) {
 			return false;
 		}
 		Material other = (Material) obj;
