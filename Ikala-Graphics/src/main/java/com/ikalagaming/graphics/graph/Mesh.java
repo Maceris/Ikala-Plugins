@@ -162,7 +162,7 @@ public class Mesh {
 			GL15.glBufferData(GL15.GL_ARRAY_BUFFER, boneIndicesBuffer,
 				GL15.GL_STATIC_DRAW);
 			GL20.glEnableVertexAttribArray(6);
-			GL20.glVertexAttribPointer(6, 4, GL11.GL_FLOAT, false, 0, 0);
+			GL20.glVertexAttribPointer(6, 4, GL11.GL_INT, false, 0, 0);
 
 			// Index VBO
 			vboID = GL15.glGenBuffers();
