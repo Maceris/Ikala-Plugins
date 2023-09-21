@@ -129,7 +129,7 @@ public class ShaderProgram {
 				GraphicsPlugin.getResourceBundle());
 			ShaderProgram.log.info(error, shaderType);
 			throw new ShaderException(
-				error.replaceFirst("\\{\\}", "" + shaderType));
+				SafeResourceLoader.format(error, "" + shaderType));
 		}
 
 		GL20.glShaderSource(shaderId, shaderCode);
@@ -140,7 +140,7 @@ public class ShaderProgram {
 				"SHADER_ERROR_COMPILING", GraphicsPlugin.getResourceBundle());
 			ShaderProgram.log.info(error,
 				GL20.glGetShaderInfoLog(shaderId, 1024));
-			throw new ShaderException(error.replaceFirst("\\{\\}",
+			throw new ShaderException(SafeResourceLoader.format(error,
 				GL20.glGetShaderInfoLog(shaderId, 1024)));
 		}
 
@@ -161,7 +161,7 @@ public class ShaderProgram {
 				GraphicsPlugin.getResourceBundle());
 			ShaderProgram.log.info(error,
 				GL20.glGetProgramInfoLog(this.programID, 1024));
-			throw new ShaderException(error.replaceFirst("\\{\\}",
+			throw new ShaderException(SafeResourceLoader.format(error,
 				GL20.glGetProgramInfoLog(this.programID, 1024)));
 		}
 
@@ -187,7 +187,7 @@ public class ShaderProgram {
 					GraphicsPlugin.getResourceBundle());
 			ShaderProgram.log.warn(error,
 				GL20.glGetProgramInfoLog(this.programID, 1024));
-			throw new ShaderException(error.replaceFirst("\\{\\}",
+			throw new ShaderException(SafeResourceLoader.format(error,
 				GL20.glGetProgramInfoLog(this.programID, 1024)));
 		}
 	}

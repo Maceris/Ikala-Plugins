@@ -8,7 +8,6 @@ package com.ikalagaming.graphics.render;
 
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.graph.Material;
-import com.ikalagaming.graphics.graph.Mesh;
 import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.graphics.graph.TextureCache;
@@ -86,9 +85,7 @@ public class SkyBoxRender {
 	 */
 	public void render(@NonNull Scene scene) {
 		SkyBox skyBox = scene.getSkyBox();
-		if (skyBox == null) {
-			return;
-		}
+
 		this.shaderProgram.bind();
 
 		this.uniformsMap.setUniform(ShaderUniforms.Skybox.PROJECTION_MATRIX,
@@ -101,11 +98,11 @@ public class SkyBoxRender {
 			this.viewMatrix);
 		this.uniformsMap.setUniform(ShaderUniforms.Skybox.TEXTURE_SAMPLER, 0);
 
-		Entity skyBoxEntity = skyBox.getSkyBoxEntity();
-		TextureCache textureCache = scene.getTextureCache();
-		Material material = skyBox.getMaterial();
-		Mesh mesh = skyBox.getMesh();
-		Texture texture = textureCache.getTexture(material.getTexturePath());
+		final Entity skyBoxEntity = skyBox.getSkyBoxEntity();
+		Material material =
+			scene.getMaterialCache().getMaterial(skyBox.getMaterialIndex());
+		Texture texture =
+			scene.getTextureCache().getTexture(material.getTexturePath());
 		GL13.glActiveTexture(GL13.GL_TEXTURE0);
 		texture.bind();
 
@@ -116,11 +113,11 @@ public class SkyBoxRender {
 				? 0
 				: 1);
 
-		GL30.glBindVertexArray(mesh.getVaoID());
+		GL30.glBindVertexArray(skyBox.getVaoID());
 
 		this.uniformsMap.setUniform(ShaderUniforms.Skybox.MODEL_MATRIX,
 			skyBoxEntity.getModelMatrix());
-		GL11.glDrawElements(GL11.GL_TRIANGLES, mesh.getVertexCount(),
+		GL11.glDrawElements(GL11.GL_TRIANGLES, skyBox.getVertexCount(),
 			GL11.GL_UNSIGNED_INT, 0);
 
 		GL30.glBindVertexArray(0);

@@ -12,7 +12,6 @@ import com.ikalagaming.graphics.Utils;
 import com.ikalagaming.graphics.exceptions.ModelException;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
-import com.ikalagaming.graphics.graph.Mesh;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.graph.TextureCache;
@@ -62,6 +61,11 @@ import java.util.concurrent.ConcurrentLinkedDeque;
  */
 @Slf4j
 public class ModelLoader {
+	/**
+	 * The maximum number of bone weights that can affect a vertex, the default
+	 * value used by Assimp when limiting bone weights.
+	 */
+	public static final int MAX_WEIGHTS = 4;
 
 	/**
 	 * Information needed to load a model.
@@ -552,8 +556,8 @@ public class ModelLoader {
 				AIVertexWeight aiWeight = aiWeights.get(j);
 				VertexWeight vw = new VertexWeight(bone.boneID(),
 					aiWeight.mVertexId(), aiWeight.mWeight());
-				List<VertexWeight> vertexWeightList =
-					weightSet.computeIfAbsent(vw.vertexID(), ArrayList::new);
+				List<VertexWeight> vertexWeightList = weightSet.computeIfAbsent(
+					vw.vertexID(), ignored -> new ArrayList<>());
 				vertexWeightList.add(vw);
 			}
 		}
@@ -562,7 +566,7 @@ public class ModelLoader {
 		for (int i = 0; i < numVertices; ++i) {
 			List<VertexWeight> vertexWeightList = weightSet.get(i);
 			int size = vertexWeightList == null ? 0 : vertexWeightList.size();
-			for (int j = 0; j < Mesh.MAX_WEIGHTS; j++) {
+			for (int j = 0; j < MAX_WEIGHTS; j++) {
 				if (j < size) {
 					/*
 					 * Since size is 0 if the weight list is null, this branch
