@@ -132,6 +132,9 @@ public class RenderBuffers {
 		GL30.glDeleteVertexArrays(this.animVaoID);
 	}
 
+	/**
+	 * Used to define the vertex attribute arrays.
+	 */
 	private void defineVertexAttribs() {
 		final int stride = (3 * 4) * 4 + 2 * 4;
 		int pointer = 0;
@@ -257,7 +260,7 @@ public class RenderBuffers {
 	 * Store binding pose information for all of the meshes that are associated
 	 * with the animated models.
 	 *
-	 * @param modelList The modes to load binding pose information for.
+	 * @param modelList The models to load binding pose information for.
 	 */
 	private void loadBindingPoses(@NonNull List<Model> modelList) {
 		int meshSize = 0;
@@ -285,7 +288,7 @@ public class RenderBuffers {
 			GL15.GL_STATIC_DRAW);
 		MemoryUtil.memFree(meshesBuffer);
 
-		GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
+		GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, 0);
 	}
 
 	/**
@@ -354,8 +357,6 @@ public class RenderBuffers {
 			}
 		}
 
-		this.bonesMatricesBuffer = GL15.glGenBuffers();
-		this.vboIDList.add(this.bonesMatricesBuffer);
 		ByteBuffer dataBuffer = MemoryUtil.memAlloc(bufferSize);
 		int matrixSize = 4 * 4 * 4;
 		for (Model model : modelList) {
@@ -373,12 +374,17 @@ public class RenderBuffers {
 			}
 		}
 		dataBuffer.flip();
+		
+		this.bonesMatricesBuffer = GL15.glGenBuffers();
+		this.vboIDList.add(this.bonesMatricesBuffer);
 
 		GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER,
 			this.bonesMatricesBuffer);
 		GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, dataBuffer,
 			GL15.GL_STATIC_DRAW);
 		MemoryUtil.memFree(dataBuffer);
+		
+		GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, 0);
 	}
 
 	/**
