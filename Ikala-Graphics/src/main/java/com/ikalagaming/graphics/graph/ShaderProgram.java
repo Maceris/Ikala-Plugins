@@ -94,6 +94,7 @@ public class ShaderProgram {
 				data.shaderType)));
 
 		this.link(shaderModules);
+		this.validate();
 	}
 
 	/**
