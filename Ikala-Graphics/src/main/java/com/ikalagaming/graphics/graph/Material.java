@@ -11,6 +11,8 @@ import lombok.NonNull;
 import lombok.Setter;
 import org.joml.Vector4f;
 
+import java.util.Objects;
+
 /**
  * A material for rendering that defines color and textures for a mesh.
  */
@@ -45,7 +47,7 @@ public class Material {
 	 * @param normalMapPath The file path to the normal map.
 	 * @return The file path to the normal map.
 	 */
-	private String normalMapPath;
+	private Texture normalMap;
 	/**
 	 * The reflectance value of the material.
 	 *
@@ -67,7 +69,7 @@ public class Material {
 	 * @param texturePath The file path to the texture.
 	 * @return The file path to the texture.
 	 */
-	private String texturePath;
+	private Texture texture;
 
 	/**
 	 * Create a default, non-reflective material with no texture.
@@ -95,18 +97,10 @@ public class Material {
 		if (!this.specularColor.equals(other.specularColor, delta)) {
 			return false;
 		}
-		if (this.normalMapPath == null && other.normalMapPath != null) {
+		if (!Objects.equals(this.texture, other.texture)) {
 			return false;
 		}
-		if (this.normalMapPath != null
-			&& !this.normalMapPath.equals(other.normalMapPath)) {
-			return false;
-		}
-		if (this.texturePath == null && other.texturePath != null) {
-			return false;
-		}
-		if (this.texturePath != null
-			&& !this.texturePath.equals(other.texturePath)) {
+		if (!Objects.equals(this.normalMap, other.normalMap)) {
 			return false;
 		}
 		if (Math.abs(this.reflectance - other.reflectance) > delta) {

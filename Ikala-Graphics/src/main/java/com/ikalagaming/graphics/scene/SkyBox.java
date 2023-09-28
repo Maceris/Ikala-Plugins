@@ -10,7 +10,6 @@ import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
-import com.ikalagaming.graphics.graph.TextureCache;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -79,16 +78,14 @@ public class SkyBox {
 	 * Create a new skybox.
 	 *
 	 * @param skyBoxModelPath The path to the model from the resource directory.
-	 * @param textureCache The texture cache to use.
 	 * @param materialCache The texture cache to use.
 	 */
 	public SkyBox(@NonNull String skyBoxModelPath,
-		@NonNull TextureCache textureCache,
 		@NonNull MaterialCache materialCache) {
 		this.skyBoxModel =
 			ModelLoader.loadModel(new ModelLoader.ModelLoadRequest(
 				"skybox-model", GraphicsPlugin.PLUGIN_NAME, skyBoxModelPath,
-				textureCache, materialCache, false));
+				materialCache, false));
 		MeshData meshData = this.skyBoxModel.getMeshDataList().get(0);
 		this.materialIndex = meshData.getMaterialIndex();
 		setupBuffers(meshData);

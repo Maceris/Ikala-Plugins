@@ -6,7 +6,6 @@
  */
 package com.ikalagaming.graphics.render;
 
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.Material;
@@ -14,13 +13,10 @@ import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.RenderBuffers;
 import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.Texture;
-import com.ikalagaming.graphics.graph.TextureCache;
 import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL15;
@@ -30,14 +26,11 @@ import org.lwjgl.opengl.GL40;
 import org.lwjgl.opengl.GL43;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Handles rendering for the scene geometry.
  */
-@Slf4j
 public class SceneRender {
 	/**
 	 * The maximum number of draw elements that we can process.
@@ -123,8 +116,7 @@ public class SceneRender {
 	 * @param scene The scene to render.
 	 */
 	public void recalculateMaterials(@NonNull Scene scene) {
-		this.setupMaterialsUniform(scene.getTextureCache(),
-			scene.getMaterialCache());
+		this.setupMaterialsUniform(scene.getMaterialCache());
 	}
 
 	/**
@@ -151,22 +143,29 @@ public class SceneRender {
 		this.uniformsMap.setUniform(ShaderUniforms.Scene.VIEW_MATRIX,
 			scene.getCamera().getViewMatrix());
 
-		TextureCache textureCache = scene.getTextureCache();
-		List<Texture> textures = textureCache.getAll().stream().toList();
-		int numTextures = textures.size();
-		if (numTextures > SceneRender.MAX_TEXTURES) {
-			SceneRender.log.warn(
-				SafeResourceLoader.getString("TOO_MANY_TEXTURES",
-					GraphicsPlugin.getResourceBundle()),
-				SceneRender.MAX_TEXTURES);
+		GL13.glActiveTexture(GL13.GL_TEXTURE0);
+		Texture.DEFAULT_TEXTURE.bind();
+
+		int nextTexture = 1;
+		for (Material material : scene.getMaterialCache().getMaterialsList()) {
+			if (material.getNormalMap() != null) {
+				GL13.glActiveTexture(GL13.GL_TEXTURE0 + nextTexture);
+				material.getNormalMap().bind();
+				this.uniformsMap.setUniform(ShaderUniforms.Scene.TEXTURE_SAMPLER
+					+ "[" + nextTexture + "]", nextTexture);
+				++nextTexture;
+			}
+			if (material.getTexture() != null) {
+				GL13.glActiveTexture(GL13.GL_TEXTURE0 + nextTexture);
+				material.getTexture().bind();
+				this.uniformsMap.setUniform(ShaderUniforms.Scene.TEXTURE_SAMPLER
+					+ "[" + nextTexture + "]", nextTexture);
+				++nextTexture;
+			}
 		}
-		for (int i = 0; i < Math.min(SceneRender.MAX_TEXTURES,
-			numTextures); ++i) {
-			this.uniformsMap.setUniform(
-				ShaderUniforms.Scene.TEXTURE_SAMPLER + "[" + i + "]", i);
-			Texture texture = textures.get(i);
+		for (int i = 0; i < SceneRender.MAX_TEXTURES; ++i) {
+
 			GL13.glActiveTexture(GL13.GL_TEXTURE0 + i);
-			texture.bind();
 		}
 
 		// Static meshes
@@ -214,25 +213,12 @@ public class SceneRender {
 	 * @param textureCache The texture cache.
 	 * @param materialCache The material cache.
 	 */
-	private void setupMaterialsUniform(@NonNull TextureCache textureCache,
-		@NonNull MaterialCache materialCache) {
-		List<Texture> textures = textureCache.getAll().stream().toList();
-		int numTextures = textures.size();
-		if (numTextures > SceneRender.MAX_TEXTURES) {
-			SceneRender.log.warn(
-				SafeResourceLoader.getString("TOO_MANY_TEXTURES",
-					GraphicsPlugin.getResourceBundle()),
-				SceneRender.MAX_TEXTURES);
-		}
-		Map<String, Integer> texturePosMap = new HashMap<>();
-		for (int i = 0; i < Math.min(SceneRender.MAX_TEXTURES,
-			numTextures); ++i) {
-			texturePosMap.put(textures.get(i).getTexturePath(), i);
-		}
-
+	private void setupMaterialsUniform(@NonNull MaterialCache materialCache) {
 		this.shaderProgram.bind();
 		List<Material> materialList = materialCache.getMaterialsList();
 		int numMaterials = materialList.size();
+
+		int nextTexture = 1;
 		for (int i = 0; i < numMaterials; ++i) {
 			Material material = materialCache.getMaterial(i);
 			String name = ShaderUniforms.Scene.MATERIALS + "[" + i + "].";
@@ -245,17 +231,20 @@ public class SceneRender {
 			this.uniformsMap.setUniform(
 				name + ShaderUniforms.Scene.Material.REFLECTANCE,
 				material.getReflectance());
-			String normalMapPath = material.getNormalMapPath();
+
+			// We bind the default texture to 0
 			int index = 0;
-			if (normalMapPath != null) {
-				index = texturePosMap.computeIfAbsent(normalMapPath, k -> 0);
+			if (material.getNormalMap() != null) {
+				index = nextTexture;
+				++nextTexture;
 			}
 			this.uniformsMap.setUniform(
 				name + ShaderUniforms.Scene.Material.NORMAL_MAP_INDEX, index);
-			Texture texture =
-				textureCache.getTexture(material.getTexturePath());
-			index =
-				texturePosMap.computeIfAbsent(texture.getTexturePath(), k -> 0);
+			index = 0;
+			if (material.getTexture() != null) {
+				index = nextTexture;
+				++nextTexture;
+			}
 			this.uniformsMap.setUniform(
 				name + ShaderUniforms.Scene.Material.TEXTURE_INDEX, index);
 		}

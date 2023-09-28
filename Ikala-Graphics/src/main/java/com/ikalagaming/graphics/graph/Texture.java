@@ -8,6 +8,8 @@ package com.ikalagaming.graphics.graph;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.exceptions.TextureException;
+import com.ikalagaming.launcher.PluginFolder;
+import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.Getter;
@@ -28,24 +30,31 @@ import java.nio.IntBuffer;
 @Getter
 public class Texture {
 	/**
+	 * The default texture to use if nothing is provided.
+	 */
+	private static final String DEFAULT_TEXTURE_PATH =
+		PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME, ResourceType.DATA,
+			"models/default/default_texture.png").getAbsolutePath();
+	/**
+	 * The default texture so that we have an easy reference.
+	 */
+	public static final Texture DEFAULT_TEXTURE =
+		new Texture(Texture.DEFAULT_TEXTURE_PATH);
+
+	/**
 	 * The OpenGL Texture ID.
 	 *
 	 * @return The texture ID.
 	 */
 	private int textureID;
-	/**
-	 * The path to the file for the texture, from the resource directory.
-	 *
-	 * @return The path to the file, which might be empty if the texture was
-	 *         loaded from a buffer instead.
-	 */
-	private String texturePath;
+
 	/**
 	 * The width of the texture that was loaded.
 	 *
 	 * @return The width in pixels.
 	 */
 	private int width;
+
 	/**
 	 * The height of the texture that was loaded.
 	 *
@@ -61,7 +70,6 @@ public class Texture {
 	 * @param buffer The buffer to load from.
 	 */
 	public Texture(int width, int height, @NonNull ByteBuffer buffer) {
-		this.texturePath = "";
 		this.width = width;
 		this.height = height;
 		this.generateTexture(buffer);
@@ -76,7 +84,6 @@ public class Texture {
 	 */
 	public Texture(@NonNull String texturePath) {
 		try (MemoryStack stack = MemoryStack.stackPush()) {
-			this.texturePath = texturePath;
 			IntBuffer w = stack.mallocInt(1);
 			IntBuffer h = stack.mallocInt(1);
 			IntBuffer channels = stack.mallocInt(1);
@@ -121,7 +128,6 @@ public class Texture {
 	 * Create the a texture from a byte buffer.
 	 *
 	 * @param buffer The buffer that contains the texture information.
-	 * @return The texture ID.
 	 */
 	private void generateTexture(@NonNull ByteBuffer buffer) {
 		this.textureID = GL11.glGenTextures();

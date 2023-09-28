@@ -204,7 +204,6 @@ public class GraphicsManager {
 		Model terrain = ModelLoader
 			.loadModel(new ModelLoader.ModelLoadRequest(terrainModelId,
 				GraphicsPlugin.PLUGIN_NAME, "models/terrain/terrain.obj",
-				GraphicsManager.getScene().getTextureCache(),
 				GraphicsManager.getScene().getMaterialCache(), false));
 		GraphicsManager.getScene().addModel(terrain);
 
@@ -218,7 +217,6 @@ public class GraphicsManager {
 		Model bobModel =
 			ModelLoader.loadModel(new ModelLoader.ModelLoadRequest(bobModelId,
 				GraphicsPlugin.PLUGIN_NAME, "models/bob/boblamp.md5mesh",
-				GraphicsManager.getScene().getTextureCache(),
 				GraphicsManager.getScene().getMaterialCache(), true));
 		GraphicsManager.getScene().addModel(bobModel);
 
@@ -255,7 +253,6 @@ public class GraphicsManager {
 					new Vector3f(0, 0, -1.4f), 1.0f));
 
 		SkyBox skyBox = new SkyBox("models/skybox/skybox.obj",
-			GraphicsManager.scene.getTextureCache(),
 			GraphicsManager.scene.getMaterialCache());
 		skyBox.getSkyBoxEntity().setScale(100);
 		skyBox.getSkyBoxEntity().updateModelMatrix();

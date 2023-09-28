@@ -10,7 +10,6 @@ import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.Texture;
-import com.ikalagaming.graphics.graph.TextureCache;
 import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
@@ -101,17 +100,20 @@ public class SkyBoxRender {
 		final Entity skyBoxEntity = skyBox.getSkyBoxEntity();
 		Material material =
 			scene.getMaterialCache().getMaterial(skyBox.getMaterialIndex());
-		Texture texture =
-			scene.getTextureCache().getTexture(material.getTexturePath());
-		GL13.glActiveTexture(GL13.GL_TEXTURE0);
-		texture.bind();
 
 		this.uniformsMap.setUniform(ShaderUniforms.Skybox.DIFFUSE,
 			material.getDiffuseColor());
+
+		Texture texture = material.getTexture();
+		boolean hasTexture = false;
+		if (texture != null) {
+			GL13.glActiveTexture(GL13.GL_TEXTURE0);
+			texture.bind();
+			hasTexture = true;
+		}
+		
 		this.uniformsMap.setUniform(ShaderUniforms.Skybox.HAS_TEXTURE,
-			texture.getTexturePath().equals(TextureCache.DEFAULT_TEXTURE_PATH)
-				? 0
-				: 1);
+			hasTexture ? 1 : 0);
 
 		GL30.glBindVertexArray(skyBox.getVaoID());
 

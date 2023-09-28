@@ -9,7 +9,6 @@ package com.ikalagaming.graphics.scene;
 import com.ikalagaming.graphics.GuiInstance;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.Model;
-import com.ikalagaming.graphics.graph.TextureCache;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
 
 import lombok.Getter;
@@ -85,12 +84,6 @@ public class Scene {
 	@Setter
 	@NonNull
 	private SkyBox skyBox;
-	/**
-	 * The texture cache to use for this scene.
-	 *
-	 * @return The texture cache.
-	 */
-	private TextureCache textureCache;
 
 	/**
 	 * Set up a new scene.
@@ -101,7 +94,6 @@ public class Scene {
 	public Scene(int width, int height) {
 		this.modelMap = new ConcurrentHashMap<>();
 		this.projection = new Projection(width, height);
-		this.textureCache = new TextureCache();
 		this.materialCache = new MaterialCache();
 		this.sceneLights = new SceneLights();
 		this.camera = new Camera();

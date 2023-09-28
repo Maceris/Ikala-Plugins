@@ -184,8 +184,8 @@ public class GUIControls implements GuiInstance {
 	 */
 	private void oneTimeSetups() {
 		if (this.itemTexture == null) {
-			this.itemTexture = GraphicsManager.getScene().getTextureCache()
-				.createTexture(PluginFolder.getResource(ItemPlugin.PLUGIN_NAME,
+			this.itemTexture =
+				new Texture(PluginFolder.getResource(ItemPlugin.PLUGIN_NAME,
 					ResourceType.DATA, "item-spritesheet.png")
 					.getAbsolutePath());
 			GraphicsManager.getRender()

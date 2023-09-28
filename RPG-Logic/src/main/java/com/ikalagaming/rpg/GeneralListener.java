@@ -322,48 +322,41 @@ public class GeneralListener implements Listener {
 		Model model =
 			ModelLoader.loadModel(new ModelLoader.ModelLoadRequest("floor_001",
 				RPGPlugin.PLUGIN_NAME, "models/dungeon/floor_001.obj",
-				GraphicsManager.getScene().getTextureCache(),
 				GraphicsManager.getScene().getMaterialCache(), false));
 		GraphicsManager.getScene().addModel(model);
 
 		model =
 			ModelLoader.loadModel(new ModelLoader.ModelLoadRequest("brick_wall",
 				RPGPlugin.PLUGIN_NAME, "models/dungeon/brick_wall.obj",
-				GraphicsManager.getScene().getTextureCache(),
 				GraphicsManager.getScene().getMaterialCache(), false));
 		GraphicsManager.getScene().addModel(model);
 
 		model = ModelLoader
 			.loadModel(new ModelLoader.ModelLoadRequest("brick_wall_corner",
 				RPGPlugin.PLUGIN_NAME, "models/dungeon/brick_wall_corner.obj",
-				GraphicsManager.getScene().getTextureCache(),
 				GraphicsManager.getScene().getMaterialCache(), false));
 		GraphicsManager.getScene().addModel(model);
 
 		model = ModelLoader.loadModel(new ModelLoader.ModelLoadRequest(
 			"brick_wall_all_sides", RPGPlugin.PLUGIN_NAME,
 			"models/dungeon/brick_wall_all_sides.obj",
-			GraphicsManager.getScene().getTextureCache(),
 			GraphicsManager.getScene().getMaterialCache(), false));
 		GraphicsManager.getScene().addModel(model);
 
 		model = ModelLoader.loadModel(new ModelLoader.ModelLoadRequest(
 			"brick_wall_opposite_sides", RPGPlugin.PLUGIN_NAME,
 			"models/dungeon/brick_wall_opposite_sides.obj",
-			GraphicsManager.getScene().getTextureCache(),
 			GraphicsManager.getScene().getMaterialCache(), false));
 		GraphicsManager.getScene().addModel(model);
 
 		model = ModelLoader.loadModel(new ModelLoader.ModelLoadRequest(
 			"brick_wall_three_sides", RPGPlugin.PLUGIN_NAME,
 			"models/dungeon/brick_wall_three_sides.obj",
-			GraphicsManager.getScene().getTextureCache(),
 			GraphicsManager.getScene().getMaterialCache(), false));
 		GraphicsManager.getScene().addModel(model);
 
 		ModelLoader.loadModelLater(new ModelLoader.ModelLoadRequest("player",
 			RPGPlugin.PLUGIN_NAME, "models/characters/stickman.obj",
-			GraphicsManager.getScene().getTextureCache(),
 			GraphicsManager.getScene().getMaterialCache(), true));
 
 		this.modelsLoaded = true;

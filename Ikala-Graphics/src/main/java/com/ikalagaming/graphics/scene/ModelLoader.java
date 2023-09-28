@@ -14,7 +14,7 @@ import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
-import com.ikalagaming.graphics.graph.TextureCache;
+import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -73,7 +73,6 @@ public class ModelLoader {
 	 * @param modelId The ID to supply the model.
 	 * @param pluginName The plugin that contains the model.
 	 * @param modelPath The path to the model from the resource directory.
-	 * @param textureCache The texture cache so we can reuse textures.
 	 * @param materialCache The material cache so we can reuse materials.
 	 * @param animation Whether we want to set up vertices for animation.
 	 * @param flags Post processing flags for
@@ -82,7 +81,6 @@ public class ModelLoader {
 	 */
 	public static record ModelLoadRequest(@NonNull String modelId,
 		@NonNull String pluginName, @NonNull String modelPath,
-		@NonNull TextureCache textureCache,
 		@NonNull MaterialCache materialCache, boolean animation, int flags) {
 
 		/**
@@ -92,20 +90,18 @@ public class ModelLoader {
 		 * @param modelId The ID to supply the model.
 		 * @param pluginName The plugin that contains the model.
 		 * @param modelPath The path to the model from the resource directory.
-		 * @param textureCache The texture cache so we can reuse textures.
 		 * @param materialCache The material cache so we can reuse materials.
 		 * @param animation Whether we want to set up vertices for animation.
 		 */
 		public ModelLoadRequest(@NonNull String modelId,
 			@NonNull String pluginName, @NonNull String modelPath,
-			@NonNull TextureCache textureCache,
 			@NonNull MaterialCache materialCache, boolean animation) {
-			this(modelId, pluginName, modelPath, textureCache, materialCache,
-				animation, /*
-							 * Generates smooth normals for all vertices in the
-							 * mesh unless the normals are already there at the
-							 * time this flag is evaluated.
-							 */
+			this(modelId, pluginName, modelPath, materialCache, animation,
+				/*
+				 * Generates smooth normals for all vertices in the mesh unless
+				 * the normals are already there at the time this flag is
+				 * evaluated.
+				 */
 				Assimp.aiProcess_GenSmoothNormals
 					/*
 					 * Reduces number of vertices by reusing identical vertices
@@ -403,8 +399,8 @@ public class ModelLoader {
 		for (int i = 0; i < numMaterials; ++i) {
 			AIMaterial aiMaterial =
 				AIMaterial.create(aiScene.mMaterials().get(i));
-			Material material = ModelLoader.processMaterial(aiMaterial,
-				modelDir, request.textureCache());
+			Material material =
+				ModelLoader.processMaterial(aiMaterial, modelDir);
 			int index = request.materialCache().addMaterial(material);
 			materialList.add(index);
 		}
@@ -621,7 +617,7 @@ public class ModelLoader {
 	 * @return The material that we have processed.
 	 */
 	private static Material processMaterial(@NonNull AIMaterial aiMaterial,
-		@NonNull String modelDir, @NonNull TextureCache textureCache) {
+		@NonNull String modelDir) {
 		Material material = new Material();
 		try (MemoryStack stack = MemoryStack.stackPush()) {
 			AIColor4D color = AIColor4D.create();
@@ -667,9 +663,9 @@ public class ModelLoader {
 				(IntBuffer) null, null, null, null, null, null);
 			String texturePath = aiTexturePath.dataString();
 			if (texturePath != null && texturePath.length() > 0) {
-				material.setTexturePath(modelDir + File.separator
-					+ new File(texturePath).getName());
-				textureCache.createTexture(material.getTexturePath());
+				texturePath =
+					modelDir + File.separator + new File(texturePath).getName();
+				material.setTexture(new Texture(texturePath));
 				material.setDiffuseColor(Material.DEFAULT_COLOR);
 			}
 
@@ -679,10 +675,11 @@ public class ModelLoader {
 				(IntBuffer) null, null, null, null, null, null);
 			String normalMapPath = aiNormalMapPath.dataString();
 			if (normalMapPath != null && normalMapPath.length() > 0) {
-				material.setNormalMapPath(modelDir + File.separator
-					+ new File(normalMapPath).getName());
-				textureCache.createTexture(material.getNormalMapPath());
+				normalMapPath = modelDir + File.separator
+					+ new File(normalMapPath).getName();
+				material.setNormalMap(new Texture(normalMapPath));
 			}
+
 			return material;
 		}
 	}
