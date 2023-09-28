@@ -80,7 +80,7 @@ public class SceneControls implements GUIWindow {
 			this.ambientColor[2]);
 
 		DirectionalLight dirLight = sceneLights.getDirLight();
-		dirLight.setPosition(this.dirLightX[0], this.dirLightY[0],
+		dirLight.setDirection(this.dirLightX[0], this.dirLightY[0],
 			this.dirLightZ[0]);
 		dirLight.setColor(this.dirLightColor[0], this.dirLightColor[1],
 			this.dirLightColor[2]);

@@ -6,6 +6,7 @@
  */
 package com.ikalagaming.graphics.scene.lights;
 
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -32,14 +33,9 @@ public class SpotLight {
 	 * @param cutOff The new cutoff, in radians.
 	 * @return The cutoff in radians.
 	 */
+	@Setter(value = AccessLevel.NONE)
 	private float cutOff;
-	/**
-	 * The angle where we cut the light off, in degrees.
-	 *
-	 * @param cutOff The new cutoff, in degrees.
-	 * @return The cutoff in degrees.
-	 */
-	private float cutOffAngle;
+	
 	/**
 	 * The light information we are using, which we cut off everywhere except
 	 * the cone.
@@ -63,16 +59,15 @@ public class SpotLight {
 		@NonNull Vector3f coneDirection, float cutOffAngle) {
 		this.pointLight = pointLight;
 		this.coneDirection = coneDirection;
-		this.cutOffAngle = cutOffAngle;
 		this.setCutOffAngle(cutOffAngle);
 	}
 
 	/**
 	 * Set the cone direction.
 	 *
-	 * @param x The x position.
-	 * @param y The y position.
-	 * @param z The z position.
+	 * @param x The x direction.
+	 * @param y The y direction.
+	 * @param z The z direction.
 	 */
 	public void setConeDirection(float x, float y, float z) {
 		this.coneDirection.set(x, y, z);
@@ -85,7 +80,6 @@ public class SpotLight {
 	 * @param cutOffAngle The angle in degrees.
 	 */
 	public final void setCutOffAngle(float cutOffAngle) {
-		this.cutOffAngle = cutOffAngle;
 		this.cutOff = (float) Math.cos(Math.toRadians(cutOffAngle));
 	}
 }

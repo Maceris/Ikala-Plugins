@@ -45,7 +45,7 @@ public class CascadeShadow {
 		@NonNull List<CascadeShadow> cascadeShadows, @NonNull Scene scene) {
 		Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
 		Matrix4f projMatrix = scene.getProjection().getProjMatrix();
-		Vector4f lightPos = new Vector4f(
+		Vector4f lightDir = new Vector4f(
 			scene.getSceneLights().getDirLight().getDirection(), 0);
 
 		final float cascadeSplitLambda = 0.95f;
@@ -130,7 +130,7 @@ public class CascadeShadow {
 			Vector3f minExtents = new Vector3f(maxExtents).mul(-1);
 
 			Vector3f lightDirection =
-				(new Vector3f(lightPos.x, lightPos.y, lightPos.z).mul(-1))
+				(new Vector3f(lightDir.x, lightDir.y, lightDir.z).mul(-1))
 					.normalize();
 			Vector3f eye = new Vector3f(frustumCenter)
 				.sub(new Vector3f(lightDirection).mul(-minExtents.z));
