@@ -6,6 +6,7 @@
  */
 package com.ikalagaming.graphics.graph;
 
+import com.ikalagaming.graphics.scene.Projection;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.Getter;
@@ -53,15 +54,11 @@ public class CascadeShadow {
 		float[] cascadeSplits =
 			new float[CascadeShadow.SHADOW_MAP_CASCADE_COUNT];
 
-		final float nearClip = projMatrix.perspectiveNear();
-		final float farClip = projMatrix.perspectiveFar();
+		final float nearClip = Projection.Z_NEAR;
+		final float farClip = Projection.Z_FAR;
 		final float clipRange = farClip - nearClip;
 
-		final float minZ = nearClip;
-		final float maxZ = nearClip + clipRange;
-
-		final float range = maxZ - minZ;
-		final float ratio = maxZ / minZ;
+		final float ratio = farClip / nearClip;
 
 		/*
 		 * Calculate split depths based on view camera frustum Based on method
@@ -71,8 +68,8 @@ public class CascadeShadow {
 		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
 			float power =
 				(i + 1) / (float) (CascadeShadow.SHADOW_MAP_CASCADE_COUNT);
-			float log = (float) (minZ * Math.pow(ratio, power));
-			float uniform = minZ + range * power;
+			float log = (float) (nearClip * Math.pow(ratio, power));
+			float uniform = nearClip + clipRange * power;
 			float d = cascadeSplitLambda * (log - uniform) + uniform;
 			cascadeSplits[i] = (d - nearClip) / clipRange;
 		}
