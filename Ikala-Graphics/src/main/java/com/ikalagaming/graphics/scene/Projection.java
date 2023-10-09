@@ -23,11 +23,11 @@ public class Projection {
 	/**
 	 * The far clipping plane distance, in world units.
 	 */
-	private static final float Z_FAR = 1000.f;
+	public static final float Z_FAR = 1000.f;
 	/**
 	 * The near clipping plane distance, in world units.
 	 */
-	private static final float Z_NEAR = 0.01f;
+	public static final float Z_NEAR = 0.01f;
 	/**
 	 * The inverse of the current projection matrix.
 	 *
