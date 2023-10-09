@@ -55,6 +55,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Utility class for loading in models from file.
@@ -143,8 +144,8 @@ public class ModelLoader {
 
 	/**
 	 * Lists of weights and bones that affect the vertices, ordered by vertex
-	 * ID. Each vertex has {@link Mesh#MAX_WEIGHTS} entries in each list, and if
-	 * there are less than that number of bones affecting the vertex, the
+	 * ID. Each vertex has {@link ModelLoader#MAX_WEIGHTS} entries in each list,
+	 * and if there are less than that number of bones affecting the vertex, the
 	 * remaining positions are filled with zeroes.
 	 *
 	 * Each index in the weights list is the weight corresponding to the bone ID
@@ -189,6 +190,11 @@ public class ModelLoader {
 	 * A 4x4 identity matrix.
 	 */
 	private static final Matrix4f IDENTITY_MATRIX = new Matrix4f();
+
+	/**
+	 * Used to generate unique node names for those missing a name.
+	 */
+	private static AtomicInteger nodeID = new AtomicInteger();
 
 	/**
 	 * For a given frame, go through and build transformation matrices from the
@@ -243,7 +249,13 @@ public class ModelLoader {
 	 */
 	private static Node buildNodesTree(@NonNull AINode aiNode,
 		Node parentNode) {
-		String nodeName = aiNode.mName().dataString();
+		String nodeName;
+		if (aiNode.mName().length() <= 0) {
+			nodeName = "node" + nodeID.getAndIncrement();
+		}
+		else {
+			nodeName = aiNode.mName().dataString();
+		}
 		Node node = new Node(nodeName, parentNode,
 			ModelLoader.toMatrix(aiNode.mTransformation()));
 
@@ -424,11 +436,13 @@ public class ModelLoader {
 
 		List<Model.Animation> animations = new ArrayList<>();
 		int numAnimations = aiScene.mNumAnimations();
+		Matrix4f globalInverseTransformation = ModelLoader
+			.toMatrix(aiScene.mRootNode().mTransformation()).invert();
 		if (numAnimations > 0) {
+			nodeID.set(0);
 			Node rootNode =
 				ModelLoader.buildNodesTree(aiScene.mRootNode(), null);
-			Matrix4f globalInverseTransformation = ModelLoader
-				.toMatrix(aiScene.mRootNode().mTransformation()).invert();
+
 			animations = ModelLoader.processAnimations(aiScene, boneList,
 				rootNode, globalInverseTransformation);
 		}
@@ -462,21 +476,33 @@ public class ModelLoader {
 		@NonNull Node rootNode, @NonNull Matrix4f globalInverseTransformation) {
 		List<Model.Animation> animations = new ArrayList<>();
 
+		final int boneCount = Math.min(ModelLoader.MAX_BONES, boneList.size());
+
 		// Process all animations
-		int numAnimations = aiScene.mNumAnimations();
+		final int numAnimations = aiScene.mNumAnimations();
 		PointerBuffer aiAnimations = aiScene.mAnimations();
 		for (int i = 0; i < numAnimations; ++i) {
 			AIAnimation aiAnimation = AIAnimation.create(aiAnimations.get(i));
-			int maxFrames = ModelLoader.calcAnimationMaxFrames(aiAnimation);
+			final int maxFrames =
+				ModelLoader.calcAnimationMaxFrames(aiAnimation);
 
 			List<Model.AnimatedFrame> frames = new ArrayList<>();
-			Model.Animation animation =
-				new Model.Animation(aiAnimation.mName().dataString(),
-					aiAnimation.mDuration(), frames);
+
+			AIString aiName = aiAnimation.mName();
+			String animationName;
+			if (aiName.length() <= 0) {
+				animationName = "animation" + i;
+			}
+			else {
+				animationName = aiName.dataString();
+			}
+
+			Model.Animation animation = new Model.Animation(animationName,
+				aiAnimation.mDuration(), frames);
 			animations.add(animation);
 
 			for (int j = 0; j < maxFrames; j++) {
-				Matrix4f[] boneMatrices = new Matrix4f[ModelLoader.MAX_BONES];
+				Matrix4f[] boneMatrices = new Matrix4f[boneCount];
 				Arrays.fill(boneMatrices, ModelLoader.IDENTITY_MATRIX);
 				Model.AnimatedFrame animatedFrame =
 					new Model.AnimatedFrame(boneMatrices);
@@ -543,7 +569,14 @@ public class ModelLoader {
 		for (int i = 0; i < numBones; ++i) {
 			AIBone aiBone = AIBone.create(aiBones.get(i));
 			int id = boneList.size();
-			Bone bone = new Bone(id, aiBone.mName().dataString(),
+			String boneName;
+			if (aiBone.mName().length() <= 0) {
+				boneName = "bone" + i;
+			}
+			else {
+				boneName = aiBone.mName().dataString();
+			}
+			Bone bone = new Bone(id, boneName,
 				ModelLoader.toMatrix(aiBone.mOffsetMatrix()));
 			boneList.add(bone);
 			int numWeights = aiBone.mNumWeights();
@@ -612,8 +645,6 @@ public class ModelLoader {
 	 * @param aiMaterial The material to process.
 	 * @param modelDir The directory for the model, as a path from the resource
 	 *            directory.
-	 * @param textureCache Used to reuse textures if shared by multiple
-	 *            materials.
 	 * @return The material that we have processed.
 	 */
 	private static Material processMaterial(@NonNull AIMaterial aiMaterial,
