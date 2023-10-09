@@ -9,26 +9,12 @@ package com.ikalagaming.graphics.scene;
 import com.ikalagaming.graphics.graph.Model;
 
 import lombok.Getter;
-import org.joml.Matrix4f;
 
 /**
  * Tracks an animation and what frame we are on within it.
  */
 @Getter
 public class AnimationData {
-	/**
-	 * The default bone matrices for an animation, which are all zero matrices.
-	 * There is one for each (potential) bone in a model.
-	 */
-	protected static final Matrix4f[] DEFAULT_BONES_MATRICES =
-		new Matrix4f[ModelLoader.MAX_BONES];
-
-	static {
-		Matrix4f zeroMatrix = new Matrix4f().zero();
-		for (int i = 0; i < AnimationData.DEFAULT_BONES_MATRICES.length; ++i) {
-			AnimationData.DEFAULT_BONES_MATRICES[i] = zeroMatrix;
-		}
-	}
 	/**
 	 * The current ongoing animation.
 	 *
