@@ -571,7 +571,7 @@ public class ModelLoader {
 			int id = boneList.size();
 			String boneName;
 			if (aiBone.mName().length() <= 0) {
-				boneName = "bone" + i;
+				boneName = "bone" + id;
 			}
 			else {
 				boneName = aiBone.mName().dataString();
