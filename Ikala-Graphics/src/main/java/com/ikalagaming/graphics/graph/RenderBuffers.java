@@ -7,6 +7,7 @@
 package com.ikalagaming.graphics.graph;
 
 import com.ikalagaming.graphics.scene.Entity;
+import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.Getter;
@@ -267,9 +268,9 @@ public class RenderBuffers {
 		for (Model model : modelList) {
 			for (MeshData meshData : model.getMeshDataList()) {
 				meshSize += meshData.getPositions().length
+					// normal, tangent, bitangent
 					+ meshData.getNormals().length * 3
-					+ meshData.getTextureCoordinates().length
-					+ meshData.getIndices().length;
+					+ meshData.getTextureCoordinates().length;
 			}
 		}
 
@@ -302,8 +303,9 @@ public class RenderBuffers {
 		int bufferSize = 0;
 		for (Model model : modelList) {
 			for (MeshData meshData : model.getMeshDataList()) {
-				bufferSize += meshData.getBoneIndices().length * 4
-					+ meshData.getWeights().length * 4;
+				bufferSize += meshData.getBoneIndices().length
+					* ModelLoader.MAX_WEIGHTS
+					+ meshData.getWeights().length * ModelLoader.MAX_WEIGHTS;
 			}
 		}
 		ByteBuffer dataBuffer = MemoryUtil.memAlloc(bufferSize);
@@ -311,17 +313,15 @@ public class RenderBuffers {
 			for (MeshData meshData : model.getMeshDataList()) {
 				int[] bonesIndices = meshData.getBoneIndices();
 				float[] weights = meshData.getWeights();
-				int rows = bonesIndices.length / 4;
+				int rows = bonesIndices.length / ModelLoader.MAX_WEIGHTS;
 				for (int row = 0; row < rows; row++) {
-					int startPos = row * 4;
-					dataBuffer.putFloat(weights[startPos]);
-					dataBuffer.putFloat(weights[startPos + 1]);
-					dataBuffer.putFloat(weights[startPos + 2]);
-					dataBuffer.putFloat(weights[startPos + 3]);
-					dataBuffer.putFloat(bonesIndices[startPos]);
-					dataBuffer.putFloat(bonesIndices[startPos + 1]);
-					dataBuffer.putFloat(bonesIndices[startPos + 2]);
-					dataBuffer.putFloat(bonesIndices[startPos + 3]);
+					int startPos = row * ModelLoader.MAX_WEIGHTS;
+					for (int i = 0; i < ModelLoader.MAX_WEIGHTS; ++i) {
+						dataBuffer.putFloat(weights[startPos + i]);
+					}
+					for (int i = 0; i < ModelLoader.MAX_WEIGHTS; ++i) {
+						dataBuffer.putFloat(bonesIndices[startPos + i]);
+					}
 				}
 			}
 		}
@@ -346,19 +346,20 @@ public class RenderBuffers {
 	 */
 	private void loadBonesMatricesBuffer(@NonNull List<Model> modelList) {
 		int bufferSize = 0;
+		final int matrixSize = 4 * 4 * 4;
 		for (Model model : modelList) {
 			List<Model.Animation> animationsList = model.getAnimationList();
 			for (Model.Animation animation : animationsList) {
 				List<Model.AnimatedFrame> frameList = animation.frames();
 				for (Model.AnimatedFrame frame : frameList) {
 					Matrix4f[] matrices = frame.getBonesMatrices();
-					bufferSize += matrices.length * 64;
+					bufferSize += matrices.length * matrixSize;
 				}
 			}
 		}
 
 		ByteBuffer dataBuffer = MemoryUtil.memAlloc(bufferSize);
-		int matrixSize = 4 * 4 * 4;
+
 		for (Model model : modelList) {
 			List<Model.Animation> animationsList = model.getAnimationList();
 			for (Model.Animation animation : animationsList) {
@@ -374,7 +375,7 @@ public class RenderBuffers {
 			}
 		}
 		dataBuffer.flip();
-		
+
 		this.bonesMatricesBuffer = GL15.glGenBuffers();
 		this.vboIDList.add(this.bonesMatricesBuffer);
 
@@ -383,7 +384,7 @@ public class RenderBuffers {
 		GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, dataBuffer,
 			GL15.GL_STATIC_DRAW);
 		MemoryUtil.memFree(dataBuffer);
-		
+
 		GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, 0);
 	}
 
