@@ -184,11 +184,12 @@ public class LightRender {
 
 		this.updateLights(scene);
 
+		int nextTexture = 0;
 		// Bind the G-Buffer textures
 		int[] textureIds = gBuffer.getTextureIDs();
 		if (textureIds != null) {
 			for (int i = 0; i < textureIds.length; ++i) {
-				GL13.glActiveTexture(GL13.GL_TEXTURE0 + i);
+				GL13.glActiveTexture(GL13.GL_TEXTURE0 + nextTexture++);
 				GL11.glBindTexture(GL11.GL_TEXTURE_2D, textureIds[i]);
 			}
 		}
@@ -208,12 +209,10 @@ public class LightRender {
 			ShaderUniforms.Light.FOG + "." + ShaderUniforms.Light.Fog.DENSITY,
 			fog.getDensity());
 
-		int start = 4;
 		List<CascadeShadow> cascadeShadows = shadowRender.getCascadeShadows();
 		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
-			GL13.glActiveTexture(GL13.GL_TEXTURE0 + start + i);
 			this.uniformsMap.setUniform(
-				ShaderUniforms.Light.SHADOW_MAP_PREFIX + i, start + i);
+				ShaderUniforms.Light.SHADOW_MAP_PREFIX + i, nextTexture + i);
 			CascadeShadow cascadeShadow = cascadeShadows.get(i);
 			this.uniformsMap.setUniform(
 				ShaderUniforms.Light.CASCADE_SHADOWS + "[" + i + "]."
@@ -224,7 +223,9 @@ public class LightRender {
 					+ ShaderUniforms.Light.CascadeShadow.SPLIT_DISTANCE,
 				cascadeShadow.getSplitDistance());
 		}
-		shadowRender.getShadowBuffer().bindTextures(GL13.GL_TEXTURE0 + start);
+		GL13.glActiveTexture(GL13.GL_TEXTURE0 + nextTexture);
+		shadowRender.getShadowBuffer()
+			.bindTextures(GL13.GL_TEXTURE0 + nextTexture);
 
 		this.uniformsMap.setUniform(
 			ShaderUniforms.Light.INVERSE_PROJECTION_MATRIX,
