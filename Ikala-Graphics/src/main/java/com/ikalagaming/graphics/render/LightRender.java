@@ -312,7 +312,6 @@ public class LightRender {
 	 */
 	private void updatePointLight(PointLight pointLight, @NonNull String prefix,
 		@NonNull Matrix4f viewMatrix) {
-		Vector4f aux = new Vector4f();
 		Vector3f lightPosition = new Vector3f();
 		Vector3f color = new Vector3f();
 		float intensity = 0.0f;
@@ -320,9 +319,9 @@ public class LightRender {
 		float linear = 0.0f;
 		float exponent = 0.0f;
 		if (pointLight != null) {
-			aux.set(pointLight.getPosition(), 1);
-			aux.mul(viewMatrix);
-			lightPosition.set(aux.x, aux.y, aux.z);
+			Vector4f temp = new Vector4f(pointLight.getPosition(), 1);
+			temp.mul(viewMatrix);
+			lightPosition.set(temp.x, temp.y, temp.z);
 			color.set(pointLight.getColor());
 			intensity = pointLight.getIntensity();
 			PointLight.Attenuation attenuation = pointLight.getAttenuation();
