@@ -28,6 +28,37 @@ public class CascadeShadow {
 	public static final int SHADOW_MAP_CASCADE_COUNT = 3;
 
 	/**
+	 * We calculate the splits once, and use the same values every time we
+	 * calculate the cascade shadows.
+	 */
+	private static float[] cachedSplits =
+		new float[CascadeShadow.SHADOW_MAP_CASCADE_COUNT];
+
+	static {
+		final float nearClip = Projection.Z_NEAR;
+		final float farClip = Projection.Z_FAR;
+		final float clipRange = farClip - nearClip;
+
+		final float ratio = farClip / nearClip;
+
+		final float cascadeSplitLambda = 0.95f;
+
+		/*
+		 * Calculate split depths based on view camera frustum Based on method
+		 * presented in
+		 * https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch10.html
+		 */
+		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+			float power =
+				(i + 1) / (float) (CascadeShadow.SHADOW_MAP_CASCADE_COUNT);
+			float logPart = (float) (nearClip * Math.pow(ratio, power));
+			float uniform = nearClip + clipRange * power;
+			float d = cascadeSplitLambda * (logPart - uniform) + uniform;
+			cachedSplits[i] = (d - nearClip) / clipRange;
+		}
+	}
+
+	/**
 	 * <p>
 	 * Update the cascade shadows for the scene.
 	 * </p>
@@ -44,49 +75,30 @@ public class CascadeShadow {
 	 */
 	public static void updateCascadeShadows(
 		@NonNull List<CascadeShadow> cascadeShadows, @NonNull Scene scene) {
-		Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
-		Matrix4f projMatrix = scene.getProjection().getProjMatrix();
-		Vector4f lightDir = new Vector4f(
-			scene.getSceneLights().getDirLight().getDirection(), 0);
-
-		final float cascadeSplitLambda = 0.95f;
-
-		float[] cascadeSplits =
-			new float[CascadeShadow.SHADOW_MAP_CASCADE_COUNT];
+		final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
+		final Matrix4f projMatrix = scene.getProjection().getProjMatrix();
+		final Vector3f lightDir =
+			scene.getSceneLights().getDirLight().getDirection();
 
 		final float nearClip = Projection.Z_NEAR;
 		final float farClip = Projection.Z_FAR;
 		final float clipRange = farClip - nearClip;
 
-		final float ratio = farClip / nearClip;
-
-		/*
-		 * Calculate split depths based on view camera frustum Based on method
-		 * presented in
-		 * https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch10.html
-		 */
-		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
-			float power =
-				(i + 1) / (float) (CascadeShadow.SHADOW_MAP_CASCADE_COUNT);
-			float log = (float) (nearClip * Math.pow(ratio, power));
-			float uniform = nearClip + clipRange * power;
-			float d = cascadeSplitLambda * (log - uniform) + uniform;
-			cascadeSplits[i] = (d - nearClip) / clipRange;
-		}
-
 		// Calculate orthographic projection matrix for each cascade
 		float lastSplitDistance = 0.0f;
 		for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
-			float splitDistance = cascadeSplits[i];
+			float splitDistance = cachedSplits[i];
 
-			Vector3f[] frustumCorners = new Vector3f[] {
-				new Vector3f(-1.0f, 1.0f, -1.0f),
-				new Vector3f(1.0f, 1.0f, -1.0f),
-				new Vector3f(1.0f, -1.0f, -1.0f),
-				new Vector3f(-1.0f, -1.0f, -1.0f),
-				new Vector3f(-1.0f, 1.0f, 1.0f), new Vector3f(1.0f, 1.0f, 1.0f),
-				new Vector3f(1.0f, -1.0f, 1.0f),
-				new Vector3f(-1.0f, -1.0f, 1.0f)};
+			Vector3f[] frustumCorners = new Vector3f[] {//
+				new Vector3f(-1.0f, 1.0f, -1.0f), //
+				new Vector3f(1.0f, 1.0f, -1.0f), //
+				new Vector3f(1.0f, -1.0f, -1.0f), //
+				new Vector3f(-1.0f, -1.0f, -1.0f), //
+				new Vector3f(-1.0f, 1.0f, 1.0f), //
+				new Vector3f(1.0f, 1.0f, 1.0f), //
+				new Vector3f(1.0f, -1.0f, 1.0f), //
+				new Vector3f(-1.0f, -1.0f, 1.0f)//
+			};
 
 			// Project frustum corners into world space
 			Matrix4f invertedCamera =
@@ -94,8 +106,9 @@ public class CascadeShadow {
 			for (int j = 0; j < frustumCorners.length; ++j) {
 				Vector4f invCorner =
 					new Vector4f(frustumCorners[j], 1.0f).mul(invertedCamera);
-				frustumCorners[j] = new Vector3f(invCorner.x / invCorner.w,
-					invCorner.y / invCorner.w, invCorner.z / invCorner.w);
+				frustumCorners[j] =
+					new Vector3f(invCorner.x, invCorner.y, invCorner.z)
+						.div(invCorner.w);
 			}
 
 			for (int j = 0; j < frustumCorners.length / 2; ++j) {
@@ -127,16 +140,15 @@ public class CascadeShadow {
 			Vector3f minExtents = new Vector3f(maxExtents).mul(-1);
 
 			Vector3f lightDirection =
-				(new Vector3f(lightDir.x, lightDir.y, lightDir.z).mul(-1))
-					.normalize();
+				(new Vector3f(lightDir).mul(-1)).normalize();
 			Vector3f eye = new Vector3f(frustumCenter)
 				.sub(new Vector3f(lightDirection).mul(-minExtents.z));
 			Vector3f up = new Vector3f(0.0f, 1.0f, 0.0f);
 			Matrix4f lightViewMatrix =
-				new Matrix4f().lookAt(eye, frustumCenter, up);
+				new Matrix4f().setLookAt(eye, frustumCenter, up);
 			Matrix4f lightOrthoMatrix =
 				new Matrix4f().ortho(minExtents.x, maxExtents.x, minExtents.y,
-					maxExtents.y, 0.0f, maxExtents.z - minExtents.z, true);
+					maxExtents.y, 0.0f, maxExtents.z - minExtents.z, false);
 
 			// Store split distance and matrix in cascade
 			CascadeShadow cascadeShadow = cascadeShadows.get(i);
@@ -145,8 +157,9 @@ public class CascadeShadow {
 			cascadeShadow.projViewMatrix =
 				lightOrthoMatrix.mul(lightViewMatrix);
 
-			lastSplitDistance = cascadeSplits[i];
+			lastSplitDistance = cachedSplits[i];
 		}
+
 	}
 
 	/**
