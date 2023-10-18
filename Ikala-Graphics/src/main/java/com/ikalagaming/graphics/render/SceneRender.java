@@ -163,10 +163,6 @@ public class SceneRender {
 				++nextTexture;
 			}
 		}
-		for (int i = 0; i < SceneRender.MAX_TEXTURES; ++i) {
-
-			GL13.glActiveTexture(GL13.GL_TEXTURE0 + i);
-		}
 
 		// Static meshes
 		GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER,
@@ -196,15 +192,6 @@ public class SceneRender {
 		GL30.glBindVertexArray(0);
 		GL11.glEnable(GL11.GL_BLEND);
 		this.shaderProgram.unbind();
-	}
-
-	/**
-	 * Set up data for the scene to prepare for rendering.
-	 *
-	 * @param scene The scene to render.
-	 */
-	public void setupData(@NonNull Scene scene) {
-		this.recalculateMaterials(scene);
 	}
 
 	/**

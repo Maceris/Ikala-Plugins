@@ -458,7 +458,7 @@ public class Render {
 		}
 		this.renderBuffers.loadStaticModels(scene);
 		this.renderBuffers.loadAnimatedModels(scene);
-		this.sceneRender.setupData(scene);
+		this.sceneRender.recalculateMaterials(scene);
 		this.setupAnimCommandBuffer(scene);
 		this.setupStaticCommandBuffer(scene);
 	}
