@@ -68,17 +68,17 @@ public class Render {
 		/**
 		 * Sets the post-processing filter. Must be a valid index in the array
 		 * of filters or an exception will be thrown.
-		 * 
+		 *
 		 * @param newFilter The index of the filter to use.
 		 */
 		public void setSelectedFilter(int newFilter) {
-			if (newFilter < 0 || newFilter > filterNames.length) {
+			if (newFilter < 0 || newFilter > this.filterNames.length) {
 				throw new IllegalArgumentException(SafeResourceLoader
 					.getStringFormatted("ILLEGAL_FILTER_SELECTION",
 						GraphicsPlugin.getResourceBundle(), newFilter + "",
-						filterNames.length + ""));
+						this.filterNames.length + ""));
 			}
-			selectedFilter = newFilter;
+			this.selectedFilter = newFilter;
 		}
 	}
 
@@ -170,12 +170,12 @@ public class Render {
 	 * The Frame Buffer Object for the pre-filter render target.
 	 */
 	private int screenFBO;
-	
+
 	/**
 	 * The depth RBO for the pre-filter render target.
 	 */
 	private int screenRBODepth;
-	
+
 	/**
 	 * The texture ID we render to before applying filters.
 	 */
@@ -452,7 +452,7 @@ public class Render {
 	 * @param scene The scene to read models from.
 	 */
 	public void setupData(@NonNull Scene scene) {
-		if (this.buffersPopulated.compareAndSet(false, true)) {
+		if (this.buffersPopulated.getAndSet(false)) {
 			this.renderBuffers.cleanup();
 			this.commandBuffers.cleanup();
 		}
@@ -461,6 +461,7 @@ public class Render {
 		this.sceneRender.recalculateMaterials(scene);
 		this.setupAnimCommandBuffer(scene);
 		this.setupStaticCommandBuffer(scene);
+		this.buffersPopulated.set(true);
 	}
 
 	/**
