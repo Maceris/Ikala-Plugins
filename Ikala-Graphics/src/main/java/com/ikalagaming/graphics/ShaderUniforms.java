@@ -330,6 +330,7 @@ public class ShaderUniforms {
 		 */
 		public static final String INVERSE_PROJECTION_MATRIX =
 			"invProjectionMatrix";
+
 		/**
 		 * The inverse of the view matrix.
 		 */
@@ -339,11 +340,9 @@ public class ShaderUniforms {
 		 */
 		public static final String NORMAL_SAMPLER = "normalSampler";
 		/**
-		 * A list of point lights.
-		 *
-		 * @see PointLight
+		 * How many point lights we have in the point light SSBO.
 		 */
-		public static final String POINT_LIGHTS = "pointLights";
+		public static final String POINT_LIGHT_COUNT = "pointLightCount";
 		/**
 		 * The prefix for shadow maps. There are several of these numbered
 		 * uniforms, based on the shadow map cascade count.
@@ -354,11 +353,9 @@ public class ShaderUniforms {
 		 */
 		public static final String SPECULAR_SAMPLER = "specularSampler";
 		/**
-		 * A list of spot lights.
-		 *
-		 * @see SpotLight
+		 * How many spot lights we have in the spot light SSBO.
 		 */
-		public static final String SPOT_LIGHTS = "spotLights";
+		public static final String SPOT_LIGHT_COUNT = "spotLightCount";
 
 		/**
 		 * Private constructor so this class is not instantiated.

@@ -21,29 +21,41 @@ import com.ikalagaming.graphics.scene.lights.SceneLights;
 import com.ikalagaming.graphics.scene.lights.SpotLight;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
+import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
+import org.lwjgl.opengl.GL42;
+import org.lwjgl.opengl.GL43;
+import org.lwjgl.system.MemoryUtil;
 
+import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Handle light rendering.
  */
+@Slf4j
 public class LightRender {
 	/**
-	 * The maximum number of point lights that are allowed.
+	 * The binding for the point light SSBO.
 	 */
-	private static final int MAX_POINT_LIGHTS = 50;
+	static final int POINT_LIGHT_BINDING = 0;
+
 	/**
-	 * The maximum number of spot lights that are allowed.
+	 * The binding for the spot light SSBO.
 	 */
-	private static final int MAX_SPOT_LIGHTS = 50;
+	static final int SPOT_LIGHT_BINDING = 1;
+	/**
+	 * How many lights we currently support
+	 */
+	private static final int MAX_LIGHTS_SUPPORTED = 1000;
 	/**
 	 * The shader program for rendering lights.
 	 */
@@ -56,6 +68,14 @@ public class LightRender {
 	 * The uniforms for the shader program.
 	 */
 	private UniformsMap uniformsMap;
+	/**
+	 * An SSBO for point lights.
+	 */
+	private int pointLightBuffer;
+	/**
+	 * An SSBO for spot lights.
+	 */
+	private int spotLightBuffer;
 
 	/**
 	 * Set up the light renderer.
@@ -70,6 +90,7 @@ public class LightRender {
 		this.shaderProgram = new ShaderProgram(shaderModuleDataList);
 		this.quadMesh = new QuadMesh();
 		this.createUniforms();
+		this.initSSBOs();
 	}
 
 	/**
@@ -78,6 +99,8 @@ public class LightRender {
 	public void cleanup() {
 		this.quadMesh.cleanup();
 		this.shaderProgram.cleanup();
+		GL15.glDeleteBuffers(this.pointLightBuffer);
+		GL15.glDeleteBuffers(this.spotLightBuffer);
 	}
 
 	/**
@@ -98,59 +121,15 @@ public class LightRender {
 		this.uniformsMap.createUniform(ShaderUniforms.Light.AMBIENT_LIGHT + "."
 			+ ShaderUniforms.Light.AmbientLight.COLOR);
 
-		for (int i = 0; i < LightRender.MAX_POINT_LIGHTS; ++i) {
-			String name = ShaderUniforms.Light.POINT_LIGHTS + "[" + i + "].";
-			this.uniformsMap
-				.createUniform(name + ShaderUniforms.Light.PointLight.POSITION);
-			this.uniformsMap
-				.createUniform(name + ShaderUniforms.Light.PointLight.COLOR);
-			this.uniformsMap.createUniform(
-				name + ShaderUniforms.Light.PointLight.INTENSITY);
-			this.uniformsMap.createUniform(
-				name + ShaderUniforms.Light.PointLight.ATTENUATION + "."
-					+ ShaderUniforms.Light.Attenuation.CONSTANT);
-			this.uniformsMap.createUniform(
-				name + ShaderUniforms.Light.PointLight.ATTENUATION + "."
-					+ ShaderUniforms.Light.Attenuation.LINEAR);
-			this.uniformsMap.createUniform(
-				name + ShaderUniforms.Light.PointLight.ATTENUATION + "."
-					+ ShaderUniforms.Light.Attenuation.EXPONENT);
-		}
-		for (int i = 0; i < LightRender.MAX_SPOT_LIGHTS; ++i) {
-			String name = ShaderUniforms.Light.SPOT_LIGHTS + "[" + i + "].";
-			this.uniformsMap
-				.createUniform(name + ShaderUniforms.Light.SpotLight.POINT_LIGHT
-					+ "." + ShaderUniforms.Light.PointLight.POSITION);
-			this.uniformsMap
-				.createUniform(name + ShaderUniforms.Light.SpotLight.POINT_LIGHT
-					+ "." + ShaderUniforms.Light.PointLight.COLOR);
-			this.uniformsMap
-				.createUniform(name + ShaderUniforms.Light.SpotLight.POINT_LIGHT
-					+ "." + ShaderUniforms.Light.PointLight.INTENSITY);
-			this.uniformsMap
-				.createUniform(name + ShaderUniforms.Light.SpotLight.POINT_LIGHT
-					+ "." + ShaderUniforms.Light.PointLight.ATTENUATION + "."
-					+ ShaderUniforms.Light.Attenuation.CONSTANT);
-			this.uniformsMap
-				.createUniform(name + ShaderUniforms.Light.SpotLight.POINT_LIGHT
-					+ "." + ShaderUniforms.Light.PointLight.ATTENUATION + "."
-					+ ShaderUniforms.Light.Attenuation.LINEAR);
-			this.uniformsMap
-				.createUniform(name + ShaderUniforms.Light.SpotLight.POINT_LIGHT
-					+ "." + ShaderUniforms.Light.PointLight.ATTENUATION + "."
-					+ ShaderUniforms.Light.Attenuation.EXPONENT);
-			this.uniformsMap.createUniform(
-				name + ShaderUniforms.Light.SpotLight.CONE_DIRECTION);
-			this.uniformsMap
-				.createUniform(name + ShaderUniforms.Light.SpotLight.CUTOFF);
-		}
-
 		this.uniformsMap.createUniform(ShaderUniforms.Light.DIRECTIONAL_LIGHT
 			+ "." + ShaderUniforms.Light.DirectionalLight.COLOR);
 		this.uniformsMap.createUniform(ShaderUniforms.Light.DIRECTIONAL_LIGHT
 			+ "." + ShaderUniforms.Light.DirectionalLight.DIRECTION);
 		this.uniformsMap.createUniform(ShaderUniforms.Light.DIRECTIONAL_LIGHT
 			+ "." + ShaderUniforms.Light.DirectionalLight.INTENSITY);
+
+		this.uniformsMap.createUniform(ShaderUniforms.Light.POINT_LIGHT_COUNT);
+		this.uniformsMap.createUniform(ShaderUniforms.Light.SPOT_LIGHT_COUNT);
 
 		this.uniformsMap.createUniform(
 			ShaderUniforms.Light.FOG + "." + ShaderUniforms.Light.Fog.ENABLED);
@@ -172,6 +151,51 @@ public class LightRender {
 	}
 
 	/**
+	 * Initialize the lighting SSBOs and fill them with zeroes.
+	 */
+	private void initSSBOs() {
+		this.pointLightBuffer = GL15.glGenBuffers();
+		this.spotLightBuffer = GL15.glGenBuffers();
+		/*
+		 * Position (vec3 + ignored), color (vec3), intensity (1), Attenuation
+		 * (3 + ignored), in that order.
+		 */
+		final int POINT_LIGHT_SIZE = 4 + 3 + 1 + 4;
+		FloatBuffer pointLightFloatBuffer = MemoryUtil
+			.memAllocFloat(LightRender.MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE);
+
+		pointLightFloatBuffer
+			.put(new float[LightRender.MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE])
+			.flip();
+
+		GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER,
+			LightRender.POINT_LIGHT_BINDING, this.pointLightBuffer);
+		GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, pointLightFloatBuffer,
+			GL15.GL_STATIC_DRAW);
+
+		MemoryUtil.memFree(pointLightFloatBuffer);
+
+		/*
+		 * Position (vec3 + ignored), color (vec3), intensity (1), Attenuation
+		 * (3 + ignored), cone direction (vec3), cutoff (1) in that order.
+		 */
+		final int SPOT_LIGHT_SIZE = 4 + 3 + 1 + 4 + 3 + 1;
+		FloatBuffer spotLightFloatBuffer = MemoryUtil
+			.memAllocFloat(LightRender.MAX_LIGHTS_SUPPORTED * SPOT_LIGHT_SIZE);
+
+		spotLightFloatBuffer
+			.put(new float[LightRender.MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE])
+			.flip();
+
+		GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER,
+			LightRender.SPOT_LIGHT_BINDING, this.spotLightBuffer);
+		GL15.glBufferData(GL43.GL_SHADER_STORAGE_BUFFER, spotLightFloatBuffer,
+			GL15.GL_STATIC_DRAW);
+
+		MemoryUtil.memFree(spotLightFloatBuffer);
+	}
+
+	/**
 	 * Render a scene.
 	 *
 	 * @param scene The scene we are rendering.
@@ -183,6 +207,8 @@ public class LightRender {
 		this.shaderProgram.bind();
 
 		this.updateLights(scene);
+
+		GL42.glMemoryBarrier(GL43.GL_SHADER_STORAGE_BARRIER_BIT);
 
 		int nextTexture = 0;
 		// Bind the G-Buffer textures
@@ -241,6 +267,132 @@ public class LightRender {
 	}
 
 	/**
+	 * Load all the point lights into the SSBO for rendering.
+	 *
+	 * @param scene The scene to fetch lights from.
+	 */
+	private void setupPointLightBuffer(@NonNull Scene scene) {
+		List<PointLight> pointLights = scene.getSceneLights().getPointLights();
+		final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
+
+		if (pointLights.size() > LightRender.MAX_LIGHTS_SUPPORTED) {
+			LightRender.log.error(
+				"We only support {} point lights but are trying to render {}.",
+				LightRender.MAX_LIGHTS_SUPPORTED, pointLights.size());
+		}
+		/*
+		 * Position (vec3 + ignored), color (vec3), intensity (1), Attenuation
+		 * (3 + ignored), in that order.
+		 */
+		final int STRUCT_SIZE = 4 + 3 + 1 + 4;
+
+		final int lightsToRender =
+			Math.min(LightRender.MAX_LIGHTS_SUPPORTED, pointLights.size());
+
+		FloatBuffer lightBuffer =
+			MemoryUtil.memAllocFloat(lightsToRender * STRUCT_SIZE);
+		
+		Vector4f temp = new Vector4f();
+		Vector3f lightPosition = new Vector3f();
+		final float padding = 0.0f;
+		for (int i = 0; i < lightsToRender; ++i) {
+			PointLight light = pointLights.get(i);
+			temp.set(light.getPosition(), 1);
+			temp.mul(viewMatrix);
+			lightPosition.set(temp.x, temp.y, temp.z);
+			lightBuffer.put(lightPosition.x);
+			lightBuffer.put(lightPosition.y);
+			lightBuffer.put(lightPosition.z);
+			lightBuffer.put(padding);
+			lightBuffer.put(light.getColor().x);
+			lightBuffer.put(light.getColor().y);
+			lightBuffer.put(light.getColor().z);
+			lightBuffer.put(light.getIntensity());
+			lightBuffer.put(light.getAttenuation().getConstant());
+			lightBuffer.put(light.getAttenuation().getLinear());
+			lightBuffer.put(light.getAttenuation().getExponent());
+			lightBuffer.put(padding);
+		}
+
+		lightBuffer.flip();
+
+		GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER,
+			LightRender.POINT_LIGHT_BINDING, this.pointLightBuffer);
+		GL15.glBufferSubData(GL43.GL_SHADER_STORAGE_BUFFER, 0, lightBuffer);
+
+		MemoryUtil.memFree(lightBuffer);
+
+		this.uniformsMap.setUniform(ShaderUniforms.Light.POINT_LIGHT_COUNT,
+			lightsToRender);
+	}
+
+	/**
+	 * Load all the spot lights into the SSBO for rendering.
+	 *
+	 * @param scene The scene to fetch lights from.
+	 */
+	private void setupSpotLightBuffer(@NonNull Scene scene) {
+		List<SpotLight> spotLights = scene.getSceneLights().getSpotLights();
+		final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
+
+		if (spotLights.size() > LightRender.MAX_LIGHTS_SUPPORTED) {
+			LightRender.log.error(
+				"We only support {} point lights but are trying to render {}.",
+				LightRender.MAX_LIGHTS_SUPPORTED, spotLights.size());
+		}
+
+		/*
+		 * Position (vec3 + ignored), color (vec3), intensity (1), Attenuation
+		 * (3 + ignored), cone direction (vec3), cutoff (1) in that order.
+		 */
+		final int STRUCT_SIZE = 4 + 3 + 1 + 4 + 3 + 1;
+
+		final int lightsToRender =
+			Math.min(LightRender.MAX_LIGHTS_SUPPORTED, spotLights.size());
+
+		FloatBuffer lightBuffer =
+			MemoryUtil.memAllocFloat(lightsToRender * STRUCT_SIZE);
+
+		Vector4f temp = new Vector4f();
+		Vector3f lightPosition = new Vector3f();
+		final float padding = 0.0f;
+		for (int i = 0; i < lightsToRender; ++i) {
+			SpotLight light = spotLights.get(i);
+			temp.set(light.getPointLight().getPosition(), 1);
+			temp.mul(viewMatrix);
+			lightPosition.set(temp.x, temp.y, temp.z);
+			lightBuffer.put(light.getPointLight().getPosition().x);
+			lightBuffer.put(light.getPointLight().getPosition().y);
+			lightBuffer.put(light.getPointLight().getPosition().z);
+			lightBuffer.put(padding);
+			lightBuffer.put(light.getPointLight().getColor().x);
+			lightBuffer.put(light.getPointLight().getColor().y);
+			lightBuffer.put(light.getPointLight().getColor().z);
+			lightBuffer.put(light.getPointLight().getIntensity());
+			lightBuffer
+				.put(light.getPointLight().getAttenuation().getConstant());
+			lightBuffer.put(light.getPointLight().getAttenuation().getLinear());
+			lightBuffer
+				.put(light.getPointLight().getAttenuation().getExponent());
+			lightBuffer.put(padding);
+			lightBuffer.put(light.getConeDirection().x);
+			lightBuffer.put(light.getConeDirection().y);
+			lightBuffer.put(light.getConeDirection().z);
+			lightBuffer.put(light.getCutOff());
+		}
+		lightBuffer.flip();
+
+		GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER,
+			LightRender.SPOT_LIGHT_BINDING, this.spotLightBuffer);
+		GL15.glBufferSubData(GL43.GL_SHADER_STORAGE_BUFFER, 0, lightBuffer);
+
+		MemoryUtil.memFree(lightBuffer);
+
+		this.uniformsMap.setUniform(ShaderUniforms.Light.SPOT_LIGHT_COUNT,
+			lightsToRender);
+	}
+
+	/**
 	 * Update the uniforms for lights in the scene.
 	 *
 	 * @param scene The scene we are updating.
@@ -274,103 +426,7 @@ public class LightRender {
 				+ ShaderUniforms.Light.DirectionalLight.INTENSITY,
 			dirLight.getIntensity());
 
-		List<PointLight> pointLights = sceneLights.getPointLights();
-		int numPointLights = pointLights.size();
-		PointLight pointLight;
-		for (int i = 0; i < LightRender.MAX_POINT_LIGHTS; ++i) {
-			if (i < numPointLights) {
-				pointLight = pointLights.get(i);
-			}
-			else {
-				pointLight = null;
-			}
-			String name = ShaderUniforms.Light.POINT_LIGHTS + "[" + i + "].";
-			this.updatePointLight(pointLight, name, viewMatrix);
-		}
-
-		List<SpotLight> spotLights = sceneLights.getSpotLights();
-		int numSpotLights = spotLights.size();
-		SpotLight spotLight;
-		for (int i = 0; i < LightRender.MAX_SPOT_LIGHTS; ++i) {
-			if (i < numSpotLights) {
-				spotLight = spotLights.get(i);
-			}
-			else {
-				spotLight = null;
-			}
-			String name = ShaderUniforms.Light.SPOT_LIGHTS + "[" + i + "].";
-			this.updateSpotLight(spotLight, name, viewMatrix);
-		}
-	}
-
-	/**
-	 * Update point light uniforms.
-	 *
-	 * @param pointLight The point light information.
-	 * @param prefix The prefix for uniforms.
-	 * @param viewMatrix The view matrix.
-	 */
-	private void updatePointLight(PointLight pointLight, @NonNull String prefix,
-		@NonNull Matrix4f viewMatrix) {
-		Vector3f lightPosition = new Vector3f();
-		Vector3f color = new Vector3f();
-		float intensity = 0.0f;
-		float constant = 0.0f;
-		float linear = 0.0f;
-		float exponent = 0.0f;
-		if (pointLight != null) {
-			Vector4f temp = new Vector4f(pointLight.getPosition(), 1);
-			temp.mul(viewMatrix);
-			lightPosition.set(temp.x, temp.y, temp.z);
-			color.set(pointLight.getColor());
-			intensity = pointLight.getIntensity();
-			PointLight.Attenuation attenuation = pointLight.getAttenuation();
-			constant = attenuation.getConstant();
-			linear = attenuation.getLinear();
-			exponent = attenuation.getExponent();
-		}
-		this.uniformsMap.setUniform(
-			prefix + ShaderUniforms.Light.PointLight.POSITION, lightPosition);
-		this.uniformsMap
-			.setUniform(prefix + ShaderUniforms.Light.PointLight.COLOR, color);
-		this.uniformsMap.setUniform(
-			prefix + ShaderUniforms.Light.PointLight.INTENSITY, intensity);
-		this.uniformsMap
-			.setUniform(prefix + ShaderUniforms.Light.PointLight.ATTENUATION
-				+ "." + ShaderUniforms.Light.Attenuation.CONSTANT, constant);
-		this.uniformsMap
-			.setUniform(prefix + ShaderUniforms.Light.PointLight.ATTENUATION
-				+ "." + ShaderUniforms.Light.Attenuation.LINEAR, linear);
-		this.uniformsMap
-			.setUniform(prefix + ShaderUniforms.Light.PointLight.ATTENUATION
-				+ "." + ShaderUniforms.Light.Attenuation.EXPONENT, exponent);
-	}
-
-	/**
-	 * Update spot light uniforms for the given spot light.
-	 *
-	 * @param spotLight The light information.
-	 * @param prefix The prefix for uniform values.
-	 * @param viewMatrix The view matrix.
-	 */
-	private void updateSpotLight(SpotLight spotLight, @NonNull String prefix,
-		@NonNull Matrix4f viewMatrix) {
-		PointLight pointLight = null;
-		Vector3f coneDirection = new Vector3f();
-		float cutoff = 0.0f;
-		if (spotLight != null) {
-			coneDirection = spotLight.getConeDirection();
-			cutoff = spotLight.getCutOff();
-			pointLight = spotLight.getPointLight();
-		}
-
-		this.uniformsMap.setUniform(
-			prefix + ShaderUniforms.Light.SpotLight.CONE_DIRECTION,
-			coneDirection);
-		this.uniformsMap
-			.setUniform(prefix + ShaderUniforms.Light.SpotLight.CUTOFF, cutoff);
-		this.updatePointLight(pointLight,
-			prefix + ShaderUniforms.Light.SpotLight.POINT_LIGHT + ".",
-			viewMatrix);
+		this.setupPointLightBuffer(scene);
+		this.setupSpotLightBuffer(scene);
 	}
 }
