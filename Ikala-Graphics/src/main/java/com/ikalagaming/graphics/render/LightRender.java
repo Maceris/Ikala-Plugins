@@ -30,7 +30,6 @@ import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
-import org.lwjgl.opengl.GL42;
 import org.lwjgl.opengl.GL43;
 import org.lwjgl.system.MemoryUtil;
 
@@ -208,8 +207,6 @@ public class LightRender {
 
 		this.updateLights(scene);
 
-		GL42.glMemoryBarrier(GL43.GL_SHADER_STORAGE_BARRIER_BIT);
-
 		int nextTexture = 0;
 		// Bind the G-Buffer textures
 		int[] textureIds = gBuffer.getTextureIDs();
@@ -291,7 +288,7 @@ public class LightRender {
 
 		FloatBuffer lightBuffer =
 			MemoryUtil.memAllocFloat(lightsToRender * STRUCT_SIZE);
-		
+
 		Vector4f temp = new Vector4f();
 		Vector3f lightPosition = new Vector3f();
 		final float padding = 0.0f;
