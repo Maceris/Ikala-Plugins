@@ -289,14 +289,12 @@ public class LightRender {
 		FloatBuffer lightBuffer =
 			MemoryUtil.memAllocFloat(lightsToRender * STRUCT_SIZE);
 
-		Vector4f temp = new Vector4f();
-		Vector3f lightPosition = new Vector3f();
+		Vector4f lightPosition = new Vector4f();
 		final float padding = 0.0f;
 		for (int i = 0; i < lightsToRender; ++i) {
 			PointLight light = pointLights.get(i);
-			temp.set(light.getPosition(), 1);
-			temp.mul(viewMatrix);
-			lightPosition.set(temp.x, temp.y, temp.z);
+			lightPosition.set(light.getPosition(), 1);
+			lightPosition.mul(viewMatrix);
 			lightBuffer.put(lightPosition.x);
 			lightBuffer.put(lightPosition.y);
 			lightBuffer.put(lightPosition.z);
@@ -350,14 +348,12 @@ public class LightRender {
 		FloatBuffer lightBuffer =
 			MemoryUtil.memAllocFloat(lightsToRender * STRUCT_SIZE);
 
-		Vector4f temp = new Vector4f();
-		Vector3f lightPosition = new Vector3f();
+		Vector4f lightPosition = new Vector4f();
 		final float padding = 0.0f;
 		for (int i = 0; i < lightsToRender; ++i) {
 			SpotLight light = spotLights.get(i);
-			temp.set(light.getPointLight().getPosition(), 1);
-			temp.mul(viewMatrix);
-			lightPosition.set(temp.x, temp.y, temp.z);
+			lightPosition.set(light.getPointLight().getPosition(), 1);
+			lightPosition.mul(viewMatrix);
 			lightBuffer.put(light.getPointLight().getPosition().x);
 			lightBuffer.put(light.getPointLight().getPosition().y);
 			lightBuffer.put(light.getPointLight().getPosition().z);
