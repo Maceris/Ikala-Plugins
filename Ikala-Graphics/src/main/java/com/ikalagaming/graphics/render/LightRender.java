@@ -53,7 +53,7 @@ public class LightRender {
 	 */
 	static final int SPOT_LIGHT_BINDING = 1;
 	/**
-	 * How many lights we currently support
+	 * How many lights of each type (spot, point) we currently support.
 	 */
 	private static final int MAX_LIGHTS_SUPPORTED = 1000;
 	/**
