@@ -334,7 +334,7 @@ public class LightRender {
 
 		if (spotLights.size() > LightRender.MAX_LIGHTS_SUPPORTED) {
 			LightRender.log.error(
-				"We only support {} point lights but are trying to render {}.",
+				"We only support {} spot lights but are trying to render {}.",
 				LightRender.MAX_LIGHTS_SUPPORTED, spotLights.size());
 		}
 
