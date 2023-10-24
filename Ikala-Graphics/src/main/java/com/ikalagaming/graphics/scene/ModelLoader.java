@@ -184,7 +184,7 @@ public class ModelLoader {
 	/**
 	 * The maximum number of bones that are allowed in a model.
 	 */
-	public static final int MAX_BONES = 150;
+	public static final int MAX_BONES = 256;
 
 	/**
 	 * A 4x4 identity matrix.
