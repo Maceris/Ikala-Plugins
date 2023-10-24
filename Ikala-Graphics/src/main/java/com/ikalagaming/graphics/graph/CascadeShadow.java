@@ -136,19 +136,15 @@ public class CascadeShadow {
 			}
 			radius = (float) Math.ceil(radius * 16.0f) / 16.0f;
 
-			Vector3f maxExtents = new Vector3f(radius);
-			Vector3f minExtents = new Vector3f(maxExtents).mul(-1);
-
 			Vector3f lightDirection =
-				(new Vector3f(lightDir).mul(-1)).normalize();
-			Vector3f eye = new Vector3f(frustumCenter)
-				.sub(new Vector3f(lightDirection).mul(-minExtents.z));
+				new Vector3f(lightDir).mul(-1).normalize();
+			Vector3f eye =
+				new Vector3f(frustumCenter).add(lightDirection.mul(radius));
 			Vector3f up = new Vector3f(0.0f, 1.0f, 0.0f);
 			Matrix4f lightViewMatrix =
-				new Matrix4f().setLookAt(eye, frustumCenter, up);
-			Matrix4f lightOrthoMatrix =
-				new Matrix4f().ortho(minExtents.x, maxExtents.x, minExtents.y,
-					maxExtents.y, 0.0f, maxExtents.z - minExtents.z, false);
+				new Matrix4f().lookAtLH(eye, frustumCenter, up);
+			Matrix4f lightOrthoMatrix = new Matrix4f().ortho(-radius, radius,
+				-radius, radius, 0, 2 * radius, true);
 
 			// Store split distance and matrix in cascade
 			CascadeShadow cascadeShadow = cascadeShadows.get(i);
