@@ -94,8 +94,8 @@ public class GBuffer {
 		}
 
 		try (MemoryStack stack = MemoryStack.stackPush()) {
-			IntBuffer intBuff = stack.mallocInt(GBuffer.TOTAL_TEXTURES);
-			for (int i = 0; i < GBuffer.TOTAL_TEXTURES; ++i) {
+			IntBuffer intBuff = stack.mallocInt(GBuffer.TOTAL_TEXTURES - 1);
+			for (int i = 0; i < GBuffer.TOTAL_TEXTURES - 1; ++i) {
 				intBuff.put(i, GL30.GL_COLOR_ATTACHMENT0 + i);
 			}
 			GL20.glDrawBuffers(intBuff);
