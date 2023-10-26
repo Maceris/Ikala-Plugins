@@ -10,6 +10,7 @@ import lombok.Getter;
 import lombok.NonNull;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -32,7 +33,7 @@ public class MaterialCache {
 	 * Set up a new cache with a default material.
 	 */
 	public MaterialCache() {
-		this.materialsList = new ArrayList<>();
+		this.materialsList = Collections.synchronizedList(new ArrayList<>());
 		Material defaultMaterial = new Material();
 		this.materialsList.add(defaultMaterial);
 	}

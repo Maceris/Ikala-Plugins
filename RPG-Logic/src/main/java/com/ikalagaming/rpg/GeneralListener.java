@@ -4,6 +4,7 @@ import com.ikalagaming.event.EventHandler;
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.graph.Model;
+import com.ikalagaming.graphics.render.Render;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
@@ -215,7 +216,7 @@ public class GeneralListener implements Listener {
 		PointLight pointLight = new PointLight(
 			GeneralListener.toVector3f(pointLightInfo.getColor("Color")),
 			position, pointLightInfo.getFloat("Intensity"));
-		
+
 		float cutoff = 360f;
 
 		String cutoffString = props.getProperty("Cutoff Angle");
@@ -465,6 +466,7 @@ public class GeneralListener implements Listener {
 			}
 		}
 		GraphicsManager.refreshRenderData();
+		Render.configuration.setRenderingScene(true);
 	}
 
 	/**

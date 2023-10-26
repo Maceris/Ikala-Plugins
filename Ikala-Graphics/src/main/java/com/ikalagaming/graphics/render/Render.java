@@ -59,6 +59,11 @@ public class Render {
 		private int selectedFilter;
 
 		/**
+		 * Whether we are actually drawing the scene.
+		 */
+		private boolean renderingScene;
+
+		/**
 		 * The list of filter names that are available. We use an array to make
 		 * ImGui access easier.
 		 */
@@ -308,30 +313,32 @@ public class Render {
 	 * @param scene The scene to render.
 	 */
 	public void render(@NonNull Window window, @NonNull Scene scene) {
-		this.updateModelMatrices(scene);
+		if (configuration.renderingScene) {
+			this.updateModelMatrices(scene);
 
-		this.animationRender.render(scene, this.renderBuffers);
-		this.shadowRender.render(scene, this.renderBuffers,
-			this.commandBuffers);
+			this.animationRender.render(scene, this.renderBuffers);
+			this.shadowRender.render(scene, this.renderBuffers,
+				this.commandBuffers);
 
-		if (Render.configuration.wireframe) {
-			GL11.glPolygonMode(GL11.GL_FRONT_AND_BACK, GL11.GL_LINE);
-			GL11.glDisable(GL11.GL_TEXTURE_2D);
+			if (Render.configuration.wireframe) {
+				GL11.glPolygonMode(GL11.GL_FRONT_AND_BACK, GL11.GL_LINE);
+				GL11.glDisable(GL11.GL_TEXTURE_2D);
+			}
+
+			this.sceneRender.render(scene, this.renderBuffers, this.gBuffer,
+				this.commandBuffers);
+
+			if (Render.configuration.wireframe) {
+				GL11.glPolygonMode(GL11.GL_FRONT_AND_BACK, GL11.GL_FILL);
+				GL11.glEnable(GL11.GL_TEXTURE_2D);
+			}
+			this.lightRenderStart(window);
+			this.lightRender.render(scene, this.shadowRender, this.gBuffer);
+			this.skyBoxRender.render(scene);
+			this.lightRenderFinish();
+
+			this.filterRender.render(scene, this.screenTexture);
 		}
-
-		this.sceneRender.render(scene, this.renderBuffers, this.gBuffer,
-			this.commandBuffers);
-
-		if (Render.configuration.wireframe) {
-			GL11.glPolygonMode(GL11.GL_FRONT_AND_BACK, GL11.GL_FILL);
-			GL11.glEnable(GL11.GL_TEXTURE_2D);
-		}
-		this.lightRenderStart(window);
-		this.lightRender.render(scene, this.shadowRender, this.gBuffer);
-		this.skyBoxRender.render(scene);
-		this.lightRenderFinish();
-
-		this.filterRender.render(scene, this.screenTexture);
 		this.guiRender.render(scene);
 	}
 
