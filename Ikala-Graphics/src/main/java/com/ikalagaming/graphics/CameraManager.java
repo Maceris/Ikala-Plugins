@@ -72,13 +72,12 @@ public class CameraManager {
 		}
 
 		// Update camera based on mouse
-		if (this.window.getMouseInput().isRightButtonPressed()) {
-			if (!ImGui.getIO().getWantCaptureMouse()) {
-				Vector2f rotVec = this.window.getMouseInput().getDisplVec();
-				this.camera.addRotation(
-					rotVec.x * CameraManager.MOUSE_SENSITIVITY,
-					rotVec.y * CameraManager.MOUSE_SENSITIVITY);
-			}
+		if (this.window.getMouseInput().isRightButtonPressed()
+			&& (!ImGui.getIO().getWantCaptureMouse())) {
+			Vector2f rotVec = this.window.getMouseInput().getDisplVec();
+			this.camera.addRotation(rotVec.x * CameraManager.MOUSE_SENSITIVITY,
+				rotVec.y * CameraManager.MOUSE_SENSITIVITY);
+
 		}
 	}
 }
