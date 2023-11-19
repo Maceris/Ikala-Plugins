@@ -349,14 +349,15 @@ public class LightRender {
 			MemoryUtil.memAllocFloat(lightsToRender * STRUCT_SIZE);
 
 		Vector4f lightPosition = new Vector4f();
+		Vector4f lightDirection = new Vector4f();		
 		final float padding = 0.0f;
 		for (int i = 0; i < lightsToRender; ++i) {
 			SpotLight light = spotLights.get(i);
 			lightPosition.set(light.getPointLight().getPosition(), 1);
 			lightPosition.mul(viewMatrix);
-			lightBuffer.put(light.getPointLight().getPosition().x);
-			lightBuffer.put(light.getPointLight().getPosition().y);
-			lightBuffer.put(light.getPointLight().getPosition().z);
+			lightBuffer.put(lightPosition.x);
+			lightBuffer.put(lightPosition.y);
+			lightBuffer.put(lightPosition.z);
 			lightBuffer.put(padding);
 			lightBuffer.put(light.getPointLight().getColor().x);
 			lightBuffer.put(light.getPointLight().getColor().y);
@@ -368,9 +369,11 @@ public class LightRender {
 			lightBuffer
 				.put(light.getPointLight().getAttenuation().getExponent());
 			lightBuffer.put(padding);
-			lightBuffer.put(light.getConeDirection().x);
-			lightBuffer.put(light.getConeDirection().y);
-			lightBuffer.put(light.getConeDirection().z);
+			lightDirection.set(light.getConeDirection(), 1);
+			lightDirection.mul(viewMatrix);
+			lightBuffer.put(lightDirection.x);
+			lightBuffer.put(lightDirection.y);
+			lightBuffer.put(lightDirection.z);
 			lightBuffer.put(light.getCutOff());
 		}
 		lightBuffer.flip();
