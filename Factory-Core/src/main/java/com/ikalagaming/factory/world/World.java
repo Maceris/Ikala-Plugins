@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -73,6 +74,8 @@ public class World {
 	 */
 	public boolean addTag(@NonNull String tag) {
 		if (this.hasTag(tag)) {
+			log.warn(SafeResourceLoader.getStringFormatted("TAG_DUPLICATE",
+				FactoryPlugin.getResourceBundle(), tag));
 			return false;
 		}
 		return this.tags.add(new Tag(tag, null));
@@ -83,14 +86,33 @@ public class World {
 	 * does not, this will fail.
 	 * 
 	 * @param tag The name of the tag.
-	 * @param parent The name of the parent tag.
+	 * @param parentName The name of the parent tag.
 	 * @return Whether we successfully added the tag.
 	 */
-	public boolean addTag(@NonNull String tag, @NonNull String parent) {
-		if (this.hasTag(tag) || !this.hasTag(parent)) {
+	public boolean addTag(@NonNull String tag, @NonNull String parentName) {
+		if (this.hasTag(tag)) {
+			log.warn(SafeResourceLoader.getStringFormatted("TAG_DUPLICATE",
+				FactoryPlugin.getResourceBundle(), tag));
 			return false;
 		}
-		return this.tags.add(new Tag(tag, this.findTag(parent)));
+		if (!this.hasTag(parentName)) {
+			log.warn(SafeResourceLoader.getStringFormatted("TAG_MISSING_PARENT",
+				FactoryPlugin.getResourceBundle(), tag, parentName));
+			return false;
+		}
+
+		Tag parent = this.findTag(parentName).orElse(null);
+
+		Tag tempParent = parent;
+		while (tempParent != null) {
+			if (tag.equals(tempParent.name())) {
+				log.warn(SafeResourceLoader.getStringFormatted("TAG_CYCLE",
+					FactoryPlugin.getResourceBundle(), tag));
+				return false;
+			}
+		}
+
+		return this.tags.add(new Tag(tag, parent));
 	}
 
 	/**
@@ -135,17 +157,17 @@ public class World {
 	 *
 	 * @param materialName The name of the material to look for.
 	 * @return The tag with the given name.
-	 * @throws NullPointerException If the material is not found, or is null.
+	 * @throws NullPointerException If the material name is null.
 	 */
-	public Material findMaterial(@NonNull String materialName) {
+	public Optional<Material> findMaterial(@NonNull String materialName) {
 		for (Material material : this.materials) {
 			if (materialName.equals(material.name())) {
-				return material;
+				return Optional.of(material);
 			}
 		}
 		World.log.error(SafeResourceLoader.getString("MATERIAL_MISSING",
 			FactoryPlugin.getResourceBundle()), materialName);
-		throw new NullPointerException();
+		return Optional.empty();
 	}
 
 	/**
@@ -153,17 +175,17 @@ public class World {
 	 *
 	 * @param tagName The name of the tag to look for.
 	 * @return The tag with the given name.
-	 * @throws NullPointerException If the tag is not found, or is null.
+	 * @throws NullPointerException If the tag name is null.
 	 */
-	public Tag findTag(@NonNull String tagName) {
+	public Optional<Tag> findTag(@NonNull String tagName) {
 		for (Tag tag : this.tags) {
 			if (tagName.equals(tag.name())) {
-				return tag;
+				return Optional.of(tag);
 			}
 		}
 		World.log.error(SafeResourceLoader.getString("TAG_MISSING",
 			FactoryPlugin.getResourceBundle()), tagName);
-		throw new NullPointerException();
+		return Optional.empty();
 	}
 
 	/**
@@ -285,15 +307,24 @@ public class World {
 				@SuppressWarnings("unchecked")
 				List<String> tagNames = (List<String>) contents.get("tags");
 
-				List<Tag> tagValues = tagNames.stream().map(this::findTag)
-					.collect(Collectors.toCollection(ArrayList::new));
+				List<Tag> tagValues =
+					tagNames.stream().map(this::findTag).map(Optional::get)
+						.collect(Collectors.toCollection(ArrayList::new));
 
 				String parentName = (String) contents.get("parent");
 				Material parent = null;
 				if (parentName != null) {
-					parent = findMaterial(parentName);
-					// Inherit tags
-					tagValues.addAll(parent.tags());
+					Optional<Material> maybeParent = findMaterial(parentName);
+					if (maybeParent.isEmpty()) {
+						log.warn(SafeResourceLoader.getStringFormatted(
+							"MAT_PARENT_MISSING",
+							FactoryPlugin.getResourceBundle(), parentName));
+					}
+					else {
+						parent = maybeParent.get();
+						// Inherit tags
+						tagValues.addAll(parent.tags());
+					}
 				}
 				this.deduplicateTags(tagValues);
 
