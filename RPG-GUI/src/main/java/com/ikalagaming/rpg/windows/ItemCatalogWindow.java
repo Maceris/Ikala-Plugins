@@ -1,18 +1,18 @@
 package com.ikalagaming.rpg.windows;
 
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.inventory.Inventory;
-import com.ikalagaming.item.Affix;
-import com.ikalagaming.item.Equipment;
-import com.ikalagaming.item.Item;
-import com.ikalagaming.item.ItemCatalog;
-import com.ikalagaming.item.ItemPersistence;
-import com.ikalagaming.item.ItemRoller;
-import com.ikalagaming.item.template.AccessoryTemplate;
-import com.ikalagaming.item.template.ArmorTemplate;
-import com.ikalagaming.item.template.EquipmentTemplate;
-import com.ikalagaming.item.template.WeaponTemplate;
-import com.ikalagaming.item.testing.ItemGenerator;
+import com.ikalagaming.rpg.inventory.Inventory;
+import com.ikalagaming.rpg.item.Affix;
+import com.ikalagaming.rpg.item.Equipment;
+import com.ikalagaming.rpg.item.Item;
+import com.ikalagaming.rpg.item.ItemCatalog;
+import com.ikalagaming.rpg.item.ItemPersistence;
+import com.ikalagaming.rpg.item.ItemRoller;
+import com.ikalagaming.rpg.item.template.AccessoryTemplate;
+import com.ikalagaming.rpg.item.template.ArmorTemplate;
+import com.ikalagaming.rpg.item.template.EquipmentTemplate;
+import com.ikalagaming.rpg.item.template.WeaponTemplate;
+import com.ikalagaming.rpg.item.testing.ItemGenerator;
 import com.ikalagaming.rpg.utils.ItemRendering;
 
 import imgui.ImGui;
@@ -186,7 +186,7 @@ public class ItemCatalogWindow implements GUIWindow {
 
 	/**
 	 * Draw the current index, max index, and buttons to move the current index.
-	 * 
+	 *
 	 * @param <T> The type of items we are choosing from.
 	 * @param items The list of items we are choosing from.
 	 */
@@ -222,7 +222,7 @@ public class ItemCatalogWindow implements GUIWindow {
 
 	/**
 	 * Draws the controls for items that can be rolled and have unique stats.
-	 * 
+	 *
 	 * @param <T> The type of template we are rolling.
 	 * @param <Q> The type of item we have rolled.
 	 * @param items The list of items we can choose from.
@@ -240,7 +240,7 @@ public class ItemCatalogWindow implements GUIWindow {
 
 	/**
 	 * Draw the controls for items that can't be rolled, and are all equivalent.
-	 * 
+	 *
 	 * @param <T> The type of item we are dealing with.
 	 * @param items The list of items we can choose from.
 	 */

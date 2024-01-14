@@ -11,9 +11,9 @@ import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.scene.lights.PointLight;
 import com.ikalagaming.graphics.scene.lights.SpotLight;
 import com.ikalagaming.plugins.events.AllPluginsEnabled;
-import com.ikalagaming.world.Level;
-import com.ikalagaming.world.WorldManager;
-import com.ikalagaming.world.events.LevelLoaded;
+import com.ikalagaming.rpg.world.Level;
+import com.ikalagaming.rpg.world.WorldManager;
+import com.ikalagaming.rpg.world.events.LevelLoaded;
 
 import com.google.gson.Gson;
 import lombok.NonNull;

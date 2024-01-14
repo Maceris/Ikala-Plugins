@@ -1,0 +1,13 @@
+rootProject.name = 'RPG-Inventory'
+include ':Ikala-Core'
+project(':Ikala-Core').projectDir = new File('../../Ikala-Core')
+include ':RPG-Item'
+project(':RPG-Item').projectDir = new File('../RPG-Item')
+include ':EntityComponentSystem'
+project(':EntityComponentSystem').projectDir = new File('../EntityComponentSystem')
+include ':Ikala-Attributes'
+project(':Ikala-Attributes').projectDir = new File('../Ikala-Attributes')
+include ':Random'
+project(':Random').projectDir = new File('../Random')
+include ':Ikala-Database'
+project(':Ikala-Database').projectDir = new File('../Ikala-Database')

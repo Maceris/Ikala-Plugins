@@ -3,24 +3,24 @@ package com.ikalagaming.rpg.windows;
 import com.ikalagaming.ecs.ECSManager;
 import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.inventory.InvUtil;
-import com.ikalagaming.inventory.Inventory;
-import com.ikalagaming.item.Accessory;
-import com.ikalagaming.item.Armor;
-import com.ikalagaming.item.Component;
-import com.ikalagaming.item.Consumable;
-import com.ikalagaming.item.Item;
-import com.ikalagaming.item.ItemUtil;
-import com.ikalagaming.item.Junk;
-import com.ikalagaming.item.Material;
-import com.ikalagaming.item.Quest;
-import com.ikalagaming.item.Weapon;
-import com.ikalagaming.item.enums.AccessoryType;
-import com.ikalagaming.item.enums.ArmorType;
-import com.ikalagaming.item.enums.WeaponType;
-import com.ikalagaming.item.testing.ItemGenerator;
 import com.ikalagaming.rpg.GUIPlugin;
 import com.ikalagaming.rpg.GameManager;
+import com.ikalagaming.rpg.inventory.InvUtil;
+import com.ikalagaming.rpg.inventory.Inventory;
+import com.ikalagaming.rpg.item.Accessory;
+import com.ikalagaming.rpg.item.Armor;
+import com.ikalagaming.rpg.item.Component;
+import com.ikalagaming.rpg.item.Consumable;
+import com.ikalagaming.rpg.item.Item;
+import com.ikalagaming.rpg.item.ItemUtil;
+import com.ikalagaming.rpg.item.Junk;
+import com.ikalagaming.rpg.item.Material;
+import com.ikalagaming.rpg.item.Quest;
+import com.ikalagaming.rpg.item.Weapon;
+import com.ikalagaming.rpg.item.enums.AccessoryType;
+import com.ikalagaming.rpg.item.enums.ArmorType;
+import com.ikalagaming.rpg.item.enums.WeaponType;
+import com.ikalagaming.rpg.item.testing.ItemGenerator;
 import com.ikalagaming.rpg.utils.ItemRendering;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -97,8 +97,8 @@ public class PlayerInventory implements GUIWindow {
 			int position;
 			for (int row = 0; row < PlayerInventory.INVENTORY_HEIGHT; ++row) {
 				ImGui.tableNextRow();
-				for (int col =
-					0; col < PlayerInventory.INVENTORY_WIDTH; ++col) {
+				for (int col = 0; col < PlayerInventory.INVENTORY_WIDTH;
+					++col) {
 					ImGui.tableSetColumnIndex(col);
 					position = row * PlayerInventory.INVENTORY_WIDTH + col;
 
@@ -356,18 +356,19 @@ public class PlayerInventory implements GUIWindow {
 		UUID player = GameManager.getPlayer();
 
 		if (player == null) {
-			this.inventory = new Inventory(INVENTORY_HEIGHT * INVENTORY_WIDTH);
-			log.warn(SafeResourceLoader.getString("INVALID_INVENTORY",
-				GUIPlugin.getResourceBundle()));
+			this.inventory = new Inventory(PlayerInventory.INVENTORY_HEIGHT
+				* PlayerInventory.INVENTORY_WIDTH);
+			PlayerInventory.log.warn(SafeResourceLoader
+				.getString("INVALID_INVENTORY", GUIPlugin.getResourceBundle()));
 		}
 		else {
 			Optional<Inventory> inventoryMaybe =
 				ECSManager.getComponent(player, Inventory.class);
 			if (inventoryMaybe.isEmpty()) {
-				this.inventory =
-					new Inventory(INVENTORY_HEIGHT * INVENTORY_WIDTH);
-				log.warn(SafeResourceLoader.getString("INVALID_INVENTORY",
-					GUIPlugin.getResourceBundle()));
+				this.inventory = new Inventory(PlayerInventory.INVENTORY_HEIGHT
+					* PlayerInventory.INVENTORY_WIDTH);
+				PlayerInventory.log.warn(SafeResourceLoader.getString(
+					"INVALID_INVENTORY", GUIPlugin.getResourceBundle()));
 			}
 			else {
 				this.inventory = inventoryMaybe.get();

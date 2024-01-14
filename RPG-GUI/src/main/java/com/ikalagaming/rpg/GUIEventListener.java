@@ -6,8 +6,8 @@ import com.ikalagaming.event.Order;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.plugins.events.PluginEnabled;
+import com.ikalagaming.rpg.world.events.LevelLoaded;
 import com.ikalagaming.util.SafeResourceLoader;
-import com.ikalagaming.world.events.LevelLoaded;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +38,19 @@ public class GUIEventListener implements Listener {
 	}
 
 	/**
+	 * Update scene controls when a level is loaded.
+	 *
+	 * @param event The event.
+	 */
+	@EventHandler(order = Order.LATE)
+	public void onLevelLoaded(LevelLoaded event) {
+		GUIEventListener.log.debug(SafeResourceLoader
+			.getString("SCENE_CONTROLS", GUIPlugin.getResourceBundle()));
+		this.gui.windowSceneControls.setup(GraphicsManager.getScene());
+		this.gui.windowInventory.setup(GraphicsManager.getScene());
+	}
+
+	/**
 	 * Attach the GUI once the graphics plugin is loaded.
 	 *
 	 * @param event The event.
@@ -48,18 +61,5 @@ public class GUIEventListener implements Listener {
 			return;
 		}
 		this.attachGUI();
-	}
-
-	/**
-	 * Update scene controls when a level is loaded.
-	 * 
-	 * @param event The event.
-	 */
-	@EventHandler(order = Order.LATE)
-	public void onLevelLoaded(LevelLoaded event) {
-		log.debug(SafeResourceLoader.getString("SCENE_CONTROLS",
-			GUIPlugin.getResourceBundle()));
-		this.gui.windowSceneControls.setup(GraphicsManager.getScene());
-		this.gui.windowInventory.setup(GraphicsManager.getScene());
 	}
 }

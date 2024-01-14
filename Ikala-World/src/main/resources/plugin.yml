@@ -1,6 +1,0 @@
----
-name: Ikala-World
-version: 0.0.1-alpha
-description: Handles the world and loading levels
-authors: [maceris]
-main-class: com.ikalagaming.world.WorldPlugin

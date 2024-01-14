@@ -8,6 +8,6 @@ dependencies:
   - EntityComponentSystem
   - Ikala-Database
   - Ikala-Graphics
-  - Ikala-Inventory
-  - Ikala-World
+  - RPG-Inventory
+  - RPG-World
   - Random

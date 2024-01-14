@@ -3,7 +3,7 @@ package com.ikalagaming.database;
 /**
  * An operation was attempted on a database that did not have an open
  * connection.
- * 
+ *
  * @author Ches Burks
  *
  */

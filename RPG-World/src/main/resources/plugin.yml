@@ -1,0 +1,6 @@
+---
+name: RPG-World
+version: 0.0.1-alpha
+description: Handles an RPG world and loading levels
+authors: [maceris]
+main-class: com.ikalagaming.rpg.world.WorldPlugin

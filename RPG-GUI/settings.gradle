@@ -3,8 +3,8 @@ include ':Ikala-Core'
 project(':Ikala-Core').projectDir = new File('../../Ikala-Core')
 include ':Ikala-Graphics'
 project(':Ikala-Graphics').projectDir = new File('../Ikala-Graphics')
-include ':Ikala-Item'
-project(':Ikala-Item').projectDir = new File('../Ikala-Item')
+include ':RPG-Item'
+project(':RPG-Item').projectDir = new File('../RPG-Item')
 include ':EntityComponentSystem'
 project(':EntityComponentSystem').projectDir = new File('../EntityComponentSystem')
 include ':Ikala-Attributes'
@@ -13,9 +13,9 @@ include ':Random'
 project(':Random').projectDir = new File('../Random')
 include ':Ikala-Database'
 project(':Ikala-Database').projectDir = new File('../Ikala-Database')
-include ':Ikala-Inventory'
-project(':Ikala-Inventory').projectDir = new File('../Ikala-Inventory')
-include ':Ikala-World'
-project(':Ikala-World').projectDir = new File('../Ikala-World')
+include ':RPG-Inventory'
+project(':RPG-Inventory').projectDir = new File('../RPG-Inventory')
+include ':RPG-World'
+project(':RPG-World').projectDir = new File('../RPG-World')
 include ':RPG-Logic'
 project(':RPG-Logic').projectDir = new File('../RPG-Logic')

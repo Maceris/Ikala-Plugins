@@ -1,7 +1,7 @@
 package com.ikalagaming.rpg;
 
 import com.ikalagaming.ecs.ECSManager;
-import com.ikalagaming.inventory.Inventory;
+import com.ikalagaming.rpg.inventory.Inventory;
 
 import lombok.Getter;
 

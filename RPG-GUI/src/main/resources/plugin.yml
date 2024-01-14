@@ -9,6 +9,6 @@ dependencies:
   - Ikala-Attributes
   - Ikala-Database
   - Ikala-Graphics
-  - Ikala-Inventory
-  - Ikala-Item
+  - RPG-Inventory
+  - RPG-Item
   - Random

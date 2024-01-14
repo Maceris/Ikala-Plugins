@@ -1,0 +1,7 @@
+---
+name: RPG-Inventory
+version: 0.0.1
+description: An inventory system for RPGs
+authors: [maceris]
+main-class: com.ikalagaming.rpg.inventory.InventoryPlugin
+dependencies: [RPG-Item, EntityComponentSystem]

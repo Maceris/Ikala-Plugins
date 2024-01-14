@@ -47,13 +47,13 @@ idea {
 dependencies {
 	implementation project(':Ikala-Core')
 	compileOnly project(':Ikala-Graphics')
-	compileOnly project(':Ikala-Item')
+	compileOnly project(':RPG-Item')
 	compileOnly project(':Ikala-Attributes')
 	compileOnly project(':Random')
 	compileOnly project(':Ikala-Database')
-	compileOnly project(':Ikala-Inventory')
+	compileOnly project(':RPG-Inventory')
 	compileOnly project(':EntityComponentSystem')
-	compileOnly project(':Ikala-World')
+	compileOnly project(':RPG-World')
 	compileOnly project(':RPG-Logic')
 	
 	implementation "org.joml:joml:${jomlVersion}"

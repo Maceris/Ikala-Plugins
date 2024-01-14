@@ -32,7 +32,7 @@ public class Database {
 
 	/**
 	 * The connection string for the database.
-	 * 
+	 *
 	 * @return The connection string for the database.
 	 */
 	@Getter
@@ -118,7 +118,7 @@ public class Database {
 			Database.log.warn(SafeResourceLoader
 				.getString("ERROR_SETTING_UP_DRIVER", resourceBundle));
 		}
-		
+
 		try {
 			DriverManager.setLoginTimeout(5);
 			Properties props = new Properties();
