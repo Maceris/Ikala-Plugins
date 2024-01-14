@@ -7,6 +7,7 @@ package com.ikalagaming.factory.world.gen;
  *
  */
 public class WorldGenerator {
+	
 	void generateChunk() {
 
 	}

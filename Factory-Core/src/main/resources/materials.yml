@@ -1,0 +1,17 @@
+---
+cloth:
+  tags:
+    - flammable
+    - wettable
+metal:
+  tags:
+    - conductive
+    - metal
+steel:
+  tags:
+    - steel
+  parent: metal
+gold:
+  tags:
+    - gold
+  parent: metal
