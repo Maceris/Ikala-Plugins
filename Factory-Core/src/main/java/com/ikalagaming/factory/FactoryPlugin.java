@@ -1,7 +1,6 @@
 package com.ikalagaming.factory;
 
 import com.ikalagaming.event.Listener;
-import com.ikalagaming.factory.world.World;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 
@@ -51,14 +50,6 @@ public class FactoryPlugin extends Plugin {
 	@Override
 	public String getName() {
 		return FactoryPlugin.PLUGIN_NAME;
-	}
-
-	@Override
-	public boolean onEnable() {
-		World world = new World();
-		world.load();
-		log.debug(world.getTags().toString());
-		return true;
 	}
 
 	@Override

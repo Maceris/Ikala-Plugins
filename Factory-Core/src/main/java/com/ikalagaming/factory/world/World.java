@@ -1,10 +1,8 @@
 package com.ikalagaming.factory.world;
 
 import com.ikalagaming.factory.FactoryPlugin;
-import com.ikalagaming.factory.item.Material;
 import com.ikalagaming.util.SafeResourceLoader;
 
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.yaml.snakeyaml.Yaml;
@@ -51,68 +49,151 @@ public class World {
 	}
 
 	/**
-	 * A list of tags that apply to nouns.
-	 *
-	 * @return The tags that apply to nouns.
+	 * Used to store and look tags up by name.
 	 */
-	@Getter
-	private List<Tag> tags = new ArrayList<>();
+	private Map<String, Tag> tags = new HashMap<>();
 
 	/**
-	 * A list of all materials.
-	 *
-	 * @return The materials that exist.
+	 * Used to store and look materials up by name.
 	 */
-	@Getter
-	private List<Material> materials = new ArrayList<>();
+	private Map<String, Material> materials = new HashMap<>();
+
+	/**
+	 * Create a new material record without any tags or parent material.
+	 *
+	 * @param name The name of the material.
+	 * @return Whether we successfully created a material.
+	 */
+	public boolean addMaterial(@NonNull String name) {
+		return this.addMaterial(name, null, null);
+	}
+
+	/**
+	 * Create a new material record without any parent material.
+	 *
+	 * @param name The name of the material.
+	 * @param materialTags The names of all the tags that apply to this
+	 *            material. If any of these do not already exist, creating the
+	 *            material will fail.
+	 * @return Whether we successfully created a material.
+	 */
+	public boolean addMaterial(@NonNull String name,
+		@NonNull List<String> materialTags) {
+		return this.addMaterial(name, materialTags, null);
+	}
+
+	/**
+	 * Create a new material record.
+	 *
+	 * @param name The name of the material.
+	 * @param materialTags The names of all the tags that apply to this
+	 *            material. If any of these do not already exist, creating the
+	 *            material will fail.
+	 * @param parentName The name of the parent material, which must already
+	 *            exist if not null.
+	 * @return Whether we successfully created a material.
+	 */
+	public boolean addMaterial(@NonNull String name, List<String> materialTags,
+		String parentName) {
+		if (this.hasMaterial(name)) {
+			World.log.warn(SafeResourceLoader.getStringFormatted(
+				"MAT_DUPLICATE", FactoryPlugin.getResourceBundle(), name));
+			return false;
+		}
+		if (parentName != null && !this.hasMaterial(parentName)) {
+			World.log.warn(
+				SafeResourceLoader.getStringFormatted("MAT_MISSING_PARENT",
+					FactoryPlugin.getResourceBundle(), name, parentName));
+			return false;
+		}
+
+		Material parent = null;
+		if (parentName != null) {
+			parent = this.findMaterial(parentName).orElse(null);
+		}
+
+		List<Tag> totalTags = new ArrayList<>();
+		if (materialTags != null) {
+			for (String tagName : materialTags) {
+				Optional<Tag> maybeTag = this.findTag(tagName);
+				if (maybeTag.isEmpty()) {
+					World.log.warn(
+						SafeResourceLoader.getStringFormatted("TAG_MISSING",
+							FactoryPlugin.getResourceBundle(), tagName));
+					return false;
+				}
+				totalTags.add(maybeTag.get());
+			}
+		}
+
+		if (parent != null) {
+			Material tempParent = parent;
+			while (tempParent != null) {
+				totalTags.addAll(tempParent.tags());
+				tempParent = tempParent.parent();
+			}
+		}
+
+		this.deduplicateTags(totalTags);
+
+		this.materials.put(name, new Material(name, totalTags, parent));
+		return true;
+	}
+
+	/**
+	 * Create a new material record without any tags.
+	 *
+	 * @param name The name of the material.
+	 * @param parentName The name of the parent material, which must already
+	 *            exist if not null.
+	 * @return Whether we successfully created a material.
+	 */
+	public boolean addMaterial(@NonNull String name,
+		@NonNull String parentName) {
+		return this.addMaterial(name, null, parentName);
+	}
 
 	/**
 	 * Add a tag to the list of tags. If the tag already exists, this will fail.
-	 * 
+	 *
 	 * @param tag The name of the tag.
 	 * @return Whether we successfully added the tag.
 	 */
 	public boolean addTag(@NonNull String tag) {
-		if (this.hasTag(tag)) {
-			log.warn(SafeResourceLoader.getStringFormatted("TAG_DUPLICATE",
-				FactoryPlugin.getResourceBundle(), tag));
-			return false;
-		}
-		return this.tags.add(new Tag(tag, null));
+		return this.addTag(tag, null);
 	}
 
 	/**
 	 * Add a tag to the list of tags. If the tag already exists, or the parent
 	 * does not, this will fail.
-	 * 
+	 *
 	 * @param tag The name of the tag.
-	 * @param parentName The name of the parent tag.
+	 * @param parentName The name of the parent tag, or null if there is no
+	 *            parent tag.
 	 * @return Whether we successfully added the tag.
 	 */
-	public boolean addTag(@NonNull String tag, @NonNull String parentName) {
+	public boolean addTag(@NonNull String tag, String parentName) {
 		if (this.hasTag(tag)) {
-			log.warn(SafeResourceLoader.getStringFormatted("TAG_DUPLICATE",
-				FactoryPlugin.getResourceBundle(), tag));
+			World.log.warn(SafeResourceLoader.getStringFormatted(
+				"TAG_DUPLICATE", FactoryPlugin.getResourceBundle(), tag));
 			return false;
 		}
-		if (!this.hasTag(parentName)) {
-			log.warn(SafeResourceLoader.getStringFormatted("TAG_MISSING_PARENT",
-				FactoryPlugin.getResourceBundle(), tag, parentName));
+		if (parentName != null && !this.hasTag(parentName)) {
+			World.log.warn(
+				SafeResourceLoader.getStringFormatted("TAG_MISSING_PARENT",
+					FactoryPlugin.getResourceBundle(), tag, parentName));
 			return false;
 		}
 
-		Tag parent = this.findTag(parentName).orElse(null);
+		Tag parent = null;
 
-		Tag tempParent = parent;
-		while (tempParent != null) {
-			if (tag.equals(tempParent.name())) {
-				log.warn(SafeResourceLoader.getStringFormatted("TAG_CYCLE",
-					FactoryPlugin.getResourceBundle(), tag));
-				return false;
-			}
+		if (parentName != null) {
+			parent = this.findTag(parentName).orElse(null);
 		}
 
-		return this.tags.add(new Tag(tag, parent));
+		this.tags.put(tag, new Tag(tag, parent));
+
+		return true;
 	}
 
 	/**
@@ -137,11 +218,12 @@ public class World {
 
 		for (Tag tag : deduplicated) {
 			Tag parent = tag.parent();
-			if (parent == null) {
-				continue;
-			}
-			if (deduplicated.contains(parent)) {
-				toRemove.add(parent);
+
+			while (parent != null) {
+				if (deduplicated.contains(parent)) {
+					toRemove.add(parent);
+				}
+				parent = parent.parent();
 			}
 		}
 
@@ -160,10 +242,8 @@ public class World {
 	 * @throws NullPointerException If the material name is null.
 	 */
 	public Optional<Material> findMaterial(@NonNull String materialName) {
-		for (Material material : this.materials) {
-			if (materialName.equals(material.name())) {
-				return Optional.of(material);
-			}
+		if (this.materials.containsKey(materialName)) {
+			return Optional.of(this.materials.get(materialName));
 		}
 		World.log.error(SafeResourceLoader.getString("MATERIAL_MISSING",
 			FactoryPlugin.getResourceBundle()), materialName);
@@ -178,10 +258,8 @@ public class World {
 	 * @throws NullPointerException If the tag name is null.
 	 */
 	public Optional<Tag> findTag(@NonNull String tagName) {
-		for (Tag tag : this.tags) {
-			if (tagName.equals(tag.name())) {
-				return Optional.of(tag);
-			}
+		if (this.tags.containsKey(tagName)) {
+			return Optional.of(this.tags.get(tagName));
 		}
 		World.log.error(SafeResourceLoader.getString("TAG_MISSING",
 			FactoryPlugin.getResourceBundle()), tagName);
@@ -189,18 +267,50 @@ public class World {
 	}
 
 	/**
+	 * Fetch an unmodifiable copy of the list of material names that currently
+	 * exist.
+	 *
+	 * @return An unmodifiable copy of the material names.
+	 */
+	public List<String> getMaterialNames() {
+		return List.copyOf(this.materials.keySet());
+	}
+
+	/**
+	 * Fetch an unmodifiable copy of the list of materials that currently exist.
+	 *
+	 * @return An unmodifiable copy of the material values.
+	 */
+	public List<Material> getMaterials() {
+		return List.copyOf(this.materials.values());
+	}
+
+	/**
+	 * Fetch an unmodifiable copy of the list of tag names that currently exist.
+	 *
+	 * @return An unmodifiable copy of the tag names.
+	 */
+	public List<String> getTagNames() {
+		return List.copyOf(this.tags.keySet());
+	}
+
+	/**
+	 * Fetch an unmodifiable copy of the list of tags that currently exist.
+	 *
+	 * @return An unmodifiable copy of the tag values.
+	 */
+	public List<Tag> getTags() {
+		return List.copyOf(this.tags.values());
+	}
+
+	/**
 	 * Checks if the specified material exists.
 	 *
-	 * @param tag The material we are looking for.
+	 * @param material The material we are looking for.
 	 * @return Whether the material exists.
 	 */
-	public boolean hasMaterial(@NonNull String tag) {
-		for (Material potential : this.materials) {
-			if (potential.name().equals(tag)) {
-				return true;
-			}
-		}
-		return false;
+	public boolean hasMaterial(@NonNull String material) {
+		return this.materials.containsKey(material);
 	}
 
 	/**
@@ -210,12 +320,7 @@ public class World {
 	 * @return Whether the tag exists.
 	 */
 	public boolean hasTag(@NonNull String tag) {
-		for (Tag potential : this.tags) {
-			if (potential.name().equals(tag)) {
-				return true;
-			}
-		}
-		return false;
+		return this.tags.containsKey(tag);
 	}
 
 	/**
@@ -223,7 +328,7 @@ public class World {
 	 *
 	 * @return Whether we successfully loaded all information.
 	 */
-	public boolean load() {
+	public boolean loadDefaultConfigurations() {
 		// Short-circuiting will stop execution if one fails
 		return this.loadTags() && this.loadMaterials();
 	}
@@ -306,31 +411,9 @@ public class World {
 
 				@SuppressWarnings("unchecked")
 				List<String> tagNames = (List<String>) contents.get("tags");
+				String parent = (String) contents.get("parent");
 
-				List<Tag> tagValues =
-					tagNames.stream().map(this::findTag).map(Optional::get)
-						.collect(Collectors.toCollection(ArrayList::new));
-
-				String parentName = (String) contents.get("parent");
-				Material parent = null;
-				if (parentName != null) {
-					Optional<Material> maybeParent = findMaterial(parentName);
-					if (maybeParent.isEmpty()) {
-						log.warn(SafeResourceLoader.getStringFormatted(
-							"MAT_PARENT_MISSING",
-							FactoryPlugin.getResourceBundle(), parentName));
-					}
-					else {
-						parent = maybeParent.get();
-						// Inherit tags
-						tagValues.addAll(parent.tags());
-					}
-				}
-				this.deduplicateTags(tagValues);
-
-				Material newMaterial =
-					new Material(entry.getKey(), tagValues, parent);
-				this.materials.add(newMaterial);
+				this.addMaterial(entry.getKey(), tagNames, parent);
 			}
 		}
 		catch (Exception e) {
@@ -343,18 +426,18 @@ public class World {
 	 * Process a map from snakeyaml and populate the tag list with the results.
 	 *
 	 * @param map The nested map structure output by snakeyaml.
-	 * @param parent The parent tag, which is null for root tags.
+	 * @param parent The name of the parent tag, which is null for root tags.
 	 */
-	private void processTags(@NonNull Map<String, Object> map, Tag parent) {
+	private void processTags(@NonNull Map<String, Object> map, String parent) {
 		for (Entry<String, Object> entry : map.entrySet()) {
-			Tag newTag = new Tag(entry.getKey(), parent);
-			this.tags.add(newTag);
+			final String tagName = entry.getKey();
+			this.addTag(tagName, parent);
 
 			Object value = entry.getValue();
 			if (value instanceof Map<?, ?> child) {
 				@SuppressWarnings("unchecked")
 				Map<String, Object> cast = (Map<String, Object>) child;
-				this.processTags(cast, newTag);
+				this.processTags(cast, tagName);
 			}
 		}
 	}

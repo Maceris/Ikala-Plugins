@@ -1,6 +1,4 @@
-package com.ikalagaming.factory.item;
-
-import com.ikalagaming.factory.world.Tag;
+package com.ikalagaming.factory.world;
 
 import lombok.NonNull;
 
@@ -11,7 +9,8 @@ import java.util.Objects;
 
 /**
  * The substance an object is primarily made of. These serve as groups of tags
- * that can be applied to all objects that share the material.
+ * that can be applied to all objects that share the material, and also as a
+ * name for the material.
  * 
  * Materials can also extend from a parent, automatically including all of the
  * tags of the parent. When a child includes a more specific tag than the

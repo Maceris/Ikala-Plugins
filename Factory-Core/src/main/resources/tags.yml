@@ -19,13 +19,6 @@ lockable: # Can be locked and unlocked. Like a chest, door.
 openable: # Can be opened and closed. Like a box, door.
 poisonous: # Toxic to consume. Like poison, bleach.
 solid: # Solid in normal conditions. Like rocks, a mug.
-  metal: # Generic metal. Like steel, alloy blends.
-    aluminum:
-    copper:
-    gold:
-    iron:
-    lead:
-    steel:
   powder: # Solid, but granular and can be poured. Like sand, dust.
 transparent: # We can see the contents. Like glass, a bucket.
 wettable: # Can have a liquid stay on, or soak into it. Like cloth, sponges.
