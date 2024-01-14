@@ -8,6 +8,7 @@ Each plugin will likely have it's own README, but below are high level descripti
 
 * `EntityComponentSystem` - Provides a framework for the Entity Component System pattern.
 * `Example-Plugin` - An example plugin, set up and ready to build. This can be used as a framework to start building your own plugins.
+* `Factory-Core` - The core of a factory game.
 * `Ikala-Attributes` - RPG related attributes, player and enemy stats.
 * `Ikala-Database` - A relational database and utilities for interacting with it.
 * `Ikala-Graphics` - Proivides utilities for graphics, using LWJGL.
