@@ -1,19 +1,9 @@
 package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.events.WindowCreated;
-import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.render.Render;
-import com.ikalagaming.graphics.scene.AnimationData;
-import com.ikalagaming.graphics.scene.Camera;
-import com.ikalagaming.graphics.scene.Entity;
-import com.ikalagaming.graphics.scene.Fog;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.graphics.scene.SkyBox;
-import com.ikalagaming.graphics.scene.lights.AmbientLight;
-import com.ikalagaming.graphics.scene.lights.PointLight;
-import com.ikalagaming.graphics.scene.lights.SceneLights;
-import com.ikalagaming.graphics.scene.lights.SpotLight;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -21,7 +11,6 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.joml.Vector3f;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.UUID;
@@ -100,10 +89,6 @@ public class GraphicsManager {
 	 */
 	private static double nextUpdateTime;
 	/**
-	 * The current time, stored here to prevent extra doubles.
-	 */
-	private static double currentTime;
-	/**
 	 * The last time we rendered a frame, for calculating FPS.
 	 */
 	private static double lastTime;
@@ -140,9 +125,6 @@ public class GraphicsManager {
 	 */
 	@Getter
 	private static Window window;
-
-	private static AnimationData animationData1;
-	private static AnimationData animationData2;
 
 	/**
 	 * Creates a graphics window, fires off a {@link WindowCreated} event. Won't
@@ -200,71 +182,6 @@ public class GraphicsManager {
 	 * Initialize the application.
 	 */
 	private static void init() {
-		String terrainModelId = "terrain";
-		Model terrain = ModelLoader
-			.loadModel(new ModelLoader.ModelLoadRequest(terrainModelId,
-				GraphicsPlugin.PLUGIN_NAME, "models/terrain/terrain.obj",
-				GraphicsManager.getScene().getMaterialCache(), false));
-		GraphicsManager.getScene().addModel(terrain);
-
-		Entity terrainEntity = new Entity("terrainEntity", terrainModelId);
-		terrainEntity.setScale(100.0f);
-		terrainEntity.setPosition(0, -1, 0);
-		terrainEntity.updateModelMatrix();
-		GraphicsManager.getScene().addEntity(terrainEntity);
-
-		String bobModelId = "bobModel";
-		Model bobModel =
-			ModelLoader.loadModel(new ModelLoader.ModelLoadRequest(bobModelId,
-				GraphicsPlugin.PLUGIN_NAME, "models/bob/boblamp.md5mesh",
-				GraphicsManager.getScene().getMaterialCache(), true));
-		GraphicsManager.getScene().addModel(bobModel);
-
-		Entity bobEntity = new Entity("bobEntity-1", bobModelId);
-		bobEntity.setScale(0.05f);
-		bobEntity.updateModelMatrix();
-		GraphicsManager.animationData1 =
-			new AnimationData(bobModel.getAnimationList().get(0));
-		bobEntity.setAnimationData(GraphicsManager.animationData1);
-		GraphicsManager.getScene().addEntity(bobEntity);
-
-		Entity bobEntity2 = new Entity("bobEntity-2", bobModelId);
-		bobEntity2.setPosition(2, 0, 0);
-		bobEntity2.setScale(0.025f);
-		bobEntity2.updateModelMatrix();
-		GraphicsManager.animationData2 =
-			new AnimationData(bobModel.getAnimationList().get(0));
-		bobEntity2.setAnimationData(GraphicsManager.animationData2);
-		GraphicsManager.getScene().addEntity(bobEntity2);
-
-		SceneLights sceneLights = GraphicsManager.scene.getSceneLights();
-		AmbientLight ambientLight = sceneLights.getAmbientLight();
-		ambientLight.setIntensity(0.5f);
-		ambientLight.setColor(0.3f, 0.3f, 0.3f);
-
-		sceneLights.getPointLights().add(new PointLight(new Vector3f(1, 1, 1),
-			new Vector3f(0, 2.5f, -0.4f), 1.0f));
-
-		sceneLights.getSpotLights()
-			.add(
-				new SpotLight(
-					new PointLight(new Vector3f(1, 1, 1),
-						new Vector3f(0, 0, -1.6f), 1.0f),
-					new Vector3f(0, 0, -1.4f), 1.0f));
-
-		SkyBox skyBox = new SkyBox("models/skybox/skybox.obj",
-			GraphicsManager.scene.getMaterialCache());
-		skyBox.getSkyBoxEntity().setScale(100);
-		skyBox.getSkyBoxEntity().updateModelMatrix();
-		GraphicsManager.scene.setSkyBox(skyBox);
-
-		GraphicsManager.scene
-			.setFog(new Fog(true, new Vector3f(0.5f, 0.5f, 0.5f), 0.02f));
-
-		Camera camera = GraphicsManager.scene.getCamera();
-		camera.setPosition(-11f, 11f, 0f);
-		camera.addRotation(0.42f, 1.92f);
-
 		GraphicsManager.render.setupData(GraphicsManager.scene);
 	}
 
@@ -296,12 +213,12 @@ public class GraphicsManager {
 		GraphicsManager.window.update();
 		++GraphicsManager.framesSinceLastCalculation;
 
-		GraphicsManager.currentTime = GLFW.glfwGetTime();
-		if (GraphicsManager.currentTime - GraphicsManager.lastTime >= 1d) {
+		final double currentTime = GLFW.glfwGetTime();
+		if (currentTime - GraphicsManager.lastTime >= 1d) {
 			GraphicsManager.lastFPS =
 				GraphicsManager.framesSinceLastCalculation;
 			GraphicsManager.framesSinceLastCalculation = 0;
-			GraphicsManager.lastTime = GraphicsManager.currentTime;
+			GraphicsManager.lastTime = currentTime;
 		}
 	}
 
@@ -378,8 +295,6 @@ public class GraphicsManager {
 					GraphicsManager.window);
 			}
 
-			GraphicsManager.update((long) elapsedTime);
-
 			if (GraphicsManager.refreshRequested.compareAndSet(true, false)) {
 				GraphicsManager.render.setupData(GraphicsManager.scene);
 			}
@@ -403,18 +318,6 @@ public class GraphicsManager {
 		}
 
 		return Launcher.STATUS_OK;
-	}
-
-	/**
-	 * Make game updates.
-	 *
-	 * @param diffTimeMillis Time since the last update in milliseconds.
-	 */
-	private static void update(long diffTimeMillis) {
-		GraphicsManager.animationData1.nextFrame();
-		if (diffTimeMillis % 2 == 0) {
-			GraphicsManager.animationData2.nextFrame();
-		}
 	}
 
 	/**
