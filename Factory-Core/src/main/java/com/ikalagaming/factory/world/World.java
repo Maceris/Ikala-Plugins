@@ -324,6 +324,26 @@ public class World {
 	}
 
 	/**
+	 * Checks if the specified tag exists on the given material.
+	 * 
+	 * @param tag The name of the tag we are looking for.
+	 * @param materialName The material name we are checking against.
+	 * @return True if the material has the tag, false if it does not or either
+	 *         tag or material don't exist.
+	 */
+	public boolean hasTagMaterial(@NonNull String tag,
+		@NonNull String materialName) {
+		if (!this.tags.containsKey(tag)) {
+			return false;
+		}
+		if (!this.materials.containsKey(materialName)) {
+			return false;
+		}
+
+		return containsTag(tag, this.materials.get(materialName).tags());
+	}
+
+	/**
 	 * Load all the information from files.
 	 *
 	 * @return Whether we successfully loaded all information.

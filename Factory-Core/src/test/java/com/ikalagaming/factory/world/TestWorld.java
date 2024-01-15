@@ -99,6 +99,57 @@ class TestWorld {
 	}
 
 	/**
+	 * Test that we can retrieve materials.
+	 */
+	@Test
+	void testFetchMaterial() {
+		World world = new World();
+
+		Assertions.assertTrue(world.addTag("solid"));
+		Assertions.assertTrue(world.addTag("powder", "solid"));
+
+		final String name = "dust";
+		Assertions.assertTrue(world.addMaterial("parent"));
+		Assertions
+			.assertTrue(world.addMaterial(name, List.of("powder"), "parent"));
+
+		Assertions.assertTrue(world.hasMaterial(name));
+		Assertions.assertFalse(world.hasMaterial(name + "y"));
+		Optional<Material> maybeMaterial = world.findMaterial(name);
+		Assertions.assertTrue(maybeMaterial.isPresent());
+		Assertions.assertEquals(name, maybeMaterial.get().name());
+		Assertions.assertEquals("parent", maybeMaterial.get().parent().name());
+
+		Assertions.assertTrue(world.hasTagMaterial("solid", name));
+		Assertions.assertTrue(world.hasTagMaterial("powder", name));
+
+	}
+
+	/**
+	 * Test that we can retrieve tags.
+	 */
+	@Test
+	void testFetchTag() {
+		World world = new World();
+
+		final String parentName = "liquid";
+		Assertions.assertTrue(world.addTag(parentName));
+		Assertions.assertTrue(world.hasTag(parentName));
+		Optional<Tag> maybeLiquid = world.findTag(parentName);
+		Assertions.assertTrue(maybeLiquid.isPresent());
+		Assertions.assertEquals(parentName, maybeLiquid.get().name());
+
+		final String childName = "sludge";
+		Assertions.assertTrue(world.addTag(childName, parentName));
+		Assertions.assertTrue(world.hasTag(parentName));
+		Assertions.assertTrue(world.hasTag(childName));
+		Optional<Tag> maybeSludge = world.findTag(childName);
+		Assertions.assertTrue(maybeSludge.isPresent());
+		Assertions.assertEquals(childName, maybeSludge.get().name());
+		Assertions.assertEquals(maybeLiquid.get(), maybeSludge.get().parent());
+	}
+
+	/**
 	 * Test the creation of materials.
 	 */
 	@Test
@@ -120,37 +171,6 @@ class TestWorld {
 				world.addMaterial("Sample5", new ArrayList<>(), null)),
 			() -> Assertions.assertTrue(
 				world.addMaterial("Sample6", new ArrayList<>(), "simple")));
-	}
-
-	/**
-	 * Test that tags are de-duplicated when we inherit from parent materials.
-	 */
-	@Test
-	void testTagDeduplication() {
-		World world = new World();
-
-		Assertions.assertTrue(world.addTag("solid"));
-		Assertions.assertTrue(world.addTag("metal", "solid"));
-		Assertions.assertTrue(world.addTag("rare_metal", "metal"));
-
-		Assertions.assertTrue(
-			world.addMaterial("gold", List.of("rare_metal", "solid")));
-		Assertions.assertTrue(
-			world.addMaterial("refined_gold", List.of("rare_metal"), "gold"));
-
-		Optional<Material> maybeGold = world.findMaterial("gold");
-		Assertions.assertTrue(maybeGold.isPresent());
-		Assertions.assertEquals(1, maybeGold.get().tags().size());
-		Assertions.assertEquals("rare_metal",
-			maybeGold.get().tags().get(0).name());
-
-		Optional<Material> maybeRefinedGold =
-			world.findMaterial("refined_gold");
-		Assertions.assertTrue(maybeRefinedGold.isPresent());
-		Assertions.assertEquals(1, maybeRefinedGold.get().tags().size());
-		Assertions.assertEquals("rare_metal",
-			maybeRefinedGold.get().tags().get(0).name());
-
 	}
 
 	/**
@@ -182,6 +202,36 @@ class TestWorld {
 		Assertions.assertFalse(world.addMaterial("parent", List.of()));
 		Assertions
 			.assertFalse(world.addMaterial("parent", List.of(), "parent"));
+	}
+
+	/**
+	 * Test that tags are de-duplicated when we inherit from parent materials.
+	 */
+	@Test
+	void testTagDeduplication() {
+		World world = new World();
+
+		Assertions.assertTrue(world.addTag("solid"));
+		Assertions.assertTrue(world.addTag("metal", "solid"));
+		Assertions.assertTrue(world.addTag("rare_metal", "metal"));
+
+		Assertions.assertTrue(
+			world.addMaterial("gold", List.of("rare_metal", "solid")));
+		Assertions.assertTrue(
+			world.addMaterial("refined_gold", List.of("rare_metal"), "gold"));
+
+		Optional<Material> maybeGold = world.findMaterial("gold");
+		Assertions.assertTrue(maybeGold.isPresent());
+		Assertions.assertEquals(1, maybeGold.get().tags().size());
+		Assertions.assertEquals("rare_metal",
+			maybeGold.get().tags().get(0).name());
+
+		Optional<Material> maybeRefinedGold =
+			world.findMaterial("refined_gold");
+		Assertions.assertTrue(maybeRefinedGold.isPresent());
+		Assertions.assertEquals(1, maybeRefinedGold.get().tags().size());
+		Assertions.assertEquals("rare_metal",
+			maybeRefinedGold.get().tags().get(0).name());
 	}
 
 	/**
