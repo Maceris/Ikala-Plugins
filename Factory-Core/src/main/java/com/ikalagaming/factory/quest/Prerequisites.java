@@ -8,7 +8,7 @@ import java.util.Objects;
 /**
  * The quests that must be completed before another quest is enabled for
  * completing or viewing.
- * 
+ *
  * @author Ches Burks
  *
  * @param quests The list of quest names.

@@ -3,7 +3,7 @@ package com.ikalagaming.factory.quest;
 /**
  * The types of requirement that must be satisfied for a quest to be considered
  * completed.
- * 
+ *
  * @author Ches Burks
  *
  */
@@ -25,10 +25,6 @@ public enum RequirementType {
 	 */
 	INTERACT_ENTITY,
 	/**
-	 * The player has to use a specific kind of item.
-	 */
-	INTERACT_ITEM,
-	/**
 	 * The player has to reach a specific location (position, structure, biome,
 	 * dimension).
 	 */
@@ -36,5 +32,9 @@ public enum RequirementType {
 	/**
 	 * The player has to have a certain item in their inventory.
 	 */
-	RETRIEVE;
+	RETRIEVE,
+	/**
+	 * The player has to use a specific kind of item.
+	 */
+	USE_ITEM;
 }
