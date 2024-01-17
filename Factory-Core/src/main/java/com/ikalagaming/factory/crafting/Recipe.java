@@ -1,5 +1,7 @@
 package com.ikalagaming.factory.crafting;
 
+import java.util.List;
+
 /**
  * Represents a crafting recipe.
  * 
@@ -7,5 +9,12 @@ package com.ikalagaming.factory.crafting;
  *
  */
 public class Recipe {
-
+	List<String> inputItems;
+	List<String> inputLiquids;
+	List<String> inputGases;
+	long inputPower;
+	List<String> outputItems;
+	List<String> outputLiquids;
+	List<String> outputGases;
+	long outputPower;
 }
