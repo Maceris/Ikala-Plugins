@@ -16,9 +16,11 @@ hot: # Typically or inherently hot. Like magma, heating elements.
 indestructible: # Cannot be destroyed or damaged in any meaningful way
 liquid: # Liquid in normal conditions. Like water, oil.
 lockable: # Can be locked and unlocked. Like a chest, door.
+ore: # The source of raw materials. Like an iron ore patch.
+organic: # Made of or derived from living things, plants, animals.
 openable: # Can be opened and closed. Like a box, door.
 poisonous: # Toxic to consume. Like poison, bleach.
 solid: # Solid in normal conditions. Like rocks, a mug.
   powder: # Solid, but granular and can be poured. Like sand, dust.
-transparent: # We can see the contents. Like glass, a bucket.
+transparent: # We can see the contents or see through it. Like glass, a bucket.
 wettable: # Can have a liquid stay on, or soak into it. Like cloth, sponges.
