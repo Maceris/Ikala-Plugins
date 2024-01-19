@@ -17,7 +17,7 @@ import java.util.List;
 @Getter
 @Setter
 @AllArgsConstructor
-public class ValueNode<T> extends NodeTree {
+public class ValueNode<T> implements NodeTree {
 
 	/**
 	 * The type of the node.
@@ -48,7 +48,7 @@ public class ValueNode<T> extends NodeTree {
 
 	@Override
 	public void add(String name, @NonNull NodeType newType,
-		@NonNull NodeTree newValue) {
+		@NonNull Node newValue) {
 		throw new UnsupportedOperationException();
 	}
 

@@ -12,14 +12,14 @@ import java.util.List;
  * @author Ches Burks
  *
  */
-public abstract class NodeTree {
+public interface NodeTree {
 
 	/**
 	 * Add a child node.
 	 *
 	 * @param name The name of the child node.
 	 */
-	public abstract void add(final @NonNull String name);
+	void add(final @NonNull String name);
 
 	/**
 	 * Add a child to the node. Only works on non-leaf nodes. A node that is
@@ -30,7 +30,7 @@ public abstract class NodeTree {
 	 * @param value The value we are storing. Must be a boolean. Must match the
 	 *            specified type.
 	 */
-	public abstract void add(final String name, final @NonNull NodeType type,
+	void add(final String name, final @NonNull NodeType type,
 		final @NonNull Boolean value);
 
 	/**
@@ -42,8 +42,8 @@ public abstract class NodeTree {
 	 * @param type The type of the node.
 	 * @param value The value we are storing. Must match the specified type.
 	 */
-	public abstract <T> void add(final String name,
-		final @NonNull NodeType type, final @NonNull List<T> value);
+	<T> void add(final String name, final @NonNull NodeType type,
+		final @NonNull List<T> value);
 
 	/**
 	 * Add a child to the node. Only works on non-leaf nodes. A node that is
@@ -54,8 +54,8 @@ public abstract class NodeTree {
 	 * @param value The value we are storing. Must be a Node. Must match the
 	 *            specified type.
 	 */
-	public abstract void add(final String name, final @NonNull NodeType type,
-		final @NonNull NodeTree value);
+	void add(final String name, final @NonNull NodeType type,
+		final @NonNull Node value);
 
 	/**
 	 * Add a child to the node. Only works on non-leaf nodes. A node that is
@@ -66,7 +66,7 @@ public abstract class NodeTree {
 	 * @param value The value we are storing. Must be a String. Must match the
 	 *            specified type.
 	 */
-	public abstract void add(final String name, final @NonNull NodeType type,
+	void add(final String name, final @NonNull NodeType type,
 		final @NonNull String value);
 
 	/**
@@ -79,8 +79,8 @@ public abstract class NodeTree {
 	 * @param value The value we are storing. Must be a number. Must match the
 	 *            specified type.
 	 */
-	public abstract <T extends Number> void add(final String name,
-		final @NonNull NodeType type, final @NonNull T value);
+	<T extends Number> void add(final String name, final @NonNull NodeType type,
+		final @NonNull T value);
 
 	/**
 	 * Add a child to the node. Only works on non-leaf nodes. A node that is
@@ -92,8 +92,7 @@ public abstract class NodeTree {
 	 * @param value The value to store. Must be a primitive wrapper or string.
 	 * @throws UnsupportedOperationException If trying to call on a leaf node.
 	 */
-	public abstract <T> void add(final @NonNull String name,
-		final @NonNull T value);
+	<T> void add(final @NonNull String name, final @NonNull T value);
 
 	/**
 	 * Add a boolean child.
@@ -101,7 +100,7 @@ public abstract class NodeTree {
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
-	public void addBoolean(final String name, final boolean value) {
+	default void addBoolean(final String name, final boolean value) {
 		this.add(name, NodeType.BOOLEAN, value);
 	}
 
@@ -111,7 +110,7 @@ public abstract class NodeTree {
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
-	public void addBooleanArray(final @NonNull String name,
+	default void addBooleanArray(final @NonNull String name,
 		final @NonNull List<Boolean> value) {
 		this.add(name, NodeType.BOOLEAN_ARRAY, value);
 	}
@@ -122,7 +121,7 @@ public abstract class NodeTree {
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
-	public void addByte(final @NonNull String name, final byte value) {
+	default void addByte(final @NonNull String name, final byte value) {
 		this.add(name, NodeType.BYTE, value);
 	}
 
@@ -132,7 +131,7 @@ public abstract class NodeTree {
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
-	public void addByteArray(final @NonNull String name,
+	default void addByteArray(final @NonNull String name,
 		final @NonNull List<Byte> value) {
 		this.add(name, NodeType.BYTE_ARRAY, value);
 	}
@@ -143,7 +142,7 @@ public abstract class NodeTree {
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
-	public void addDouble(final @NonNull String name, final double value) {
+	default void addDouble(final @NonNull String name, final double value) {
 		this.add(name, NodeType.DOUBLE, value);
 	}
 
@@ -153,7 +152,7 @@ public abstract class NodeTree {
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
-	public void addDoubleArray(final @NonNull String name,
+	default void addDoubleArray(final @NonNull String name,
 		final @NonNull List<Double> value) {
 		this.add(name, NodeType.DOUBLE_ARRAY, value);
 	}
@@ -164,7 +163,7 @@ public abstract class NodeTree {
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
-	public void addFloat(final @NonNull String name, final float value) {
+	default void addFloat(final @NonNull String name, final float value) {
 		this.add(name, NodeType.FLOAT, value);
 	}
 
@@ -174,7 +173,7 @@ public abstract class NodeTree {
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
-	public void addFloatArray(final @NonNull String name,
+	default void addFloatArray(final @NonNull String name,
 		final @NonNull List<Float> value) {
 		this.add(name, NodeType.FLOAT_ARRAY, value);
 	}
@@ -185,7 +184,7 @@ public abstract class NodeTree {
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
-	public void addInteger(final String name, final int value) {
+	default void addInteger(final String name, final int value) {
 		this.add(name, NodeType.INTEGER, value);
 	}
 
@@ -195,7 +194,7 @@ public abstract class NodeTree {
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
-	public void addIntegerArray(final @NonNull String name,
+	default void addIntegerArray(final @NonNull String name,
 		final @NonNull List<Integer> value) {
 		this.add(name, NodeType.INTEGER_ARRAY, value);
 	}
@@ -206,7 +205,7 @@ public abstract class NodeTree {
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
-	public void addLong(final @NonNull String name, final long value) {
+	default void addLong(final @NonNull String name, final long value) {
 		this.add(name, NodeType.LONG, value);
 	}
 
@@ -216,7 +215,7 @@ public abstract class NodeTree {
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
-	public void addLongArray(final @NonNull String name,
+	default void addLongArray(final @NonNull String name,
 		final @NonNull List<Long> value) {
 		this.add(name, NodeType.LONG_ARRAY, value);
 	}
@@ -226,7 +225,7 @@ public abstract class NodeTree {
 	 *
 	 * @param name The name of the child.
 	 */
-	public void addNode(final @NonNull String name) {
+	default void addNode(final @NonNull String name) {
 		this.add(name, NodeType.NODE, new Node());
 	}
 
@@ -235,7 +234,7 @@ public abstract class NodeTree {
 	 *
 	 * @param name The name of the child.
 	 */
-	public void addNodeArray(final @NonNull String name) {
+	default void addNodeArray(final @NonNull String name) {
 		this.add(name, NodeType.NODE_ARRAY, new ArrayList<Node>());
 	}
 
@@ -245,7 +244,7 @@ public abstract class NodeTree {
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
-	public void addShort(final @NonNull String name, final short value) {
+	default void addShort(final @NonNull String name, final short value) {
 		this.add(name, NodeType.SHORT, value);
 	}
 
@@ -256,7 +255,7 @@ public abstract class NodeTree {
 	 * @param value The child value.
 	 */
 
-	public void addShortArray(final @NonNull String name,
+	default void addShortArray(final @NonNull String name,
 		final @NonNull List<Short> value) {
 		this.add(name, NodeType.SHORT_ARRAY, value);
 	}
@@ -267,7 +266,7 @@ public abstract class NodeTree {
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
-	public void addString(final @NonNull String name,
+	default void addString(final @NonNull String name,
 		final @NonNull String value) {
 		this.add(name, NodeType.STRING, value);
 	}
@@ -278,7 +277,7 @@ public abstract class NodeTree {
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
-	public void addStringArray(final @NonNull String name,
+	default void addStringArray(final @NonNull String name,
 		final @NonNull List<String> value) {
 		this.add(name, NodeType.STRING_ARRAY, value);
 	}
@@ -291,7 +290,7 @@ public abstract class NodeTree {
 	 * @return The primitive wrapper, String, node, or a List containing those.
 	 *         Null if no child of that name exists.
 	 */
-	public abstract <T> T get(final @NonNull String name);
+	<T> T get(final @NonNull String name);
 
 	/**
 	 * Returns the type of the node. Each node has a type corresponding to the
@@ -300,7 +299,7 @@ public abstract class NodeTree {
 	 *
 	 * @return The node type for this node.
 	 */
-	public abstract NodeType getType();
+	NodeType getType();
 
 	/**
 	 * Checks if there is a child with the given name.
@@ -308,6 +307,6 @@ public abstract class NodeTree {
 	 * @param name The name of the child.
 	 * @return Whether a child with that name exists on this node.
 	 */
-	public abstract boolean hasChild(final @NonNull String name);
+	boolean hasChild(final @NonNull String name);
 
 }

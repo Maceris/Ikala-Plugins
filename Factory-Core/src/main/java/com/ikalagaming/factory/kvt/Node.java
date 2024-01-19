@@ -15,7 +15,7 @@ import java.util.TreeMap;
  *
  */
 @Getter
-public class Node extends NodeTree {
+public class Node implements NodeTree {
 
 	/**
 	 * The key value pairs in the node.
@@ -47,8 +47,7 @@ public class Node extends NodeTree {
 	}
 
 	@Override
-	public void add(String name, @NonNull NodeType type,
-		@NonNull NodeTree value) {
+	public void add(String name, @NonNull NodeType type, @NonNull Node value) {
 		this.values.put(name, new ValueNode<>(type, value));
 	}
 

@@ -15,7 +15,7 @@ import java.util.List;
  */
 @Getter
 @AllArgsConstructor
-public class ArrayNode<T> extends NodeTree {
+public class ArrayNode<T> implements NodeTree {
 
 	/**
 	 * The type of the node.
@@ -46,7 +46,7 @@ public class ArrayNode<T> extends NodeTree {
 
 	@Override
 	public void add(String name, @NonNull NodeType newType,
-		@NonNull NodeTree value) {
+		@NonNull Node value) {
 		throw new UnsupportedOperationException();
 	}
 
