@@ -12,6 +12,10 @@ public enum NodeType {
 	 */
 	BOOLEAN,
 	/**
+	 * Ordered list of booleans.
+	 */
+	BOOLEAN_ARRAY,
+	/**
 	 * A signed 8-bit integer, ranging between -128 to 127 (inclusive).
 	 */
 	BYTE,
@@ -59,6 +63,10 @@ public enum NodeType {
 	 * A list of key-value pairs, ordered by key. Each value can be of any type.
 	 */
 	NODE,
+	/**
+	 * Ordered list of nodes.
+	 */
+	NODE_ARRAY,
 	/**
 	 * A signed 16-bit integer, ranging from -32,768 to 32,767 (inclusive).
 	 */
