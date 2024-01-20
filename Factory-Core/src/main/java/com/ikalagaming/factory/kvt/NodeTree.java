@@ -3,6 +3,7 @@ package com.ikalagaming.factory.kvt;
 import lombok.NonNull;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -17,6 +18,13 @@ public interface NodeTree {
 	/**
 	 * Add a child node.
 	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
+	 *
 	 * @param name The name of the child node.
 	 */
 	void add(final @NonNull String name);
@@ -24,6 +32,13 @@ public interface NodeTree {
 	/**
 	 * Add a child to the node. Only works on non-leaf nodes. A node that is
 	 * just a literal value will throw an exception.
+	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
 	 *
 	 * @param name The key name.
 	 * @param type The type of the node. Always boolean.
@@ -37,6 +52,13 @@ public interface NodeTree {
 	 * Add a child to the node. Only works on non-leaf nodes. A node that is
 	 * just a literal value will throw an exception.
 	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
+	 *
 	 * @param <T> The type we are storing. Must be a list of valid types.
 	 * @param name The key name.
 	 * @param type The type of the node.
@@ -48,6 +70,13 @@ public interface NodeTree {
 	/**
 	 * Add a child to the node. Only works on non-leaf nodes. A node that is
 	 * just a literal value will throw an exception.
+	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
 	 *
 	 * @param name The key name.
 	 * @param type The type of the node. Always Node.
@@ -61,6 +90,13 @@ public interface NodeTree {
 	 * Add a child to the node. Only works on non-leaf nodes. A node that is
 	 * just a literal value will throw an exception.
 	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
+	 *
 	 * @param name The key name.
 	 * @param type The type of the node. Always String.
 	 * @param value The value we are storing. Must be a String. Must match the
@@ -72,6 +108,13 @@ public interface NodeTree {
 	/**
 	 * Add a child to the node. Only works on non-leaf nodes. A node that is
 	 * just a literal value will throw an exception.
+	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
 	 *
 	 * @param <T> The type we are storing. Must be a number.
 	 * @param name The key name.
@@ -86,6 +129,13 @@ public interface NodeTree {
 	 * Add a child to the node. Only works on non-leaf nodes. A node that is
 	 * just a literal value will throw an exception.
 	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
+	 *
 	 * @param <T> The type we are storing. Must be a primitive wrapper or
 	 *            string.
 	 * @param name The key name.
@@ -97,6 +147,13 @@ public interface NodeTree {
 	/**
 	 * Add a boolean child.
 	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
+	 *
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
@@ -106,6 +163,13 @@ public interface NodeTree {
 
 	/**
 	 * Add a list of booleans.
+	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
 	 *
 	 * @param name The name of the child.
 	 * @param value The child value.
@@ -118,6 +182,13 @@ public interface NodeTree {
 	/**
 	 * Add a byte value.
 	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
+	 *
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
@@ -127,6 +198,13 @@ public interface NodeTree {
 
 	/**
 	 * Add a list of bytes.
+	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
 	 *
 	 * @param name The name of the child.
 	 * @param value The child value.
@@ -139,6 +217,13 @@ public interface NodeTree {
 	/**
 	 * Add a double value.
 	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
+	 *
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
@@ -148,6 +233,13 @@ public interface NodeTree {
 
 	/**
 	 * Add a list of doubles.
+	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
 	 *
 	 * @param name The name of the child.
 	 * @param value The child value.
@@ -160,6 +252,13 @@ public interface NodeTree {
 	/**
 	 * Add a float value.
 	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
+	 *
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
@@ -169,6 +268,13 @@ public interface NodeTree {
 
 	/**
 	 * Add a list of floats.
+	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
 	 *
 	 * @param name The name of the child.
 	 * @param value The child value.
@@ -181,6 +287,13 @@ public interface NodeTree {
 	/**
 	 * Add an integer value.
 	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
+	 *
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
@@ -191,6 +304,13 @@ public interface NodeTree {
 	/**
 	 * Add a list of integers.
 	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
+	 *
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
@@ -200,7 +320,14 @@ public interface NodeTree {
 	}
 
 	/**
-	 * Add a long .
+	 * Add a long.
+	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
 	 *
 	 * @param name The name of the child.
 	 * @param value The child value.
@@ -211,6 +338,13 @@ public interface NodeTree {
 
 	/**
 	 * Add a list of longs.
+	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
 	 *
 	 * @param name The name of the child.
 	 * @param value The child value.
@@ -223,6 +357,13 @@ public interface NodeTree {
 	/**
 	 * Add a node.
 	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
+	 *
 	 * @param name The name of the child.
 	 */
 	default void addNode(final @NonNull String name) {
@@ -231,6 +372,13 @@ public interface NodeTree {
 
 	/**
 	 * Add a list of nodes.
+	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
 	 *
 	 * @param name The name of the child.
 	 */
@@ -241,6 +389,13 @@ public interface NodeTree {
 	/**
 	 * Add a short value.
 	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
+	 *
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
@@ -250,6 +405,13 @@ public interface NodeTree {
 
 	/**
 	 * Add a list of shorts.
+	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
 	 *
 	 * @param name The name of the child.
 	 * @param value The child value.
@@ -263,6 +425,13 @@ public interface NodeTree {
 	/**
 	 * Add a String.
 	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
+	 *
 	 * @param name The name of the child.
 	 * @param value The child value.
 	 */
@@ -273,6 +442,13 @@ public interface NodeTree {
 
 	/**
 	 * Add a list of Strings.
+	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
 	 *
 	 * @param name The name of the child.
 	 * @param value The child value.
@@ -303,7 +479,7 @@ public interface NodeTree {
 		try {
 			return this.get(name);
 		}
-		catch (NullPointerException ignored) {
+		catch (NullPointerException | ClassCastException ignored) {
 			return false;
 		}
 	}
@@ -312,10 +488,16 @@ public interface NodeTree {
 	 * Fetch an array of boolean values.
 	 *
 	 * @param name The name of the list.
-	 * @return The list of values. If it does not exist, will be null.
+	 * @return The list of values. If it does not exist, may be null or an empty
+	 *         unmodifiable list.
 	 */
 	default List<Boolean> getBooleanArray(final @NonNull String name) {
-		return this.get(name);
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException | ClassCastException ignored) {
+			return Collections.emptyList();
+		}
 	}
 
 	/**
@@ -328,7 +510,7 @@ public interface NodeTree {
 		try {
 			return this.get(name);
 		}
-		catch (NullPointerException ignored) {
+		catch (NullPointerException | ClassCastException ignored) {
 			return 0;
 		}
 	}
@@ -337,10 +519,16 @@ public interface NodeTree {
 	 * Fetch an array of byte values.
 	 *
 	 * @param name The name of the list.
-	 * @return The list of values. If it does not exist, will be null.
+	 * @return The list of values. If it does not exist, may be null or an empty
+	 *         unmodifiable list.
 	 */
 	default List<Byte> getByteArray(final @NonNull String name) {
-		return this.get(name);
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException | ClassCastException ignored) {
+			return Collections.emptyList();
+		}
 	}
 
 	/**
@@ -353,7 +541,7 @@ public interface NodeTree {
 		try {
 			return this.get(name);
 		}
-		catch (NullPointerException ignored) {
+		catch (NullPointerException | ClassCastException ignored) {
 			return 0;
 		}
 	}
@@ -362,10 +550,16 @@ public interface NodeTree {
 	 * Fetch an array of double values.
 	 *
 	 * @param name The name of the list.
-	 * @return The list of values. If it does not exist, will be null.
+	 * @return The list of values. If it does not exist, may be null or an empty
+	 *         unmodifiable list.
 	 */
 	default List<Double> getDoubleArray(final @NonNull String name) {
-		return this.get(name);
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException | ClassCastException ignored) {
+			return Collections.emptyList();
+		}
 	}
 
 	/**
@@ -378,7 +572,7 @@ public interface NodeTree {
 		try {
 			return this.get(name);
 		}
-		catch (NullPointerException ignored) {
+		catch (NullPointerException | ClassCastException ignored) {
 			return 0;
 		}
 	}
@@ -387,10 +581,16 @@ public interface NodeTree {
 	 * Fetch an array of float values.
 	 *
 	 * @param name The name of the list.
-	 * @return The list of values. If it does not exist, will be null.
+	 * @return The list of values. If it does not exist, may be null or an empty
+	 *         unmodifiable list.
 	 */
 	default List<Float> getFloatArray(final @NonNull String name) {
-		return this.get(name);
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException | ClassCastException ignored) {
+			return Collections.emptyList();
+		}
 	}
 
 	/**
@@ -403,7 +603,7 @@ public interface NodeTree {
 		try {
 			return this.get(name);
 		}
-		catch (NullPointerException ignored) {
+		catch (NullPointerException | ClassCastException ignored) {
 			return 0;
 		}
 	}
@@ -412,10 +612,16 @@ public interface NodeTree {
 	 * Fetch an array of integer values.
 	 *
 	 * @param name The name of the list.
-	 * @return The list of values. If it does not exist, will be null.
+	 * @return The list of values. If it does not exist, may be null or an empty
+	 *         unmodifiable list.
 	 */
 	default List<Integer> getIntegerArray(final @NonNull String name) {
-		return this.get(name);
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException | ClassCastException ignored) {
+			return Collections.emptyList();
+		}
 	}
 
 	/**
@@ -428,7 +634,7 @@ public interface NodeTree {
 		try {
 			return this.get(name);
 		}
-		catch (NullPointerException ignored) {
+		catch (NullPointerException | ClassCastException ignored) {
 			return 0;
 		}
 	}
@@ -437,10 +643,16 @@ public interface NodeTree {
 	 * Fetch an array of long values.
 	 *
 	 * @param name The name of the list.
-	 * @return The list of values. If it does not exist, will be null.
+	 * @return The list of values. If it does not exist, may be null or an empty
+	 *         unmodifiable list.
 	 */
 	default List<Long> getLongArray(final @NonNull String name) {
-		return this.get(name);
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException | ClassCastException ignored) {
+			return Collections.emptyList();
+		}
 	}
 
 	/**
@@ -450,17 +662,28 @@ public interface NodeTree {
 	 * @return The boolean value. If it does not exist, will be null.
 	 */
 	default Node getNode(final @NonNull String name) {
-		return this.get(name);
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException | ClassCastException ignored) {
+			return null;
+		}
 	}
 
 	/**
 	 * Fetch an array of nodes values.
 	 *
 	 * @param name The name of the list.
-	 * @return The list of values. If it does not exist, will be null.
+	 * @return The list of values. If it does not exist, may be null or an empty
+	 *         unmodifiable list.
 	 */
 	default List<Node> getNodeArray(final @NonNull String name) {
-		return this.get(name);
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException | ClassCastException ignored) {
+			return Collections.emptyList();
+		}
 	}
 
 	/**
@@ -473,7 +696,7 @@ public interface NodeTree {
 		try {
 			return this.get(name);
 		}
-		catch (NullPointerException ignored) {
+		catch (NullPointerException | ClassCastException ignored) {
 			return 0;
 		}
 	}
@@ -482,10 +705,16 @@ public interface NodeTree {
 	 * Fetch an array of short values.
 	 *
 	 * @param name The name of the list.
-	 * @return The list of values. If it does not exist, will be null.
+	 * @return The list of values. If it does not exist, may be null or an empty
+	 *         unmodifiable list.
 	 */
 	default List<Short> getShortArray(final @NonNull String name) {
-		return this.get(name);
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException | ClassCastException ignored) {
+			return Collections.emptyList();
+		}
 	}
 
 	/**
@@ -495,17 +724,28 @@ public interface NodeTree {
 	 * @return The boolean value. If it does not exist, will be null.
 	 */
 	default String getString(final @NonNull String name) {
-		return this.get(name);
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException | ClassCastException ignored) {
+			return null;
+		}
 	}
 
 	/**
 	 * Fetch an array of string values.
 	 *
 	 * @param name The name of the list.
-	 * @return The list of values. If it does not exist, will be null.
+	 * @return The list of values. If it does not exist, may be null or an empty
+	 *         unmodifiable list.
 	 */
 	default List<String> getStringArray(final @NonNull String name) {
-		return this.get(name);
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException | ClassCastException ignored) {
+			return Collections.emptyList();
+		}
 	}
 
 	/**

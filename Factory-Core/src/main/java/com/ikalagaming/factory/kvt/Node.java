@@ -35,38 +35,71 @@ public class Node implements NodeTree {
 		this.values = new TreeMap<>();
 	}
 
+	private void add(final @NonNull List<String> names, int index,
+		@NonNull NodeTree node) {
+
+		if (index < 0 || index >= names.size()) {
+			Node.log.warn(SafeResourceLoader.getStringFormatted(
+				"NODE_INVALID_INDEX", FactoryPlugin.getResourceBundle(),
+				"" + index, names.stream().collect(Collectors.joining("."))));
+			return;
+		}
+
+		final String next = names.get(index);
+
+		if (index == names.size() - 1) {
+			this.values.put(next, node);
+			return;
+		}
+
+		if (this.values.computeIfAbsent(next,
+			ignored -> new Node()) instanceof Node cast) {
+			cast.add(names, index + 1, node);
+		}
+		else {
+			Node.log.warn(SafeResourceLoader.getStringFormatted(
+				"NODE_INVALID_TYPE", FactoryPlugin.getResourceBundle(), next,
+				names.stream().collect(Collectors.joining("."))));
+		}
+
+	}
+
 	@Override
 	public void add(final @NonNull String name) {
-		this.values.put(name, new Node());
+		this.add(name, new Node());
+	}
+
+	private void add(final @NonNull String name, @NonNull NodeTree node) {
+		this.add(List.of(name.split("\\.")), 0, node);
 	}
 
 	@Override
 	public void add(String name, @NonNull NodeType type,
 		@NonNull Boolean value) {
-		this.values.put(name, new ValueNode<>(type, value));
+		this.add(name, new ValueNode<>(type, value));
 	}
 
 	@Override
 	public <T> void add(String name, @NonNull NodeType type,
 		@NonNull List<T> value) {
-		this.values.put(name, new ValueNode<>(type, value));
+		this.add(name, new ValueNode<>(type, value));
 	}
 
 	@Override
 	public void add(String name, @NonNull NodeType type, @NonNull Node value) {
-		this.values.put(name, new ValueNode<>(type, value));
+		this.add(name, new ValueNode<>(type, value));
 	}
 
 	@Override
 	public void add(String name, @NonNull NodeType type,
 		@NonNull String value) {
-		this.values.put(name, new ValueNode<>(type, value));
+		this.add(name, new ValueNode<>(type, value));
 	}
 
 	@Override
 	public <T extends Number> void add(String name, @NonNull NodeType type,
 		@NonNull T value) {
-		this.values.put(name, new ValueNode<>(type, value));
+		this.add(name, new ValueNode<>(type, value));
 	}
 
 	@Override
@@ -138,11 +171,11 @@ public class Node implements NodeTree {
 
 		NodeTree node = this.values.get(names.get(index));
 
-		if (node instanceof Node) {
+		if (node instanceof Node cast) {
 			if (index == names.size() - 1) {
-				return this.get(names, index + 1);
+				return (U) node;
 			}
-			return (U) node;
+			return cast.get(names, index + 1);
 		}
 
 		if (node instanceof ValueNode<?> cast) {

@@ -87,6 +87,29 @@ class TestNodes {
 	 * Check if we can store regular values.
 	 */
 	@Test
+	void testNestedNodes() {
+		NodeTree tree = new Node();
+
+		tree.add("several.nodes.down");
+		Assertions.assertNotNull(tree.get("several"));
+		Assertions.assertNotNull(tree.get("several.nodes"));
+		Assertions.assertNotNull(tree.get("several.nodes.down"));
+
+		Assertions.assertNotNull(((Node) tree.get("several")).get("nodes"));
+		Assertions.assertNotNull(
+			((Node) ((Node) tree.get("several")).get("nodes")).get("down"));
+
+		tree.addInteger("several.up", 2);
+		Assertions.assertEquals(2, tree.getInteger("several.up"));
+
+		Assertions.assertNull(tree.getString("several.up.invalid"));
+		
+	}
+
+	/**
+	 * Check if we can store regular values.
+	 */
+	@Test
 	void testValueNodes() {
 		NodeTree tree = new Node();
 
