@@ -283,7 +283,8 @@ public interface NodeTree {
 	}
 
 	/**
-	 * Fetch the value of the given child.
+	 * Fetch the value of the given child. Periods can be used to access nested
+	 * nested children, for example "parent.child.value".
 	 *
 	 * @param <T> The type we want to fetch.
 	 * @param name The name of the child node.
@@ -291,6 +292,221 @@ public interface NodeTree {
 	 *         Null if no child of that name exists.
 	 */
 	<T> T get(final @NonNull String name);
+
+	/**
+	 * Fetch a boolean value.
+	 *
+	 * @param name The name of the boolean.
+	 * @return The boolean value. If it does not exist, will be false.
+	 */
+	default boolean getBoolean(final String name) {
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException ignored) {
+			return false;
+		}
+	}
+
+	/**
+	 * Fetch an array of boolean values.
+	 *
+	 * @param name The name of the list.
+	 * @return The list of values. If it does not exist, will be null.
+	 */
+	default List<Boolean> getBooleanArray(final @NonNull String name) {
+		return this.get(name);
+	}
+
+	/**
+	 * Fetch a byte value.
+	 *
+	 * @param name The name of the byte.
+	 * @return The boolean value. If it does not exist, will be 0.
+	 */
+	default byte getByte(final @NonNull String name) {
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException ignored) {
+			return 0;
+		}
+	}
+
+	/**
+	 * Fetch an array of byte values.
+	 *
+	 * @param name The name of the list.
+	 * @return The list of values. If it does not exist, will be null.
+	 */
+	default List<Byte> getByteArray(final @NonNull String name) {
+		return this.get(name);
+	}
+
+	/**
+	 * Fetch a double value.
+	 *
+	 * @param name The name of the double.
+	 * @return The boolean value. If it does not exist, will be 0.
+	 */
+	default double getDouble(final @NonNull String name) {
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException ignored) {
+			return 0;
+		}
+	}
+
+	/**
+	 * Fetch an array of double values.
+	 *
+	 * @param name The name of the list.
+	 * @return The list of values. If it does not exist, will be null.
+	 */
+	default List<Double> getDoubleArray(final @NonNull String name) {
+		return this.get(name);
+	}
+
+	/**
+	 * Fetch a float value.
+	 *
+	 * @param name The name of the float.
+	 * @return The boolean value. If it does not exist, will be 0.
+	 */
+	default float getFloat(final @NonNull String name) {
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException ignored) {
+			return 0;
+		}
+	}
+
+	/**
+	 * Fetch an array of float values.
+	 *
+	 * @param name The name of the list.
+	 * @return The list of values. If it does not exist, will be null.
+	 */
+	default List<Float> getFloatArray(final @NonNull String name) {
+		return this.get(name);
+	}
+
+	/**
+	 * Fetch a integer value.
+	 *
+	 * @param name The name of the integer.
+	 * @return The boolean value. If it does not exist, will be 0.
+	 */
+	default int getInteger(final String name) {
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException ignored) {
+			return 0;
+		}
+	}
+
+	/**
+	 * Fetch an array of integer values.
+	 *
+	 * @param name The name of the list.
+	 * @return The list of values. If it does not exist, will be null.
+	 */
+	default List<Integer> getIntegerArray(final @NonNull String name) {
+		return this.get(name);
+	}
+
+	/**
+	 * Fetch a long value.
+	 *
+	 * @param name The name of the long.
+	 * @return The boolean value. If it does not exist, will be 0.
+	 */
+	default long getLong(final @NonNull String name) {
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException ignored) {
+			return 0;
+		}
+	}
+
+	/**
+	 * Fetch an array of long values.
+	 *
+	 * @param name The name of the list.
+	 * @return The list of values. If it does not exist, will be null.
+	 */
+	default List<Long> getLongArray(final @NonNull String name) {
+		return this.get(name);
+	}
+
+	/**
+	 * Fetch a node value.
+	 *
+	 * @param name The name of the node.
+	 * @return The boolean value. If it does not exist, will be null.
+	 */
+	default Node getNode(final @NonNull String name) {
+		return this.get(name);
+	}
+
+	/**
+	 * Fetch an array of nodes values.
+	 *
+	 * @param name The name of the list.
+	 * @return The list of values. If it does not exist, will be null.
+	 */
+	default List<Node> getNodeArray(final @NonNull String name) {
+		return this.get(name);
+	}
+
+	/**
+	 * Fetch a short value.
+	 *
+	 * @param name The name of the short.
+	 * @return The boolean value. If it does not exist, will be 0.
+	 */
+	default short getShort(final @NonNull String name) {
+		try {
+			return this.get(name);
+		}
+		catch (NullPointerException ignored) {
+			return 0;
+		}
+	}
+
+	/**
+	 * Fetch an array of short values.
+	 *
+	 * @param name The name of the list.
+	 * @return The list of values. If it does not exist, will be null.
+	 */
+	default List<Short> getShortArray(final @NonNull String name) {
+		return this.get(name);
+	}
+
+	/**
+	 * Fetch a String value.
+	 *
+	 * @param name The name of the String.
+	 * @return The boolean value. If it does not exist, will be null.
+	 */
+	default String getString(final @NonNull String name) {
+		return this.get(name);
+	}
+
+	/**
+	 * Fetch an array of string values.
+	 *
+	 * @param name The name of the list.
+	 * @return The list of values. If it does not exist, will be null.
+	 */
+	default List<String> getStringArray(final @NonNull String name) {
+		return this.get(name);
+	}
 
 	/**
 	 * Returns the type of the node. Each node has a type corresponding to the

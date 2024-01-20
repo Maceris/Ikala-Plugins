@@ -1,11 +1,16 @@
 package com.ikalagaming.factory.kvt;
 
+import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.util.SafeResourceLoader;
+
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 /**
  * A node that is a list of other nodes. The keys must be unique and are kept
@@ -15,6 +20,7 @@ import java.util.TreeMap;
  *
  */
 @Getter
+@Slf4j
 public class Node implements NodeTree {
 
 	/**
@@ -122,12 +128,20 @@ public class Node implements NodeTree {
 	}
 
 	@SuppressWarnings("unchecked")
-	@Override
-	public <U> U get(final @NonNull String name) {
+	private <U> U get(final @NonNull List<String> names, final int index) {
+		if (index < 0 || index >= names.size()) {
+			Node.log.warn(SafeResourceLoader.getStringFormatted("MISSING_NODE",
+				FactoryPlugin.getResourceBundle(),
+				names.stream().collect(Collectors.joining("."))));
+			return null;
+		}
 
-		NodeTree node = this.values.get(name);
+		NodeTree node = this.values.get(names.get(index));
 
 		if (node instanceof Node) {
+			if (index == names.size() - 1) {
+				return this.get(names, index + 1);
+			}
 			return (U) node;
 		}
 
@@ -139,7 +153,16 @@ public class Node implements NodeTree {
 			return (U) cast.getValues();
 		}
 
+		Node.log.warn(SafeResourceLoader.getStringFormatted("MISSING_NODE",
+			FactoryPlugin.getResourceBundle(),
+			names.stream().collect(Collectors.joining("."))));
+
 		return null;
+	}
+
+	@Override
+	public <U> U get(final @NonNull String name) {
+		return this.get(List.of(name.split("\\.")), 0);
 	}
 
 	@Override
