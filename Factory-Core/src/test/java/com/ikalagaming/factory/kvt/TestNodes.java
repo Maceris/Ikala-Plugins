@@ -110,6 +110,44 @@ class TestNodes {
 	}
 
 	/**
+	 * Check that the toString functionality works.
+	 */
+	@Test
+	void testToString() {
+		NodeTree tree = new Node();
+
+		tree.addBoolean("bool", true);
+		tree.addByte("byte", (byte) 1);
+		tree.addDouble("double", 1.02);
+		tree.addFloat("float", 2.34f);
+		tree.addInteger("int", 3);
+		tree.addLong("long", 4L);
+		tree.addShort("short", (short) 5);
+		tree.addString("string", "test");
+		tree.addNode("child1.child2");
+
+		tree.addBooleanArray("boolArray", List.of(true, false));
+		tree.addByteArray("byteArray", List.of((byte) 1));
+		tree.addDoubleArray("doubleArray", List.of(1.02));
+		tree.addFloatArray("floatArray", List.of(2.34f));
+		tree.addIntegerArray("intArray", List.of(3));
+		tree.addLongArray("longArray", List.of(4L));
+		tree.addShortArray("shortArray", List.of((short) 5));
+		tree.addStringArray("stringArray", List.of("test"));
+		tree.addNodeArray("childArray");
+
+		final String expected = String.format("{%s}",
+			String.join(",", "bool:true", "boolArray:[Z;true,false]", "byte:1B",
+				"byteArray:[B;1]", "child1:{child2:{}}", "childArray:[N;]",
+				"double:1.02", "doubleArray:[D;1.02]", "float:2.34F",
+				"floatArray:[F;2.34]", "int:3", "intArray:[I;3]", "long:4L",
+				"longArray:[L;4]", "short:5S", "shortArray:[S;5]",
+				"string:\"test\"", "stringArray:[T;\"test\"]"));
+
+		Assertions.assertEquals(expected, tree.toString());
+	}
+
+	/**
 	 * Check if we can store regular values.
 	 */
 	@Test

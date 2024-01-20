@@ -82,12 +82,12 @@ public class Node implements NodeTree {
 	@Override
 	public <T> void add(String name, @NonNull NodeType type,
 		@NonNull List<T> value) {
-		this.add(name, new ValueNode<>(type, value));
+		this.add(name, new ArrayNode<>(type, value));
 	}
 
 	@Override
 	public void add(String name, @NonNull NodeType type, @NonNull Node value) {
-		this.add(name, new ValueNode<>(type, value));
+		this.add(name, value);
 	}
 
 	@Override
@@ -157,7 +157,7 @@ public class Node implements NodeTree {
 			var node = new ValueNode<>(NodeType.BOOLEAN, cast);
 			this.values.put(name, node);
 		}
-
+		throw new UnsupportedOperationException();
 	}
 
 	@SuppressWarnings("unchecked")
@@ -206,5 +206,13 @@ public class Node implements NodeTree {
 	@Override
 	public boolean hasChild(@NonNull String name) {
 		return this.values.containsKey(name);
+	}
+
+	@Override
+	public String toString() {
+		return String.format("{%s}",
+			this.values.entrySet().stream().map(
+				pair -> String.format("%s:%s", pair.getKey(), pair.getValue()))
+				.collect(Collectors.joining(",")));
 	}
 }
