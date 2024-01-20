@@ -103,7 +103,10 @@ class TestNodes {
 		Assertions.assertEquals(2, tree.getInteger("several.up"));
 
 		Assertions.assertNull(tree.getString("several.up.invalid"));
-		
+
+		tree.addDoubleArray("multiple.nodes.values", List.of(3.4, 1.2));
+		Assertions.assertEquals(3.4,
+			tree.getDoubleArray("multiple.nodes.values").get(0));
 	}
 
 	/**
