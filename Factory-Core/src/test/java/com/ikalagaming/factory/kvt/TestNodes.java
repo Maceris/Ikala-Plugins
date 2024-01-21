@@ -116,6 +116,8 @@ class TestNodes {
 	void testToString() {
 		NodeTree tree = new Node();
 
+		tree.addString("annoying name 7!@#$%^ %^&_+'-={}|[]\\\\*()\\\"",
+			"annoying value 7!@#$%^ %^&_+'-={}|[]\\\\*()\\\"");
 		tree.addBoolean("bool", true);
 		tree.addByte("byte", (byte) 1);
 		tree.addDouble("double", 1.02);
@@ -137,7 +139,10 @@ class TestNodes {
 		tree.addNodeArray("childArray");
 
 		final String expected = String.format("{%s}",
-			String.join(",", "bool:true", "boolArray:[Z;true,false]", "byte:1B",
+			String.join(",",
+				"\"annoying name 7!@#$%^ %^&_+'-={}|[]\\\\*()\\\"\":"
+					+ "\"annoying value 7!@#$%^ %^&_+'-={}|[]\\\\*()\\\"\"",
+				"bool:true", "boolArray:[Z;true,false]", "byte:1B",
 				"byteArray:[B;1]", "child1:{child2:{}}", "childArray:[N;]",
 				"double:1.02", "doubleArray:[D;1.02]", "float:2.34F",
 				"floatArray:[F;2.34]", "int:3", "intArray:[I;3]", "long:4L",

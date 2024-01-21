@@ -3,6 +3,7 @@ package com.ikalagaming.factory.kvt;
 import com.ikalagaming.factory.FactoryPlugin;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -21,7 +22,21 @@ import java.util.stream.Collectors;
  */
 @Getter
 @Slf4j
+@EqualsAndHashCode
 public class Node implements NodeTree {
+
+	/**
+	 * Escape the key if required.
+	 *
+	 * @param key The key.
+	 * @return The key, escaped if necessary.
+	 */
+	private static String formatKey(final @NonNull String key) {
+		if (TreeStringSerialization.NORMAL_KEY_PATTERN.matcher(key).matches()) {
+			return key;
+		}
+		return "\"" + key + "\"";
+	}
 
 	/**
 	 * The key value pairs in the node.
@@ -211,8 +226,9 @@ public class Node implements NodeTree {
 	@Override
 	public String toString() {
 		return String.format("{%s}",
-			this.values.entrySet().stream().map(
-				pair -> String.format("%s:%s", pair.getKey(), pair.getValue()))
+			this.values.entrySet().stream()
+				.map(pair -> String.format("%s:%s",
+					Node.formatKey(pair.getKey()), pair.getValue()))
 				.collect(Collectors.joining(",")));
 	}
 }

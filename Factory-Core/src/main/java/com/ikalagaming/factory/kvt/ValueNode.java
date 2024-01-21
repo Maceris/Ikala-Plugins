@@ -3,6 +3,7 @@ package com.ikalagaming.factory.kvt;
 import com.ikalagaming.factory.FactoryPlugin;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -20,6 +21,7 @@ import java.util.List;
 @Getter
 @Setter
 @Slf4j
+@EqualsAndHashCode
 public class ValueNode<T> implements NodeTree {
 
 	/**

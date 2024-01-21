@@ -3,10 +3,12 @@ package com.ikalagaming.factory.kvt;
 import com.ikalagaming.factory.FactoryPlugin;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -19,7 +21,32 @@ import java.util.stream.Collectors;
  */
 @Getter
 @Slf4j
+@EqualsAndHashCode
 public class ArrayNode<T> implements NodeTree {
+
+	/**
+	 * Convert the the letter prefix used in the string form of the arrays to
+	 * type of node.
+	 *
+	 * @param letter The letter used to prefix the array to indicate the values.
+	 * @return The corresponding type of array.
+	 * @throws IllegalArgumentException If the provided letter is not valid.
+	 */
+	static NodeType toArrayLetter(final char letter) {
+		return switch (letter) {
+			case 'Z' -> NodeType.BOOLEAN_ARRAY;
+			case 'B' -> NodeType.BYTE_ARRAY;
+			case 'D' -> NodeType.DOUBLE_ARRAY;
+			case 'F' -> NodeType.FLOAT_ARRAY;
+			case 'I' -> NodeType.INTEGER_ARRAY;
+			case 'L' -> NodeType.LONG_ARRAY;
+			case 'N' -> NodeType.NODE_ARRAY;
+			case 'S' -> NodeType.SHORT_ARRAY;
+			case 'T' -> NodeType.STRING_ARRAY;
+			default -> throw new IllegalArgumentException(
+				"Unexpected value: " + letter);
+		};
+	}
 
 	/**
 	 * Convert the type of node to the letter prefix used in the string form of
@@ -99,7 +126,7 @@ public class ArrayNode<T> implements NodeTree {
 				throw new UnsupportedOperationException();
 		}
 		this.type = type;
-		this.values = values;
+		this.values = new ArrayList<>(values);
 	}
 
 	@Override
@@ -160,7 +187,6 @@ public class ArrayNode<T> implements NodeTree {
 
 	@Override
 	public String toString() {
-
 		return String.format("[%s;%s]", ArrayNode.toArrayLetter(this.type),
 			this.values.stream()
 				.map(value -> ArrayNode.toString(this.type, value))

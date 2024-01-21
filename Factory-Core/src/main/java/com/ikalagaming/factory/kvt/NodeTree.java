@@ -371,6 +371,23 @@ public interface NodeTree {
 	}
 
 	/**
+	 * Add a node.
+	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
+	 *
+	 * @param name The name of the child.
+	 * @param node The node to add.
+	 */
+	default void addNode(final @NonNull String name, @NonNull Node node) {
+		this.add(name, NodeType.NODE, node);
+	}
+
+	/**
 	 * Add a list of nodes.
 	 *
 	 * <p>
@@ -384,6 +401,24 @@ public interface NodeTree {
 	 */
 	default void addNodeArray(final @NonNull String name) {
 		this.add(name, NodeType.NODE_ARRAY, new ArrayList<Node>());
+	}
+
+	/**
+	 * Add a list of nodes.
+	 *
+	 * <p>
+	 * Periods can be used to specify nested nested children, for example
+	 * "parent.child.value". Any intermediate nodes that don't exist will be
+	 * created, but if any intermediate node exists but is not a {@link Node}
+	 * this will fail and stop trying to add nodes.
+	 * </p>
+	 *
+	 * @param name The name of the child.
+	 * @param nodes The child value.
+	 */
+	default void addNodeArray(final @NonNull String name,
+		final @NonNull List<Node> nodes) {
+		this.add(name, NodeType.NODE_ARRAY, nodes);
 	}
 
 	/**
