@@ -55,7 +55,7 @@ public class ShadowBuffer {
 		this.depthMap =
 			new ArrayOfTextures(CascadeShadow.SHADOW_MAP_CASCADE_COUNT,
 				ShadowBuffer.SHADOW_MAP_WIDTH, ShadowBuffer.SHADOW_MAP_HEIGHT,
-				GL11.GL_DEPTH_COMPONENT);
+				GL11.GL_DEPTH_COMPONENT, GL13.GL_CLAMP_TO_BORDER);
 
 		// Attach the the depth map texture to the FBO
 		GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, this.depthMapFBO);

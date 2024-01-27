@@ -8,7 +8,6 @@ package com.ikalagaming.graphics.graph;
 
 import lombok.Getter;
 import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL12;
 import org.lwjgl.opengl.GL14;
 
 import java.nio.ByteBuffer;
@@ -34,9 +33,10 @@ public class ArrayOfTextures {
 	 * @param height The height of each texture in pixels.
 	 * @param pixelFormat The pixel format to use for the textures for
 	 *            glTexImage2Ds.
+	 * @param textureWrap The texture wrap behavior.
 	 */
 	public ArrayOfTextures(int numTextures, int width, int height,
-		int pixelFormat) {
+		int pixelFormat, int textureWrap) {
 		this.IDs = new int[numTextures];
 		GL11.glGenTextures(this.IDs);
 
@@ -52,9 +52,9 @@ public class ArrayOfTextures {
 			GL11.glTexParameteri(GL11.GL_TEXTURE_2D,
 				GL14.GL_TEXTURE_COMPARE_MODE, GL11.GL_NONE);
 			GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S,
-				GL12.GL_CLAMP_TO_EDGE);
+				textureWrap);
 			GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T,
-				GL12.GL_CLAMP_TO_EDGE);
+				textureWrap);
 		}
 	}
 
