@@ -140,7 +140,7 @@ public class TreeStringSerialization {
 		}
 
 		char typeIndicator = context.ArrayPrefix().getText().charAt(0);
-		NodeType type = ArrayNode.toArrayLetter(typeIndicator);
+		NodeType type = NodeType.fromArrayLietter(typeIndicator);
 
 		switch (type) {
 			case BOOLEAN, BYTE, DOUBLE, FLOAT, INTEGER, LONG, NODE, SHORT,

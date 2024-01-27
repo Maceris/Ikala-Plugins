@@ -25,53 +25,6 @@ import java.util.stream.Collectors;
 public class ArrayNode<T> implements NodeTree {
 
 	/**
-	 * Convert the the letter prefix used in the string form of the arrays to
-	 * type of node.
-	 *
-	 * @param letter The letter used to prefix the array to indicate the values.
-	 * @return The corresponding type of array.
-	 * @throws IllegalArgumentException If the provided letter is not valid.
-	 */
-	static NodeType toArrayLetter(final char letter) {
-		return switch (letter) {
-			case 'Z' -> NodeType.BOOLEAN_ARRAY;
-			case 'B' -> NodeType.BYTE_ARRAY;
-			case 'D' -> NodeType.DOUBLE_ARRAY;
-			case 'F' -> NodeType.FLOAT_ARRAY;
-			case 'I' -> NodeType.INTEGER_ARRAY;
-			case 'L' -> NodeType.LONG_ARRAY;
-			case 'N' -> NodeType.NODE_ARRAY;
-			case 'S' -> NodeType.SHORT_ARRAY;
-			case 'T' -> NodeType.STRING_ARRAY;
-			default -> throw new IllegalArgumentException(
-				"Unexpected value: " + letter);
-		};
-	}
-
-	/**
-	 * Convert the type of node to the letter prefix used in the string form of
-	 * the arrays. It is expected that only the array types are passed in.
-	 *
-	 * @param type The type of array.
-	 * @return The letter used to prefix the array to indicate the values.
-	 */
-	private static String toArrayLetter(@NonNull NodeType type) {
-		return switch (type) {
-			case BOOLEAN_ARRAY -> "Z";
-			case BYTE_ARRAY -> "B";
-			case DOUBLE_ARRAY -> "D";
-			case FLOAT_ARRAY -> "F";
-			case INTEGER_ARRAY -> "I";
-			case LONG_ARRAY -> "L";
-			case NODE_ARRAY -> "N";
-			case SHORT_ARRAY -> "S";
-			case STRING_ARRAY -> "T";
-			case BOOLEAN, BYTE, DOUBLE, FLOAT, INTEGER, LONG, NODE, SHORT,
-				STRING -> "?";
-		};
-	}
-
-	/**
 	 * Convert a value to the format it should use in the string format.
 	 *
 	 * @param <T> The type of the value.
@@ -187,7 +140,7 @@ public class ArrayNode<T> implements NodeTree {
 
 	@Override
 	public String toString() {
-		return String.format("[%s;%s]", ArrayNode.toArrayLetter(this.type),
+		return String.format("[%s;%s]", this.type.getArrayLetter(),
 			this.values.stream()
 				.map(value -> ArrayNode.toString(this.type, value))
 				.collect(Collectors.joining(",")));
