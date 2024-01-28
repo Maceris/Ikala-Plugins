@@ -42,7 +42,7 @@ public class TreeStringSerialization {
 	 * @param input The input stream.
 	 * @return The corresponding runtime.
 	 */
-	public static Optional<Node> parse(String input) {
+	public static Optional<Node> fromString(String input) {
 		// Generate parse tree
 		ParserErrorListener errorListener = new ParserErrorListener();
 

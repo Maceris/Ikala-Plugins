@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Tests the value nodes.
+ * Tests converting to and from strings.
  *
  * @author Ches Burks
  *
@@ -80,7 +80,7 @@ class TestStringSerialization {
 		tree.addNodeArray("childArray");
 
 		Optional<Node> maybeNode =
-			TreeStringSerialization.parse(tree.toString());
+			TreeStringSerialization.fromString(tree.toString());
 		Assertions.assertTrue(maybeNode.isPresent());
 
 		Assertions.assertEquals(tree, maybeNode.get());

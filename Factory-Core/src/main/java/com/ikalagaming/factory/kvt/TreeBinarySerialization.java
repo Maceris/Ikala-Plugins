@@ -89,7 +89,8 @@ public class TreeBinarySerialization {
 					for (int i = 0; i < arrayCount; ++i) {
 						int childSize =
 							TreeBinarySerialization.calculateTotalSize(
-								((ArrayNode<Node>) entry).getValues().get(i),
+								((ArrayNode<Node>) entry.getValue()).getValues()
+									.get(i),
 								sizes);
 						arraySize += childSize;
 					}
@@ -105,13 +106,13 @@ public class TreeBinarySerialization {
 					break;
 				case STRING:
 					size += 4;
-					size += ((ValueNode<String>) entry).getValue()
+					size += ((ValueNode<String>) entry.getValue()).getValue()
 						.getBytes(StandardCharsets.UTF_8).length;
 					break;
 				case STRING_ARRAY:
 					size += 8;
 					List<String> strings =
-						((ArrayNode<String>) entry).getValues();
+						((ArrayNode<String>) entry.getValue()).getValues();
 					int stringSize = 0;
 					for (int i = 0; i < arrayCount; ++i) {
 						size += 4;
@@ -169,6 +170,16 @@ public class TreeBinarySerialization {
 		}
 	}
 
+	/**
+	 * Write an array to the output stream.
+	 *
+	 * @param <T> The type of the array contents.
+	 * @param node The array node to write.
+	 * @param stream The stream we are writing to.
+	 * @param sizes The map from NODE, NODE_ARRAY, or STRING_ARRAY to size in
+	 *            bytes.
+	 * @throws IOException If there is a problem writing data.
+	 */
 	@SuppressWarnings("unchecked")
 	private static <T> void writeArray(final @NonNull ArrayNode<T> node,
 		OutputStream stream, final Map<NodeTree, Integer> sizes)
@@ -233,7 +244,7 @@ public class TreeBinarySerialization {
 		final int arrayCount = values.size();
 
 		int byteCount = (int) Math.ceil(arrayCount / 8.0f);
-		TreeBinarySerialization.writeInteger(byteCount, stream);
+		TreeBinarySerialization.writeInteger(arrayCount, stream);
 		for (int i = 0; i < byteCount; ++i) {
 			byte result = 0;
 			for (int j = 0; j < 8; ++j) {
@@ -251,6 +262,13 @@ public class TreeBinarySerialization {
 		}
 	}
 
+	/**
+	 * Write a byte value to the output stream.
+	 *
+	 * @param value The value to write.
+	 * @param stream The stream to write to.
+	 * @throws IOException If there is an error writing.
+	 */
 	private static void writeByte(final byte value, OutputStream stream)
 		throws IOException {
 		byte[] data = new byte[1];
@@ -312,6 +330,13 @@ public class TreeBinarySerialization {
 		}
 	}
 
+	/**
+	 * Write an integer value to the output stream in big-endian.
+	 *
+	 * @param value The value to write.
+	 * @param stream The stream to write to.
+	 * @throws IOException If there is an error writing.
+	 */
 	private static void writeInteger(final int value, OutputStream stream)
 		throws IOException {
 		byte[] data = new byte[4];
@@ -340,6 +365,13 @@ public class TreeBinarySerialization {
 		}
 	}
 
+	/**
+	 * Write a long value to the output stream in big-endian.
+	 *
+	 * @param value The value to write.
+	 * @param stream The stream to write to.
+	 * @throws IOException If there is an error writing.
+	 */
 	private static void writeLong(final long value, OutputStream stream)
 		throws IOException {
 		byte[] data = new byte[8];
@@ -372,10 +404,19 @@ public class TreeBinarySerialization {
 		}
 	}
 
+	/**
+	 * Write a node to the output stream.
+	 *
+	 * @param node The node to write.
+	 * @param stream The stream we are writing to.
+	 * @param sizes The map from NODE, NODE_ARRAY, or STRING_ARRAY to size in
+	 *            bytes.
+	 * @throws IOException If there is a problem writing data.
+	 */
 	private static void writeNode(final @NonNull Node node, OutputStream stream,
 		Map<NodeTree, Integer> sizes) throws IOException {
 
-		TreeBinarySerialization.writeInteger(sizes.get(node), stream);
+		TreeBinarySerialization.writeLong(sizes.get(node), stream);
 		for (var entry : node.getValues().entrySet()) {
 			TreeBinarySerialization
 				.writeByte(entry.getValue().getType().getBinaryID(), stream);
@@ -410,12 +451,20 @@ public class TreeBinarySerialization {
 		throws IOException {
 
 		final int arrayCount = values.size();
-		TreeBinarySerialization.writeInteger(size, stream);
+		TreeBinarySerialization.writeLong(size, stream);
+		TreeBinarySerialization.writeInteger(arrayCount, stream);
 		for (int i = 0; i < arrayCount; ++i) {
 			TreeBinarySerialization.writeNode(values.get(i), stream, sizes);
 		}
 	}
 
+	/**
+	 * Write a short value to the output stream in big-endian.
+	 *
+	 * @param value The value to write.
+	 * @param stream The stream to write to.
+	 * @throws IOException If there is an error writing.
+	 */
 	private static void writeShort(final short value, OutputStream stream)
 		throws IOException {
 		byte[] data = new byte[2];
@@ -442,6 +491,13 @@ public class TreeBinarySerialization {
 		}
 	}
 
+	/**
+	 * Write a boolean value to the output stream in as a byte.
+	 *
+	 * @param value The value to write.
+	 * @param stream The stream to write to.
+	 * @throws IOException If there is an error writing.
+	 */
 	private static void writeSingleBoolean(final boolean value,
 		OutputStream stream) throws IOException {
 		byte[] data = new byte[1];
@@ -450,6 +506,13 @@ public class TreeBinarySerialization {
 		stream.write(data, 0, data.length);
 	}
 
+	/**
+	 * Write a string value to the output stream, prefixed by length.
+	 *
+	 * @param string The string to write.
+	 * @param stream The stream to write to.
+	 * @throws IOException If there is an error writing.
+	 */
 	private static void writeString(final String string, OutputStream stream)
 		throws IOException {
 		TreeBinarySerialization.writeInteger(string.length(), stream);
@@ -468,12 +531,23 @@ public class TreeBinarySerialization {
 		final int size, OutputStream stream) throws IOException {
 
 		final int arrayCount = values.size();
-		TreeBinarySerialization.writeInteger(size, stream);
+		TreeBinarySerialization.writeLong(size, stream);
+		TreeBinarySerialization.writeInteger(arrayCount, stream);
 		for (int i = 0; i < arrayCount; ++i) {
 			TreeBinarySerialization.writeString(values.get(i), stream);
 		}
 	}
 
+	/**
+	 * Write a value node to the output stream.
+	 *
+	 * @param <T> The type of the value.
+	 * @param node The array node to write.
+	 * @param stream The stream we are writing to.
+	 * @param sizes The map from NODE, NODE_ARRAY, or STRING_ARRAY to size in
+	 *            bytes.
+	 * @throws IOException If there is a problem writing data.
+	 */
 	private static <T> void writeValue(final @NonNull ValueNode<T> node,
 		OutputStream stream, Map<NodeTree, Integer> sizes) throws IOException {
 		switch (node.getType()) {
