@@ -67,6 +67,56 @@ public class TreeStringSerialization {
 	}
 
 	/**
+	 * Process a floating point value (float, double).
+	 *
+	 * @param root The node that we are adding the literal node to.
+	 * @param key The key for this node.
+	 * @param valueText The text of the value we are turning into a floating
+	 *            point.
+	 */
+	private static void processFloatingPoint(Node root, String key,
+		final String valueText) {
+		if (valueText.endsWith("f") || valueText.endsWith("F")) {
+			root.addFloat(key, Float
+				.parseFloat(valueText.substring(0, valueText.length() - 1)));
+			return;
+		}
+		if (valueText.endsWith("d") || valueText.endsWith("D")) {
+			root.addDouble(key, Double
+				.parseDouble(valueText.substring(0, valueText.length() - 1)));
+			return;
+		}
+		root.addDouble(key, Double.parseDouble(valueText));
+	}
+
+	/**
+	 * Process an integral value (byte, short, int, long).
+	 *
+	 * @param root The node that we are adding the literal node to.
+	 * @param key The key for this node.
+	 * @param valueText The text of the value we are turning into an integer.
+	 */
+	private static void processInteger(Node root, String key,
+		final String valueText) {
+		if (valueText.endsWith("b") || valueText.endsWith("B")) {
+			root.addByte(key,
+				Byte.parseByte(valueText.substring(0, valueText.length() - 1)));
+			return;
+		}
+		if (valueText.endsWith("s") || valueText.endsWith("S")) {
+			root.addShort(key, Short
+				.parseShort(valueText.substring(0, valueText.length() - 1)));
+			return;
+		}
+		if (valueText.endsWith("l") || valueText.endsWith("L")) {
+			root.addLong(key,
+				Long.parseLong(valueText.substring(0, valueText.length() - 1)));
+			return;
+		}
+		root.addInteger(key, Integer.parseInt(valueText));
+	}
+
+	/**
 	 * Process a literal and store it in the root.
 	 *
 	 * @param root The node that we are adding the literal node to.
@@ -77,36 +127,11 @@ public class TreeStringSerialization {
 		@NonNull LiteralContext context) {
 		final String valueText = context.getText();
 		if (context.IntegerLiteral() != null) {
-			if (valueText.endsWith("b") || valueText.endsWith("B")) {
-				root.addByte(key, Byte
-					.parseByte(valueText.substring(0, valueText.length() - 1)));
-				return;
-			}
-			if (valueText.endsWith("s") || valueText.endsWith("S")) {
-				root.addShort(key, Short.parseShort(
-					valueText.substring(0, valueText.length() - 1)));
-				return;
-			}
-			if (valueText.endsWith("l") || valueText.endsWith("L")) {
-				root.addLong(key, Long
-					.parseLong(valueText.substring(0, valueText.length() - 1)));
-				return;
-			}
-			root.addInteger(key, Integer.parseInt(valueText));
+			TreeStringSerialization.processInteger(root, key, valueText);
 			return;
 		}
 		if (context.FloatingPointLiteral() != null) {
-			if (valueText.endsWith("f") || valueText.endsWith("F")) {
-				root.addFloat(key, Float.parseFloat(
-					valueText.substring(0, valueText.length() - 1)));
-				return;
-			}
-			if (valueText.endsWith("d") || valueText.endsWith("D")) {
-				root.addDouble(key, Double.parseDouble(
-					valueText.substring(0, valueText.length() - 1)));
-				return;
-			}
-			root.addDouble(key, Double.parseDouble(valueText));
+			TreeStringSerialization.processFloatingPoint(root, key, valueText);
 			return;
 		}
 		if (context.BooleanLiteral() != null) {
