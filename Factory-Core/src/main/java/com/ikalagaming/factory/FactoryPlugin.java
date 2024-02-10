@@ -1,6 +1,7 @@
 package com.ikalagaming.factory;
 
 import com.ikalagaming.event.Listener;
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 
@@ -38,6 +39,8 @@ public class FactoryPlugin extends Plugin {
 	private static ResourceBundle resourceBundle;
 
 	private Set<Listener> listeners;
+	
+	private TemporaryUI gui;
 
 	@Override
 	public Set<Listener> getListeners() {
@@ -69,6 +72,18 @@ public class FactoryPlugin extends Plugin {
 	@Override
 	public boolean onUnload() {
 		FactoryPlugin.setResourceBundle(null);
+		return true;
+	}
+	
+	@Override
+	public boolean onEnable() {
+		gui = new TemporaryUI();
+		GraphicsManager.setGUI(this.gui);
+		return true;
+	}
+	
+	@Override
+	public boolean onDisable() {
 		return true;
 	}
 }

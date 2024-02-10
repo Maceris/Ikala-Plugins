@@ -4,3 +4,6 @@ version: 0.0.1-alpha
 description: The base of a factory game
 authors: [maceris]
 main-class: com.ikalagaming.factory.FactoryPlugin
+dependencies:
+  - Ikala-Graphics
+  - Random
