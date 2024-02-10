@@ -39,7 +39,7 @@ public class FactoryPlugin extends Plugin {
 	private static ResourceBundle resourceBundle;
 
 	private Set<Listener> listeners;
-	
+
 	private TemporaryUI gui;
 
 	@Override
@@ -53,6 +53,18 @@ public class FactoryPlugin extends Plugin {
 	@Override
 	public String getName() {
 		return FactoryPlugin.PLUGIN_NAME;
+	}
+
+	@Override
+	public boolean onDisable() {
+		return true;
+	}
+
+	@Override
+	public boolean onEnable() {
+		this.gui = new TemporaryUI();
+		GraphicsManager.setGUI(this.gui);
+		return true;
 	}
 
 	@Override
@@ -72,18 +84,6 @@ public class FactoryPlugin extends Plugin {
 	@Override
 	public boolean onUnload() {
 		FactoryPlugin.setResourceBundle(null);
-		return true;
-	}
-	
-	@Override
-	public boolean onEnable() {
-		gui = new TemporaryUI();
-		GraphicsManager.setGUI(this.gui);
-		return true;
-	}
-	
-	@Override
-	public boolean onDisable() {
 		return true;
 	}
 }

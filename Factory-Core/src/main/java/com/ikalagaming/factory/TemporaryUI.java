@@ -17,7 +17,7 @@ import org.joml.Vector2f;
 
 /**
  * A UI that we are using until a proper solution is designed.
- * 
+ *
  * @author Ches Burks
  *
  */
@@ -60,6 +60,19 @@ public class TemporaryUI implements GuiInstance {
 		ImGui.render();
 	}
 
+	/**
+	 * Draw the world generation debugging information.
+	 */
+	private void drawWorldGen() {
+		ImGui.setNextWindowPos(410, 10, ImGuiCond.Once);
+		ImGui.setNextWindowSize(600, 500, ImGuiCond.Once);
+		ImGui.begin("World Generation");
+
+		ImGui.text("Textures TBD");
+
+		ImGui.end();
+	}
+
 	@Override
 	public boolean handleGuiInput(@NonNull Scene scene,
 		@NonNull Window window) {
@@ -75,19 +88,6 @@ public class TemporaryUI implements GuiInstance {
 	}
 
 	/**
-	 * Draw the world generation debugging information.
-	 */
-	private void drawWorldGen() {
-		ImGui.setNextWindowPos(410, 10, ImGuiCond.Once);
-		ImGui.setNextWindowSize(600, 500, ImGuiCond.Once);
-		ImGui.begin("World Generation");
-
-		ImGui.text("Textures TBD");
-
-		ImGui.end();
-	}
-
-	/**
 	 * Render whichever windows are applicable.
 	 */
 	private void showWindows() {
@@ -95,7 +95,7 @@ public class TemporaryUI implements GuiInstance {
 			ImGui.showDemoWindow();
 		}
 		if (this.showWorldGen.get()) {
-			drawWorldGen();
+			this.drawWorldGen();
 		}
 
 	}
