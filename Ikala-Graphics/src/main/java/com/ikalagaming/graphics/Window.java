@@ -201,7 +201,7 @@ public class Window {
 			GLFW.glfwSwapInterval(1);
 		}
 
-		setWindowIcon();
+		this.setWindowIcon();
 
 		GLFW.glfwShowWindow(this.windowHandle);
 
@@ -212,51 +212,6 @@ public class Window {
 		this.height = arrHeight[0];
 
 		this.mouseInput = new MouseInput(this.windowHandle);
-	}
-
-	/**
-	 * Set up the window icon.
-	 */
-	private void setWindowIcon() {
-		PluginConfig config =
-			ConfigManager.loadConfig(GraphicsPlugin.PLUGIN_NAME);
-
-		File icon = PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
-			ResourceType.DATA, config.getString("icon-path"));
-
-		String iconPath = icon.getAbsolutePath();
-		if (!icon.exists()) {
-			Window.log.warn(
-				SafeResourceLoader.getString("ICON_MISSING",
-					GraphicsPlugin.getResourceBundle()),
-				icon.getAbsolutePath());
-			return;
-		}
-
-		try (MemoryStack stack = MemoryStack.stackPush()) {
-			IntBuffer w = stack.mallocInt(1);
-			IntBuffer h = stack.mallocInt(1);
-			IntBuffer channels = stack.mallocInt(1);
-
-			ByteBuffer buffer = STBImage.stbi_load(iconPath, w, h, channels, 4);
-			if (buffer == null) {
-				String error =
-					SafeResourceLoader.getString("TEXTURE_ERROR_LOADING",
-						GraphicsPlugin.getResourceBundle());
-				log.info(error, iconPath, STBImage.stbi_failure_reason());
-				throw new TextureException(SafeResourceLoader.format(error,
-					iconPath, STBImage.stbi_failure_reason()));
-			}
-			GLFWImage.Buffer iconBuffer = GLFWImage.create(1);
-			GLFWImage iconImage =
-				GLFWImage.create().set(w.get(), h.get(), buffer);
-			iconBuffer.put(0, iconImage);
-
-			GLFW.glfwSetWindowIcon(windowHandle, iconBuffer);
-
-			STBImage.stbi_image_free(buffer);
-		}
-
 	}
 
 	/**
@@ -315,6 +270,52 @@ public class Window {
 			Window.log.warn(SafeResourceLoader.getString("RESIZE_ERROR",
 				GraphicsPlugin.getResourceBundle()), excp);
 		}
+	}
+
+	/**
+	 * Set up the window icon.
+	 */
+	private void setWindowIcon() {
+		PluginConfig config =
+			ConfigManager.loadConfig(GraphicsPlugin.PLUGIN_NAME);
+
+		File icon = PluginFolder.getResource(GraphicsPlugin.PLUGIN_NAME,
+			ResourceType.DATA, config.getString("icon-path"));
+
+		String iconPath = icon.getAbsolutePath();
+		if (!icon.exists()) {
+			Window.log.warn(
+				SafeResourceLoader.getString("ICON_MISSING",
+					GraphicsPlugin.getResourceBundle()),
+				icon.getAbsolutePath());
+			return;
+		}
+
+		try (MemoryStack stack = MemoryStack.stackPush()) {
+			IntBuffer w = stack.mallocInt(1);
+			IntBuffer h = stack.mallocInt(1);
+			IntBuffer channels = stack.mallocInt(1);
+
+			ByteBuffer buffer = STBImage.stbi_load(iconPath, w, h, channels, 4);
+			if (buffer == null) {
+				String error =
+					SafeResourceLoader.getString("TEXTURE_ERROR_LOADING",
+						GraphicsPlugin.getResourceBundle());
+				Window.log.info(error, iconPath,
+					STBImage.stbi_failure_reason());
+				throw new TextureException(SafeResourceLoader.format(error,
+					iconPath, STBImage.stbi_failure_reason()));
+			}
+			GLFWImage.Buffer iconBuffer = GLFWImage.create(1);
+			GLFWImage iconImage =
+				GLFWImage.create().set(w.get(), h.get(), buffer);
+			iconBuffer.put(0, iconImage);
+
+			GLFW.glfwSetWindowIcon(this.windowHandle, iconBuffer);
+
+			STBImage.stbi_image_free(buffer);
+		}
+
 	}
 
 	/**

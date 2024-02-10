@@ -127,6 +127,15 @@ public class GraphicsManager {
 	private static Window window;
 
 	/**
+	 * The GUI instance to use for rendering.
+	 *
+	 * @param guiInstance The new GUI to use.
+	 * @return The current GUI.
+	 */
+	@Getter
+	private static GuiInstance guiInstance;
+
+	/**
 	 * Creates a graphics window, fires off a {@link WindowCreated} event. Won't
 	 * do anything if a window already exists.
 	 *
@@ -235,7 +244,7 @@ public class GraphicsManager {
 	 * @param gui The user interface.
 	 */
 	public static void setGUI(GuiInstance gui) {
-		GraphicsManager.scene.setGuiInstance(gui);
+		GraphicsManager.guiInstance = gui;
 	}
 
 	/**
@@ -289,10 +298,9 @@ public class GraphicsManager {
 			GraphicsManager.window.getMouseInput().input();
 			GraphicsManager.cameraManager.updateCamera(elapsedTime);
 
-			GuiInstance guiInstance = GraphicsManager.scene.getGuiInstance();
-			if (guiInstance != null) {
-				guiInstance.handleGuiInput(GraphicsManager.scene,
-					GraphicsManager.window);
+			if (GraphicsManager.guiInstance != null) {
+				GraphicsManager.guiInstance.handleGuiInput(
+					GraphicsManager.scene, GraphicsManager.window);
 			}
 
 			if (GraphicsManager.refreshRequested.compareAndSet(true, false)) {

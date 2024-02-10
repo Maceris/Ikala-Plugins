@@ -85,6 +85,10 @@ public class SkyBoxRender {
 	public void render(@NonNull Scene scene) {
 		SkyBox skyBox = scene.getSkyBox();
 
+		if (skyBox == null) {
+			return;
+		}
+		
 		this.shaderProgram.bind();
 
 		this.uniformsMap.setUniform(ShaderUniforms.Skybox.PROJECTION_MATRIX,

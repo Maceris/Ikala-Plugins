@@ -6,7 +6,6 @@
  */
 package com.ikalagaming.graphics.scene;
 
-import com.ikalagaming.graphics.GuiInstance;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
@@ -42,14 +41,7 @@ public class Scene {
 	@Setter
 	@NonNull
 	private Fog fog;
-	/**
-	 * The GUI instance to use for this scene.
-	 *
-	 * @param guiInstance The new GUI to use.
-	 * @return The current GUI.
-	 */
-	@Setter
-	private GuiInstance guiInstance;
+	
 	/**
 	 * The material cache to use for this scene.
 	 *
@@ -82,7 +74,6 @@ public class Scene {
 	 * @return The skybox to draw.
 	 */
 	@Setter
-	@NonNull
 	private SkyBox skyBox;
 
 	/**

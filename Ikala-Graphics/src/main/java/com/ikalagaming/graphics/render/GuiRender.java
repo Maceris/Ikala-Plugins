@@ -6,6 +6,7 @@
  */
 package com.ikalagaming.graphics.render;
 
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GuiInstance;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
@@ -124,7 +125,7 @@ public class GuiRender {
 	 * @param scene The scene we are drawing.
 	 */
 	public void render(@NonNull Scene scene) {
-		GuiInstance guiInstance = scene.getGuiInstance();
+		GuiInstance guiInstance = GraphicsManager.getGuiInstance();
 		if (guiInstance == null) {
 			return;
 		}
