@@ -65,7 +65,7 @@ public class RandomGen {
 		@Builder.Default
 		private final int height = 100;
 		/**
-		 * The scale of the noise. A reasonable example is 0.01, should be in
+		 * The scale of the noise. A reasonable example is 0.001, should be in
 		 * the range (0, 1).
 		 */
 		@Builder.Default
@@ -116,27 +116,6 @@ public class RandomGen {
 	}
 
 	/**
-	 * If there is a tile set to 1 at the position, used for generating height
-	 * maps.
-	 *
-	 * @param map The map.
-	 * @param x The x position.
-	 * @param y The x position.
-	 * @return If x and y are a a tile with the value 1.
-	 */
-	private static boolean hasTile(int[][] map, int x, int y) {
-		if (map == null || y < 0 || y >= map.length || map[y] == null) {
-			return false;
-		}
-		int[] row = map[y];
-		if (x < 0 || x >= row.length) {
-			return false;
-		}
-
-		return row[x] == 1;
-	}
-
-	/**
 	 * Takes a cumulative distribution function and turns it into intervals
 	 * representing the sections of the line from 0 to 1 that is split at the
 	 * values at each index.
@@ -144,7 +123,7 @@ public class RandomGen {
 	 * @param cdf The cumulative distribution function values.
 	 * @return The list of intervals that represent the CDF.
 	 */
-	private Interval[] calculateIntervals(double[] cdf) {
+	private static Interval[] calculateIntervals(double[] cdf) {
 		if (cdf == null || cdf.length == 0) {
 			return new Interval[0];
 		}
@@ -165,7 +144,7 @@ public class RandomGen {
 	 * @param normalizedWeights A list of weights, in [0, 1) that add up to 1.
 	 * @return The CDF for those weights.
 	 */
-	private double[] generateCDF(double[] normalizedWeights) {
+	private static double[] generateCDF(double[] normalizedWeights) {
 		if (normalizedWeights == null || normalizedWeights.length == 0) {
 			return new double[0];
 		}
@@ -185,7 +164,7 @@ public class RandomGen {
 	 * @return The generated height map image.
 	 */
 	@Deprecated(forRemoval = true, since = "0.0.1")
-	public BufferedImage generateHeightMap() {
+	public static BufferedImage generateHeightMap() {
 		final int MAP_WIDTH = 20;
 		final int MAP_HEIGHT = 20;
 		final int TILE_SIZE = 32;
@@ -197,7 +176,7 @@ public class RandomGen {
 		BufferedImage combined = new BufferedImage(MAP_WIDTH * TILE_SIZE,
 			MAP_HEIGHT * TILE_SIZE, BufferedImage.TYPE_INT_RGB);
 
-		BufferedImage noise = this.generateSimplexNoise(SimplexParameters
+		BufferedImage noise = RandomGen.generateSimplexNoise(SimplexParameters
 			.builder().seed(seed).width(MAP_WIDTH * TILE_SIZE)
 			.height(MAP_HEIGHT * TILE_SIZE).scale(0.007).maxRGB(64).build());
 
@@ -424,8 +403,52 @@ public class RandomGen {
 	 *
 	 * @return A pseudo-randomly chosen long value.
 	 */
-	public long generateSeed() {
+	public static long generateSeed() {
 		return RandomGen.random.nextLong();
+	}
+
+	/**
+	 * Generate simplex noise at a specific position.
+	 *
+	 * @param seed The seed to use.
+	 * @param x The x coordinate.
+	 * @param y The y coordinate.
+	 * @param scale The scale of the noise. A reasonable example is 0.001,
+	 *            should be in the range (0, 1).
+	 * @param octaves The number of octaves of noise to use. Must be > 0, should
+	 *            be < 16.
+	 * @return The resulting noise value, mapped to the range [0, 1].
+	 */
+	public static double generateSimplexNoise(final long seed, final int x,
+		final int y, final double scale, final int octaves) {
+
+		if (scale <= 0 || octaves < 0) {
+			return 0;
+		}
+
+		final double persistence = 0.5;
+
+		double result = 0;
+		double totalAmplitude = 0;
+		double amplitude = 1;
+		double freq = scale;
+
+		for (int i = 0; i < octaves; ++i) {
+			result +=
+				amplitude * OpenSimplex2S.noise2(seed, freq * x, freq * y);
+			totalAmplitude += amplitude;
+			amplitude *= persistence;
+			freq *= 2;
+		}
+
+		if (totalAmplitude > 0) {
+			result /= totalAmplitude;
+		}
+
+		// NOTE(ches) map [-1, 1] to [0, 1].
+		result = (result + 1d) / 2d;
+
+		return result;
 	}
 
 	/**
@@ -434,7 +457,8 @@ public class RandomGen {
 	 * @param params The parameters for noise generation.
 	 * @return The noise, or an empty image if there was an error.
 	 */
-	public BufferedImage generateSimplexNoise(final SimplexParameters params) {
+	public static BufferedImage
+		generateSimplexNoise(final SimplexParameters params) {
 
 		BufferedImage result = new BufferedImage(params.width, params.height,
 			BufferedImage.TYPE_INT_RGB);
@@ -483,13 +507,34 @@ public class RandomGen {
 	}
 
 	/**
+	 * If there is a tile set to 1 at the position, used for generating height
+	 * maps.
+	 *
+	 * @param map The map.
+	 * @param x The x position.
+	 * @param y The x position.
+	 * @return If x and y are a a tile with the value 1.
+	 */
+	private static boolean hasTile(int[][] map, int x, int y) {
+		if (map == null || y < 0 || y >= map.length || map[y] == null) {
+			return false;
+		}
+		int[] row = map[y];
+		if (x < 0 || x >= row.length) {
+			return false;
+		}
+
+		return row[x] == 1;
+	}
+
+	/**
 	 * Normalize an array of doubles, so that they are all in the range [0, 1],
 	 * and also they all add up to 1, or at least extremely close. Also makes
 	 * the values positive.
 	 *
 	 * @param values The values to normalize, this is modified.
 	 */
-	void normalize(double[] values) {
+	static void normalize(double[] values) {
 		if (values == null || values.length == 0) {
 			return;
 		}
@@ -521,7 +566,7 @@ public class RandomGen {
 	 * @param enumClass The enum class we want to select values from.
 	 * @return The randomly selected value out of the specified enum.
 	 */
-	public <T extends Enum<T>> T selectEnumValue(Class<T> enumClass) {
+	public static <T extends Enum<T>> T selectEnumValue(Class<T> enumClass) {
 		final T[] enumValues = enumClass.getEnumConstants();
 		return enumValues[RandomGen.random.nextInt(enumValues.length)];
 	}
@@ -539,7 +584,7 @@ public class RandomGen {
 	 * @return The list of selections, in the order they were made.
 	 * @see #selectFromWeightedList(List, int)
 	 */
-	public int[] selectFromWeightedList(@NonNull final double[] weights,
+	public static int[] selectFromWeightedList(@NonNull final double[] weights,
 		final int count) {
 		if (count <= 0 || weights.length == 0) {
 			return new int[0];
@@ -547,14 +592,14 @@ public class RandomGen {
 		double[] normalizedWeights = new double[weights.length];
 
 		System.arraycopy(weights, 0, normalizedWeights, 0, weights.length);
-		this.normalize(normalizedWeights);
+		RandomGen.normalize(normalizedWeights);
 
-		double[] cdf = this.generateCDF(normalizedWeights);
-		Interval[] intervals = this.calculateIntervals(cdf);
+		double[] cdf = RandomGen.generateCDF(normalizedWeights);
+		Interval[] intervals = RandomGen.calculateIntervals(cdf);
 
 		int[] selections = new int[count];
 		for (int i = 0; i < count; ++i) {
-			selections[i] = this.selectFromWeightedList(intervals);
+			selections[i] = RandomGen.selectFromWeightedList(intervals);
 		}
 		return selections;
 	}
@@ -567,7 +612,7 @@ public class RandomGen {
 	 * @param intervals The intervals that the number line is split into.
 	 * @return The selection index.
 	 */
-	private int selectFromWeightedList(Interval[] intervals) {
+	private static int selectFromWeightedList(Interval[] intervals) {
 		double selection = RandomGen.random.nextDouble();
 
 		return Arrays.binarySearch(intervals,
@@ -598,7 +643,7 @@ public class RandomGen {
 	 * @return The list of selections, in the order they were made.
 	 * @see #selectFromWeightedList(double[], int)
 	 */
-	public List<Integer> selectFromWeightedList(
+	public static List<Integer> selectFromWeightedList(
 		@NonNull final List<Double> weights, final int count) {
 		if (count <= 0 || weights.isEmpty()) {
 			return new ArrayList<>();
@@ -608,15 +653,15 @@ public class RandomGen {
 		for (int i = 0; i < weights.size(); ++i) {
 			normalizedWeights[i] = weights.get(i);
 		}
-		this.normalize(normalizedWeights);
+		RandomGen.normalize(normalizedWeights);
 
-		double[] cdf = this.generateCDF(normalizedWeights);
-		Interval[] intervals = this.calculateIntervals(cdf);
+		double[] cdf = RandomGen.generateCDF(normalizedWeights);
+		Interval[] intervals = RandomGen.calculateIntervals(cdf);
 
 		List<Integer> selections = new ArrayList<>(count);
 
 		for (int i = 0; i < count; ++i) {
-			selections.add(this.selectFromWeightedList(intervals));
+			selections.add(RandomGen.selectFromWeightedList(intervals));
 		}
 		return selections;
 	}
@@ -634,7 +679,7 @@ public class RandomGen {
 	 *         supplied weights list. May be empty depending on inputs.
 	 * @see #selectUpToWeight(List, int)
 	 */
-	public int[] selectUpToWeight(@NonNull final int[] weights,
+	public static int[] selectUpToWeight(@NonNull final int[] weights,
 		final int maxWeight) {
 		if (maxWeight <= 0 || weights.length == 0) {
 			return new int[0];
@@ -690,8 +735,8 @@ public class RandomGen {
 	 *         supplied weights list. May be empty depending on inputs.
 	 * @see #selectUpToWeight(int[], int)
 	 */
-	public List<Integer> selectUpToWeight(@NonNull final List<Integer> weights,
-		final int maxWeight) {
+	public static List<Integer> selectUpToWeight(
+		@NonNull final List<Integer> weights, final int maxWeight) {
 		if (maxWeight <= 0 || weights.isEmpty()) {
 			return new ArrayList<>();
 		}
