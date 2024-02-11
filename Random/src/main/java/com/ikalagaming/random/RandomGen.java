@@ -123,6 +123,7 @@ public class RandomGen {
 		final int MAP_WIDTH = 20;
 		final int MAP_HEIGHT = 20;
 		final int TILE_SIZE = 32;
+		final long seed = random.nextLong();
 
 		BufferedImage tiles = new BufferedImage(MAP_WIDTH * TILE_SIZE,
 			MAP_HEIGHT * TILE_SIZE, BufferedImage.TYPE_INT_RGB);
@@ -130,12 +131,13 @@ public class RandomGen {
 		BufferedImage combined = new BufferedImage(MAP_WIDTH * TILE_SIZE,
 			MAP_HEIGHT * TILE_SIZE, BufferedImage.TYPE_INT_RGB);
 
-		BufferedImage noise = this.generateSimplexNoise(MAP_WIDTH * TILE_SIZE,
-			MAP_HEIGHT * TILE_SIZE, 10, 0.25);
+		BufferedImage noise = this.generateSimplexNoise(seed, 0, 0,
+			MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 10, 0.25);
 
 		// create map
 		int[][] map = new int[MAP_HEIGHT][];
-		int x, y;
+		int x;
+		int y;
 		for (y = 0; y < MAP_HEIGHT; ++y) {
 			map[y] = new int[MAP_WIDTH];
 			for (x = 0; x < MAP_WIDTH; ++x) {
@@ -150,7 +152,8 @@ public class RandomGen {
 			pointsOfInterest[y] = new int[MAP_WIDTH * 2 + 2];
 		}
 
-		int xCoord, yCoord;
+		int xCoord;
+		int yCoord;
 		for (y = 0; y < (MAP_HEIGHT + 1) * TILE_SIZE; y += TILE_SIZE / 2) {
 			for (x = 0; x < (MAP_WIDTH + 1) * TILE_SIZE; x += TILE_SIZE / 2) {
 				xCoord = x == 0 ? -1 : (x - 1) / TILE_SIZE;
@@ -204,19 +207,29 @@ public class RandomGen {
 		}
 
 		// point 1 we are interpolating between
-		int p1x, p1y;
+		int p1x;
+		int p1y;
 		// point 2 we are interpolating between
-		int p2x, p2y;
+		int p2x;
+		int p2y;
 		// point 3 we are interpolating between
-		int p3x, p3y;
+		int p3x;
+		int p3y;
 
 		// actual pixel x and y we are at, within the tile
-		int px, py;
+		int px;
+		int py;
 		// the values we are interpolating between
-		int v1, v2, v3, totalValue;
+		int v1;
+		int v2;
+		int v3;
+		int totalValue;
 		// Relative weights of the three nodes
-		double w1, w2, w3;
-		int poiX, poiY;
+		double w1;
+		double w2;
+		double w3;
+		int poiX;
+		int poiY;
 		for (y = 0; y < MAP_HEIGHT; ++y) {
 			for (x = 0; x < MAP_WIDTH; ++x) {
 				if (!RandomGen.hasTile(map, x, y)) {
@@ -342,22 +355,29 @@ public class RandomGen {
 	/**
 	 * Create an image containing simplex noise. Please keep the sizes
 	 * reasonable.
-	 *
+	 * 
+	 * @param seed The seed to use for the noise generation.
+	 * @param startX The starting X coordinate. Values increase from here.
+	 * @param startY The starting Y coordinate. Values increase from here.
 	 * @param width The width of the image.
 	 * @param height The height of the image.
 	 * @return The noise, or an empty image if you give weird height and width
 	 *         values.
 	 */
-	public BufferedImage generateSimplexNoise(int width, int height) {
+	public BufferedImage generateSimplexNoise(long seed, int startX, int startY,
+		int width, int height) {
 		final int frequency = 5;
 		final double noiseAmplitude = 1;
-		return this.generateSimplexNoise(width, height, frequency,
-			noiseAmplitude);
+		return this.generateSimplexNoise(seed, startX, startY, width, height,
+			frequency, noiseAmplitude);
 	}
 
 	/**
 	 * Generate simplex noise with specific parameters.
-	 *
+	 * 
+	 * @param seed The seed to use for the noise generation.
+	 * @param startX The starting X coordinate. Values increase from here.
+	 * @param startY The starting Y coordinate. Values increase from here.
 	 * @param width The width of the image.
 	 * @param height The height of the image.
 	 * @param frequency The base frequency for the noise. A reasonable example
@@ -366,8 +386,8 @@ public class RandomGen {
 	 *            between 0 and 1 inclusive.
 	 * @return The noise, or an empty image if you give weird values.
 	 */
-	public BufferedImage generateSimplexNoise(int width, int height,
-		int frequency, double noiseAmplitude) {
+	public BufferedImage generateSimplexNoise(long seed, int startX, int startY,
+		int width, int height, int frequency, double noiseAmplitude) {
 		BufferedImage result =
 			new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
 		if (width <= 0 || height <= 0 || frequency <= 0 || noiseAmplitude <= 0
@@ -375,8 +395,7 @@ public class RandomGen {
 			return result;
 		}
 
-		OpenSimplexNoise noise =
-			new OpenSimplexNoise(RandomGen.random.nextLong());
+		OpenSimplexNoise noise = new OpenSimplexNoise(seed);
 
 		int[] rawData = new int[width * height];
 
@@ -386,17 +405,17 @@ public class RandomGen {
 		double ny;
 		double pixelValue;
 		int pixelTemp;
-		for (y = 0; y < height; ++y) {
-			for (x = 0; x < width; ++x) {
-				nx = ((double) x) / width - 0.5;
-				ny = ((double) y) / height - 0.5;
+		for (y = startY; y < startY + height; ++y) {
+			for (x = startX; x < startX + width; ++x) {
+				nx = ((double) x - startX) / width - 0.5;
+				ny = ((double) y - startY) / height - 0.5;
 				// output is from -1 to 1
-				pixelValue =
-					noiseAmplitude * noise.eval(frequency * nx, frequency * ny);
-				pixelValue += noiseAmplitude * 0.5
-					* noise.eval(frequency * 2 * nx, frequency * 2 * ny);
-				pixelValue += noiseAmplitude * 0.25
-					* noise.eval(frequency * 4 * nx, frequency * 4 * ny);
+				pixelValue = noiseAmplitude * noise
+					.eval(frequency * nx + startX, frequency * ny + startY);
+				pixelValue += noiseAmplitude * 0.5 * noise.eval(
+					frequency * 2 * nx + startX, frequency * 2 * ny + startY);
+				pixelValue += noiseAmplitude * 0.25 * noise.eval(
+					frequency * 4 * nx + startX, frequency * 4 * ny + startY);
 				pixelValue /= noiseAmplitude + noiseAmplitude * 0.5
 					+ noiseAmplitude * 0.25;
 				// we map it from 0 to 1

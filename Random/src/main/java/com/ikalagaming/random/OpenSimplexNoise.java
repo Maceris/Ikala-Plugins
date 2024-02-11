@@ -41,7 +41,8 @@ package com.ikalagaming.random;
 public class OpenSimplexNoise {
 
 	public static class Grad2 {
-		double dx, dy;
+		double dx;
+		double dy;
 
 		public Grad2(double dx, double dy) {
 			this.dx = dx;
@@ -50,7 +51,9 @@ public class OpenSimplexNoise {
 	}
 
 	public static class Grad3 {
-		double dx, dy, dz;
+		double dx;
+		double dy;
+		double dz;
 
 		public Grad3(double dx, double dy, double dz) {
 			this.dx = dx;
@@ -60,7 +63,10 @@ public class OpenSimplexNoise {
 	}
 
 	public static class Grad4 {
-		double dx, dy, dz, dw;
+		double dx;
+		double dy;
+		double dz;
+		double dw;
 
 		public Grad4(double dx, double dy, double dz, double dw) {
 			this.dx = dx;
@@ -70,13 +76,16 @@ public class OpenSimplexNoise {
 		}
 	}
 
-	private static final double STRETCH_CONSTANT_2D = -0.211324865405187; // (1/Math.sqrt(2+1)-1)/2;
-	private static final double SQUISH_CONSTANT_2D = 0.366025403784439; // (Math.sqrt(2+1)-1)/2;
-	private static final double STRETCH_CONSTANT_3D = -1.0 / 6; // (1/Math.sqrt(3+1)-1)/3;
-
-	private static final double SQUISH_CONSTANT_3D = 1.0 / 3; // (Math.sqrt(3+1)-1)/3;
-
-	private static final double SQUISH_CONSTANT_4D = 0.309016994374947; // (Math.sqrt(4+1)-1)/4;
+	private static final double STRETCH_CONSTANT_2D =
+		(1 / Math.sqrt(2d + 1) - 1) / 2;
+	private static final double SQUISH_CONSTANT_2D =
+		(Math.sqrt(2d + 1) - 1) / 2;
+	private static final double STRETCH_CONSTANT_3D =
+		(1 / Math.sqrt(3d + 1) - 1) / 3;
+	private static final double SQUISH_CONSTANT_3D =
+		(Math.sqrt(3d + 1) - 1) / 3;
+	private static final double SQUISH_CONSTANT_4D =
+		(Math.sqrt(4d + 1) - 1) / 4;
 
 	private static final long DEFAULT_SEED = 0;
 	private static final int PSIZE = 2048;
@@ -575,7 +584,8 @@ public class OpenSimplexNoise {
 		this(OpenSimplexNoise.DEFAULT_SEED);
 	}
 
-	public OpenSimplexNoise(long seed) {
+	public OpenSimplexNoise(long originalSeed) {
+		long seed = originalSeed;
 		this.perm = new short[OpenSimplexNoise.PSIZE];
 		this.permGrad2 = new Grad2[OpenSimplexNoise.PSIZE];
 		this.permGrad3 = new Grad3[OpenSimplexNoise.PSIZE];
@@ -585,7 +595,7 @@ public class OpenSimplexNoise {
 			source[i] = i;
 		}
 		for (int i = OpenSimplexNoise.PSIZE - 1; i >= 0; i--) {
-			seed = seed * 6364136223846793005L + 1442695040888963407L;
+			seed *= 6364136223846793005L + 1442695040888963407L;
 			int r = (int) ((seed + 31) % (i + 1));
 			if (r < 0) {
 				r += (i + 1);
