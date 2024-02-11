@@ -5,7 +5,7 @@ package com.ikalagaming.factory.world.gen;
  * 
  * @author Ches Burks
  * @param min The minimum valid value for a biome. Must be >= 0 and <= max.
- * @param max The maximum valid value for a biome. Must be <=0 and >= min.
+ * @param max The maximum valid value for a biome. Must be <=1 and >= min.
  *
  */
 public record ParameterRange(float min, float max) {
@@ -16,7 +16,7 @@ public record ParameterRange(float min, float max) {
 	 * @param min The minimum valid value for a biome. Must be >= 0 and <= max.
 	 * @param max The maximum valid value for a biome. Must be <=0 and >= min.
 	 */
-	public ParameterRange(float min, float max) {
+	public ParameterRange(final float min, final float max) {
 		if (Float.isNaN(min) || Float.isNaN(max)) {
 			throw new IllegalArgumentException("NaN value provided for range");
 		}
@@ -30,5 +30,15 @@ public record ParameterRange(float min, float max) {
 
 		this.min = min;
 		this.max = max;
+	}
+
+	/**
+	 * Check if a value is within the specified range.
+	 * 
+	 * @param value The value to check for
+	 * @return True if the value is between the min and max values (inclusive).
+	 */
+	public boolean contains(final double value) {
+		return value >= min && value <= max;
 	}
 }

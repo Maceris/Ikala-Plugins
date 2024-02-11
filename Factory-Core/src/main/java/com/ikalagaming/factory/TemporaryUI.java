@@ -38,6 +38,7 @@ public class TemporaryUI implements GuiInstance {
 	private Texture height;
 	private Texture erosion;
 	private Texture vegetation;
+	private Texture weirdness;
 	private Texture biomes;
 
 	/**
@@ -79,7 +80,7 @@ public class TemporaryUI implements GuiInstance {
 	 */
 	private void drawWorldGen() {
 		ImGui.setNextWindowPos(20, 20, ImGuiCond.Once);
-		ImGui.setNextWindowSize(850, 850, ImGuiCond.Once);
+		ImGui.setNextWindowSize(1300, 900, ImGuiCond.Once);
 		ImGui.begin("World Generation");
 
 		if (ImGui.button("Generate textures")) {
@@ -101,8 +102,13 @@ public class TemporaryUI implements GuiInstance {
 		drawImage(vegetation);
 		ImGui.endGroup();
 
+		ImGui.sameLine();
+		ImGui.beginGroup();
+		ImGui.text("Weirdness");
+		drawImage(weirdness);
 		ImGui.text("Biomes");
 		drawImage(biomes);
+		ImGui.endGroup();
 
 		ImGui.end();
 	}
@@ -144,48 +150,54 @@ public class TemporaryUI implements GuiInstance {
 		imGuiIO.setMouseDown(1, mouseInput.isRightButtonPressed());
 
 		if (generateRequested.compareAndExchange(true, false)) {
-			RandomGen gen = new RandomGen();
-			long seed = gen.generateSeed();
+			long seed = RandomGen.generateSeed();
 
 			if (temperature != null) {
 				temperature.cleanup();
 			}
 			int w = 400;
 			int h = 400;
-			double scale = 0.01;
-			int octaves = 8;
 			BufferedImage tempImage =
-				gen.generateSimplexNoise(RandomGen.SimplexParameters.builder()
-					.seed(seed).startX(-w).startY(-h).width(w).height(h)
-					.scale(scale).octaves(octaves).build());
+				RandomGen.generateSimplexNoise(RandomGen.SimplexParameters
+					.builder().seed(seed).startX(0).startY(0).width(w).height(h)
+					.scale(0.001).octaves(4).build());
 			temperature = generateTexture(tempImage);
 
 			if (height != null) {
 				height.cleanup();
 			}
 			BufferedImage heightImage =
-				gen.generateSimplexNoise(RandomGen.SimplexParameters.builder()
-					.startX(0).startY(-h).seed(seed).width(w).height(h)
-					.scale(scale).octaves(octaves).build());
+				RandomGen.generateSimplexNoise(RandomGen.SimplexParameters
+					.builder().startX(0).startY(0).seed(seed + 1).width(w)
+					.height(h).scale(0.002).octaves(10).build());
 			height = generateTexture(heightImage);
 
 			if (erosion != null) {
 				erosion.cleanup();
 			}
 			BufferedImage erosionImage =
-				gen.generateSimplexNoise(RandomGen.SimplexParameters.builder()
-					.startX(-w).startY(0).seed(seed).width(w).height(h)
-					.scale(scale).octaves(octaves).build());
+				RandomGen.generateSimplexNoise(RandomGen.SimplexParameters
+					.builder().startX(0).startY(0).seed(seed + 2).width(w)
+					.height(h).scale(0.002).octaves(6).build());
 			erosion = generateTexture(erosionImage);
 
 			if (vegetation != null) {
 				vegetation.cleanup();
 			}
 			BufferedImage vegetationImage =
-				gen.generateSimplexNoise(RandomGen.SimplexParameters.builder()
-					.startX(0).startY(0).seed(seed).width(w).height(h)
-					.scale(scale).octaves(octaves).build());
+				RandomGen.generateSimplexNoise(RandomGen.SimplexParameters
+					.builder().startX(0).startY(0).seed(seed + 3).width(w)
+					.height(h).scale(0.001).octaves(5).build());
 			vegetation = generateTexture(vegetationImage);
+
+			if (weirdness != null) {
+				weirdness.cleanup();
+			}
+			BufferedImage weirdnessImage =
+				RandomGen.generateSimplexNoise(RandomGen.SimplexParameters
+					.builder().startX(0).startY(0).seed(seed + 4).width(w)
+					.height(h).scale(0.002).octaves(6).build());
+			weirdness = generateTexture(weirdnessImage);
 
 		}
 
