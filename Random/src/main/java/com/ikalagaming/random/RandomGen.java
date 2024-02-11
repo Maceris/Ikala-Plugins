@@ -31,6 +31,69 @@ public class RandomGen {
 	private record Interval(double start, double end) {}
 
 	/**
+	 * Configuration for the simplex noise generation. Provides some sane
+	 * defaults in case not all parameters need to be configured.
+	 *
+	 * @author Ches Burks
+	 */
+	@Builder
+	@AllArgsConstructor
+	public static class SimplexParameters {
+		/**
+		 * The seed to use for the noise generation.
+		 */
+		@Builder.Default
+		private final long seed = 0;
+		/**
+		 * The starting X coordinate. Values increase from here.
+		 */
+		@Builder.Default
+		private final int startX = 0;
+		/**
+		 * The starting Y coordinate. Values increase from here.
+		 */
+		@Builder.Default
+		private final int startY = 0;
+		/**
+		 * The width of the image to generate, in pixels.
+		 */
+		@Builder.Default
+		private final int width = 100;
+		/**
+		 * The height of the image to generate, in pixels.
+		 */
+		@Builder.Default
+		private final int height = 100;
+		/**
+		 * The scale of the noise. A reasonable example is 0.01, should be in
+		 * the range (0, 1).
+		 */
+		@Builder.Default
+		private final double scale = 0.01;
+		/**
+		 * The minimum RGB value to scale to. Must be >= 0 and < maxRGB.
+		 */
+		@Builder.Default
+		private final int minRGB = 0;
+		/**
+		 * The maximum RGB value to scale to. Must be > minRGB and <= 255.
+		 */
+		@Builder.Default
+		private final int maxRGB = 255;
+		/**
+		 * The number of octaves of noise to use. Must be > 0, should be < 16.
+		 */
+		@Builder.Default
+		private final int octaves = 8;
+		/**
+		 * The scale factor for each octave iteration. Must be in the range (0,
+		 * 1].
+		 */
+		@Builder.Default
+		private final double persistence = 0.5;
+	}
+
+	/**
 	 * Used for selecting items from a list up to a certain weight.
 	 *
 	 * @author Ches Burks
@@ -121,6 +184,7 @@ public class RandomGen {
 	 *
 	 * @return The generated height map image.
 	 */
+	@Deprecated(forRemoval = true, since = "0.0.1")
 	public BufferedImage generateHeightMap() {
 		final int MAP_WIDTH = 20;
 		final int MAP_HEIGHT = 20;
@@ -365,71 +429,8 @@ public class RandomGen {
 	}
 
 	/**
-	 * Configuration for the simplex noise generation. Provides some sane
-	 * defaults in case not all parameters need to be configured.
-	 * 
-	 * @author Ches Burks
-	 */
-	@Builder
-	@AllArgsConstructor
-	public static class SimplexParameters {
-		/**
-		 * The seed to use for the noise generation.
-		 */
-		@Builder.Default
-		private final long seed = 0;
-		/**
-		 * The starting X coordinate. Values increase from here.
-		 */
-		@Builder.Default
-		private final int startX = 0;
-		/**
-		 * The starting Y coordinate. Values increase from here.
-		 */
-		@Builder.Default
-		private final int startY = 0;
-		/**
-		 * The width of the image to generate, in pixels.
-		 */
-		@Builder.Default
-		private final int width = 100;
-		/**
-		 * The height of the image to generate, in pixels.
-		 */
-		@Builder.Default
-		private final int height = 100;
-		/**
-		 * The scale of the noise. A reasonable example is 0.01, should be in
-		 * the range (0, 1).
-		 */
-		@Builder.Default
-		private final double scale = 0.01;
-		/**
-		 * The minimum RGB value to scale to. Must be >= 0 and < maxRGB.
-		 */
-		@Builder.Default
-		private final int minRGB = 0;
-		/**
-		 * The maximum RGB value to scale to. Must be > minRGB and <= 255.
-		 */
-		@Builder.Default
-		private final int maxRGB = 255;
-		/**
-		 * The number of octaves of noise to use. Must be > 0, should be < 16.
-		 */
-		@Builder.Default
-		private final int octaves = 8;
-		/**
-		 * The scale factor for each octave iteration. Must be in the range (0,
-		 * 1].
-		 */
-		@Builder.Default
-		private final double persistence = 0.5;
-	}
-
-	/**
 	 * Generate simplex noise with specific parameters.
-	 * 
+	 *
 	 * @param params The parameters for noise generation.
 	 * @return The noise, or an empty image if there was an error.
 	 */
