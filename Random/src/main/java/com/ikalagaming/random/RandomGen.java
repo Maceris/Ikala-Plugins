@@ -1,5 +1,7 @@
 package com.ikalagaming.random;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.NonNull;
 
 import java.awt.image.BufferedImage;
@@ -123,7 +125,7 @@ public class RandomGen {
 		final int MAP_WIDTH = 20;
 		final int MAP_HEIGHT = 20;
 		final int TILE_SIZE = 32;
-		final long seed = random.nextLong();
+		final long seed = RandomGen.random.nextLong();
 
 		BufferedImage tiles = new BufferedImage(MAP_WIDTH * TILE_SIZE,
 			MAP_HEIGHT * TILE_SIZE, BufferedImage.TYPE_INT_RGB);
@@ -131,8 +133,9 @@ public class RandomGen {
 		BufferedImage combined = new BufferedImage(MAP_WIDTH * TILE_SIZE,
 			MAP_HEIGHT * TILE_SIZE, BufferedImage.TYPE_INT_RGB);
 
-		BufferedImage noise = this.generateSimplexNoise(seed, 0, 0,
-			MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 10, 0.25);
+		BufferedImage noise = this.generateSimplexNoise(SimplexParameters
+			.builder().seed(seed).width(MAP_WIDTH * TILE_SIZE)
+			.height(MAP_HEIGHT * TILE_SIZE).scale(0.007).maxRGB(64).build());
 
 		// create map
 		int[][] map = new int[MAP_HEIGHT][];
@@ -353,81 +356,128 @@ public class RandomGen {
 	}
 
 	/**
-	 * Create an image containing simplex noise. Please keep the sizes
-	 * reasonable.
-	 * 
-	 * @param seed The seed to use for the noise generation.
-	 * @param startX The starting X coordinate. Values increase from here.
-	 * @param startY The starting Y coordinate. Values increase from here.
-	 * @param width The width of the image.
-	 * @param height The height of the image.
-	 * @return The noise, or an empty image if you give weird height and width
-	 *         values.
+	 * Returns a pseudo-randomly chosen long value for use as a seed.
+	 *
+	 * @return A pseudo-randomly chosen long value.
 	 */
-	public BufferedImage generateSimplexNoise(long seed, int startX, int startY,
-		int width, int height) {
-		final int frequency = 5;
-		final double noiseAmplitude = 1;
-		return this.generateSimplexNoise(seed, startX, startY, width, height,
-			frequency, noiseAmplitude);
+	public long generateSeed() {
+		return RandomGen.random.nextLong();
+	}
+
+	/**
+	 * Configuration for the simplex noise generation. Provides some sane
+	 * defaults in case not all parameters need to be configured.
+	 * 
+	 * @author Ches Burks
+	 */
+	@Builder
+	@AllArgsConstructor
+	public static class SimplexParameters {
+		/**
+		 * The seed to use for the noise generation.
+		 */
+		@Builder.Default
+		private final long seed = 0;
+		/**
+		 * The starting X coordinate. Values increase from here.
+		 */
+		@Builder.Default
+		private final int startX = 0;
+		/**
+		 * The starting Y coordinate. Values increase from here.
+		 */
+		@Builder.Default
+		private final int startY = 0;
+		/**
+		 * The width of the image to generate, in pixels.
+		 */
+		@Builder.Default
+		private final int width = 100;
+		/**
+		 * The height of the image to generate, in pixels.
+		 */
+		@Builder.Default
+		private final int height = 100;
+		/**
+		 * The scale of the noise. A reasonable example is 0.01, should be in
+		 * the range (0, 1).
+		 */
+		@Builder.Default
+		private final double scale = 0.01;
+		/**
+		 * The minimum RGB value to scale to. Must be >= 0 and < maxRGB.
+		 */
+		@Builder.Default
+		private final int minRGB = 0;
+		/**
+		 * The maximum RGB value to scale to. Must be > minRGB and <= 255.
+		 */
+		@Builder.Default
+		private final int maxRGB = 255;
+		/**
+		 * The number of octaves of noise to use. Must be > 0, should be < 16.
+		 */
+		@Builder.Default
+		private final int octaves = 8;
+		/**
+		 * The scale factor for each octave iteration. Must be in the range (0,
+		 * 1].
+		 */
+		@Builder.Default
+		private final double persistence = 0.5;
 	}
 
 	/**
 	 * Generate simplex noise with specific parameters.
 	 * 
-	 * @param seed The seed to use for the noise generation.
-	 * @param startX The starting X coordinate. Values increase from here.
-	 * @param startY The starting Y coordinate. Values increase from here.
-	 * @param width The width of the image.
-	 * @param height The height of the image.
-	 * @param frequency The base frequency for the noise. A reasonable example
-	 *            is 5, should be > 1.
-	 * @param noiseAmplitude The maximum amplitude for the noise. Should be
-	 *            between 0 and 1 inclusive.
-	 * @return The noise, or an empty image if you give weird values.
+	 * @param params The parameters for noise generation.
+	 * @return The noise, or an empty image if there was an error.
 	 */
-	public BufferedImage generateSimplexNoise(long seed, int startX, int startY,
-		int width, int height, int frequency, double noiseAmplitude) {
-		BufferedImage result =
-			new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-		if (width <= 0 || height <= 0 || frequency <= 0 || noiseAmplitude <= 0
-			|| noiseAmplitude > 1) {
+	public BufferedImage generateSimplexNoise(final SimplexParameters params) {
+
+		BufferedImage result = new BufferedImage(params.width, params.height,
+			BufferedImage.TYPE_INT_RGB);
+		if (params.width <= 0 || params.height <= 0 || params.scale <= 0
+			|| params.minRGB < 0 || params.minRGB > params.maxRGB
+			|| params.maxRGB > 255 || params.octaves < 0) {
 			return result;
 		}
 
-		OpenSimplexNoise noise = new OpenSimplexNoise(seed);
+		int[] rawData = new int[params.width * params.height];
 
-		int[] rawData = new int[width * height];
+		for (int y = params.startY; y < params.startY + params.height; ++y) {
+			for (int x = params.startX; x < params.startX + params.width; ++x) {
+				double pixelValue = 0;
+				double totalAmplitude = 0;
+				double amplitude = 1;
+				double freq = params.scale;
 
-		int x;
-		int y;
-		double nx;
-		double ny;
-		double pixelValue;
-		int pixelTemp;
-		for (y = startY; y < startY + height; ++y) {
-			for (x = startX; x < startX + width; ++x) {
-				nx = ((double) x - startX) / width - 0.5;
-				ny = ((double) y - startY) / height - 0.5;
-				// output is from -1 to 1
-				pixelValue = noiseAmplitude * noise
-					.eval(frequency * nx + startX, frequency * ny + startY);
-				pixelValue += noiseAmplitude * 0.5 * noise.eval(
-					frequency * 2 * nx + startX, frequency * 2 * ny + startY);
-				pixelValue += noiseAmplitude * 0.25 * noise.eval(
-					frequency * 4 * nx + startX, frequency * 4 * ny + startY);
-				pixelValue /= noiseAmplitude + noiseAmplitude * 0.5
-					+ noiseAmplitude * 0.25;
+				for (int i = 0; i < params.octaves; ++i) {
+					pixelValue += amplitude
+						* OpenSimplex2S.noise2(params.seed, freq * x, freq * y);
+					totalAmplitude += amplitude;
+					amplitude *= params.persistence;
+					freq *= 2;
+				}
+
+				if (totalAmplitude > 0) {
+					pixelValue /= totalAmplitude;
+				}
+
 				// we map it from 0 to 1
 				pixelValue = (pixelValue + 1d) / 2d;
-				// Map to [0,255)
-				pixelTemp = (int) (pixelValue * 255);
+				// Map to [min, max)
+				final int pixelTemp =
+					(int) (pixelValue * (params.maxRGB - params.minRGB))
+						+ params.minRGB;
 				// fill out R, G, and B to pixelTemps least significant byte
-				rawData[width * y + x] =
-					pixelTemp << 16 | pixelTemp << 8 | pixelTemp;
+				rawData[params.width * (y - params.startY) + x
+					- params.startX] =
+						pixelTemp << 16 | pixelTemp << 8 | pixelTemp;
 			}
 		}
-		result.setRGB(0, 0, width, height, rawData, 0, width);
+		result.setRGB(0, 0, params.width, params.height, rawData, 0,
+			params.width);
 		return result;
 	}
 
