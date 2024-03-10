@@ -13,50 +13,43 @@ import javax.xml.bind.annotation.XmlEnum;
 import javax.xml.bind.annotation.XmlEnumValue;
 import javax.xml.bind.annotation.XmlType;
 
-/**
- *
- */
+/** */
 @XmlType(name = "HorizontalAlignment")
 @XmlEnum
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public enum HorizontalAlignment {
 
-	/**
-	 * 
-	 */
-	@XmlEnumValue("left")
-	LEFT("left"),
+    /** */
+    @XmlEnumValue("left")
+    LEFT("left"),
 
-	/**
-	 * 
-	 */
-	@XmlEnumValue("center")
-	CENTER("center"),
+    /** */
+    @XmlEnumValue("center")
+    CENTER("center"),
 
-	/**
-	 * 
-	 */
-	@XmlEnumValue("right")
-	RIGHT("right");
+    /** */
+    @XmlEnumValue("right")
+    RIGHT("right");
 
-	public static HorizontalAlignment fromValue(String v) {
-		for (HorizontalAlignment c : HorizontalAlignment.values()) {
-			if (c.value.equals(v)) {
-				return c;
-			}
-		}
-		throw new IllegalArgumentException(v);
-	}
+    public static HorizontalAlignment fromValue(String v) {
+        for (HorizontalAlignment c : HorizontalAlignment.values()) {
+            if (c.value.equals(v)) {
+                return c;
+            }
+        }
+        throw new IllegalArgumentException(v);
+    }
 
-	private final String value;
+    private final String value;
 
-	HorizontalAlignment(String v) {
-		this.value = v;
-	}
+    HorizontalAlignment(String v) {
+        value = v;
+    }
 
-	public String value() {
-		return this.value;
-	}
-
+    public String value() {
+        return value;
+    }
 }

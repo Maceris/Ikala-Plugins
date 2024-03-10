@@ -13,44 +13,39 @@ import javax.xml.bind.annotation.XmlEnum;
 import javax.xml.bind.annotation.XmlEnumValue;
 import javax.xml.bind.annotation.XmlType;
 
-/**
- *
- */
+/** */
 @XmlType(name = "StaggerIndex")
 @XmlEnum
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public enum StaggerIndex {
 
-	/**
-	 * 
-	 */
-	@XmlEnumValue("even")
-	EVEN("even"),
+    /** */
+    @XmlEnumValue("even")
+    EVEN("even"),
 
-	/**
-	 * 
-	 */
-	@XmlEnumValue("odd")
-	ODD("odd");
+    /** */
+    @XmlEnumValue("odd")
+    ODD("odd");
 
-	public static StaggerIndex fromValue(String v) {
-		for (StaggerIndex c : StaggerIndex.values()) {
-			if (c.value.equals(v)) {
-				return c;
-			}
-		}
-		throw new IllegalArgumentException(v);
-	}
+    public static StaggerIndex fromValue(String v) {
+        for (StaggerIndex c : StaggerIndex.values()) {
+            if (c.value.equals(v)) {
+                return c;
+            }
+        }
+        throw new IllegalArgumentException(v);
+    }
 
-	private final String value;
+    private final String value;
 
-	StaggerIndex(String v) {
-		this.value = v;
-	}
+    StaggerIndex(String v) {
+        value = v;
+    }
 
-	public String value() {
-		return this.value;
-	}
-
+    public String value() {
+        return value;
+    }
 }

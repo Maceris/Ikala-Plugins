@@ -31,83 +31,79 @@
 package org.mapeditor.core;
 
 /**
- * Animated tiles take advantage of the Sprite class internally to handle
- * animation using an array of tiles.
+ * Animated tiles take advantage of the Sprite class internally to handle animation using an array
+ * of tiles.
  *
  * @see org.mapeditor.core.Sprite
  * @version 1.4.2
  */
 public class AnimatedTile extends Tile {
 
-	private Sprite sprite;
+    private Sprite sprite;
 
-	/**
-	 * Constructor for AnimatedTile.
-	 */
-	public AnimatedTile() {}
+    /** Constructor for AnimatedTile. */
+    public AnimatedTile() {}
 
-	/**
-	 * Constructor for AnimatedTile.
-	 *
-	 * @param s a {@link org.mapeditor.core.Sprite} object.
-	 */
-	public AnimatedTile(Sprite s) {
-		this();
-		this.setSprite(s);
-	}
+    /**
+     * Constructor for AnimatedTile.
+     *
+     * @param s a {@link org.mapeditor.core.Sprite} object.
+     */
+    public AnimatedTile(Sprite s) {
+        setSprite(s);
+    }
 
-	/**
-	 * Constructor for AnimatedTile.
-	 *
-	 * @param frames an array of {@link org.mapeditor.core.Tile} objects.
-	 */
-	public AnimatedTile(Tile[] frames) {
-		this();
-		this.sprite = new Sprite(frames);
-	}
+    /**
+     * Constructor for AnimatedTile.
+     *
+     * @param frames an array of {@link org.mapeditor.core.Tile} objects.
+     */
+    public AnimatedTile(Tile[] frames) {
+        sprite = new Sprite(frames);
+    }
 
-	/**
-	 * Constructor for AnimatedTile.
-	 *
-	 * @param set a {@link org.mapeditor.core.TileSet} object.
-	 */
-	public AnimatedTile(TileSet set) {
-		super(set);
-	}
+    /**
+     * Constructor for AnimatedTile.
+     *
+     * @param set a {@link org.mapeditor.core.TileSet} object.
+     */
+    public AnimatedTile(TileSet set) {
+        super(set);
+    }
 
-	/**
-	 * countAnimationFrames.
-	 *
-	 * @return a int.
-	 */
-	public int countAnimationFrames() {
-		return this.sprite.getTotalFrames();
-	}
+    /**
+     * countAnimationFrames.
+     *
+     * @return a int.
+     */
+    public int countAnimationFrames() {
+        return sprite.getTotalFrames();
+    }
 
-	/**
-	 * countKeys.
-	 *
-	 * @return a int.
-	 */
-	public int countKeys() {
-		return this.sprite.getTotalKeys();
-	}
+    /**
+     * countKeys.
+     *
+     * @return a int.
+     */
+    public int countKeys() {
+        return sprite.getTotalKeys();
+    }
 
-	/**
-	 * Getter for the field <code>sprite</code>.
-	 *
-	 * @return a {@link org.mapeditor.core.Sprite} object.
-	 */
-	public Sprite getSprite() {
-		return this.sprite;
-	}
+    /**
+     * Getter for the field <code>sprite</code>.
+     *
+     * @return a {@link org.mapeditor.core.Sprite} object.
+     */
+    public Sprite getSprite() {
+        return sprite;
+    }
 
-	/**
-	 * Setter for the field <code>sprite</code>.
-	 *
-	 * @param s a {@link org.mapeditor.core.Sprite} object.
-	 */
-	public final void setSprite(Sprite s) {
-		this.sprite = s;
-	}
+    /**
+     * Setter for the field <code>sprite</code>.
+     *
+     * @param s a {@link org.mapeditor.core.Sprite} object.
+     */
+    public final void setSprite(Sprite s) {
+        sprite = s;
+    }
 }

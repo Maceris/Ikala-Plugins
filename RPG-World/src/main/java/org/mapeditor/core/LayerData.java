@@ -16,484 +16,513 @@ import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlSeeAlso;
 import javax.xml.bind.annotation.XmlType;
 
-/**
- *
- */
+/** */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "Layer", propOrder = {"properties"})
+@XmlType(
+        name = "Layer",
+        propOrder = {"properties"})
 @XmlSeeAlso({Group.class, ImageLayer.class, ObjectGroup.class, TileLayer.class})
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public abstract class LayerData {
 
-	/**
-	 * 
-	 */
-	@XmlElement(type = Properties.class)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Properties properties;
-	/**
-	 * Unique ID of the layer. Each layer that is added to a map gets a<br>
-	 * unique id. Even if a layer is deleted, no layer ever gets the<br>
-	 * same ID. Can not be changed in Tiled. <br>
-	 * <br>
-	 *
-	 * @since 1.2
-	 * 
-	 */
-	@XmlAttribute(name = "id")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Integer id;
-	/**
-	 * The name of the layer.
-	 * 
-	 */
-	@XmlAttribute(name = "name", required = true)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected String name;
-	/**
-	 * The x coordinate of the layer in tiles. Defaults to 0 and<br>
-	 * can no longer be changed in Tiled Qt.<br>
-	 * <br>
-	 *
-	 * @deprecated
-	 * 
-	 */
-	@XmlAttribute(name = "x")
-	@Deprecated
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Integer x;
-	/**
-	 * The y coordinate of the layer in tiles. Defaults to 0 and<br>
-	 * can no longer be changed in Tiled Qt.<br>
-	 * <br>
-	 *
-	 * @deprecated
-	 * 
-	 */
-	@XmlAttribute(name = "y")
-	@Deprecated
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Integer y;
-	/**
-	 * The width of the layer in tiles. Traditionally required, but<br>
-	 * as of Tiled Qt always the same as the map width.<br>
-	 * <br>
-	 *
-	 * @deprecated
-	 * 
-	 */
-	@XmlAttribute(name = "width", required = true)
-	@Deprecated
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected int width;
-	/**
-	 * The height of the layer in tiles. Traditionally required,<br>
-	 * but as of Tiled Qt always the same as the map height.<br>
-	 * <br>
-	 *
-	 * @deprecated
-	 * 
-	 */
-	@XmlAttribute(name = "height", required = true)
-	@Deprecated
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected int height;
-	/**
-	 * The opacity of the layer as a value from 0 to 1. Defaults to<br>
-	 * 1.
-	 * 
-	 */
-	@XmlAttribute(name = "opacity")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Float opacity;
-	/**
-	 * Whether the layer is shown (1) or hidden (0). Defaults to 1.
-	 * 
-	 */
-	@XmlAttribute(name = "visible")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Boolean visible;
-	/**
-	 * Rendering offset for this layer in pixels. Defaults to 0.<br>
-	 * <br>
-	 *
-	 * @since 0.14
-	 * 
-	 */
-	@XmlAttribute(name = "offsetx")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Integer offsetX;
-	/**
-	 * Rendering offset for this layer in pixels. Defaults to 0.<br>
-	 * <br>
-	 *
-	 * @since 0.14
-	 * 
-	 */
-	@XmlAttribute(name = "offsety")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Integer offsetY;
-	/**
-	 * Locking flag of the layer (used by Tiled).
-	 * 
-	 */
-	@XmlAttribute(name = "locked")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Integer locked;
+    /** */
+    @XmlElement(type = Properties.class)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Properties properties;
 
-	/**
-	 * The height of the layer in tiles. Traditionally required,<br>
-	 * but as of Tiled Qt always the same as the map height.<br>
-	 * <br>
-	 *
-	 * @deprecated
-	 * 
-	 */
-	@Deprecated
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public int getHeight() {
-		return this.height;
-	}
+    /**
+     * Unique ID of the layer. Each layer that is added to a map gets a<br>
+     * unique id. Even if a layer is deleted, no layer ever gets the<br>
+     * same ID. Can not be changed in Tiled. <br>
+     * <br>
+     *
+     * @since 1.2
+     */
+    @XmlAttribute(name = "id")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Integer id;
 
-	/**
-	 * Unique ID of the layer. Each layer that is added to a map gets a<br>
-	 * unique id. Even if a layer is deleted, no layer ever gets the<br>
-	 * same ID. Can not be changed in Tiled. <br>
-	 * <br>
-	 *
-	 * @since 1.2
-	 * 
-	 * @return possible object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Integer getId() {
-		return this.id;
-	}
+    /** The name of the layer. */
+    @XmlAttribute(name = "name", required = true)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected String name;
 
-	/**
-	 * Locking flag of the layer (used by Tiled).
-	 * 
-	 * @return possible object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Integer getLocked() {
-		return this.locked;
-	}
+    /**
+     * The x coordinate of the layer in tiles. Defaults to 0 and<br>
+     * can no longer be changed in Tiled Qt.<br>
+     * <br>
+     *
+     * @deprecated
+     */
+    @XmlAttribute(name = "x")
+    @Deprecated
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Integer x;
 
-	/**
-	 * The name of the layer.
-	 * 
-	 * @return possible object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public String getName() {
-		return this.name;
-	}
+    /**
+     * The y coordinate of the layer in tiles. Defaults to 0 and<br>
+     * can no longer be changed in Tiled Qt.<br>
+     * <br>
+     *
+     * @deprecated
+     */
+    @XmlAttribute(name = "y")
+    @Deprecated
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Integer y;
 
-	/**
-	 * Rendering offset for this layer in pixels. Defaults to 0.<br>
-	 * <br>
-	 *
-	 * @since 0.14
-	 * 
-	 * @return possible object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Integer getOffsetX() {
-		return this.offsetX;
-	}
+    /**
+     * The width of the layer in tiles. Traditionally required, but<br>
+     * as of Tiled Qt always the same as the map width.<br>
+     * <br>
+     *
+     * @deprecated
+     */
+    @XmlAttribute(name = "width", required = true)
+    @Deprecated
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected int width;
 
-	/**
-	 * Rendering offset for this layer in pixels. Defaults to 0.<br>
-	 * <br>
-	 *
-	 * @since 0.14
-	 * 
-	 * @return possible object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Integer getOffsetY() {
-		return this.offsetY;
-	}
+    /**
+     * The height of the layer in tiles. Traditionally required,<br>
+     * but as of Tiled Qt always the same as the map height.<br>
+     * <br>
+     *
+     * @deprecated
+     */
+    @XmlAttribute(name = "height", required = true)
+    @Deprecated
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected int height;
 
-	/**
-	 * The opacity of the layer as a value from 0 to 1. Defaults to<br>
-	 * 1.
-	 * 
-	 * @return possible object is {@link Float }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Float getOpacity() {
-		return this.opacity;
-	}
+    /**
+     * The opacity of the layer as a value from 0 to 1. Defaults to<br>
+     * 1.
+     */
+    @XmlAttribute(name = "opacity")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Float opacity;
 
-	/**
-	 * 
-	 * @return possible object is {@link PropertiesData }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Properties getProperties() {
-		return this.properties;
-	}
+    /** Whether the layer is shown (1) or hidden (0). Defaults to 1. */
+    @XmlAttribute(name = "visible")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Boolean visible;
 
-	/**
-	 * The width of the layer in tiles. Traditionally required, but<br>
-	 * as of Tiled Qt always the same as the map width.<br>
-	 * <br>
-	 *
-	 * @deprecated
-	 * 
-	 */
-	@Deprecated
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public int getWidth() {
-		return this.width;
-	}
+    /**
+     * Rendering offset for this layer in pixels. Defaults to 0.<br>
+     * <br>
+     *
+     * @since 0.14
+     */
+    @XmlAttribute(name = "offsetx")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Integer offsetX;
 
-	/**
-	 * The x coordinate of the layer in tiles. Defaults to 0 and<br>
-	 * can no longer be changed in Tiled Qt.<br>
-	 * <br>
-	 *
-	 * @deprecated
-	 * 
-	 * @return possible object is {@link Integer }
-	 * 
-	 */
-	@Deprecated
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Integer getX() {
-		return this.x;
-	}
+    /**
+     * Rendering offset for this layer in pixels. Defaults to 0.<br>
+     * <br>
+     *
+     * @since 0.14
+     */
+    @XmlAttribute(name = "offsety")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Integer offsetY;
 
-	/**
-	 * The y coordinate of the layer in tiles. Defaults to 0 and<br>
-	 * can no longer be changed in Tiled Qt.<br>
-	 * <br>
-	 *
-	 * @deprecated
-	 * 
-	 * @return possible object is {@link Integer }
-	 * 
-	 */
-	@Deprecated
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Integer getY() {
-		return this.y;
-	}
+    /** Locking flag of the layer (used by Tiled). */
+    @XmlAttribute(name = "locked")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Integer locked;
 
-	/**
-	 * Whether the layer is shown (1) or hidden (0). Defaults to 1.
-	 * 
-	 * @return possible object is {@link Boolean }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Boolean isVisible() {
-		return this.visible;
-	}
+    /**
+     * The height of the layer in tiles. Traditionally required,<br>
+     * but as of Tiled Qt always the same as the map height.<br>
+     * <br>
+     *
+     * @deprecated
+     */
+    @Deprecated
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public int getHeight() {
+        return height;
+    }
 
-	/**
-	 * The height of the layer in tiles. Traditionally required,<br>
-	 * but as of Tiled Qt always the same as the map height.<br>
-	 * <br>
-	 *
-	 * @deprecated
-	 * 
-	 */
-	@Deprecated
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setHeight(int value) {
-		this.height = value;
-	}
+    /**
+     * Unique ID of the layer. Each layer that is added to a map gets a<br>
+     * unique id. Even if a layer is deleted, no layer ever gets the<br>
+     * same ID. Can not be changed in Tiled. <br>
+     * <br>
+     *
+     * @since 1.2
+     * @return possible object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Integer getId() {
+        return id;
+    }
 
-	/**
-	 * Unique ID of the layer. Each layer that is added to a map gets a<br>
-	 * unique id. Even if a layer is deleted, no layer ever gets the<br>
-	 * same ID. Can not be changed in Tiled. <br>
-	 * <br>
-	 *
-	 * @since 1.2
-	 * 
-	 * @param value allowed object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setId(Integer value) {
-		this.id = value;
-	}
+    /**
+     * Locking flag of the layer (used by Tiled).
+     *
+     * @return possible object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Integer getLocked() {
+        return locked;
+    }
 
-	/**
-	 * Locking flag of the layer (used by Tiled).
-	 * 
-	 * @param value allowed object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setLocked(Integer value) {
-		this.locked = value;
-	}
+    /**
+     * The name of the layer.
+     *
+     * @return possible object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public String getName() {
+        return name;
+    }
 
-	/**
-	 * The name of the layer.
-	 * 
-	 * @param value allowed object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setName(String value) {
-		this.name = value;
-	}
+    /**
+     * Rendering offset for this layer in pixels. Defaults to 0.<br>
+     * <br>
+     *
+     * @since 0.14
+     * @return possible object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Integer getOffsetX() {
+        return offsetX;
+    }
 
-	/**
-	 * Rendering offset for this layer in pixels. Defaults to 0.<br>
-	 * <br>
-	 *
-	 * @since 0.14
-	 * 
-	 * @param value allowed object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setOffsetX(Integer value) {
-		this.offsetX = value;
-	}
+    /**
+     * Rendering offset for this layer in pixels. Defaults to 0.<br>
+     * <br>
+     *
+     * @since 0.14
+     * @return possible object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Integer getOffsetY() {
+        return offsetY;
+    }
 
-	/**
-	 * Rendering offset for this layer in pixels. Defaults to 0.<br>
-	 * <br>
-	 *
-	 * @since 0.14
-	 * 
-	 * @param value allowed object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setOffsetY(Integer value) {
-		this.offsetY = value;
-	}
+    /**
+     * The opacity of the layer as a value from 0 to 1. Defaults to<br>
+     * 1.
+     *
+     * @return possible object is {@link Float }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Float getOpacity() {
+        return opacity;
+    }
 
-	/**
-	 * The opacity of the layer as a value from 0 to 1. Defaults to<br>
-	 * 1.
-	 * 
-	 * @param value allowed object is {@link Float }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setOpacity(Float value) {
-		this.opacity = value;
-	}
+    /**
+     * @return possible object is {@link PropertiesData }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Properties getProperties() {
+        return properties;
+    }
 
-	/**
-	 * 
-	 * @param value allowed object is {@link PropertiesData }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setProperties(Properties value) {
-		this.properties = value;
-	}
+    /**
+     * The width of the layer in tiles. Traditionally required, but<br>
+     * as of Tiled Qt always the same as the map width.<br>
+     * <br>
+     *
+     * @deprecated
+     */
+    @Deprecated
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public int getWidth() {
+        return width;
+    }
 
-	/**
-	 * Whether the layer is shown (1) or hidden (0). Defaults to 1.
-	 * 
-	 * @param value allowed object is {@link Boolean }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setVisible(Boolean value) {
-		this.visible = value;
-	}
+    /**
+     * The x coordinate of the layer in tiles. Defaults to 0 and<br>
+     * can no longer be changed in Tiled Qt.<br>
+     * <br>
+     *
+     * @deprecated
+     * @return possible object is {@link Integer }
+     */
+    @Deprecated
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Integer getX() {
+        return x;
+    }
 
-	/**
-	 * The width of the layer in tiles. Traditionally required, but<br>
-	 * as of Tiled Qt always the same as the map width.<br>
-	 * <br>
-	 *
-	 * @deprecated
-	 * 
-	 */
-	@Deprecated
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setWidth(int value) {
-		this.width = value;
-	}
+    /**
+     * The y coordinate of the layer in tiles. Defaults to 0 and<br>
+     * can no longer be changed in Tiled Qt.<br>
+     * <br>
+     *
+     * @deprecated
+     * @return possible object is {@link Integer }
+     */
+    @Deprecated
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Integer getY() {
+        return y;
+    }
 
-	/**
-	 * The x coordinate of the layer in tiles. Defaults to 0 and<br>
-	 * can no longer be changed in Tiled Qt.<br>
-	 * <br>
-	 *
-	 * @deprecated
-	 * 
-	 * @param value allowed object is {@link Integer }
-	 * 
-	 */
-	@Deprecated
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setX(Integer value) {
-		this.x = value;
-	}
+    /**
+     * Whether the layer is shown (1) or hidden (0). Defaults to 1.
+     *
+     * @return possible object is {@link Boolean }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Boolean isVisible() {
+        return visible;
+    }
 
-	/**
-	 * The y coordinate of the layer in tiles. Defaults to 0 and<br>
-	 * can no longer be changed in Tiled Qt.<br>
-	 * <br>
-	 *
-	 * @deprecated
-	 * 
-	 * @param value allowed object is {@link Integer }
-	 * 
-	 */
-	@Deprecated
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setY(Integer value) {
-		this.y = value;
-	}
+    /**
+     * The height of the layer in tiles. Traditionally required,<br>
+     * but as of Tiled Qt always the same as the map height.<br>
+     * <br>
+     *
+     * @deprecated
+     */
+    @Deprecated
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setHeight(int value) {
+        height = value;
+    }
 
+    /**
+     * Unique ID of the layer. Each layer that is added to a map gets a<br>
+     * unique id. Even if a layer is deleted, no layer ever gets the<br>
+     * same ID. Can not be changed in Tiled. <br>
+     * <br>
+     *
+     * @since 1.2
+     * @param value allowed object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setId(Integer value) {
+        id = value;
+    }
+
+    /**
+     * Locking flag of the layer (used by Tiled).
+     *
+     * @param value allowed object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setLocked(Integer value) {
+        locked = value;
+    }
+
+    /**
+     * The name of the layer.
+     *
+     * @param value allowed object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setName(String value) {
+        name = value;
+    }
+
+    /**
+     * Rendering offset for this layer in pixels. Defaults to 0.<br>
+     * <br>
+     *
+     * @since 0.14
+     * @param value allowed object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setOffsetX(Integer value) {
+        offsetX = value;
+    }
+
+    /**
+     * Rendering offset for this layer in pixels. Defaults to 0.<br>
+     * <br>
+     *
+     * @since 0.14
+     * @param value allowed object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setOffsetY(Integer value) {
+        offsetY = value;
+    }
+
+    /**
+     * The opacity of the layer as a value from 0 to 1. Defaults to<br>
+     * 1.
+     *
+     * @param value allowed object is {@link Float }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setOpacity(Float value) {
+        opacity = value;
+    }
+
+    /**
+     * @param value allowed object is {@link PropertiesData }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setProperties(Properties value) {
+        properties = value;
+    }
+
+    /**
+     * Whether the layer is shown (1) or hidden (0). Defaults to 1.
+     *
+     * @param value allowed object is {@link Boolean }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setVisible(Boolean value) {
+        visible = value;
+    }
+
+    /**
+     * The width of the layer in tiles. Traditionally required, but<br>
+     * as of Tiled Qt always the same as the map width.<br>
+     * <br>
+     *
+     * @deprecated
+     */
+    @Deprecated
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setWidth(int value) {
+        width = value;
+    }
+
+    /**
+     * The x coordinate of the layer in tiles. Defaults to 0 and<br>
+     * can no longer be changed in Tiled Qt.<br>
+     * <br>
+     *
+     * @deprecated
+     * @param value allowed object is {@link Integer }
+     */
+    @Deprecated
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setX(Integer value) {
+        x = value;
+    }
+
+    /**
+     * The y coordinate of the layer in tiles. Defaults to 0 and<br>
+     * can no longer be changed in Tiled Qt.<br>
+     * <br>
+     *
+     * @deprecated
+     * @param value allowed object is {@link Integer }
+     */
+    @Deprecated
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setY(Integer value) {
+        y = value;
+    }
 }

@@ -15,14 +15,12 @@ import javax.xml.bind.annotation.XmlType;
 
 /**
  * Used to mark an object as a point.<br>
- * The existing x and y attributes are used to determine the position of the
- * point.
- *
+ * The existing x and y attributes are used to determine the position of the point.
  */
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlType(name = "Point")
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
-public class Point {
-
-}
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
+public class Point {}

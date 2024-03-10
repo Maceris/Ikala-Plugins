@@ -1,4 +1,2 @@
-/**
- * Exceptions relating to graphics.
- */
+/** Exceptions relating to graphics. */
 package com.ikalagaming.graphics.exceptions;

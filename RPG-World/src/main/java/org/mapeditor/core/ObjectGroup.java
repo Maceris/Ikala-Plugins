@@ -36,7 +36,6 @@ import java.awt.geom.Ellipse2D;
 import java.awt.geom.Rectangle2D;
 import java.util.Iterator;
 import java.util.LinkedList;
-
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 
@@ -46,161 +45,157 @@ import javax.xml.bind.annotation.XmlAccessorType;
  * @version 1.4.2
  */
 @XmlAccessorType(XmlAccessType.NONE)
-public class ObjectGroup extends ObjectGroupData
-	implements Cloneable, Iterable<MapObject> {
+public class ObjectGroup extends ObjectGroupData implements Cloneable, Iterable<MapObject> {
 
-	/**
-	 * Default constructor.
-	 */
-	public ObjectGroup() {
-		super();
-	}
+    /** Default constructor. */
+    public ObjectGroup() {}
 
-	/**
-	 * Constructor for ObjectGroup.
-	 *
-	 * @param map the map this object group is part of
-	 */
-	public ObjectGroup(Map map) {
-		this();
-		this.map = map;
-	}
+    /**
+     * Constructor for ObjectGroup.
+     *
+     * @param map the map this object group is part of
+     */
+    public ObjectGroup(Map map) {
+        this.map = map;
+    }
 
-	/**
-	 * Creates an object group that is part of the given map and has the given
-	 * origin.
-	 *
-	 * @param map the map this object group is part of
-	 * @param x the x origin of this layer
-	 * @param y the y origin of this layer
-	 */
-	public ObjectGroup(Map map, int x, int y) {
-		this(map);
-		this.x = x;
-		this.y = y;
-	}
+    /**
+     * Creates an object group that is part of the given map and has the given origin.
+     *
+     * @param map the map this object group is part of
+     * @param x the x origin of this layer
+     * @param y the y origin of this layer
+     */
+    public ObjectGroup(Map map, int x, int y) {
+        this(map);
+        this.x = x;
+        this.y = y;
+    }
 
-	/**
-	 * Creates an object group with a given area. The size of area is
-	 * irrelevant, just its origin.
-	 *
-	 * @param area the area of the object group
-	 */
-	public ObjectGroup(Rectangle area) {
-		this.x = (int) area.getX();
-		this.y = (int) area.getY();
-		this.width = (int) area.getWidth();
-		this.height = (int) area.getHeight();
-	}
+    /**
+     * Creates an object group with a given area. The size of area is irrelevant, just its origin.
+     *
+     * @param area the area of the object group
+     */
+    public ObjectGroup(Rectangle area) {
+        x = (int) area.getX();
+        y = (int) area.getY();
+        width = (int) area.getWidth();
+        height = (int) area.getHeight();
+    }
 
-	/**
-	 * addObject.
-	 *
-	 * @param o a {@link org.mapeditor.core.MapObject} object.
-	 */
-	public void addObject(MapObject o) {
-		this.getObjects().add(o);
-		o.setObjectGroup(this);
-	}
+    /**
+     * addObject.
+     *
+     * @param o a {@link org.mapeditor.core.MapObject} object.
+     */
+    public void addObject(MapObject o) {
+        getObjects().add(o);
+        o.setObjectGroup(this);
+    }
 
-	/** {@inheritDoc} */
-	@Override
-	public Object clone() throws CloneNotSupportedException {
-		ObjectGroup clone = (ObjectGroup) super.clone();
-		clone.objects = new LinkedList<>();
-		for (MapObject object : this.getObjects()) {
-			final MapObject objectClone = (MapObject) object.clone();
-			clone.objects.add(objectClone);
-			objectClone.setObjectGroup(clone);
-		}
-		return clone;
-	}
+    /** {@inheritDoc} */
+    @Override
+    public Object clone() throws CloneNotSupportedException {
+        ObjectGroup clone = (ObjectGroup) super.clone();
+        clone.objects = new LinkedList<>();
+        for (MapObject object : getObjects()) {
+            final MapObject objectClone = (MapObject) object.clone();
+            clone.objects.add(objectClone);
+            objectClone.setObjectGroup(clone);
+        }
+        return clone;
+    }
 
-	/**
-	 * getObjectAt.
-	 *
-	 * @param x a double.
-	 * @param y a double.
-	 * @return a {@link org.mapeditor.core.MapObject} object.
-	 */
-	public MapObject getObjectAt(double x, double y) {
-		for (MapObject obj : this.getObjects()) {
-			// Attempt to get an object bordering the point that has no width
-			// Attempt to get an object bordering the point that has no height
-			if ((obj.getWidth() == 0 && obj.getX() + this.x == x) || (obj.getHeight() == 0 && obj.getY() + this.y == y)) {
-				return obj;
-			}
+    /**
+     * getObjectAt.
+     *
+     * @param x a double.
+     * @param y a double.
+     * @return a {@link org.mapeditor.core.MapObject} object.
+     */
+    public MapObject getObjectAt(double x, double y) {
+        for (MapObject obj : getObjects()) {
+            // Attempt to get an object bordering the point that has no width
+            // Attempt to get an object bordering the point that has no height
+            if ((obj.getWidth() == 0 && obj.getX() + this.x == x)
+                    || (obj.getHeight() == 0 && obj.getY() + this.y == y)) {
+                return obj;
+            }
 
-			Rectangle2D.Double rect = new Rectangle2D.Double(
-				obj.getX() + this.x * this.map.getTileWidth(),
-				obj.getY() + this.y * this.map.getTileHeight(), obj.getWidth(),
-				obj.getHeight());
-			if (rect.contains(x, y)) {
-				return obj;
-			}
-		}
-		return null;
-	}
+            Rectangle2D.Double rect =
+                    new Rectangle2D.Double(
+                            obj.getX() + this.x * map.getTileWidth(),
+                            obj.getY() + this.y * map.getTileHeight(),
+                            obj.getWidth(),
+                            obj.getHeight());
+            if (rect.contains(x, y)) {
+                return obj;
+            }
+        }
+        return null;
+    }
 
-	// This method will work at any zoom level, provided you provide the correct
-	// zoom factor. It also adds a one pixel buffer (that doesn't change with
-	// zoom).
-	/**
-	 * getObjectNear.
-	 *
-	 * @param x a int.
-	 * @param y a int.
-	 * @param zoom a double.
-	 * @return a {@link org.mapeditor.core.MapObject} object.
-	 */
-	public MapObject getObjectNear(int x, int y, double zoom) {
-		Rectangle2D mouse = new Rectangle2D.Double(x - zoom - 1, y - zoom - 1,
-			2 * zoom + 1, 2 * zoom + 1);
-		Shape shape;
+    // This method will work at any zoom level, provided you provide the correct
+    // zoom factor. It also adds a one pixel buffer (that doesn't change with
+    // zoom).
+    /**
+     * getObjectNear.
+     *
+     * @param x a int.
+     * @param y a int.
+     * @param zoom a double.
+     * @return a {@link org.mapeditor.core.MapObject} object.
+     */
+    public MapObject getObjectNear(int x, int y, double zoom) {
+        Rectangle2D mouse =
+                new Rectangle2D.Double(x - zoom - 1, y - zoom - 1, 2 * zoom + 1, 2 * zoom + 1);
+        Shape shape;
 
-		for (MapObject obj : this.getObjects()) {
-			if (obj.getWidth() == 0 && obj.getHeight() == 0) {
-				shape = new Ellipse2D.Double(obj.getX() * zoom,
-					obj.getY() * zoom, 10 * zoom, 10 * zoom);
-			}
-			else {
-				shape = new Rectangle2D.Double(
-					obj.getX() + this.x * this.map.getTileWidth(),
-					obj.getY() + this.y * this.map.getTileHeight(),
-					obj.getWidth() > 0 ? obj.getWidth() : zoom,
-					obj.getHeight() > 0 ? obj.getHeight() : zoom);
-			}
+        for (MapObject obj : getObjects()) {
+            if (obj.getWidth() == 0 && obj.getHeight() == 0) {
+                shape =
+                        new Ellipse2D.Double(
+                                obj.getX() * zoom, obj.getY() * zoom, 10 * zoom, 10 * zoom);
+            } else {
+                shape =
+                        new Rectangle2D.Double(
+                                obj.getX() + this.x * map.getTileWidth(),
+                                obj.getY() + this.y * map.getTileHeight(),
+                                obj.getWidth() > 0 ? obj.getWidth() : zoom,
+                                obj.getHeight() > 0 ? obj.getHeight() : zoom);
+            }
 
-			if (shape.intersects(mouse)) {
-				return obj;
-			}
-		}
+            if (shape.intersects(mouse)) {
+                return obj;
+            }
+        }
 
-		return null;
-	}
+        return null;
+    }
 
-	/**
-	 * isEmpty.
-	 *
-	 * @return a boolean.
-	 */
-	public boolean isEmpty() {
-		return this.getObjects().isEmpty();
-	}
+    /**
+     * isEmpty.
+     *
+     * @return a boolean.
+     */
+    public boolean isEmpty() {
+        return getObjects().isEmpty();
+    }
 
-	/** {@inheritDoc} */
-	@Override
-	public Iterator<MapObject> iterator() {
-		return this.getObjects().iterator();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public Iterator<MapObject> iterator() {
+        return getObjects().iterator();
+    }
 
-	/**
-	 * removeObject.
-	 *
-	 * @param o a {@link org.mapeditor.core.MapObject} object.
-	 */
-	public void removeObject(MapObject o) {
-		this.getObjects().remove(o);
-		o.setObjectGroup(null);
-	}
+    /**
+     * removeObject.
+     *
+     * @param o a {@link org.mapeditor.core.MapObject} object.
+     */
+    public void removeObject(MapObject o) {
+        getObjects().remove(o);
+        o.setObjectGroup(null);
+    }
 }

@@ -12,39 +12,35 @@ import org.junit.jupiter.api.Test;
  * Tests for the {@link ExamplePlugin example plugin}.
  *
  * @author Ches Burks
- *
  */
 class TestExamplePlugin {
 
-	/**
-	 * Set up before all the tests.
-	 *
-	 * @throws Exception If something goes wrong.
-	 */
-	@BeforeAll
-	static void setUpBeforeClass() throws Exception {
-		EventManager.getInstance();
-		PluginManager.getInstance();
-	}
+    /**
+     * Set up before all the tests.
+     *
+     * @throws Exception If something goes wrong.
+     */
+    @BeforeAll
+    static void setUpBeforeClass() throws Exception {
+        EventManager.getInstance();
+        PluginManager.getInstance();
+    }
 
-	/**
-	 * Tear down after all the tests.
-	 *
-	 * @throws Exception If something goes wrong.
-	 */
-	@AfterAll
-	static void tearDownAfterClass() throws Exception {
-		PluginManager.destoryInstance();
-		EventManager.destoryInstance();
-	}
+    /**
+     * Tear down after all the tests.
+     *
+     * @throws Exception If something goes wrong.
+     */
+    @AfterAll
+    static void tearDownAfterClass() throws Exception {
+        PluginManager.destoryInstance();
+        EventManager.destoryInstance();
+    }
 
-	/**
-	 * Test that the listeners gives back a list that is not null.
-	 */
-	@Test
-	void testGetListeners() {
-		ExamplePlugin plugin = new ExamplePlugin();
-		Assertions.assertNotNull(plugin.getListeners());
-	}
-
+    /** Test that the listeners gives back a list that is not null. */
+    @Test
+    void testGetListeners() {
+        ExamplePlugin plugin = new ExamplePlugin();
+        Assertions.assertNotNull(plugin.getListeners());
+    }
 }

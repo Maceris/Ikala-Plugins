@@ -10,10 +10,7 @@ import java.lang.annotation.Target;
  * Identifies that a field should be stored as a JSON blob in the database.
  *
  * @author Ches Burks
- *
  */
 @Retention(RUNTIME)
 @Target(FIELD)
-public @interface JSONField {
-
-}
+public @interface JSONField {}

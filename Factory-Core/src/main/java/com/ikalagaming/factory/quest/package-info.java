@@ -1,4 +1,2 @@
-/**
- * Classes related to quests.
- */
+/** Classes related to quests. */
 package com.ikalagaming.factory.quest;

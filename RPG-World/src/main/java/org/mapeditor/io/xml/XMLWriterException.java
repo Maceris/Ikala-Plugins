@@ -31,8 +31,8 @@
 package org.mapeditor.io.xml;
 
 /**
- * an XMLWriterException is thrown if an error occurs while writing the
- * xml-structure of a .tmx file.
+ * an XMLWriterException is thrown if an error occurs while writing the xml-structure of a .tmx
+ * file.
  *
  * @deprecated
  * @version 1.4.2
@@ -40,14 +40,14 @@ package org.mapeditor.io.xml;
 @Deprecated
 public class XMLWriterException extends RuntimeException {
 
-	private static final long serialVersionUID = 1629373837269498797L;
+    private static final long serialVersionUID = 1629373837269498797L;
 
-	/**
-	 * Constructor for XMLWriterException.
-	 *
-	 * @param error a {@link java.lang.String} object.
-	 */
-	public XMLWriterException(String error) {
-		super(error);
-	}
+    /**
+     * Constructor for XMLWriterException.
+     *
+     * @param error a {@link java.lang.String} object.
+     */
+    public XMLWriterException(String error) {
+        super(error);
+    }
 }

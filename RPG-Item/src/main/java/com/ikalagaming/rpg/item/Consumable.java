@@ -24,24 +24,21 @@ import javax.persistence.Table;
 @Entity
 @Table(name = Consumable.TABLE_NAME)
 public class Consumable extends Item {
-	/**
-	 * The name of the table in the database.
-	 */
-	static final String TABLE_NAME = "CONSUMABLE";
-	/**
-	 * What kind of consumable this item is.
-	 *
-	 * @param consumableType The type of consumable this item is.
-	 * @return The type of consumable this item is.
-	 */
-	@Column(name = "CONSUMABLE_TYPE")
-	@Enumerated(EnumType.STRING)
-	private ConsumableType consumableType;
+    /** The name of the table in the database. */
+    static final String TABLE_NAME = "CONSUMABLE";
 
-	/**
-	 * Constructs a new consumable item.
-	 */
-	public Consumable() {
-		this.setItemType(ItemType.CONSUMABLE);
-	}
+    /**
+     * What kind of consumable this item is.
+     *
+     * @param consumableType The type of consumable this item is.
+     * @return The type of consumable this item is.
+     */
+    @Column(name = "CONSUMABLE_TYPE")
+    @Enumerated(EnumType.STRING)
+    private ConsumableType consumableType;
+
+    /** Constructs a new consumable item. */
+    public Consumable() {
+        setItemType(ItemType.CONSUMABLE);
+    }
 }

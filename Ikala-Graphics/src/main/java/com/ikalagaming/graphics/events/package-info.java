@@ -1,4 +1,2 @@
-/**
- * Events relating to graphics.
- */
+/** Events relating to graphics. */
 package com.ikalagaming.graphics.events;

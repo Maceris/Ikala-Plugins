@@ -43,498 +43,493 @@ import java.util.List;
  */
 public class Sprite {
 
-	public class KeyFrame {
+    public class KeyFrame {
 
-		public static final int MASK_ANIMATION = 0x0000000F;
+        public static final int MASK_ANIMATION = 0x0000000F;
 
-		public static final int KEY_LOOP = 0x01;
-		public static final int KEY_STOP = 0x02;
-		public static final int KEY_AUTO = 0x04;
-		public static final int KEY_REVERSE = 0x08;
+        public static final int KEY_LOOP = 0x01;
+        public static final int KEY_STOP = 0x02;
+        public static final int KEY_AUTO = 0x04;
+        public static final int KEY_REVERSE = 0x08;
 
-		public static final int KEY_NAME_LENGTH_MAX = 32;
+        public static final int KEY_NAME_LENGTH_MAX = 32;
 
-		private String name = null;
-		private int id = -1;
-		private int flags = KeyFrame.KEY_LOOP;
-		private float frameRate = 1.0f; // one fps
-		private Tile[] frames;
+        private String name = null;
+        private int id = -1;
+        private int flags = KeyFrame.KEY_LOOP;
+        private float frameRate = 1.0f; // one fps
+        private Tile[] frames;
 
-		public KeyFrame() {
-			this.flags = KeyFrame.KEY_LOOP;
-		}
+        public KeyFrame() {
+            flags = KeyFrame.KEY_LOOP;
+        }
 
-		public KeyFrame(String name) {
-			this();
-			this.name = name;
-		}
+        public KeyFrame(String name) {
+            this.name = name;
+        }
 
-		public KeyFrame(String name, Tile[] tile) {
-			this(name);
-			this.frames = tile;
-		}
+        public KeyFrame(String name, Tile[] tile) {
+            this(name);
+            frames = tile;
+        }
 
-		public boolean equalsIgnoreCase(String n) {
-			return this.name != null && this.name.equalsIgnoreCase(n);
-		}
+        public boolean equalsIgnoreCase(String n) {
+            return name != null && name.equalsIgnoreCase(n);
+        }
 
-		public int getFlags() {
-			return this.flags;
-		}
+        public int getFlags() {
+            return flags;
+        }
 
-		public Tile getFrame(int f) {
-			if (f > 0 && f < this.frames.length) {
-				return this.frames[f];
-			}
-			return null;
-		}
+        public Tile getFrame(int f) {
+            if (f > 0 && f < frames.length) {
+                return frames[f];
+            }
+            return null;
+        }
 
-		public float getFrameRate() {
-			return this.frameRate;
-		}
+        public float getFrameRate() {
+            return frameRate;
+        }
 
-		public int getId() {
-			return this.id;
-		}
+        public int getId() {
+            return id;
+        }
 
-		public int getLastFrame() {
-			return this.frames.length - 1;
-		}
+        public int getLastFrame() {
+            return frames.length - 1;
+        }
 
-		public String getName() {
-			return this.name;
-		}
+        public String getName() {
+            return name;
+        }
 
-		public int getTotalFrames() {
-			return this.frames.length;
-		}
+        public int getTotalFrames() {
+            return frames.length;
+        }
 
-		public boolean isFrameLast(int frame) {
-			return this.frames.length - 1 == frame;
-		}
+        public boolean isFrameLast(int frame) {
+            return frames.length - 1 == frame;
+        }
 
-		public void setFlags(int f) {
-			this.flags = f;
-		}
+        public void setFlags(int f) {
+            flags = f;
+        }
 
-		public void setFrameRate(float r) {
-			this.frameRate = r;
-		}
+        public void setFrameRate(float r) {
+            frameRate = r;
+        }
 
-		public void setId(int id) {
-			this.id = id;
-		}
+        public void setId(int id) {
+            this.id = id;
+        }
 
-		public void setName(String name) {
-			this.name = name;
-		}
+        public void setName(String name) {
+            this.name = name;
+        }
 
-		@Override
-		public String toString() {
-			return "(" + this.name + ")" + this.id + ": @ " + this.frameRate;
-		}
-	}
+        @Override
+        public String toString() {
+            return "(" + name + ")" + id + ": @ " + frameRate;
+        }
+    }
 
-	private List<KeyFrame> keys;
-	private int borderWidth = 0;
-	private int fpl = 0;
+    private List<KeyFrame> keys;
+    private int borderWidth = 0;
+    private int fpl = 0;
 
-	private int totalKeys = -1;
-	private float currentFrame = 0;
-	private Rectangle frameSize;
+    private int totalKeys = -1;
+    private float currentFrame = 0;
+    private Rectangle frameSize;
 
-	private boolean bPlaying = true;
+    private boolean bPlaying = true;
 
-	private KeyFrame currentKey = null;
+    private KeyFrame currentKey = null;
 
-	/**
-	 * Constructor for Sprite.
-	 */
-	public Sprite() {
-		this.frameSize = new Rectangle();
-		this.keys = new ArrayList<>();
-	}
+    /** Constructor for Sprite. */
+    public Sprite() {
+        frameSize = new Rectangle();
+        keys = new ArrayList<>();
+    }
 
-	/**
-	 * Constructor for Sprite.
-	 *
-	 * @param image a {@link java.awt.Image} object.
-	 * @param fpl a int.
-	 * @param border a int.
-	 * @param totalFrames a int.
-	 */
-	public Sprite(Image image, int fpl, int border, int totalFrames) {
-		Tile[] frames = null;
-		this.fpl = fpl;
-		this.borderWidth = border;
+    /**
+     * Constructor for Sprite.
+     *
+     * @param image a {@link java.awt.Image} object.
+     * @param fpl a int.
+     * @param border a int.
+     * @param totalFrames a int.
+     */
+    public Sprite(Image image, int fpl, int border, int totalFrames) {
+        Tile[] frames = null;
+        this.fpl = fpl;
+        borderWidth = border;
 
-		// TODO: break up the image into tiles
-		// given this information, extrapolate the rest...
-		this.frameSize.width =
-			image.getWidth(null) / (fpl + this.borderWidth * fpl);
-		this.frameSize.height =
-			(int) (image.getHeight(null) / (Math.ceil(totalFrames / fpl)
-				+ Math.ceil(totalFrames / fpl) * this.borderWidth));
-		this.createKey("", frames, KeyFrame.KEY_LOOP);
-	}
+        // TODO: break up the image into tiles
+        // given this information, extrapolate the rest...
+        frameSize.width = image.getWidth(null) / (fpl + borderWidth * fpl);
+        frameSize.height =
+                (int)
+                        (image.getHeight(null)
+                                / (Math.ceil(totalFrames / fpl)
+                                        + Math.ceil(totalFrames / fpl) * borderWidth));
+        createKey("", frames, KeyFrame.KEY_LOOP);
+    }
 
-	/**
-	 * Constructor for Sprite.
-	 *
-	 * @param frames an array of {@link org.mapeditor.core.Tile} objects.
-	 */
-	public Sprite(Tile[] frames) {
-		this.setFrames(frames);
-	}
+    /**
+     * Constructor for Sprite.
+     *
+     * @param frames an array of {@link org.mapeditor.core.Tile} objects.
+     */
+    public Sprite(Tile[] frames) {
+        setFrames(frames);
+    }
 
-	/**
-	 * addKey.
-	 *
-	 * @param k a {@link org.mapeditor.core.Sprite.KeyFrame} object.
-	 */
-	public void addKey(KeyFrame k) {
-		this.keys.add(k);
-	}
+    /**
+     * addKey.
+     *
+     * @param k a {@link org.mapeditor.core.Sprite.KeyFrame} object.
+     */
+    public void addKey(KeyFrame k) {
+        keys.add(k);
+    }
 
-	/**
-	 * createKey.
-	 *
-	 * @param name a {@link java.lang.String} object.
-	 * @param frames an array of {@link org.mapeditor.core.Tile} objects.
-	 * @param flags a int.
-	 */
-	public final void createKey(String name, Tile[] frames, int flags) {
-		KeyFrame kf = new KeyFrame(name, frames);
-		kf.setName(name);
-		kf.setFlags(flags);
-		this.addKey(kf);
-	}
+    /**
+     * createKey.
+     *
+     * @param name a {@link java.lang.String} object.
+     * @param frames an array of {@link org.mapeditor.core.Tile} objects.
+     * @param flags a int.
+     */
+    public final void createKey(String name, Tile[] frames, int flags) {
+        KeyFrame kf = new KeyFrame(name, frames);
+        kf.setName(name);
+        kf.setFlags(flags);
+        addKey(kf);
+    }
 
-	/**
-	 * Getter for the field <code>borderWidth</code>.
-	 *
-	 * @return a int.
-	 */
-	public int getBorderWidth() {
-		return this.borderWidth;
-	}
+    /**
+     * Getter for the field <code>borderWidth</code>.
+     *
+     * @return a int.
+     */
+    public int getBorderWidth() {
+        return borderWidth;
+    }
 
-	/**
-	 * Getter for the field <code>currentFrame</code>.
-	 *
-	 * @return a {@link org.mapeditor.core.Tile} object.
-	 */
-	public Tile getCurrentFrame() {
-		return this.currentKey.getFrame((int) this.currentFrame);
-	}
+    /**
+     * Getter for the field <code>currentFrame</code>.
+     *
+     * @return a {@link org.mapeditor.core.Tile} object.
+     */
+    public Tile getCurrentFrame() {
+        return currentKey.getFrame((int) currentFrame);
+    }
 
-	/**
-	 * getCurrentFrameRect.
-	 *
-	 * @return a {@link java.awt.Rectangle} object.
-	 */
-	public Rectangle getCurrentFrameRect() {
-		int x = 0, y = 0;
+    /**
+     * getCurrentFrameRect.
+     *
+     * @return a {@link java.awt.Rectangle} object.
+     */
+    public Rectangle getCurrentFrameRect() {
+        int x = 0, y = 0;
 
-		if (this.frameSize.height > 0 && this.frameSize.width > 0) {
-			y = ((int) this.currentFrame / this.fpl)
-				* (this.frameSize.height + this.borderWidth);
-			x = ((int) this.currentFrame % this.fpl)
-				* (this.frameSize.width + this.borderWidth);
-		}
+        if (frameSize.height > 0 && frameSize.width > 0) {
+            y = ((int) currentFrame / fpl) * (frameSize.height + borderWidth);
+            x = ((int) currentFrame % fpl) * (frameSize.width + borderWidth);
+        }
 
-		return new Rectangle(x, y, this.frameSize.width, this.frameSize.height);
-	}
+        return new Rectangle(x, y, frameSize.width, frameSize.height);
+    }
 
-	/**
-	 * Getter for the field <code>currentKey</code>.
-	 *
-	 * @return a {@link org.mapeditor.core.Sprite.KeyFrame} object.
-	 */
-	public KeyFrame getCurrentKey() {
-		return this.currentKey;
-	}
+    /**
+     * Getter for the field <code>currentKey</code>.
+     *
+     * @return a {@link org.mapeditor.core.Sprite.KeyFrame} object.
+     */
+    public KeyFrame getCurrentKey() {
+        return currentKey;
+    }
 
-	/**
-	 * getFPL.
-	 *
-	 * @return a int.
-	 */
-	public int getFPL() {
-		return this.fpl;
-	}
+    /**
+     * getFPL.
+     *
+     * @return a int.
+     */
+    public int getFPL() {
+        return fpl;
+    }
 
-	/**
-	 * Getter for the field <code>frameSize</code>.
-	 *
-	 * @return a {@link java.awt.Rectangle} object.
-	 */
-	public Rectangle getFrameSize() {
-		return this.frameSize;
-	}
+    /**
+     * Getter for the field <code>frameSize</code>.
+     *
+     * @return a {@link java.awt.Rectangle} object.
+     */
+    public Rectangle getFrameSize() {
+        return frameSize;
+    }
 
-	/**
-	 * getKey.
-	 *
-	 * @param i a int.
-	 * @return a {@link org.mapeditor.core.Sprite.KeyFrame} object.
-	 */
-	public KeyFrame getKey(int i) {
-		return this.keys.get(i);
-	}
+    /**
+     * getKey.
+     *
+     * @param i a int.
+     * @return a {@link org.mapeditor.core.Sprite.KeyFrame} object.
+     */
+    public KeyFrame getKey(int i) {
+        return keys.get(i);
+    }
 
-	/**
-	 * getKey.
-	 *
-	 * @param keyName a {@link java.lang.String} object.
-	 * @return a {@link org.mapeditor.core.Sprite.KeyFrame} object.
-	 */
-	public KeyFrame getKey(String keyName) {
-		for (KeyFrame k : this.keys) {
-			if (k != null && k.equalsIgnoreCase(keyName)) {
-				return k;
-			}
-		}
-		return null;
-	}
+    /**
+     * getKey.
+     *
+     * @param keyName a {@link java.lang.String} object.
+     * @return a {@link org.mapeditor.core.Sprite.KeyFrame} object.
+     */
+    public KeyFrame getKey(String keyName) {
+        for (KeyFrame k : keys) {
+            if (k != null && k.equalsIgnoreCase(keyName)) {
+                return k;
+            }
+        }
+        return null;
+    }
 
-	/**
-	 * Getter for the field <code>keys</code>.
-	 *
-	 * @return a {@link java.util.Iterator} object.
-	 * @throws java.lang.Exception if any.
-	 */
-	public Iterator<KeyFrame> getKeys() throws Exception {
-		return this.keys.iterator();
-	}
+    /**
+     * Getter for the field <code>keys</code>.
+     *
+     * @return a {@link java.util.Iterator} object.
+     * @throws java.lang.Exception if any.
+     */
+    public Iterator<KeyFrame> getKeys() throws Exception {
+        return keys.iterator();
+    }
 
-	/**
-	 * getNextKey.
-	 *
-	 * @return a {@link org.mapeditor.core.Sprite.KeyFrame} object.
-	 */
-	public KeyFrame getNextKey() {
-		Iterator<KeyFrame> itr = this.keys.iterator();
-		while (itr.hasNext()) {
-			KeyFrame k = itr.next();
-			if (k == this.currentKey && itr.hasNext()) {
-				return itr.next();
-			}
-		}
+    /**
+     * getNextKey.
+     *
+     * @return a {@link org.mapeditor.core.Sprite.KeyFrame} object.
+     */
+    public KeyFrame getNextKey() {
+        Iterator<KeyFrame> itr = keys.iterator();
+        while (itr.hasNext()) {
+            KeyFrame k = itr.next();
+            if (k == currentKey && itr.hasNext()) {
+                return itr.next();
+            }
+        }
 
-		return this.keys.get(0);
-	}
+        return keys.get(0);
+    }
 
-	/**
-	 * getPreviousKey.
-	 *
-	 * @return a {@link org.mapeditor.core.Sprite.KeyFrame} object.
-	 */
-	public KeyFrame getPreviousKey() {
-		// TODO: this
-		return null;
-	}
+    /**
+     * getPreviousKey.
+     *
+     * @return a {@link org.mapeditor.core.Sprite.KeyFrame} object.
+     */
+    public KeyFrame getPreviousKey() {
+        // TODO: this
+        return null;
+    }
 
-	/**
-	 * getTotalFrames.
-	 *
-	 * @return a int.
-	 */
-	public int getTotalFrames() {
-		return this.keys.stream().map(KeyFrame::getTotalFrames).reduce(0,
-			Integer::sum);
-	}
+    /**
+     * getTotalFrames.
+     *
+     * @return a int.
+     */
+    public int getTotalFrames() {
+        return keys.stream().map(KeyFrame::getTotalFrames).reduce(0, Integer::sum);
+    }
 
-	/**
-	 * Getter for the field <code>totalKeys</code>.
-	 *
-	 * @return a int.
-	 */
-	public int getTotalKeys() {
-		return this.keys.size();
-	}
+    /**
+     * Getter for the field <code>totalKeys</code>.
+     *
+     * @return a int.
+     */
+    public int getTotalKeys() {
+        return keys.size();
+    }
 
-	/**
-	 * iterateFrame.
-	 */
-	public void iterateFrame() {
-		if (this.currentKey != null && this.bPlaying) {
-			this.setCurrentFrame(
-				this.currentFrame + this.currentKey.getFrameRate());
-		}
-	}
+    /** iterateFrame. */
+    public void iterateFrame() {
+        if (currentKey != null && bPlaying) {
+            setCurrentFrame(currentFrame + currentKey.getFrameRate());
+        }
+    }
 
-	/**
-	 * Sets the current frame relative to the starting frame of the current key.
-	 *
-	 * @param c a int.
-	 */
-	public void keySetFrame(int c) {
-		this.setCurrentFrame(c);
-	}
+    /**
+     * Sets the current frame relative to the starting frame of the current key.
+     *
+     * @param c a int.
+     */
+    public void keySetFrame(int c) {
+        setCurrentFrame(c);
+    }
 
-	/**
-	 * keyStepBack.
-	 *
-	 * @param amt a int.
-	 */
-	public void keyStepBack(int amt) {
-		this.setCurrentFrame(this.currentFrame - amt);
-	}
+    /**
+     * keyStepBack.
+     *
+     * @param amt a int.
+     */
+    public void keyStepBack(int amt) {
+        setCurrentFrame(currentFrame - amt);
+    }
 
-	/**
-	 * keyStepForward.
-	 *
-	 * @param amt a int.
-	 */
-	public void keyStepForward(int amt) {
-		this.setCurrentFrame(this.currentFrame + amt);
-	}
+    /**
+     * keyStepForward.
+     *
+     * @param amt a int.
+     */
+    public void keyStepForward(int amt) {
+        setCurrentFrame(currentFrame + amt);
+    }
 
-	/**
-	 * play.
-	 */
-	public void play() {
-		this.bPlaying = true;
-	}
+    /** play. */
+    public void play() {
+        bPlaying = true;
+    }
 
-	/**
-	 * removeKey.
-	 *
-	 * @param name a {@link java.lang.String} object.
-	 */
-	public void removeKey(String name) {
-		this.keys.remove(this.getKey(name));
-	}
+    /**
+     * removeKey.
+     *
+     * @param name a {@link java.lang.String} object.
+     */
+    public void removeKey(String name) {
+        keys.remove(this.getKey(name));
+    }
 
-	/**
-	 * Setter for the field <code>borderWidth</code>.
-	 *
-	 * @param b a int.
-	 */
-	public void setBorderWidth(int b) {
-		this.borderWidth = b;
-	}
+    /**
+     * Setter for the field <code>borderWidth</code>.
+     *
+     * @param b a int.
+     */
+    public void setBorderWidth(int b) {
+        borderWidth = b;
+    }
 
-	/**
-	 * Setter for the field <code>currentFrame</code>.
-	 *
-	 * @param c a float.
-	 */
-	public void setCurrentFrame(float c) {
-		if (c < 0) {
-			switch (this.currentKey.flags & KeyFrame.MASK_ANIMATION) {
-				case KeyFrame.KEY_LOOP:
-					this.currentFrame = this.currentKey.getLastFrame();
-					break;
-				case KeyFrame.KEY_AUTO:
-					this.currentKey = this.getPreviousKey();
-					this.currentFrame = this.currentKey.getLastFrame();
-					break;
-				case KeyFrame.KEY_REVERSE:
-					this.currentKey
-						.setFrameRate(-this.currentKey.getFrameRate());
-					this.currentFrame = 0;
-					break;
-				case KeyFrame.KEY_STOP:
-					this.bPlaying = false;
-					this.currentFrame = 0;
-					break;
-			}
-		}
-		else if (c > this.currentKey.getLastFrame()) {
-			switch (this.currentKey.flags & KeyFrame.MASK_ANIMATION) {
-				case KeyFrame.KEY_LOOP:
-					this.currentFrame = 0;
-					break;
-				case KeyFrame.KEY_AUTO:
-					this.currentFrame = 0;
-					this.currentKey = this.getNextKey();
-					break;
-				case KeyFrame.KEY_REVERSE:
-					this.currentKey
-						.setFrameRate(-this.currentKey.getFrameRate());
-					this.currentFrame = this.currentKey.getLastFrame();
-					break;
-				case KeyFrame.KEY_STOP:
-					this.bPlaying = false;
-					this.currentFrame = this.currentKey.getLastFrame();
-					break;
-			}
-		}
-		else {
-			this.currentFrame = c;
-		}
-	}
+    /**
+     * Setter for the field <code>currentFrame</code>.
+     *
+     * @param c a float.
+     */
+    public void setCurrentFrame(float c) {
+        if (c < 0) {
+            switch (currentKey.flags & KeyFrame.MASK_ANIMATION) {
+                case KeyFrame.KEY_LOOP:
+                    currentFrame = currentKey.getLastFrame();
+                    break;
+                case KeyFrame.KEY_AUTO:
+                    currentKey = getPreviousKey();
+                    currentFrame = currentKey.getLastFrame();
+                    break;
+                case KeyFrame.KEY_REVERSE:
+                    currentKey.setFrameRate(-currentKey.getFrameRate());
+                    currentFrame = 0;
+                    break;
+                case KeyFrame.KEY_STOP:
+                    bPlaying = false;
+                    currentFrame = 0;
+                    break;
+            }
+        } else if (c > currentKey.getLastFrame()) {
+            switch (currentKey.flags & KeyFrame.MASK_ANIMATION) {
+                case KeyFrame.KEY_LOOP:
+                    currentFrame = 0;
+                    break;
+                case KeyFrame.KEY_AUTO:
+                    currentFrame = 0;
+                    currentKey = getNextKey();
+                    break;
+                case KeyFrame.KEY_REVERSE:
+                    currentKey.setFrameRate(-currentKey.getFrameRate());
+                    currentFrame = currentKey.getLastFrame();
+                    break;
+                case KeyFrame.KEY_STOP:
+                    bPlaying = false;
+                    currentFrame = currentKey.getLastFrame();
+                    break;
+            }
+        } else {
+            currentFrame = c;
+        }
+    }
 
-	/**
-	 * Setter for the field <code>fpl</code>.
-	 *
-	 * @param f a int.
-	 */
-	public void setFpl(int f) {
-		this.fpl = f;
-	}
+    /**
+     * Setter for the field <code>fpl</code>.
+     *
+     * @param f a int.
+     */
+    public void setFpl(int f) {
+        fpl = f;
+    }
 
-	/**
-	 * setFrames.
-	 *
-	 * @param frames an array of {@link org.mapeditor.core.Tile} objects.
-	 */
-	public final void setFrames(Tile[] frames) {
-		this.frameSize =
-			new Rectangle(0, 0, frames[0].getWidth(), frames[0].getHeight());
+    /**
+     * setFrames.
+     *
+     * @param frames an array of {@link org.mapeditor.core.Tile} objects.
+     */
+    public final void setFrames(Tile[] frames) {
+        frameSize = new Rectangle(0, 0, frames[0].getWidth(), frames[0].getHeight());
 
-		this.createKey("", frames, KeyFrame.KEY_LOOP);
-	}
+        createKey("", frames, KeyFrame.KEY_LOOP);
+    }
 
-	/**
-	 * Setter for the field <code>frameSize</code>.
-	 *
-	 * @param w a int.
-	 * @param h a int.
-	 */
-	public void setFrameSize(int w, int h) {
-		this.frameSize.width = w;
-		this.frameSize.height = h;
-	}
+    /**
+     * Setter for the field <code>frameSize</code>.
+     *
+     * @param w a int.
+     * @param h a int.
+     */
+    public void setFrameSize(int w, int h) {
+        frameSize.width = w;
+        frameSize.height = h;
+    }
 
-	/**
-	 * setKeyFrameTo.
-	 *
-	 * @param name a {@link java.lang.String} object.
-	 */
-	public void setKeyFrameTo(String name) {
-		for (KeyFrame k : this.keys) {
-			if (k.equalsIgnoreCase(name)) {
-				this.currentKey = k;
-				break;
-			}
-		}
-	}
+    /**
+     * setKeyFrameTo.
+     *
+     * @param name a {@link java.lang.String} object.
+     */
+    public void setKeyFrameTo(String name) {
+        for (KeyFrame k : keys) {
+            if (k.equalsIgnoreCase(name)) {
+                currentKey = k;
+                break;
+            }
+        }
+    }
 
-	/**
-	 * Setter for the field <code>totalKeys</code>.
-	 *
-	 * @param t a int.
-	 */
-	public void setTotalKeys(int t) {
-		this.totalKeys = t;
-	}
+    /**
+     * Setter for the field <code>totalKeys</code>.
+     *
+     * @param t a int.
+     */
+    public void setTotalKeys(int t) {
+        totalKeys = t;
+    }
 
-	/**
-	 * stop.
-	 */
-	public void stop() {
-		this.bPlaying = false;
-	}
+    /** stop. */
+    public void stop() {
+        bPlaying = false;
+    }
 
-	/** {@inheritDoc} */
-	@Override
-	public String toString() {
-		return "Frame: (" + this.frameSize.width + "x" + this.frameSize.height
-			+ ")\n" + "Border: " + this.borderWidth + "\n" + "FPL: " + this.fpl
-			+ "\n" + "Total Frames: " + this.getTotalFrames() + "\n"
-			+ "Total keys: " + this.totalKeys;
-	}
+    /** {@inheritDoc} */
+    @Override
+    public String toString() {
+        return "Frame: ("
+                + frameSize.width
+                + "x"
+                + frameSize.height
+                + ")\n"
+                + "Border: "
+                + borderWidth
+                + "\n"
+                + "FPL: "
+                + fpl
+                + "\n"
+                + "Total Frames: "
+                + getTotalFrames()
+                + "\n"
+                + "Total keys: "
+                + totalKeys;
+    }
 }

@@ -1,4 +1,2 @@
-/**
- * Rendering logic and stages.
- */
+/** Rendering logic and stages. */
 package com.ikalagaming.graphics.render;

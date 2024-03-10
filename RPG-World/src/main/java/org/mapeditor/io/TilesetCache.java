@@ -32,16 +32,14 @@ import org.mapeditor.core.TileSet;
 
 public interface TilesetCache {
 
-	interface TilesetLoader {
-		TileSet load() throws Exception;
-	}
+    interface TilesetLoader {
+        TileSet load() throws Exception;
+    }
 
-	/**
-	 * Gets tileset from cache or uses supplied loader to load tileset if
-	 * tileset is not in cache
-	 *
-	 * @return tileset or null if tileset is not in the cache and can't be
-	 *         loaded
-	 */
-	TileSet getTileset(String tilesetName, TilesetLoader tilesetLoader);
+    /**
+     * Gets tileset from cache or uses supplied loader to load tileset if tileset is not in cache
+     *
+     * @return tileset or null if tileset is not in the cache and can't be loaded
+     */
+    TileSet getTileset(String tilesetName, TilesetLoader tilesetLoader);
 }

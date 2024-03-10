@@ -30,6 +30,7 @@
  */
 package org.mapeditor.io;
 
+import lombok.extern.slf4j.Slf4j;
 import org.mapeditor.core.Map;
 import org.mapeditor.core.TileSet;
 import org.mapeditor.util.StreamHelper;
@@ -38,9 +39,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBElement;
 import javax.xml.bind.JAXBException;
@@ -50,109 +48,104 @@ import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
 
 /**
- * The standard map reader for TMX files. Supports reading .tmx, .tmx.gz and
- * *.tsx files.
+ * The standard map reader for TMX files. Supports reading .tmx, .tmx.gz and *.tsx files.
  *
  * @version 1.4.2
  */
+@Slf4j
 public class MapReader {
 
-	private Map buildMap(Map map, String xmlPath) throws IOException {
-		List<TileSet> tilesets = map.getTileSets();
-		for (int i = 0; i < tilesets.size(); i++) {
-			TileSet tileset = tilesets.get(i);
-			String tileSetSource = tileset.getSource();
-			if (tileSetSource != null) {
-				int firstGid = tileset.getFirstgid();
-				tileset = this.readTileset(xmlPath + tileSetSource);
-				tileset.setFirstgid(firstGid);
-				tileset.setSource(tileSetSource);
-				tilesets.set(i, tileset);
-			}
-		}
-		return map;
-	}
+    private Map buildMap(Map map, String xmlPath) throws IOException {
+        List<TileSet> tilesets = map.getTileSets();
+        for (int i = 0; i < tilesets.size(); i++) {
+            TileSet tileset = tilesets.get(i);
+            String tileSetSource = tileset.getSource();
+            if (tileSetSource != null) {
+                int firstGid = tileset.getFirstgid();
+                tileset = this.readTileset(xmlPath + tileSetSource);
+                tileset.setFirstgid(firstGid);
+                tileset.setSource(tileSetSource);
+                tilesets.set(i, tileset);
+            }
+        }
+        return map;
+    }
 
-	private String makeUrl(String filename) {
-		final String url;
-		if (filename.indexOf("://") > 0 || filename.startsWith("file:")) {
-			url = filename;
-		}
-		else {
-			url = new File(filename).toURI().toString();
-		}
-		return url;
-	}
+    private String makeUrl(String filename) {
+        final String url;
+        if (filename.indexOf("://") > 0 || filename.startsWith("file:")) {
+            url = filename;
+        } else {
+            url = new File(filename).toURI().toString();
+        }
+        return url;
+    }
 
-	/**
-	 * readMap.
-	 *
-	 * @param in a {@link java.io.InputStream} object.
-	 * @param xmlPath a {@link java.lang.String} object.
-	 * @return a {@link org.mapeditor.core.Map} object.
-	 * @throws java.io.IOException if any.
-	 */
-	public Map readMap(InputStream in, String xmlPath) throws IOException {
-		Map unmarshalledMap = this.unmarshal(in, Map.class);
-		return this.buildMap(unmarshalledMap, xmlPath);
-	}
+    /**
+     * readMap.
+     *
+     * @param in a {@link java.io.InputStream} object.
+     * @param xmlPath a {@link java.lang.String} object.
+     * @return a {@link org.mapeditor.core.Map} object.
+     * @throws java.io.IOException if any.
+     */
+    public Map readMap(InputStream in, String xmlPath) throws IOException {
+        Map unmarshalledMap = this.unmarshal(in, Map.class);
+        return buildMap(unmarshalledMap, xmlPath);
+    }
 
-	/**
-	 * readMap.
-	 *
-	 * @param filename a {@link java.lang.String} object.
-	 * @return a {@link org.mapeditor.core.Map} object.
-	 * @throws java.io.IOException if any.
-	 */
-	public Map readMap(String filename) throws IOException {
-		int fileSeparatorIndex = filename.lastIndexOf(File.separatorChar) + 1;
-		String xmlPath =
-			this.makeUrl(filename.substring(0, fileSeparatorIndex));
+    /**
+     * readMap.
+     *
+     * @param filename a {@link java.lang.String} object.
+     * @return a {@link org.mapeditor.core.Map} object.
+     * @throws java.io.IOException if any.
+     */
+    public Map readMap(String filename) throws IOException {
+        int fileSeparatorIndex = filename.lastIndexOf(File.separatorChar) + 1;
+        String xmlPath = makeUrl(filename.substring(0, fileSeparatorIndex));
 
-		try (InputStream in = StreamHelper.openStream(filename)) {
-			return this.readMap(in, xmlPath);
-		}
-	}
+        try (InputStream in = StreamHelper.openStream(filename)) {
+            return this.readMap(in, xmlPath);
+        }
+    }
 
-	/**
-	 * readTileset.
-	 *
-	 * @param in a {@link java.io.InputStream} object.
-	 * @return a {@link org.mapeditor.core.TileSet} object.
-	 */
-	public TileSet readTileset(InputStream in) {
-		return this.unmarshal(in, TileSet.class);
-	}
+    /**
+     * readTileset.
+     *
+     * @param in a {@link java.io.InputStream} object.
+     * @return a {@link org.mapeditor.core.TileSet} object.
+     */
+    public TileSet readTileset(InputStream in) {
+        return this.unmarshal(in, TileSet.class);
+    }
 
-	/**
-	 * readTileset.
-	 *
-	 * @param filename a {@link java.lang.String} object.
-	 * @return a {@link org.mapeditor.core.TileSet} object.
-	 * @throws java.io.IOException if any.
-	 */
-	public TileSet readTileset(String filename) throws IOException {
-		try (InputStream in = StreamHelper.openStream(filename)) {
-			return this.readTileset(in);
-		}
-	}
+    /**
+     * readTileset.
+     *
+     * @param filename a {@link java.lang.String} object.
+     * @return a {@link org.mapeditor.core.TileSet} object.
+     * @throws java.io.IOException if any.
+     */
+    public TileSet readTileset(String filename) throws IOException {
+        try (InputStream in = StreamHelper.openStream(filename)) {
+            return this.readTileset(in);
+        }
+    }
 
-	private <T> T unmarshal(InputStream in, Class<T> type) {
-		try {
-			XMLInputFactory factory = XMLInputFactory.newInstance();
-			XMLEventReader reader =
-				factory.createXMLEventReader(StreamHelper.buffered(in));
+    private <T> T unmarshal(InputStream in, Class<T> type) {
+        try {
+            XMLInputFactory factory = XMLInputFactory.newInstance();
+            XMLEventReader reader = factory.createXMLEventReader(StreamHelper.buffered(in));
 
-			JAXBContext context = JAXBContext.newInstance(type);
-			Unmarshaller unmarshaller = context.createUnmarshaller();
+            JAXBContext context = JAXBContext.newInstance(type);
+            Unmarshaller unmarshaller = context.createUnmarshaller();
 
-			JAXBElement<T> element = unmarshaller.unmarshal(reader, type);
-			return element.getValue();
-		}
-		catch (XMLStreamException | JAXBException ex) {
-			Logger.getLogger(MapReader.class.getName()).log(Level.SEVERE, null,
-				ex);
-			return null;
-		}
-	}
+            JAXBElement<T> element = unmarshaller.unmarshal(reader, type);
+            return element.getValue();
+        } catch (XMLStreamException | JAXBException ex) {
+            log.error("Exception reading map", ex);
+            return null;
+        }
+    }
 }

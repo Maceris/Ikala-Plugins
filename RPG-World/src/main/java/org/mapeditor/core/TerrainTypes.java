@@ -10,7 +10,6 @@ package org.mapeditor.core;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import javax.annotation.Generated;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
@@ -20,32 +19,34 @@ import javax.xml.bind.annotation.XmlType;
 /**
  * This element defines an array of terrain types, which can be<br>
  * referenced from the `terrain` attribute of the `tile` element.
- *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "TerrainTypes", propOrder = {"terrain"})
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@XmlType(
+        name = "TerrainTypes",
+        propOrder = {"terrain"})
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class TerrainTypes {
 
-	/**
-	 * 
-	 */
-	@XmlElement(required = true)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected List<Terrain> terrain;
+    /** */
+    @XmlElement(required = true)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected List<Terrain> terrain;
 
-	/**
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public List<Terrain> getTerrain() {
-		if (this.terrain == null) {
-			this.terrain = new ArrayList<>();
-		}
-		return this.terrain;
-	}
-
+    /** */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public List<Terrain> getTerrain() {
+        if (terrain == null) {
+            terrain = new ArrayList<>();
+        }
+        return terrain;
+    }
 }

@@ -33,40 +33,39 @@ package org.mapeditor.util;
 import java.awt.image.RGBImageFilter;
 
 /**
- * This filter is used for filtering out a given "transparent" color from an
- * image. Sometimes known as magic pink.
+ * This filter is used for filtering out a given "transparent" color from an image. Sometimes known
+ * as magic pink.
  *
  * @version 1.4.2
  */
 public class TransparentImageFilter extends RGBImageFilter {
 
-	int trans;
+    int trans;
 
-	/**
-	 * Constructor for TransparentImageFilter.
-	 *
-	 * @param col the color to make transparent
-	 */
-	public TransparentImageFilter(int col) {
-		this.trans = col;
+    /**
+     * Constructor for TransparentImageFilter.
+     *
+     * @param col the color to make transparent
+     */
+    public TransparentImageFilter(int col) {
+        trans = col;
 
-		// The filter doesn't depend on pixel location
-		this.canFilterIndexColorModel = true;
-	}
+        // The filter doesn't depend on pixel location
+        canFilterIndexColorModel = true;
+    }
 
-	/**
-	 * {@inheritDoc}
-	 *
-	 * Filters the given pixel. It returns a transparent pixel for pixels that
-	 * match the transparency color, or the existing pixel for anything else.
-	 */
-	@Override
-	public int filterRGB(int x, int y, int rgb) {
-		if (rgb == this.trans) {
-			return 0;
-		}
-		else {
-			return rgb;
-		}
-	}
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Filters the given pixel. It returns a transparent pixel for pixels that match the
+     * transparency color, or the existing pixel for anything else.
+     */
+    @Override
+    public int filterRGB(int x, int y, int rgb) {
+        if (rgb == trans) {
+            return 0;
+        } else {
+            return rgb;
+        }
+    }
 }

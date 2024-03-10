@@ -10,7 +10,6 @@ package org.mapeditor.core;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import javax.annotation.Generated;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
@@ -18,305 +17,319 @@ import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlType;
 
-/**
- *
- *
- */
+/** */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "Tile",
-	propOrder = {"properties", "imageData", "objectgroup", "animation"})
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@XmlType(
+        name = "Tile",
+        propOrder = {"properties", "imageData", "objectgroup", "animation"})
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class TileData {
 
-	/**
-	 * 
-	 */
-	@XmlElement(required = true, type = Properties.class)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Properties properties;
-	/**
-	 * @since 0.9
-	 * 
-	 */
-	@XmlElement(name = "image", required = true)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected ImageData imageData;
-	/**
-	 * @since 0.10
-	 * 
-	 */
-	@XmlElement(required = true, type = ObjectGroup.class)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected List<ObjectGroupData> objectgroup;
-	/**
-	 * @since 0.10
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Animation animation;
-	/**
-	 * The local tile ID within its tileset.
-	 * 
-	 */
-	@XmlAttribute(name = "id")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Integer id;
-	/**
-	 * The type of the tile. Refers to an object type and is used<br>
-	 * by tile objects. (optional)<br>
-	 * <br>
-	 *
-	 * @since 1.0
-	 * 
-	 */
-	@XmlAttribute(name = "type")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected String type;
-	/**
-	 * Defines the terrain type of each corner of the tile, given<br>
-	 * as comma-separated indexes in the terrain types array in the<br>
-	 * order top-left, top-right, bottom-left, bottom-right.<br>
-	 * Leaving out a value means that corner has no terrain.<br>
-	 * (optional)<br>
-	 * <br>
-	 *
-	 * @since 0.9
-	 * 
-	 */
-	@XmlAttribute(name = "terrain")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected String terrain;
-	/**
-	 * A percentage indicating the probability that this tile is<br>
-	 * chosen when it competes with others while editing with the<br>
-	 * terrain tool. (optional)<br>
-	 * <br>
-	 *
-	 * @since 0.9
-	 * 
-	 */
-	@XmlAttribute(name = "probability")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Double probability;
+    /** */
+    @XmlElement(required = true, type = Properties.class)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Properties properties;
 
-	/**
-	 * @since 0.10
-	 * 
-	 * @return possible object is {@link Animation }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Animation getAnimation() {
-		return this.animation;
-	}
+    /**
+     * @since 0.9
+     */
+    @XmlElement(name = "image", required = true)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected ImageData imageData;
 
-	/**
-	 * The local tile ID within its tileset.
-	 * 
-	 * @return possible object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Integer getId() {
-		return this.id;
-	}
+    /**
+     * @since 0.10
+     */
+    @XmlElement(required = true, type = ObjectGroup.class)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected List<ObjectGroupData> objectgroup;
 
-	/**
-	 * @since 0.9
-	 * 
-	 * @return possible object is {@link ImageData }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public ImageData getImageData() {
-		return this.imageData;
-	}
+    /**
+     * @since 0.10
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Animation animation;
 
-	/**
-	 * @since 0.10
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public List<ObjectGroupData> getObjectgroup() {
-		if (this.objectgroup == null) {
-			this.objectgroup = new ArrayList<>();
-		}
-		return this.objectgroup;
-	}
+    /** The local tile ID within its tileset. */
+    @XmlAttribute(name = "id")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Integer id;
 
-	/**
-	 * A percentage indicating the probability that this tile is<br>
-	 * chosen when it competes with others while editing with the<br>
-	 * terrain tool. (optional)<br>
-	 * <br>
-	 *
-	 * @since 0.9
-	 * 
-	 * @return possible object is {@link Double }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Double getProbability() {
-		return this.probability;
-	}
+    /**
+     * The type of the tile. Refers to an object type and is used<br>
+     * by tile objects. (optional)<br>
+     * <br>
+     *
+     * @since 1.0
+     */
+    @XmlAttribute(name = "type")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected String type;
 
-	/**
-	 * 
-	 * @return possible object is {@link PropertiesData }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Properties getProperties() {
-		return this.properties;
-	}
+    /**
+     * Defines the terrain type of each corner of the tile, given<br>
+     * as comma-separated indexes in the terrain types array in the<br>
+     * order top-left, top-right, bottom-left, bottom-right.<br>
+     * Leaving out a value means that corner has no terrain.<br>
+     * (optional)<br>
+     * <br>
+     *
+     * @since 0.9
+     */
+    @XmlAttribute(name = "terrain")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected String terrain;
 
-	/**
-	 * Defines the terrain type of each corner of the tile, given<br>
-	 * as comma-separated indexes in the terrain types array in the<br>
-	 * order top-left, top-right, bottom-left, bottom-right.<br>
-	 * Leaving out a value means that corner has no terrain.<br>
-	 * (optional)<br>
-	 * <br>
-	 *
-	 * @since 0.9
-	 * 
-	 * @return possible object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public String getTerrain() {
-		return this.terrain;
-	}
+    /**
+     * A percentage indicating the probability that this tile is<br>
+     * chosen when it competes with others while editing with the<br>
+     * terrain tool. (optional)<br>
+     * <br>
+     *
+     * @since 0.9
+     */
+    @XmlAttribute(name = "probability")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Double probability;
 
-	/**
-	 * The type of the tile. Refers to an object type and is used<br>
-	 * by tile objects. (optional)<br>
-	 * <br>
-	 *
-	 * @since 1.0
-	 * 
-	 * @return possible object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public String getType() {
-		return this.type;
-	}
+    /**
+     * @since 0.10
+     * @return possible object is {@link Animation }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Animation getAnimation() {
+        return animation;
+    }
 
-	/**
-	 * @since 0.10
-	 * 
-	 * @param value allowed object is {@link Animation }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setAnimation(Animation value) {
-		this.animation = value;
-	}
+    /**
+     * The local tile ID within its tileset.
+     *
+     * @return possible object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Integer getId() {
+        return id;
+    }
 
-	/**
-	 * The local tile ID within its tileset.
-	 * 
-	 * @param value allowed object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setId(Integer value) {
-		this.id = value;
-	}
+    /**
+     * @since 0.9
+     * @return possible object is {@link ImageData }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public ImageData getImageData() {
+        return imageData;
+    }
 
-	/**
-	 * @since 0.9
-	 * 
-	 * @param value allowed object is {@link ImageData }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setImageData(ImageData value) {
-		this.imageData = value;
-	}
+    /**
+     * @since 0.10
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public List<ObjectGroupData> getObjectgroup() {
+        if (objectgroup == null) {
+            objectgroup = new ArrayList<>();
+        }
+        return objectgroup;
+    }
 
-	/**
-	 * A percentage indicating the probability that this tile is<br>
-	 * chosen when it competes with others while editing with the<br>
-	 * terrain tool. (optional)<br>
-	 * <br>
-	 *
-	 * @since 0.9
-	 * 
-	 * @param value allowed object is {@link Double }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setProbability(Double value) {
-		this.probability = value;
-	}
+    /**
+     * A percentage indicating the probability that this tile is<br>
+     * chosen when it competes with others while editing with the<br>
+     * terrain tool. (optional)<br>
+     * <br>
+     *
+     * @since 0.9
+     * @return possible object is {@link Double }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Double getProbability() {
+        return probability;
+    }
 
-	/**
-	 * 
-	 * @param value allowed object is {@link PropertiesData }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setProperties(Properties value) {
-		this.properties = value;
-	}
+    /**
+     * @return possible object is {@link PropertiesData }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Properties getProperties() {
+        return properties;
+    }
 
-	/**
-	 * Defines the terrain type of each corner of the tile, given<br>
-	 * as comma-separated indexes in the terrain types array in the<br>
-	 * order top-left, top-right, bottom-left, bottom-right.<br>
-	 * Leaving out a value means that corner has no terrain.<br>
-	 * (optional)<br>
-	 * <br>
-	 *
-	 * @since 0.9
-	 * 
-	 * @param value allowed object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setTerrain(String value) {
-		this.terrain = value;
-	}
+    /**
+     * Defines the terrain type of each corner of the tile, given<br>
+     * as comma-separated indexes in the terrain types array in the<br>
+     * order top-left, top-right, bottom-left, bottom-right.<br>
+     * Leaving out a value means that corner has no terrain.<br>
+     * (optional)<br>
+     * <br>
+     *
+     * @since 0.9
+     * @return possible object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public String getTerrain() {
+        return terrain;
+    }
 
-	/**
-	 * The type of the tile. Refers to an object type and is used<br>
-	 * by tile objects. (optional)<br>
-	 * <br>
-	 *
-	 * @since 1.0
-	 * 
-	 * @param value allowed object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setType(String value) {
-		this.type = value;
-	}
+    /**
+     * The type of the tile. Refers to an object type and is used<br>
+     * by tile objects. (optional)<br>
+     * <br>
+     *
+     * @since 1.0
+     * @return possible object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public String getType() {
+        return type;
+    }
 
+    /**
+     * @since 0.10
+     * @param value allowed object is {@link Animation }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setAnimation(Animation value) {
+        animation = value;
+    }
+
+    /**
+     * The local tile ID within its tileset.
+     *
+     * @param value allowed object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setId(Integer value) {
+        id = value;
+    }
+
+    /**
+     * @since 0.9
+     * @param value allowed object is {@link ImageData }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setImageData(ImageData value) {
+        imageData = value;
+    }
+
+    /**
+     * A percentage indicating the probability that this tile is<br>
+     * chosen when it competes with others while editing with the<br>
+     * terrain tool. (optional)<br>
+     * <br>
+     *
+     * @since 0.9
+     * @param value allowed object is {@link Double }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setProbability(Double value) {
+        probability = value;
+    }
+
+    /**
+     * @param value allowed object is {@link PropertiesData }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setProperties(Properties value) {
+        properties = value;
+    }
+
+    /**
+     * Defines the terrain type of each corner of the tile, given<br>
+     * as comma-separated indexes in the terrain types array in the<br>
+     * order top-left, top-right, bottom-left, bottom-right.<br>
+     * Leaving out a value means that corner has no terrain.<br>
+     * (optional)<br>
+     * <br>
+     *
+     * @since 0.9
+     * @param value allowed object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setTerrain(String value) {
+        terrain = value;
+    }
+
+    /**
+     * The type of the tile. Refers to an object type and is used<br>
+     * by tile objects. (optional)<br>
+     * <br>
+     *
+     * @since 1.0
+     * @param value allowed object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setType(String value) {
+        type = value;
+    }
 }

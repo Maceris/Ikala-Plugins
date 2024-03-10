@@ -6,13 +6,12 @@ import java.util.List;
 
 /**
  * Represents an item in the game.
- * 
- * @author Ches Burks
  *
+ * @author Ches Burks
  */
 public class Item {
-	private String modName;
-	private String identifier;
-	private Material material;
-	private List<String> tags;
+    private String modName;
+    private String identifier;
+    private Material material;
+    private List<String> tags;
 }

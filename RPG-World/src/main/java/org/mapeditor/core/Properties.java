@@ -31,7 +31,6 @@ package org.mapeditor.core;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 
@@ -43,92 +42,87 @@ import javax.xml.bind.annotation.XmlAccessorType;
 @XmlAccessorType(XmlAccessType.NONE)
 public class Properties extends PropertiesData implements Cloneable {
 
-	/**
-	 * Constructor for Properties.
-	 */
-	public Properties() {
-		super();
-		this.properties = new ArrayList<>();
-	}
+    /** Constructor for Properties. */
+    public Properties() {
+        properties = new ArrayList<>();
+    }
 
-	/**
-	 * clear.
-	 */
-	public void clear() {
-		this.properties.clear();
-	}
+    /** clear. */
+    public void clear() {
+        properties.clear();
+    }
 
-	/** {@inheritDoc} */
-	@Override
-	public Properties clone() throws CloneNotSupportedException {
-		return (Properties) super.clone();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public Properties clone() throws CloneNotSupportedException {
+        return (Properties) super.clone();
+    }
 
-	/**
-	 * getProperty.
-	 *
-	 * @param name a {@link java.lang.String} object.
-	 * @return a {@link java.lang.String} object.
-	 */
-	public String getProperty(String name) {
-		return this.getProperty(name, null);
-	}
+    /**
+     * getProperty.
+     *
+     * @param name a {@link java.lang.String} object.
+     * @return a {@link java.lang.String} object.
+     */
+    public String getProperty(String name) {
+        return this.getProperty(name, null);
+    }
 
-	/**
-	 * Gets a property with a default value if this property is not found
-	 *
-	 * @param name a {@link java.lang.String} object.
-	 * @param defaultValue the string value to return if property is not found
-	 * @return a {@link java.lang.String} object.
-	 */
-	public String getProperty(String name, String defaultValue) {
-		for (Property property : this.properties) {
-			if (name.equals(property.getName())) {
-				return property.getValue();
-			}
-		}
-		return defaultValue;
-	}
+    /**
+     * Gets a property with a default value if this property is not found
+     *
+     * @param name a {@link java.lang.String} object.
+     * @param defaultValue the string value to return if property is not found
+     * @return a {@link java.lang.String} object.
+     */
+    public String getProperty(String name, String defaultValue) {
+        for (Property property : properties) {
+            if (name.equals(property.getName())) {
+                return property.getValue();
+            }
+        }
+        return defaultValue;
+    }
 
-	/**
-	 * isEmpty.
-	 *
-	 * @return a boolean.
-	 */
-	public boolean isEmpty() {
-		return this.properties.isEmpty();
-	}
+    /**
+     * isEmpty.
+     *
+     * @return a boolean.
+     */
+    public boolean isEmpty() {
+        return properties.isEmpty();
+    }
 
-	/**
-	 * keySet.
-	 *
-	 * @return a {@link java.util.List} object.
-	 */
-	public List<String> keySet() {
-		List<String> keys = new ArrayList<>();
-		this.properties.forEach(property -> keys.add(property.getName()));
-		return keys;
-	}
+    /**
+     * keySet.
+     *
+     * @return a {@link java.util.List} object.
+     */
+    public List<String> keySet() {
+        List<String> keys = new ArrayList<>();
+        properties.forEach(property -> keys.add(property.getName()));
+        return keys;
+    }
 
-	/**
-	 * putAll.
-	 *
-	 * @param props a {@link org.mapeditor.core.Properties} object.
-	 */
-	public void putAll(Properties props) {
-		this.properties.addAll(props.getProperties());
-	}
+    /**
+     * putAll.
+     *
+     * @param props a {@link org.mapeditor.core.Properties} object.
+     */
+    public void putAll(Properties props) {
+        properties.addAll(props.getProperties());
+    }
 
-	/**
-	 * setProperty.
-	 *
-	 * @param name a {@link java.lang.String} object.
-	 * @param value a {@link java.lang.String} object.
-	 */
-	public void setProperty(String name, String value) {
-		Property property = new Property();
-		property.setName(name);
-		property.setValue(value);
-		this.properties.add(property);
-	}
+    /**
+     * setProperty.
+     *
+     * @param name a {@link java.lang.String} object.
+     * @param value a {@link java.lang.String} object.
+     */
+    public void setProperty(String name, String value) {
+        Property property = new Property();
+        property.setName(name);
+        property.setValue(value);
+        properties.add(property);
+    }
 }

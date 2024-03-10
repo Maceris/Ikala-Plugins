@@ -4,10 +4,7 @@ import com.ikalagaming.event.CancelableEvent;
 
 /**
  * A player is trying to craft an item.
- * 
- * @author Ches Burks
  *
+ * @author Ches Burks
  */
-public class CraftItem extends CancelableEvent {
-
-}
+public class CraftItem extends CancelableEvent {}

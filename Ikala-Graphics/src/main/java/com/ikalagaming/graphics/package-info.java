@@ -1,4 +1,2 @@
-/**
- * Graphics related classes.
- */
+/** Graphics related classes. */
 package com.ikalagaming.graphics;

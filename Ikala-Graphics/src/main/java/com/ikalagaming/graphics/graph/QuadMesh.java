@@ -6,11 +6,21 @@
  */
 package com.ikalagaming.graphics.graph;
 
+import static org.lwjgl.opengl.GL11.GL_FLOAT;
+import static org.lwjgl.opengl.GL15.GL_ARRAY_BUFFER;
+import static org.lwjgl.opengl.GL15.GL_ELEMENT_ARRAY_BUFFER;
+import static org.lwjgl.opengl.GL15.GL_STATIC_DRAW;
+import static org.lwjgl.opengl.GL15.glBindBuffer;
+import static org.lwjgl.opengl.GL15.glBufferData;
+import static org.lwjgl.opengl.GL15.glGenBuffers;
+import static org.lwjgl.opengl.GL20.glEnableVertexAttribArray;
+import static org.lwjgl.opengl.GL20.glVertexAttribPointer;
+import static org.lwjgl.opengl.GL30.glBindVertexArray;
+import static org.lwjgl.opengl.GL30.glDeleteVertexArrays;
+import static org.lwjgl.opengl.GL30.glGenVertexArrays;
+
 import lombok.Getter;
-import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL15;
-import org.lwjgl.opengl.GL20;
-import org.lwjgl.opengl.GL30;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
@@ -19,87 +29,77 @@ import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Defines a quad that is used to render in the lighting pass.
- */
+/** Defines a quad that is used to render in the lighting pass. */
 public class QuadMesh {
-	/**
-	 * The number of vertices in the mesh.
-	 *
-	 * @return The vertex count.
-	 */
-	@Getter
-	private int vertexCount;
-	/**
-	 * The Vertex Array Object for the mesh.
-	 *
-	 * @return The VAO.
-	 */
-	@Getter
-	private int vaoID;
-	/**
-	 * The list of VBOs created so we can clean them up.
-	 */
-	private List<Integer> vboIDList;
+    /**
+     * The number of vertices in the mesh.
+     *
+     * @return The vertex count.
+     */
+    @Getter private int vertexCount;
 
-	/**
-	 * Create a new quad mesh.
-	 */
-	public QuadMesh() {
-		try (MemoryStack stack = MemoryStack.stackPush()) {
-			this.vboIDList = new ArrayList<>();
-			float[] positions = new float[] {-1.0f, 1.0f, 0.0f, 1.0f, 1.0f,
-				0.0f, -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f,};
-			float[] textCoords =
-				new float[] {0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,};
-			int[] indices = new int[] {0, 2, 1, 1, 2, 3};
-			this.vertexCount = indices.length;
+    /**
+     * The Vertex Array Object for the mesh.
+     *
+     * @return The VAO.
+     */
+    @Getter private int vaoID;
 
-			this.vaoID = GL30.glGenVertexArrays();
-			GL30.glBindVertexArray(this.vaoID);
+    /** The list of VBOs created so we can clean them up. */
+    private List<Integer> vboIDList;
 
-			// Positions VBO
-			int vboId = GL15.glGenBuffers();
-			this.vboIDList.add(vboId);
-			FloatBuffer positionsBuffer = stack.callocFloat(positions.length);
-			positionsBuffer.put(0, positions);
-			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboId);
-			GL15.glBufferData(GL15.GL_ARRAY_BUFFER, positionsBuffer,
-				GL15.GL_STATIC_DRAW);
-			GL20.glEnableVertexAttribArray(0);
-			GL20.glVertexAttribPointer(0, 3, GL11.GL_FLOAT, false, 0, 0);
+    /** Create a new quad mesh. */
+    public QuadMesh() {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            vboIDList = new ArrayList<>();
+            float[] positions = {
+                -1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f,
+            };
+            float[] textCoords = {
+                0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+            };
+            int[] indices = {0, 2, 1, 1, 2, 3};
+            vertexCount = indices.length;
 
-			// Texture coordinates VBO
-			vboId = GL15.glGenBuffers();
-			this.vboIDList.add(vboId);
-			FloatBuffer textCoordsBuffer =
-				MemoryUtil.memAllocFloat(textCoords.length);
-			textCoordsBuffer.put(0, textCoords);
-			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, vboId);
-			GL15.glBufferData(GL15.GL_ARRAY_BUFFER, textCoordsBuffer,
-				GL15.GL_STATIC_DRAW);
-			GL20.glEnableVertexAttribArray(1);
-			GL20.glVertexAttribPointer(1, 2, GL11.GL_FLOAT, false, 0, 0);
+            vaoID = glGenVertexArrays();
+            glBindVertexArray(vaoID);
 
-			// Index VBO
-			vboId = GL15.glGenBuffers();
-			this.vboIDList.add(vboId);
-			IntBuffer indicesBuffer = stack.callocInt(indices.length);
-			indicesBuffer.put(0, indices);
-			GL15.glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, vboId);
-			GL15.glBufferData(GL15.GL_ELEMENT_ARRAY_BUFFER, indicesBuffer,
-				GL15.GL_STATIC_DRAW);
+            // Positions VBO
+            int vboId = glGenBuffers();
+            vboIDList.add(vboId);
+            FloatBuffer positionsBuffer = stack.callocFloat(positions.length);
+            positionsBuffer.put(0, positions);
+            glBindBuffer(GL_ARRAY_BUFFER, vboId);
+            glBufferData(GL_ARRAY_BUFFER, positionsBuffer, GL_STATIC_DRAW);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 3, GL_FLOAT, false, 0, 0);
 
-			GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
-			GL30.glBindVertexArray(0);
-		}
-	}
+            // Texture coordinates VBO
+            vboId = glGenBuffers();
+            vboIDList.add(vboId);
+            FloatBuffer textCoordsBuffer = MemoryUtil.memAllocFloat(textCoords.length);
+            textCoordsBuffer.put(0, textCoords);
+            glBindBuffer(GL_ARRAY_BUFFER, vboId);
+            glBufferData(GL_ARRAY_BUFFER, textCoordsBuffer, GL_STATIC_DRAW);
+            glEnableVertexAttribArray(1);
+            glVertexAttribPointer(1, 2, GL_FLOAT, false, 0, 0);
 
-	/**
-	 * Clean up the buffers.
-	 */
-	public void cleanup() {
-		this.vboIDList.stream().forEach(GL15::glDeleteBuffers);
-		GL30.glDeleteVertexArrays(this.vaoID);
-	}
+            // Index VBO
+            vboId = glGenBuffers();
+            vboIDList.add(vboId);
+            IntBuffer indicesBuffer = stack.callocInt(indices.length);
+            indicesBuffer.put(0, indices);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vboId);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, indicesBuffer, GL_STATIC_DRAW);
+
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            glBindVertexArray(0);
+        }
+    }
+
+    /** Clean up the buffers. */
+    public void cleanup() {
+        vboIDList.stream().forEach(GL15::glDeleteBuffers);
+        glDeleteVertexArrays(vaoID);
+    }
 }

@@ -17,45 +17,46 @@ import javax.xml.bind.annotation.XmlType;
 /**
  * A `polyline` follows the same placement definition as a<br>
  * `polygon` object.
- *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlType(name = "Polyline")
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class Polyline {
 
-	/**
-	 * A list of x,y coordinates in pixels.
-	 * 
-	 */
-	@XmlAttribute(name = "points")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected String points;
+    /** A list of x,y coordinates in pixels. */
+    @XmlAttribute(name = "points")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected String points;
 
-	/**
-	 * A list of x,y coordinates in pixels.
-	 * 
-	 * @return possible object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public String getPoints() {
-		return this.points;
-	}
+    /**
+     * A list of x,y coordinates in pixels.
+     *
+     * @return possible object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public String getPoints() {
+        return points;
+    }
 
-	/**
-	 * A list of x,y coordinates in pixels.
-	 * 
-	 * @param value allowed object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setPoints(String value) {
-		this.points = value;
-	}
-
+    /**
+     * A list of x,y coordinates in pixels.
+     *
+     * @param value allowed object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setPoints(String value) {
+        points = value;
+    }
 }

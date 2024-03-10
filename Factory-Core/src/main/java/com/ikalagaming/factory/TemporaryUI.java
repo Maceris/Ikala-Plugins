@@ -1,5 +1,7 @@
 package com.ikalagaming.factory;
 
+import static org.lwjgl.opengl.GL11.glIsTexture;
+
 import com.ikalagaming.graphics.GuiInstance;
 import com.ikalagaming.graphics.MouseInput;
 import com.ikalagaming.graphics.Window;
@@ -16,7 +18,6 @@ import imgui.flag.ImGuiCond;
 import imgui.type.ImBoolean;
 import lombok.NonNull;
 import org.joml.Vector2f;
-import org.lwjgl.opengl.GL11;
 
 import java.awt.image.BufferedImage;
 import java.nio.ByteBuffer;
@@ -26,208 +27,229 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * A UI that we are using until a proper solution is designed.
  *
  * @author Ches Burks
- *
  */
 public class TemporaryUI implements GuiInstance {
 
-	private ImBoolean showDemo;
-	private ImBoolean showWorldGen;
-	private AtomicBoolean generateRequested = new AtomicBoolean();
+    private static byte[] intARGBtoByteRGBA(int[] argb) {
+        byte[] rgba = new byte[argb.length * 4];
 
-	private Texture temperature;
-	private Texture height;
-	private Texture erosion;
-	private Texture vegetation;
-	private Texture weirdness;
-	private Texture biomes;
+        for (int i = 0; i < argb.length; i++) {
+            rgba[4 * i] = (byte) ((argb[i] >> 16) & 0xff); // R
+            rgba[4 * i + 1] = (byte) ((argb[i] >> 8) & 0xff); // G
+            rgba[4 * i + 2] = (byte) ((argb[i]) & 0xff); // B
+            rgba[4 * i + 3] = (byte) ((argb[i] >> 24) & 0xff); // A
+        }
 
-	/**
-	 * Set up the UI.
-	 */
-	public TemporaryUI() {
-		this.showDemo = new ImBoolean(false);
-		this.showWorldGen = new ImBoolean(true);
-	}
+        return rgba;
+    }
 
-	@Override
-	public void drawGui() {
-		ImGui.newFrame();
+    private ImBoolean showDemo;
+    private ImBoolean showWorldGen;
 
-		if (ImGui.beginMainMenuBar()) {
-			if (ImGui.beginMenu("Windows")) {
-				ImGui.checkbox("Demo", this.showDemo);
-				ImGui.checkbox("World Generation Debugger", this.showWorldGen);
-				ImGui.endMenu();
-			}
-			ImGui.pushStyleColor(ImGuiCol.Text,
-				ImColor.floatToColor(1f, 0.1f, 0.1f));
-			if (ImGui.menuItem("Quit Game")) {
-				new Shutdown().fire();
-			}
-			ImGui.popStyleColor();
+    private AtomicBoolean generateRequested = new AtomicBoolean();
+    private Texture temperature;
+    private Texture height;
+    private Texture erosion;
+    private Texture vegetation;
+    private Texture weirdness;
 
-			ImGui.endMainMenuBar();
-		}
+    private Texture biomes;
 
-		this.showWindows();
+    /** Set up the UI. */
+    public TemporaryUI() {
+        showDemo = new ImBoolean(false);
+        showWorldGen = new ImBoolean(true);
+    }
 
-		ImGui.endFrame();
-		ImGui.render();
-	}
+    @Override
+    public void drawGui() {
+        ImGui.newFrame();
 
-	/**
-	 * Draw the world generation debugging information.
-	 */
-	private void drawWorldGen() {
-		ImGui.setNextWindowPos(20, 20, ImGuiCond.Once);
-		ImGui.setNextWindowSize(1300, 900, ImGuiCond.Once);
-		ImGui.begin("World Generation");
+        if (ImGui.beginMainMenuBar()) {
+            if (ImGui.beginMenu("Windows")) {
+                ImGui.checkbox("Demo", showDemo);
+                ImGui.checkbox("World Generation Debugger", showWorldGen);
+                ImGui.endMenu();
+            }
+            ImGui.pushStyleColor(ImGuiCol.Text, ImColor.floatToColor(1f, 0.1f, 0.1f));
+            if (ImGui.menuItem("Quit Game")) {
+                new Shutdown().fire();
+            }
+            ImGui.popStyleColor();
 
-		if (ImGui.button("Generate textures")) {
-			generateRequested.set(true);
-		}
+            ImGui.endMainMenuBar();
+        }
 
-		ImGui.beginGroup();
-		ImGui.text("Temperature");
-		drawImage(temperature);
-		ImGui.text("Erosion");
-		drawImage(erosion);
-		ImGui.endGroup();
+        showWindows();
 
-		ImGui.sameLine();
-		ImGui.beginGroup();
-		ImGui.text("Height");
-		drawImage(height);
-		ImGui.text("Vegetation");
-		drawImage(vegetation);
-		ImGui.endGroup();
+        ImGui.endFrame();
+        ImGui.render();
+    }
 
-		ImGui.sameLine();
-		ImGui.beginGroup();
-		ImGui.text("Weirdness");
-		drawImage(weirdness);
-		ImGui.text("Biomes");
-		drawImage(biomes);
-		ImGui.endGroup();
+    private void drawImage(Texture image) {
+        if (image != null) {
+            if (glIsTexture(image.getTextureID())) {
+                image.bind();
+                ImGui.image(image.getTextureID(), image.getWidth(), image.getHeight());
+            } else {
+                ImGui.text("Texture somehow does not exist!");
+            }
+        }
+    }
 
-		ImGui.end();
-	}
+    /** Draw the world generation debugging information. */
+    private void drawWorldGen() {
+        ImGui.setNextWindowPos(20, 20, ImGuiCond.Once);
+        ImGui.setNextWindowSize(1300, 900, ImGuiCond.Once);
+        ImGui.begin("World Generation");
 
-	private void drawImage(Texture image) {
-		if (image != null) {
-			if (GL11.glIsTexture(image.getTextureID())) {
-				image.bind();
-				ImGui.image(image.getTextureID(), image.getWidth(),
-					image.getHeight());
-			}
-			else {
-				ImGui.text("Texture somehow does not exist!");
-			}
-		}
-	}
+        if (ImGui.button("Generate textures")) {
+            generateRequested.set(true);
+        }
 
-	private static byte[] intARGBtoByteRGBA(int[] argb) {
-		byte[] rgba = new byte[argb.length * 4];
+        ImGui.beginGroup();
+        ImGui.text("Temperature");
+        drawImage(temperature);
+        ImGui.text("Erosion");
+        drawImage(erosion);
+        ImGui.endGroup();
 
-		for (int i = 0; i < argb.length; i++) {
-			rgba[4 * i] = (byte) ((argb[i] >> 16) & 0xff); // R
-			rgba[4 * i + 1] = (byte) ((argb[i] >> 8) & 0xff); // G
-			rgba[4 * i + 2] = (byte) ((argb[i]) & 0xff); // B
-			rgba[4 * i + 3] = (byte) ((argb[i] >> 24) & 0xff); // A
-		}
+        ImGui.sameLine();
+        ImGui.beginGroup();
+        ImGui.text("Height");
+        drawImage(height);
+        ImGui.text("Vegetation");
+        drawImage(vegetation);
+        ImGui.endGroup();
 
-		return rgba;
-	}
+        ImGui.sameLine();
+        ImGui.beginGroup();
+        ImGui.text("Weirdness");
+        drawImage(weirdness);
+        ImGui.text("Biomes");
+        drawImage(biomes);
+        ImGui.endGroup();
 
-	@Override
-	public boolean handleGuiInput(@NonNull Scene scene,
-		@NonNull Window window) {
-		ImGuiIO imGuiIO = ImGui.getIO();
-		MouseInput mouseInput = window.getMouseInput();
-		Vector2f mousePos = mouseInput.getCurrentPos();
-		imGuiIO.setMousePos(mousePos.x, mousePos.y);
-		imGuiIO.setMouseDown(0, mouseInput.isLeftButtonPressed());
-		imGuiIO.setMouseDown(1, mouseInput.isRightButtonPressed());
+        ImGui.end();
+    }
 
-		if (generateRequested.compareAndExchange(true, false)) {
-			long seed = RandomGen.generateSeed();
+    private Texture generateTexture(BufferedImage image) {
+        int[] rgbValues =
+                image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
+        byte[] rgba = intARGBtoByteRGBA(rgbValues);
 
-			if (temperature != null) {
-				temperature.cleanup();
-			}
-			int w = 400;
-			int h = 400;
-			BufferedImage tempImage =
-				RandomGen.generateSimplexNoise(RandomGen.SimplexParameters
-					.builder().seed(seed).startX(0).startY(0).width(w).height(h)
-					.scale(0.001).octaves(4).build());
-			temperature = generateTexture(tempImage);
+        ByteBuffer buffer = ByteBuffer.allocateDirect(rgba.length);
+        buffer.put(rgba);
+        buffer.rewind();
 
-			if (height != null) {
-				height.cleanup();
-			}
-			BufferedImage heightImage =
-				RandomGen.generateSimplexNoise(RandomGen.SimplexParameters
-					.builder().startX(0).startY(0).seed(seed + 1).width(w)
-					.height(h).scale(0.002).octaves(10).build());
-			height = generateTexture(heightImage);
+        return new Texture(image.getWidth(), image.getHeight(), buffer);
+    }
 
-			if (erosion != null) {
-				erosion.cleanup();
-			}
-			BufferedImage erosionImage =
-				RandomGen.generateSimplexNoise(RandomGen.SimplexParameters
-					.builder().startX(0).startY(0).seed(seed + 2).width(w)
-					.height(h).scale(0.002).octaves(6).build());
-			erosion = generateTexture(erosionImage);
+    @Override
+    public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+        ImGuiIO imGuiIO = ImGui.getIO();
+        MouseInput mouseInput = window.getMouseInput();
+        Vector2f mousePos = mouseInput.getCurrentPos();
+        imGuiIO.setMousePos(mousePos.x, mousePos.y);
+        imGuiIO.setMouseDown(0, mouseInput.isLeftButtonPressed());
+        imGuiIO.setMouseDown(1, mouseInput.isRightButtonPressed());
 
-			if (vegetation != null) {
-				vegetation.cleanup();
-			}
-			BufferedImage vegetationImage =
-				RandomGen.generateSimplexNoise(RandomGen.SimplexParameters
-					.builder().startX(0).startY(0).seed(seed + 3).width(w)
-					.height(h).scale(0.001).octaves(5).build());
-			vegetation = generateTexture(vegetationImage);
+        if (generateRequested.compareAndExchange(true, false)) {
+            long seed = RandomGen.generateSeed();
 
-			if (weirdness != null) {
-				weirdness.cleanup();
-			}
-			BufferedImage weirdnessImage =
-				RandomGen.generateSimplexNoise(RandomGen.SimplexParameters
-					.builder().startX(0).startY(0).seed(seed + 4).width(w)
-					.height(h).scale(0.002).octaves(6).build());
-			weirdness = generateTexture(weirdnessImage);
+            if (temperature != null) {
+                temperature.cleanup();
+            }
+            int w = 400;
+            int h = 400;
+            BufferedImage tempImage =
+                    RandomGen.generateSimplexNoise(
+                            RandomGen.SimplexParameters.builder()
+                                    .seed(seed)
+                                    .startX(0)
+                                    .startY(0)
+                                    .width(w)
+                                    .height(h)
+                                    .scale(0.001)
+                                    .octaves(4)
+                                    .build());
+            temperature = generateTexture(tempImage);
 
-		}
+            if (height != null) {
+                height.cleanup();
+            }
+            BufferedImage heightImage =
+                    RandomGen.generateSimplexNoise(
+                            RandomGen.SimplexParameters.builder()
+                                    .startX(0)
+                                    .startY(0)
+                                    .seed(seed + 1)
+                                    .width(w)
+                                    .height(h)
+                                    .scale(0.002)
+                                    .octaves(10)
+                                    .build());
+            height = generateTexture(heightImage);
 
-		return imGuiIO.getWantCaptureMouse()
-			|| imGuiIO.getWantCaptureKeyboard();
-	}
+            if (erosion != null) {
+                erosion.cleanup();
+            }
+            BufferedImage erosionImage =
+                    RandomGen.generateSimplexNoise(
+                            RandomGen.SimplexParameters.builder()
+                                    .startX(0)
+                                    .startY(0)
+                                    .seed(seed + 2)
+                                    .width(w)
+                                    .height(h)
+                                    .scale(0.002)
+                                    .octaves(6)
+                                    .build());
+            erosion = generateTexture(erosionImage);
 
-	private Texture generateTexture(BufferedImage image) {
-		int[] rgbValues = image.getRGB(0, 0, image.getWidth(),
-			image.getHeight(), null, 0, image.getWidth());
-		byte[] rgba = intARGBtoByteRGBA(rgbValues);
+            if (vegetation != null) {
+                vegetation.cleanup();
+            }
+            BufferedImage vegetationImage =
+                    RandomGen.generateSimplexNoise(
+                            RandomGen.SimplexParameters.builder()
+                                    .startX(0)
+                                    .startY(0)
+                                    .seed(seed + 3)
+                                    .width(w)
+                                    .height(h)
+                                    .scale(0.001)
+                                    .octaves(5)
+                                    .build());
+            vegetation = generateTexture(vegetationImage);
 
-		ByteBuffer buffer = ByteBuffer.allocateDirect(rgba.length);
-		buffer.put(rgba);
-		buffer.rewind();
+            if (weirdness != null) {
+                weirdness.cleanup();
+            }
+            BufferedImage weirdnessImage =
+                    RandomGen.generateSimplexNoise(
+                            RandomGen.SimplexParameters.builder()
+                                    .startX(0)
+                                    .startY(0)
+                                    .seed(seed + 4)
+                                    .width(w)
+                                    .height(h)
+                                    .scale(0.002)
+                                    .octaves(6)
+                                    .build());
+            weirdness = generateTexture(weirdnessImage);
+        }
 
-		return new Texture(image.getWidth(), image.getHeight(), buffer);
-	}
+        return imGuiIO.getWantCaptureMouse() || imGuiIO.getWantCaptureKeyboard();
+    }
 
-	/**
-	 * Render whichever windows are applicable.
-	 */
-	private void showWindows() {
-		if (this.showDemo.get()) {
-			ImGui.showDemoWindow();
-		}
-		if (this.showWorldGen.get()) {
-			this.drawWorldGen();
-		}
-
-	}
-
+    /** Render whichever windows are applicable. */
+    private void showWindows() {
+        if (showDemo.get()) {
+            ImGui.showDemoWindow();
+        }
+        if (showWorldGen.get()) {
+            drawWorldGen();
+        }
+    }
 }

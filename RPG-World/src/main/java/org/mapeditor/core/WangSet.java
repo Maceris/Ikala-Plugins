@@ -10,7 +10,6 @@ package org.mapeditor.core;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import javax.annotation.Generated;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
@@ -21,135 +20,142 @@ import javax.xml.bind.annotation.XmlType;
 /**
  * Defines a list of corner colors and a list of edge colors, and<br>
  * any number of Wang tiles using these colors.
- *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "WangSet",
-	propOrder = {"wangcornercolor", "wangedgecolor", "wangtile"})
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@XmlType(
+        name = "WangSet",
+        propOrder = {"wangcornercolor", "wangedgecolor", "wangtile"})
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class WangSet {
 
-	/**
-	 * 
-	 */
-	@XmlElement(required = true)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected List<WangCornerColor> wangcornercolor;
-	/**
-	 * 
-	 */
-	@XmlElement(required = true)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected List<WangEdgeColor> wangedgecolor;
-	/**
-	 * 
-	 */
-	@XmlElement(required = true)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected List<WangTile> wangtile;
-	/**
-	 * The name of the Wang set.
-	 * 
-	 */
-	@XmlAttribute(name = "name")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected String name;
-	/**
-	 * The tile ID of the tile representing this Wang set.
-	 * 
-	 */
-	@XmlAttribute(name = "tile")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Integer tile;
+    /** */
+    @XmlElement(required = true)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected List<WangCornerColor> wangcornercolor;
 
-	/**
-	 * The name of the Wang set.
-	 * 
-	 * @return possible object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public String getName() {
-		return this.name;
-	}
+    /** */
+    @XmlElement(required = true)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected List<WangEdgeColor> wangedgecolor;
 
-	/**
-	 * The tile ID of the tile representing this Wang set.
-	 * 
-	 * @return possible object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Integer getTile() {
-		return this.tile;
-	}
+    /** */
+    @XmlElement(required = true)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected List<WangTile> wangtile;
 
-	/**
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public List<WangCornerColor> getWangcornercolor() {
-		if (this.wangcornercolor == null) {
-			this.wangcornercolor = new ArrayList<>();
-		}
-		return this.wangcornercolor;
-	}
+    /** The name of the Wang set. */
+    @XmlAttribute(name = "name")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected String name;
 
-	/**
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public List<WangEdgeColor> getWangedgecolor() {
-		if (this.wangedgecolor == null) {
-			this.wangedgecolor = new ArrayList<>();
-		}
-		return this.wangedgecolor;
-	}
+    /** The tile ID of the tile representing this Wang set. */
+    @XmlAttribute(name = "tile")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Integer tile;
 
-	/**
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public List<WangTile> getWangtile() {
-		if (this.wangtile == null) {
-			this.wangtile = new ArrayList<>();
-		}
-		return this.wangtile;
-	}
+    /**
+     * The name of the Wang set.
+     *
+     * @return possible object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public String getName() {
+        return name;
+    }
 
-	/**
-	 * The name of the Wang set.
-	 * 
-	 * @param value allowed object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setName(String value) {
-		this.name = value;
-	}
+    /**
+     * The tile ID of the tile representing this Wang set.
+     *
+     * @return possible object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Integer getTile() {
+        return tile;
+    }
 
-	/**
-	 * The tile ID of the tile representing this Wang set.
-	 * 
-	 * @param value allowed object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setTile(Integer value) {
-		this.tile = value;
-	}
+    /** */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public List<WangCornerColor> getWangcornercolor() {
+        if (wangcornercolor == null) {
+            wangcornercolor = new ArrayList<>();
+        }
+        return wangcornercolor;
+    }
 
+    /** */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public List<WangEdgeColor> getWangedgecolor() {
+        if (wangedgecolor == null) {
+            wangedgecolor = new ArrayList<>();
+        }
+        return wangedgecolor;
+    }
+
+    /** */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public List<WangTile> getWangtile() {
+        if (wangtile == null) {
+            wangtile = new ArrayList<>();
+        }
+        return wangtile;
+    }
+
+    /**
+     * The name of the Wang set.
+     *
+     * @param value allowed object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setName(String value) {
+        name = value;
+    }
+
+    /**
+     * The tile ID of the tile representing this Wang set.
+     *
+     * @param value allowed object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setTile(Integer value) {
+        tile = value;
+    }
 }

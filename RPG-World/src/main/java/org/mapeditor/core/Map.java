@@ -32,14 +32,12 @@ package org.mapeditor.core;
 
 import java.awt.Rectangle;
 import java.util.Iterator;
-
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlRootElement;
 
 /**
- * The Map class is the focal point of the <code>org.mapeditor.core</code>
- * package.
+ * The Map class is the focal point of the <code>org.mapeditor.core</code> package.
  *
  * @version 1.4.2
  */
@@ -47,322 +45,315 @@ import javax.xml.bind.annotation.XmlRootElement;
 @XmlAccessorType(XmlAccessType.NONE)
 public class Map extends MapData implements Iterable<MapLayer> {
 
-	private String filename;
+    private String filename;
 
-	/**
-	 * Constructor for Map.
-	 */
-	public Map() {
-		super();
-		this.orientation = Orientation.ORTHOGONAL;
-	}
+    /** Constructor for Map. */
+    public Map() {
+        orientation = Orientation.ORTHOGONAL;
+    }
 
-	/**
-	 * Constructor for Map.
-	 *
-	 * @param width the map width in tiles.
-	 * @param height the map height in tiles.
-	 */
-	public Map(int width, int height) {
-		this();
-		this.width = width;
-		this.height = height;
-	}
+    /**
+     * Constructor for Map.
+     *
+     * @param width the map width in tiles.
+     * @param height the map height in tiles.
+     */
+    public Map(int width, int height) {
+        this.width = width;
+        this.height = height;
+    }
 
-	/**
-	 * addLayer.
-	 *
-	 * @param layer a {@link org.mapeditor.core.MapLayer} object.
-	 * @return a {@link org.mapeditor.core.MapLayer} object.
-	 */
-	public MapLayer addLayer(MapLayer layer) {
-		layer.setMap(this);
-		this.getLayers().add(layer);
-		return layer;
-	}
+    /**
+     * addLayer.
+     *
+     * @param layer a {@link org.mapeditor.core.MapLayer} object.
+     * @return a {@link org.mapeditor.core.MapLayer} object.
+     */
+    public MapLayer addLayer(MapLayer layer) {
+        layer.setMap(this);
+        getLayers().add(layer);
+        return layer;
+    }
 
-	/**
-	 * Adds a Tileset to this Map. If the set is already attached to this map,
-	 * <code>addTileset</code> simply returns.
-	 *
-	 * @param tileset a tileset to add
-	 */
-	public void addTileset(TileSet tileset) {
-		// Sanity check
-		final int tilesetIndex = this.getTileSets().indexOf(tileset);
-		if (tileset == null || tilesetIndex > -1) {
-			return;
-		}
+    /**
+     * Adds a Tileset to this Map. If the set is already attached to this map, <code>addTileset
+     * </code> simply returns.
+     *
+     * @param tileset a tileset to add
+     */
+    public void addTileset(TileSet tileset) {
+        // Sanity check
+        final int tilesetIndex = getTileSets().indexOf(tileset);
+        if (tileset == null || tilesetIndex > -1) {
+            return;
+        }
 
-		Tile t = tileset.getTile(0);
+        Tile t = tileset.getTile(0);
 
-		if (t != null) {
-			int tw = t.getWidth();
-			int th = t.getHeight();
-			if (tw != this.tileWidth && this.tileWidth == 0) {
-				this.tileWidth = tw;
-				this.tileHeight = th;
-			}
-		}
+        if (t != null) {
+            int tw = t.getWidth();
+            int th = t.getHeight();
+            if (tw != tileWidth && tileWidth == 0) {
+                tileWidth = tw;
+                tileHeight = th;
+            }
+        }
 
-		this.tileSets.add(tileset);
-	}
+        tileSets.add(tileset);
+    }
 
-	/**
-	 * Returns whether the given tile coordinates fall within the map
-	 * boundaries.
-	 *
-	 * @param x The tile-space x-coordinate
-	 * @param y The tile-space y-coordinate
-	 * @return <code>true</code> if the point is within the map boundaries,
-	 *         <code>false</code> otherwise
-	 */
-	public boolean contains(int x, int y) {
-		return x >= 0 && y >= 0 && x < this.width && y < this.height;
-	}
+    /**
+     * Returns whether the given tile coordinates fall within the map boundaries.
+     *
+     * @param x The tile-space x-coordinate
+     * @param y The tile-space y-coordinate
+     * @return <code>true</code> if the point is within the map boundaries, <code>false</code>
+     *     otherwise
+     */
+    public boolean contains(int x, int y) {
+        return x >= 0 && y >= 0 && x < width && y < height;
+    }
 
-	/**
-	 * Changes the bounds of this plane to include all layers completely.
-	 */
-	public void fitBoundsToLayers() {
-		int width = 0;
-		int height = 0;
+    /** Changes the bounds of this plane to include all layers completely. */
+    public void fitBoundsToLayers() {
+        int width = 0;
+        int height = 0;
 
-		Rectangle layerBounds = new Rectangle();
+        Rectangle layerBounds = new Rectangle();
 
-		for (int i = 0; i < this.getLayers().size(); i++) {
-			this.getLayer(i).getBounds(layerBounds);
-			if (width < layerBounds.width) {
-				width = layerBounds.width;
-			}
-			if (height < layerBounds.height) {
-				height = layerBounds.height;
-			}
-		}
+        for (int i = 0; i < getLayers().size(); i++) {
+            getLayer(i).getBounds(layerBounds);
+            if (width < layerBounds.width) {
+                width = layerBounds.width;
+            }
+            if (height < layerBounds.height) {
+                height = layerBounds.height;
+            }
+        }
 
-		this.width = width;
-		this.height = height;
-	}
+        this.width = width;
+        this.height = height;
+    }
 
-	/**
-	 * Returns a <code>Rectangle</code> representing the maximum bounds in
-	 * tiles.
-	 *
-	 * @return a new rectangle containing the maximum bounds of this plane
-	 */
-	public Rectangle getBounds() {
-		return new Rectangle(this.width, this.height);
-	}
+    /**
+     * Returns a <code>Rectangle</code> representing the maximum bounds in tiles.
+     *
+     * @return a new rectangle containing the maximum bounds of this plane
+     */
+    public Rectangle getBounds() {
+        return new Rectangle(width, height);
+    }
 
-	/**
-	 * Getter for the field <code>filename</code>.
-	 *
-	 * @return a {@link java.lang.String} object.
-	 */
-	public String getFilename() {
-		return this.filename;
-	}
+    /**
+     * Getter for the field <code>filename</code>.
+     *
+     * @return a {@link java.lang.String} object.
+     */
+    public String getFilename() {
+        return filename;
+    }
 
-	/**
-	 * Returns the layer at the specified list index.
-	 *
-	 * @param i the index of the layer to return
-	 * @return the layer at the specified index, or null if the index is out of
-	 *         bounds
-	 */
-	public MapLayer getLayer(int i) {
-		try {
-			return this.getLayers().get(i);
-		}
-		catch (IndexOutOfBoundsException e) {
-			// todo: we should log this
-		}
-		return null;
-	}
+    /**
+     * Returns the layer at the specified list index.
+     *
+     * @param i the index of the layer to return
+     * @return the layer at the specified index, or null if the index is out of bounds
+     */
+    public MapLayer getLayer(int i) {
+        try {
+            return getLayers().get(i);
+        } catch (IndexOutOfBoundsException e) {
+            // todo: we should log this
+        }
+        return null;
+    }
 
-	/**
-	 * Returns the total number of layers.
-	 *
-	 * @return the size of the layer list
-	 */
-	public int getLayerCount() {
-		return this.getLayers().size();
-	}
+    /**
+     * Returns the total number of layers.
+     *
+     * @return the size of the layer list
+     */
+    public int getLayerCount() {
+        return getLayers().size();
+    }
 
-	/** {@inheritDoc} */
-	@Override
-	public Properties getProperties() {
-		if (this.properties == null) {
-			this.properties = new Properties();
-		}
-		return super.getProperties();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public Properties getProperties() {
+        if (properties == null) {
+            properties = new Properties();
+        }
+        return super.getProperties();
+    }
 
-	/**
-	 * Returns the maximum tile height. This is the height of the highest tile
-	 * in all tileSets or the tile height used by this map if it's smaller.
-	 *
-	 * @return int The maximum tile height
-	 */
-	public int getTileHeightMax() {
-		int maxHeight = this.tileHeight;
+    /**
+     * Returns the maximum tile height. This is the height of the highest tile in all tileSets or
+     * the tile height used by this map if it's smaller.
+     *
+     * @return int The maximum tile height
+     */
+    public int getTileHeightMax() {
+        int maxHeight = tileHeight;
 
-		for (TileSet tileset : this.tileSets) {
-			int height = tileset.getTileHeight();
-			if (height > maxHeight) {
-				maxHeight = height;
-			}
-		}
+        for (TileSet tileset : tileSets) {
+            int height = tileset.getTileHeight();
+            if (height > maxHeight) {
+                maxHeight = height;
+            }
+        }
 
-		return maxHeight;
-	}
+        return maxHeight;
+    }
 
-	/**
-	 * Determines whether the point (x,y) falls within the plane.
-	 *
-	 * @param x a int.
-	 * @param y a int.
-	 * @return <code>true</code> if the point is within the plane,
-	 *         <code>false</code> otherwise
-	 */
-	public boolean inBounds(int x, int y) {
-		return x >= 0 && y >= 0 && x < this.width && y < this.height;
-	}
+    /**
+     * Determines whether the point (x,y) falls within the plane.
+     *
+     * @param x a int.
+     * @param y a int.
+     * @return <code>true</code> if the point is within the plane, <code>false</code> otherwise
+     */
+    public boolean inBounds(int x, int y) {
+        return x >= 0 && y >= 0 && x < width && y < height;
+    }
 
-	/**
-	 * insertLayer.
-	 *
-	 * @param index a int.
-	 * @param layer a {@link org.mapeditor.core.TileLayer} object.
-	 */
-	public void insertLayer(int index, TileLayer layer) {
-		layer.setMap(this);
-		this.getLayers().add(index, layer);
-	}
+    /**
+     * insertLayer.
+     *
+     * @param index a int.
+     * @param layer a {@link org.mapeditor.core.TileLayer} object.
+     */
+    public void insertLayer(int index, TileLayer layer) {
+        layer.setMap(this);
+        getLayers().add(index, layer);
+    }
 
-	/** {@inheritDoc} */
-	@Override
-	public Iterator<MapLayer> iterator() {
-		return this.getLayers().iterator();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public Iterator<MapLayer> iterator() {
+        return getLayers().iterator();
+    }
 
-	/**
-	 * Removes all layers from the plane.
-	 */
-	public void removeAllLayers() {
-		this.getLayers().clear();
-	}
+    /** Removes all layers from the plane. */
+    public void removeAllLayers() {
+        getLayers().clear();
+    }
 
-	/**
-	 * Removes the layer at the specified index. Layers above this layer will
-	 * move down to fill the gap.
-	 *
-	 * @param index the index of the layer to be removed
-	 * @return the layer that was removed from the list
-	 */
-	public MapLayer removeLayer(int index) {
-		return this.getLayers().remove(index);
-	}
+    /**
+     * Removes the layer at the specified index. Layers above this layer will move down to fill the
+     * gap.
+     *
+     * @param index the index of the layer to be removed
+     * @return the layer that was removed from the list
+     */
+    public MapLayer removeLayer(int index) {
+        return getLayers().remove(index);
+    }
 
-	/**
-	 * Removes a {@link org.mapeditor.core.TileSet} from the map, and removes
-	 * any tiles in the set from the map layers.
-	 *
-	 * @param tileset TileSet to remove
-	 */
-	public void removeTileset(TileSet tileset) {
-		// Sanity check
-		final int tilesetIndex = this.getTileSets().indexOf(tileset);
-		if (tilesetIndex == -1) {
-			return;
-		}
+    /**
+     * Removes a {@link org.mapeditor.core.TileSet} from the map, and removes any tiles in the set
+     * from the map layers.
+     *
+     * @param tileset TileSet to remove
+     */
+    public void removeTileset(TileSet tileset) {
+        // Sanity check
+        final int tilesetIndex = getTileSets().indexOf(tileset);
+        if (tilesetIndex == -1) {
+            return;
+        }
 
-		// Go through the map and remove any instances of the tiles in the set
-		for (Tile tile : tileset) {
-			for (MapLayer ml : this) {
-				if (ml instanceof TileLayer) {
-					TileLayer tl = (TileLayer) ml;
-					tl.removeTile(tile);
-				}
-			}
-		}
+        // Go through the map and remove any instances of the tiles in the set
+        for (Tile tile : tileset) {
+            for (MapLayer ml : this) {
+                if (ml instanceof TileLayer) {
+                    TileLayer tl = (TileLayer) ml;
+                    tl.removeTile(tile);
+                }
+            }
+        }
 
-		this.tileSets.remove(tileset);
-	}
+        tileSets.remove(tileset);
+    }
 
-	/**
-	 * Resizes this plane. The (dx, dy) pair determines where the original plane
-	 * should be positioned on the new area. Only layers that exactly match the
-	 * bounds of the map are resized, any other layers are moved by the given
-	 * shift.
-	 *
-	 * @see org.mapeditor.core.TileLayer#resize
-	 * @param width The new width of the map.
-	 * @param height The new height of the map.
-	 * @param dx The shift in x direction in tiles.
-	 * @param dy The shift in y direction in tiles.
-	 */
-	public void resize(int width, int height, int dx, int dy) {
-		for (MapLayer layer : this) {
-			Rectangle layerBounds = layer.getBounds();
-			if (layerBounds.equals(this.getBounds())) {
-				layer.resize(width, height, dx, dy);
-			}
-			else {
-				layer.setOffset(layerBounds.x + dx, layerBounds.y + dy);
-			}
-		}
+    /**
+     * Resizes this plane. The (dx, dy) pair determines where the original plane should be
+     * positioned on the new area. Only layers that exactly match the bounds of the map are resized,
+     * any other layers are moved by the given shift.
+     *
+     * @see org.mapeditor.core.TileLayer#resize
+     * @param width The new width of the map.
+     * @param height The new height of the map.
+     * @param dx The shift in x direction in tiles.
+     * @param dy The shift in y direction in tiles.
+     */
+    public void resize(int width, int height, int dx, int dy) {
+        for (MapLayer layer : this) {
+            Rectangle layerBounds = layer.getBounds();
+            if (layerBounds.equals(getBounds())) {
+                layer.resize(width, height, dx, dy);
+            } else {
+                layer.setOffset(layerBounds.x + dx, layerBounds.y + dy);
+            }
+        }
 
-		this.width = width;
-		this.height = height;
-	}
+        this.width = width;
+        this.height = height;
+    }
 
-	/**
-	 * Setter for the field <code>filename</code>.
-	 *
-	 * @param filename a {@link java.lang.String} object.
-	 */
-	public void setFilename(String filename) {
-		this.filename = filename;
-	}
+    /**
+     * Setter for the field <code>filename</code>.
+     *
+     * @param filename a {@link java.lang.String} object.
+     */
+    public void setFilename(String filename) {
+        this.filename = filename;
+    }
 
-	/**
-	 * setLayer.
-	 *
-	 * @param index a int.
-	 * @param layer a {@link org.mapeditor.core.TileLayer} object.
-	 */
-	public void setLayer(int index, TileLayer layer) {
-		layer.setMap(this);
-		this.getLayers().set(index, layer);
-	}
+    /**
+     * setLayer.
+     *
+     * @param index a int.
+     * @param layer a {@link org.mapeditor.core.TileLayer} object.
+     */
+    public void setLayer(int index, TileLayer layer) {
+        layer.setMap(this);
+        getLayers().set(index, layer);
+    }
 
-	/**
-	 * Swaps the tile sets at the given indices.
-	 *
-	 * @param index0 a int.
-	 * @param index1 a int.
-	 */
-	public void swapTileSets(int index0, int index1) {
-		if (index0 == index1 || this.tileSets == null) {
-			return;
-		}
-		TileSet set = this.tileSets.get(index0);
-		this.tileSets.set(index0, this.tileSets.get(index1));
-		this.tileSets.set(index1, set);
-	}
+    /**
+     * Swaps the tile sets at the given indices.
+     *
+     * @param index0 a int.
+     * @param index1 a int.
+     */
+    public void swapTileSets(int index0, int index1) {
+        if (index0 == index1 || tileSets == null) {
+            return;
+        }
+        TileSet set = tileSets.get(index0);
+        tileSets.set(index0, tileSets.get(index1));
+        tileSets.set(index1, set);
+    }
 
-	/**
-	 * {@inheritDoc}
-	 *
-	 * Returns string describing the map. The form is <code>Map[width x height
-	 * x layers][tileWidth x tileHeight]</code>, for example <code>
-	 * Map[64x64x2][24x24]</code>.
-	 */
-	@Override
-	public String toString() {
-		return "Map[" + this.width + "x" + this.height + "x"
-			+ this.getLayerCount() + "][" + this.tileWidth + "x"
-			+ this.tileHeight + "]";
-	}
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Returns string describing the map. The form is <code>Map[width x height
+     * x layers][tileWidth x tileHeight]</code>, for example <code>
+     * Map[64x64x2][24x24]</code>.
+     */
+    @Override
+    public String toString() {
+        return "Map["
+                + width
+                + "x"
+                + height
+                + "x"
+                + getLayerCount()
+                + "]["
+                + tileWidth
+                + "x"
+                + tileHeight
+                + "]";
+    }
 }

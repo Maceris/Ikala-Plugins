@@ -12,74 +12,66 @@ import lombok.NonNull;
 import lombok.Setter;
 import org.joml.Vector3f;
 
-/**
- * A light that acts in a cone.
- */
+/** A light that acts in a cone. */
 @Getter
 @Setter
 public class SpotLight {
-	/**
-	 * The direction the light is pointing towards.
-	 *
-	 * @param coneDirection The new direction.
-	 * @return The direction.
-	 */
-	@NonNull
-	private Vector3f coneDirection;
-	/**
-	 * The angle where we cut the light off, stored as cos(cut-off angle in
-	 * radians).
-	 *
-	 * @param cutOff The new cutoff, in radians.
-	 * @return The cutoff in radians.
-	 */
-	@Setter(value = AccessLevel.NONE)
-	private float cutOff;
-	
-	/**
-	 * The light information we are using, which we cut off everywhere except
-	 * the cone.
-	 *
-	 * @param pointLight The new light.
-	 * @return The light information.
-	 */
-	@NonNull
-	private PointLight pointLight;
+    /**
+     * The direction the light is pointing towards.
+     *
+     * @param coneDirection The new direction.
+     * @return The direction.
+     */
+    @NonNull private Vector3f coneDirection;
 
-	/**
-	 * Create a new spotlight.
-	 *
-	 * @param pointLight The point light that describes the properties of the
-	 *            light.
-	 * @param coneDirection The direction the point light is facing.
-	 * @param cutOffAngle The angle in degrees we cut off the light at away from
-	 *            the direction.
-	 */
-	public SpotLight(@NonNull PointLight pointLight,
-		@NonNull Vector3f coneDirection, float cutOffAngle) {
-		this.pointLight = pointLight;
-		this.coneDirection = coneDirection;
-		this.setCutOffAngle(cutOffAngle);
-	}
+    /**
+     * The angle where we cut the light off, stored as cos(cut-off angle in radians).
+     *
+     * @param cutOff The new cutoff, in radians.
+     * @return The cutoff in radians.
+     */
+    @Setter(value = AccessLevel.NONE)
+    private float cutOff;
 
-	/**
-	 * Set the cone direction.
-	 *
-	 * @param x The x direction.
-	 * @param y The y direction.
-	 * @param z The z direction.
-	 */
-	public void setConeDirection(float x, float y, float z) {
-		this.coneDirection.set(x, y, z);
-	}
+    /**
+     * The light information we are using, which we cut off everywhere except the cone.
+     *
+     * @param pointLight The new light.
+     * @return The light information.
+     */
+    @NonNull private PointLight pointLight;
 
-	/**
-	 * Set the cutoff angle, in degrees. Converted to cos(toRadians(angle in
-	 * degrees)).
-	 *
-	 * @param cutOffAngle The angle in degrees.
-	 */
-	public final void setCutOffAngle(float cutOffAngle) {
-		this.cutOff = (float) Math.cos(Math.toRadians(cutOffAngle));
-	}
+    /**
+     * Create a new spotlight.
+     *
+     * @param pointLight The point light that describes the properties of the light.
+     * @param coneDirection The direction the point light is facing.
+     * @param cutOffAngle The angle in degrees we cut off the light at away from the direction.
+     */
+    public SpotLight(
+            @NonNull PointLight pointLight, @NonNull Vector3f coneDirection, float cutOffAngle) {
+        this.pointLight = pointLight;
+        this.coneDirection = coneDirection;
+        setCutOffAngle(cutOffAngle);
+    }
+
+    /**
+     * Set the cone direction.
+     *
+     * @param x The x direction.
+     * @param y The y direction.
+     * @param z The z direction.
+     */
+    public void setConeDirection(float x, float y, float z) {
+        coneDirection.set(x, y, z);
+    }
+
+    /**
+     * Set the cutoff angle, in degrees. Converted to cos(toRadians(angle in degrees)).
+     *
+     * @param cutOffAngle The angle in degrees.
+     */
+    public final void setCutOffAngle(float cutOffAngle) {
+        cutOff = (float) Math.cos(Math.toRadians(cutOffAngle));
+    }
 }

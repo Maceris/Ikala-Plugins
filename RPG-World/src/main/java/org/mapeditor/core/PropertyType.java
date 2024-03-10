@@ -13,94 +13,87 @@ import javax.xml.bind.annotation.XmlEnum;
 import javax.xml.bind.annotation.XmlEnumValue;
 import javax.xml.bind.annotation.XmlType;
 
-/**
- *
- */
+/** */
 @XmlType(name = "PropertyType")
 @XmlEnum
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public enum PropertyType {
 
-	/**
-	 * When a string property contains newlines, the current<br>
-	 * version of Tiled will write out the value as characters<br>
-	 * contained inside the `property` element rather than as<br>
-	 * the `value` attribute. It is possible that a future<br>
-	 * version of the TMX format will switch to always saving<br>
-	 * property values inside the element rather than as an<br>
-	 * attribute.<br>
-	 * <br>
-	 *
-	 * @since 0.16
-	 * 
-	 */
-	@XmlEnumValue("string")
-	STRING("string"),
+    /**
+     * When a string property contains newlines, the current<br>
+     * version of Tiled will write out the value as characters<br>
+     * contained inside the `property` element rather than as<br>
+     * the `value` attribute. It is possible that a future<br>
+     * version of the TMX format will switch to always saving<br>
+     * property values inside the element rather than as an<br>
+     * attribute.<br>
+     * <br>
+     *
+     * @since 0.16
+     */
+    @XmlEnumValue("string")
+    STRING("string"),
 
-	/**
-	 * @since 0.16
-	 * 
-	 */
-	@XmlEnumValue("int")
-	INT("int"),
+    /**
+     * @since 0.16
+     */
+    @XmlEnumValue("int")
+    INT("int"),
 
-	/**
-	 * @since 0.16
-	 * 
-	 */
-	@XmlEnumValue("float")
-	FLOAT("float"),
+    /**
+     * @since 0.16
+     */
+    @XmlEnumValue("float")
+    FLOAT("float"),
 
-	/**
-	 * Boolean properties have a value of either "true"<br>
-	 * or "false".<br>
-	 * <br>
-	 *
-	 * @since 0.16
-	 * 
-	 */
-	@XmlEnumValue("bool")
-	BOOL("bool"),
+    /**
+     * Boolean properties have a value of either "true"<br>
+     * or "false".<br>
+     * <br>
+     *
+     * @since 0.16
+     */
+    @XmlEnumValue("bool")
+    BOOL("bool"),
 
-	/**
-	 * Color properties are stored in the format `#AARRGGBB`.<br>
-	 * <br>
-	 *
-	 * @since 0.17
-	 * 
-	 */
-	@XmlEnumValue("color")
-	COLOR("color"),
+    /**
+     * Color properties are stored in the format `#AARRGGBB`.<br>
+     * <br>
+     *
+     * @since 0.17
+     */
+    @XmlEnumValue("color")
+    COLOR("color"),
 
-	/**
-	 * File properties are stored as paths relative from<br>
-	 * the location of the map file.<br>
-	 * <br>
-	 *
-	 * @since 0.17
-	 * 
-	 */
-	@XmlEnumValue("file")
-	FILE("file");
+    /**
+     * File properties are stored as paths relative from<br>
+     * the location of the map file.<br>
+     * <br>
+     *
+     * @since 0.17
+     */
+    @XmlEnumValue("file")
+    FILE("file");
 
-	public static PropertyType fromValue(String v) {
-		for (PropertyType c : PropertyType.values()) {
-			if (c.value.equals(v)) {
-				return c;
-			}
-		}
-		throw new IllegalArgumentException(v);
-	}
+    public static PropertyType fromValue(String v) {
+        for (PropertyType c : PropertyType.values()) {
+            if (c.value.equals(v)) {
+                return c;
+            }
+        }
+        throw new IllegalArgumentException(v);
+    }
 
-	private final String value;
+    private final String value;
 
-	PropertyType(String v) {
-		this.value = v;
-	}
+    PropertyType(String v) {
+        value = v;
+    }
 
-	public String value() {
-		return this.value;
-	}
-
+    public String value() {
+        return value;
+    }
 }

@@ -36,117 +36,127 @@ import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
  * need to find the tileset with the highest `firstgid` that is<br>
  * still lower or equal than the gid. The tilesets are always<br>
  * stored with increasing `firstgid`s.
- *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "Data", propOrder = {"value"})
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@XmlType(
+        name = "Data",
+        propOrder = {"value"})
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class Data {
 
-	/**
-	 * 
-	 */
-	@XmlValue
-	@XmlJavaTypeAdapter(CollapsedStringAdapter.class)
-	@XmlSchemaType(name = "token")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected String value;
-	/**
-	 * The encoding used to encode the tile layer data.<br>
-	 * When used, it can be "base64" and "csv" at the<br>
-	 * moment.
-	 * 
-	 */
-	@XmlAttribute(name = "encoding")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Encoding encoding;
-	/**
-	 * The compression used to compress the tile layer<br>
-	 * data. Tiled Qt supports "gzip" and "zlib".
-	 * 
-	 */
-	@XmlAttribute(name = "compression")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Compression compression;
+    /** */
+    @XmlValue
+    @XmlJavaTypeAdapter(CollapsedStringAdapter.class)
+    @XmlSchemaType(name = "token")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected String value;
 
-	/**
-	 * The compression used to compress the tile layer<br>
-	 * data. Tiled Qt supports "gzip" and "zlib".
-	 * 
-	 * @return possible object is {@link Compression }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Compression getCompression() {
-		return this.compression;
-	}
+    /**
+     * The encoding used to encode the tile layer data.<br>
+     * When used, it can be "base64" and "csv" at the<br>
+     * moment.
+     */
+    @XmlAttribute(name = "encoding")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Encoding encoding;
 
-	/**
-	 * The encoding used to encode the tile layer data.<br>
-	 * When used, it can be "base64" and "csv" at the<br>
-	 * moment.
-	 * 
-	 * @return possible object is {@link Encoding }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Encoding getEncoding() {
-		return this.encoding;
-	}
+    /**
+     * The compression used to compress the tile layer<br>
+     * data. Tiled Qt supports "gzip" and "zlib".
+     */
+    @XmlAttribute(name = "compression")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Compression compression;
 
-	/**
-	 * 
-	 * @return possible object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public String getValue() {
-		return this.value;
-	}
+    /**
+     * The compression used to compress the tile layer<br>
+     * data. Tiled Qt supports "gzip" and "zlib".
+     *
+     * @return possible object is {@link Compression }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Compression getCompression() {
+        return compression;
+    }
 
-	/**
-	 * The compression used to compress the tile layer<br>
-	 * data. Tiled Qt supports "gzip" and "zlib".
-	 * 
-	 * @param value allowed object is {@link Compression }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setCompression(Compression value) {
-		this.compression = value;
-	}
+    /**
+     * The encoding used to encode the tile layer data.<br>
+     * When used, it can be "base64" and "csv" at the<br>
+     * moment.
+     *
+     * @return possible object is {@link Encoding }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Encoding getEncoding() {
+        return encoding;
+    }
 
-	/**
-	 * The encoding used to encode the tile layer data.<br>
-	 * When used, it can be "base64" and "csv" at the<br>
-	 * moment.
-	 * 
-	 * @param value allowed object is {@link Encoding }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setEncoding(Encoding value) {
-		this.encoding = value;
-	}
+    /**
+     * @return possible object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public String getValue() {
+        return value;
+    }
 
-	/**
-	 * 
-	 * @param value allowed object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setValue(String value) {
-		this.value = value;
-	}
+    /**
+     * The compression used to compress the tile layer<br>
+     * data. Tiled Qt supports "gzip" and "zlib".
+     *
+     * @param value allowed object is {@link Compression }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setCompression(Compression value) {
+        compression = value;
+    }
 
+    /**
+     * The encoding used to encode the tile layer data.<br>
+     * When used, it can be "base64" and "csv" at the<br>
+     * moment.
+     *
+     * @param value allowed object is {@link Encoding }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setEncoding(Encoding value) {
+        encoding = value;
+    }
+
+    /**
+     * @param value allowed object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setValue(String value) {
+        this.value = value;
+    }
 }

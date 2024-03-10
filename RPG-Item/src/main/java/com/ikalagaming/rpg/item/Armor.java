@@ -17,7 +17,6 @@ import javax.persistence.Table;
  * Armor that is worn for protection or power.
  *
  * @author Ches Burks
- *
  */
 @EqualsAndHashCode(callSuper = true)
 @Getter
@@ -25,24 +24,21 @@ import javax.persistence.Table;
 @Entity
 @Table(name = Armor.TABLE_NAME)
 public class Armor extends Equipment {
-	/**
-	 * The name of the table in the database.
-	 */
-	static final String TABLE_NAME = "ARMOR";
-	/**
-	 * What kind of armor this is.
-	 *
-	 * @param armorType The classification of armor.
-	 * @return The classification of armor.
-	 */
-	@Column(name = "ARMOR_TYPE")
-	@Enumerated(EnumType.STRING)
-	private ArmorType armorType;
+    /** The name of the table in the database. */
+    static final String TABLE_NAME = "ARMOR";
 
-	/**
-	 * Constructs a new armor item.
-	 */
-	public Armor() {
-		this.setItemType(ItemType.ARMOR);
-	}
+    /**
+     * What kind of armor this is.
+     *
+     * @param armorType The classification of armor.
+     * @return The classification of armor.
+     */
+    @Column(name = "ARMOR_TYPE")
+    @Enumerated(EnumType.STRING)
+    private ArmorType armorType;
+
+    /** Constructs a new armor item. */
+    public Armor() {
+        setItemType(ItemType.ARMOR);
+    }
 }

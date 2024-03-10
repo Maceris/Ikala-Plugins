@@ -5,14 +5,10 @@ import lombok.Setter;
 
 /**
  * A test component.
- * 
- * @author Ches Burks
  *
+ * @author Ches Burks
  */
 public class TestB extends Component<TestB> {
 
-	@Getter
-	@Setter
-	private String testString;
-
+    @Getter @Setter private String testString;
 }

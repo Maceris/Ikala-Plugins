@@ -1,4 +1,2 @@
-/**
- * Events related to crafting.
- */
+/** Events related to crafting. */
 package com.ikalagaming.factory.crafting.events;

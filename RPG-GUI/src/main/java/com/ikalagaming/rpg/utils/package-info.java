@@ -1,4 +1,2 @@
-/**
- * Utilities related to RPGs.
- */
+/** Utilities related to RPGs. */
 package com.ikalagaming.rpg.utils;

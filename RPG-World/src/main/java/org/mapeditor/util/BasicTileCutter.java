@@ -33,115 +33,110 @@ package org.mapeditor.util;
 import java.awt.image.BufferedImage;
 
 /**
- * Cuts tiles from a tileset image according to a regular rectangular pattern.
- * Supports a variable spacing between tiles and a margin around them.
+ * Cuts tiles from a tileset image according to a regular rectangular pattern. Supports a variable
+ * spacing between tiles and a margin around them.
  *
  * @version 1.4.2
  */
 public class BasicTileCutter implements TileCutter {
 
-	private int nextX, nextY;
-	private BufferedImage image;
-	private final int tileWidth;
-	private final int tileHeight;
-	private final int tileSpacing;
-	private final int tileMargin;
+    private int nextX, nextY;
+    private BufferedImage image;
+    private final int tileWidth;
+    private final int tileHeight;
+    private final int tileSpacing;
+    private final int tileMargin;
 
-	/**
-	 * Constructor for BasicTileCutter.
-	 *
-	 * @param tileWidth a int.
-	 * @param tileHeight a int.
-	 * @param tileSpacing a int.
-	 * @param tileMargin a int.
-	 */
-	public BasicTileCutter(int tileWidth, int tileHeight, int tileSpacing,
-		int tileMargin) {
-		this.tileWidth = tileWidth;
-		this.tileHeight = tileHeight;
-		this.tileSpacing = tileSpacing;
-		this.tileMargin = tileMargin;
+    /**
+     * Constructor for BasicTileCutter.
+     *
+     * @param tileWidth a int.
+     * @param tileHeight a int.
+     * @param tileSpacing a int.
+     * @param tileMargin a int.
+     */
+    public BasicTileCutter(int tileWidth, int tileHeight, int tileSpacing, int tileMargin) {
+        this.tileWidth = tileWidth;
+        this.tileHeight = tileHeight;
+        this.tileSpacing = tileSpacing;
+        this.tileMargin = tileMargin;
 
-		this.reset();
-	}
+        reset();
+    }
 
-	/**
-	 * Returns the number of tiles per row in the tileset image.
-	 *
-	 * @return the number of tiles per row in the tileset image.
-	 */
-	public int getColumns() {
-		return (this.image.getWidth() - 2 * this.tileMargin + this.tileSpacing)
-			/ (this.tileWidth + this.tileSpacing);
-	}
+    /**
+     * Returns the number of tiles per row in the tileset image.
+     *
+     * @return the number of tiles per row in the tileset image.
+     */
+    public int getColumns() {
+        return (image.getWidth() - 2 * tileMargin + tileSpacing) / (tileWidth + tileSpacing);
+    }
 
-	/** {@inheritDoc} */
-	@Override
-	public String getName() {
-		return "Basic";
-	}
+    /** {@inheritDoc} */
+    @Override
+    public String getName() {
+        return "Basic";
+    }
 
-	/** {@inheritDoc} */
-	@Override
-	public BufferedImage getNextTile() {
-		if (this.nextY + this.tileHeight + this.tileMargin <= this.image
-			.getHeight()) {
-			BufferedImage tile = this.image.getSubimage(this.nextX, this.nextY,
-				this.tileWidth, this.tileHeight);
-			this.nextX += this.tileWidth + this.tileSpacing;
+    /** {@inheritDoc} */
+    @Override
+    public BufferedImage getNextTile() {
+        if (nextY + tileHeight + tileMargin <= image.getHeight()) {
+            BufferedImage tile = image.getSubimage(nextX, nextY, tileWidth, tileHeight);
+            nextX += tileWidth + tileSpacing;
 
-			if (this.nextX + this.tileWidth + this.tileMargin > this.image
-				.getWidth()) {
-				this.nextX = this.tileMargin;
-				this.nextY += this.tileHeight + this.tileSpacing;
-			}
+            if (nextX + tileWidth + tileMargin > image.getWidth()) {
+                nextX = tileMargin;
+                nextY += tileHeight + tileSpacing;
+            }
 
-			return tile;
-		}
+            return tile;
+        }
 
-		return null;
-	}
+        return null;
+    }
 
-	/** {@inheritDoc} */
-	@Override
-	public int getTileHeight() {
-		return this.tileHeight;
-	}
+    /** {@inheritDoc} */
+    @Override
+    public int getTileHeight() {
+        return tileHeight;
+    }
 
-	/**
-	 * Returns the margin around the tile images.
-	 *
-	 * @return the margin around the tile images.
-	 */
-	public int getTileMargin() {
-		return this.tileMargin;
-	}
+    /**
+     * Returns the margin around the tile images.
+     *
+     * @return the margin around the tile images.
+     */
+    public int getTileMargin() {
+        return tileMargin;
+    }
 
-	/**
-	 * Returns the spacing between tile images.
-	 *
-	 * @return the spacing between tile images.
-	 */
-	public int getTileSpacing() {
-		return this.tileSpacing;
-	}
+    /**
+     * Returns the spacing between tile images.
+     *
+     * @return the spacing between tile images.
+     */
+    public int getTileSpacing() {
+        return tileSpacing;
+    }
 
-	/** {@inheritDoc} */
-	@Override
-	public int getTileWidth() {
-		return this.tileWidth;
-	}
+    /** {@inheritDoc} */
+    @Override
+    public int getTileWidth() {
+        return tileWidth;
+    }
 
-	/** {@inheritDoc} */
-	@Override
-	public final void reset() {
-		this.nextX = this.tileMargin;
-		this.nextY = this.tileMargin;
-	}
+    /** {@inheritDoc} */
+    @Override
+    public final void reset() {
+        nextX = tileMargin;
+        nextY = tileMargin;
+    }
 
-	/** {@inheritDoc} */
-	@Override
-	public void setImage(BufferedImage image) {
-		this.image = image;
-	}
+    /** {@inheritDoc} */
+    @Override
+    public void setImage(BufferedImage image) {
+        this.image = image;
+    }
 }

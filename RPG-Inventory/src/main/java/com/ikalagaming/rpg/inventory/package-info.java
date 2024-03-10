@@ -1,4 +1,2 @@
-/**
- * Classes relating to inventory.
- */
+/** Classes relating to inventory. */
 package com.ikalagaming.rpg.inventory;

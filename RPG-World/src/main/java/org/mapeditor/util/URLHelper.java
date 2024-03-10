@@ -34,67 +34,54 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 
-/**
- * Helper class containing util methods for jar protocol URLs.
- */
+/** Helper class containing util methods for jar protocol URLs. */
 public class URLHelper {
 
-	private static final String JAR_PROTOCOL = "jar";
-	private static final char URL_SEPARATOR_CHAR = '/';
-	private static final String URL_SEPARATOR =
-		"" + URLHelper.URL_SEPARATOR_CHAR;
-	private static final String PARENT_DIR = "..";
-	private static final String CURRENT_DIR = ".";
-	private static final char JAR_PATH_SEPARATOR_CHAR = '!';
+    private static final String JAR_PROTOCOL = "jar";
+    private static final char URL_SEPARATOR_CHAR = '/';
+    private static final String URL_SEPARATOR = "" + URLHelper.URL_SEPARATOR_CHAR;
+    private static final String PARENT_DIR = "..";
+    private static final String CURRENT_DIR = ".";
+    private static final char JAR_PATH_SEPARATOR_CHAR = '!';
 
-	/**
-	 * Returns parent directory of the URL's path.
-	 */
-	public static URL getParent(final URL url)
-		throws MalformedURLException, URISyntaxException {
-		if (url == null) {
-			throw new IllegalArgumentException("Url cannot be null");
-		}
-		if (URLHelper.isDirectory(url)) {
-			return URLHelper.resolve(url, URLHelper.PARENT_DIR);
-		}
-		else {
-			return URLHelper.resolve(url, URLHelper.CURRENT_DIR);
-		}
-	}
+    /** Returns parent directory of the URL's path. */
+    public static URL getParent(final URL url) throws MalformedURLException, URISyntaxException {
+        if (url == null) {
+            throw new IllegalArgumentException("Url cannot be null");
+        }
+        if (URLHelper.isDirectory(url)) {
+            return URLHelper.resolve(url, URLHelper.PARENT_DIR);
+        } else {
+            return URLHelper.resolve(url, URLHelper.CURRENT_DIR);
+        }
+    }
 
-	private static boolean isDirectory(final URL url) {
-		return url.getPath().endsWith(URLHelper.URL_SEPARATOR);
-	}
+    private static boolean isDirectory(final URL url) {
+        return url.getPath().endsWith(URLHelper.URL_SEPARATOR);
+    }
 
-	/**
-	 * Reimplementation of {@link java.net.URI#resolve(String)} with support for
-	 * jar URLs.
-	 */
-	public static URL resolve(final URL url, final String path)
-		throws URISyntaxException, MalformedURLException {
-		if (url == null) {
-			throw new IllegalArgumentException("Url cannot be null");
-		}
-		if (path == null || path.isEmpty()) {
-			return url;
-		}
+    /** Reimplementation of {@link java.net.URI#resolve(String)} with support for jar URLs. */
+    public static URL resolve(final URL url, final String path)
+            throws URISyntaxException, MalformedURLException {
+        if (url == null) {
+            throw new IllegalArgumentException("Url cannot be null");
+        }
+        if (path == null || path.isEmpty()) {
+            return url;
+        }
 
-		String urlPath =
-			path.replace(File.separatorChar, URLHelper.URL_SEPARATOR_CHAR);
-		if (URLHelper.JAR_PROTOCOL.equals(url.getProtocol())) {
-			String urlStr = url.toString();
-			int jarPathStart =
-				urlStr.lastIndexOf(URLHelper.JAR_PATH_SEPARATOR_CHAR);
-			String withinJarPath = urlStr.substring(jarPathStart + 1);
-			return new URL(urlStr.substring(0, jarPathStart + 1)
-				+ new URI(withinJarPath).resolve(urlPath));
-		}
-		else {
-			return url.toURI().resolve(urlPath).toURL();
-		}
-	}
+        String urlPath = path.replace(File.separatorChar, URLHelper.URL_SEPARATOR_CHAR);
+        if (URLHelper.JAR_PROTOCOL.equals(url.getProtocol())) {
+            String urlStr = url.toString();
+            int jarPathStart = urlStr.lastIndexOf(URLHelper.JAR_PATH_SEPARATOR_CHAR);
+            String withinJarPath = urlStr.substring(jarPathStart + 1);
+            return new URL(
+                    urlStr.substring(0, jarPathStart + 1)
+                            + new URI(withinJarPath).resolve(urlPath));
+        } else {
+            return url.toURI().resolve(urlPath).toURL();
+        }
+    }
 
-	private URLHelper() {}
-
+    private URLHelper() {}
 }

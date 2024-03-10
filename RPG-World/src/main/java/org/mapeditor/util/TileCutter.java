@@ -39,45 +39,44 @@ import java.awt.image.BufferedImage;
  */
 public interface TileCutter {
 
-	/**
-	 * Returns the name of this tile cutter.
-	 *
-	 * @return the name of this tile cutter
-	 */
-	String getName();
+    /**
+     * Returns the name of this tile cutter.
+     *
+     * @return the name of this tile cutter
+     */
+    String getName();
 
-	/**
-	 * Retrieves the next tile image.
-	 *
-	 * @return the next tile image, or <code>null</code> when no more tile
-	 *         images are available
-	 */
-	BufferedImage getNextTile();
+    /**
+     * Retrieves the next tile image.
+     *
+     * @return the next tile image, or <code>null</code> when no more tile images are available
+     */
+    BufferedImage getNextTile();
 
-	/**
-	 * Returns the default tile height of tiles cut by this cutter.
-	 *
-	 * @return the default tile height of tiles cut by this cutter.
-	 */
-	int getTileHeight();
+    /**
+     * Returns the default tile height of tiles cut by this cutter.
+     *
+     * @return the default tile height of tiles cut by this cutter.
+     */
+    int getTileHeight();
 
-	/**
-	 * Returns the default tile width of tiles cut by this cutter.
-	 *
-	 * @return the default tile width of tiles cut by this cutter.
-	 */
-	int getTileWidth();
+    /**
+     * Returns the default tile width of tiles cut by this cutter.
+     *
+     * @return the default tile width of tiles cut by this cutter.
+     */
+    int getTileWidth();
 
-	/**
-	 * Resets the tile cutter so that the next call to <code>getNextTile</code>
-	 * will return the first tile.
-	 */
-	void reset();
+    /**
+     * Resets the tile cutter so that the next call to <code>getNextTile</code> will return the
+     * first tile.
+     */
+    void reset();
 
-	/**
-	 * Sets the image that this cutter should cut in tile images.
-	 *
-	 * @param image the image that this cutter should cut
-	 */
-	void setImage(BufferedImage image);
+    /**
+     * Sets the image that this cutter should cut in tile images.
+     *
+     * @param image the image that this cutter should cut
+     */
+    void setImage(BufferedImage image);
 }

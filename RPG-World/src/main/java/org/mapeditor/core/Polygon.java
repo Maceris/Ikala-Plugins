@@ -20,45 +20,46 @@ import javax.xml.bind.annotation.XmlType;
  * location of the parent `object`. By default, the first point is<br>
  * created as 0,0 denoting that the point will originate exactly<br>
  * where the `object` is placed.
- *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlType(name = "Polygon")
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class Polygon {
 
-	/**
-	 * A list of x,y coordinates in pixels.
-	 * 
-	 */
-	@XmlAttribute(name = "points")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected String points;
+    /** A list of x,y coordinates in pixels. */
+    @XmlAttribute(name = "points")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected String points;
 
-	/**
-	 * A list of x,y coordinates in pixels.
-	 * 
-	 * @return possible object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public String getPoints() {
-		return this.points;
-	}
+    /**
+     * A list of x,y coordinates in pixels.
+     *
+     * @return possible object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public String getPoints() {
+        return points;
+    }
 
-	/**
-	 * A list of x,y coordinates in pixels.
-	 * 
-	 * @param value allowed object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setPoints(String value) {
-		this.points = value;
-	}
-
+    /**
+     * A list of x,y coordinates in pixels.
+     *
+     * @param value allowed object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setPoints(String value) {
+        points = value;
+    }
 }

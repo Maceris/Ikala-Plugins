@@ -18,112 +18,119 @@ import javax.xml.bind.annotation.XmlType;
  * This element is only used in case of isometric orientation, and<br>
  * determines how tile overlays for terrain and collision<br>
  * information are rendered.
- *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlType(name = "Grid")
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class Grid {
 
-	/**
-	 * Orientation of the grid for the tiles in this tileset<br>
-	 * (orthogonal or isometric)
-	 * 
-	 */
-	@XmlAttribute(name = "orientation")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Orientation orientation;
-	/**
-	 * Width of a grid cell
-	 * 
-	 */
-	@XmlAttribute(name = "width")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Integer width;
-	/**
-	 * Height of a grid cell
-	 * 
-	 */
-	@XmlAttribute(name = "height")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Integer height;
+    /**
+     * Orientation of the grid for the tiles in this tileset<br>
+     * (orthogonal or isometric)
+     */
+    @XmlAttribute(name = "orientation")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Orientation orientation;
 
-	/**
-	 * Height of a grid cell
-	 * 
-	 * @return possible object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Integer getHeight() {
-		return this.height;
-	}
+    /** Width of a grid cell */
+    @XmlAttribute(name = "width")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Integer width;
 
-	/**
-	 * Orientation of the grid for the tiles in this tileset<br>
-	 * (orthogonal or isometric)
-	 * 
-	 * @return possible object is {@link Orientation }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Orientation getOrientation() {
-		return this.orientation;
-	}
+    /** Height of a grid cell */
+    @XmlAttribute(name = "height")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Integer height;
 
-	/**
-	 * Width of a grid cell
-	 * 
-	 * @return possible object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Integer getWidth() {
-		return this.width;
-	}
+    /**
+     * Height of a grid cell
+     *
+     * @return possible object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Integer getHeight() {
+        return height;
+    }
 
-	/**
-	 * Height of a grid cell
-	 * 
-	 * @param value allowed object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setHeight(Integer value) {
-		this.height = value;
-	}
+    /**
+     * Orientation of the grid for the tiles in this tileset<br>
+     * (orthogonal or isometric)
+     *
+     * @return possible object is {@link Orientation }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Orientation getOrientation() {
+        return orientation;
+    }
 
-	/**
-	 * Orientation of the grid for the tiles in this tileset<br>
-	 * (orthogonal or isometric)
-	 * 
-	 * @param value allowed object is {@link Orientation }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setOrientation(Orientation value) {
-		this.orientation = value;
-	}
+    /**
+     * Width of a grid cell
+     *
+     * @return possible object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Integer getWidth() {
+        return width;
+    }
 
-	/**
-	 * Width of a grid cell
-	 * 
-	 * @param value allowed object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setWidth(Integer value) {
-		this.width = value;
-	}
+    /**
+     * Height of a grid cell
+     *
+     * @param value allowed object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setHeight(Integer value) {
+        height = value;
+    }
 
+    /**
+     * Orientation of the grid for the tiles in this tileset<br>
+     * (orthogonal or isometric)
+     *
+     * @param value allowed object is {@link Orientation }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setOrientation(Orientation value) {
+        orientation = value;
+    }
+
+    /**
+     * Width of a grid cell
+     *
+     * @param value allowed object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setWidth(Integer value) {
+        width = value;
+    }
 }

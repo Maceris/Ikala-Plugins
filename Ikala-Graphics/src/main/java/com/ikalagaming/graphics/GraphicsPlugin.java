@@ -20,75 +20,68 @@ import java.util.UUID;
  * The plugin for handling graphics.
  *
  * @author Ches Burks
- *
  */
 @Slf4j
 public class GraphicsPlugin extends Plugin {
 
-	/**
-	 * The name of the plugin.
-	 */
-	public static final String PLUGIN_NAME = "Ikala-Graphics";
-	/**
-	 * The resource bundle for the Graphics plugin.
-	 *
-	 * @return The bundle.
-	 * @param resourceBundle The new bundle to use.
-	 */
-	@Getter
-	@Setter
-	private static ResourceBundle resourceBundle;
+    /** The name of the plugin. */
+    public static final String PLUGIN_NAME = "Ikala-Graphics";
 
-	private Set<Listener> listeners;
+    /**
+     * The resource bundle for the Graphics plugin.
+     *
+     * @return The bundle.
+     * @param resourceBundle The new bundle to use.
+     */
+    @Getter @Setter private static ResourceBundle resourceBundle;
 
-	@Override
-	public Set<Listener> getListeners() {
-		if (this.listeners == null) {
-			this.listeners =
-				Collections.synchronizedSet(new HashSet<Listener>());
-		}
+    private Set<Listener> listeners;
 
-		return this.listeners;
-	}
+    @Override
+    public Set<Listener> getListeners() {
+        if (listeners == null) {
+            listeners = Collections.synchronizedSet(new HashSet<Listener>());
+        }
 
-	@Override
-	public String getName() {
-		return GraphicsPlugin.PLUGIN_NAME;
-	}
+        return listeners;
+    }
 
-	@Override
-	public boolean onDisable() {
-		GraphicsManager.getShutdownFlag().set(true);
-		Launcher.removeMainThreadStage(GraphicsManager.getTickStageID());
-		return true;
-	}
+    @Override
+    public String getName() {
+        return GraphicsPlugin.PLUGIN_NAME;
+    }
 
-	@Override
-	public boolean onEnable() {
-		GraphicsManager.createWindow();
-		UUID stageID = Launcher.addMainThreadStage(GraphicsManager::tick);
-		GraphicsManager.setTickStageID(stageID);
-		return true;
-	}
+    @Override
+    public boolean onDisable() {
+        GraphicsManager.getShutdownFlag().set(true);
+        Launcher.removeMainThreadStage(GraphicsManager.getTickStageID());
+        return true;
+    }
 
-	@Override
-	public boolean onLoad() {
-		try {
-			GraphicsPlugin.setResourceBundle(ResourceBundle.getBundle(
-				"com.ikalagaming.graphics.strings", Localization.getLocale()));
-		}
-		catch (MissingResourceException missingResource) {
-			// don't localize this since it would fail anyways
-			GraphicsPlugin.log
-				.warn("Locale not found for Ikala-Graphics in onLoad()");
-		}
-		return true;
-	}
+    @Override
+    public boolean onEnable() {
+        GraphicsManager.createWindow();
+        UUID stageID = Launcher.addMainThreadStage(GraphicsManager::tick);
+        GraphicsManager.setTickStageID(stageID);
+        return true;
+    }
 
-	@Override
-	public boolean onUnload() {
-		GraphicsPlugin.setResourceBundle(null);
-		return true;
-	}
+    @Override
+    public boolean onLoad() {
+        try {
+            GraphicsPlugin.setResourceBundle(
+                    ResourceBundle.getBundle(
+                            "com.ikalagaming.graphics.strings", Localization.getLocale()));
+        } catch (MissingResourceException missingResource) {
+            // don't localize this since it would fail anyways
+            log.warn("Locale not found for Ikala-Graphics in onLoad()");
+        }
+        return true;
+    }
 
+    @Override
+    public boolean onUnload() {
+        GraphicsPlugin.setResourceBundle(null);
+        return true;
+    }
 }

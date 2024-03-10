@@ -10,7 +10,6 @@ package org.mapeditor.core;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import javax.annotation.Generated;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
@@ -22,35 +21,39 @@ import javax.xml.bind.annotation.XmlType;
  * A group layer, used to organize the layers of the map in a<br>
  * hierarchy. Its attributes `offsetx`, `offsety`, `opacity` and<br>
  * `visible` recursively affect child layers.
- *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "Group", propOrder = {"layers"})
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@XmlType(
+        name = "Group",
+        propOrder = {"layers"})
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class Group extends MapLayer {
 
-	/**
-	 * 
-	 */
-	@XmlElements({@XmlElement(name = "layer", type = TileLayer.class),
-		@XmlElement(name = "objectgroup", type = ObjectGroup.class),
-		@XmlElement(name = "imagelayer", type = ImageLayer.class),
-		@XmlElement(name = "group", type = Group.class)})
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected List<MapLayer> layers;
+    /** */
+    @XmlElements({
+        @XmlElement(name = "layer", type = TileLayer.class),
+        @XmlElement(name = "objectgroup", type = ObjectGroup.class),
+        @XmlElement(name = "imagelayer", type = ImageLayer.class),
+        @XmlElement(name = "group", type = Group.class)
+    })
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected List<MapLayer> layers;
 
-	/**
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public List<MapLayer> getLayers() {
-		if (this.layers == null) {
-			this.layers = new ArrayList<>();
-		}
-		return this.layers;
-	}
-
+    /** */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public List<MapLayer> getLayers() {
+        if (layers == null) {
+            layers = new ArrayList<>();
+        }
+        return layers;
+    }
 }

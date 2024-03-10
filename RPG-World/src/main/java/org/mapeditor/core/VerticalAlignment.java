@@ -13,50 +13,43 @@ import javax.xml.bind.annotation.XmlEnum;
 import javax.xml.bind.annotation.XmlEnumValue;
 import javax.xml.bind.annotation.XmlType;
 
-/**
- *
- */
+/** */
 @XmlType(name = "VerticalAlignment")
 @XmlEnum
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public enum VerticalAlignment {
 
-	/**
-	 * 
-	 */
-	@XmlEnumValue("top")
-	TOP("top"),
+    /** */
+    @XmlEnumValue("top")
+    TOP("top"),
 
-	/**
-	 * 
-	 */
-	@XmlEnumValue("center")
-	CENTER("center"),
+    /** */
+    @XmlEnumValue("center")
+    CENTER("center"),
 
-	/**
-	 * 
-	 */
-	@XmlEnumValue("bottom")
-	BOTTOM("bottom");
+    /** */
+    @XmlEnumValue("bottom")
+    BOTTOM("bottom");
 
-	public static VerticalAlignment fromValue(String v) {
-		for (VerticalAlignment c : VerticalAlignment.values()) {
-			if (c.value.equals(v)) {
-				return c;
-			}
-		}
-		throw new IllegalArgumentException(v);
-	}
+    public static VerticalAlignment fromValue(String v) {
+        for (VerticalAlignment c : VerticalAlignment.values()) {
+            if (c.value.equals(v)) {
+                return c;
+            }
+        }
+        throw new IllegalArgumentException(v);
+    }
 
-	private final String value;
+    private final String value;
 
-	VerticalAlignment(String v) {
-		this.value = v;
-	}
+    VerticalAlignment(String v) {
+        value = v;
+    }
 
-	public String value() {
-		return this.value;
-	}
-
+    public String value() {
+        return value;
+    }
 }

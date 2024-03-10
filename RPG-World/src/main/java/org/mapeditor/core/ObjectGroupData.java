@@ -10,7 +10,6 @@ package org.mapeditor.core;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import javax.annotation.Generated;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
@@ -21,102 +20,110 @@ import javax.xml.bind.annotation.XmlType;
 /**
  * The object group is in fact a map layer, and is hence called<br>
  * "object layer" in Tiled Qt.
- *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "ObjectGroup", propOrder = {"objects"})
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@XmlType(
+        name = "ObjectGroup",
+        propOrder = {"objects"})
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class ObjectGroupData extends MapLayer {
 
-	/**
-	 * 
-	 */
-	@XmlElement(name = "object", required = true, type = MapObject.class)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected List<MapObject> objects;
-	/**
-	 * The color used to display the objects in this group.
-	 * 
-	 */
-	@XmlAttribute(name = "color")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected String color;
-	/**
-	 * Whether the objects are drawn according to the order<br>
-	 * of appearance ("index") or sorted by their<br>
-	 * y-coordinate ("topdown"). Defaults to "topdown".
-	 * 
-	 */
-	@XmlAttribute(name = "draworder")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected String draworder;
+    /** */
+    @XmlElement(name = "object", required = true, type = MapObject.class)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected List<MapObject> objects;
 
-	/**
-	 * The color used to display the objects in this group.
-	 * 
-	 * @return possible object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public String getColor() {
-		return this.color;
-	}
+    /** The color used to display the objects in this group. */
+    @XmlAttribute(name = "color")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected String color;
 
-	/**
-	 * Whether the objects are drawn according to the order<br>
-	 * of appearance ("index") or sorted by their<br>
-	 * y-coordinate ("topdown"). Defaults to "topdown".
-	 * 
-	 * @return possible object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public String getDraworder() {
-		return this.draworder;
-	}
+    /**
+     * Whether the objects are drawn according to the order<br>
+     * of appearance ("index") or sorted by their<br>
+     * y-coordinate ("topdown"). Defaults to "topdown".
+     */
+    @XmlAttribute(name = "draworder")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected String draworder;
 
-	/**
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public List<MapObject> getObjects() {
-		if (this.objects == null) {
-			this.objects = new ArrayList<>();
-		}
-		return this.objects;
-	}
+    /**
+     * The color used to display the objects in this group.
+     *
+     * @return possible object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public String getColor() {
+        return color;
+    }
 
-	/**
-	 * The color used to display the objects in this group.
-	 * 
-	 * @param value allowed object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setColor(String value) {
-		this.color = value;
-	}
+    /**
+     * Whether the objects are drawn according to the order<br>
+     * of appearance ("index") or sorted by their<br>
+     * y-coordinate ("topdown"). Defaults to "topdown".
+     *
+     * @return possible object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public String getDraworder() {
+        return draworder;
+    }
 
-	/**
-	 * Whether the objects are drawn according to the order<br>
-	 * of appearance ("index") or sorted by their<br>
-	 * y-coordinate ("topdown"). Defaults to "topdown".
-	 * 
-	 * @param value allowed object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setDraworder(String value) {
-		this.draworder = value;
-	}
+    /** */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public List<MapObject> getObjects() {
+        if (objects == null) {
+            objects = new ArrayList<>();
+        }
+        return objects;
+    }
 
+    /**
+     * The color used to display the objects in this group.
+     *
+     * @param value allowed object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setColor(String value) {
+        color = value;
+    }
+
+    /**
+     * Whether the objects are drawn according to the order<br>
+     * of appearance ("index") or sorted by their<br>
+     * y-coordinate ("topdown"). Defaults to "topdown".
+     *
+     * @param value allowed object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setDraworder(String value) {
+        draworder = value;
+    }
 }

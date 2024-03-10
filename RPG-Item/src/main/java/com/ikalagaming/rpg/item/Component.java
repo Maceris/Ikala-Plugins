@@ -20,7 +20,6 @@ import javax.persistence.Table;
  * An item that slots into and empowers or modifies another item.
  *
  * @author Ches Burks
- *
  */
 @EqualsAndHashCode(callSuper = false)
 @Getter
@@ -28,44 +27,41 @@ import javax.persistence.Table;
 @Entity
 @Table(name = Component.TABLE_NAME)
 public class Component extends Item {
-	/**
-	 * The name of the table in the database.
-	 */
-	static final String TABLE_NAME = "COMPONENT";
-	/**
-	 * What kind of component the item is.
-	 *
-	 * @param componentType The kind of component the item is.
-	 * @return The kind of component the item is.
-	 */
-	@Column(name = "COMPONENT_TYPE")
-	@Enumerated(EnumType.STRING)
-	private ComponentType componentType;
+    /** The name of the table in the database. */
+    static final String TABLE_NAME = "COMPONENT";
 
-	/**
-	 * Stat bonuses provided by the item.
-	 *
-	 * @param itemStats The stat bonuses provided by the item.
-	 * @return The stat bonuses provided by the item.
-	 */
-	@Column(name = "ITEM_STATS")
-	@Convert(converter = ItemStatsConverter.class)
-	private ItemStats itemStats = new ItemStats();
+    /**
+     * What kind of component the item is.
+     *
+     * @param componentType The kind of component the item is.
+     * @return The kind of component the item is.
+     */
+    @Column(name = "COMPONENT_TYPE")
+    @Enumerated(EnumType.STRING)
+    private ComponentType componentType;
 
-	/**
-	 * The types of items this component can be applied to.
-	 *
-	 * @param itemCriteria The types of items this component can be applied to.
-	 * @return The types of items this component can be applied to.
-	 */
-	@Column(name = "ITEM_CRITERIA")
-	@Convert(converter = ItemCriteriaConverter.class)
-	private ItemCriteria itemCriteria = new ItemCriteria();
+    /**
+     * Stat bonuses provided by the item.
+     *
+     * @param itemStats The stat bonuses provided by the item.
+     * @return The stat bonuses provided by the item.
+     */
+    @Column(name = "ITEM_STATS")
+    @Convert(converter = ItemStatsConverter.class)
+    private ItemStats itemStats = new ItemStats();
 
-	/**
-	 * Constructs a new component.
-	 */
-	public Component() {
-		this.setItemType(ItemType.COMPONENT);
-	}
+    /**
+     * The types of items this component can be applied to.
+     *
+     * @param itemCriteria The types of items this component can be applied to.
+     * @return The types of items this component can be applied to.
+     */
+    @Column(name = "ITEM_CRITERIA")
+    @Convert(converter = ItemCriteriaConverter.class)
+    private ItemCriteria itemCriteria = new ItemCriteria();
+
+    /** Constructs a new component. */
+    public Component() {
+        setItemType(ItemType.COMPONENT);
+    }
 }

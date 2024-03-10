@@ -18,42 +18,44 @@ import javax.xml.bind.annotation.XmlType;
  * All `tileset` tags shall occur before the first `layer` tag so<br>
  * that parsers may rely on having the tilesets before needing to<br>
  * resolve tiles.
- *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "TileLayer", propOrder = {"data"})
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@XmlType(
+        name = "TileLayer",
+        propOrder = {"data"})
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class TileLayerData extends MapLayer {
 
-	/**
-	 * 
-	 */
-	@XmlElement(required = true)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Data data;
+    /** */
+    @XmlElement(required = true)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Data data;
 
-	/**
-	 * 
-	 * @return possible object is {@link Data }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Data getData() {
-		return this.data;
-	}
+    /**
+     * @return possible object is {@link Data }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Data getData() {
+        return data;
+    }
 
-	/**
-	 * 
-	 * @param value allowed object is {@link Data }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setData(Data value) {
-		this.data = value;
-	}
-
+    /**
+     * @param value allowed object is {@link Data }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setData(Data value) {
+        data = value;
+    }
 }

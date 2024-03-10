@@ -13,44 +13,39 @@ import javax.xml.bind.annotation.XmlEnum;
 import javax.xml.bind.annotation.XmlEnumValue;
 import javax.xml.bind.annotation.XmlType;
 
-/**
- *
- */
+/** */
 @XmlType(name = "Encoding")
 @XmlEnum
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public enum Encoding {
 
-	/**
-	 * 
-	 */
-	@XmlEnumValue("base64")
-	BASE_64("base64"),
+    /** */
+    @XmlEnumValue("base64")
+    BASE_64("base64"),
 
-	/**
-	 * 
-	 */
-	@XmlEnumValue("csv")
-	CSV("csv");
+    /** */
+    @XmlEnumValue("csv")
+    CSV("csv");
 
-	public static Encoding fromValue(String v) {
-		for (Encoding c : Encoding.values()) {
-			if (c.value.equals(v)) {
-				return c;
-			}
-		}
-		throw new IllegalArgumentException(v);
-	}
+    public static Encoding fromValue(String v) {
+        for (Encoding c : Encoding.values()) {
+            if (c.value.equals(v)) {
+                return c;
+            }
+        }
+        throw new IllegalArgumentException(v);
+    }
 
-	private final String value;
+    private final String value;
 
-	Encoding(String v) {
-		this.value = v;
-	}
+    Encoding(String v) {
+        value = v;
+    }
 
-	public String value() {
-		return this.value;
-	}
-
+    public String value() {
+        return value;
+    }
 }

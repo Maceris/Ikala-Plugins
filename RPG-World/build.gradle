@@ -10,6 +10,7 @@ plugins {
     id 'eclipse'
     id 'idea'
     id 'io.franzbecker.gradle-lombok' version '5.0.0'
+    id 'com.diffplug.spotless' version '6.25.0'
 }
 
 import io.franzbecker.gradle.lombok.task.DelombokTask
@@ -114,4 +115,31 @@ tasks.named('jar') {
         configurations.provided.collect { it.isDirectory() ? it : zipTree(it) }
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.named('check') {
+	dependsOn spotlessApply
+}
+
+spotless {
+	java {
+		target fileTree('.') {
+			include '**/*.java'
+			exclude '**/build/**', '**/build-*/**'
+		}
+		cleanthat().sourceCompatibility('17')
+			.addMutator('SafeAndConsensual')
+			.addMutator('SafeButNotConsensual')
+			.addMutator('SafeButControversial')
+			.excludeMutator('AvoidInlineConditionals')
+			.includeDraft(false)
+		googleJavaFormat('1.21.0').aosp()
+		// eclipse('4.27').configFile('formatting.xml')
+		toggleOffOn()
+		removeUnusedImports()
+		trimTrailingWhitespace()
+		endWithNewline()
+		importOrder('\\#', 'com.ikalagaming', '', 'java|javax')
+		formatAnnotations()
+	}
 }

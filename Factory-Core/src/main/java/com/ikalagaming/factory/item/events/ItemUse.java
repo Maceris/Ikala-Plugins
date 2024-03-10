@@ -4,10 +4,7 @@ import com.ikalagaming.event.CancelableEvent;
 
 /**
  * A player is trying to use an item.
- * 
- * @author Ches Burks
  *
+ * @author Ches Burks
  */
-public class ItemUse extends CancelableEvent {
-
-}
+public class ItemUse extends CancelableEvent {}

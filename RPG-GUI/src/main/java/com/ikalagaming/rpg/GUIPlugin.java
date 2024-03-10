@@ -20,72 +20,67 @@ import java.util.Set;
  * A plugin that handles GUI.
  *
  * @author Ches Burks
- *
  */
 @Slf4j
 public class GUIPlugin extends Plugin {
-	/**
-	 * The name of the plugin.
-	 */
-	public static final String PLUGIN_NAME = "RPG-GUI";
-	/**
-	 * The resource bundle for the Graphics plugin.
-	 *
-	 * @return The bundle.
-	 * @param resourceBundle The new bundle to use.
-	 */
-	@Getter
-	@Setter
-	private static ResourceBundle resourceBundle;
+    /** The name of the plugin. */
+    public static final String PLUGIN_NAME = "RPG-GUI";
 
-	private GUIEventListener listener;
-	private Set<Listener> listeners;
+    /**
+     * The resource bundle for the Graphics plugin.
+     *
+     * @return The bundle.
+     * @param resourceBundle The new bundle to use.
+     */
+    @Getter @Setter private static ResourceBundle resourceBundle;
 
-	@Override
-	public Set<Listener> getListeners() {
-		if (this.listeners == null) {
-			this.listeners =
-				Collections.synchronizedSet(new HashSet<Listener>());
-			this.listener = new GUIEventListener();
-			this.listeners.add(this.listener);
-		}
-		return this.listeners;
-	}
+    private GUIEventListener listener;
+    private Set<Listener> listeners;
 
-	@Override
-	public String getName() {
-		return GUIPlugin.PLUGIN_NAME;
-	}
+    @Override
+    public Set<Listener> getListeners() {
+        if (listeners == null) {
+            listeners = Collections.synchronizedSet(new HashSet<Listener>());
+            listener = new GUIEventListener();
+            listeners.add(listener);
+        }
+        return listeners;
+    }
 
-	@Override
-	public boolean onDisable() {
-		ScriptManager.unregisterClass(Dialogue.class);
-		return true;
-	}
+    @Override
+    public String getName() {
+        return GUIPlugin.PLUGIN_NAME;
+    }
 
-	@Override
-	public boolean onEnable() {
-		ScriptManager.registerClass(Dialogue.class);
-		return true;
-	}
+    @Override
+    public boolean onDisable() {
+        ScriptManager.unregisterClass(Dialogue.class);
+        return true;
+    }
 
-	@Override
-	public boolean onLoad() {
-		try {
-			GUIPlugin.setResourceBundle(ResourceBundle.getBundle(
-				"com.ikalagaming.rpg.strings", Localization.getLocale()));
-		}
-		catch (MissingResourceException missingResource) {
-			// don't localize this since it would fail anyways
-			GUIPlugin.log.warn("Locale not found for RPG-GUI in onLoad()");
-		}
-		return true;
-	}
+    @Override
+    public boolean onEnable() {
+        ScriptManager.registerClass(Dialogue.class);
+        return true;
+    }
 
-	@Override
-	public boolean onUnload() {
-		this.listener.getGui().cleanup();
-		GraphicsPlugin.setResourceBundle(null);
-		return true;
-	}
+    @Override
+    public boolean onLoad() {
+        try {
+            GUIPlugin.setResourceBundle(
+                    ResourceBundle.getBundle(
+                            "com.ikalagaming.rpg.strings", Localization.getLocale()));
+        } catch (MissingResourceException missingResource) {
+            // don't localize this since it would fail anyways
+            log.warn("Locale not found for RPG-GUI in onLoad()");
+        }
+        return true;
+    }
+
+    @Override
+    public boolean onUnload() {
+        listener.getGui().cleanup();
+        GraphicsPlugin.setResourceBundle(null);
+        return true;
+    }
 }

@@ -1,4 +1,2 @@
-/**
- * Events relating to the world.
- */
+/** Events relating to the world. */
 package com.ikalagaming.rpg.world.events;

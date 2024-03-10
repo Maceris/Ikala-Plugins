@@ -15,110 +15,117 @@ import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlType;
 
-/**
- *
- */
+/** */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "Terrain", propOrder = {"properties"})
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@XmlType(
+        name = "Terrain",
+        propOrder = {"properties"})
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class Terrain {
 
-	/**
-	 * 
-	 */
-	@XmlElement(required = true, type = Properties.class)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Properties properties;
-	/**
-	 * The name of the terrain type.
-	 * 
-	 */
-	@XmlAttribute(name = "name")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected String name;
-	/**
-	 * The local tile-id of the tile that represents the terrain<br>
-	 * visually.
-	 * 
-	 */
-	@XmlAttribute(name = "tile")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Integer tile;
+    /** */
+    @XmlElement(required = true, type = Properties.class)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Properties properties;
 
-	/**
-	 * The name of the terrain type.
-	 * 
-	 * @return possible object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public String getName() {
-		return this.name;
-	}
+    /** The name of the terrain type. */
+    @XmlAttribute(name = "name")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected String name;
 
-	/**
-	 * 
-	 * @return possible object is {@link PropertiesData }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public PropertiesData getProperties() {
-		return this.properties;
-	}
+    /**
+     * The local tile-id of the tile that represents the terrain<br>
+     * visually.
+     */
+    @XmlAttribute(name = "tile")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Integer tile;
 
-	/**
-	 * The local tile-id of the tile that represents the terrain<br>
-	 * visually.
-	 * 
-	 * @return possible object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Integer getTile() {
-		return this.tile;
-	}
+    /**
+     * The name of the terrain type.
+     *
+     * @return possible object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public String getName() {
+        return name;
+    }
 
-	/**
-	 * The name of the terrain type.
-	 * 
-	 * @param value allowed object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setName(String value) {
-		this.name = value;
-	}
+    /**
+     * @return possible object is {@link PropertiesData }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public PropertiesData getProperties() {
+        return properties;
+    }
 
-	/**
-	 * 
-	 * @param value allowed object is {@link PropertiesData }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setProperties(PropertiesData value) {
-		this.properties = ((Properties) value);
-	}
+    /**
+     * The local tile-id of the tile that represents the terrain<br>
+     * visually.
+     *
+     * @return possible object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Integer getTile() {
+        return tile;
+    }
 
-	/**
-	 * The local tile-id of the tile that represents the terrain<br>
-	 * visually.
-	 * 
-	 * @param value allowed object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setTile(Integer value) {
-		this.tile = value;
-	}
+    /**
+     * The name of the terrain type.
+     *
+     * @param value allowed object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setName(String value) {
+        name = value;
+    }
 
+    /**
+     * @param value allowed object is {@link PropertiesData }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setProperties(PropertiesData value) {
+        properties = ((Properties) value);
+    }
+
+    /**
+     * The local tile-id of the tile that represents the terrain<br>
+     * visually.
+     *
+     * @param value allowed object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setTile(Integer value) {
+        tile = value;
+    }
 }

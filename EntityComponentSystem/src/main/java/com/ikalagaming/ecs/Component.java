@@ -11,72 +11,71 @@ import java.util.UUID;
  * A component that stores state information.
  *
  * @author Ches Burks
- *
  * @param <T> The actual class of this component, stored as a type parameter.
  */
 public abstract class Component<T extends Component<?>>
-	implements Comparable<Component<Component<?>>> {
+        implements Comparable<Component<Component<?>>> {
 
-	/**
-	 * The unique ID for a component instance.
-	 *
-	 * @return The unique ID for the component instance.
-	 */
-	@Getter
-	private final UUID uniqueID = UUID.randomUUID();
+    /**
+     * The unique ID for a component instance.
+     *
+     * @return The unique ID for the component instance.
+     */
+    @Getter private final UUID uniqueID = UUID.randomUUID();
 
-	/**
-	 * Reference counting in the case of shared components. Tracks the number of
-	 * entities that currently contain this component.
-	 */
-	int referenceCount = 0;
+    /**
+     * Reference counting in the case of shared components. Tracks the number of entities that
+     * currently contain this component.
+     */
+    int referenceCount = 0;
 
-	/**
-	 * The IDs of the Entities that this component belongs to.
-	 *
-	 * @return The unique IDs of the entities that contains this component.
-	 */
-	@Getter
-	private List<UUID> parents = new ArrayList<>();
+    /**
+     * The IDs of the Entities that this component belongs to.
+     *
+     * @return The unique IDs of the entities that contains this component.
+     */
+    @Getter private List<UUID> parents = new ArrayList<>();
 
-	/**
-	 * Casts this component to its actual class.
-	 *
-	 * @return This object as its original class.
-	 * @throws ClassCastException If this component is not the type we expect.
-	 */
-	@SuppressWarnings("unchecked")
-	public T asType() {
-		return (T) this;
-	}
+    /**
+     * Casts this component to its actual class.
+     *
+     * @return This object as its original class.
+     * @throws ClassCastException If this component is not the type we expect.
+     */
+    @SuppressWarnings("unchecked")
+    public T asType() {
+        return (T) this;
+    }
 
-	@Override
-	public int compareTo(Component<Component<?>> o) {
-		return this.getUniqueID().compareTo(o.getUniqueID());
-	}
+    @Override
+    public int compareTo(Component<Component<?>> o) {
+        return this.getUniqueID().compareTo(o.getUniqueID());
+    }
 
-	@Override
-	public boolean equals(Object obj) {
-		if (!(obj instanceof Component<?>)) {
-			return false;
-		}
-		return this.getUniqueID().equals(((Component<?>) obj).getUniqueID());
-	}
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof Component<?>)) {
+            return false;
+        }
+        return this.getUniqueID().equals(((Component<?>) obj).getUniqueID());
+    }
 
-	/**
-	 * Return the actual component class that this component was when created.
-	 *
-	 * @return The Component class it should be.
-	 */
-	public Class<T> getOriginalClass() {
-		@SuppressWarnings("unchecked")
-		Class<T> persistentClass = (Class<T>) ((ParameterizedType) this
-			.getClass().getGenericSuperclass()).getActualTypeArguments()[0];
-		return persistentClass;
-	}
+    /**
+     * Return the actual component class that this component was when created.
+     *
+     * @return The Component class it should be.
+     */
+    public Class<T> getOriginalClass() {
+        @SuppressWarnings("unchecked")
+        Class<T> persistentClass =
+                (Class<T>)
+                        ((ParameterizedType) this.getClass().getGenericSuperclass())
+                                .getActualTypeArguments()[0];
+        return persistentClass;
+    }
 
-	@Override
-	public int hashCode() {
-		return this.getUniqueID().hashCode();
-	}
+    @Override
+    public int hashCode() {
+        return this.getUniqueID().hashCode();
+    }
 }

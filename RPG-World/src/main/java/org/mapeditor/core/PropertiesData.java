@@ -10,7 +10,6 @@ package org.mapeditor.core;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import javax.annotation.Generated;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
@@ -22,32 +21,34 @@ import javax.xml.bind.annotation.XmlType;
  * the `map`, `tileset`, `tile` (when part of a `tileset`),<br>
  * `terrain`, `layer`, `objectgroup`, `object`, `imagelayer` and<br>
  * `group` elements.
- *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "Properties", propOrder = {"properties"})
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@XmlType(
+        name = "Properties",
+        propOrder = {"properties"})
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class PropertiesData {
 
-	/**
-	 * 
-	 */
-	@XmlElement(name = "property", required = true)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected List<Property> properties;
+    /** */
+    @XmlElement(name = "property", required = true)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected List<Property> properties;
 
-	/**
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public List<Property> getProperties() {
-		if (this.properties == null) {
-			this.properties = new ArrayList<>();
-		}
-		return this.properties;
-	}
-
+    /** */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public List<Property> getProperties() {
+        if (properties == null) {
+            properties = new ArrayList<>();
+        }
+        return properties;
+    }
 }

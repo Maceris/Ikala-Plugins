@@ -17,86 +17,91 @@ import javax.xml.bind.annotation.XmlType;
 /**
  * Defines a Wang tile, by referring to a tile in the tileset and<br>
  * associating it with a certain Wang ID.
- *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlType(name = "WangTile")
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class WangTile {
 
-	/**
-	 * The tile ID.
-	 * 
-	 */
-	@XmlAttribute(name = "tileid")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Integer tileid;
-	/**
-	 * The Wang ID, which is a 32-bit unsigned integer stored in<br>
-	 * the format 0xCECECECE (where each C is a corner color and<br>
-	 * each E is an edge color, from right to left clockwise,<br>
-	 * starting with the top edge)
-	 * 
-	 */
-	@XmlAttribute(name = "wangid")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected String wangid;
+    /** The tile ID. */
+    @XmlAttribute(name = "tileid")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Integer tileid;
 
-	/**
-	 * The tile ID.
-	 * 
-	 * @return possible object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Integer getTileid() {
-		return this.tileid;
-	}
+    /**
+     * The Wang ID, which is a 32-bit unsigned integer stored in<br>
+     * the format 0xCECECECE (where each C is a corner color and<br>
+     * each E is an edge color, from right to left clockwise,<br>
+     * starting with the top edge)
+     */
+    @XmlAttribute(name = "wangid")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected String wangid;
 
-	/**
-	 * The Wang ID, which is a 32-bit unsigned integer stored in<br>
-	 * the format 0xCECECECE (where each C is a corner color and<br>
-	 * each E is an edge color, from right to left clockwise,<br>
-	 * starting with the top edge)
-	 * 
-	 * @return possible object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public String getWangid() {
-		return this.wangid;
-	}
+    /**
+     * The tile ID.
+     *
+     * @return possible object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Integer getTileid() {
+        return tileid;
+    }
 
-	/**
-	 * The tile ID.
-	 * 
-	 * @param value allowed object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setTileid(Integer value) {
-		this.tileid = value;
-	}
+    /**
+     * The Wang ID, which is a 32-bit unsigned integer stored in<br>
+     * the format 0xCECECECE (where each C is a corner color and<br>
+     * each E is an edge color, from right to left clockwise,<br>
+     * starting with the top edge)
+     *
+     * @return possible object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public String getWangid() {
+        return wangid;
+    }
 
-	/**
-	 * The Wang ID, which is a 32-bit unsigned integer stored in<br>
-	 * the format 0xCECECECE (where each C is a corner color and<br>
-	 * each E is an edge color, from right to left clockwise,<br>
-	 * starting with the top edge)
-	 * 
-	 * @param value allowed object is {@link String }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setWangid(String value) {
-		this.wangid = value;
-	}
+    /**
+     * The tile ID.
+     *
+     * @param value allowed object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setTileid(Integer value) {
+        tileid = value;
+    }
 
+    /**
+     * The Wang ID, which is a 32-bit unsigned integer stored in<br>
+     * the format 0xCECECECE (where each C is a corner color and<br>
+     * each E is an edge color, from right to left clockwise,<br>
+     * starting with the top edge)
+     *
+     * @param value allowed object is {@link String }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setWangid(String value) {
+        wangid = value;
+    }
 }

@@ -10,7 +10,6 @@ package org.mapeditor.core;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import javax.annotation.Generated;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
@@ -22,160 +21,170 @@ import javax.xml.bind.annotation.XmlType;
  * This is currently added only for infinite maps. The contents of a<br>
  * chunk element is same as that of the data element, except it<br>
  * stores the 'data' of the area specified in the attributes.
- *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "Chunk", propOrder = {"tile"})
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@XmlType(
+        name = "Chunk",
+        propOrder = {"tile"})
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class Chunk {
 
-	/**
-	 * 
-	 */
-	@XmlElement(required = true, type = Tile.class)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected List<TileData> tile;
-	/**
-	 * The x coordinate of the chunk in tiles.
-	 * 
-	 */
-	@XmlAttribute(name = "x")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Integer x;
-	/**
-	 * The y coordinate of the chunk in tiles.
-	 * 
-	 */
-	@XmlAttribute(name = "y")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Integer y;
-	/**
-	 * The width of the chunk in tiles.
-	 * 
-	 */
-	@XmlAttribute(name = "width")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Integer width;
-	/**
-	 * The height of the chunk in tiles.
-	 * 
-	 */
-	@XmlAttribute(name = "height")
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected Integer height;
+    /** */
+    @XmlElement(required = true, type = Tile.class)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected List<TileData> tile;
 
-	/**
-	 * The height of the chunk in tiles.
-	 * 
-	 * @return possible object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Integer getHeight() {
-		return this.height;
-	}
+    /** The x coordinate of the chunk in tiles. */
+    @XmlAttribute(name = "x")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Integer x;
 
-	/**
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public List<TileData> getTile() {
-		if (this.tile == null) {
-			this.tile = new ArrayList<>();
-		}
-		return this.tile;
-	}
+    /** The y coordinate of the chunk in tiles. */
+    @XmlAttribute(name = "y")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Integer y;
 
-	/**
-	 * The width of the chunk in tiles.
-	 * 
-	 * @return possible object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Integer getWidth() {
-		return this.width;
-	}
+    /** The width of the chunk in tiles. */
+    @XmlAttribute(name = "width")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Integer width;
 
-	/**
-	 * The x coordinate of the chunk in tiles.
-	 * 
-	 * @return possible object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Integer getX() {
-		return this.x;
-	}
+    /** The height of the chunk in tiles. */
+    @XmlAttribute(name = "height")
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected Integer height;
 
-	/**
-	 * The y coordinate of the chunk in tiles.
-	 * 
-	 * @return possible object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public Integer getY() {
-		return this.y;
-	}
+    /**
+     * The height of the chunk in tiles.
+     *
+     * @return possible object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Integer getHeight() {
+        return height;
+    }
 
-	/**
-	 * The height of the chunk in tiles.
-	 * 
-	 * @param value allowed object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setHeight(Integer value) {
-		this.height = value;
-	}
+    /** */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public List<TileData> getTile() {
+        if (tile == null) {
+            tile = new ArrayList<>();
+        }
+        return tile;
+    }
 
-	/**
-	 * The width of the chunk in tiles.
-	 * 
-	 * @param value allowed object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setWidth(Integer value) {
-		this.width = value;
-	}
+    /**
+     * The width of the chunk in tiles.
+     *
+     * @return possible object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Integer getWidth() {
+        return width;
+    }
 
-	/**
-	 * The x coordinate of the chunk in tiles.
-	 * 
-	 * @param value allowed object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setX(Integer value) {
-		this.x = value;
-	}
+    /**
+     * The x coordinate of the chunk in tiles.
+     *
+     * @return possible object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Integer getX() {
+        return x;
+    }
 
-	/**
-	 * The y coordinate of the chunk in tiles.
-	 * 
-	 * @param value allowed object is {@link Integer }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setY(Integer value) {
-		this.y = value;
-	}
+    /**
+     * The y coordinate of the chunk in tiles.
+     *
+     * @return possible object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public Integer getY() {
+        return y;
+    }
 
+    /**
+     * The height of the chunk in tiles.
+     *
+     * @param value allowed object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setHeight(Integer value) {
+        height = value;
+    }
+
+    /**
+     * The width of the chunk in tiles.
+     *
+     * @param value allowed object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setWidth(Integer value) {
+        width = value;
+    }
+
+    /**
+     * The x coordinate of the chunk in tiles.
+     *
+     * @param value allowed object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setX(Integer value) {
+        x = value;
+    }
+
+    /**
+     * The y coordinate of the chunk in tiles.
+     *
+     * @param value allowed object is {@link Integer }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setY(Integer value) {
+        y = value;
+    }
 }

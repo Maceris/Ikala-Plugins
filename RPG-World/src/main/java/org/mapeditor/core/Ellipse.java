@@ -20,12 +20,11 @@ import javax.xml.bind.annotation.XmlType;
  * <br>
  *
  * @since 0.9
- *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlType(name = "Ellipse")
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
-public class Ellipse {
-
-}
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
+public class Ellipse {}

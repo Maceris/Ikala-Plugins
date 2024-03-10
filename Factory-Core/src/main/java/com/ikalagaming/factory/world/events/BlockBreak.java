@@ -4,10 +4,7 @@ import com.ikalagaming.event.CancelableEvent;
 
 /**
  * A player is trying to break a block.
- * 
- * @author Ches Burks
  *
+ * @author Ches Burks
  */
-public class BlockBreak extends CancelableEvent {
-
-}
+public class BlockBreak extends CancelableEvent {}

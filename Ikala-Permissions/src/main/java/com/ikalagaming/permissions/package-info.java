@@ -1,4 +1,2 @@
-/**
- * A group-based permissions system.
- */
+/** A group-based permissions system. */
 package com.ikalagaming.permissions;

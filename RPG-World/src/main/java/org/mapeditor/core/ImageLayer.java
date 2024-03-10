@@ -14,44 +14,44 @@ import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlType;
 
-/**
- * A layer consisting of a single image.
- *
- */
+/** A layer consisting of a single image. */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "ImageLayer", propOrder = {"image"})
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@XmlType(
+        name = "ImageLayer",
+        propOrder = {"image"})
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class ImageLayer extends MapLayer {
 
-	/**
-	 * 
-	 */
-	@XmlElement(required = true)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected ImageData image;
+    /** */
+    @XmlElement(required = true)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected ImageData image;
 
-	/**
-	 * 
-	 * @return possible object is {@link ImageData }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public ImageData getImage() {
-		return this.image;
-	}
+    /**
+     * @return possible object is {@link ImageData }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public ImageData getImage() {
+        return image;
+    }
 
-	/**
-	 * 
-	 * @param value allowed object is {@link ImageData }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setImage(ImageData value) {
-		this.image = value;
-	}
-
+    /**
+     * @param value allowed object is {@link ImageData }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setImage(ImageData value) {
+        image = value;
+    }
 }

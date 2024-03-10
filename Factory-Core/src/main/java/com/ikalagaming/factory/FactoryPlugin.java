@@ -18,72 +18,65 @@ import java.util.Set;
  * The core of a factory game.
  *
  * @author Ches Burks
- *
  */
 @Slf4j
 public class FactoryPlugin extends Plugin {
-	/**
-	 * The name of the plugin in Java for convenience, should match the name in
-	 * plugin.yml.
-	 */
-	public static final String PLUGIN_NAME = "Factory-Core";
+    /** The name of the plugin in Java for convenience, should match the name in plugin.yml. */
+    public static final String PLUGIN_NAME = "Factory-Core";
 
-	/**
-	 * The resource bundle for the Graphics plugin.
-	 *
-	 * @return The bundle.
-	 * @param resourceBundle The new bundle to use.
-	 */
-	@Getter
-	@Setter
-	private static ResourceBundle resourceBundle;
+    /**
+     * The resource bundle for the Graphics plugin.
+     *
+     * @return The bundle.
+     * @param resourceBundle The new bundle to use.
+     */
+    @Getter @Setter private static ResourceBundle resourceBundle;
 
-	private Set<Listener> listeners;
+    private Set<Listener> listeners;
 
-	private TemporaryUI gui;
+    private TemporaryUI gui;
 
-	@Override
-	public Set<Listener> getListeners() {
-		if (null == this.listeners) {
-			this.listeners = new HashSet<>();
-		}
-		return this.listeners;
-	}
+    @Override
+    public Set<Listener> getListeners() {
+        if (null == listeners) {
+            listeners = new HashSet<>();
+        }
+        return listeners;
+    }
 
-	@Override
-	public String getName() {
-		return FactoryPlugin.PLUGIN_NAME;
-	}
+    @Override
+    public String getName() {
+        return FactoryPlugin.PLUGIN_NAME;
+    }
 
-	@Override
-	public boolean onDisable() {
-		return true;
-	}
+    @Override
+    public boolean onDisable() {
+        return true;
+    }
 
-	@Override
-	public boolean onEnable() {
-		this.gui = new TemporaryUI();
-		GraphicsManager.setGUI(this.gui);
-		return true;
-	}
+    @Override
+    public boolean onEnable() {
+        gui = new TemporaryUI();
+        GraphicsManager.setGUI(gui);
+        return true;
+    }
 
-	@Override
-	public boolean onLoad() {
-		try {
-			FactoryPlugin.setResourceBundle(ResourceBundle.getBundle(
-				"com.ikalagaming.factory.strings", Localization.getLocale()));
-		}
-		catch (MissingResourceException missingResource) {
-			// don't localize this since it would fail anyways
-			FactoryPlugin.log
-				.warn("Locale not found for Factory-Core in onLoad()");
-		}
-		return true;
-	}
+    @Override
+    public boolean onLoad() {
+        try {
+            FactoryPlugin.setResourceBundle(
+                    ResourceBundle.getBundle(
+                            "com.ikalagaming.factory.strings", Localization.getLocale()));
+        } catch (MissingResourceException missingResource) {
+            // don't localize this since it would fail anyways
+            log.warn("Locale not found for Factory-Core in onLoad()");
+        }
+        return true;
+    }
 
-	@Override
-	public boolean onUnload() {
-		FactoryPlugin.setResourceBundle(null);
-		return true;
-	}
+    @Override
+    public boolean onUnload() {
+        FactoryPlugin.setResourceBundle(null);
+        return true;
+    }
 }

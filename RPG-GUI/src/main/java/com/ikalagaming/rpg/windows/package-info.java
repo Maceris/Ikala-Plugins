@@ -1,4 +1,2 @@
-/**
- * Windows that we can draw on the screen.
- */
+/** Windows that we can draw on the screen. */
 package com.ikalagaming.rpg.windows;

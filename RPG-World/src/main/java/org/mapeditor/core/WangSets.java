@@ -10,41 +10,40 @@ package org.mapeditor.core;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import javax.annotation.Generated;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlType;
 
-/**
- * Contains the list of Wang sets defined for this tileset.
- *
- */
+/** Contains the list of Wang sets defined for this tileset. */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "WangSets", propOrder = {"wangset"})
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@XmlType(
+        name = "WangSets",
+        propOrder = {"wangset"})
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class WangSets {
 
-	/**
-	 * 
-	 */
-	@XmlElement(required = true)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected List<WangSet> wangset;
+    /** */
+    @XmlElement(required = true)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected List<WangSet> wangset;
 
-	/**
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public List<WangSet> getWangset() {
-		if (this.wangset == null) {
-			this.wangset = new ArrayList<>();
-		}
-		return this.wangset;
-	}
-
+    /** */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public List<WangSet> getWangset() {
+        if (wangset == null) {
+            wangset = new ArrayList<>();
+        }
+        return wangset;
+    }
 }

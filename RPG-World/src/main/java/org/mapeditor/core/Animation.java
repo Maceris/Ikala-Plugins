@@ -10,7 +10,6 @@ package org.mapeditor.core;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import javax.annotation.Generated;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
@@ -23,32 +22,34 @@ import javax.xml.bind.annotation.XmlType;
  * As of Tiled 0.10, each tile can have exactly one animation<br>
  * associated with it. In the future, there could be support for<br>
  * multiple named animations on a tile.
- *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "Animation", propOrder = {"frame"})
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@XmlType(
+        name = "Animation",
+        propOrder = {"frame"})
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class Animation {
 
-	/**
-	 * 
-	 */
-	@XmlElement(required = true)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected List<Frame> frame;
+    /** */
+    @XmlElement(required = true)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected List<Frame> frame;
 
-	/**
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public List<Frame> getFrame() {
-		if (this.frame == null) {
-			this.frame = new ArrayList<>();
-		}
-		return this.frame;
-	}
-
+    /** */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public List<Frame> getFrame() {
+        if (frame == null) {
+            frame = new ArrayList<>();
+        }
+        return frame;
+    }
 }

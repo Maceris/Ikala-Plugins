@@ -10,28 +10,23 @@ import java.util.Set;
  * A plugin that handles the game world state.
  *
  * @author Ches Burks
- *
  */
 public class WorldPlugin extends Plugin {
-	/**
-	 * The name of the plugin in Java for convenience, should match the name in
-	 * plugin.yml.
-	 */
-	public static final String PLUGIN_NAME = "RPG-World";
+    /** The name of the plugin in Java for convenience, should match the name in plugin.yml. */
+    public static final String PLUGIN_NAME = "RPG-World";
 
-	private Set<Listener> listeners;
+    private Set<Listener> listeners;
 
-	@Override
-	public Set<Listener> getListeners() {
-		if (null == this.listeners) {
-			this.listeners = new HashSet<>();
-		}
-		return this.listeners;
-	}
+    @Override
+    public Set<Listener> getListeners() {
+        if (null == listeners) {
+            listeners = new HashSet<>();
+        }
+        return listeners;
+    }
 
-	@Override
-	public String getName() {
-		return WorldPlugin.PLUGIN_NAME;
-	}
-
+    @Override
+    public String getName() {
+        return WorldPlugin.PLUGIN_NAME;
+    }
 }

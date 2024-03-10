@@ -13,15 +13,11 @@ import javax.persistence.Table;
 @Entity
 @Table(name = Quest.TABLE_NAME)
 public class Quest extends Item {
-	/**
-	 * The name of the table in the database.
-	 */
-	static final String TABLE_NAME = "QUEST_ITEM";
+    /** The name of the table in the database. */
+    static final String TABLE_NAME = "QUEST_ITEM";
 
-	/**
-	 * Construct a new quest item.
-	 */
-	public Quest() {
-		this.setItemType(ItemType.QUEST);
-	}
+    /** Construct a new quest item. */
+    public Quest() {
+        setItemType(ItemType.QUEST);
+    }
 }

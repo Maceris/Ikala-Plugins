@@ -30,10 +30,9 @@
  */
 package org.mapeditor.core;
 
-import java.awt.image.BufferedImage;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import lombok.extern.slf4j.Slf4j;
 
+import java.awt.image.BufferedImage;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 
@@ -43,154 +42,148 @@ import javax.xml.bind.annotation.XmlAccessorType;
  * @version 1.4.2
  */
 @XmlAccessorType(XmlAccessType.NONE)
+@Slf4j
 public class Tile extends TileData {
 
-	private BufferedImage image;
-	private String source;
-	private TileSet tileset;
+    private BufferedImage image;
+    private String source;
+    private TileSet tileset;
 
-	/**
-	 * Constructor for Tile.
-	 */
-	public Tile() {
-		super();
-		this.id = -1;
-	}
+    /** Constructor for Tile. */
+    public Tile() {
+        id = -1;
+    }
 
-	/**
-	 * Copy constructor
-	 *
-	 * @param t tile to copy
-	 */
-	public Tile(Tile t) {
-		this.tileset = t.tileset;
+    /**
+     * Copy constructor
+     *
+     * @param t tile to copy
+     */
+    public Tile(Tile t) {
+        tileset = t.tileset;
 
-		Properties tileProperties = t.properties;
-		if (tileProperties != null) {
-			try {
-				this.properties = tileProperties.clone();
-			}
-			catch (CloneNotSupportedException ex) {
-				Logger.getLogger(Tile.class.getName()).log(Level.SEVERE, null,
-					ex);
-			}
-		}
-	}
+        Properties tileProperties = t.properties;
+        if (tileProperties != null) {
+            try {
+                properties = tileProperties.clone();
+            } catch (CloneNotSupportedException ex) {
+                log.error("Clone not supported", ex);
+            }
+        }
+    }
 
-	/**
-	 * Constructor for Tile.
-	 *
-	 * @param set a {@link org.mapeditor.core.TileSet} object.
-	 */
-	public Tile(TileSet set) {
-		this();
-		this.tileset = set;
-	}
+    /**
+     * Constructor for Tile.
+     *
+     * @param set a {@link org.mapeditor.core.TileSet} object.
+     */
+    public Tile(TileSet set) {
+        tileset = set;
+    }
 
-	/**
-	 * getHeight.
-	 *
-	 * @return a int.
-	 */
-	public int getHeight() {
-		if (this.image != null) {
-			return this.image.getHeight();
-		}
-		return 0;
-	}
+    /**
+     * getHeight.
+     *
+     * @return a int.
+     */
+    public int getHeight() {
+        if (image != null) {
+            return image.getHeight();
+        }
+        return 0;
+    }
 
-	/**
-	 * Returns the tile image for this Tile.
-	 *
-	 * @return a {@link java.awt.image.BufferedImage} object.
-	 */
-	public BufferedImage getImage() {
-		return this.image;
-	}
+    /**
+     * Returns the tile image for this Tile.
+     *
+     * @return a {@link java.awt.image.BufferedImage} object.
+     */
+    public BufferedImage getImage() {
+        return image;
+    }
 
-	/** {@inheritDoc} */
-	@Override
-	public Properties getProperties() {
-		if (this.properties == null) {
-			this.properties = new Properties();
-		}
-		return super.getProperties();
-	}
+    /** {@inheritDoc} */
+    @Override
+    public Properties getProperties() {
+        if (properties == null) {
+            properties = new Properties();
+        }
+        return super.getProperties();
+    }
 
-	/**
-	 * Getter for the field <code>source</code>.
-	 *
-	 * @return a {@link java.lang.String} object.
-	 */
-	public String getSource() {
-		return this.source;
-	}
+    /**
+     * Getter for the field <code>source</code>.
+     *
+     * @return a {@link java.lang.String} object.
+     */
+    public String getSource() {
+        return source;
+    }
 
-	/**
-	 * Returns the {@link org.mapeditor.core.TileSet} that this tile is part of.
-	 *
-	 * @return TileSet
-	 */
-	public TileSet getTileSet() {
-		return this.tileset;
-	}
+    /**
+     * Returns the {@link org.mapeditor.core.TileSet} that this tile is part of.
+     *
+     * @return TileSet
+     */
+    public TileSet getTileSet() {
+        return tileset;
+    }
 
-	/**
-	 * getWidth.
-	 *
-	 * @return a int.
-	 */
-	public int getWidth() {
-		if (this.image != null) {
-			return this.image.getWidth();
-		}
-		return 0;
-	}
+    /**
+     * getWidth.
+     *
+     * @return a int.
+     */
+    public int getWidth() {
+        if (image != null) {
+            return image.getWidth();
+        }
+        return 0;
+    }
 
-	/**
-	 * {@inheritDoc}
-	 *
-	 * Sets the id of the tile as long as it is at least 0.
-	 */
-	@Override
-	public void setId(Integer value) {
-		if (value >= 0) {
-			this.id = value;
-		}
-	}
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Sets the id of the tile as long as it is at least 0.
+     */
+    @Override
+    public void setId(Integer value) {
+        if (value >= 0) {
+            id = value;
+        }
+    }
 
-	/**
-	 * Sets the image of the tile.
-	 *
-	 * @param image the new image of the tile
-	 */
-	public void setImage(BufferedImage image) {
-		this.image = image;
-	}
+    /**
+     * Sets the image of the tile.
+     *
+     * @param image the new image of the tile
+     */
+    public void setImage(BufferedImage image) {
+        this.image = image;
+    }
 
-	/**
-	 * Sets the URI path of the external source of this tile set. By setting
-	 * this, the set is implied to be external in all other operations.
-	 *
-	 * @param source a URI of the tileset image file
-	 */
-	public void setSource(String source) {
-		this.source = source;
-	}
+    /**
+     * Sets the URI path of the external source of this tile set. By setting this, the set is
+     * implied to be external in all other operations.
+     *
+     * @param source a URI of the tileset image file
+     */
+    public void setSource(String source) {
+        this.source = source;
+    }
 
-	/**
-	 * Sets the parent tileset for a tile.
-	 *
-	 * @param set a {@link org.mapeditor.core.TileSet} object.
-	 */
-	public void setTileSet(TileSet set) {
-		this.tileset = set;
-	}
+    /**
+     * Sets the parent tileset for a tile.
+     *
+     * @param set a {@link org.mapeditor.core.TileSet} object.
+     */
+    public void setTileSet(TileSet set) {
+        tileset = set;
+    }
 
-	/** {@inheritDoc} */
-	@Override
-	public String toString() {
-		return "Tile " + this.id + " (" + this.getWidth() + "x"
-			+ this.getHeight() + ")";
-	}
+    /** {@inheritDoc} */
+    @Override
+    public String toString() {
+        return "Tile " + id + " (" + getWidth() + "x" + getHeight() + ")";
+    }
 }

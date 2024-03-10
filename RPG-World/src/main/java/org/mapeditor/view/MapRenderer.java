@@ -43,28 +43,27 @@ import java.awt.Graphics2D;
  */
 public interface MapRenderer {
 
-	/**
-	 * Calculates the dimensions of the map this renderer applies to.
-	 *
-	 * @return the dimensions of the given map in pixels
-	 */
-	Dimension getMapSize();
+    /**
+     * Calculates the dimensions of the map this renderer applies to.
+     *
+     * @return the dimensions of the given map in pixels
+     */
+    Dimension getMapSize();
 
-	/**
-	 * Paints the given object group, taking into account the clip rect of the
-	 * given graphics context.
-	 *
-	 * @param g the graphics context to paint to
-	 * @param group the group to paint
-	 */
-	void paintObjectGroup(Graphics2D g, ObjectGroup group);
+    /**
+     * Paints the given object group, taking into account the clip rect of the given graphics
+     * context.
+     *
+     * @param g the graphics context to paint to
+     * @param group the group to paint
+     */
+    void paintObjectGroup(Graphics2D g, ObjectGroup group);
 
-	/**
-	 * Paints the given tile layer, taking into account the clip rect of the
-	 * given graphics context.
-	 *
-	 * @param g the graphics context to paint to
-	 * @param layer the layer to paint
-	 */
-	void paintTileLayer(Graphics2D g, TileLayer layer);
+    /**
+     * Paints the given tile layer, taking into account the clip rect of the given graphics context.
+     *
+     * @param g the graphics context to paint to
+     * @param layer the layer to paint
+     */
+    void paintTileLayer(Graphics2D g, TileLayer layer);
 }

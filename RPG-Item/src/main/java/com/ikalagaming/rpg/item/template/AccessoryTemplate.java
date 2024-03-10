@@ -16,7 +16,6 @@ import javax.persistence.Table;
  * A template for generating accessories from.
  *
  * @author Ches Burks
- *
  */
 @EqualsAndHashCode(callSuper = false)
 @Getter
@@ -24,22 +23,19 @@ import javax.persistence.Table;
 @Entity
 @Table(name = AccessoryTemplate.TABLE_NAME)
 public class AccessoryTemplate extends EquipmentTemplate {
-	/**
-	 * The name of the table in the database.
-	 */
-	static final String TABLE_NAME = "ACCESSORY_TEMPLATE";
-	/**
-	 * What kind of accessory this is.
-	 *
-	 * @param accessoryType The classification of accessory.
-	 * @return The classification of accessory.
-	 */
-	@Column(name = "ACCESSORY_TYPE")
-	@Enumerated(EnumType.STRING)
-	private AccessoryType accessoryType;
+    /** The name of the table in the database. */
+    static final String TABLE_NAME = "ACCESSORY_TEMPLATE";
 
-	/**
-	 * Construct a new accessory template.
-	 */
-	public AccessoryTemplate() {}
+    /**
+     * What kind of accessory this is.
+     *
+     * @param accessoryType The classification of accessory.
+     * @return The classification of accessory.
+     */
+    @Column(name = "ACCESSORY_TYPE")
+    @Enumerated(EnumType.STRING)
+    private AccessoryType accessoryType;
+
+    /** Construct a new accessory template. */
+    public AccessoryTemplate() {}
 }

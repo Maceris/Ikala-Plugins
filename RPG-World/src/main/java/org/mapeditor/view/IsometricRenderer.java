@@ -48,108 +48,111 @@ import java.awt.image.BufferedImage;
  */
 public class IsometricRenderer implements MapRenderer {
 
-	private final Map map;
+    private final Map map;
 
-	/**
-	 * Constructor for IsometricRenderer.
-	 *
-	 * @param map a {@link org.mapeditor.core.Map} object.
-	 */
-	public IsometricRenderer(Map map) {
-		this.map = map;
-	}
+    /**
+     * Constructor for IsometricRenderer.
+     *
+     * @param map a {@link org.mapeditor.core.Map} object.
+     */
+    public IsometricRenderer(Map map) {
+        this.map = map;
+    }
 
-	/** {@inheritDoc} */
-	@Override
-	public Dimension getMapSize() {
-		int side = this.map.getHeight() + this.map.getWidth();
-		return new Dimension(side * this.map.getTileWidth() / 2,
-			side * this.map.getTileHeight() / 2);
-	}
+    /** {@inheritDoc} */
+    @Override
+    public Dimension getMapSize() {
+        int side = map.getHeight() + map.getWidth();
+        return new Dimension(side * map.getTileWidth() / 2, side * map.getTileHeight() / 2);
+    }
 
-	/** {@inheritDoc} */
-	@Override
-	public void paintObjectGroup(Graphics2D g, ObjectGroup group) {
-		throw new UnsupportedOperationException("Not supported yet.");
-	}
+    /** {@inheritDoc} */
+    @Override
+    public void paintObjectGroup(Graphics2D g, ObjectGroup group) {
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
 
-	/** {@inheritDoc} */
-	@Override
-	public void paintTileLayer(Graphics2D g, TileLayer layer) {
-		final Rectangle clip = g.getClipBounds();
-		final int tileWidth = this.map.getTileWidth();
-		final int tileHeight = this.map.getTileHeight();
+    /** {@inheritDoc} */
+    @Override
+    public void paintTileLayer(Graphics2D g, TileLayer layer) {
+        final Rectangle clip = g.getClipBounds();
+        final int tileWidth = map.getTileWidth();
+        final int tileHeight = map.getTileHeight();
 
-		// Translate origin to top-center
-		double tileRatio = (double) tileWidth / (double) tileHeight;
-		clip.x -= this.map.getHeight() * (tileWidth / 2);
-		int mx = clip.y + (int) (clip.x / tileRatio);
-		int my = clip.y - (int) (clip.x / tileRatio);
+        // Translate origin to top-center
+        double tileRatio = (double) tileWidth / (double) tileHeight;
+        clip.x -= map.getHeight() * (tileWidth / 2);
+        int mx = clip.y + (int) (clip.x / tileRatio);
+        int my = clip.y - (int) (clip.x / tileRatio);
 
-		// Calculate map coords and divide by tile size (tiles assumed to
-		// be square in normal projection)
-		Point rowItr = new Point((mx < 0 ? mx - tileHeight : mx) / tileHeight,
-			(my < 0 ? my - tileHeight : my) / tileHeight);
-		rowItr.x--;
+        // Calculate map coords and divide by tile size (tiles assumed to
+        // be square in normal projection)
+        Point rowItr =
+                new Point(
+                        (mx < 0 ? mx - tileHeight : mx) / tileHeight,
+                        (my < 0 ? my - tileHeight : my) / tileHeight);
+        rowItr.x--;
 
-		// Location on the screen of the top corner of a tile.
-		int originX = (this.map.getHeight() * tileWidth) / 2;
-		Point drawLoc =
-			new Point(((rowItr.x - rowItr.y) * tileWidth / 2) + originX,
-				(rowItr.x + rowItr.y) * tileHeight / 2);
-		drawLoc.x -= tileWidth / 2;
-		drawLoc.y -= tileHeight / 2;
+        // Location on the screen of the top corner of a tile.
+        int originX = (map.getHeight() * tileWidth) / 2;
+        Point drawLoc =
+                new Point(
+                        ((rowItr.x - rowItr.y) * tileWidth / 2) + originX,
+                        (rowItr.x + rowItr.y) * tileHeight / 2);
+        drawLoc.x -= tileWidth / 2;
+        drawLoc.y -= tileHeight / 2;
 
-		// Add offset from tile layer property
-		drawLoc.x += layer.getOffsetX() != null ? layer.getOffsetX() : 0;
-		drawLoc.y += layer.getOffsetY() != null ? layer.getOffsetY() : 0;
+        // Add offset from tile layer property
+        drawLoc.x += layer.getOffsetX() != null ? layer.getOffsetX() : 0;
+        drawLoc.y += layer.getOffsetY() != null ? layer.getOffsetY() : 0;
 
-		// Determine area to draw from clipping rectangle
-		int tileStepY = tileHeight / 2 == 0 ? 1 : tileHeight / 2;
-		int columns = clip.width / tileWidth + 3;
-		int rows = clip.height / tileStepY + 4;
+        // Determine area to draw from clipping rectangle
+        int tileStepY = tileHeight / 2 == 0 ? 1 : tileHeight / 2;
+        int columns = clip.width / tileWidth + 3;
+        int rows = clip.height / tileStepY + 4;
 
-		// Draw this map layer
-		for (int y = 0; y < rows; y++) {
-			Point columnItr = new Point(rowItr);
+        // Draw this map layer
+        for (int y = 0; y < rows; y++) {
+            Point columnItr = new Point(rowItr);
 
-			for (int x = 0; x < columns; x++) {
-				final Tile tile = layer.getTileAt(columnItr.x, columnItr.y);
+            for (int x = 0; x < columns; x++) {
+                final Tile tile = layer.getTileAt(columnItr.x, columnItr.y);
 
-				if (tile != null) {
-					final BufferedImage image = tile.getImage();
-					if (image == null) {
-						continue;
-					}
+                if (tile != null) {
+                    final BufferedImage image = tile.getImage();
+                    if (image == null) {
+                        continue;
+                    }
 
-					// Add offset from tileset property
-					drawLoc.x += tile.getTileSet().getTileoffset() != null
-						? tile.getTileSet().getTileoffset().getX()
-						: 0;
-					drawLoc.y += tile.getTileSet().getTileoffset() != null
-						? tile.getTileSet().getTileoffset().getY()
-						: 0;
+                    // Add offset from tileset property
+                    drawLoc.x +=
+                            tile.getTileSet().getTileoffset() != null
+                                    ? tile.getTileSet().getTileoffset().getX()
+                                    : 0;
+                    drawLoc.y +=
+                            tile.getTileSet().getTileoffset() != null
+                                    ? tile.getTileSet().getTileoffset().getY()
+                                    : 0;
 
-					g.drawImage(image, drawLoc.x, drawLoc.y, null);
-				}
+                    g.drawImage(image, drawLoc.x, drawLoc.y, null);
+                }
 
-				// Advance to the next tile
-				columnItr.x++;
-				columnItr.y--;
-				drawLoc.x += tileWidth;
-			}
+                // Advance to the next tile
+                columnItr.x++;
+                columnItr.y--;
+                drawLoc.x += tileWidth;
+            }
 
-			// Advance to the next row
-			if ((y & 1) > 0) {
-				rowItr.x++;
-				drawLoc.x += tileWidth / 2;
-			}
-			else {
-				rowItr.y++;
-				drawLoc.x -= tileWidth / 2;
-			}
-			drawLoc.x -= columns * tileWidth;
-			drawLoc.y += tileStepY;
-		}
-	}
+            // Advance to the next row
+            if ((y & 1) > 0) {
+                rowItr.x++;
+                drawLoc.x += tileWidth / 2;
+            } else {
+                rowItr.y++;
+                drawLoc.x -= tileWidth / 2;
+            }
+            drawLoc.x -= columns * tileWidth;
+            drawLoc.y += tileStepY;
+        }
+    }
 }

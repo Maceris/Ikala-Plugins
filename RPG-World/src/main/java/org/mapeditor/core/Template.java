@@ -18,71 +18,74 @@ import javax.xml.bind.annotation.XmlType;
  * The template root element contains the saved map object and a<br>
  * tileset element that points to an external tileset, if the<br>
  * object is a tile object.
- *
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "Template", propOrder = {"tileset", "object"})
-@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-	date = "2023-01-22T18:49:20-05:00")
+@XmlType(
+        name = "Template",
+        propOrder = {"tileset", "object"})
+@Generated(
+        value = "com.sun.tools.xjc.Driver",
+        comments = "JAXB RI v2.3.7",
+        date = "2023-01-22T18:49:20-05:00")
 public class Template {
 
-	/**
-	 * 
-	 */
-	@XmlElement(required = true, type = TileSet.class)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected TileSet tileset;
-	/**
-	 * 
-	 */
-	@XmlElement(required = true, type = MapObject.class)
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	protected MapObject object;
+    /** */
+    @XmlElement(required = true, type = TileSet.class)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected TileSet tileset;
 
-	/**
-	 * 
-	 * @return possible object is {@link MapObjectData }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public MapObjectData getObject() {
-		return this.object;
-	}
+    /** */
+    @XmlElement(required = true, type = MapObject.class)
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    protected MapObject object;
 
-	/**
-	 * 
-	 * @return possible object is {@link TileSetData }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public TileSetData getTileset() {
-		return this.tileset;
-	}
+    /**
+     * @return possible object is {@link MapObjectData }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public MapObjectData getObject() {
+        return object;
+    }
 
-	/**
-	 * 
-	 * @param value allowed object is {@link MapObjectData }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setObject(MapObjectData value) {
-		this.object = ((MapObject) value);
-	}
+    /**
+     * @return possible object is {@link TileSetData }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public TileSetData getTileset() {
+        return tileset;
+    }
 
-	/**
-	 * 
-	 * @param value allowed object is {@link TileSetData }
-	 * 
-	 */
-	@Generated(value = "com.sun.tools.xjc.Driver", comments = "JAXB RI v2.3.7",
-		date = "2023-01-22T18:49:20-05:00")
-	public void setTileset(TileSetData value) {
-		this.tileset = ((TileSet) value);
-	}
+    /**
+     * @param value allowed object is {@link MapObjectData }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setObject(MapObjectData value) {
+        object = ((MapObject) value);
+    }
 
+    /**
+     * @param value allowed object is {@link TileSetData }
+     */
+    @Generated(
+            value = "com.sun.tools.xjc.Driver",
+            comments = "JAXB RI v2.3.7",
+            date = "2023-01-22T18:49:20-05:00")
+    public void setTileset(TileSetData value) {
+        tileset = ((TileSet) value);
+    }
 }

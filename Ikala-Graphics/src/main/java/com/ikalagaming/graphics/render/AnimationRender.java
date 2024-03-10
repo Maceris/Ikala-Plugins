@@ -6,6 +6,13 @@
  */
 package com.ikalagaming.graphics.render;
 
+import static org.lwjgl.opengl.GL30.glBindBufferBase;
+import static org.lwjgl.opengl.GL42.glMemoryBarrier;
+import static org.lwjgl.opengl.GL43.GL_COMPUTE_SHADER;
+import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BARRIER_BIT;
+import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
+import static org.lwjgl.opengl.GL43.glDispatchCompute;
+
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.graph.RenderBuffers;
@@ -15,121 +22,111 @@ import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
-import org.lwjgl.opengl.GL30;
-import org.lwjgl.opengl.GL42;
-import org.lwjgl.opengl.GL43;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Handles computations for animated models.
- */
+/** Handles computations for animated models. */
 public class AnimationRender {
-	/**
-	 * The compute shader for animations.
-	 */
-	private ShaderProgram shaderProgram;
-	/**
-	 * The uniforms for the program.
-	 */
-	private UniformsMap uniformsMap;
+    /** The compute shader for animations. */
+    private ShaderProgram shaderProgram;
 
-	/**
-	 * Set up a new animation renderer.
-	 */
-	public AnimationRender() {
-		List<ShaderProgram.ShaderModuleData> shaderModuleDataList =
-			new ArrayList<>();
-		shaderModuleDataList.add(new ShaderProgram.ShaderModuleData(
-			"shaders/anim.comp", GL43.GL_COMPUTE_SHADER));
-		this.shaderProgram = new ShaderProgram(shaderModuleDataList);
-		this.createUniforms();
-	}
+    /** The uniforms for the program. */
+    private UniformsMap uniformsMap;
 
-	/**
-	 * Clean up the shader program.
-	 */
-	public void cleanup() {
-		this.shaderProgram.cleanup();
-	}
+    /** Set up a new animation renderer. */
+    public AnimationRender() {
+        List<ShaderProgram.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        shaderModuleDataList.add(
+                new ShaderProgram.ShaderModuleData("shaders/anim.comp", GL_COMPUTE_SHADER));
+        shaderProgram = new ShaderProgram(shaderModuleDataList);
+        createUniforms();
+    }
 
-	/**
-	 * Create the uniforms for the compute shader.
-	 */
-	private void createUniforms() {
-		this.uniformsMap = new UniformsMap(this.shaderProgram.getProgramID());
-		this.uniformsMap.createUniform(ShaderUniforms.Animation.DRAW_PARAMETERS
-			+ "." + ShaderUniforms.Animation.DrawParameters.SOURCE_OFFSET);
-		this.uniformsMap.createUniform(ShaderUniforms.Animation.DRAW_PARAMETERS
-			+ "." + ShaderUniforms.Animation.DrawParameters.SOURCE_SIZE);
-		this.uniformsMap.createUniform(ShaderUniforms.Animation.DRAW_PARAMETERS
-			+ "." + ShaderUniforms.Animation.DrawParameters.WEIGHTS_OFFSET);
-		this.uniformsMap.createUniform(ShaderUniforms.Animation.DRAW_PARAMETERS
-			+ "."
-			+ ShaderUniforms.Animation.DrawParameters.BONES_MATRICES_OFFSET);
-		this.uniformsMap.createUniform(ShaderUniforms.Animation.DRAW_PARAMETERS
-			+ "." + ShaderUniforms.Animation.DrawParameters.DESTINATION_OFFSET);
-	}
+    /** Clean up the shader program. */
+    public void cleanup() {
+        shaderProgram.cleanup();
+    }
 
-	/**
-	 * Compute animation transformations for all animated models in the scene.
-	 *
-	 * @param scene The scene we are rendering.
-	 * @param renderBuffer The buffers for indirect drawing of models.
-	 */
-	public void render(@NonNull Scene scene,
-		@NonNull RenderBuffers renderBuffer) {
-		this.shaderProgram.bind();
-		GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, 0,
-			renderBuffer.getBindingPosesBuffer());
-		GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, 1,
-			renderBuffer.getBonesIndicesWeightsBuffer());
-		GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, 2,
-			renderBuffer.getBonesMatricesBuffer());
-		GL30.glBindBufferBase(GL43.GL_SHADER_STORAGE_BUFFER, 3,
-			renderBuffer.getDestAnimationBuffer());
+    /** Create the uniforms for the compute shader. */
+    private void createUniforms() {
+        uniformsMap = new UniformsMap(shaderProgram.getProgramID());
+        uniformsMap.createUniform(
+                ShaderUniforms.Animation.DRAW_PARAMETERS
+                        + "."
+                        + ShaderUniforms.Animation.DrawParameters.SOURCE_OFFSET);
+        uniformsMap.createUniform(
+                ShaderUniforms.Animation.DRAW_PARAMETERS
+                        + "."
+                        + ShaderUniforms.Animation.DrawParameters.SOURCE_SIZE);
+        uniformsMap.createUniform(
+                ShaderUniforms.Animation.DRAW_PARAMETERS
+                        + "."
+                        + ShaderUniforms.Animation.DrawParameters.WEIGHTS_OFFSET);
+        uniformsMap.createUniform(
+                ShaderUniforms.Animation.DRAW_PARAMETERS
+                        + "."
+                        + ShaderUniforms.Animation.DrawParameters.BONES_MATRICES_OFFSET);
+        uniformsMap.createUniform(
+                ShaderUniforms.Animation.DRAW_PARAMETERS
+                        + "."
+                        + ShaderUniforms.Animation.DrawParameters.DESTINATION_OFFSET);
+    }
 
-		int dstOffset = 0;
-		for (Model model : scene.getModelMap().values()) {
-			if (!model.isAnimated()) {
-				continue;
-			}
-			for (RenderBuffers.MeshDrawData meshDrawData : model
-				.getMeshDrawDataList()) {
-				RenderBuffers.AnimMeshDrawData animMeshDrawData =
-					meshDrawData.animMeshDrawData();
-				Entity entity = animMeshDrawData.entity();
-				Model.AnimatedFrame frame =
-					entity.getAnimationData().getCurrentFrame();
-				int groupSize = (int) Math
-					.ceil((float) meshDrawData.sizeInBytes() / (14 * 4));
-				this.uniformsMap.setUniform(
-					ShaderUniforms.Animation.DRAW_PARAMETERS + "."
-						+ ShaderUniforms.Animation.DrawParameters.SOURCE_OFFSET,
-					animMeshDrawData.bindingPoseOffset());
-				this.uniformsMap.setUniform(
-					ShaderUniforms.Animation.DRAW_PARAMETERS + "."
-						+ ShaderUniforms.Animation.DrawParameters.SOURCE_SIZE,
-					meshDrawData.sizeInBytes() / 4);
-				this.uniformsMap.setUniform(
-					ShaderUniforms.Animation.DRAW_PARAMETERS + "."
-						+ ShaderUniforms.Animation.DrawParameters.WEIGHTS_OFFSET,
-					animMeshDrawData.weightsOffset());
-				this.uniformsMap.setUniform(
-					ShaderUniforms.Animation.DRAW_PARAMETERS + "."
-						+ ShaderUniforms.Animation.DrawParameters.BONES_MATRICES_OFFSET,
-					frame.getOffset());
-				this.uniformsMap.setUniform(
-					ShaderUniforms.Animation.DRAW_PARAMETERS + "."
-						+ ShaderUniforms.Animation.DrawParameters.DESTINATION_OFFSET,
-					dstOffset);
-				GL43.glDispatchCompute(groupSize, 1, 1);
-				dstOffset += meshDrawData.sizeInBytes() / 4;
-			}
-		}
+    /**
+     * Compute animation transformations for all animated models in the scene.
+     *
+     * @param scene The scene we are rendering.
+     * @param renderBuffer The buffers for indirect drawing of models.
+     */
+    public void render(@NonNull Scene scene, @NonNull RenderBuffers renderBuffer) {
+        shaderProgram.bind();
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, renderBuffer.getBindingPosesBuffer());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, renderBuffer.getBonesIndicesWeightsBuffer());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, renderBuffer.getBonesMatricesBuffer());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, renderBuffer.getDestAnimationBuffer());
 
-		GL42.glMemoryBarrier(GL43.GL_SHADER_STORAGE_BARRIER_BIT);
-		this.shaderProgram.unbind();
-	}
+        int dstOffset = 0;
+        for (Model model : scene.getModelMap().values()) {
+            if (!model.isAnimated()) {
+                continue;
+            }
+            for (RenderBuffers.MeshDrawData meshDrawData : model.getMeshDrawDataList()) {
+                RenderBuffers.AnimMeshDrawData animMeshDrawData = meshDrawData.animMeshDrawData();
+                Entity entity = animMeshDrawData.entity();
+                Model.AnimatedFrame frame = entity.getAnimationData().getCurrentFrame();
+                int groupSize = (int) Math.ceil((float) meshDrawData.sizeInBytes() / (14 * 4));
+                uniformsMap.setUniform(
+                        ShaderUniforms.Animation.DRAW_PARAMETERS
+                                + "."
+                                + ShaderUniforms.Animation.DrawParameters.SOURCE_OFFSET,
+                        animMeshDrawData.bindingPoseOffset());
+                uniformsMap.setUniform(
+                        ShaderUniforms.Animation.DRAW_PARAMETERS
+                                + "."
+                                + ShaderUniforms.Animation.DrawParameters.SOURCE_SIZE,
+                        meshDrawData.sizeInBytes() / 4);
+                uniformsMap.setUniform(
+                        ShaderUniforms.Animation.DRAW_PARAMETERS
+                                + "."
+                                + ShaderUniforms.Animation.DrawParameters.WEIGHTS_OFFSET,
+                        animMeshDrawData.weightsOffset());
+                uniformsMap.setUniform(
+                        ShaderUniforms.Animation.DRAW_PARAMETERS
+                                + "."
+                                + ShaderUniforms.Animation.DrawParameters.BONES_MATRICES_OFFSET,
+                        frame.getOffset());
+                uniformsMap.setUniform(
+                        ShaderUniforms.Animation.DRAW_PARAMETERS
+                                + "."
+                                + ShaderUniforms.Animation.DrawParameters.DESTINATION_OFFSET,
+                        dstOffset);
+                glDispatchCompute(groupSize, 1, 1);
+                dstOffset += meshDrawData.sizeInBytes() / 4;
+            }
+        }
+
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        shaderProgram.unbind();
+    }
 }

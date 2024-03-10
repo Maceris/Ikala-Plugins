@@ -44,297 +44,277 @@ import java.util.Stack;
 @Deprecated
 public class XMLWriter {
 
-	private boolean bIndent = true;
-	private String indentString = " ";
-	private String newLine = "\n";
-	private final Writer w;
+    private boolean bIndent = true;
+    private String indentString = " ";
+    private String newLine = "\n";
+    private final Writer w;
 
-	private final Stack<String> openElements;
-	private boolean bStartTagOpen;
-	private boolean bDocumentOpen;
+    private final Stack<String> openElements;
+    private boolean bStartTagOpen;
+    private boolean bDocumentOpen;
 
-	/**
-	 * Constructor for XMLWriter.
-	 *
-	 * @param writer a {@link java.io.Writer} object.
-	 */
-	public XMLWriter(Writer writer) {
-		this.openElements = new Stack<>();
-		this.w = writer;
-	}
+    /**
+     * Constructor for XMLWriter.
+     *
+     * @param writer a {@link java.io.Writer} object.
+     */
+    public XMLWriter(Writer writer) {
+        openElements = new Stack<>();
+        w = writer;
+    }
 
-	/**
-	 * endDocument.
-	 *
-	 * @throws java.io.IOException if any.
-	 */
-	public void endDocument() throws IOException {
-		// End all open elements.
-		while (!this.openElements.isEmpty()) {
-			this.endElement();
-		}
+    /**
+     * endDocument.
+     *
+     * @throws java.io.IOException if any.
+     */
+    public void endDocument() throws IOException {
+        // End all open elements.
+        while (!openElements.isEmpty()) {
+            endElement();
+        }
 
-		this.w.flush(); // writers do not always flush automatically...
-	}
+        w.flush(); // writers do not always flush automatically...
+    }
 
-	/**
-	 * endElement.
-	 *
-	 * @throws java.io.IOException if any.
-	 */
-	public void endElement() throws IOException {
-		String name = this.openElements.pop();
+    /**
+     * endElement.
+     *
+     * @throws java.io.IOException if any.
+     */
+    public void endElement() throws IOException {
+        String name = openElements.pop();
 
-		// If start tag still open, end with />, else with </name>.
-		if (this.bStartTagOpen) {
-			this.w.write("/>" + this.newLine);
-			this.bStartTagOpen = false;
-		}
-		else {
-			this.writeIndent();
-			this.w.write("</" + name + ">" + this.newLine);
-		}
+        // If start tag still open, end with />, else with </name>.
+        if (bStartTagOpen) {
+            w.write("/>" + newLine);
+            bStartTagOpen = false;
+        } else {
+            writeIndent();
+            w.write("</" + name + ">" + newLine);
+        }
 
-		// Set document closed when last element is closed
-		if (this.openElements.isEmpty()) {
-			this.bDocumentOpen = false;
-		}
-	}
+        // Set document closed when last element is closed
+        if (openElements.isEmpty()) {
+            bDocumentOpen = false;
+        }
+    }
 
-	/**
-	 * setIndent.
-	 *
-	 * @param bIndent a boolean.
-	 */
-	public void setIndent(boolean bIndent) {
-		this.bIndent = bIndent;
-		this.newLine = bIndent ? "\n" : "";
-	}
+    /**
+     * setIndent.
+     *
+     * @param bIndent a boolean.
+     */
+    public void setIndent(boolean bIndent) {
+        this.bIndent = bIndent;
+        newLine = bIndent ? "\n" : "";
+    }
 
-	/**
-	 * Setter for the field <code>indentString</code>.
-	 *
-	 * @param indentString a {@link java.lang.String} object.
-	 */
-	public void setIndentString(String indentString) {
-		this.indentString = indentString;
-	}
+    /**
+     * Setter for the field <code>indentString</code>.
+     *
+     * @param indentString a {@link java.lang.String} object.
+     */
+    public void setIndentString(String indentString) {
+        this.indentString = indentString;
+    }
 
-	/**
-	 * startDocument.
-	 *
-	 * @throws java.io.IOException if any.
-	 */
-	public void startDocument() throws IOException {
-		this.startDocument("1.0");
-	}
+    /**
+     * startDocument.
+     *
+     * @throws java.io.IOException if any.
+     */
+    public void startDocument() throws IOException {
+        this.startDocument("1.0");
+    }
 
-	/**
-	 * startDocument.
-	 *
-	 * @param version a {@link java.lang.String} object.
-	 * @throws java.io.IOException if any.
-	 */
-	public void startDocument(String version) throws IOException {
-		this.w.write("<?xml version=\"" + version + "\" encoding=\"UTF-8\"?>"
-			+ this.newLine);
-		this.bDocumentOpen = true;
-	}
+    /**
+     * startDocument.
+     *
+     * @param version a {@link java.lang.String} object.
+     * @throws java.io.IOException if any.
+     */
+    public void startDocument(String version) throws IOException {
+        w.write("<?xml version=\"" + version + "\" encoding=\"UTF-8\"?>" + newLine);
+        bDocumentOpen = true;
+    }
 
-	/**
-	 * startElement.
-	 *
-	 * @param name a {@link java.lang.String} object.
-	 * @throws java.io.IOException if any.
-	 * @throws org.mapeditor.io.xml.XMLWriterException if any.
-	 */
-	public void startElement(String name)
-		throws IOException, XMLWriterException {
-		if (!this.bDocumentOpen) {
-			throw new XMLWriterException(
-				"Can't start new element, no open document.");
-		}
+    /**
+     * startElement.
+     *
+     * @param name a {@link java.lang.String} object.
+     * @throws java.io.IOException if any.
+     * @throws org.mapeditor.io.xml.XMLWriterException if any.
+     */
+    public void startElement(String name) throws IOException, XMLWriterException {
+        if (!bDocumentOpen) {
+            throw new XMLWriterException("Can't start new element, no open document.");
+        }
 
-		if (this.bStartTagOpen) {
-			this.w.write(">" + this.newLine);
-		}
+        if (bStartTagOpen) {
+            w.write(">" + newLine);
+        }
 
-		this.writeIndent();
-		this.w.write("<" + name);
+        writeIndent();
+        w.write("<" + name);
 
-		this.openElements.push(name);
-		this.bStartTagOpen = true;
-	}
+        openElements.push(name);
+        bStartTagOpen = true;
+    }
 
-	/**
-	 * writeAttribute.
-	 *
-	 * @param name a {@link java.lang.String} object.
-	 * @param content a double.
-	 * @throws java.io.IOException if any.
-	 * @throws org.mapeditor.io.xml.XMLWriterException if any.
-	 */
-	public void writeAttribute(String name, double content)
-		throws IOException, XMLWriterException {
-		// TODO: Tiled omits the decimals if it's '.0' so this is for parity
-		long longContent = (long) content;
-		if (longContent == content) {
-			this.writeAttribute(name, String.valueOf(longContent));
-		}
-		else {
-			this.writeAttribute(name, String.valueOf(content));
-		}
-	}
+    /**
+     * writeAttribute.
+     *
+     * @param name a {@link java.lang.String} object.
+     * @param content a double.
+     * @throws java.io.IOException if any.
+     * @throws org.mapeditor.io.xml.XMLWriterException if any.
+     */
+    public void writeAttribute(String name, double content) throws IOException, XMLWriterException {
+        // TODO: Tiled omits the decimals if it's '.0' so this is for parity
+        long longContent = (long) content;
+        if (longContent == content) {
+            this.writeAttribute(name, String.valueOf(longContent));
+        } else {
+            this.writeAttribute(name, String.valueOf(content));
+        }
+    }
 
-	/**
-	 * <p>
-	 * writeAttribute.
-	 * </p>
-	 *
-	 * @param name a {@link java.lang.String} object.
-	 * @param content a float.
-	 * @throws java.io.IOException if any.
-	 * @throws org.mapeditor.io.xml.XMLWriterException if any.
-	 */
-	public void writeAttribute(String name, float content)
-		throws IOException, XMLWriterException {
-		this.writeAttribute(name, String.valueOf(content));
-	}
+    /**
+     * writeAttribute.
+     *
+     * @param name a {@link java.lang.String} object.
+     * @param content a float.
+     * @throws java.io.IOException if any.
+     * @throws org.mapeditor.io.xml.XMLWriterException if any.
+     */
+    public void writeAttribute(String name, float content) throws IOException, XMLWriterException {
+        this.writeAttribute(name, String.valueOf(content));
+    }
 
-	/**
-	 * writeAttribute.
-	 *
-	 * @param name a {@link java.lang.String} object.
-	 * @param content a int.
-	 * @throws java.io.IOException if any.
-	 * @throws org.mapeditor.io.xml.XMLWriterException if any.
-	 */
-	public void writeAttribute(String name, int content)
-		throws IOException, XMLWriterException {
-		this.writeAttribute(name, String.valueOf(content));
-	}
+    /**
+     * writeAttribute.
+     *
+     * @param name a {@link java.lang.String} object.
+     * @param content a int.
+     * @throws java.io.IOException if any.
+     * @throws org.mapeditor.io.xml.XMLWriterException if any.
+     */
+    public void writeAttribute(String name, int content) throws IOException, XMLWriterException {
+        this.writeAttribute(name, String.valueOf(content));
+    }
 
-	/**
-	 * writeAttribute.
-	 *
-	 * @param name a {@link java.lang.String} object.
-	 * @param content a long.
-	 * @throws java.io.IOException if any.
-	 * @throws org.mapeditor.io.xml.XMLWriterException if any.
-	 */
-	public void writeAttribute(String name, long content)
-		throws IOException, XMLWriterException {
-		this.writeAttribute(name, String.valueOf(content));
-	}
+    /**
+     * writeAttribute.
+     *
+     * @param name a {@link java.lang.String} object.
+     * @param content a long.
+     * @throws java.io.IOException if any.
+     * @throws org.mapeditor.io.xml.XMLWriterException if any.
+     */
+    public void writeAttribute(String name, long content) throws IOException, XMLWriterException {
+        this.writeAttribute(name, String.valueOf(content));
+    }
 
-	/**
-	 * writeAttribute.
-	 *
-	 * @param name a {@link java.lang.String} object.
-	 * @param content a {@link java.lang.String} object.
-	 * @throws java.io.IOException if any.
-	 * @throws org.mapeditor.io.xml.XMLWriterException if any.
-	 */
-	public void writeAttribute(String name, String content)
-		throws IOException, XMLWriterException {
-		if (this.bStartTagOpen) {
-			String escapedContent =
-				(content != null) ? content.replaceAll("\"", "&quot;") : "";
-			this.w.write(" " + name + "=\"" + escapedContent + "\"");
-		}
-		else {
-			throw new XMLWriterException(
-				"Can't write attribute without open start tag.");
-		}
-	}
+    /**
+     * writeAttribute.
+     *
+     * @param name a {@link java.lang.String} object.
+     * @param content a {@link java.lang.String} object.
+     * @throws java.io.IOException if any.
+     * @throws org.mapeditor.io.xml.XMLWriterException if any.
+     */
+    public void writeAttribute(String name, String content) throws IOException, XMLWriterException {
+        if (bStartTagOpen) {
+            String escapedContent = (content != null) ? content.replaceAll("\"", "&quot;") : "";
+            w.write(" " + name + "=\"" + escapedContent + "\"");
+        } else {
+            throw new XMLWriterException("Can't write attribute without open start tag.");
+        }
+    }
 
-	/**
-	 * writeCDATA.
-	 *
-	 * @param content a {@link java.lang.String} object.
-	 * @throws java.io.IOException if any.
-	 */
-	public void writeCDATA(String content) throws IOException {
-		if (this.bStartTagOpen) {
-			this.w.write(">" + this.newLine);
-			this.bStartTagOpen = false;
-		}
+    /**
+     * writeCDATA.
+     *
+     * @param content a {@link java.lang.String} object.
+     * @throws java.io.IOException if any.
+     */
+    public void writeCDATA(String content) throws IOException {
+        if (bStartTagOpen) {
+            w.write(">" + newLine);
+            bStartTagOpen = false;
+        }
 
-		this.writeIndent();
-		this.w.write(content + this.newLine);
-	}
+        writeIndent();
+        w.write(content + newLine);
+    }
 
-	/**
-	 * writeComment.
-	 *
-	 * @param content a {@link java.lang.String} object.
-	 * @throws java.io.IOException if any.
-	 */
-	public void writeComment(String content) throws IOException {
-		if (this.bStartTagOpen) {
-			this.w.write(">" + this.newLine);
-			this.bStartTagOpen = false;
-		}
+    /**
+     * writeComment.
+     *
+     * @param content a {@link java.lang.String} object.
+     * @throws java.io.IOException if any.
+     */
+    public void writeComment(String content) throws IOException {
+        if (bStartTagOpen) {
+            w.write(">" + newLine);
+            bStartTagOpen = false;
+        }
 
-		this.writeIndent();
-		this.w.write("<!-- " + content + " -->" + this.newLine);
-	}
+        writeIndent();
+        w.write("<!-- " + content + " -->" + newLine);
+    }
 
-	/**
-	 * writeDocType.
-	 *
-	 * @param name a {@link java.lang.String} object.
-	 * @param pubId a {@link java.lang.String} object.
-	 * @param sysId a {@link java.lang.String} object.
-	 * @throws java.io.IOException if any.
-	 * @throws org.mapeditor.io.xml.XMLWriterException if any.
-	 */
-	public void writeDocType(String name, String pubId, String sysId)
-		throws IOException, XMLWriterException {
-		if (!this.bDocumentOpen) {
-			throw new XMLWriterException(
-				"Can't write DocType, no open document.");
-		}
-		else if (!this.openElements.isEmpty()) {
-			throw new XMLWriterException(
-				"Can't write DocType, open elements exist.");
-		}
+    /**
+     * writeDocType.
+     *
+     * @param name a {@link java.lang.String} object.
+     * @param pubId a {@link java.lang.String} object.
+     * @param sysId a {@link java.lang.String} object.
+     * @throws java.io.IOException if any.
+     * @throws org.mapeditor.io.xml.XMLWriterException if any.
+     */
+    public void writeDocType(String name, String pubId, String sysId)
+            throws IOException, XMLWriterException {
+        if (!bDocumentOpen) {
+            throw new XMLWriterException("Can't write DocType, no open document.");
+        } else if (!openElements.isEmpty()) {
+            throw new XMLWriterException("Can't write DocType, open elements exist.");
+        }
 
-		this.w.write("<!DOCTYPE " + name + " ");
+        w.write("<!DOCTYPE " + name + " ");
 
-		if (pubId != null) {
-			this.w.write("PUBLIC \"" + pubId + "\"");
-			if (sysId != null) {
-				this.w.write(" \"" + sysId + "\"");
-			}
-		}
-		else if (sysId != null) {
-			this.w.write("SYSTEM \"" + sysId + "\"");
-		}
+        if (pubId != null) {
+            w.write("PUBLIC \"" + pubId + "\"");
+            if (sysId != null) {
+                w.write(" \"" + sysId + "\"");
+            }
+        } else if (sysId != null) {
+            w.write("SYSTEM \"" + sysId + "\"");
+        }
 
-		this.w.write(">" + this.newLine);
-	}
+        w.write(">" + newLine);
+    }
 
-	/**
-	 * writeElement.
-	 *
-	 * @param name a {@link java.lang.String} object.
-	 * @param content a {@link java.lang.String} object.
-	 * @throws java.io.IOException if any.
-	 * @throws org.mapeditor.io.xml.XMLWriterException if any.
-	 */
-	public void writeElement(String name, String content)
-		throws IOException, XMLWriterException {
-		this.startElement(name);
-		this.writeCDATA(content);
-		this.endElement();
-	}
+    /**
+     * writeElement.
+     *
+     * @param name a {@link java.lang.String} object.
+     * @param content a {@link java.lang.String} object.
+     * @throws java.io.IOException if any.
+     * @throws org.mapeditor.io.xml.XMLWriterException if any.
+     */
+    public void writeElement(String name, String content) throws IOException, XMLWriterException {
+        startElement(name);
+        writeCDATA(content);
+        endElement();
+    }
 
-	private void writeIndent() throws IOException {
-		if (this.bIndent) {
-			for (String openElement : this.openElements) {
-				this.w.write(this.indentString);
-			}
-		}
-	}
+    private void writeIndent() throws IOException {
+        if (bIndent) {
+            for (String openElement : openElements) {
+                w.write(indentString);
+            }
+        }
+    }
 }
