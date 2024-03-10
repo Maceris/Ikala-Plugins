@@ -1,0 +1,8 @@
+---
+name: Factory-Server
+version: 0.0.1-alpha
+description: The server side of the factory plugin
+authors: [maceris]
+main-class: com.ikalagaming.factory.FactoryServerPlugin
+dependencies:
+  - Factory-Core

@@ -71,7 +71,7 @@ public class TemporaryUI implements GuiInstance {
                 ImGui.checkbox("World Generation Debugger", showWorldGen);
                 ImGui.endMenu();
             }
-            ImGui.pushStyleColor(ImGuiCol.Text, ImColor.floatToColor(1f, 0.1f, 0.1f));
+            ImGui.pushStyleColor(ImGuiCol.Text, ImColor.rgba(1f, 0.1f, 0.1f, 1.0f));
             if (ImGui.menuItem("Quit Game")) {
                 new Shutdown().fire();
             }

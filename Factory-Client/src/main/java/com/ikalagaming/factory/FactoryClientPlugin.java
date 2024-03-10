@@ -1,6 +1,7 @@
 package com.ikalagaming.factory;
 
 import com.ikalagaming.event.Listener;
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 
@@ -14,14 +15,14 @@ import java.util.ResourceBundle;
 import java.util.Set;
 
 /**
- * The core of a factory game.
+ * Handles the client-side parts of Lotomation.
  *
  * @author Ches Burks
  */
 @Slf4j
-public class FactoryPlugin extends Plugin {
+public class FactoryClientPlugin extends Plugin {
     /** The name of the plugin in Java for convenience, should match the name in plugin.yml. */
-    public static final String PLUGIN_NAME = "Factory-Core";
+    public static final String PLUGIN_NAME = "Factory-Client";
 
     /**
      * The resource bundle for the Graphics plugin.
@@ -33,6 +34,8 @@ public class FactoryPlugin extends Plugin {
 
     private Set<Listener> listeners;
 
+    private TemporaryUI gui;
+
     @Override
     public Set<Listener> getListeners() {
         if (null == listeners) {
@@ -43,13 +46,26 @@ public class FactoryPlugin extends Plugin {
 
     @Override
     public String getName() {
-        return FactoryPlugin.PLUGIN_NAME;
+        return PLUGIN_NAME;
+    }
+
+    @Override
+    public boolean onDisable() {
+        GraphicsManager.setGUI(null);
+        return true;
+    }
+
+    @Override
+    public boolean onEnable() {
+        gui = new TemporaryUI();
+        GraphicsManager.setGUI(gui);
+        return true;
     }
 
     @Override
     public boolean onLoad() {
         try {
-            FactoryPlugin.setResourceBundle(
+            setResourceBundle(
                     ResourceBundle.getBundle(
                             "com.ikalagaming.factory.strings", Localization.getLocale()));
         } catch (MissingResourceException missingResource) {
@@ -61,7 +77,7 @@ public class FactoryPlugin extends Plugin {
 
     @Override
     public boolean onUnload() {
-        FactoryPlugin.setResourceBundle(null);
+        setResourceBundle(null);
         return true;
     }
 }

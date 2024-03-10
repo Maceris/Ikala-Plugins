@@ -1,0 +1,10 @@
+---
+name: Factory-Client
+version: 0.0.1-alpha
+description: The client side of the factory plugin
+authors: [maceris]
+main-class: com.ikalagaming.factory.FactoryClientPlugin
+dependencies:
+  - Factory-Core
+  - Ikala-Graphics
+  - Random

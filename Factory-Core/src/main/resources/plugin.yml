@@ -5,5 +5,4 @@ description: The base of a factory game
 authors: [maceris]
 main-class: com.ikalagaming.factory.FactoryPlugin
 dependencies:
-  - Ikala-Graphics
   - Random
