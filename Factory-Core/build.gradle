@@ -57,6 +57,8 @@ dependencies {
 
 	// Testing
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
+	testImplementation "org.mockito:mockito-core:${mockitoVersion}"
+	testImplementation "org.mockito:mockito-junit-jupiter:${mockitoVersion}"
 	
 	// lombok
 	compileOnly "org.projectlombok:lombok:${lombokVersion}"

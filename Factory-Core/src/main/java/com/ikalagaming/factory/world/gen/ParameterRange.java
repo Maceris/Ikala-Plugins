@@ -49,4 +49,13 @@ public record ParameterRange(float min, float max) {
     public float getWidth() {
         return max - min;
     }
+
+    /**
+     * Returns the value that is midway between the min and max values.
+     *
+     * @return The midpoint of the range.
+     */
+    public float getMidpoint() {
+        return (min + max) / 2;
+    }
 }

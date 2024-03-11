@@ -14,7 +14,7 @@ import lombok.NonNull;
  * @param weirdness The weirdness value.
  */
 public record ParameterPack(
-        double temperature, double height, double erosion, double precipitation, double weirdness) {
+        float temperature, float height, float erosion, float precipitation, float weirdness) {
 
     /**
      * Generate the parameter pack at specified coordinates.
@@ -46,12 +46,12 @@ public record ParameterPack(
      * @param parameters The parameters to use.
      * @return The noise value in the range [0, 1].
      */
-    private static double generate(
+    private static float generate(
             @NonNull NoiseGenerator generator,
             final long seed,
             final int x,
             final int y,
             @NonNull NoiseParameters parameters) {
-        return generator.getNoise(seed, x, y, parameters.scale(), parameters.octaves());
+        return (float) generator.getNoise(seed, x, y, parameters.scale(), parameters.octaves());
     }
 }

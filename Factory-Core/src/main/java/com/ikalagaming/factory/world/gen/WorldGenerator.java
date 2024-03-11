@@ -15,14 +15,34 @@ public class WorldGenerator {
     private static Map<String, BiomeParameters> biomes = new HashMap<>();
 
     private static String pickBiome(final @NonNull ParameterPack parameters) {
-        return biomes.entrySet().stream()
-                .filter(entry -> entry.getValue().contains(parameters))
-                .sorted(
-                        (e1, e2) ->
-                                BiomeParameters.compareSpecificity(e1.getValue(), e2.getValue()))
-                .findFirst()
-                .map(Map.Entry::getKey)
-                .orElse(null);
+        var matches =
+                biomes.entrySet().stream()
+                        .filter(entry -> entry.getValue().contains(parameters))
+                        .sorted((e1, e2) -> compareBiomes(e1.getValue(), e2.getValue(), parameters))
+                        .map(Map.Entry::getKey)
+                        .toList();
+
+        if (matches.isEmpty()) {
+            return null;
+        }
+        if (matches.size() == 1) {
+            return matches.get(0);
+        }
+
+        return null;
+    }
+
+    private static int compareBiomes(
+            BiomeParameters biome1, BiomeParameters biome2, ParameterPack target) {
+        float difference = biome2.getDistance(target) - biome1.getDistance(target);
+        final float epsilon = 0.001f;
+        if (difference < -epsilon) {
+            return -1;
+        }
+        if (difference > epsilon) {
+            return 1;
+        }
+        return 0;
     }
 
     void generateChunk() {}

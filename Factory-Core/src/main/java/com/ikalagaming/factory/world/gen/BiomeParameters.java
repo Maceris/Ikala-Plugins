@@ -68,4 +68,19 @@ public record BiomeParameters(
                 + precipitation.getWidth()
                 + weirdness.getWidth();
     }
+
+    /**
+     * Calculate the distance from the given parameter pack to the midpoint of these parameters.
+     *
+     * @param parameters The values we want to compare with the midpoints of this range.
+     * @return The total distance in all dimensions.
+     */
+    public float getDistance(@NonNull final ParameterPack parameters) {
+
+        return Math.abs(parameters.temperature() - temperature().getMidpoint())
+                + Math.abs(parameters.height() - height().getMidpoint())
+                + Math.abs(parameters.erosion() - erosion().getMidpoint())
+                + Math.abs(parameters.precipitation() - precipitation().getMidpoint())
+                + Math.abs(parameters.weirdness() - weirdness().getMidpoint());
+    }
 }
