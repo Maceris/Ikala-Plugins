@@ -68,6 +68,16 @@ class TestParameterRange {
         Assertions.assertThrows(IllegalArgumentException.class, () -> new ParameterRange(min, max));
     }
 
+    /** Check that midpoint is calculated correctly. */
+    @Test
+    void testMidpoint() {
+        final float epsilon = 0.0001f;
+        final float midpoint = new ParameterRange(0.3f, 0.5f).getMidpoint();
+        final float expectedMidpoint = 0.4f;
+
+        Assertions.assertTrue(Math.abs(expectedMidpoint - midpoint) < epsilon);
+    }
+
     /**
      * Test the creation normal parameter ranges.
      *
@@ -88,15 +98,5 @@ class TestParameterRange {
         final float expectedWidth = 0.1f;
 
         Assertions.assertTrue(Math.abs(expectedWidth - width) < epsilon);
-    }
-
-    /** Check that midpoint is calculated correctly. */
-    @Test
-    void testMidpoint() {
-        final float epsilon = 0.0001f;
-        final float midpoint = new ParameterRange(0.3f, 0.5f).getMidpoint();
-        final float expectedMidpoint = 0.4f;
-
-        Assertions.assertTrue(Math.abs(expectedMidpoint - midpoint) < epsilon);
     }
 }

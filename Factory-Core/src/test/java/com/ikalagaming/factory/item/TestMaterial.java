@@ -1,9 +1,10 @@
 package com.ikalagaming.factory.item;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.ikalagaming.factory.world.Material;
 import com.ikalagaming.factory.world.Tag;
 
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -28,13 +29,13 @@ class TestMaterial {
         Material fourth = new Material("same_name", List.of(new Tag("test")));
         Material fifth = new Material("same_name", new ArrayList<>(), parent2);
 
-        Assertions.assertAll(
-                () -> Assertions.assertNotEquals(parent1, parent2),
-                () -> Assertions.assertEquals(first, second),
-                () -> Assertions.assertEquals(second, first),
-                () -> Assertions.assertEquals(first, third),
-                () -> Assertions.assertEquals(first, fourth),
-                () -> Assertions.assertEquals(first, fifth));
+        assertAll(
+                () -> assertNotEquals(parent1, parent2),
+                () -> assertEquals(first, second),
+                () -> assertEquals(second, first),
+                () -> assertEquals(first, third),
+                () -> assertEquals(first, fourth),
+                () -> assertEquals(first, fifth));
     }
 
     /** Check for the runtime errors from material constructors. */
@@ -43,26 +44,21 @@ class TestMaterial {
         Material parent = new Material("parent");
         final String nullName = null;
         final List<Tag> nullList = null;
-        final Material nullParent = null;
         final List<Tag> normalList = new ArrayList<>();
 
-        Assertions.assertThrows(
-                NullPointerException.class, () -> new Material(nullName, normalList, parent));
-        Assertions.assertThrows(
-                NullPointerException.class, () -> new Material("Sample", nullList, parent));
-        Assertions.assertThrows(NullPointerException.class, () -> new Material("Sample", nullList));
-        Assertions.assertThrows(
-                NullPointerException.class, () -> new Material("Sample", nullParent));
-        Assertions.assertThrows(NullPointerException.class, () -> new Material(nullName));
+        assertThrows(NullPointerException.class, () -> new Material(nullName, normalList, parent));
+        assertThrows(NullPointerException.class, () -> new Material("Sample", nullList, parent));
+        assertThrows(NullPointerException.class, () -> new Material("Sample", nullList));
+        assertThrows(NullPointerException.class, () -> new Material(nullName));
     }
 
     /** Test the creation of materials. */
     @Test
     void testMaterialCreation() {
-        Assertions.assertDoesNotThrow(() -> new Material("simple"));
+        assertDoesNotThrow(() -> new Material("simple"));
 
         Material parent = new Material("parent");
-        Assertions.assertAll(
+        assertAll(
                 () -> new Material("Sample1"),
                 () -> new Material("Sample2", new ArrayList<>()),
                 () -> new Material("Sample3", parent),

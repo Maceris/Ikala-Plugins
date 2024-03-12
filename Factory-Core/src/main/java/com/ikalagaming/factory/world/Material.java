@@ -2,10 +2,7 @@ package com.ikalagaming.factory.world;
 
 import lombok.NonNull;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 /**
  * The substance an object is primarily made of. These serve as groups of tags that can be applied
@@ -59,10 +56,9 @@ public record Material(@NonNull String name, @NonNull List<Tag> tags, Material p
      * Create a new material record without any tags or a parent.
      *
      * @param name The name of the material.
-     * @param parent The parent material, must not be null. If there is no parent, there are other
-     *     constructors to support that.
+     * @param parent The parent material.
      */
-    public Material(@NonNull String name, @NonNull Material parent) {
+    public Material(@NonNull String name, Material parent) {
         this(name, new ArrayList<>(), parent);
     }
 
@@ -95,13 +91,36 @@ public record Material(@NonNull String name, @NonNull List<Tag> tags, Material p
 
     @Override
     public String toString() {
-        return "Material["
-                + "name="
-                + name
-                + ", tags="
-                + tags.toString()
-                + ", parent="
-                + parent.name()
-                + ']';
+        var result = new StringBuilder("Material[name=");
+
+        result.append(name);
+        result.append(", tags=");
+        result.append(tags);
+        if (parent != null) {
+            result.append(", parent=");
+            result.append(parent.name());
+        }
+        result.append(']');
+
+        return result.toString();
+    }
+
+    /**
+     * Remove any tags that are on the material which are the parent of another tag on the material.
+     */
+    public void deduplicateTags() {
+        Set<Tag> toRemove = new HashSet<>();
+        for (Tag tag : tags) {
+            var parent = tag.parent();
+            while (parent != null) {
+                if (tags.contains(parent)) {
+                    toRemove.add(parent);
+                }
+                parent = parent.parent();
+            }
+        }
+        var deduplicated = tags.stream().distinct().filter(tag -> !toRemove.contains(tag)).toList();
+        tags.clear();
+        tags.addAll(deduplicated);
     }
 }

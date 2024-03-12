@@ -1,11 +1,12 @@
 package com.ikalagaming.factory.world;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.ikalagaming.event.EventManager;
 import com.ikalagaming.factory.FactoryPlugin;
 import com.ikalagaming.plugins.PluginManager;
 
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -22,13 +23,9 @@ class TestWorld {
 
     private static FactoryPlugin plugin;
 
-    /**
-     * Set up before all the tests.
-     *
-     * @throws Exception If something goes wrong.
-     */
+    /** Set up before all the tests. */
     @BeforeAll
-    static void setUpBeforeClass() throws Exception {
+    static void setUpBeforeClass() {
         EventManager.getInstance();
         PluginManager.getInstance();
         TestWorld.plugin = new FactoryPlugin();
@@ -36,13 +33,9 @@ class TestWorld {
         TestWorld.plugin.onEnable();
     }
 
-    /**
-     * Tear down after all the tests.
-     *
-     * @throws Exception If something goes wrong.
-     */
+    /** Tear down after all the tests. */
     @AfterAll
-    static void tearDownAfterClass() throws Exception {
+    static void tearDownAfterClass() {
         TestWorld.plugin.onDisable();
         TestWorld.plugin.onUnload();
         TestWorld.plugin = null;
@@ -54,38 +47,38 @@ class TestWorld {
     @Test
     void testAddingTags() {
         World world = new World();
-        Assertions.assertTrue(world.loadDefaultConfigurations());
-        Assertions.assertTrue(world.addTag("testing_tag_001"));
-        Assertions.assertTrue(world.addTag("testing_tag_001_variant", "testing_tag_001"));
-        Assertions.assertFalse(world.addTag("testing_tag_001"));
+        assertTrue(world.loadDefaultConfigurations());
+        assertTrue(world.addTag("testing_tag_001"));
+        assertTrue(world.addTag("testing_tag_001_variant", "testing_tag_001"));
+        assertFalse(world.addTag("testing_tag_001"));
 
-        Assertions.assertFalse(world.addTag("testing_tag_002", "does_not_exist"));
-        Assertions.assertFalse(world.addTag("same", "same"));
+        assertFalse(world.addTag("testing_tag_002", "does_not_exist"));
+        assertFalse(world.addTag("same", "same"));
 
-        Assertions.assertThrows(NullPointerException.class, () -> world.addTag(null));
-        Assertions.assertThrows(NullPointerException.class, () -> world.addTag(null, null));
+        assertThrows(NullPointerException.class, () -> world.addTag(null));
+        assertThrows(NullPointerException.class, () -> world.addTag(null, null));
     }
 
     /** Test the default tag and material loading. */
     @Test
     void testDefaultLoading() {
         World world = new World();
-        Assertions.assertTrue(world.loadDefaultConfigurations());
+        assertTrue(world.loadDefaultConfigurations());
 
-        Assertions.assertNotNull(world.getTags());
-        Assertions.assertTrue(world.getTags().size() > 0);
+        assertNotNull(world.getTags());
+        assertFalse(world.getTags().isEmpty());
 
         for (Tag tag : world.getTags()) {
-            Assertions.assertNotNull(tag);
-            Assertions.assertNotNull(tag.name());
+            assertNotNull(tag);
+            assertNotNull(tag.name());
         }
 
-        Assertions.assertNotNull(world.getMaterials());
-        Assertions.assertTrue(world.getMaterials().size() > 0);
+        assertNotNull(world.getMaterials());
+        assertFalse(world.getMaterials().isEmpty());
 
         for (Material material : world.getMaterials()) {
-            Assertions.assertNotNull(material);
-            Assertions.assertNotNull(material.name());
+            assertNotNull(material);
+            assertNotNull(material.name());
         }
     }
 
@@ -94,22 +87,22 @@ class TestWorld {
     void testFetchMaterial() {
         World world = new World();
 
-        Assertions.assertTrue(world.addTag("solid"));
-        Assertions.assertTrue(world.addTag("powder", "solid"));
+        assertTrue(world.addTag("solid"));
+        assertTrue(world.addTag("powder", "solid"));
 
         final String name = "dust";
-        Assertions.assertTrue(world.addMaterial("parent"));
-        Assertions.assertTrue(world.addMaterial(name, List.of("powder"), "parent"));
+        assertTrue(world.addMaterial("parent"));
+        assertTrue(world.addMaterial(name, List.of("powder"), "parent"));
 
-        Assertions.assertTrue(world.hasMaterial(name));
-        Assertions.assertFalse(world.hasMaterial(name + "y"));
+        assertTrue(world.hasMaterial(name));
+        assertFalse(world.hasMaterial(name + "y"));
         Optional<Material> maybeMaterial = world.findMaterial(name);
-        Assertions.assertTrue(maybeMaterial.isPresent());
-        Assertions.assertEquals(name, maybeMaterial.get().name());
-        Assertions.assertEquals("parent", maybeMaterial.get().parent().name());
+        assertTrue(maybeMaterial.isPresent());
+        assertEquals(name, maybeMaterial.get().name());
+        assertEquals("parent", maybeMaterial.get().parent().name());
 
-        Assertions.assertTrue(world.hasTagMaterial("solid", name));
-        Assertions.assertTrue(world.hasTagMaterial("powder", name));
+        assertTrue(world.materialHasTag(name, "solid"));
+        assertTrue(world.materialHasTag(name, "powder"));
     }
 
     /** Test that we can retrieve tags. */
@@ -118,20 +111,20 @@ class TestWorld {
         World world = new World();
 
         final String parentName = "liquid";
-        Assertions.assertTrue(world.addTag(parentName));
-        Assertions.assertTrue(world.hasTag(parentName));
+        assertTrue(world.addTag(parentName));
+        assertTrue(world.tagExists(parentName));
         Optional<Tag> maybeLiquid = world.findTag(parentName);
-        Assertions.assertTrue(maybeLiquid.isPresent());
-        Assertions.assertEquals(parentName, maybeLiquid.get().name());
+        assertTrue(maybeLiquid.isPresent());
+        assertEquals(parentName, maybeLiquid.get().name());
 
         final String childName = "sludge";
-        Assertions.assertTrue(world.addTag(childName, parentName));
-        Assertions.assertTrue(world.hasTag(parentName));
-        Assertions.assertTrue(world.hasTag(childName));
+        assertTrue(world.addTag(childName, parentName));
+        assertTrue(world.tagExists(parentName));
+        assertTrue(world.tagExists(childName));
         Optional<Tag> maybeSludge = world.findTag(childName);
-        Assertions.assertTrue(maybeSludge.isPresent());
-        Assertions.assertEquals(childName, maybeSludge.get().name());
-        Assertions.assertEquals(maybeLiquid.get(), maybeSludge.get().parent());
+        assertTrue(maybeSludge.isPresent());
+        assertEquals(childName, maybeSludge.get().name());
+        assertEquals(maybeLiquid.get(), maybeSludge.get().parent());
     }
 
     /** Test the creation of materials. */
@@ -139,45 +132,41 @@ class TestWorld {
     void testMaterialCreation() {
         World world = new World();
 
-        Assertions.assertDoesNotThrow(() -> world.addMaterial("simple"));
+        assertDoesNotThrow(() -> world.addMaterial("simple"));
 
-        Assertions.assertTrue(world.addTag("normal_tag"));
+        assertTrue(world.addTag("normal_tag"));
 
-        Assertions.assertAll(
-                () -> Assertions.assertTrue(world.addMaterial("Sample1")),
-                () -> Assertions.assertTrue(world.addMaterial("Sample2", new ArrayList<>())),
-                () -> Assertions.assertTrue(world.addMaterial("Sample3", "simple")),
-                () -> Assertions.assertTrue(world.addMaterial("Sample4", List.of("normal_tag"))),
-                () -> Assertions.assertTrue(world.addMaterial("Sample5", new ArrayList<>(), null)),
-                () ->
-                        Assertions.assertTrue(
-                                world.addMaterial("Sample6", new ArrayList<>(), "simple")));
+        assertAll(
+                () -> assertTrue(world.addMaterial("Sample1")),
+                () -> assertTrue(world.addMaterial("Sample2", new ArrayList<>())),
+                () -> assertTrue(world.addMaterial("Sample3", "simple")),
+                () -> assertTrue(world.addMaterial("Sample4", List.of("normal_tag"))),
+                () -> assertTrue(world.addMaterial("Sample5", new ArrayList<>(), null)),
+                () -> assertTrue(world.addMaterial("Sample6", new ArrayList<>(), "simple")));
     }
 
     /** Check for the negative scenarios for material creation. */
     @Test
     void testMaterialCreationNegative() {
         World world = new World();
-        Assertions.assertDoesNotThrow(() -> world.addMaterial("parent"));
+        assertDoesNotThrow(() -> world.addMaterial("parent"));
 
         final String nullString = null;
         final List<String> nullList = null;
         final List<String> normalList = new ArrayList<>();
 
-        Assertions.assertThrows(
+        assertThrows(
                 NullPointerException.class,
                 () -> world.addMaterial(nullString, normalList, nullString));
-        Assertions.assertThrows(
-                NullPointerException.class, () -> world.addMaterial("Sample", nullList));
-        Assertions.assertThrows(
-                NullPointerException.class, () -> world.addMaterial("Sample", nullString));
-        Assertions.assertThrows(NullPointerException.class, () -> world.addMaterial(nullString));
+        assertThrows(NullPointerException.class, () -> world.addMaterial("Sample", nullList));
+        assertThrows(NullPointerException.class, () -> world.addMaterial("Sample", nullString));
+        assertThrows(NullPointerException.class, () -> world.addMaterial(nullString));
 
-        Assertions.assertFalse(world.addMaterial("recursive", List.of(), "recursive"));
-        Assertions.assertFalse(world.addMaterial("sample2", List.of("does_not_exist")));
-        Assertions.assertFalse(world.addMaterial("parent"));
-        Assertions.assertFalse(world.addMaterial("parent", List.of()));
-        Assertions.assertFalse(world.addMaterial("parent", List.of(), "parent"));
+        assertFalse(world.addMaterial("recursive", List.of(), "recursive"));
+        assertFalse(world.addMaterial("sample2", List.of("does_not_exist")));
+        assertFalse(world.addMaterial("parent"));
+        assertFalse(world.addMaterial("parent", List.of()));
+        assertFalse(world.addMaterial("parent", List.of(), "parent"));
     }
 
     /** Test that tags are de-duplicated when we inherit from parent materials. */
@@ -185,27 +174,84 @@ class TestWorld {
     void testTagDeduplication() {
         World world = new World();
 
-        Assertions.assertTrue(world.addTag("solid"));
-        Assertions.assertTrue(world.addTag("metal", "solid"));
-        Assertions.assertTrue(world.addTag("rare_metal", "metal"));
+        assertTrue(world.addTag("solid"));
+        assertTrue(world.addTag("metal", "solid"));
+        assertTrue(world.addTag("rare_metal", "metal"));
 
-        Assertions.assertTrue(world.addMaterial("gold", List.of("rare_metal", "solid")));
-        Assertions.assertTrue(world.addMaterial("refined_gold", List.of("rare_metal"), "gold"));
+        assertTrue(world.addMaterial("gold", List.of("rare_metal", "solid")));
+        assertTrue(world.addMaterial("refined_gold", List.of("rare_metal"), "gold"));
 
         Optional<Material> maybeGold = world.findMaterial("gold");
-        Assertions.assertTrue(maybeGold.isPresent());
-        Assertions.assertEquals(1, maybeGold.get().tags().size());
-        Assertions.assertEquals("rare_metal", maybeGold.get().tags().get(0).name());
+        assertTrue(maybeGold.isPresent());
+        assertEquals(1, maybeGold.get().tags().size());
+        assertEquals("rare_metal", maybeGold.get().tags().get(0).name());
 
         Optional<Material> maybeRefinedGold = world.findMaterial("refined_gold");
-        Assertions.assertTrue(maybeRefinedGold.isPresent());
-        Assertions.assertEquals(1, maybeRefinedGold.get().tags().size());
-        Assertions.assertEquals("rare_metal", maybeRefinedGold.get().tags().get(0).name());
+        assertTrue(maybeRefinedGold.isPresent());
+        assertEquals(1, maybeRefinedGold.get().tags().size());
+        assertEquals("rare_metal", maybeRefinedGold.get().tags().get(0).name());
+    }
+
+    @Test
+    void testTagDeduplicationSharedParentMaterial() {
+        World world = new World();
+
+        assertTrue(world.addTag("container"));
+        assertTrue(world.addTag("liquid_container", "container"));
+        assertTrue(world.addTag("gas_container", "container"));
+
+        assertTrue(world.addMaterial("boxium", List.of("container")));
+        assertTrue(
+                world.addMaterial(
+                        "box_orbium", List.of("liquid_container", "gas_container"), "boxium"));
+
+        Optional<Material> maybeBoxium = world.findMaterial("boxium");
+        assertTrue(maybeBoxium.isPresent());
+        assertEquals(1, maybeBoxium.get().tags().size());
+        assertTrue(world.materialHasTag("boxium", "container"));
+
+        Optional<Material> maybeRefinedGold = world.findMaterial("box_orbium");
+        assertTrue(maybeRefinedGold.isPresent());
+        assertEquals(2, maybeRefinedGold.get().tags().size());
+        assertTrue(world.materialHasTag("box_orbium", "liquid_container"));
+        assertTrue(world.materialHasTag("box_orbium", "gas_container"));
+    }
+
+    @Test
+    void testTagDeduplicationSharedParentTag() {
+        World world = new World();
+
+        assertTrue(world.addTag("container"));
+        assertTrue(world.addTag("liquid_container", "container"));
+        assertTrue(world.addTag("gas_container", "container"));
+
+        assertTrue(world.addMaterial("boxium", List.of("liquid_container", "gas_container")));
+
+        Optional<Material> maybeRefinedGold = world.findMaterial("boxium");
+        assertTrue(maybeRefinedGold.isPresent());
+        assertEquals(2, maybeRefinedGold.get().tags().size());
+        assertTrue(world.materialHasTag("boxium", "liquid_container"));
+        assertTrue(world.materialHasTag("boxium", "gas_container"));
+    }
+
+    @Test
+    void testTagDeduplicationTagAndParentTag() {
+        World world = new World();
+
+        assertTrue(world.addTag("container"));
+        assertTrue(world.addTag("liquid_container", "container"));
+
+        assertTrue(world.addMaterial("boxium", List.of("liquid_container", "container")));
+
+        Optional<Material> maybeRefinedGold = world.findMaterial("boxium");
+        assertTrue(maybeRefinedGold.isPresent());
+        assertEquals(1, maybeRefinedGold.get().tags().size());
+        assertTrue(world.materialHasTag("boxium", "liquid_container"));
     }
 
     /** Test the creation of the world object. */
     @Test
     void testWorldCreation() {
-        Assertions.assertDoesNotThrow(World::new);
+        assertDoesNotThrow(World::new);
     }
 }

@@ -9,9 +9,9 @@ package com.ikalagaming.factory.world;
  * @author Ches Burks
  */
 public class Chunk {
-    private byte[][] biomes;
+    public byte[][] biomes;
 
-    Chunk() {
-        biomes = new byte[World.CHUNK_WIDTH / 4][World.CHUNK_WIDTH / 4];
+    public Chunk() {
+        biomes = new byte[World.CHUNK_WIDTH][World.CHUNK_WIDTH];
     }
 }

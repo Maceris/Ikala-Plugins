@@ -8,13 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
 /**
  * Tracks the state of the world.
@@ -41,32 +36,7 @@ public class World {
     /** The total height of the world in blocks. */
     public static final int WORLD_HEIGHT_TOTAL = WORLD_HEIGHT_MAX - WORLD_HEIGHT_MIN;
 
-    /**
-     * Checks if the tag is in the provided list. If any tag matches the expected tag, or inherits
-     * from a tag that does, this will return true.
-     *
-     * @param tag The tag we are looking for.
-     * @param list The list of tags that might contain the desired tag.
-     * @return Whether the tag can be found in the list.
-     */
-    public static boolean containsTag(@NonNull String tag, List<Tag> list) {
-        for (Tag potential : list) {
-            if (tag.equals(potential.name())) {
-                return true;
-            }
-            // Check all parent tags too
-            Tag parent = potential.parent();
-            while (potential.parent() != null) {
-                if (tag.equals(parent.name())) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /** Used to store and look tags up by name. */
-    private Map<String, Tag> tags = new HashMap<>();
+    private TagRegistry tagRegistry = new TagRegistry();
 
     /** Used to store and look materials up by name. */
     private Map<String, Material> materials = new HashMap<>();
@@ -124,31 +94,28 @@ public class World {
             parent = findMaterial(parentName).orElse(null);
         }
 
-        List<Tag> totalTags = new ArrayList<>();
+        var result = new Material(name, parent);
+
+        if (parent != null) {
+            result.tags().addAll(parent.tags());
+        }
         if (materialTags != null) {
             for (String tagName : materialTags) {
-                Optional<Tag> maybeTag = findTag(tagName);
+                Optional<Tag> maybeTag = tagRegistry.findTag(tagName);
                 if (maybeTag.isEmpty()) {
                     log.warn(
                             SafeResourceLoader.getStringFormatted(
                                     "TAG_MISSING", FactoryPlugin.getResourceBundle(), tagName));
                     return false;
                 }
-                totalTags.add(maybeTag.get());
+
+                result.tags().add(maybeTag.get());
             }
         }
+        result.deduplicateTags();
 
-        if (parent != null) {
-            Material tempParent = parent;
-            while (tempParent != null) {
-                totalTags.addAll(tempParent.tags());
-                tempParent = tempParent.parent();
-            }
-        }
+        materials.put(name, result);
 
-        deduplicateTags(totalTags);
-
-        materials.put(name, new Material(name, totalTags, parent));
         return true;
     }
 
@@ -170,7 +137,7 @@ public class World {
      * @return Whether we successfully added the tag.
      */
     public boolean addTag(@NonNull String tag) {
-        return this.addTag(tag, null);
+        return tagRegistry.addTag(tag, null);
     }
 
     /**
@@ -182,67 +149,7 @@ public class World {
      * @return Whether we successfully added the tag.
      */
     public boolean addTag(@NonNull String tag, String parentName) {
-        if (hasTag(tag)) {
-            log.warn(
-                    SafeResourceLoader.getStringFormatted(
-                            "TAG_DUPLICATE", FactoryPlugin.getResourceBundle(), tag));
-            return false;
-        }
-        if (parentName != null && !hasTag(parentName)) {
-            log.warn(
-                    SafeResourceLoader.getStringFormatted(
-                            "TAG_MISSING_PARENT",
-                            FactoryPlugin.getResourceBundle(),
-                            tag,
-                            parentName));
-            return false;
-        }
-
-        Tag parent = null;
-
-        if (parentName != null) {
-            parent = findTag(parentName).orElse(null);
-        }
-
-        tags.put(tag, new Tag(tag, parent));
-
-        return true;
-    }
-
-    /**
-     * Remove any duplicate values in the list of tags. If there are both a generic tag and a more
-     * specific one that inherits from it, the generic tag will be removed.
-     *
-     * @param list The tags to de-duplicate. It is expected that the contents of this list will be
-     *     modified.
-     */
-    private void deduplicateTags(@NonNull List<Tag> list) {
-        if (list.isEmpty()) {
-            // Well that was easy.
-            return;
-        }
-
-        List<Tag> toRemove = new ArrayList<>();
-
-        // It's easier to remove duplicates this way
-        List<Tag> deduplicated =
-                list.stream().distinct().collect(Collectors.toCollection(ArrayList::new));
-
-        for (Tag tag : deduplicated) {
-            Tag parent = tag.parent();
-
-            while (parent != null) {
-                if (deduplicated.contains(parent)) {
-                    toRemove.add(parent);
-                }
-                parent = parent.parent();
-            }
-        }
-
-        deduplicated.removeAll(toRemove);
-
-        list.clear();
-        list.addAll(deduplicated);
+        return tagRegistry.addTag(tag, parentName);
     }
 
     /**
@@ -270,13 +177,7 @@ public class World {
      * @throws NullPointerException If the tag name is null.
      */
     public Optional<Tag> findTag(@NonNull String tagName) {
-        if (tags.containsKey(tagName)) {
-            return Optional.of(tags.get(tagName));
-        }
-        log.error(
-                SafeResourceLoader.getString("TAG_MISSING", FactoryPlugin.getResourceBundle()),
-                tagName);
-        return Optional.empty();
+        return tagRegistry.findTag(tagName);
     }
 
     /**
@@ -303,7 +204,7 @@ public class World {
      * @return An unmodifiable copy of the tag names.
      */
     public List<String> getTagNames() {
-        return List.copyOf(tags.keySet());
+        return tagRegistry.getTagNames();
     }
 
     /**
@@ -312,7 +213,7 @@ public class World {
      * @return An unmodifiable copy of the tag values.
      */
     public List<Tag> getTags() {
-        return List.copyOf(tags.values());
+        return tagRegistry.getTags();
     }
 
     /**
@@ -326,29 +227,28 @@ public class World {
     }
 
     /**
-     * Checks if the specified tag exists.
+     * Check whether the new or exsting tag is more specific, and keep that one in the material.
      *
-     * @param tag The tag we are looking for.
-     * @return Whether the tag exists.
+     * @param material The material we are interested in.
+     * @param newTag The tag that we might want to add to the material.
+     * @param oldTag The tag that is already in the materials tag list.
      */
-    public boolean hasTag(@NonNull String tag) {
-        return tags.containsKey(tag);
-    }
-
-    /**
-     * Checks if the specified tag exists on the given material.
-     *
-     * @param tag The name of the tag we are looking for.
-     * @param materialName The material name we are checking against.
-     * @return True if the material has the tag, false if it does not or either tag or material
-     *     don't exist.
-     */
-    public boolean hasTagMaterial(@NonNull String tag, @NonNull String materialName) {
-        if (!tags.containsKey(tag) || !materials.containsKey(materialName)) {
-            return false;
+    private void keepMoreSpecificTag(
+            @NonNull Material material, @NonNull Tag newTag, @NonNull Tag oldTag) {
+        boolean oldIsParent = false;
+        Tag parent = newTag.parent();
+        while (parent != null) {
+            if (parent.equals(newTag)) {
+                oldIsParent = true;
+                break;
+            }
+            parent = parent.parent();
         }
-
-        return containsTag(tag, materials.get(materialName).tags());
+        if (oldIsParent) {
+            material.tags().remove(oldTag);
+            material.tags().add(newTag);
+        }
+        // NOTE(ches) otherwise, do nothing and keep the old one.
     }
 
     /**
@@ -416,6 +316,34 @@ public class World {
     }
 
     /**
+     * Checks if the material has the given tag.
+     *
+     * @param material The material we are checking.
+     * @param tag The name of the tag we are looking for.
+     * @return True if the material has the tag, false if it does not or either tag or material
+     *     don't exist.
+     */
+    public boolean materialHasTag(@NonNull Material material, @NonNull String tag) {
+        return Tag.containsTag(tag, material.tags());
+    }
+
+    /**
+     * Checks if the material has the given tag.
+     *
+     * @param materialName The material name we are checking against.
+     * @param tag The name of the tag we are looking for.
+     * @return True if the material has the tag, false if it does not or either tag or material
+     *     don't exist.
+     */
+    public boolean materialHasTag(@NonNull String materialName, @NonNull String tag) {
+        if (!tagRegistry.tagExists(tag) || !materials.containsKey(materialName)) {
+            return false;
+        }
+
+        return materialHasTag(materials.get(materialName), tag);
+    }
+
+    /**
      * Process a map from snakeyaml and populate the material list with the results.
      *
      * @param map The nested map structure output by snakeyaml.
@@ -457,7 +385,7 @@ public class World {
     private void processTags(@NonNull Map<String, Object> map, String parent) {
         for (Entry<String, Object> entry : map.entrySet()) {
             final String tagName = entry.getKey();
-            this.addTag(tagName, parent);
+            tagRegistry.addTag(tagName, parent);
 
             Object value = entry.getValue();
             if (value instanceof Map<?, ?> child) {
@@ -466,5 +394,15 @@ public class World {
                 processTags(cast, tagName);
             }
         }
+    }
+
+    /**
+     * Checks if the specified tag exists.
+     *
+     * @param tag The tag we are looking for.
+     * @return Whether the tag exists.
+     */
+    public boolean tagExists(@NonNull String tag) {
+        return tagRegistry.tagExists(tag);
     }
 }
