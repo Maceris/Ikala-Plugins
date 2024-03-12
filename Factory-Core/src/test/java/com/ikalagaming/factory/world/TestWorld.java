@@ -43,32 +43,19 @@ class TestWorld {
         EventManager.destoryInstance();
     }
 
-    /** Test adding new tags. */
-    @Test
-    void testAddingTags() {
-        World world = new World();
-        assertTrue(world.loadDefaultConfigurations());
-        assertTrue(world.addTag("testing_tag_001"));
-        assertTrue(world.addTag("testing_tag_001_variant", "testing_tag_001"));
-        assertFalse(world.addTag("testing_tag_001"));
-
-        assertFalse(world.addTag("testing_tag_002", "does_not_exist"));
-        assertFalse(world.addTag("same", "same"));
-
-        assertThrows(NullPointerException.class, () -> world.addTag(null));
-        assertThrows(NullPointerException.class, () -> world.addTag(null, null));
-    }
-
     /** Test the default tag and material loading. */
     @Test
     void testDefaultLoading() {
-        World world = new World();
+        var world = new World();
         assertTrue(world.loadDefaultConfigurations());
 
-        assertNotNull(world.getTags());
-        assertFalse(world.getTags().isEmpty());
+        var tagRegistry = world.getTagRegistry();
 
-        for (Tag tag : world.getTags()) {
+        assertNotNull(tagRegistry);
+        assertNotNull(tagRegistry.getTags());
+        assertFalse(tagRegistry.getTags().isEmpty());
+
+        for (Tag tag : tagRegistry.getTags()) {
             assertNotNull(tag);
             assertNotNull(tag.name());
         }
@@ -85,10 +72,11 @@ class TestWorld {
     /** Test that we can retrieve materials. */
     @Test
     void testFetchMaterial() {
-        World world = new World();
+        var world = new World();
+        var tagRegistry = world.getTagRegistry();
 
-        assertTrue(world.addTag("solid"));
-        assertTrue(world.addTag("powder", "solid"));
+        assertTrue(tagRegistry.addTag("solid"));
+        assertTrue(tagRegistry.addTag("powder", "solid"));
 
         final String name = "dust";
         assertTrue(world.addMaterial("parent"));
@@ -105,36 +93,15 @@ class TestWorld {
         assertTrue(world.materialHasTag(name, "powder"));
     }
 
-    /** Test that we can retrieve tags. */
-    @Test
-    void testFetchTag() {
-        World world = new World();
-
-        final String parentName = "liquid";
-        assertTrue(world.addTag(parentName));
-        assertTrue(world.tagExists(parentName));
-        Optional<Tag> maybeLiquid = world.findTag(parentName);
-        assertTrue(maybeLiquid.isPresent());
-        assertEquals(parentName, maybeLiquid.get().name());
-
-        final String childName = "sludge";
-        assertTrue(world.addTag(childName, parentName));
-        assertTrue(world.tagExists(parentName));
-        assertTrue(world.tagExists(childName));
-        Optional<Tag> maybeSludge = world.findTag(childName);
-        assertTrue(maybeSludge.isPresent());
-        assertEquals(childName, maybeSludge.get().name());
-        assertEquals(maybeLiquid.get(), maybeSludge.get().parent());
-    }
-
     /** Test the creation of materials. */
     @Test
     void testMaterialCreation() {
-        World world = new World();
+        var world = new World();
+        var tagRegistry = world.getTagRegistry();
 
         assertDoesNotThrow(() -> world.addMaterial("simple"));
 
-        assertTrue(world.addTag("normal_tag"));
+        assertTrue(tagRegistry.addTag("normal_tag"));
 
         assertAll(
                 () -> assertTrue(world.addMaterial("Sample1")),
@@ -148,7 +115,7 @@ class TestWorld {
     /** Check for the negative scenarios for material creation. */
     @Test
     void testMaterialCreationNegative() {
-        World world = new World();
+        var world = new World();
         assertDoesNotThrow(() -> world.addMaterial("parent"));
 
         final String nullString = null;
@@ -172,11 +139,12 @@ class TestWorld {
     /** Test that tags are de-duplicated when we inherit from parent materials. */
     @Test
     void testTagDeduplication() {
-        World world = new World();
+        var world = new World();
+        var tagRegistry = world.getTagRegistry();
 
-        assertTrue(world.addTag("solid"));
-        assertTrue(world.addTag("metal", "solid"));
-        assertTrue(world.addTag("rare_metal", "metal"));
+        assertTrue(tagRegistry.addTag("solid"));
+        assertTrue(tagRegistry.addTag("metal", "solid"));
+        assertTrue(tagRegistry.addTag("rare_metal", "metal"));
 
         assertTrue(world.addMaterial("gold", List.of("rare_metal", "solid")));
         assertTrue(world.addMaterial("refined_gold", List.of("rare_metal"), "gold"));
@@ -194,11 +162,12 @@ class TestWorld {
 
     @Test
     void testTagDeduplicationSharedParentMaterial() {
-        World world = new World();
+        var world = new World();
+        var tagRegistry = world.getTagRegistry();
 
-        assertTrue(world.addTag("container"));
-        assertTrue(world.addTag("liquid_container", "container"));
-        assertTrue(world.addTag("gas_container", "container"));
+        assertTrue(tagRegistry.addTag("container"));
+        assertTrue(tagRegistry.addTag("liquid_container", "container"));
+        assertTrue(tagRegistry.addTag("gas_container", "container"));
 
         assertTrue(world.addMaterial("boxium", List.of("container")));
         assertTrue(
@@ -219,11 +188,12 @@ class TestWorld {
 
     @Test
     void testTagDeduplicationSharedParentTag() {
-        World world = new World();
+        var world = new World();
+        var tagRegistry = world.getTagRegistry();
 
-        assertTrue(world.addTag("container"));
-        assertTrue(world.addTag("liquid_container", "container"));
-        assertTrue(world.addTag("gas_container", "container"));
+        assertTrue(tagRegistry.addTag("container"));
+        assertTrue(tagRegistry.addTag("liquid_container", "container"));
+        assertTrue(tagRegistry.addTag("gas_container", "container"));
 
         assertTrue(world.addMaterial("boxium", List.of("liquid_container", "gas_container")));
 
@@ -236,10 +206,11 @@ class TestWorld {
 
     @Test
     void testTagDeduplicationTagAndParentTag() {
-        World world = new World();
+        var world = new World();
+        var tagRegistry = world.getTagRegistry();
 
-        assertTrue(world.addTag("container"));
-        assertTrue(world.addTag("liquid_container", "container"));
+        assertTrue(tagRegistry.addTag("container"));
+        assertTrue(tagRegistry.addTag("liquid_container", "container"));
 
         assertTrue(world.addMaterial("boxium", List.of("liquid_container", "container")));
 

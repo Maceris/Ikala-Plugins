@@ -3,6 +3,7 @@ package com.ikalagaming.factory.world;
 import com.ikalagaming.factory.FactoryPlugin;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.yaml.snakeyaml.Yaml;
@@ -36,10 +37,11 @@ public class World {
     /** The total height of the world in blocks. */
     public static final int WORLD_HEIGHT_TOTAL = WORLD_HEIGHT_MAX - WORLD_HEIGHT_MIN;
 
-    private TagRegistry tagRegistry = new TagRegistry();
+    /** Stores all the tags. */
+    @Getter private TagRegistry tagRegistry = new TagRegistry();
 
-    /** Used to store and look materials up by name. */
-    private Map<String, Material> materials = new HashMap<>();
+    /** Stores all the materials. */
+    @Getter private MaterialRegistry materialRegistry = new MaterialRegistry(tagRegistry);
 
     /**
      * Create a new material record without any tags or parent material.
@@ -73,50 +75,7 @@ public class World {
      * @return Whether we successfully created a material.
      */
     public boolean addMaterial(@NonNull String name, List<String> materialTags, String parentName) {
-        if (hasMaterial(name)) {
-            log.warn(
-                    SafeResourceLoader.getStringFormatted(
-                            "MAT_DUPLICATE", FactoryPlugin.getResourceBundle(), name));
-            return false;
-        }
-        if (parentName != null && !hasMaterial(parentName)) {
-            log.warn(
-                    SafeResourceLoader.getStringFormatted(
-                            "MAT_MISSING_PARENT",
-                            FactoryPlugin.getResourceBundle(),
-                            name,
-                            parentName));
-            return false;
-        }
-
-        Material parent = null;
-        if (parentName != null) {
-            parent = findMaterial(parentName).orElse(null);
-        }
-
-        var result = new Material(name, parent);
-
-        if (parent != null) {
-            result.tags().addAll(parent.tags());
-        }
-        if (materialTags != null) {
-            for (String tagName : materialTags) {
-                Optional<Tag> maybeTag = tagRegistry.findTag(tagName);
-                if (maybeTag.isEmpty()) {
-                    log.warn(
-                            SafeResourceLoader.getStringFormatted(
-                                    "TAG_MISSING", FactoryPlugin.getResourceBundle(), tagName));
-                    return false;
-                }
-
-                result.tags().add(maybeTag.get());
-            }
-        }
-        result.deduplicateTags();
-
-        materials.put(name, result);
-
-        return true;
+        return materialRegistry.addMaterial(name, materialTags, parentName);
     }
 
     /**
@@ -131,28 +90,6 @@ public class World {
     }
 
     /**
-     * Add a tag to the list of tags. If the tag already exists, this will fail.
-     *
-     * @param tag The name of the tag.
-     * @return Whether we successfully added the tag.
-     */
-    public boolean addTag(@NonNull String tag) {
-        return tagRegistry.addTag(tag, null);
-    }
-
-    /**
-     * Add a tag to the list of tags. If the tag already exists, or the parent does not, this will
-     * fail.
-     *
-     * @param tag The name of the tag.
-     * @param parentName The name of the parent tag, or null if there is no parent tag.
-     * @return Whether we successfully added the tag.
-     */
-    public boolean addTag(@NonNull String tag, String parentName) {
-        return tagRegistry.addTag(tag, parentName);
-    }
-
-    /**
      * Look through the list of materials and search for one with the given name.
      *
      * @param materialName The name of the material to look for.
@@ -160,33 +97,7 @@ public class World {
      * @throws NullPointerException If the material name is null.
      */
     public Optional<Material> findMaterial(@NonNull String materialName) {
-        if (materials.containsKey(materialName)) {
-            return Optional.of(materials.get(materialName));
-        }
-        log.error(
-                SafeResourceLoader.getString("MATERIAL_MISSING", FactoryPlugin.getResourceBundle()),
-                materialName);
-        return Optional.empty();
-    }
-
-    /**
-     * Look through the list of tags and search for one with the given name.
-     *
-     * @param tagName The name of the tag to look for.
-     * @return The tag with the given name.
-     * @throws NullPointerException If the tag name is null.
-     */
-    public Optional<Tag> findTag(@NonNull String tagName) {
-        return tagRegistry.findTag(tagName);
-    }
-
-    /**
-     * Fetch an unmodifiable copy of the list of material names that currently exist.
-     *
-     * @return An unmodifiable copy of the material names.
-     */
-    public List<String> getMaterialNames() {
-        return List.copyOf(materials.keySet());
+        return materialRegistry.findMaterial(materialName);
     }
 
     /**
@@ -195,25 +106,7 @@ public class World {
      * @return An unmodifiable copy of the material values.
      */
     public List<Material> getMaterials() {
-        return List.copyOf(materials.values());
-    }
-
-    /**
-     * Fetch an unmodifiable copy of the list of tag names that currently exist.
-     *
-     * @return An unmodifiable copy of the tag names.
-     */
-    public List<String> getTagNames() {
-        return tagRegistry.getTagNames();
-    }
-
-    /**
-     * Fetch an unmodifiable copy of the list of tags that currently exist.
-     *
-     * @return An unmodifiable copy of the tag values.
-     */
-    public List<Tag> getTags() {
-        return tagRegistry.getTags();
+        return materialRegistry.getMaterials();
     }
 
     /**
@@ -223,32 +116,7 @@ public class World {
      * @return Whether the material exists.
      */
     public boolean hasMaterial(@NonNull String material) {
-        return materials.containsKey(material);
-    }
-
-    /**
-     * Check whether the new or exsting tag is more specific, and keep that one in the material.
-     *
-     * @param material The material we are interested in.
-     * @param newTag The tag that we might want to add to the material.
-     * @param oldTag The tag that is already in the materials tag list.
-     */
-    private void keepMoreSpecificTag(
-            @NonNull Material material, @NonNull Tag newTag, @NonNull Tag oldTag) {
-        boolean oldIsParent = false;
-        Tag parent = newTag.parent();
-        while (parent != null) {
-            if (parent.equals(newTag)) {
-                oldIsParent = true;
-                break;
-            }
-            parent = parent.parent();
-        }
-        if (oldIsParent) {
-            material.tags().remove(oldTag);
-            material.tags().add(newTag);
-        }
-        // NOTE(ches) otherwise, do nothing and keep the old one.
+        return materialRegistry.hasMaterial(material);
     }
 
     /**
@@ -318,29 +186,13 @@ public class World {
     /**
      * Checks if the material has the given tag.
      *
-     * @param material The material we are checking.
-     * @param tag The name of the tag we are looking for.
-     * @return True if the material has the tag, false if it does not or either tag or material
-     *     don't exist.
-     */
-    public boolean materialHasTag(@NonNull Material material, @NonNull String tag) {
-        return Tag.containsTag(tag, material.tags());
-    }
-
-    /**
-     * Checks if the material has the given tag.
-     *
      * @param materialName The material name we are checking against.
      * @param tag The name of the tag we are looking for.
      * @return True if the material has the tag, false if it does not or either tag or material
      *     don't exist.
      */
     public boolean materialHasTag(@NonNull String materialName, @NonNull String tag) {
-        if (!tagRegistry.tagExists(tag) || !materials.containsKey(materialName)) {
-            return false;
-        }
-
-        return materialHasTag(materials.get(materialName), tag);
+        return materialRegistry.materialHasTag(materialName, tag);
     }
 
     /**
@@ -349,7 +201,6 @@ public class World {
      * @param map The nested map structure output by snakeyaml.
      */
     private void processMaterials(@NonNull Map<String, Object> map) {
-
         try {
             for (Entry<String, Object> entry : map.entrySet()) {
                 Object value = entry.getValue();
@@ -367,7 +218,7 @@ public class World {
                 List<String> tagNames = (List<String>) contents.get("tags");
                 String parent = (String) contents.get("parent");
 
-                this.addMaterial(entry.getKey(), tagNames, parent);
+                materialRegistry.addMaterial(entry.getKey(), tagNames, parent);
             }
         } catch (Exception e) {
             log.warn(
