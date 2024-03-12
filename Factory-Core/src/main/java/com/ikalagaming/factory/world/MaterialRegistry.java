@@ -22,6 +22,39 @@ public class MaterialRegistry {
     private final Map<String, Material> materials = new HashMap<>();
 
     /**
+     * Create a new material record without any tags or parent material.
+     *
+     * @param name The name of the material.
+     * @return Whether we successfully created a material.
+     */
+    public boolean addMaterial(@NonNull String name) {
+        return this.addMaterial(name, null, null);
+    }
+
+    /**
+     * Create a new material record without any parent material.
+     *
+     * @param name The name of the material.
+     * @param materialTags The names of all the tags that apply to this material. If any of these do
+     *     not already exist, creating the material will fail.
+     * @return Whether we successfully created a material.
+     */
+    public boolean addMaterial(@NonNull String name, @NonNull List<String> materialTags) {
+        return this.addMaterial(name, materialTags, null);
+    }
+
+    /**
+     * Create a new material record without any tags.
+     *
+     * @param name The name of the material.
+     * @param parentName The name of the parent material, which must already exist if not null.
+     * @return Whether we successfully created a material.
+     */
+    public boolean addMaterial(@NonNull String name, @NonNull String parentName) {
+        return this.addMaterial(name, null, parentName);
+    }
+
+    /**
      * Create a new material record.
      *
      * @param name The name of the material.

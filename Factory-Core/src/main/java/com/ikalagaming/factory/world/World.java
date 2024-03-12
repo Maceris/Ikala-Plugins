@@ -44,82 +44,6 @@ public class World {
     @Getter private MaterialRegistry materialRegistry = new MaterialRegistry(tagRegistry);
 
     /**
-     * Create a new material record without any tags or parent material.
-     *
-     * @param name The name of the material.
-     * @return Whether we successfully created a material.
-     */
-    public boolean addMaterial(@NonNull String name) {
-        return this.addMaterial(name, null, null);
-    }
-
-    /**
-     * Create a new material record without any parent material.
-     *
-     * @param name The name of the material.
-     * @param materialTags The names of all the tags that apply to this material. If any of these do
-     *     not already exist, creating the material will fail.
-     * @return Whether we successfully created a material.
-     */
-    public boolean addMaterial(@NonNull String name, @NonNull List<String> materialTags) {
-        return this.addMaterial(name, materialTags, null);
-    }
-
-    /**
-     * Create a new material record.
-     *
-     * @param name The name of the material.
-     * @param materialTags The names of all the tags that apply to this material. If any of these do
-     *     not already exist, creating the material will fail.
-     * @param parentName The name of the parent material, which must already exist if not null.
-     * @return Whether we successfully created a material.
-     */
-    public boolean addMaterial(@NonNull String name, List<String> materialTags, String parentName) {
-        return materialRegistry.addMaterial(name, materialTags, parentName);
-    }
-
-    /**
-     * Create a new material record without any tags.
-     *
-     * @param name The name of the material.
-     * @param parentName The name of the parent material, which must already exist if not null.
-     * @return Whether we successfully created a material.
-     */
-    public boolean addMaterial(@NonNull String name, @NonNull String parentName) {
-        return this.addMaterial(name, null, parentName);
-    }
-
-    /**
-     * Look through the list of materials and search for one with the given name.
-     *
-     * @param materialName The name of the material to look for.
-     * @return The tag with the given name.
-     * @throws NullPointerException If the material name is null.
-     */
-    public Optional<Material> findMaterial(@NonNull String materialName) {
-        return materialRegistry.findMaterial(materialName);
-    }
-
-    /**
-     * Fetch an unmodifiable copy of the list of materials that currently exist.
-     *
-     * @return An unmodifiable copy of the material values.
-     */
-    public List<Material> getMaterials() {
-        return materialRegistry.getMaterials();
-    }
-
-    /**
-     * Checks if the specified material exists.
-     *
-     * @param material The material we are looking for.
-     * @return Whether the material exists.
-     */
-    public boolean hasMaterial(@NonNull String material) {
-        return materialRegistry.hasMaterial(material);
-    }
-
-    /**
      * Load all the information from files.
      *
      * @return Whether we successfully loaded all information.
@@ -172,8 +96,7 @@ public class World {
         Yaml yaml = new Yaml();
 
         InputStream stream = this.getClass().getResourceAsStream(resourceName);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> map = (Map<String, Object>) yaml.load(stream);
+        Map<String, Object> map = yaml.load(stream);
         if (map == null) {
             log.warn(
                     SafeResourceLoader.getString("FILE_EMPTY", FactoryPlugin.getResourceBundle()),
@@ -181,18 +104,6 @@ public class World {
             return new HashMap<>();
         }
         return map;
-    }
-
-    /**
-     * Checks if the material has the given tag.
-     *
-     * @param materialName The material name we are checking against.
-     * @param tag The name of the tag we are looking for.
-     * @return True if the material has the tag, false if it does not or either tag or material
-     *     don't exist.
-     */
-    public boolean materialHasTag(@NonNull String materialName, @NonNull String tag) {
-        return materialRegistry.materialHasTag(materialName, tag);
     }
 
     /**
@@ -245,15 +156,5 @@ public class World {
                 processTags(cast, tagName);
             }
         }
-    }
-
-    /**
-     * Checks if the specified tag exists.
-     *
-     * @param tag The tag we are looking for.
-     * @return Whether the tag exists.
-     */
-    public boolean tagExists(@NonNull String tag) {
-        return tagRegistry.tagExists(tag);
     }
 }

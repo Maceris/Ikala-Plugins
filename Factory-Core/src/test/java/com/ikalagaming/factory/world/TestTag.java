@@ -14,18 +14,6 @@ import java.util.Optional;
  */
 class TestTag {
 
-    /** Test the creation of tags. */
-    @Test
-    void testTagCreation() {
-        try {
-            Tag parent = new Tag("parent");
-            assertDoesNotThrow(() -> new Tag("child", parent));
-            assertDoesNotThrow(() -> new Tag("noParent", null));
-        } catch (Exception e) {
-            fail("Failed to create tags", e);
-        }
-    }
-
     @Test
     void testContainsTag() {
         var firstName = "foo";
@@ -79,5 +67,17 @@ class TestTag {
         assertFalse(unrelated.isContainedBy(childList));
         assertFalse(parent.isContainedBy(List.of()));
         assertFalse(parent.isContainedBy(null));
+    }
+
+    /** Test the creation of tags. */
+    @Test
+    void testTagCreation() {
+        try {
+            Tag parent = new Tag("parent");
+            assertDoesNotThrow(() -> new Tag("child", parent));
+            assertDoesNotThrow(() -> new Tag("noParent", null));
+        } catch (Exception e) {
+            fail("Failed to create tags", e);
+        }
     }
 }

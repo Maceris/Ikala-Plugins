@@ -17,7 +17,6 @@ import java.util.ResourceBundle;
  */
 class TestTagRegistry {
 
-    private TagRegistry tagRegistry;
     private static MockedStatic<FactoryPlugin> fakePlugin;
 
     /** Set up before all the tests. */
@@ -36,6 +35,8 @@ class TestTagRegistry {
     static void tearDownAfterClass() {
         fakePlugin.close();
     }
+
+    private TagRegistry tagRegistry;
 
     @BeforeEach
     void setUp() {
