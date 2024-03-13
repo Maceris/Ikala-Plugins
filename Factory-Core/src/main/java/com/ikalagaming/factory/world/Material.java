@@ -20,12 +20,13 @@ import java.util.*;
 public record Material(@NonNull String name, @NonNull List<Tag> tags, Material parent) {
 
     /**
-     * Create a new material record.
+     * Create a new material record. This won't automatically de-deduplicate tags.
      *
      * @param name The name of the material.
      * @param tags The tags that apply to this material. If this is not a modifiable list, we will
      *     create a new list with a copy of the provided elements instead of using the provided one.
      * @param parent The parent material, null if this is a root material.
+     * @see #deduplicateTags()
      */
     public Material(@NonNull String name, @NonNull List<Tag> tags, Material parent) {
 
@@ -42,11 +43,12 @@ public record Material(@NonNull String name, @NonNull List<Tag> tags, Material p
     }
 
     /**
-     * Create a new material record without a parent.
+     * Create a new material record without a parent. This won't automatically de-deduplicate tags.
      *
      * @param name The name of the material.
      * @param tags The tags that apply to this material. If this is not a modifiable list, we will
      *     create a new list with a copy of the provided elements instead of using the provided one.
+     * @see #deduplicateTags()
      */
     public Material(@NonNull String name, @NonNull List<Tag> tags) {
         this(name, tags, null);
@@ -69,6 +71,25 @@ public record Material(@NonNull String name, @NonNull List<Tag> tags, Material p
      */
     public Material(@NonNull String name) {
         this(name, new ArrayList<>(), null);
+    }
+
+    /**
+     * Remove any tags that are on the material which are the parent of another tag on the material.
+     */
+    void deduplicateTags() {
+        Set<Tag> toRemove = new HashSet<>();
+        for (Tag tag : tags) {
+            var parent = tag.parent();
+            while (parent != null) {
+                if (tags.contains(parent)) {
+                    toRemove.add(parent);
+                }
+                parent = parent.parent();
+            }
+        }
+        var deduplicated = tags.stream().distinct().filter(tag -> !toRemove.contains(tag)).toList();
+        tags.clear();
+        tags.addAll(deduplicated);
     }
 
     @Override
@@ -103,24 +124,5 @@ public record Material(@NonNull String name, @NonNull List<Tag> tags, Material p
         result.append(']');
 
         return result.toString();
-    }
-
-    /**
-     * Remove any tags that are on the material which are the parent of another tag on the material.
-     */
-    void deduplicateTags() {
-        Set<Tag> toRemove = new HashSet<>();
-        for (Tag tag : tags) {
-            var parent = tag.parent();
-            while (parent != null) {
-                if (tags.contains(parent)) {
-                    toRemove.add(parent);
-                }
-                parent = parent.parent();
-            }
-        }
-        var deduplicated = tags.stream().distinct().filter(tag -> !toRemove.contains(tag)).toList();
-        tags.clear();
-        tags.addAll(deduplicated);
     }
 }

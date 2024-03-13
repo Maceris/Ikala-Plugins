@@ -35,41 +35,6 @@ public record BiomeParameters(
     }
 
     /**
-     * Compare biome parameters by how broad of a range they cover.
-     *
-     * @param first The first biome parameters.
-     * @param second The second biome parameters.
-     * @return A value of -1 if the first covers more range, 0 if they're about equal, and 1 if the
-     *     first covers less range.
-     */
-    public static int compareSpecificity(
-            @NonNull BiomeParameters first, @NonNull BiomeParameters second) {
-        final float epsilon = 0.001f;
-        final float rangeDifference = first.getTotalRange() - second.getTotalRange();
-        if (rangeDifference < -epsilon) {
-            return -1;
-        }
-        if (rangeDifference > epsilon) {
-            return 1;
-        }
-        return 0;
-    }
-
-    /**
-     * Calculates the sum of all the parameter widths. Loose estimate of how broad of a range this
-     * spans in the vector space.
-     *
-     * @return The sum of parameter ranges.
-     */
-    private float getTotalRange() {
-        return temperature.getWidth()
-                + height.getWidth()
-                + erosion.getWidth()
-                + precipitation.getWidth()
-                + weirdness.getWidth();
-    }
-
-    /**
      * Calculate the distance from the given parameter pack to the midpoint of these parameters.
      *
      * @param parameters The values we want to compare with the midpoints of this range.
