@@ -2,6 +2,7 @@ package com.ikalagaming.factory.quest;
 
 import com.ikalagaming.factory.crafting.Recipe;
 
+import lombok.Getter;
 import lombok.NonNull;
 
 /**
@@ -9,6 +10,7 @@ import lombok.NonNull;
  *
  * @author Ches Burks
  */
+@Getter
 public class RewardRecipe extends Reward {
 
     /** The recipe to unlock. */
@@ -22,5 +24,10 @@ public class RewardRecipe extends Reward {
     public RewardRecipe(@NonNull Recipe recipe) {
         super(RewardType.RECIPE);
         this.recipe = recipe;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Reward[type=%s, recipe=%s]", type, recipe);
     }
 }

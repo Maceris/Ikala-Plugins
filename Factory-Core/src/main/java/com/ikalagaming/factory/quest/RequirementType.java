@@ -1,5 +1,10 @@
 package com.ikalagaming.factory.quest;
 
+import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.util.SafeResourceLoader;
+
+import lombok.NonNull;
+
 /**
  * The types of requirement that must be satisfied for a quest to be considered completed.
  *
@@ -20,4 +25,22 @@ public enum RequirementType {
     RETRIEVE,
     /** The player has to use a specific kind of item. */
     USE_ITEM;
+
+    private static String getLocalizationKey(@NonNull RequirementType type) {
+        return switch (type) {
+            case BREAK_BLOCK -> "REQUIREMENT_TYPE_BREAK_BLOCK";
+            case CHECKBOX -> "REQUIREMENT_TYPE_CHECKBOX";
+            case CRAFT -> "REQUIREMENT_TYPE_CRAFT";
+            case INTERACT_ENTITY -> "REQUIREMENT_TYPE_INTERACT_ENTITY";
+            case LOCATION -> "REQUIREMENT_TYPE_LOCATION";
+            case RETRIEVE -> "REQUIREMENT_TYPE_RETRIEVE";
+            case USE_ITEM -> "REQUIREMENT_TYPE_USE_ITEM";
+        };
+    }
+
+    @Override
+    public String toString() {
+        return SafeResourceLoader.getString(
+                getLocalizationKey(this), FactoryPlugin.getResourceBundle());
+    }
 }

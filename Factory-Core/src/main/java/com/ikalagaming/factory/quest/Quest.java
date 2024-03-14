@@ -3,6 +3,7 @@ package com.ikalagaming.factory.quest;
 import lombok.NonNull;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -28,8 +29,8 @@ public record Quest(
         Prerequisites prerequisites,
         boolean repeatable,
         boolean autoClaim,
-        @NonNull Requirement[] requirements,
-        Reward[] rewards) {
+        @NonNull List<Requirement> requirements,
+        @NonNull List<Reward> rewards) {
 
     @Override
     public boolean equals(Object o) {
@@ -61,7 +62,7 @@ public record Quest(
                 prerequisites.toString(),
                 repeatable,
                 autoClaim,
-                Arrays.toString(requirements),
-                Arrays.toString(rewards));
+                Arrays.toString(requirements.toArray()),
+                Arrays.toString(rewards.toArray()));
     }
 }

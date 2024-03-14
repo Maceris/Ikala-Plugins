@@ -1,5 +1,6 @@
 package com.ikalagaming.factory.quest;
 
+import lombok.Getter;
 import lombok.NonNull;
 
 /**
@@ -7,8 +8,10 @@ import lombok.NonNull;
  *
  * @author Ches Burks
  */
+@Getter
 public class RewardItem extends Reward {
 
+    // TODO(ches) Allow stacks, item metadata
     /** The item to give the player. */
     @NonNull public final String itemName;
 
@@ -20,5 +23,10 @@ public class RewardItem extends Reward {
     public RewardItem(@NonNull String itemName) {
         super(RewardType.ITEM);
         this.itemName = itemName;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Reward[type=%s, itemName=%s]", type, itemName);
     }
 }

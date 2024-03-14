@@ -6,7 +6,7 @@ package com.ikalagaming.factory.world.gen;
  * @author Ches Burks
  * @param scale The scale of the noise. A reasonable example is 0.001, should be in the range (0,
  *     1).
- * @param octaves The number of octaves of noise to use. Must be > 0, should be < 16.
+ * @param octaves The number of octaves of noise to use. Must be > 0, should be &lt; 16.
  */
 public record NoiseParameters(double scale, int octaves) {
     public static final NoiseParameters TEMPERATURE = new NoiseParameters(0.001, 4);

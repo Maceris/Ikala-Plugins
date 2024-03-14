@@ -1,5 +1,6 @@
 package com.ikalagaming.factory.quest;
 
+import lombok.Getter;
 import lombok.NonNull;
 
 /**
@@ -7,6 +8,7 @@ import lombok.NonNull;
  *
  * @author Ches Burks
  */
+@Getter
 public class RewardCommand extends Reward {
 
     /** The script to run. */
@@ -20,5 +22,10 @@ public class RewardCommand extends Reward {
     public RewardCommand(@NonNull String script) {
         super(RewardType.COMMAND);
         this.script = script;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Reward[type=%s, script='%s']", type, script);
     }
 }

@@ -4,16 +4,16 @@ package com.ikalagaming.factory.world.gen;
  * Specifies the range of values that a biome will have.
  *
  * @author Ches Burks
- * @param min The minimum valid value for a biome. Must be >= 0 and <= max.
- * @param max The maximum valid value for a biome. Must be <=1 and >= min.
+ * @param min The minimum valid value for a biome. Must be >= 0 and &lt;= max.
+ * @param max The maximum valid value for a biome. Must be &lt;=1 and >= min.
  */
 public record ParameterRange(float min, float max) {
 
     /**
      * Create a new parameter range and check the values are reasonable.
      *
-     * @param min The minimum valid value for a biome. Must be >= 0 and <= max.
-     * @param max The maximum valid value for a biome. Must be <=0 and >= min.
+     * @param min The minimum valid value for a biome. Must be >= 0 and &lt;= max.
+     * @param max The maximum valid value for a biome. Must be &lt;=0 and >= min.
      */
     public ParameterRange(final float min, final float max) {
         if (Float.isNaN(min) || Float.isNaN(max)) {

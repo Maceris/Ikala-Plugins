@@ -214,7 +214,7 @@ public class TreeBinarySerialization {
         } catch (IOException e) {
             log.warn(
                     SafeResourceLoader.getString(
-                            "NODE_SERIALIZATON_FAILED", FactoryPlugin.getResourceBundle()),
+                            "NODE_SERIALIZATION_FAILED", FactoryPlugin.getResourceBundle()),
                     e);
             return Optional.empty();
         }
@@ -737,7 +737,7 @@ public class TreeBinarySerialization {
         } catch (IOException e) {
             log.warn(
                     SafeResourceLoader.getString(
-                            "NODE_SERIALIZATON_FAILED", FactoryPlugin.getResourceBundle()));
+                            "NODE_SERIALIZATION_FAILED", FactoryPlugin.getResourceBundle()));
             return false;
         }
     }
