@@ -47,8 +47,8 @@ class TestBinarySerialization {
         TestBinarySerialization.plugin.onDisable();
         TestBinarySerialization.plugin.onUnload();
         TestBinarySerialization.plugin = null;
-        PluginManager.destoryInstance();
-        EventManager.destoryInstance();
+        PluginManager.destroyInstance();
+        EventManager.destroyInstance();
     }
 
     /** Test converting to and from binary data. */

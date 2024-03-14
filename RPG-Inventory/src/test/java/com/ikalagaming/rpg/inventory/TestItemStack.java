@@ -36,8 +36,8 @@ class TestItemStack {
      */
     @AfterAll
     static void tearDownAfterClass() throws Exception {
-        PluginManager.destoryInstance();
-        EventManager.destoryInstance();
+        PluginManager.destroyInstance();
+        EventManager.destroyInstance();
     }
 
     /** Test the type comparison. */

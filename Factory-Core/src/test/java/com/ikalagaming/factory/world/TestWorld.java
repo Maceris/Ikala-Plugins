@@ -35,8 +35,8 @@ class TestWorld {
         TestWorld.plugin.onDisable();
         TestWorld.plugin.onUnload();
         TestWorld.plugin = null;
-        PluginManager.destoryInstance();
-        EventManager.destoryInstance();
+        PluginManager.destroyInstance();
+        EventManager.destroyInstance();
     }
 
     /** Test the default tag and material loading. */

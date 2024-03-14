@@ -45,8 +45,8 @@ class TestStringSerialization {
         TestStringSerialization.plugin.onDisable();
         TestStringSerialization.plugin.onUnload();
         TestStringSerialization.plugin = null;
-        PluginManager.destoryInstance();
-        EventManager.destoryInstance();
+        PluginManager.destroyInstance();
+        EventManager.destroyInstance();
     }
 
     /** Test converting to and from strings. */

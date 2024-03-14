@@ -53,8 +53,8 @@ class TestInventory {
      */
     @AfterAll
     static void tearDownAfterClass() throws Exception {
-        PluginManager.destoryInstance();
-        EventManager.destoryInstance();
+        PluginManager.destroyInstance();
+        EventManager.destroyInstance();
     }
 
     /**

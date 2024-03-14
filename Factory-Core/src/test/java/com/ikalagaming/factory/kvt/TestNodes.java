@@ -44,8 +44,8 @@ class TestNodes {
         TestNodes.plugin.onDisable();
         TestNodes.plugin.onUnload();
         TestNodes.plugin = null;
-        PluginManager.destoryInstance();
-        EventManager.destoryInstance();
+        PluginManager.destroyInstance();
+        EventManager.destroyInstance();
     }
 
     /** Check if we can store regular values. */
