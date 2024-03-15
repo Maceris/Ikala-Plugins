@@ -52,7 +52,7 @@ class TestStringSerialization {
     /** Test converting to and from strings. */
     @Test
     void testFromString() {
-        NodeTree tree = new Node();
+        KVT tree = new Node();
 
         tree.addString(
                 "annoying name 7!@#$%^ %^&_+'-={}|[]\\\\*()\\\"",

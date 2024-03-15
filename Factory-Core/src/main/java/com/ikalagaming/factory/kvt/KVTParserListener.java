@@ -4,7 +4,7 @@ package com.ikalagaming.factory.kvt;
 import org.antlr.v4.runtime.tree.ParseTreeListener;
 
 /** This interface defines a complete listener for a parse tree produced by {@link KVTParser}. */
-public interface KVTParserListener extends ParseTreeListener {
+interface KVTParserListener extends ParseTreeListener {
     /**
      * Enter a parse tree produced by {@link KVTParser#array}.
      *

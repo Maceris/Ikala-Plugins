@@ -4,7 +4,28 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 /**
- * The types of tags that we can have.
+ * The types of tags that we can have:
+ *
+ * <ul>
+ *   <li>{@link #BOOLEAN}
+ *   <li>{@link #BOOLEAN_ARRAY}
+ *   <li>{@link #BYTE}
+ *   <li>{@link #BYTE_ARRAY}
+ *   <li>{@link #DOUBLE}
+ *   <li>{@link #DOUBLE_ARRAY}
+ *   <li>{@link #FLOAT}
+ *   <li>{@link #FLOAT_ARRAY}
+ *   <li>{@link #INTEGER}
+ *   <li>{@link #INTEGER_ARRAY}
+ *   <li>{@link #LONG}
+ *   <li>{@link #LONG_ARRAY}
+ *   <li>{@link #NODE}
+ *   <li>{@link #NODE_ARRAY}
+ *   <li>{@link #SHORT}
+ *   <li>{@link #SHORT_ARRAY}
+ *   <li>{@link #STRING}
+ *   <li>{@link #STRING_ARRAY}
+ * </ul>
  *
  * @author Ches Burks
  */

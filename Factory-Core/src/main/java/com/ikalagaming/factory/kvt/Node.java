@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 @Getter
 @Slf4j
 @EqualsAndHashCode
-public class Node implements NodeTree {
+public class Node implements KVT {
 
     /**
      * Escape the key if required.
@@ -37,14 +37,14 @@ public class Node implements NodeTree {
     }
 
     /** The key value pairs in the node. */
-    public final Map<String, NodeTree> values;
+    public final Map<String, KVT> values;
 
     /** Set up an empty node. */
     public Node() {
         values = new TreeMap<>();
     }
 
-    private void add(final @NonNull List<String> names, int index, @NonNull NodeTree node) {
+    private void add(final @NonNull List<String> names, int index, @NonNull KVT node) {
 
         if (index < 0 || index >= names.size()) {
             log.warn(
@@ -52,7 +52,7 @@ public class Node implements NodeTree {
                             "NODE_INVALID_INDEX",
                             FactoryPlugin.getResourceBundle(),
                             "" + index,
-                            names.stream().collect(Collectors.joining("."))));
+                            String.join(".", names)));
             return;
         }
 
@@ -71,7 +71,7 @@ public class Node implements NodeTree {
                             "NODE_INVALID_TYPE",
                             FactoryPlugin.getResourceBundle(),
                             next,
-                            names.stream().collect(Collectors.joining("."))));
+                            String.join(".", names)));
         }
     }
 
@@ -80,7 +80,7 @@ public class Node implements NodeTree {
         this.add(name, new Node());
     }
 
-    private void add(final @NonNull String name, @NonNull NodeTree node) {
+    private void add(final @NonNull String name, @NonNull KVT node) {
         this.add(List.of(name.split("\\.")), 0, node);
     }
 
@@ -174,11 +174,11 @@ public class Node implements NodeTree {
                     SafeResourceLoader.getStringFormatted(
                             "MISSING_NODE",
                             FactoryPlugin.getResourceBundle(),
-                            names.stream().collect(Collectors.joining("."))));
+                            String.join(".", names)));
             return null;
         }
 
-        NodeTree node = values.get(names.get(index));
+        KVT node = values.get(names.get(index));
 
         if (node instanceof Node cast) {
             if (index == names.size() - 1) {
@@ -199,7 +199,7 @@ public class Node implements NodeTree {
                 SafeResourceLoader.getStringFormatted(
                         "MISSING_NODE",
                         FactoryPlugin.getResourceBundle(),
-                        names.stream().collect(Collectors.joining("."))));
+                        String.join(".", names)));
 
         return null;
     }

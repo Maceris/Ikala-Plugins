@@ -89,7 +89,7 @@ public class TreeBinarySerialization {
      *     added compression.
      */
     static int calculateTotalSize(final @NonNull Node node) {
-        Map<NodeTree, Integer> sizes = new HashMap<>();
+        Map<KVT, Integer> sizes = new HashMap<>();
         return TreeBinarySerialization.calculateTotalSize(node, sizes);
     }
 
@@ -103,7 +103,7 @@ public class TreeBinarySerialization {
      * @return The total size for the node.
      */
     @SuppressWarnings("unchecked")
-    private static int calculateTotalSize(final @NonNull Node node, Map<NodeTree, Integer> sizes) {
+    private static int calculateTotalSize(final @NonNull Node node, Map<KVT, Integer> sizes) {
         int size = 0;
         size += 8; // size in bytes
         for (var entry : node.getValues().entrySet()) {
@@ -710,7 +710,7 @@ public class TreeBinarySerialization {
      *
      * @param node The node that was unexpected.
      */
-    private static void reportUnexpectedNode(final @NonNull NodeTree node) {
+    private static void reportUnexpectedNode(final @NonNull KVT node) {
         log.warn(
                 SafeResourceLoader.getStringFormatted(
                         "NODE_UNEXPECTED_TYPE",
@@ -729,7 +729,7 @@ public class TreeBinarySerialization {
      * @throws UnsupportedOperationException If there are nodes with invalid/unsupported types.
      */
     public static boolean write(final @NonNull Node node, @NonNull OutputStream stream) {
-        Map<NodeTree, Integer> sizes = new HashMap<>();
+        Map<KVT, Integer> sizes = new HashMap<>();
         TreeBinarySerialization.calculateTotalSize(node, sizes);
         try {
             TreeBinarySerialization.writeNode(node, stream, sizes);
@@ -753,9 +753,7 @@ public class TreeBinarySerialization {
      */
     @SuppressWarnings("unchecked")
     private static <T> void writeArray(
-            final @NonNull ArrayNode<T> node,
-            OutputStream stream,
-            final Map<NodeTree, Integer> sizes)
+            final @NonNull ArrayNode<T> node, OutputStream stream, final Map<KVT, Integer> sizes)
             throws IOException {
 
         switch (node.getType()) {
@@ -972,7 +970,7 @@ public class TreeBinarySerialization {
      * @throws IOException If there is a problem writing data.
      */
     private static void writeNode(
-            final @NonNull Node node, OutputStream stream, Map<NodeTree, Integer> sizes)
+            final @NonNull Node node, OutputStream stream, Map<KVT, Integer> sizes)
             throws IOException {
 
         TreeBinarySerialization.writeLong(sizes.get(node), stream);
@@ -1005,7 +1003,7 @@ public class TreeBinarySerialization {
             final @NonNull List<Node> values,
             final int size,
             OutputStream stream,
-            final Map<NodeTree, Integer> sizes)
+            final Map<KVT, Integer> sizes)
             throws IOException {
 
         final int arrayCount = values.size();
@@ -1106,7 +1104,7 @@ public class TreeBinarySerialization {
      * @throws IOException If there is a problem writing data.
      */
     private static <T> void writeValue(
-            final @NonNull ValueNode<T> node, OutputStream stream, Map<NodeTree, Integer> sizes)
+            final @NonNull ValueNode<T> node, OutputStream stream, Map<KVT, Integer> sizes)
             throws IOException {
         switch (node.getType()) {
             case BOOLEAN:

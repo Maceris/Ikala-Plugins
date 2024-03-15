@@ -11,14 +11,14 @@ import java.util.List;
  *
  * @author Ches Burks
  */
-public interface NodeTree {
+public interface KVT {
 
     /**
      * Add a child node.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child node.
      */
@@ -28,9 +28,9 @@ public interface NodeTree {
      * Add a child to the node. Only works on non-leaf nodes. A node that is just a literal value
      * will throw an exception.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The key name.
      * @param type The type of the node. Always boolean.
@@ -42,9 +42,9 @@ public interface NodeTree {
      * Add a child to the node. Only works on non-leaf nodes. A node that is just a literal value
      * will throw an exception.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param <T> The type we are storing. Must be a list of valid types.
      * @param name The key name.
@@ -57,9 +57,9 @@ public interface NodeTree {
      * Add a child to the node. Only works on non-leaf nodes. A node that is just a literal value
      * will throw an exception.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The key name.
      * @param type The type of the node. Always Node.
@@ -71,9 +71,9 @@ public interface NodeTree {
      * Add a child to the node. Only works on non-leaf nodes. A node that is just a literal value
      * will throw an exception.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The key name.
      * @param type The type of the node. Always String.
@@ -85,9 +85,9 @@ public interface NodeTree {
      * Add a child to the node. Only works on non-leaf nodes. A node that is just a literal value
      * will throw an exception.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param <T> The type we are storing. Must be a number.
      * @param name The key name.
@@ -101,9 +101,9 @@ public interface NodeTree {
      * Add a child to the node. Only works on non-leaf nodes. A node that is just a literal value
      * will throw an exception.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param <T> The type we are storing. Must be a primitive wrapper or string.
      * @param name The key name.
@@ -115,9 +115,9 @@ public interface NodeTree {
     /**
      * Add a boolean child.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param value The child value.
@@ -129,9 +129,9 @@ public interface NodeTree {
     /**
      * Add a list of booleans.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param value The child value.
@@ -143,9 +143,9 @@ public interface NodeTree {
     /**
      * Add a byte value.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param value The child value.
@@ -157,9 +157,9 @@ public interface NodeTree {
     /**
      * Add a list of bytes.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param value The child value.
@@ -171,9 +171,9 @@ public interface NodeTree {
     /**
      * Add a double value.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param value The child value.
@@ -185,9 +185,9 @@ public interface NodeTree {
     /**
      * Add a list of doubles.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param value The child value.
@@ -199,9 +199,9 @@ public interface NodeTree {
     /**
      * Add a float value.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param value The child value.
@@ -213,9 +213,9 @@ public interface NodeTree {
     /**
      * Add a list of floats.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param value The child value.
@@ -227,9 +227,9 @@ public interface NodeTree {
     /**
      * Add an integer value.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param value The child value.
@@ -241,9 +241,9 @@ public interface NodeTree {
     /**
      * Add a list of integers.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param value The child value.
@@ -255,9 +255,9 @@ public interface NodeTree {
     /**
      * Add a long.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param value The child value.
@@ -269,9 +269,9 @@ public interface NodeTree {
     /**
      * Add a list of longs.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param value The child value.
@@ -283,9 +283,9 @@ public interface NodeTree {
     /**
      * Add a node.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      */
@@ -296,9 +296,9 @@ public interface NodeTree {
     /**
      * Add a node.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param node The node to add.
@@ -310,9 +310,9 @@ public interface NodeTree {
     /**
      * Add a list of nodes.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      */
@@ -323,9 +323,9 @@ public interface NodeTree {
     /**
      * Add a list of nodes.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param nodes The child value.
@@ -337,9 +337,9 @@ public interface NodeTree {
     /**
      * Add a short value.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param value The child value.
@@ -351,9 +351,9 @@ public interface NodeTree {
     /**
      * Add a list of shorts.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param value The child value.
@@ -365,9 +365,9 @@ public interface NodeTree {
     /**
      * Add a String.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param value The child value.
@@ -379,9 +379,9 @@ public interface NodeTree {
     /**
      * Add a list of Strings.
      *
-     * <p>Periods can be used to specify nested nested children, for example "parent.child.value".
-     * Any intermediate nodes that don't exist will be created, but if any intermediate node exists
-     * but is not a {@link Node} this will fail and stop trying to add nodes.
+     * <p>Periods can be used to specify nested children, for example "parent.child.value". Any
+     * intermediate nodes that don't exist will be created, but if any intermediate node exists but
+     * is not a {@link Node} this will fail and stop trying to add nodes.
      *
      * @param name The name of the child.
      * @param value The child value.
@@ -391,7 +391,7 @@ public interface NodeTree {
     }
 
     /**
-     * Fetch the value of the given child. Periods can be used to access nested nested children, for
+     * Fetch the value of the given child. Periods can be used to access nested children, for
      * example "parent.child.value".
      *
      * @param <T> The type we want to fetch.

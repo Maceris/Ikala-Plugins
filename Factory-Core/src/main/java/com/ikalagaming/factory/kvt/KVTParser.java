@@ -23,7 +23,7 @@ import org.antlr.v4.runtime.tree.TerminalNode;
 import java.util.List;
 
 @SuppressWarnings({"all", "warnings", "unchecked", "unused", "cast", "CheckReturnValue"})
-public class KVTParser extends Parser {
+class KVTParser extends Parser {
     @SuppressWarnings("CheckReturnValue")
     public static class ArrayContext extends ParserRuleContext {
         public ArrayContext(ParserRuleContext parent, int invokingState) {

@@ -14,7 +14,7 @@ import org.antlr.v4.runtime.atn.PredictionContextCache;
 import org.antlr.v4.runtime.dfa.DFA;
 
 @SuppressWarnings({"all", "warnings", "unchecked", "unused", "cast", "CheckReturnValue"})
-public class KVTLexer extends Lexer {
+class KVTLexer extends Lexer {
     static {
         RuntimeMetaData.checkVersion("4.12.0", RuntimeMetaData.VERSION);
     }

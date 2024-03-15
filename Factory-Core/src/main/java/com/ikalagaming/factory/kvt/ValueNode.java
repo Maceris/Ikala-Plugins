@@ -21,7 +21,7 @@ import java.util.List;
 @Setter
 @Slf4j
 @EqualsAndHashCode
-public class ValueNode<T> implements NodeTree {
+public class ValueNode<T> implements KVT {
 
     /** The type of the node. */
     private final NodeType type;

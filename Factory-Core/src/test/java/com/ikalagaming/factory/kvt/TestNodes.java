@@ -52,7 +52,7 @@ class TestNodes {
     @SuppressWarnings("unchecked")
     @Test
     void testArrayNodes() {
-        NodeTree tree = new Node();
+        KVT tree = new Node();
 
         tree.addBooleanArray("bool", List.of(true, false));
         tree.addByteArray("byte", List.of((byte) 1));
@@ -76,7 +76,7 @@ class TestNodes {
     /** Check if we can store regular values. */
     @Test
     void testNestedNodes() {
-        NodeTree tree = new Node();
+        KVT tree = new Node();
 
         tree.add("several.nodes.down");
         Assertions.assertNotNull(tree.get("several"));
@@ -98,7 +98,7 @@ class TestNodes {
     /** Check that the toString functionality works. */
     @Test
     void testToString() {
-        NodeTree tree = new Node();
+        KVT tree = new Node();
 
         tree.addString(
                 "annoying name 7!@#$%^ %^&_+'-={}|[]\\\\*()\\\"",
@@ -155,7 +155,7 @@ class TestNodes {
     /** Check if we can store regular values. */
     @Test
     void testValueNodes() {
-        NodeTree tree = new Node();
+        KVT tree = new Node();
 
         tree.addBoolean("bool", true);
         tree.addByte("byte", (byte) 1);
@@ -179,7 +179,7 @@ class TestNodes {
     /** Check if we can fetch regular values. */
     @Test
     void testValueNodesGetters() {
-        NodeTree tree = new Node();
+        KVT tree = new Node();
 
         tree.addBoolean("bool", true);
         tree.addByte("byte", (byte) 1);

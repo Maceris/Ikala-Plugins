@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 @Getter
 @Slf4j
 @EqualsAndHashCode
-public class ArrayNode<T> implements NodeTree {
+class ArrayNode<T> implements KVT {
 
     /**
      * Convert a value to the format it should use in the string format.
@@ -32,22 +32,19 @@ public class ArrayNode<T> implements NodeTree {
      * @return The String format for the given value.
      */
     private static <T> String toString(final @NonNull NodeType type, final @NonNull T value) {
-        switch (type) {
+        return switch (type) {
             case BOOLEAN_ARRAY,
-                    BYTE_ARRAY,
-                    DOUBLE_ARRAY,
-                    FLOAT_ARRAY,
-                    INTEGER_ARRAY,
-                    LONG_ARRAY,
-                    NODE_ARRAY,
-                    SHORT_ARRAY:
-                return value.toString();
-            case STRING_ARRAY:
-                return String.format("\"%s\"", value.toString());
-            case BOOLEAN, BYTE, DOUBLE, FLOAT, INTEGER, LONG, NODE, SHORT, STRING:
-            default:
-                throw new UnsupportedOperationException();
-        }
+                            BYTE_ARRAY,
+                            DOUBLE_ARRAY,
+                            FLOAT_ARRAY,
+                            INTEGER_ARRAY,
+                            LONG_ARRAY,
+                            NODE_ARRAY,
+                            SHORT_ARRAY ->
+                    value.toString();
+            case STRING_ARRAY -> String.format("\"%s\"", value.toString());
+            default -> throw new UnsupportedOperationException();
+        };
     }
 
     /** The type of the node. */

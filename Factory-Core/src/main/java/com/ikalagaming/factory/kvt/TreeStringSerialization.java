@@ -262,7 +262,7 @@ public class TreeStringSerialization {
      * @param tree The tree to convert.
      * @return The string version.
      */
-    public static String toString(final @NonNull NodeTree tree) {
+    public static String toString(final @NonNull KVT tree) {
         return tree.toString();
     }
 
