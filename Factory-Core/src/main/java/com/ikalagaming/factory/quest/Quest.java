@@ -10,10 +10,10 @@ import java.util.Objects;
  * Represents a quest for players to complete.
  *
  * @author Ches Burks
- * @param name The name of the quest, in unlocalized form.
- * @param description The description of the quest, in unlocalized form.
+ * @param name The name of the quest, in localized form.
+ * @param description The description of the quest, in localized form.
  * @param main Whether this is a main quest.
- * @param tab Which tab of the quest book to show this on, in unlocalized form.
+ * @param tab Which tab of the quest book to show this on, in localized form.
  * @param prerequisites The prerequisites for this quest to be completed. Null if there are no
  *     prerequisites.
  * @param repeatable Whether this quest can be completed multiple times.
