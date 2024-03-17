@@ -1,9 +1,11 @@
-package com.ikalagaming.factory.item;
+package com.ikalagaming.factory.world.registry;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.item.Item;
+import com.ikalagaming.factory.item.ItemDefinition;
 import com.ikalagaming.factory.kvt.NodeType;
 import com.ikalagaming.localization.Localization;
 

@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.ikalagaming.event.EventManager;
 import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.world.registry.MaterialRegistry;
+import com.ikalagaming.factory.world.registry.TagRegistry;
 import com.ikalagaming.plugins.PluginManager;
 
 import org.junit.jupiter.api.AfterAll;

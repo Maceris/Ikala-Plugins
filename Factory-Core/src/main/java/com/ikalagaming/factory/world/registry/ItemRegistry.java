@@ -1,6 +1,8 @@
-package com.ikalagaming.factory.item;
+package com.ikalagaming.factory.world.registry;
 
 import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.item.Item;
+import com.ikalagaming.factory.item.ItemDefinition;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;

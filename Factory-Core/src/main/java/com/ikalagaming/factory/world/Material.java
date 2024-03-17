@@ -75,8 +75,9 @@ public record Material(@NonNull String name, @NonNull List<Tag> tags, Material p
 
     /**
      * Remove any tags that are on the material which are the parent of another tag on the material.
+     * Intended to be used while materials are being loaded, should not need to be called elsewhere.
      */
-    void deduplicateTags() {
+    public void deduplicateTags() {
         Set<Tag> toRemove = new HashSet<>();
         for (Tag tag : tags) {
             var parent = tag.parent();

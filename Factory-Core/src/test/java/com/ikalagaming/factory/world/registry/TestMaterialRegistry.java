@@ -1,8 +1,9 @@
-package com.ikalagaming.factory.world;
+package com.ikalagaming.factory.world.registry;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.world.Material;
 import com.ikalagaming.localization.Localization;
 
 import org.junit.jupiter.api.AfterAll;

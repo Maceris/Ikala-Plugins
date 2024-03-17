@@ -10,8 +10,8 @@ import java.util.List;
  * Defines an item.
  *
  * @param modName The name of the mod the item belongs to, used for the fully qualified name.
- * @param itemName
- * @param tags
+ * @param itemName The name of the item, at least unique within the mod.
+ * @param tags Tags that are applied to the item by default.
  * @param attributes A list of {@link Attribute attributes} that we expect the item to have.
  */
 public record ItemDefinition(

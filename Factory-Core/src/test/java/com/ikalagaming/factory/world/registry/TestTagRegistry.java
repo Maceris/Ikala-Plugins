@@ -1,6 +1,7 @@
-package com.ikalagaming.factory.world;
+package com.ikalagaming.factory.world.registry;
 
 import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.world.Tag;
 import com.ikalagaming.localization.Localization;
 
 import org.junit.jupiter.api.*;
@@ -66,7 +67,7 @@ class TestTagRegistry {
         Assertions.assertTrue(tagRegistry.addTag(parentName));
         Assertions.assertTrue(tagRegistry.tagExists(parentName));
 
-        Optional<Tag> maybeLiquid = tagRegistry.findTag(parentName);
+        Optional<com.ikalagaming.factory.world.Tag> maybeLiquid = tagRegistry.findTag(parentName);
         Assertions.assertTrue(maybeLiquid.isPresent());
         Assertions.assertEquals(parentName, maybeLiquid.get().name());
 
