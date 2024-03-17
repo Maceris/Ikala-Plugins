@@ -44,17 +44,6 @@ public class MaterialRegistry {
     }
 
     /**
-     * Create a new material record without any tags.
-     *
-     * @param name The name of the material.
-     * @param parentName The name of the parent material, which must already exist if not null.
-     * @return Whether we successfully created a material.
-     */
-    public boolean addMaterial(@NonNull String name, @NonNull String parentName) {
-        return this.addMaterial(name, null, parentName);
-    }
-
-    /**
      * Create a new material record.
      *
      * @param name The name of the material.
@@ -108,6 +97,17 @@ public class MaterialRegistry {
         materials.put(name, result);
 
         return true;
+    }
+
+    /**
+     * Create a new material record without any tags.
+     *
+     * @param name The name of the material.
+     * @param parentName The name of the parent material, which must already exist if not null.
+     * @return Whether we successfully created a material.
+     */
+    public boolean addMaterial(@NonNull String name, @NonNull String parentName) {
+        return this.addMaterial(name, null, parentName);
     }
 
     /**

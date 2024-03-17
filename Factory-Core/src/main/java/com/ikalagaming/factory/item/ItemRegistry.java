@@ -9,17 +9,18 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.HashMap;
 import java.util.Map;
 
+/** Stores the definitions of items, */
 @Slf4j
 public class ItemRegistry {
     /**
-     * A map from the item name in {@code mod_name:item_name} format to the {@link ItemDefinition
-     * definition} of the item.
+     * A map from the item name in {@link Item#FULLY_QUALIFIED_NAME_FORMAT} format to the {@link
+     * ItemDefinition definition} of the item.
      */
     private final Map<String, ItemDefinition> definitions = new HashMap<>();
 
     public boolean register(@NonNull String name, @NonNull ItemDefinition value) {
 
-        if (!name.matches(Item.COMBINED_NAME_FORMAT)) {
+        if (!name.matches(Item.FULLY_QUALIFIED_NAME_FORMAT)) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
                             "FULL_ITEM_NAME_INVALID", FactoryPlugin.getResourceBundle(), name));

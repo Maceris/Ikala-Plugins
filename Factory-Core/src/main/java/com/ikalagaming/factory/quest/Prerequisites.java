@@ -16,17 +16,6 @@ import java.util.List;
 @EqualsAndHashCode
 public class Prerequisites {
     /**
-     * The quests that must be completed before another quest is enabled for completing or viewing.
-     */
-    @NonNull private final List<String> quests;
-
-    /**
-     * The logic that is used to calculate if enough prerequisites are met. Only really relevant if
-     * there are more than 1 prerequisite.
-     */
-    @NonNull private final Logic logic;
-
-    /**
      * The logic that is used to calculate if enough prerequisites are met. Only really used if
      * there are more than 1 prerequisite.
      */
@@ -41,6 +30,17 @@ public class Prerequisites {
          */
         XOR
     }
+
+    /**
+     * The quests that must be completed before another quest is enabled for completing or viewing.
+     */
+    @NonNull private final List<String> quests;
+
+    /**
+     * The logic that is used to calculate if enough prerequisites are met. Only really relevant if
+     * there are more than 1 prerequisite.
+     */
+    @NonNull private final Logic logic;
 
     @Override
     public String toString() {
