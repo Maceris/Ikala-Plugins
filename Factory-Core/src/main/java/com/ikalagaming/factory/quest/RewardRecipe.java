@@ -14,7 +14,7 @@ import lombok.NonNull;
 public class RewardRecipe extends Reward {
 
     /** The recipe to unlock. */
-    @NonNull public final Recipe recipe;
+    @NonNull private final Recipe recipe;
 
     /**
      * Specifies a reward.

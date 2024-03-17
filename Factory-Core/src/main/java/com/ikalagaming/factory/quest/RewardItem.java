@@ -11,9 +11,9 @@ import lombok.NonNull;
 @Getter
 public class RewardItem extends Reward {
 
-    // TODO(ches) Allow stacks, item metadata
+    // TODO(ches) Allow stacks, item metadata - FACT-7
     /** The item to give the player. */
-    @NonNull public final String itemName;
+    @NonNull private final String itemName;
 
     /**
      * Specifies a reward.

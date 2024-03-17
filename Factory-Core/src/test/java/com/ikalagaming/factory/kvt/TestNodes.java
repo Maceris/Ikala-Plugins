@@ -20,13 +20,9 @@ class TestNodes {
 
     private static FactoryPlugin plugin;
 
-    /**
-     * Set up before all the tests.
-     *
-     * @throws Exception If something goes wrong.
-     */
+    /** Set up before all the tests. */
     @BeforeAll
-    static void setUpBeforeClass() throws Exception {
+    static void setUpBeforeClass() {
         EventManager.getInstance();
         PluginManager.getInstance();
         TestNodes.plugin = new FactoryPlugin();
@@ -34,13 +30,9 @@ class TestNodes {
         TestNodes.plugin.onEnable();
     }
 
-    /**
-     * Tear down after all the tests.
-     *
-     * @throws Exception If something goes wrong.
-     */
+    /** Tear down after all the tests. */
     @AfterAll
-    static void tearDownAfterClass() throws Exception {
+    static void tearDownAfterClass() {
         TestNodes.plugin.onDisable();
         TestNodes.plugin.onUnload();
         TestNodes.plugin = null;

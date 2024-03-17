@@ -2,6 +2,7 @@ package com.ikalagaming.factory.quest;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Arrays;
 import java.util.List;
@@ -12,19 +13,22 @@ import java.util.List;
  * @author Ches Burks
  */
 @Getter
+@Slf4j
 public class RewardChoice extends Reward {
 
+    // TODO(ches) Allow stacks, item metadata - FACT-7
     /** The choices that the player has. */
-    @NonNull public final List<String> items;
+    @NonNull private final List<String> items;
 
     /**
      * Specifies a reward.
      *
      * @param items All the items that the player can choose between.
      */
-    public RewardChoice(@NonNull String... items) {
+    public RewardChoice(@NonNull List<String> items) {
         super(RewardType.CHOICE);
-        this.items = List.of(items);
+
+        this.items = List.copyOf(items);
     }
 
     @Override

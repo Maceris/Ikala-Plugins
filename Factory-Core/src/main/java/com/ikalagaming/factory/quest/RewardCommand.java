@@ -12,7 +12,7 @@ import lombok.NonNull;
 public class RewardCommand extends Reward {
 
     /** The script to run. */
-    @NonNull public final String script;
+    @NonNull private final String script;
 
     /**
      * Specifies a reward.
