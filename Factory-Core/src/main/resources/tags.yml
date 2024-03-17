@@ -1,5 +1,6 @@
 ---
 beverage: # Normal and okay to drink. Like clean water, martini.
+block: # A block in the world, or its equivalent item form.
 cold: # Typically or inherently cold. Like ice cream, liquid nitrogen.
   frozen: # Something that is liquid at room temp, which has been frozen solid. Like ice.
 conductive: # Conducts electricity. Like metal, water.
@@ -16,6 +17,7 @@ hot: # Typically or inherently hot. Like magma, heating elements.
 indestructible: # Cannot be destroyed or damaged in any meaningful way
 liquid: # Liquid in normal conditions. Like water, oil.
 lockable: # Can be locked and unlocked. Like a chest, door.
+machine: # Used to produce or transform resources.
 ore: # The source of raw materials. Like an iron ore patch.
 organic: # Made of or derived from living things, plants, animals.
 openable: # Can be opened and closed. Like a box, door.
