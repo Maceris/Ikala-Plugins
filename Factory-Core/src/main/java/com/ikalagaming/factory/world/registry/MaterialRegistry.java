@@ -55,13 +55,13 @@ public class MaterialRegistry {
      * @return Whether we successfully created a material.
      */
     public boolean addMaterial(@NonNull String name, List<String> materialTags, String parentName) {
-        if (hasMaterial(name)) {
+        if (materialExists(name)) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
                             "MAT_DUPLICATE", FactoryPlugin.getResourceBundle(), name));
             return false;
         }
-        if (parentName != null && !hasMaterial(parentName)) {
+        if (parentName != null && !materialExists(parentName)) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
                             "MAT_MISSING_PARENT",
@@ -153,7 +153,7 @@ public class MaterialRegistry {
      * @param material The material we are looking for.
      * @return Whether the material exists.
      */
-    public boolean hasMaterial(@NonNull String material) {
+    public boolean materialExists(@NonNull String material) {
         return materials.containsKey(material);
     }
 

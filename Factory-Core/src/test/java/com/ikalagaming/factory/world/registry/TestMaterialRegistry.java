@@ -65,8 +65,8 @@ class TestMaterialRegistry {
         assertTrue(materialRegistry.addMaterial("parent"));
         assertTrue(materialRegistry.addMaterial(name, List.of("powder"), "parent"));
 
-        assertTrue(materialRegistry.hasMaterial(name));
-        assertFalse(materialRegistry.hasMaterial(name + "y"));
+        assertTrue(materialRegistry.materialExists(name));
+        assertFalse(materialRegistry.materialExists(name + "y"));
         Optional<Material> maybeMaterial = materialRegistry.findMaterial(name);
         assertTrue(maybeMaterial.isPresent());
         assertEquals(name, maybeMaterial.get().name());

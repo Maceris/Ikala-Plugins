@@ -1,6 +1,7 @@
-package com.ikalagaming.factory.item;
+package com.ikalagaming.factory.world.registry;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -14,7 +15,7 @@ import java.util.stream.Stream;
  *
  * @author Ches Burks
  */
-class TestItem {
+class TestRegistryConstants {
 
     /** Check that we properly combine names to the fully qualified format. */
     @Test
@@ -22,71 +23,75 @@ class TestItem {
         var modName = "mod";
         var itemName = "item_name";
 
-        var combined = Item.combineName(modName, itemName);
+        var combined = RegistryConstants.combineName(modName, itemName);
 
-        assertTrue(combined.matches(Item.FULLY_QUALIFIED_NAME_FORMAT));
+        assertTrue(combined.matches(RegistryConstants.FULLY_QUALIFIED_NAME_FORMAT));
     }
 
     @ParameterizedTest
     @MethodSource("modNameValidProvider")
     void testModNameValidFormat(String modName) {
-        assertTrue(modName.matches(Item.MOD_NAME_FORMAT));
+        assertTrue(modName.matches(RegistryConstants.MOD_NAME_FORMAT));
     }
 
     private static Stream<Arguments> modNameValidProvider() {
         return Stream.of(
                 Arguments.of("simple"),
-                Arguments.of("A"),
+                Arguments.of("foo.bar"),
                 Arguments.of("abcd1234"),
                 Arguments.of("a-1"),
                 Arguments.of("a_1"),
                 Arguments.of("3ty1"),
-                Arguments.of("thisNameHasThirtyTwoCharactersIn"));
+                Arguments.of("thisnamehasthirtytwocharactersin"));
     }
 
     @ParameterizedTest
     @MethodSource("modNameInvalidProvider")
     void testModNameInvalidFormat(String modName) {
-        assertFalse(modName.matches(Item.MOD_NAME_FORMAT));
+        assertFalse(modName.matches(RegistryConstants.MOD_NAME_FORMAT));
     }
 
     private static Stream<Arguments> modNameInvalidProvider() {
         return Stream.of(
                 Arguments.of("-m"),
                 Arguments.of("_m"),
+                Arguments.of("A"),
+                Arguments.of("haA"),
                 Arguments.of("K^"),
                 Arguments.of("a#"),
                 Arguments.of("*"),
-                Arguments.of("thisNameHasThirty-ThreeCharacters"));
+                Arguments.of("thisnamehasthirty-threecharacters"));
     }
 
     @ParameterizedTest
     @MethodSource("itemNameValidProvider")
     void testItemNameValidFormat(String itemName) {
-        assertTrue(itemName.matches(Item.ITEM_NAME_FORMAT));
+        assertTrue(itemName.matches(RegistryConstants.RESOURCE_NAME_FORMAT));
     }
 
     private static Stream<Arguments> itemNameValidProvider() {
         return Stream.of(
                 Arguments.of("simple"),
-                Arguments.of("A"),
+                Arguments.of("foo.bar"),
                 Arguments.of("abcd1234"),
                 Arguments.of("a-1"),
                 Arguments.of("a_1"),
                 Arguments.of("3ty1"),
-                Arguments.of("thisNameHasSixtyFourCharactersIn-HonestlyWhoNeedsAnyNameThisLong"));
+                Arguments.of("thisnamehassixtyfourcharactersin-honestlywhoneedsanynamethislong"));
     }
 
     @ParameterizedTest
     @MethodSource("itemNameInvalidProvider")
     void testItemNameInvalidFormat(String itemName) {
-        assertFalse(itemName.matches(Item.ITEM_NAME_FORMAT));
+        assertFalse(itemName.matches(RegistryConstants.RESOURCE_NAME_FORMAT));
     }
 
     private static Stream<Arguments> itemNameInvalidProvider() {
         return Stream.of(
                 Arguments.of("-m"),
                 Arguments.of("_m"),
+                Arguments.of("A"),
+                Arguments.of("haA"),
                 Arguments.of("K^"),
                 Arguments.of("a#"),
                 Arguments.of("*"),

@@ -6,8 +6,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 
 import com.ikalagaming.factory.FactoryPlugin;
-import com.ikalagaming.factory.item.ItemDefinition;
-import com.ikalagaming.factory.kvt.NodeType;
+import com.ikalagaming.factory.world.BlockDefinition;
 import com.ikalagaming.localization.Localization;
 
 import org.junit.jupiter.api.AfterAll;
@@ -32,20 +31,17 @@ import java.util.ResourceBundle;
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
-class TestItemRegistry {
-
+class TestBlockRegistry {
     private static MockedStatic<FactoryPlugin> fakePlugin;
-
     @Mock private TagRegistry tagRegistry;
     @Mock private MaterialRegistry materialRegistry;
 
-    private ItemRegistry itemRegistry;
+    private BlockRegistry blockRegistry;
     private String modName;
-    private String itemName;
+    private String blockName;
     private String combinedName;
     private String material;
     private List<String> tags;
-    private ItemDefinition.Attribute attribute;
 
     /** Set up before all the tests. */
     @BeforeAll
@@ -67,12 +63,11 @@ class TestItemRegistry {
     @BeforeEach
     void setup() {
         modName = "mod_name-complicated.1";
-        itemName = "item_name-complicated.1";
-        combinedName = RegistryConstants.combineName(modName, itemName);
-        attribute = new ItemDefinition.Attribute("charge", NodeType.LONG);
-        material = "iron";
-        tags = List.of("throwable");
-        itemRegistry = new ItemRegistry(tagRegistry, materialRegistry);
+        blockName = "block_name-complicated.1";
+        combinedName = RegistryConstants.combineName(modName, blockName);
+        material = "wood";
+        tags = List.of("organic");
+        blockRegistry = new BlockRegistry(tagRegistry, materialRegistry);
 
         given(tagRegistry.tagExists(anyString())).willReturn(true);
         given(materialRegistry.materialExists(anyString())).willReturn(true);
@@ -80,75 +75,73 @@ class TestItemRegistry {
 
     @Test
     void testRegister() {
-        var definition = new ItemDefinition(modName, itemName, material, tags, List.of(attribute));
+        var definition = new BlockDefinition(modName, blockName, material, tags);
 
-        assertTrue(itemRegistry.register(combinedName, definition));
+        assertTrue(blockRegistry.register(combinedName, definition));
     }
 
     @Test
     void testRegisterNullMaterial() {
-        var definition = new ItemDefinition(modName, itemName, null, tags, List.of(attribute));
+        var definition = new BlockDefinition(modName, blockName, null, tags);
 
-        assertTrue(itemRegistry.register(combinedName, definition));
+        assertTrue(blockRegistry.register(combinedName, definition));
     }
 
     @Test
     void testRegisterInvalidName() {
         var invalidName = "%@#$Kevin?";
-        var definition = new ItemDefinition(modName, itemName, material, tags, List.of(attribute));
+        var definition = new BlockDefinition(modName, blockName, material, tags);
 
-        assertFalse(itemRegistry.register(invalidName, definition));
+        assertFalse(blockRegistry.register(invalidName, definition));
     }
 
     @Test
     void testRegisterInvalidModName() {
         var invalidName = "%@#$Kevin?";
-        var definition =
-                new ItemDefinition(invalidName, itemName, material, tags, List.of(attribute));
+        var definition = new BlockDefinition(invalidName, blockName, material, tags);
 
-        assertFalse(itemRegistry.register(combinedName, definition));
+        assertFalse(blockRegistry.register(combinedName, definition));
     }
 
     @Test
     void testRegisterInvalidItemName() {
         var invalidName = "%@#$Kevin?";
-        var definition =
-                new ItemDefinition(modName, invalidName, material, tags, List.of(attribute));
+        var definition = new BlockDefinition(modName, invalidName, material, tags);
 
-        assertFalse(itemRegistry.register(combinedName, definition));
+        assertFalse(blockRegistry.register(combinedName, definition));
     }
 
     @Test
     void testRegisterDuplicate() {
-        var definition = new ItemDefinition(modName, itemName, material, tags, List.of(attribute));
+        var definition = new BlockDefinition(modName, blockName, material, tags);
 
-        assertTrue(itemRegistry.register(combinedName, definition));
-        assertFalse(itemRegistry.register(combinedName, definition));
+        assertTrue(blockRegistry.register(combinedName, definition));
+        assertFalse(blockRegistry.register(combinedName, definition));
     }
 
     @Test
     void testRegisterMismatchedNames() {
-        var definition = new ItemDefinition(modName, itemName, material, tags, List.of(attribute));
+        var definition = new BlockDefinition(modName, blockName, material, tags);
         var combinedName = RegistryConstants.combineName(modName, "different-item-name");
 
-        assertFalse(itemRegistry.register(combinedName, definition));
+        assertFalse(blockRegistry.register(combinedName, definition));
     }
 
     @Test
     void testRegisterInvalidTag() {
-        var definition = new ItemDefinition(modName, itemName, material, tags, List.of(attribute));
+        var definition = new BlockDefinition(modName, blockName, material, tags);
 
         given(tagRegistry.tagExists(anyString())).willReturn(false);
 
-        assertFalse(itemRegistry.register(combinedName, definition));
+        assertFalse(blockRegistry.register(combinedName, definition));
     }
 
     @Test
     void testRegisterInvalidMaterial() {
-        var definition = new ItemDefinition(modName, itemName, material, tags, List.of(attribute));
+        var definition = new BlockDefinition(modName, blockName, material, tags);
 
         given(materialRegistry.materialExists(anyString())).willReturn(false);
 
-        assertFalse(itemRegistry.register(combinedName, definition));
+        assertFalse(blockRegistry.register(combinedName, definition));
     }
 }
