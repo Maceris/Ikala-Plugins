@@ -1,18 +1,22 @@
 package com.ikalagaming.factory.world;
 
 import com.ikalagaming.factory.FactoryPlugin;
-import com.ikalagaming.factory.world.registry.MaterialRegistry;
-import com.ikalagaming.factory.world.registry.TagRegistry;
+import com.ikalagaming.factory.item.ItemDefinition;
+import com.ikalagaming.factory.world.registry.*;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import com.opencsv.CSVReaderHeaderAware;
+import com.opencsv.exceptions.CsvValidationException;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.yaml.snakeyaml.Yaml;
 
-import java.io.InputStream;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.Map.Entry;
+import java.util.stream.Stream;
 
 /**
  * Tracks the state of the world.
@@ -39,11 +43,81 @@ public class World {
     /** The total height of the world in blocks. */
     public static final int WORLD_HEIGHT_TOTAL = WORLD_HEIGHT_MAX - WORLD_HEIGHT_MIN;
 
+    /** The headers that we expect in the blocks csv file. */
+    private static final String[] BLOCK_HEADERS = {
+        "mod_name", "identifier", "material", "tags", "register_item"
+    };
+
+    /** The headers that we expect in the items csv file. */
+    private static final String[] ITEM_HEADERS = {"mod_name", "identifier", "material", "tags"};
+
     /** Stores all the tags. */
-    @Getter private TagRegistry tagRegistry = new TagRegistry();
+    @Getter private final TagRegistry tagRegistry;
 
     /** Stores all the materials. */
-    @Getter private MaterialRegistry materialRegistry = new MaterialRegistry(tagRegistry);
+    @Getter private final MaterialRegistry materialRegistry;
+
+    /** Stores all the item definitions. */
+    @Getter private final ItemRegistry itemRegistry;
+
+    /** Stores all the block definitions. */
+    @Getter private final BlockRegistry blockRegistry;
+
+    public World() {
+        tagRegistry = new TagRegistry();
+        materialRegistry = new MaterialRegistry(tagRegistry);
+        itemRegistry = new ItemRegistry(tagRegistry, materialRegistry);
+        blockRegistry = new BlockRegistry(tagRegistry, materialRegistry);
+    }
+
+    /**
+     * Load and process blocks from disk.
+     *
+     * @return Whether we successfully loaded all information.
+     */
+    private boolean loadBlocks() {
+        try (var stream = this.getClass().getResourceAsStream("/blocks.csv");
+                var streamReader =
+                        new InputStreamReader(
+                                Objects.requireNonNull(stream), StandardCharsets.UTF_8);
+                var fileReader = new BufferedReader(streamReader);
+                var csvReader = new CSVReaderHeaderAware(fileReader)) {
+
+            String[] results = csvReader.readNext(BLOCK_HEADERS);
+            while (results != null) {
+                var modName = results[0];
+                var identifier = results[1];
+                var material = results[2];
+                var tagsRaw = results[3];
+                boolean registerItem = Boolean.parseBoolean(results[4]);
+                List<String> tags = new ArrayList<>();
+
+                if (tagsRaw != null && tagsRaw.isEmpty()) {
+                    var tagsParsed = Stream.of(tagsRaw.split(",")).map(String::trim).toList();
+                    tags.addAll(tagsParsed);
+                }
+
+                var combinedName = RegistryConstants.combineName(modName, identifier);
+                var definition = new BlockDefinition(modName, identifier, material, tags);
+                blockRegistry.register(combinedName, definition);
+
+                if (registerItem) {
+                    var itemDefinition = new ItemDefinition(modName, identifier, material, tags);
+                    itemRegistry.register(combinedName, itemDefinition);
+                }
+
+                results = csvReader.readNext(BLOCK_HEADERS);
+            }
+
+        } catch (IOException | CsvValidationException | NullPointerException e) {
+            log.warn(
+                    SafeResourceLoader.getString(
+                            "BLOCK_INVALID_STRUCTURE", FactoryPlugin.getResourceBundle()),
+                    e);
+            return false;
+        }
+        return true;
+    }
 
     /**
      * Load all the information from files.
@@ -52,7 +126,51 @@ public class World {
      */
     public boolean loadDefaultConfigurations() {
         // Short-circuiting will stop execution if one fails
-        return loadTags() && loadMaterials();
+        return loadTags() && loadMaterials() && loadBlocks() && loadItems();
+    }
+
+    /**
+     * Load and process items from disk.
+     *
+     * @return Whether we successfully loaded all information.
+     */
+    private boolean loadItems() {
+        try (var stream = this.getClass().getResourceAsStream("/items.csv");
+                var streamReader =
+                        new InputStreamReader(
+                                Objects.requireNonNull(stream), StandardCharsets.UTF_8);
+                var fileReader = new BufferedReader(streamReader);
+                var csvReader = new CSVReaderHeaderAware(fileReader)) {
+
+            String[] results = csvReader.readNext(ITEM_HEADERS);
+            while (results != null) {
+                var modName = results[0];
+                var identifier = results[1];
+                var material = results[2];
+                var tagsRaw = results[3];
+                List<String> tags = new ArrayList<>();
+
+                if (tagsRaw != null && tagsRaw.isEmpty()) {
+                    var tagsParsed = Stream.of(tagsRaw.split(",")).map(String::trim).toList();
+                    tags.addAll(tagsParsed);
+                }
+
+                var combinedName = RegistryConstants.combineName(modName, identifier);
+
+                var itemDefinition = new ItemDefinition(modName, identifier, material, tags);
+                itemRegistry.register(combinedName, itemDefinition);
+
+                results = csvReader.readNext(ITEM_HEADERS);
+            }
+
+        } catch (IOException | CsvValidationException | NullPointerException e) {
+            log.warn(
+                    SafeResourceLoader.getString(
+                            "ITEM_INVALID_STRUCTURE", FactoryPlugin.getResourceBundle()),
+                    e);
+            return false;
+        }
+        return true;
     }
 
     /**

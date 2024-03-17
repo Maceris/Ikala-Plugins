@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.ikalagaming.event.EventManager;
 import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.world.registry.BlockRegistry;
+import com.ikalagaming.factory.world.registry.ItemRegistry;
 import com.ikalagaming.factory.world.registry.MaterialRegistry;
 import com.ikalagaming.factory.world.registry.TagRegistry;
 import com.ikalagaming.plugins.PluginManager;
@@ -60,12 +62,33 @@ class TestWorld {
 
         MaterialRegistry materialRegistry = world.getMaterialRegistry();
 
+        assertNotNull(materialRegistry);
         assertNotNull(materialRegistry.getMaterials());
         assertFalse(materialRegistry.getMaterials().isEmpty());
 
         for (Material material : materialRegistry.getMaterials()) {
             assertNotNull(material);
             assertNotNull(material.name());
+        }
+
+        ItemRegistry itemRegistry = world.getItemRegistry();
+
+        assertNotNull(itemRegistry);
+        assertNotNull(itemRegistry.getNames());
+        for (String name : itemRegistry.getNames()) {
+            var definition = itemRegistry.find(name);
+            assertNotNull(definition);
+            assertTrue(definition.isPresent());
+        }
+
+        BlockRegistry blockRegistry = world.getBlockRegistry();
+        assertNotNull(blockRegistry);
+        assertNotNull(blockRegistry.getNames());
+
+        for (String name : blockRegistry.getNames()) {
+            var definition = blockRegistry.find(name);
+            assertNotNull(definition);
+            assertTrue(definition.isPresent());
         }
     }
 

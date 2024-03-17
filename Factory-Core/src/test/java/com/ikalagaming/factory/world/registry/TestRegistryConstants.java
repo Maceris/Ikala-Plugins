@@ -17,24 +17,19 @@ import java.util.stream.Stream;
  */
 class TestRegistryConstants {
 
-    /** Check that we properly combine names to the fully qualified format. */
-    @Test
-    void testCombineName() {
-        var modName = "mod";
-        var itemName = "item_name";
-
-        var combined = RegistryConstants.combineName(modName, itemName);
-
-        assertTrue(combined.matches(RegistryConstants.FULLY_QUALIFIED_NAME_FORMAT));
+    private static Stream<Arguments> itemNameInvalidProvider() {
+        return Stream.of(
+                Arguments.of("-m"),
+                Arguments.of("_m"),
+                Arguments.of("A"),
+                Arguments.of("haA"),
+                Arguments.of("K^"),
+                Arguments.of("a#"),
+                Arguments.of("*"),
+                Arguments.of("thisNameHasSixtyFiveCharacters-SoItShouldThrowAnErrorForItsLength"));
     }
 
-    @ParameterizedTest
-    @MethodSource("modNameValidProvider")
-    void testModNameValidFormat(String modName) {
-        assertTrue(modName.matches(RegistryConstants.MOD_NAME_FORMAT));
-    }
-
-    private static Stream<Arguments> modNameValidProvider() {
+    private static Stream<Arguments> itemNameValidProvider() {
         return Stream.of(
                 Arguments.of("simple"),
                 Arguments.of("foo.bar"),
@@ -42,13 +37,7 @@ class TestRegistryConstants {
                 Arguments.of("a-1"),
                 Arguments.of("a_1"),
                 Arguments.of("3ty1"),
-                Arguments.of("thisnamehasthirtytwocharactersin"));
-    }
-
-    @ParameterizedTest
-    @MethodSource("modNameInvalidProvider")
-    void testModNameInvalidFormat(String modName) {
-        assertFalse(modName.matches(RegistryConstants.MOD_NAME_FORMAT));
+                Arguments.of("thisnamehassixtyfourcharactersin-honestlywhoneedsanynamethislong"));
     }
 
     private static Stream<Arguments> modNameInvalidProvider() {
@@ -63,13 +52,7 @@ class TestRegistryConstants {
                 Arguments.of("thisnamehasthirty-threecharacters"));
     }
 
-    @ParameterizedTest
-    @MethodSource("itemNameValidProvider")
-    void testItemNameValidFormat(String itemName) {
-        assertTrue(itemName.matches(RegistryConstants.RESOURCE_NAME_FORMAT));
-    }
-
-    private static Stream<Arguments> itemNameValidProvider() {
+    private static Stream<Arguments> modNameValidProvider() {
         return Stream.of(
                 Arguments.of("simple"),
                 Arguments.of("foo.bar"),
@@ -77,7 +60,18 @@ class TestRegistryConstants {
                 Arguments.of("a-1"),
                 Arguments.of("a_1"),
                 Arguments.of("3ty1"),
-                Arguments.of("thisnamehassixtyfourcharactersin-honestlywhoneedsanynamethislong"));
+                Arguments.of("thisnamehasthirtytwocharactersin"));
+    }
+
+    /** Check that we properly combine names to the fully qualified format. */
+    @Test
+    void testCombineName() {
+        var modName = "mod";
+        var itemName = "item_name";
+
+        var combined = RegistryConstants.combineName(modName, itemName);
+
+        assertTrue(combined.matches(RegistryConstants.FULLY_QUALIFIED_NAME_FORMAT));
     }
 
     @ParameterizedTest
@@ -86,15 +80,21 @@ class TestRegistryConstants {
         assertFalse(itemName.matches(RegistryConstants.RESOURCE_NAME_FORMAT));
     }
 
-    private static Stream<Arguments> itemNameInvalidProvider() {
-        return Stream.of(
-                Arguments.of("-m"),
-                Arguments.of("_m"),
-                Arguments.of("A"),
-                Arguments.of("haA"),
-                Arguments.of("K^"),
-                Arguments.of("a#"),
-                Arguments.of("*"),
-                Arguments.of("thisNameHasSixtyFiveCharacters-SoItShouldThrowAnErrorForItsLength"));
+    @ParameterizedTest
+    @MethodSource("itemNameValidProvider")
+    void testItemNameValidFormat(String itemName) {
+        assertTrue(itemName.matches(RegistryConstants.RESOURCE_NAME_FORMAT));
+    }
+
+    @ParameterizedTest
+    @MethodSource("modNameInvalidProvider")
+    void testModNameInvalidFormat(String modName) {
+        assertFalse(modName.matches(RegistryConstants.MOD_NAME_FORMAT));
+    }
+
+    @ParameterizedTest
+    @MethodSource("modNameValidProvider")
+    void testModNameValidFormat(String modName) {
+        assertTrue(modName.matches(RegistryConstants.MOD_NAME_FORMAT));
     }
 }

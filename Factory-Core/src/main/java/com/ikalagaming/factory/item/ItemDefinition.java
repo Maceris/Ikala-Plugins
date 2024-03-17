@@ -4,6 +4,7 @@ import com.ikalagaming.factory.kvt.NodeType;
 
 import lombok.NonNull;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -22,6 +23,23 @@ public record ItemDefinition(
         String material,
         @NonNull List<String> tags,
         @NonNull List<Attribute> attributes) {
+
+    public ItemDefinition(
+            @NonNull String modName,
+            @NonNull String itemName,
+            String material,
+            @NonNull List<String> tags) {
+        this(modName, itemName, material, tags, new ArrayList<>());
+    }
+
+    public ItemDefinition(@NonNull String modName, @NonNull String itemName, String material) {
+        this(modName, itemName, material, new ArrayList<>(), new ArrayList<>());
+    }
+
+    public ItemDefinition(@NonNull String modName, @NonNull String itemName) {
+        this(modName, itemName, null, new ArrayList<>(), new ArrayList<>());
+    }
+
     /**
      * Values that we expect to exist on the {@link com.ikalagaming.factory.kvt.KVT KVT} data.
      *
