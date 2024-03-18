@@ -6,12 +6,15 @@ import lombok.NonNull;
 @Getter
 public class IngredientGas extends Ingredient {
 
-    // TODO(ches) allow amounts FACT-9
     /** The name of the required gas. */
     @NonNull private final String gasName;
 
-    public IngredientGas(@NonNull String gasName) {
+    /** The amount of gas, in milliliters. */
+    private final long amount;
+
+    public IngredientGas(@NonNull String gasName, long amount) {
         super(IngredientType.GAS);
         this.gasName = gasName;
+        this.amount = amount;
     }
 }

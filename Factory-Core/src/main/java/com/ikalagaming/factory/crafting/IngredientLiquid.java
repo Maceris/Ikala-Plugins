@@ -7,12 +7,15 @@ import lombok.NonNull;
 @Getter
 public class IngredientLiquid extends Ingredient {
 
-    // TODO(ches) allow amounts FACT-9
     /** The name of the required liquid. */
     @NonNull private final String liquidName;
 
-    public IngredientLiquid(@NonNull String liquidName) {
+    /** The amount of liquid, in milliliters. */
+    private final long amount;
+
+    public IngredientLiquid(@NonNull String liquidName, long amount) {
         super(IngredientType.LIQUID);
         this.liquidName = liquidName;
+        this.amount = amount;
     }
 }
