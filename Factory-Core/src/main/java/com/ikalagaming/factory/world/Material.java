@@ -8,9 +8,9 @@ import java.util.*;
  * The substance an object is primarily made of. These serve as groups of tags that can be applied
  * to all objects that share the material, and also as a name for the material.
  *
- * <p>Materials can also extend from a parent, automatically including all of the tags of the
- * parent. When a child includes a more specific tag than the parent, only the most specific tag
- * will be preserved.
+ * <p>Materials can also extend from a parent, automatically including all the tags of the parent.
+ * When a child includes a more specific tag than the parent, only the most specific tag will be
+ * preserved.
  *
  * @author Ches Burks
  * @param name The name of the material.

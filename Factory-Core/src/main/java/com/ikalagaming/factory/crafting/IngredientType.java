@@ -6,7 +6,6 @@ package com.ikalagaming.factory.crafting;
  */
 public enum IngredientType {
     ITEM,
-    LIQUID,
-    GAS,
+    FLUID,
     POWER
 }

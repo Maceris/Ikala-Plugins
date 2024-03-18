@@ -1,6 +1,8 @@
 package com.ikalagaming.factory.item;
 
+import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.factory.kvt.NodeType;
+import com.ikalagaming.factory.world.registry.RegistryConstants;
 
 import lombok.NonNull;
 
@@ -47,4 +49,9 @@ public record ItemDefinition(
      * @param type The type of the key.
      */
     public record Attribute(@NonNull String name, @NonNull NodeType type) {}
+
+    public Item instantiate() {
+        return new Item(
+                RegistryConstants.combineName(modName, itemName), material, tags, new Node());
+    }
 }
