@@ -11,11 +11,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Set;
 
-/**
- * Tests for items.
- *
- * @author Ches Burks
- */
 class TestTransformItem {
 
     private Item expectedItem;

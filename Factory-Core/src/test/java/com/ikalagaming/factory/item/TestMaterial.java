@@ -10,11 +10,6 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Tests for materials.
- *
- * @author Ches Burks
- */
 class TestMaterial {
 
     /** Check if we only compare materials by name. */
