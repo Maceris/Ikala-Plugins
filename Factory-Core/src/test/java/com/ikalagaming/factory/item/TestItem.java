@@ -66,4 +66,20 @@ class TestItem {
         assertTrue(result.getTags().isEmpty());
         assertNull(result.getKvt());
     }
+
+    @Test
+    void testToString() {
+        var complex =
+                Item.builder()
+                        .name(expectedName)
+                        .material(expectedMaterial)
+                        .tags(expectedTags)
+                        .kvt(expectedKVT)
+                        .build();
+
+        var simple = Item.builder().name(expectedName).build();
+
+        assertDoesNotThrow(complex::toString);
+        assertDoesNotThrow(simple::toString);
+    }
 }
