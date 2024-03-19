@@ -6,6 +6,8 @@ import com.ikalagaming.factory.FactoryPlugin;
 import com.ikalagaming.factory.crafting.IngredientItem;
 import com.ikalagaming.factory.crafting.IngredientPower;
 import com.ikalagaming.factory.crafting.Recipe;
+import com.ikalagaming.factory.item.Item;
+import com.ikalagaming.factory.item.ItemStack;
 import com.ikalagaming.localization.Localization;
 
 import org.junit.jupiter.api.AfterAll;
@@ -72,7 +74,9 @@ class TestReward {
 
     @Test
     void testRewardRecipe() {
-        var input = new IngredientItem("coal");
+        var item = new Item("lotomation:coal");
+        var itemStack = new ItemStack(item);
+        var input = new IngredientItem(itemStack);
         var output = new IngredientPower(50);
         var recipe = new Recipe(List.of(input), List.of(output));
 

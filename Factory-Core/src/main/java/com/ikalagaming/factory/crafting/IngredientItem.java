@@ -1,5 +1,7 @@
 package com.ikalagaming.factory.crafting;
 
+import com.ikalagaming.factory.item.ItemStack;
+
 import lombok.Getter;
 import lombok.NonNull;
 
@@ -7,12 +9,11 @@ import lombok.NonNull;
 @Getter
 public class IngredientItem extends Ingredient {
 
-    // TODO(ches) Allow stacks, item metadata - FACT-8
     /** The name of the item involved in the recipe. */
-    @NonNull private final String itemName;
+    @NonNull private final ItemStack itemStack;
 
-    public IngredientItem(@NonNull String itemName) {
+    public IngredientItem(@NonNull ItemStack itemStack) {
         super(IngredientType.ITEM);
-        this.itemName = itemName;
+        this.itemStack = itemStack;
     }
 }

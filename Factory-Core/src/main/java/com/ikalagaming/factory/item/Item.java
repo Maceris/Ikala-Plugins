@@ -55,4 +55,14 @@ public class Item {
         }
         this.kvt = kvt;
     }
+
+    /**
+     * Construct an item with just a name and nothing else.
+     *
+     * @param name The name of the item. Should follow naming standards for fully qualified item
+     *     names.
+     */
+    public Item(@NonNull String name) {
+        this(name, null, null, null);
+    }
 }
