@@ -3,8 +3,8 @@ package com.ikalagaming.factory.quest;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.ikalagaming.factory.FactoryPlugin;
-import com.ikalagaming.factory.crafting.IngredientItem;
 import com.ikalagaming.factory.crafting.IngredientPower;
+import com.ikalagaming.factory.crafting.OutputItem;
 import com.ikalagaming.factory.crafting.Recipe;
 import com.ikalagaming.factory.item.Item;
 import com.ikalagaming.factory.item.ItemStack;
@@ -20,6 +20,7 @@ import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.ResourceBundle;
+import java.util.Set;
 
 /**
  * Tests for rewards.
@@ -77,7 +78,7 @@ class TestReward {
                 Item.builder()
                         .name("lotomation:battery")
                         .material("iron")
-                        .tags(List.of("chargeable", "electronic"))
+                        .tags(Set.of("chargeable", "electronic"))
                         .kvt(kvt)
                         .build();
         var itemStack = new ItemStack(item, 5);
@@ -91,7 +92,7 @@ class TestReward {
     void testRewardRecipe() {
         var item = new Item("lotomation:coal");
         var itemStack = new ItemStack(item);
-        var input = new IngredientItem(itemStack);
+        var input = new OutputItem(itemStack);
         var output = new IngredientPower(50);
         var recipe = new Recipe(List.of(input), List.of(output));
 

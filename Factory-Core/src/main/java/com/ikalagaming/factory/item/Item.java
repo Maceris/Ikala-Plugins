@@ -5,9 +5,7 @@ import com.ikalagaming.factory.kvt.TreeStringSerialization;
 
 import lombok.*;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
 /**
  * Represents an item in the game.
@@ -30,7 +28,7 @@ public class Item {
     @Builder.Default private String material = null;
 
     /** Tags associated with the item. This can be modified if desired. */
-    private final List<String> tags;
+    private final Set<String> tags;
 
     /**
      * Data associated with the item. Null by default, but can contain an arbitrary amount of
@@ -54,14 +52,14 @@ public class Item {
      * @param name The name of the item. Should follow naming standards for fully qualified item
      *     names.
      * @param material The material the item is primarily made out of. May be null.
-     * @param tags Tags to add to the item. A copy of this list is made, so it does not need to be
-     *     modifiable.
+     * @param tags Tags to add to the item. These are copied to an internal ordered set, so the
+     *     collection not need to be modifiable.
      * @param kvt The data for the item, which may be null.
      */
-    public Item(@NonNull String name, String material, List<String> tags, KVT kvt) {
+    public Item(@NonNull String name, String material, Collection<String> tags, KVT kvt) {
         this.name = name;
         this.material = material;
-        this.tags = new ArrayList<>();
+        this.tags = new TreeSet<>();
         if (tags != null && !tags.isEmpty()) {
             this.tags.addAll(tags);
         }

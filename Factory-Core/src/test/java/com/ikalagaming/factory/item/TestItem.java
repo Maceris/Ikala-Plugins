@@ -8,7 +8,7 @@ import com.ikalagaming.factory.kvt.Node;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
+import java.util.Set;
 
 /**
  * Tests for items.
@@ -19,14 +19,14 @@ class TestItem {
 
     private String expectedName;
     private String expectedMaterial;
-    private List<String> expectedTags;
+    private Set<String> expectedTags;
     private KVT expectedKVT;
 
     @BeforeEach
     void setUp() {
         expectedName = "lotomation:dirt";
         expectedMaterial = "dirt";
-        expectedTags = List.of("dirty", "clownlike");
+        expectedTags = Set.of("dirty", "clownlike");
         expectedKVT = new Node();
         expectedKVT.addInteger("dirt_dirtiness", 100);
     }

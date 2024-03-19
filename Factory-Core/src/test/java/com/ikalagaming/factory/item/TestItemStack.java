@@ -7,7 +7,7 @@ import com.ikalagaming.factory.kvt.Node;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
+import java.util.Set;
 
 /**
  * Tests for Item Stacks.
@@ -51,7 +51,7 @@ class TestItemStack {
                 Item.builder()
                         .name("lotomation:battery")
                         .material("iron")
-                        .tags(List.of("chargeable", "electronic"))
+                        .tags(Set.of("chargeable", "electronic"))
                         .kvt(kvt)
                         .build();
 
