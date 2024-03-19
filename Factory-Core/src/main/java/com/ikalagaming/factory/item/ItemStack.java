@@ -9,6 +9,18 @@ import lombok.*;
 @EqualsAndHashCode
 public class ItemStack {
     /**
+     * Check if two item stacks are the same type of item. If either is null, checks whether they
+     * both are.
+     *
+     * @param stack1 The first stack.
+     * @param stack2 The second stack.
+     * @return Whether the stacks are of the same item.
+     */
+    public static boolean isSameType(@NonNull ItemStack stack1, @NonNull ItemStack stack2) {
+        return stack1.getItem().equals(stack2.getItem());
+    }
+
+    /**
      * The item that we have a stack of.
      *
      * @return The item.
@@ -22,15 +34,8 @@ public class ItemStack {
      */
     private int count = 1;
 
-    /**
-     * Check if two item stacks are the same type of item. If either is null, checks whether they
-     * both are.
-     *
-     * @param stack1 The first stack.
-     * @param stack2 The second stack.
-     * @return Whether the stacks are of the same item.
-     */
-    public static boolean isSameType(@NonNull ItemStack stack1, @NonNull ItemStack stack2) {
-        return stack1.getItem().equals(stack2.getItem());
+    @Override
+    public String toString() {
+        return String.format("ItemStack[item=%s, count=%s]", item, count);
     }
 }

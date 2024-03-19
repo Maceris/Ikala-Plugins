@@ -11,6 +11,17 @@ import org.junit.jupiter.api.Test;
  */
 class TestItemStack {
 
+    @Test
+    void testConstructors() {
+        var item = Item.builder().name("lotomation:dirt").build();
+
+        var fullStack = new ItemStack(item, 1);
+        var simpleStack = new ItemStack(item);
+
+        assertEquals(1, fullStack.getCount());
+        assertEquals(1, simpleStack.getCount());
+    }
+
     /** Test the type comparison. */
     @Test
     void testIsSameType() {
@@ -25,16 +36,5 @@ class TestItemStack {
         assertTrue(ItemStack.isSameType(same2, same1));
         assertFalse(ItemStack.isSameType(same1, different));
         assertFalse(ItemStack.isSameType(same2, different));
-    }
-
-    @Test
-    void testConstructors() {
-        var item = Item.builder().name("lotomation:dirt").build();
-
-        var fullStack = new ItemStack(item, 1);
-        var simpleStack = new ItemStack(item);
-
-        assertEquals(1, fullStack.getCount());
-        assertEquals(1, simpleStack.getCount());
     }
 }

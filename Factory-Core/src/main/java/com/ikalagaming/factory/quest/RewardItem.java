@@ -1,5 +1,7 @@
 package com.ikalagaming.factory.quest;
 
+import com.ikalagaming.factory.item.ItemStack;
+
 import lombok.Getter;
 import lombok.NonNull;
 
@@ -11,22 +13,21 @@ import lombok.NonNull;
 @Getter
 public class RewardItem extends Reward {
 
-    // TODO(ches) Allow stacks, item metadata - FACT-7
     /** The item to give the player. */
-    @NonNull private final String itemName;
+    @NonNull private final ItemStack item;
 
     /**
      * Specifies a reward.
      *
-     * @param itemName The full name of the item (like "mod:item" format).
+     * @param item The item that is given.
      */
-    public RewardItem(@NonNull String itemName) {
+    public RewardItem(@NonNull ItemStack item) {
         super(RewardType.ITEM);
-        this.itemName = itemName;
+        this.item = item;
     }
 
     @Override
     public String toString() {
-        return String.format("Reward[type=%s, itemName=%s]", type, itemName);
+        return String.format("Reward[type=%s, item=%s]", type, item);
     }
 }

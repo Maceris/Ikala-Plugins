@@ -8,6 +8,8 @@ import com.ikalagaming.factory.crafting.IngredientPower;
 import com.ikalagaming.factory.crafting.Recipe;
 import com.ikalagaming.factory.item.Item;
 import com.ikalagaming.factory.item.ItemStack;
+import com.ikalagaming.factory.kvt.KVT;
+import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.localization.Localization;
 
 import org.junit.jupiter.api.AfterAll;
@@ -47,11 +49,15 @@ class TestReward {
 
     @Test
     void testRewardChoice() {
-        var items = List.of("lotomation:foo", "lotomation:bar");
+        var item1 = new Item("lotomation:foo");
+        var item2 = new Item("lotomation:bar");
+        var choice1 = new ItemStack(item1, 10);
+        var choice2 = new ItemStack(item2);
+        var choices = List.of(choice1, choice2);
 
-        var result = new RewardChoice(items);
+        var result = new RewardChoice(choices);
 
-        assertEquals(items, result.getItems());
+        assertEquals(choices, result.getChoices());
     }
 
     @Test
@@ -65,11 +71,20 @@ class TestReward {
 
     @Test
     void testRewardItem() {
-        var item = "lotomation:foo";
+        KVT kvt = new Node();
+        kvt.addLong("charge", 1000);
+        var item =
+                Item.builder()
+                        .name("lotomation:battery")
+                        .material("iron")
+                        .tags(List.of("chargeable", "electronic"))
+                        .kvt(kvt)
+                        .build();
+        var itemStack = new ItemStack(item, 5);
 
-        var result = new RewardItem(item);
+        var result = new RewardItem(itemStack);
 
-        assertEquals(item, result.getItemName());
+        assertEquals(itemStack, result.getItem());
     }
 
     @Test

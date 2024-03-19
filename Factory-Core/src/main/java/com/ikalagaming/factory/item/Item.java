@@ -1,10 +1,12 @@
 package com.ikalagaming.factory.item;
 
 import com.ikalagaming.factory.kvt.KVT;
+import com.ikalagaming.factory.kvt.TreeStringSerialization;
 
 import lombok.*;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -37,6 +39,16 @@ public class Item {
     @Builder.Default private KVT kvt = null;
 
     /**
+     * Construct an item with just a name and nothing else.
+     *
+     * @param name The name of the item. Should follow naming standards for fully qualified item
+     *     names.
+     */
+    public Item(@NonNull String name) {
+        this(name, null, null, null);
+    }
+
+    /**
      * Construct a new item.
      *
      * @param name The name of the item. Should follow naming standards for fully qualified item
@@ -56,13 +68,23 @@ public class Item {
         this.kvt = kvt;
     }
 
-    /**
-     * Construct an item with just a name and nothing else.
-     *
-     * @param name The name of the item. Should follow naming standards for fully qualified item
-     *     names.
-     */
-    public Item(@NonNull String name) {
-        this(name, null, null, null);
+    @Override
+    public String toString() {
+        StringBuilder result = new StringBuilder("Item[name=");
+        result.append(name);
+        if (material != null) {
+            result.append(", material=");
+            result.append(material);
+        }
+        if (tags != null) {
+            result.append(", tags=");
+            result.append(Arrays.toString(tags.toArray()));
+        }
+        if (kvt != null) {
+            result.append(", kvt=");
+            result.append(TreeStringSerialization.toString(kvt));
+        }
+        result.append(']');
+        return result.toString();
     }
 }
