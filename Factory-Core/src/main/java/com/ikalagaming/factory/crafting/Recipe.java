@@ -7,4 +7,5 @@ import java.util.List;
  *
  * @author Ches Burks
  */
-public record Recipe(List<Ingredient> inputs, List<Ingredient> outputs) {}
+public record Recipe(
+        List<Ingredient> inputs, List<Ingredient> outputs, String machine, long time) {}

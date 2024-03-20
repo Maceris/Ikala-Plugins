@@ -94,7 +94,7 @@ class TestReward {
         var itemStack = new ItemStack(item);
         var input = new OutputItem(itemStack);
         var output = new IngredientPower(50);
-        var recipe = new Recipe(List.of(input), List.of(output));
+        var recipe = new Recipe(List.of(input), List.of(output), "furnace", 10);
 
         var result = new RewardRecipe(recipe);
 
