@@ -5,7 +5,8 @@ package com.ikalagaming.factory.crafting;
  * consumed or produced by the recipe.
  */
 public enum IngredientType {
-    ITEM,
+    ITEM_INPUT,
+    ITEM_OUTPUT,
     FLUID,
     POWER
 }

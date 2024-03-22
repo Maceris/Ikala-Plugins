@@ -2,21 +2,23 @@ package com.ikalagaming.factory.crafting;
 
 import com.ikalagaming.factory.item.ItemStack;
 
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 
 /** The item input to a recipe. */
 @Getter
+@Builder
 public class InputItem extends Ingredient {
 
     /** The item required by the recipe. */
     @NonNull private final ItemStack itemStack;
 
     /** The transformation to apply to the ingredient. */
-    @NonNull private final TransformItem transformation;
+    @Builder.Default @NonNull private TransformItem transformation = TransformItem.CONSUME_ALL;
 
     /** The condition we want to use when checking if an item matches this recipe ingredient. */
-    @NonNull private final ItemMatchCondition matchCondition;
+    @Builder.Default @NonNull private ItemMatchCondition matchCondition = ItemMatchCondition.EXACT;
 
     /**
      * Create an ingredient input for items which consumes all the input.
@@ -48,7 +50,7 @@ public class InputItem extends Ingredient {
             @NonNull ItemStack itemStack,
             @NonNull TransformItem transformation,
             @NonNull ItemMatchCondition matchCondition) {
-        super(IngredientType.ITEM);
+        super(IngredientType.ITEM_INPUT);
         this.itemStack = itemStack;
         this.transformation = transformation;
         this.matchCondition = matchCondition;

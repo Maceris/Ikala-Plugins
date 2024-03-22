@@ -18,7 +18,7 @@ public class OutputItem extends Ingredient {
      * @param itemStack The item stack that is produced.
      */
     public OutputItem(@NonNull ItemStack itemStack) {
-        super(IngredientType.ITEM);
+        super(IngredientType.ITEM_OUTPUT);
         this.itemStack = itemStack;
     }
 }
