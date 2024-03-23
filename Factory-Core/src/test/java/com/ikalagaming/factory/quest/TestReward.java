@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.ikalagaming.factory.FactoryPlugin;
 import com.ikalagaming.factory.crafting.IngredientPower;
-import com.ikalagaming.factory.crafting.OutputItem;
+import com.ikalagaming.factory.crafting.InputItem;
 import com.ikalagaming.factory.crafting.Recipe;
 import com.ikalagaming.factory.item.Item;
 import com.ikalagaming.factory.item.ItemStack;
@@ -92,7 +92,7 @@ class TestReward {
     void testRewardRecipe() {
         var item = new Item("lotomation:coal");
         var itemStack = new ItemStack(item);
-        var input = new OutputItem(itemStack);
+        var input = new InputItem(itemStack);
         var output = new IngredientPower(50);
 
         var recipe =
