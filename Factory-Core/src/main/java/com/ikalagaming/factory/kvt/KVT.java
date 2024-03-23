@@ -5,6 +5,7 @@ import lombok.NonNull;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * A tree of key-value pairs. All nodes extend this, as all nodes are technically trees.
@@ -660,6 +661,23 @@ public interface KVT {
      * @return The node type for this node.
      */
     NodeType getType();
+
+    /**
+     * Returns the type of the child node. Each node has a type corresponding to the values it
+     * stores.
+     *
+     * @return The node type for the child node.
+     */
+    Optional<NodeType> getType(final @NonNull String name);
+
+    /**
+     * Fetch the list of child keys, but only one layer deep. Leaf nodes would return an empty list.
+     *
+     * @return The list of keys.
+     */
+    default List<String> getKeys() {
+        return List.of();
+    }
 
     /**
      * Checks if there is a child with the given name.

@@ -18,7 +18,7 @@ public class InputItem extends Ingredient {
     @Builder.Default @NonNull private TransformItem transformation = TransformItem.CONSUME_ALL;
 
     /** The condition we want to use when checking if an item matches this recipe ingredient. */
-    @Builder.Default @NonNull private ItemMatchCondition matchCondition = ItemMatchCondition.EXACT;
+    @Builder.Default @NonNull private ItemMatchCondition matchCondition = ItemMatchCondition.DEFAULT;
 
     /**
      * Create an ingredient input for items which consumes all the input.
@@ -26,7 +26,7 @@ public class InputItem extends Ingredient {
      * @param itemStack The item stack that is the input.
      */
     public InputItem(@NonNull ItemStack itemStack) {
-        this(itemStack, TransformItem.CONSUME_ALL, ItemMatchCondition.EXACT);
+        this(itemStack, TransformItem.CONSUME_ALL, ItemMatchCondition.DEFAULT);
     }
 
     /**
@@ -36,7 +36,7 @@ public class InputItem extends Ingredient {
      * @param transformation The transformation to perform on the input.
      */
     public InputItem(@NonNull ItemStack itemStack, @NonNull TransformItem transformation) {
-        this(itemStack, transformation, ItemMatchCondition.EXACT);
+        this(itemStack, transformation, ItemMatchCondition.DEFAULT);
     }
 
     /**

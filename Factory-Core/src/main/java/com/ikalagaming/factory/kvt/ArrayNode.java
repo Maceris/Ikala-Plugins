@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -128,6 +129,11 @@ class ArrayNode<T> implements KVT {
     @Override
     public NodeType getType() {
         return type;
+    }
+
+    @Override
+    public Optional<NodeType> getType(@NonNull String name) {
+        return Optional.empty();
     }
 
     @Override

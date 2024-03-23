@@ -10,6 +10,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * A node that is just a value and the type.
@@ -106,6 +107,11 @@ public class ValueNode<T> implements KVT {
     @Override
     public NodeType getType() {
         return type;
+    }
+
+    @Override
+    public Optional<NodeType> getType(@NonNull String name) {
+        return Optional.empty();
     }
 
     @Override

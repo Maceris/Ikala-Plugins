@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Represents a crafting recipe.
@@ -27,6 +28,7 @@ public record Recipe(
     }
 
     public static class RecipeBuilder {
+        private static final String MISMATCHED_LIST = "LIST_MISMATCHED_TYPE";
         private List<String> machines;
         private long time;
         private List<Ingredient> inputs;
@@ -88,8 +90,16 @@ public record Recipe(
          *
          * @param time The time.
          * @return The builder.
+         * @throws IllegalArgumentException If time is negative.
          */
         public RecipeBuilder withTime(long time) {
+            if (time < 0) {
+                var message =
+                        SafeResourceLoader.getString(
+                                "RECIPE_NEGATIVE_TIME", FactoryPlugin.getResourceBundle());
+                log.warn(message);
+                throw new IllegalArgumentException(message);
+            }
             this.time = time;
             return this;
         }
@@ -220,7 +230,7 @@ public record Recipe(
                         case INPUT, OUTPUT ->
                                 throw new IllegalArgumentException(
                                         SafeResourceLoader.getStringFormatted(
-                                                "LIST_MISMATCHED_TYPE",
+                                                MISMATCHED_LIST,
                                                 FactoryPlugin.getResourceBundle(),
                                                 lastList.toString()));
                         case MACHINES -> this.machines;
@@ -229,23 +239,56 @@ public record Recipe(
             return this;
         }
 
+        /**
+         * Add to the last list we had added an ingredient to. Intended to be used like {@code
+         * .withInput(...).and(...)}.
+         *
+         * @param ingredient The ingredient to add to the list.
+         * @return The builder.
+         * @throws UnsupportedOperationException If we have not started adding to a list.
+         * @throws IllegalArgumentException If the last list we added to did not accept ingredients.
+         */
         public RecipeBuilder and(@NonNull Ingredient ingredient) {
             if (lastList == null) {
-                // TODO(ches) error handling
-                return this;
+                var message =
+                        SafeResourceLoader.getString(
+                                "NOT_STARTED_LIST", FactoryPlugin.getResourceBundle());
+                log.warn(message);
+                throw new UnsupportedOperationException(message);
             }
             var list =
                     switch (lastList) {
                         case INPUT -> this.inputs;
                         case OUTPUT -> this.outputs;
-                            // TODO(ches) localize
-                        case MACHINES -> throw new IllegalArgumentException();
+                        case MACHINES ->
+                                throw new IllegalArgumentException(
+                                        SafeResourceLoader.getStringFormatted(
+                                                MISMATCHED_LIST,
+                                                FactoryPlugin.getResourceBundle(),
+                                                lastList.toString()));
                     };
-            // TODO(ches) check ingredient type
+            Consumer<Ingredient> check =
+                    switch (lastList) {
+                        case INPUT -> this::validateInput;
+                        case OUTPUT -> this::validateOutput;
+                        case MACHINES ->
+                                throw new IllegalStateException(
+                                        SafeResourceLoader.getStringFormatted(
+                                                MISMATCHED_LIST,
+                                                FactoryPlugin.getResourceBundle(),
+                                                lastList.toString()));
+                    };
+            check.accept(ingredient);
             list.add(ingredient);
             return this;
         }
 
+        /**
+         * Construct a recipe given the previous builder steps. Any lists that have not been set
+         * will be created as empty lists.
+         *
+         * @return The constructed recipe.
+         */
         public Recipe build() {
             if (this.inputs == null) {
                 this.inputs = new ArrayList<>();
@@ -256,8 +299,8 @@ public record Recipe(
             if (this.machines == null) {
                 this.machines = new ArrayList<>();
             }
-            // TODO(ches) error handling
-            return new Recipe(inputs, outputs, machines, time);
+            return new Recipe(
+                    List.copyOf(inputs), List.copyOf(outputs), List.copyOf(machines), time);
         }
     }
 }

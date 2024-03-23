@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
@@ -212,6 +213,28 @@ public class Node implements KVT {
     @Override
     public NodeType getType() {
         return NodeType.NODE;
+    }
+
+    @Override
+    public Optional<NodeType> getType(@NonNull String name) {
+        var parts = List.of(name.split("\\."));
+        KVT node = this;
+
+        for (int i = 0; i < parts.size() - 1; ++i) {
+            var nextPart = parts.get(i);
+            node = Optional.ofNullable(node).map(n -> n.getNode(nextPart)).orElse(null);
+        }
+
+        var lastPart = parts.get(parts.size() - 1);
+        return Optional.ofNullable(node)
+                .map(Node.class::cast)
+                .map(n -> n.values.get(lastPart))
+                .map(KVT::getType);
+    }
+
+    @Override
+    public List<String> getKeys() {
+        return List.copyOf(this.values.keySet());
     }
 
     @Override
