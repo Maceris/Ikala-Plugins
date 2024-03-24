@@ -104,4 +104,149 @@ class TestRecipe {
         assertTrue(result.contains(fluid));
         assertTrue(result.contains(power));
     }
+
+    @Test
+    void testInputsWithAnd() {
+        IngredientFluid fluid = new IngredientFluid("lotomation:water", 1000);
+        IngredientPower power = new IngredientPower(KILOJOULE);
+
+        var result =
+                Recipe.builder()
+                        .withInput(ingredientInputItem)
+                        .and(fluid)
+                        .and(power)
+                        .build()
+                        .inputs();
+
+        assertEquals(3, result.size());
+        assertTrue(result.contains(ingredientInputItem));
+        assertTrue(result.contains(fluid));
+        assertTrue(result.contains(power));
+    }
+
+    @Test
+    void testOutputs() {
+        IngredientFluid fluid = new IngredientFluid("lotomation:water", 1000);
+        IngredientPower power = new IngredientPower(KILOJOULE);
+
+        var result =
+                Recipe.builder()
+                        .withInput(ingredientInputItem)
+                        .withOutputs(List.of(ingredientOutputItem, fluid, power))
+                        .build()
+                        .outputs();
+
+        assertEquals(3, result.size());
+        assertTrue(result.contains(ingredientOutputItem));
+        assertTrue(result.contains(fluid));
+        assertTrue(result.contains(power));
+    }
+
+    @Test
+    void testOutputsWithAnd() {
+        IngredientFluid fluid = new IngredientFluid("lotomation:water", 1000);
+        IngredientPower power = new IngredientPower(KILOJOULE);
+
+        var result =
+                Recipe.builder()
+                        .withInput(ingredientInputItem)
+                        .withOutput(ingredientOutputItem)
+                        .and(fluid)
+                        .and(power)
+                        .build()
+                        .outputs();
+
+        assertEquals(3, result.size());
+        assertTrue(result.contains(ingredientOutputItem));
+        assertTrue(result.contains(fluid));
+        assertTrue(result.contains(power));
+    }
+
+    @Test
+    void testTimeNegative() {
+        var builder = Recipe.builder();
+
+        assertThrows(IllegalArgumentException.class, () -> builder.withTime(-1));
+    }
+
+    @Test
+    void testInputsWithOutputType() {
+        var builder = Recipe.builder();
+
+        var invalidInput = List.of(ingredientOutputItem);
+
+        assertThrows(IllegalArgumentException.class, () -> builder.withInputs(invalidInput));
+    }
+
+    @Test
+    void testInputWithOutputType() {
+        var builder = Recipe.builder();
+
+        assertThrows(IllegalArgumentException.class, () -> builder.withInput(ingredientOutputItem));
+    }
+
+    @Test
+    void testInputsAndWithOutputType() {
+        var builder = Recipe.builder().withInput(ingredientInputItem);
+
+        assertThrows(IllegalArgumentException.class, () -> builder.and(ingredientOutputItem));
+    }
+
+    @Test
+    void testOutputsWithInputType() {
+        var builder = Recipe.builder();
+
+        var invalidOutput = List.of(ingredientInputItem);
+
+        assertThrows(IllegalArgumentException.class, () -> builder.withOutputs(invalidOutput));
+    }
+
+    @Test
+    void testOutputWithInputType() {
+        var builder = Recipe.builder();
+
+        assertThrows(IllegalArgumentException.class, () -> builder.withOutput(ingredientInputItem));
+    }
+
+    @Test
+    void testOutputsAndWithInputType() {
+        var builder = Recipe.builder().withOutput(ingredientOutputItem);
+
+        assertThrows(IllegalArgumentException.class, () -> builder.and(ingredientInputItem));
+    }
+
+    @Test
+    void testAndStringWithoutList() {
+        var builder = Recipe.builder();
+
+        assertThrows(UnsupportedOperationException.class, () -> builder.and(expectedMachine));
+    }
+
+    @Test
+    void testAndStringForInputs() {
+        var builder = Recipe.builder().withInput(ingredientInputItem);
+
+        assertThrows(IllegalArgumentException.class, () -> builder.and(expectedMachine));
+    }
+
+    @Test
+    void testAndStringForOutputs() {
+        var builder = Recipe.builder().withOutput(ingredientOutputItem);
+
+        assertThrows(IllegalArgumentException.class, () -> builder.and(expectedMachine));
+    }
+
+    @Test
+    void testAndIngredientWithoutList() {
+        var builder = Recipe.builder();
+
+        assertThrows(UnsupportedOperationException.class, () -> builder.and(ingredientInputItem));
+    }
+
+    @Test
+    void testAndIngredientForMachine() {
+        var builder = Recipe.builder().withMachine(expectedMachine);
+
+        assertThrows(IllegalArgumentException.class, () -> builder.and(ingredientInputItem));
+    }
 }
