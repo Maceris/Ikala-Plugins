@@ -1,5 +1,6 @@
 package com.ikalagaming.factory.crafting;
 
+import static com.ikalagaming.factory.crafting.PowerConstants.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.ikalagaming.factory.FactoryPlugin;
@@ -78,5 +79,29 @@ class TestRecipe {
 
         assertNotNull(result);
         assertArrayEquals(expectedResult.toArray(), result.toArray());
+    }
+
+    @Test
+    void testTime() {
+        var result = Recipe.builder().withTime(expectedTime).build().time();
+
+        assertEquals(expectedTime, result);
+    }
+
+    @Test
+    void testInputs() {
+        IngredientFluid fluid = new IngredientFluid("lotomation:water", 1000);
+        IngredientPower power = new IngredientPower(KILOJOULE);
+
+        var result =
+                Recipe.builder()
+                        .withInputs(List.of(ingredientInputItem, fluid, power))
+                        .build()
+                        .inputs();
+
+        assertEquals(3, result.size());
+        assertTrue(result.contains(ingredientInputItem));
+        assertTrue(result.contains(fluid));
+        assertTrue(result.contains(power));
     }
 }
