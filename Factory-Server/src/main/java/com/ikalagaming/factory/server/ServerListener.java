@@ -3,12 +3,9 @@ package com.ikalagaming.factory.server;
 import com.ikalagaming.event.EventHandler;
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.event.Order;
-import com.ikalagaming.factory.events.registry.LoadingBlocks;
-import com.ikalagaming.factory.events.registry.LoadingItems;
-import com.ikalagaming.factory.events.registry.LoadingMaterials;
-import com.ikalagaming.factory.events.registry.LoadingTags;
-
+import com.ikalagaming.factory.events.registry.*;
 import com.ikalagaming.factory.events.server.ServerLoaded;
+
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
@@ -22,6 +19,7 @@ public class ServerListener implements Listener {
             DefinitionLoader.loadBlocks(
                     registries.getBlockRegistry(), registries.getItemRegistry());
         }
+        new LoadingBlocksCompleted().fire();
         new LoadingItems().fire();
     }
 
@@ -30,6 +28,7 @@ public class ServerListener implements Listener {
         if (!event.isCanceled()) {
             DefinitionLoader.loadItems(server.getRegistries().getItemRegistry());
         }
+        new LoadingItemsCompleted().fire();
         new ServerLoaded().fire();
     }
 
@@ -38,6 +37,7 @@ public class ServerListener implements Listener {
         if (!event.isCanceled()) {
             DefinitionLoader.loadMaterials(server.getRegistries().getMaterialRegistry());
         }
+        new LoadingMaterialsCompleted().fire();
         new LoadingBlocks().fire();
     }
 
@@ -46,6 +46,7 @@ public class ServerListener implements Listener {
         if (!event.isCanceled()) {
             DefinitionLoader.loadTags(server.getRegistries().getTagRegistry());
         }
+        new LoadingTagsCompleted().fire();
         new LoadingMaterials().fire();
     }
 }
