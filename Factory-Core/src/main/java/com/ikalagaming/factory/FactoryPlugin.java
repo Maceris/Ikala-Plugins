@@ -24,7 +24,7 @@ public class FactoryPlugin extends Plugin {
     public static final String PLUGIN_NAME = "Factory-Core";
 
     /**
-     * The resource bundle for the Graphics plugin.
+     * The resource bundle for the plugin.
      *
      * @return The bundle.
      * @param resourceBundle The new bundle to use.

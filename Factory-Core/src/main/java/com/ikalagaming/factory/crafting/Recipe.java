@@ -86,9 +86,9 @@ public record Recipe(
         }
 
         /**
-         * Specify the time for the recipe.
+         * Specify the time in ticks for the recipe.
          *
-         * @param time The time.
+         * @param time The time, in ticks.
          * @return The builder.
          * @throws IllegalArgumentException If time is negative.
          */

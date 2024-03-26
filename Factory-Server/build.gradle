@@ -53,6 +53,8 @@ configurations {
 
 dependencies {
 	implementation project(':Ikala-Core')
+	implementation project(':Factory-Core')
+	implementation "com.opencsv:opencsv:${openCSVVersion}"
 
 	// Testing
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
