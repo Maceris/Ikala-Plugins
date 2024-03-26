@@ -1,6 +1,8 @@
 package com.ikalagaming.factory;
 
 import com.ikalagaming.event.Listener;
+import com.ikalagaming.factory.server.Server;
+import com.ikalagaming.factory.server.ServerListener;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 
@@ -31,12 +33,16 @@ public class FactoryServerPlugin extends Plugin {
      */
     @Getter @Setter private static ResourceBundle resourceBundle;
 
+    /** The server that we will use, which starts out not running. */
+    private final Server server = new Server();
+
     private Set<Listener> listeners;
 
     @Override
     public Set<Listener> getListeners() {
         if (null == this.listeners) {
             this.listeners = new HashSet<>();
+            this.listeners.add(new ServerListener(server));
         }
         return this.listeners;
     }
@@ -44,6 +50,19 @@ public class FactoryServerPlugin extends Plugin {
     @Override
     public String getName() {
         return FactoryServerPlugin.PLUGIN_NAME;
+    }
+
+    @Override
+    public boolean onEnable() {
+        // TODO(ches) don't actually start it until started up manually
+        server.start();
+        return true;
+    }
+
+    @Override
+    public boolean onDisable() {
+        server.stop();
+        return true;
     }
 
     @Override
