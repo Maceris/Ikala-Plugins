@@ -1,4 +1,4 @@
-package com.ikalagaming.factory.world.registry;
+package com.ikalagaming.factory.registry;
 
 import static org.junit.jupiter.api.Assertions.*;
 

@@ -39,16 +39,6 @@ class TestWorld {
         EventManager.destroyInstance();
     }
 
-    @Test
-    void testRegistryCreation() {
-        var world = new World();
-
-        assertNotNull(world.getTagRegistry());
-        assertNotNull(world.getMaterialRegistry());
-        assertNotNull(world.getItemRegistry());
-        assertNotNull(world.getBlockRegistry());
-    }
-
     /** Test the creation of the world object. */
     @Test
     void testWorldCreation() {

@@ -2,7 +2,7 @@ package com.ikalagaming.factory.item;
 
 import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.factory.kvt.NodeType;
-import com.ikalagaming.factory.world.registry.RegistryConstants;
+import com.ikalagaming.factory.registry.RegistryConstants;
 
 import lombok.NonNull;
 

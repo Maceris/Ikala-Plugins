@@ -2,11 +2,8 @@ package com.ikalagaming.factory.server;
 
 import com.ikalagaming.factory.FactoryServerPlugin;
 import com.ikalagaming.factory.item.ItemDefinition;
+import com.ikalagaming.factory.registry.*;
 import com.ikalagaming.factory.world.BlockDefinition;
-import com.ikalagaming.factory.world.World;
-import com.ikalagaming.factory.world.registry.MaterialRegistry;
-import com.ikalagaming.factory.world.registry.RegistryConstants;
-import com.ikalagaming.factory.world.registry.TagRegistry;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -35,12 +32,12 @@ public class DefinitionLoader {
     /**
      * Load and process blocks from disk.
      *
-     * @param world The world we are loading tags for.
+     * @param blockRegistry Where we are registering the blocks.
+     * @param itemRegistry Where we are registering the corresponding block items.
      * @return Whether we successfully loaded all information.
      */
-    public static boolean loadBlocks(@NonNull World world) {
-        var blockRegistry = world.getBlockRegistry();
-        var itemRegistry = world.getItemRegistry();
+    public static boolean loadBlocks(
+            @NonNull BlockRegistry blockRegistry, @NonNull ItemRegistry itemRegistry) {
         File blocks =
                 PluginFolder.getResource(
                         FactoryServerPlugin.PLUGIN_NAME,
@@ -93,11 +90,10 @@ public class DefinitionLoader {
     /**
      * Load and process items from disk.
      *
-     * @param world The world we are loading tags for.
+     * @param itemRegistry Where we are registering items.
      * @return Whether we successfully loaded all information.
      */
-    public static boolean loadItems(@NonNull World world) {
-        var itemRegistry = world.getItemRegistry();
+    public static boolean loadItems(@NonNull ItemRegistry itemRegistry) {
         File items =
                 PluginFolder.getResource(
                         FactoryServerPlugin.PLUGIN_NAME,
@@ -144,10 +140,10 @@ public class DefinitionLoader {
     /**
      * Load and process materials from disk.
      *
-     * @param world The world we are loading tags for.
+     * @param materialRegistry Where we are registering materials.
      * @return Whether we successfully loaded all information.
      */
-    public static boolean loadMaterials(@NonNull World world) {
+    public static boolean loadMaterials(@NonNull MaterialRegistry materialRegistry) {
         File materials =
                 PluginFolder.getResource(
                         FactoryServerPlugin.PLUGIN_NAME,
@@ -157,7 +153,7 @@ public class DefinitionLoader {
         if (materialMap.isEmpty()) {
             return false;
         }
-        processMaterials(materialMap, world.getMaterialRegistry());
+        processMaterials(materialMap, materialRegistry);
 
         log.debug(
                 SafeResourceLoader.getString(
@@ -168,10 +164,10 @@ public class DefinitionLoader {
     /**
      * Load the tags from files.
      *
-     * @param world The world we are loading tags for.
+     * @param tagRegistry Where we are registering tags.
      * @return Whether we were successful.
      */
-    public static boolean loadTags(@NonNull World world) {
+    public static boolean loadTags(@NonNull TagRegistry tagRegistry) {
         File tags =
                 PluginFolder.getResource(
                         FactoryServerPlugin.PLUGIN_NAME,
@@ -182,7 +178,7 @@ public class DefinitionLoader {
         if (tagMap.isEmpty()) {
             return false;
         }
-        processTags(tagMap, null, world.getTagRegistry());
+        processTags(tagMap, null, tagRegistry);
         log.debug(
                 SafeResourceLoader.getString(
                         "LOADED_TAGS", FactoryServerPlugin.getResourceBundle()));
@@ -274,5 +270,10 @@ public class DefinitionLoader {
                 processTags(cast, tagName, tagRegistry);
             }
         }
+    }
+
+    /** Private constructor so that this class is not instantiated. */
+    private DefinitionLoader() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
     }
 }

@@ -1,4 +1,4 @@
-package com.ikalagaming.factory.world.registry;
+package com.ikalagaming.factory.registry;
 
 import com.ikalagaming.factory.FactoryPlugin;
 import com.ikalagaming.factory.item.ItemDefinition;
