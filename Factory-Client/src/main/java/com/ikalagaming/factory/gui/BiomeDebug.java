@@ -1,21 +1,16 @@
-package com.ikalagaming.factory;
+package com.ikalagaming.factory.gui;
 
 import static org.lwjgl.opengl.GL11.glIsTexture;
 
-import com.ikalagaming.graphics.GuiInstance;
 import com.ikalagaming.graphics.MouseInput;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.launcher.events.Shutdown;
 import com.ikalagaming.random.RandomGen;
 
-import imgui.ImColor;
 import imgui.ImGui;
 import imgui.ImGuiIO;
-import imgui.flag.ImGuiCol;
 import imgui.flag.ImGuiCond;
-import imgui.type.ImBoolean;
 import lombok.NonNull;
 import org.joml.Vector2f;
 
@@ -23,12 +18,7 @@ import java.awt.image.BufferedImage;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * A UI that we are using until a proper solution is designed.
- *
- * @author Ches Burks
- */
-public class TemporaryUI implements GuiInstance {
+public class BiomeDebug extends GuiComponent {
 
     private static byte[] intARGBtoByteRGBA(int[] argb) {
         byte[] rgba = new byte[argb.length * 4];
@@ -43,10 +33,7 @@ public class TemporaryUI implements GuiInstance {
         return rgba;
     }
 
-    private ImBoolean showDemo;
-    private ImBoolean showWorldGen;
-
-    private AtomicBoolean generateRequested = new AtomicBoolean();
+    private final AtomicBoolean generateRequested = new AtomicBoolean();
     private Texture temperature;
     private Texture height;
     private Texture erosion;
@@ -55,50 +42,8 @@ public class TemporaryUI implements GuiInstance {
 
     private Texture biomes;
 
-    /** Set up the UI. */
-    public TemporaryUI() {
-        showDemo = new ImBoolean(false);
-        showWorldGen = new ImBoolean(true);
-    }
-
     @Override
     public void drawGui() {
-        ImGui.newFrame();
-
-        if (ImGui.beginMainMenuBar()) {
-            if (ImGui.beginMenu("Windows")) {
-                ImGui.checkbox("Demo", showDemo);
-                ImGui.checkbox("World Generation Debugger", showWorldGen);
-                ImGui.endMenu();
-            }
-            ImGui.pushStyleColor(ImGuiCol.Text, ImColor.rgba(1f, 0.1f, 0.1f, 1.0f));
-            if (ImGui.menuItem("Quit Game")) {
-                new Shutdown().fire();
-            }
-            ImGui.popStyleColor();
-
-            ImGui.endMainMenuBar();
-        }
-
-        showWindows();
-
-        ImGui.endFrame();
-        ImGui.render();
-    }
-
-    private void drawImage(Texture image) {
-        if (image != null) {
-            if (glIsTexture(image.getTextureID())) {
-                image.bind();
-                ImGui.image(image.getTextureID(), image.getWidth(), image.getHeight());
-            } else {
-                ImGui.text("Texture somehow does not exist!");
-            }
-        }
-    }
-
-    /** Draw the world generation debugging information. */
-    private void drawWorldGen() {
         ImGui.setNextWindowPos(20, 20, ImGuiCond.Once);
         ImGui.setNextWindowSize(1300, 900, ImGuiCond.Once);
         ImGui.begin("World Generation");
@@ -131,6 +76,17 @@ public class TemporaryUI implements GuiInstance {
         ImGui.endGroup();
 
         ImGui.end();
+    }
+
+    private void drawImage(Texture image) {
+        if (image != null) {
+            if (glIsTexture(image.getTextureID())) {
+                image.bind();
+                ImGui.image(image.getTextureID(), image.getWidth(), image.getHeight());
+            } else {
+                ImGui.text("Texture somehow does not exist!");
+            }
+        }
     }
 
     private Texture generateTexture(BufferedImage image) {
@@ -241,15 +197,5 @@ public class TemporaryUI implements GuiInstance {
         }
 
         return imGuiIO.getWantCaptureMouse() || imGuiIO.getWantCaptureKeyboard();
-    }
-
-    /** Render whichever windows are applicable. */
-    private void showWindows() {
-        if (showDemo.get()) {
-            ImGui.showDemoWindow();
-        }
-        if (showWorldGen.get()) {
-            drawWorldGen();
-        }
     }
 }

@@ -1,6 +1,9 @@
 package com.ikalagaming.factory;
 
 import com.ikalagaming.event.Listener;
+import com.ikalagaming.factory.gui.BiomeDebug;
+import com.ikalagaming.factory.gui.DebugToolbar;
+import com.ikalagaming.factory.gui.GuiManager;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
@@ -34,7 +37,7 @@ public class FactoryClientPlugin extends Plugin {
 
     private Set<Listener> listeners;
 
-    private TemporaryUI gui;
+    private GuiManager guiManager;
 
     @Override
     public Set<Listener> getListeners() {
@@ -57,8 +60,12 @@ public class FactoryClientPlugin extends Plugin {
 
     @Override
     public boolean onEnable() {
-        gui = new TemporaryUI();
-        GraphicsManager.setGUI(gui);
+        guiManager = new GuiManager();
+        GraphicsManager.setGUI(guiManager);
+        guiManager.addComponent("Debug Toolbar", new DebugToolbar());
+        guiManager.addComponent("Biome Debug", new BiomeDebug());
+        guiManager.enable("Debug Toolbar");
+        guiManager.enable("Biome Debug");
         return true;
     }
 
