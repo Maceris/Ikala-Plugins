@@ -9,6 +9,7 @@ import imgui.ImGui;
 import imgui.flag.ImGuiCol;
 import lombok.NonNull;
 
+/** A menu bar at the top of the screen for debugging. */
 public class DebugToolbar extends GuiComponent {
     @Override
     public void drawGui() {

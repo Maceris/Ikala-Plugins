@@ -6,6 +6,7 @@ import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
 
+/** The main menu we start up the game showing. */
 public class MainMenu implements GuiInstance {
     @Override
     public void drawGui() {}

@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
+/** Tracks and engages all the things we want to render with ImGui. */
 public class GuiManager implements GuiInstance {
     private final Map<String, GuiComponent> components;
 
@@ -19,8 +20,8 @@ public class GuiManager implements GuiInstance {
     }
 
     /**
-     * Register a named gui component. This is expected for larger things like a menu or floating window, rather than
-     * a button or list.
+     * Register a named gui component. This is expected for larger things like a menu or floating
+     * window, rather than a button or list.
      *
      * @param name The unique name of the component.
      * @param component The component.
@@ -38,14 +39,33 @@ public class GuiManager implements GuiInstance {
         this.components.remove(name);
     }
 
+    /**
+     * Enable a component by name.
+     *
+     * @param name The name od the component to show.
+     * @see #setEnabled(String, boolean)
+     */
     public void enable(@NonNull String name) {
         setEnabled(name, true);
     }
 
+    /**
+     * Disable a component by name.
+     *
+     * @param name The name od the component to hide.
+     * @see #setEnabled(String, boolean)
+     */
     public void disable(@NonNull String name) {
         setEnabled(name, false);
     }
 
+    /**
+     * Enable/disable a component by name.
+     *
+     * @param name The name od the component to show/hide.
+     * @param enabled True if the component should show, false if it should be hidden.
+     * @see #setEnabled(String, boolean)
+     */
     public void setEnabled(@NonNull String name, boolean enabled) {
         Optional.ofNullable(this.components.get(name))
                 .ifPresent(component -> component.setVisible(enabled));

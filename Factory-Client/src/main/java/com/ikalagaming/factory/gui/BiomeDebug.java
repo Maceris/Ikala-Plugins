@@ -78,6 +78,11 @@ public class BiomeDebug extends GuiComponent {
         ImGui.end();
     }
 
+    /**
+     * Draw a texture as an image, wherever we currently are in a window.
+     *
+     * @param image The texture to draw.
+     */
     private void drawImage(Texture image) {
         if (image != null) {
             if (glIsTexture(image.getTextureID())) {
@@ -89,6 +94,12 @@ public class BiomeDebug extends GuiComponent {
         }
     }
 
+    /**
+     * Convert a buffered image to a texture that the graphics library understands.
+     *
+     * @param image The image to turn into a texture.
+     * @return The generated texture.
+     */
     private Texture generateTexture(BufferedImage image) {
         int[] rgbValues =
                 image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
