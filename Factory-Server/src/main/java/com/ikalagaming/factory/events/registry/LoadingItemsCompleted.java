@@ -1,6 +1,6 @@
 package com.ikalagaming.factory.events.registry;
 
-import com.ikalagaming.event.CancelableEvent;
+import com.ikalagaming.event.Event;
 
 /** We have finished loading the default items. */
-public class LoadingItemsCompleted extends CancelableEvent {}
+public class LoadingItemsCompleted extends Event {}
