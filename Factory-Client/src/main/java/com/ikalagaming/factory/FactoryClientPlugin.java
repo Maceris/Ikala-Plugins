@@ -4,6 +4,7 @@ import com.ikalagaming.event.Listener;
 import com.ikalagaming.factory.gui.BiomeDebug;
 import com.ikalagaming.factory.gui.DebugToolbar;
 import com.ikalagaming.factory.gui.GuiManager;
+import com.ikalagaming.factory.gui.MainMenu;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
@@ -64,8 +65,10 @@ public class FactoryClientPlugin extends Plugin {
         GraphicsManager.setGUI(guiManager);
         guiManager.addComponent("Debug Toolbar", new DebugToolbar());
         guiManager.addComponent("Biome Debug", new BiomeDebug());
+        guiManager.addComponent("Main Menu", new MainMenu());
         guiManager.enable("Debug Toolbar");
         guiManager.enable("Biome Debug");
+        guiManager.disable("Main Menu");
         return true;
     }
 
