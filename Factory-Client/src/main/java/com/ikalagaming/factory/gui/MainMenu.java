@@ -1,5 +1,8 @@
 package com.ikalagaming.factory.gui;
 
+import static com.ikalagaming.factory.gui.DefaultComponents.DEBUG_TOOLBAR;
+import static com.ikalagaming.factory.gui.DefaultComponents.MAIN_MENU;
+
 import com.ikalagaming.factory.FactoryClientPlugin;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
@@ -15,8 +18,9 @@ import lombok.NonNull;
 
 /** The main menu we start up the game showing. */
 public class MainMenu extends GuiComponent {
+    private static final float BUTTON_WIDTH = 300;
+    private static final float BUTTON_HEIGHT = 100;
     private final GuiManager guiManager;
-
     private final String textSinglePlayer;
     private final String textMultiplayer;
     private final String textOptions;
@@ -47,17 +51,32 @@ public class MainMenu extends GuiComponent {
 
     @Override
     public void drawGui() {
+        int offset = guiManager.isEnabled(DEBUG_TOOLBAR.getName()) ? 20 : 0;
         var window = GraphicsManager.getWindow();
         windowSize.x = window.getWidth();
-        windowSize.y = window.getHeight();
-        int offset = guiManager.isEnabled("Debug Toolbar") ? 20 : 0;
+        windowSize.y = window.getHeight() - offset;
         ImGui.setNextWindowPos(0, offset, ImGuiCond.Always);
-        ImGui.setNextWindowSize(windowSize.x, windowSize.y - offset, ImGuiCond.Always);
+        ImGui.setNextWindowSize(windowSize.x, windowSize.y, ImGuiCond.Always);
         ImGui.begin("Main Menu", windowOpen, windowFlags);
 
-        if (ImGui.button(textSinglePlayer)) {}
-        if (ImGui.button(textMultiplayer)) {}
-        if (ImGui.button(textOptions)) {}
+        float centerX = windowSize.x / 2;
+        float centerY = windowSize.y / 2;
+
+        ImGui.setCursorPosX(centerX - BUTTON_WIDTH / 2);
+        ImGui.setCursorPosY(centerY - BUTTON_HEIGHT - 10);
+        if (ImGui.button(textSinglePlayer, BUTTON_WIDTH, BUTTON_HEIGHT)) {
+            guiManager.disable(MAIN_MENU.getName());
+        }
+        ImGui.setCursorPosX(centerX - BUTTON_WIDTH / 2);
+        ImGui.setCursorPosY(centerY);
+        if (ImGui.button(textMultiplayer, BUTTON_WIDTH, BUTTON_HEIGHT)) {
+            guiManager.disable(MAIN_MENU.getName());
+        }
+        ImGui.setCursorPosX(centerX - BUTTON_WIDTH / 2);
+        ImGui.setCursorPosY(centerY + BUTTON_HEIGHT + 10);
+        if (ImGui.button(textOptions, BUTTON_WIDTH, BUTTON_HEIGHT)) {
+            guiManager.disable(MAIN_MENU.getName());
+        }
         ImGui.end();
     }
 

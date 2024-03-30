@@ -1,10 +1,9 @@
 package com.ikalagaming.factory;
 
+import static com.ikalagaming.factory.gui.DefaultComponents.*;
+
 import com.ikalagaming.event.Listener;
-import com.ikalagaming.factory.gui.BiomeDebug;
-import com.ikalagaming.factory.gui.DebugToolbar;
-import com.ikalagaming.factory.gui.GuiManager;
-import com.ikalagaming.factory.gui.MainMenu;
+import com.ikalagaming.factory.gui.*;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
@@ -13,10 +12,8 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.HashSet;
-import java.util.MissingResourceException;
-import java.util.ResourceBundle;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Stream;
 
 /**
  * Handles the client-side parts of Lotomation.
@@ -63,12 +60,12 @@ public class FactoryClientPlugin extends Plugin {
     public boolean onEnable() {
         guiManager = new GuiManager();
         GraphicsManager.setGUI(guiManager);
-        guiManager.addComponent("Debug Toolbar", new DebugToolbar());
-        guiManager.addComponent("Biome Debug", new BiomeDebug());
-        guiManager.addComponent("Main Menu", new MainMenu(guiManager));
-        guiManager.enable("Debug Toolbar");
-        guiManager.enable("Biome Debug");
-        guiManager.enable("Main Menu");
+        guiManager.addComponent(DEBUG_TOOLBAR.getName(), new DebugToolbar());
+        guiManager.addComponent(BIOME_DEBUG.getName(), new BiomeDebug());
+        guiManager.addComponent(MAIN_MENU.getName(), new MainMenu(guiManager));
+        Stream.of(DEBUG_TOOLBAR, BIOME_DEBUG, MAIN_MENU)
+                .map(DefaultComponents::getName)
+                .forEach(guiManager::enable);
         return true;
     }
 
