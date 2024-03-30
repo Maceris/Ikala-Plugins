@@ -15,6 +15,7 @@ import lombok.NonNull;
 
 /** The main menu we start up the game showing. */
 public class MainMenu extends GuiComponent {
+    private final GuiManager guiManager;
 
     private final String textSinglePlayer;
     private final String textMultiplayer;
@@ -23,7 +24,8 @@ public class MainMenu extends GuiComponent {
     private final int windowFlags;
     private final ImBoolean windowOpen;
 
-    public MainMenu() {
+    public MainMenu(@NonNull GuiManager guiManager) {
+        this.guiManager = guiManager;
         windowSize = new ImVec2();
         windowOpen = new ImBoolean(true);
         textSinglePlayer =
@@ -48,8 +50,9 @@ public class MainMenu extends GuiComponent {
         var window = GraphicsManager.getWindow();
         windowSize.x = window.getWidth();
         windowSize.y = window.getHeight();
-        ImGui.setNextWindowPos(0, 20, ImGuiCond.Always);
-        ImGui.setNextWindowSize(windowSize.x, windowSize.y, ImGuiCond.Always);
+        int offset = guiManager.isEnabled("Debug Toolbar") ? 20 : 0;
+        ImGui.setNextWindowPos(0, offset, ImGuiCond.Always);
+        ImGui.setNextWindowSize(windowSize.x, windowSize.y - offset, ImGuiCond.Always);
         ImGui.begin("Main Menu", windowOpen, windowFlags);
 
         if (ImGui.button(textSinglePlayer)) {}

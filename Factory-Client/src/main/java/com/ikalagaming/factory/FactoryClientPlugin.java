@@ -38,7 +38,7 @@ public class FactoryClientPlugin extends Plugin {
 
     private Set<Listener> listeners;
 
-    private GuiManager guiManager;
+    @Getter private GuiManager guiManager;
 
     @Override
     public Set<Listener> getListeners() {
@@ -65,10 +65,10 @@ public class FactoryClientPlugin extends Plugin {
         GraphicsManager.setGUI(guiManager);
         guiManager.addComponent("Debug Toolbar", new DebugToolbar());
         guiManager.addComponent("Biome Debug", new BiomeDebug());
-        guiManager.addComponent("Main Menu", new MainMenu());
+        guiManager.addComponent("Main Menu", new MainMenu(guiManager));
         guiManager.enable("Debug Toolbar");
         guiManager.enable("Biome Debug");
-        guiManager.disable("Main Menu");
+        guiManager.enable("Main Menu");
         return true;
     }
 
