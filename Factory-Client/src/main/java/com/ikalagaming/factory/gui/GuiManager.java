@@ -5,7 +5,9 @@ import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
 
 import imgui.ImGui;
+import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -14,6 +16,9 @@ import java.util.Optional;
 /** Tracks and engages all the things we want to render with ImGui. */
 public class GuiManager implements GuiInstance {
     private final Map<String, GuiComponent> components;
+
+    /** The component sizes to use for UIs. */
+    @Getter @Setter @NonNull public SizeConstants sizes = SizeConstants.MEDIUM;
 
     public GuiManager() {
         components = new HashMap<>();

@@ -76,7 +76,7 @@ public class FactoryClientPlugin extends Plugin {
                     ResourceBundle.getBundle(
                             "com.ikalagaming.factory.strings", Localization.getLocale()));
         } catch (MissingResourceException missingResource) {
-            // don't localize this since it would fail anyways
+            // don't localize this since it would fail anyway
             log.warn("Locale not found for Factory-Core in onLoad()");
         }
         return true;

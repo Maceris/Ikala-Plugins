@@ -18,8 +18,6 @@ import lombok.NonNull;
 
 /** The main menu we start up the game showing. */
 public class MainMenu extends GuiComponent {
-    private static final float BUTTON_WIDTH = 300;
-    private static final float BUTTON_HEIGHT = 100;
     private final GuiManager guiManager;
     private final String textSinglePlayer;
     private final String textMultiplayer;
@@ -55,6 +53,8 @@ public class MainMenu extends GuiComponent {
         var window = GraphicsManager.getWindow();
         windowSize.x = window.getWidth();
         windowSize.y = window.getHeight() - offset;
+        SizeConstants sizes = guiManager.getSizes();
+
         ImGui.setNextWindowPos(0, offset, ImGuiCond.Always);
         ImGui.setNextWindowSize(windowSize.x, windowSize.y, ImGuiCond.Always);
         ImGui.begin("Main Menu", windowOpen, windowFlags);
@@ -62,21 +62,17 @@ public class MainMenu extends GuiComponent {
         float centerX = windowSize.x / 2;
         float centerY = windowSize.y / 2;
 
-        ImGui.setCursorPosX(centerX - BUTTON_WIDTH / 2);
-        ImGui.setCursorPosY(centerY - BUTTON_HEIGHT - 10);
-        if (ImGui.button(textSinglePlayer, BUTTON_WIDTH, BUTTON_HEIGHT)) {
+        ImGui.setCursorPosX(centerX - sizes.buttonWidth() / 2f);
+        ImGui.setCursorPosY(centerY - sizes.buttonHeight() - sizes.padding());
+        if (ImGui.button(textSinglePlayer, sizes.buttonWidth(), sizes.buttonHeight())) {
             guiManager.disable(MAIN_MENU.getName());
         }
-        ImGui.setCursorPosX(centerX - BUTTON_WIDTH / 2);
+        ImGui.setCursorPosX(centerX - sizes.buttonWidth() / 2f);
         ImGui.setCursorPosY(centerY);
-        if (ImGui.button(textMultiplayer, BUTTON_WIDTH, BUTTON_HEIGHT)) {
-            guiManager.disable(MAIN_MENU.getName());
-        }
-        ImGui.setCursorPosX(centerX - BUTTON_WIDTH / 2);
-        ImGui.setCursorPosY(centerY + BUTTON_HEIGHT + 10);
-        if (ImGui.button(textOptions, BUTTON_WIDTH, BUTTON_HEIGHT)) {
-            guiManager.disable(MAIN_MENU.getName());
-        }
+        if (ImGui.button(textMultiplayer, sizes.buttonWidth(), sizes.buttonHeight())) {}
+        ImGui.setCursorPosX(centerX - sizes.buttonWidth() / 2f);
+        ImGui.setCursorPosY(centerY + sizes.buttonHeight() + sizes.padding());
+        if (ImGui.button(textOptions, sizes.buttonWidth(), sizes.buttonHeight())) {}
         ImGui.end();
     }
 
