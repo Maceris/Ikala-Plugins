@@ -53,15 +53,15 @@ public class FactoryServerPlugin extends Plugin {
     }
 
     @Override
-    public boolean onEnable() {
-        // TODO(ches) don't actually start it until started up manually
-        server.start();
+    public boolean onDisable() {
+        server.stop();
         return true;
     }
 
     @Override
-    public boolean onDisable() {
-        server.stop();
+    public boolean onEnable() {
+        // TODO(ches) don't actually start it until started up manually
+        server.start();
         return true;
     }
 

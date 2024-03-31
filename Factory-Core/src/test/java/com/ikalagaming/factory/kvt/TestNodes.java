@@ -68,6 +68,102 @@ class TestNodes {
         assertEquals("test", ((List<String>) tree.get("string")).get(0));
     }
 
+    @Test
+    void testGetKeys() {
+        KVT tree = new Node();
+
+        tree.addBoolean("bool", true);
+        tree.addByte("byte", (byte) 1);
+        tree.addDouble("double", 1.02);
+        tree.addFloat("float", 2.34f);
+        tree.addInteger("int", 3);
+        tree.addLong("long", 4L);
+        tree.addShort("short", (short) 5);
+        tree.addString("string", "test");
+        tree.addNode("child1.child2");
+
+        tree.addBooleanArray("boolArray", List.of(true, false));
+        tree.addByteArray("byteArray", List.of((byte) 1));
+        tree.addDoubleArray("doubleArray", List.of(1.02));
+        tree.addFloatArray("floatArray", List.of(2.34f));
+        tree.addIntegerArray("intArray", List.of(3));
+        tree.addLongArray("longArray", List.of(4L));
+        tree.addShortArray("shortArray", List.of((short) 5));
+        tree.addStringArray("stringArray", List.of("test"));
+        tree.addNodeArray("childArray");
+
+        var expectedKeys =
+                Stream.of(
+                                "bool",
+                                "byte",
+                                "double",
+                                "float",
+                                "int",
+                                "long",
+                                "short",
+                                "string",
+                                "child1",
+                                "boolArray",
+                                "byteArray",
+                                "doubleArray",
+                                "floatArray",
+                                "intArray",
+                                "longArray",
+                                "shortArray",
+                                "stringArray",
+                                "childArray")
+                        .sorted()
+                        .toArray();
+
+        assertArrayEquals(expectedKeys, tree.getKeys().toArray());
+    }
+
+    @Test
+    void testGetTypes() {
+        KVT tree = new Node();
+
+        tree.addBoolean("bool", true);
+        tree.addByte("byte", (byte) 1);
+        tree.addDouble("double", 1.02);
+        tree.addFloat("float", 2.34f);
+        tree.addInteger("int", 3);
+        tree.addLong("long", 4L);
+        tree.addShort("short", (short) 5);
+        tree.addString("string", "test");
+        tree.addNode("child1.child2");
+
+        tree.addBooleanArray("boolArray", List.of(true, false));
+        tree.addByteArray("byteArray", List.of((byte) 1));
+        tree.addDoubleArray("doubleArray", List.of(1.02));
+        tree.addFloatArray("floatArray", List.of(2.34f));
+        tree.addIntegerArray("intArray", List.of(3));
+        tree.addLongArray("longArray", List.of(4L));
+        tree.addShortArray("shortArray", List.of((short) 5));
+        tree.addStringArray("stringArray", List.of("test"));
+        tree.addNodeArray("childArray");
+
+        assertEquals(Optional.of(NodeType.BOOLEAN), tree.getType("bool"));
+        assertEquals(Optional.of(NodeType.BYTE), tree.getType("byte"));
+        assertEquals(Optional.of(NodeType.DOUBLE), tree.getType("double"));
+        assertEquals(Optional.of(NodeType.FLOAT), tree.getType("float"));
+        assertEquals(Optional.of(NodeType.INTEGER), tree.getType("int"));
+        assertEquals(Optional.of(NodeType.LONG), tree.getType("long"));
+        assertEquals(Optional.of(NodeType.SHORT), tree.getType("short"));
+        assertEquals(Optional.of(NodeType.STRING), tree.getType("string"));
+        assertEquals(Optional.of(NodeType.NODE), tree.getType("child1"));
+        assertEquals(Optional.of(NodeType.NODE), tree.getType("child1.child2"));
+
+        assertEquals(Optional.of(NodeType.BOOLEAN_ARRAY), tree.getType("boolArray"));
+        assertEquals(Optional.of(NodeType.BYTE_ARRAY), tree.getType("byteArray"));
+        assertEquals(Optional.of(NodeType.DOUBLE_ARRAY), tree.getType("doubleArray"));
+        assertEquals(Optional.of(NodeType.FLOAT_ARRAY), tree.getType("floatArray"));
+        assertEquals(Optional.of(NodeType.INTEGER_ARRAY), tree.getType("intArray"));
+        assertEquals(Optional.of(NodeType.LONG_ARRAY), tree.getType("longArray"));
+        assertEquals(Optional.of(NodeType.SHORT_ARRAY), tree.getType("shortArray"));
+        assertEquals(Optional.of(NodeType.STRING_ARRAY), tree.getType("stringArray"));
+        assertEquals(Optional.of(NodeType.NODE_ARRAY), tree.getType("childArray"));
+    }
+
     /** Check if we can store regular values. */
     @Test
     void testNestedNodes() {
@@ -211,101 +307,5 @@ class TestNodes {
         assertNull(tree.getShortArray("DoesNotExist"));
         assertNull(tree.getString("DoesNotExist"));
         assertNull(tree.getStringArray("DoesNotExist"));
-    }
-
-    @Test
-    void testGetKeys() {
-        KVT tree = new Node();
-
-        tree.addBoolean("bool", true);
-        tree.addByte("byte", (byte) 1);
-        tree.addDouble("double", 1.02);
-        tree.addFloat("float", 2.34f);
-        tree.addInteger("int", 3);
-        tree.addLong("long", 4L);
-        tree.addShort("short", (short) 5);
-        tree.addString("string", "test");
-        tree.addNode("child1.child2");
-
-        tree.addBooleanArray("boolArray", List.of(true, false));
-        tree.addByteArray("byteArray", List.of((byte) 1));
-        tree.addDoubleArray("doubleArray", List.of(1.02));
-        tree.addFloatArray("floatArray", List.of(2.34f));
-        tree.addIntegerArray("intArray", List.of(3));
-        tree.addLongArray("longArray", List.of(4L));
-        tree.addShortArray("shortArray", List.of((short) 5));
-        tree.addStringArray("stringArray", List.of("test"));
-        tree.addNodeArray("childArray");
-
-        var expectedKeys =
-                Stream.of(
-                                "bool",
-                                "byte",
-                                "double",
-                                "float",
-                                "int",
-                                "long",
-                                "short",
-                                "string",
-                                "child1",
-                                "boolArray",
-                                "byteArray",
-                                "doubleArray",
-                                "floatArray",
-                                "intArray",
-                                "longArray",
-                                "shortArray",
-                                "stringArray",
-                                "childArray")
-                        .sorted()
-                        .toArray();
-
-        assertArrayEquals(expectedKeys, tree.getKeys().toArray());
-    }
-
-    @Test
-    void testGetTypes() {
-        KVT tree = new Node();
-
-        tree.addBoolean("bool", true);
-        tree.addByte("byte", (byte) 1);
-        tree.addDouble("double", 1.02);
-        tree.addFloat("float", 2.34f);
-        tree.addInteger("int", 3);
-        tree.addLong("long", 4L);
-        tree.addShort("short", (short) 5);
-        tree.addString("string", "test");
-        tree.addNode("child1.child2");
-
-        tree.addBooleanArray("boolArray", List.of(true, false));
-        tree.addByteArray("byteArray", List.of((byte) 1));
-        tree.addDoubleArray("doubleArray", List.of(1.02));
-        tree.addFloatArray("floatArray", List.of(2.34f));
-        tree.addIntegerArray("intArray", List.of(3));
-        tree.addLongArray("longArray", List.of(4L));
-        tree.addShortArray("shortArray", List.of((short) 5));
-        tree.addStringArray("stringArray", List.of("test"));
-        tree.addNodeArray("childArray");
-
-        assertEquals(Optional.of(NodeType.BOOLEAN), tree.getType("bool"));
-        assertEquals(Optional.of(NodeType.BYTE), tree.getType("byte"));
-        assertEquals(Optional.of(NodeType.DOUBLE), tree.getType("double"));
-        assertEquals(Optional.of(NodeType.FLOAT), tree.getType("float"));
-        assertEquals(Optional.of(NodeType.INTEGER), tree.getType("int"));
-        assertEquals(Optional.of(NodeType.LONG), tree.getType("long"));
-        assertEquals(Optional.of(NodeType.SHORT), tree.getType("short"));
-        assertEquals(Optional.of(NodeType.STRING), tree.getType("string"));
-        assertEquals(Optional.of(NodeType.NODE), tree.getType("child1"));
-        assertEquals(Optional.of(NodeType.NODE), tree.getType("child1.child2"));
-
-        assertEquals(Optional.of(NodeType.BOOLEAN_ARRAY), tree.getType("boolArray"));
-        assertEquals(Optional.of(NodeType.BYTE_ARRAY), tree.getType("byteArray"));
-        assertEquals(Optional.of(NodeType.DOUBLE_ARRAY), tree.getType("doubleArray"));
-        assertEquals(Optional.of(NodeType.FLOAT_ARRAY), tree.getType("floatArray"));
-        assertEquals(Optional.of(NodeType.INTEGER_ARRAY), tree.getType("intArray"));
-        assertEquals(Optional.of(NodeType.LONG_ARRAY), tree.getType("longArray"));
-        assertEquals(Optional.of(NodeType.SHORT_ARRAY), tree.getType("shortArray"));
-        assertEquals(Optional.of(NodeType.STRING_ARRAY), tree.getType("stringArray"));
-        assertEquals(Optional.of(NodeType.NODE_ARRAY), tree.getType("childArray"));
     }
 }

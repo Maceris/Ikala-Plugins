@@ -543,6 +543,15 @@ public interface KVT {
     }
 
     /**
+     * Fetch the list of child keys, but only one layer deep. Leaf nodes would return an empty list.
+     *
+     * @return The list of keys.
+     */
+    default List<String> getKeys() {
+        return List.of();
+    }
+
+    /**
      * Fetch a long value.
      *
      * @param name The name of the long.
@@ -669,15 +678,6 @@ public interface KVT {
      * @return The node type for the child node.
      */
     Optional<NodeType> getType(final @NonNull String name);
-
-    /**
-     * Fetch the list of child keys, but only one layer deep. Leaf nodes would return an empty list.
-     *
-     * @return The list of keys.
-     */
-    default List<String> getKeys() {
-        return List.of();
-    }
 
     /**
      * Checks if there is a child with the given name.

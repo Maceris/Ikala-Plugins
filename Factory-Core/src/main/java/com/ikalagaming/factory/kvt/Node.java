@@ -211,6 +211,11 @@ public class Node implements KVT {
     }
 
     @Override
+    public List<String> getKeys() {
+        return List.copyOf(this.values.keySet());
+    }
+
+    @Override
     public NodeType getType() {
         return NodeType.NODE;
     }
@@ -230,11 +235,6 @@ public class Node implements KVT {
                 .map(Node.class::cast)
                 .map(n -> n.values.get(lastPart))
                 .map(KVT::getType);
-    }
-
-    @Override
-    public List<String> getKeys() {
-        return List.copyOf(this.values.keySet());
     }
 
     @Override

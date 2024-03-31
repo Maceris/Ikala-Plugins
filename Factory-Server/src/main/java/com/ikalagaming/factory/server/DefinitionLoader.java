@@ -34,9 +34,8 @@ public class DefinitionLoader {
      *
      * @param blockRegistry Where we are registering the blocks.
      * @param itemRegistry Where we are registering the corresponding block items.
-     * @return Whether we successfully loaded all information.
      */
-    public static boolean loadBlocks(
+    public static void loadBlocks(
             @NonNull BlockRegistry blockRegistry, @NonNull ItemRegistry itemRegistry) {
         File blocks =
                 PluginFolder.getResource(
@@ -82,18 +81,15 @@ public class DefinitionLoader {
                     SafeResourceLoader.getString(
                             "BLOCK_INVALID_STRUCTURE", FactoryServerPlugin.getResourceBundle()),
                     e);
-            return false;
         }
-        return true;
     }
 
     /**
      * Load and process items from disk.
      *
      * @param itemRegistry Where we are registering items.
-     * @return Whether we successfully loaded all information.
      */
-    public static boolean loadItems(@NonNull ItemRegistry itemRegistry) {
+    public static void loadItems(@NonNull ItemRegistry itemRegistry) {
         File items =
                 PluginFolder.getResource(
                         FactoryServerPlugin.PLUGIN_NAME,
@@ -132,18 +128,15 @@ public class DefinitionLoader {
                     SafeResourceLoader.getString(
                             "ITEM_INVALID_STRUCTURE", FactoryServerPlugin.getResourceBundle()),
                     e);
-            return false;
         }
-        return true;
     }
 
     /**
      * Load and process materials from disk.
      *
      * @param materialRegistry Where we are registering materials.
-     * @return Whether we successfully loaded all information.
      */
-    public static boolean loadMaterials(@NonNull MaterialRegistry materialRegistry) {
+    public static void loadMaterials(@NonNull MaterialRegistry materialRegistry) {
         File materials =
                 PluginFolder.getResource(
                         FactoryServerPlugin.PLUGIN_NAME,
@@ -151,23 +144,21 @@ public class DefinitionLoader {
                         "materials.yml");
         Map<String, Object> materialMap = loadYaml(materials);
         if (materialMap.isEmpty()) {
-            return false;
+            return;
         }
         processMaterials(materialMap, materialRegistry);
 
         log.debug(
                 SafeResourceLoader.getString(
                         "LOADED_MATERIALS", FactoryServerPlugin.getResourceBundle()));
-        return true;
     }
 
     /**
      * Load the tags from files.
      *
      * @param tagRegistry Where we are registering tags.
-     * @return Whether we were successful.
      */
-    public static boolean loadTags(@NonNull TagRegistry tagRegistry) {
+    public static void loadTags(@NonNull TagRegistry tagRegistry) {
         File tags =
                 PluginFolder.getResource(
                         FactoryServerPlugin.PLUGIN_NAME,
@@ -176,13 +167,12 @@ public class DefinitionLoader {
 
         Map<String, Object> tagMap = loadYaml(tags);
         if (tagMap.isEmpty()) {
-            return false;
+            return;
         }
         processTags(tagMap, null, tagRegistry);
         log.debug(
                 SafeResourceLoader.getString(
                         "LOADED_TAGS", FactoryServerPlugin.getResourceBundle()));
-        return true;
     }
 
     /**

@@ -44,32 +44,6 @@ public interface ItemMatchCondition {
                         || allKvtFound(kvt, actual.getItem().getKvt());
             };
 
-    /**
-     * Check that all the KVT tags listed in the criteria are listed in the actual KVT data. Extra
-     * tags in the data are ignored.
-     *
-     * @param criteria The KVT tags that must be present.
-     * @param tree The tree to check.
-     * @return Whether we found all the expected tags and they matched.
-     */
-    private static boolean allKvtFound(@NonNull KVT criteria, @NonNull KVT tree) {
-        for (String key : criteria.getKeys()) {
-            var expectedType = criteria.getType(key);
-            if (!tree.hasChild(key) || !Objects.equals(expectedType, tree.getType(key))) {
-                return false;
-            }
-            if (expectedType.map(NodeType.NODE::equals).orElse(false)
-                    && !allKvtFound(criteria.getNode(key), tree.getNode(key))) {
-                return false;
-            }
-            if (!Objects.equals(criteria.get(key), tree.get(key))) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     /** Only check the item name. */
     ItemMatchCondition MATCH_NAME =
             (recipe, actual) ->
@@ -95,6 +69,32 @@ public interface ItemMatchCondition {
                     actual.getItem()
                             .getTags()
                             .containsAll(recipe.getItemStack().getItem().getTags());
+
+    /**
+     * Check that all the KVT tags listed in the criteria are listed in the actual KVT data. Extra
+     * tags in the data are ignored.
+     *
+     * @param criteria The KVT tags that must be present.
+     * @param tree The tree to check.
+     * @return Whether we found all the expected tags and they matched.
+     */
+    private static boolean allKvtFound(@NonNull KVT criteria, @NonNull KVT tree) {
+        for (String key : criteria.getKeys()) {
+            var expectedType = criteria.getType(key);
+            if (!tree.hasChild(key) || !Objects.equals(expectedType, tree.getType(key))) {
+                return false;
+            }
+            if (expectedType.map(NodeType.NODE::equals).orElse(false)
+                    && !allKvtFound(criteria.getNode(key), tree.getNode(key))) {
+                return false;
+            }
+            if (!Objects.equals(criteria.get(key), tree.get(key))) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     boolean matches(@NonNull InputItem recipeItem, @NonNull ItemStack actualItem);
 }
