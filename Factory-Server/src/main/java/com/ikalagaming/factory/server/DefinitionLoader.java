@@ -75,7 +75,9 @@ public class DefinitionLoader {
 
                 results = csvReader.readNext(BLOCK_HEADERS);
             }
-
+            log.debug(
+                    SafeResourceLoader.getString(
+                            "LOADED_BLOCKS", FactoryServerPlugin.getResourceBundle()));
         } catch (IOException | CsvValidationException | NullPointerException e) {
             log.warn(
                     SafeResourceLoader.getString(
@@ -122,7 +124,9 @@ public class DefinitionLoader {
 
                 results = csvReader.readNext(ITEM_HEADERS);
             }
-
+            log.debug(
+                    SafeResourceLoader.getString(
+                            "LOADED_ITEMS", FactoryServerPlugin.getResourceBundle()));
         } catch (IOException | CsvValidationException | NullPointerException e) {
             log.warn(
                     SafeResourceLoader.getString(
