@@ -67,12 +67,18 @@ public class MainMenu extends GuiComponent {
         if (ImGui.button(textSinglePlayer, sizes.buttonWidth(), sizes.buttonHeight())) {
             guiManager.disable(MAIN_MENU.getName());
         }
+
         ImGui.setCursorPosX(centerX - sizes.buttonWidth() / 2f);
         ImGui.setCursorPosY(centerY);
-        if (ImGui.button(textMultiplayer, sizes.buttonWidth(), sizes.buttonHeight())) {}
+        if (ImGui.button(textMultiplayer, sizes.buttonWidth(), sizes.buttonHeight())) {
+            // TODO(ches) Joining remote servers FACT-13
+        }
+
         ImGui.setCursorPosX(centerX - sizes.buttonWidth() / 2f);
         ImGui.setCursorPosY(centerY + sizes.buttonHeight() + sizes.padding());
-        if (ImGui.button(textOptions, sizes.buttonWidth(), sizes.buttonHeight())) {}
+        if (ImGui.button(textOptions, sizes.buttonWidth(), sizes.buttonHeight())) {
+            // TODO(ches) Options menu FACT-14
+        }
         ImGui.end();
     }
 

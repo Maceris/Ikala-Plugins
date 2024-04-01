@@ -17,10 +17,18 @@ public class Registries {
     /** Stores all the block definitions. */
     private final BlockRegistry blockRegistry;
 
+    /** Stores all the machine definitions. */
+    private final MachineRegistry machineRegistry;
+
+    /** Stores all the crafting recipes. */
+    private final RecipeRegistry recipeRegistry;
+
     public Registries() {
         tagRegistry = new TagRegistry();
         materialRegistry = new MaterialRegistry(tagRegistry);
         itemRegistry = new ItemRegistry(tagRegistry, materialRegistry);
         blockRegistry = new BlockRegistry(tagRegistry, materialRegistry);
+        machineRegistry = new MachineRegistry();
+        recipeRegistry = new RecipeRegistry();
     }
 }

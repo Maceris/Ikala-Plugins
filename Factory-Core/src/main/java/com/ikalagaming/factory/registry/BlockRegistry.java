@@ -1,7 +1,6 @@
 package com.ikalagaming.factory.registry;
 
 import com.ikalagaming.factory.FactoryPlugin;
-import com.ikalagaming.factory.item.ItemDefinition;
 import com.ikalagaming.factory.world.BlockDefinition;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -9,44 +8,12 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
 @Slf4j
 @RequiredArgsConstructor
-public class BlockRegistry {
-    /**
-     * A map from the item name in {@link RegistryConstants#FULLY_QUALIFIED_NAME_FORMAT} format to
-     * the {@link ItemDefinition definition} of the item.
-     */
-    private final Map<String, BlockDefinition> definitions = new HashMap<>();
+public class BlockRegistry extends RegistryTemplate<BlockDefinition> {
 
     private final TagRegistry tagRegistry;
     private final MaterialRegistry materialRegistry;
-
-    /**
-     * Look up item definition by fully qualified name.
-     *
-     * @param name The name of the item.
-     * @return An optional that will contain the definition, if it can be found.
-     */
-    public Optional<BlockDefinition> find(@NonNull String name) {
-        if (!definitions.containsKey(name)) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(definitions.get(name));
-    }
-
-    /**
-     * Fetch an unmodifiable copy of the list of the block names that currently exist.
-     *
-     * @return An unmodifiable copy of the block names.
-     */
-    public List<String> getNames() {
-        return List.copyOf(definitions.keySet());
-    }
 
     public boolean register(@NonNull String name, @NonNull BlockDefinition value) {
         if (!name.matches(RegistryConstants.FULLY_QUALIFIED_NAME_FORMAT)) {

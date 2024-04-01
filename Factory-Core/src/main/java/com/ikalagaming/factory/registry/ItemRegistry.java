@@ -8,45 +8,13 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
 /** Stores the definitions of items, */
 @Slf4j
 @RequiredArgsConstructor
-public class ItemRegistry {
-    /**
-     * A map from the item name in {@link RegistryConstants#FULLY_QUALIFIED_NAME_FORMAT} format to
-     * the {@link ItemDefinition definition} of the item.
-     */
-    private final Map<String, ItemDefinition> definitions = new HashMap<>();
+public class ItemRegistry extends RegistryTemplate<ItemDefinition> {
 
     private final TagRegistry tagRegistry;
     private final MaterialRegistry materialRegistry;
-
-    /**
-     * Look up item definition by fully qualified name.
-     *
-     * @param name The name of the item.
-     * @return An optional that will contain the definition, if it can be found.
-     */
-    public Optional<ItemDefinition> find(@NonNull String name) {
-        if (!definitions.containsKey(name)) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(definitions.get(name));
-    }
-
-    /**
-     * Fetch an unmodifiable copy of the list of the item names that currently exist.
-     *
-     * @return An unmodifiable copy of the item names.
-     */
-    public List<String> getNames() {
-        return List.copyOf(definitions.keySet());
-    }
 
     public boolean register(@NonNull String name, @NonNull ItemDefinition value) {
 

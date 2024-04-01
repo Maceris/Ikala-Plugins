@@ -14,7 +14,10 @@ import java.util.function.Consumer;
 /**
  * Represents a crafting recipe.
  *
- * @author Ches Burks
+ * @param inputs The ingredients for the recipe.
+ * @param outputs The results of the recipe.
+ * @param machines Which machines the recipe is applicable to.
+ * @param time The base time for the recipe, in ticks.
  */
 @Slf4j
 public record Recipe(
@@ -23,10 +26,16 @@ public record Recipe(
         @NonNull List<String> machines,
         long time) {
 
+    /**
+     * Start a builder for more readable recipe creation.
+     *
+     * @return The builder.
+     */
     public static RecipeBuilder builder() {
         return new RecipeBuilder();
     }
 
+    /** Used for building recipes step-by-step. */
     public static class RecipeBuilder {
         /**
          * Used to track the last list that was modified, to support {@link #and(Ingredient)} and
@@ -45,12 +54,15 @@ public record Recipe(
             }
         }
 
+        /** The i18n key for trying to use the wrong type for a list. */
         private static final String MISMATCHED_LIST = "LIST_MISMATCHED_TYPE";
+
         private List<String> machines;
         private long time;
         private List<Ingredient> inputs;
         private List<Ingredient> outputs;
 
+        /** The last list that we update, for use with {@link #and(Ingredient)}. */
         private LastList lastList;
 
         /** Non-public constructor so that it's not called directly. */
