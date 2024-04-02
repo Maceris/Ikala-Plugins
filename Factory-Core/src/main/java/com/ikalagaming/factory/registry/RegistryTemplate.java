@@ -7,6 +7,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * A generic map from string to an arbitrary type, which several registries use.
+ *
+ * @param <T> The type we are storing, typically a definition.
+ */
 public class RegistryTemplate<T> {
     /**
      * A map from the item name in {@link RegistryConstants#FULLY_QUALIFIED_NAME_FORMAT} format to

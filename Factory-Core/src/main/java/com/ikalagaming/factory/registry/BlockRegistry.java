@@ -15,7 +15,17 @@ public class BlockRegistry extends RegistryTemplate<BlockDefinition> {
     private final TagRegistry tagRegistry;
     private final MaterialRegistry materialRegistry;
 
-    public boolean register(@NonNull String name, @NonNull BlockDefinition value) {
+    /**
+     * Register a block. The name must be valid and not currently in use, and the definition must
+     * also be valid. Things like name formats, and whether tags/materials currently are registered
+     * will be taken into account.
+     *
+     * @param name The {@link RegistryConstants#FULLY_QUALIFIED_NAME_FORMAT fully qualified} name of
+     *     the block.
+     * @param definition The definition of the block.
+     * @return Whether we successfully registered the block.
+     */
+    public boolean register(@NonNull String name, @NonNull BlockDefinition definition) {
         if (!name.matches(RegistryConstants.FULLY_QUALIFIED_NAME_FORMAT)) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
@@ -29,18 +39,19 @@ public class BlockRegistry extends RegistryTemplate<BlockDefinition> {
             return false;
         }
 
-        if (!validate(value)) {
+        if (!validate(definition)) {
             return false;
         }
 
-        if (!name.equals(RegistryConstants.combineName(value.modName(), value.blockName()))) {
+        if (!name.equals(
+                RegistryConstants.combineName(definition.modName(), definition.blockName()))) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
                             "DEFINITION_MISMATCHED_NAME", FactoryPlugin.getResourceBundle(), name));
             return false;
         }
 
-        definitions.put(name, value);
+        definitions.put(name, definition);
         log.debug(
                 SafeResourceLoader.getStringFormatted(
                         "BLOCK_REGISTERED", FactoryPlugin.getResourceBundle(), name));
