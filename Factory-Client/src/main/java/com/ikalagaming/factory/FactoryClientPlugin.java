@@ -28,8 +28,8 @@ public class FactoryClientPlugin extends Plugin {
     /** The name of the plugin in Java for convenience, should match the name in plugin.yml. */
     public static final String PLUGIN_NAME = "Factory-Client";
 
-    /** The path to the folder where all the game save data will be stored. */
-    public static final String SAVE_FOLDER =
+    /** The path to the folder where all the game data will be stored. */
+    public static final String DATA_FOLDER =
             SystemProperties.getHomeDir() + File.separator + ".lotomation";
 
     /**
@@ -43,6 +43,15 @@ public class FactoryClientPlugin extends Plugin {
     private Set<Listener> listeners;
 
     @Getter private GuiManager guiManager;
+
+    private void createSaveFolder() {
+        File folder = new File(DATA_FOLDER);
+        if (!folder.exists() && (!folder.mkdir())) {
+            log.error(
+                    SafeResourceLoader.getStringFormatted(
+                            "DATA_FOLDER_CREATION_FAILED", resourceBundle, DATA_FOLDER));
+        }
+    }
 
     @Override
     public Set<Listener> getListeners() {
@@ -68,22 +77,13 @@ public class FactoryClientPlugin extends Plugin {
         createSaveFolder();
         guiManager = new GuiManager();
         GraphicsManager.setGUI(guiManager);
-        guiManager.addComponent(DEBUG_TOOLBAR.getName(), new DebugToolbar());
-        guiManager.addComponent(BIOME_DEBUG.getName(), new BiomeDebug());
-        guiManager.addComponent(MAIN_MENU.getName(), new MainMenu(guiManager));
+        guiManager.addWindow(DEBUG_TOOLBAR.getName(), new DebugToolbar());
+        guiManager.addWindow(BIOME_DEBUG.getName(), new BiomeDebug());
+        guiManager.addWindow(MAIN_MENU.getName(), new MainMenu(guiManager));
         Stream.of(DEBUG_TOOLBAR, BIOME_DEBUG, MAIN_MENU)
                 .map(DefaultComponents::getName)
                 .forEach(guiManager::enable);
         return true;
-    }
-
-    private void createSaveFolder() {
-        File folder = new File(SAVE_FOLDER);
-        if (!folder.exists() && (!folder.mkdir())) {
-            log.error(
-                    SafeResourceLoader.getStringFormatted(
-                            "SAVE_FOLDER_CREATION_FAILED", resourceBundle, SAVE_FOLDER));
-        }
     }
 
     @Override
@@ -94,7 +94,7 @@ public class FactoryClientPlugin extends Plugin {
                             "com.ikalagaming.factory.strings", Localization.getLocale()));
         } catch (MissingResourceException missingResource) {
             // don't localize this since it would fail anyway
-            log.warn("Locale not found for Factory-Core in onLoad()");
+            log.warn("Locale not found for Factory-Client in onLoad()");
         }
         return true;
     }

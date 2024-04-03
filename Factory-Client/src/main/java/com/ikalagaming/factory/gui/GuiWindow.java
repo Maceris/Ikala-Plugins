@@ -1,8 +1,11 @@
 package com.ikalagaming.factory.gui;
 
 import com.ikalagaming.graphics.GuiInstance;
+import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 
 /**
@@ -12,6 +15,10 @@ import lombok.Setter;
  */
 @Setter
 @Getter
-public abstract class GuiComponent implements GuiInstance {
-    public boolean visible;
+public abstract class GuiWindow implements GuiInstance {
+    /** Whether the window should show. */
+    protected boolean visible;
+
+    @Override
+    public void handleGuiInput(@NonNull Scene scene, @NonNull Window window) {}
 }

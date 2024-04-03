@@ -19,13 +19,10 @@ public interface GuiInstance {
     void drawGui();
 
     /**
-     * Process event inputs and returns a boolean to state whether the input has been processed. For
-     * example, if we display an overlapping window we may not be interested in passing input to the
-     * underlying game. You can use the return value to control that.
+     * Process GUI inputs, which might happen at a different frequency than rendering.
      *
      * @param scene The scene we are rendering.
      * @param window The window we are using.
-     * @return Whether the input has been processed.
      */
-    boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window);
+    void handleGuiInput(@NonNull Scene scene, @NonNull Window window);
 }

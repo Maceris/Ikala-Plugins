@@ -15,13 +15,13 @@ import java.util.Optional;
 
 /** Tracks and engages all the things we want to render with ImGui. */
 public class GuiManager implements GuiInstance {
-    private final Map<String, GuiComponent> components;
+    private final Map<String, GuiWindow> windows;
 
     /** The component sizes to use for UIs. */
-    @Getter @Setter @NonNull public SizeConstants sizes = SizeConstants.MEDIUM;
+    @Getter @Setter @NonNull private SizeConstants currentSizes = SizeConstants.MEDIUM;
 
     public GuiManager() {
-        components = new HashMap<>();
+        windows = new HashMap<>();
     }
 
     /**
@@ -31,8 +31,8 @@ public class GuiManager implements GuiInstance {
      * @param name The unique name of the component.
      * @param component The component.
      */
-    public void addComponent(@NonNull String name, @NonNull GuiComponent component) {
-        this.components.put(name, component);
+    public void addWindow(@NonNull String name, @NonNull GuiWindow component) {
+        this.windows.put(name, component);
     }
 
     /**
@@ -40,8 +40,8 @@ public class GuiManager implements GuiInstance {
      *
      * @param name The name od the component to remove.
      */
-    public void removeComponent(@NonNull String name) {
-        this.components.remove(name);
+    public void removeWindow(@NonNull String name) {
+        this.windows.remove(name);
     }
 
     /**
@@ -72,7 +72,7 @@ public class GuiManager implements GuiInstance {
      * @see #setEnabled(String, boolean)
      */
     public void setEnabled(@NonNull String name, boolean enabled) {
-        Optional.ofNullable(this.components.get(name))
+        Optional.ofNullable(this.windows.get(name))
                 .ifPresent(component -> component.setVisible(enabled));
     }
 
@@ -84,26 +84,23 @@ public class GuiManager implements GuiInstance {
      * @return Whether the specified component is enabled.
      */
     public boolean isEnabled(@NonNull String name) {
-        return Optional.ofNullable(this.components.get(name))
-                .map(GuiComponent::isVisible)
-                .orElse(false);
+        return Optional.ofNullable(this.windows.get(name)).map(GuiWindow::isVisible).orElse(false);
     }
 
     @Override
     public void drawGui() {
         ImGui.newFrame();
 
-        components.values().stream().filter(GuiComponent::isVisible).forEach(GuiInstance::drawGui);
+        windows.values().stream().filter(GuiWindow::isVisible).forEach(GuiInstance::drawGui);
 
         ImGui.endFrame();
         ImGui.render();
     }
 
     @Override
-    public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
-        return components.values().stream()
-                .filter(GuiComponent::isVisible)
-                .map(component -> component.handleGuiInput(scene, window))
-                .reduce(false, (a, b) -> a || b);
+    public void handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+        windows.values().stream()
+                .filter(GuiWindow::isVisible)
+                .forEach(component -> component.handleGuiInput(scene, window));
     }
 }

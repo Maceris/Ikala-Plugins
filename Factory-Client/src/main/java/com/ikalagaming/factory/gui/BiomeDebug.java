@@ -18,7 +18,7 @@ import java.awt.image.BufferedImage;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class BiomeDebug extends GuiComponent {
+public class BiomeDebug extends GuiWindow {
 
     private static byte[] intARGBtoByteRGBA(int[] argb) {
         byte[] rgba = new byte[argb.length * 4];
@@ -113,7 +113,7 @@ public class BiomeDebug extends GuiComponent {
     }
 
     @Override
-    public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+    public void handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
         ImGuiIO imGuiIO = ImGui.getIO();
         MouseInput mouseInput = window.getMouseInput();
         Vector2f mousePos = mouseInput.getCurrentPos();
@@ -206,7 +206,5 @@ public class BiomeDebug extends GuiComponent {
                                     .build());
             weirdness = generateTexture(weirdnessImage);
         }
-
-        return imGuiIO.getWantCaptureMouse() || imGuiIO.getWantCaptureKeyboard();
     }
 }

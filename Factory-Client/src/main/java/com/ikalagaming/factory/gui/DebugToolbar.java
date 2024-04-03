@@ -1,16 +1,13 @@
 package com.ikalagaming.factory.gui;
 
-import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.events.Shutdown;
 
 import imgui.ImColor;
 import imgui.ImGui;
 import imgui.flag.ImGuiCol;
-import lombok.NonNull;
 
 /** A menu bar at the top of the screen for debugging. */
-public class DebugToolbar extends GuiComponent {
+public class DebugToolbar extends GuiWindow {
     @Override
     public void drawGui() {
         if (ImGui.beginMainMenuBar()) {
@@ -25,10 +22,5 @@ public class DebugToolbar extends GuiComponent {
 
             ImGui.endMainMenuBar();
         }
-    }
-
-    @Override
-    public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
-        return false;
     }
 }

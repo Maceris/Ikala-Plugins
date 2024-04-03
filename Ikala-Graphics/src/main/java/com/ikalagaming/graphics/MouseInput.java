@@ -39,7 +39,7 @@ public class MouseInput {
     @Getter private Vector2f displVec;
 
     /**
-     * Whether or not the mouse is currently in the window.
+     * Whether the mouse is currently in the window.
      *
      * @return True if the mouse is in the window, false if it is outside.
      */

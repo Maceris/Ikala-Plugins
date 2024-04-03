@@ -147,7 +147,7 @@ public class GUIControls implements GuiInstance {
     }
 
     @Override
-    public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+    public void handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
         ImGuiIO imGuiIO = ImGui.getIO();
         MouseInput mouseInput = window.getMouseInput();
         Vector2f mousePos = mouseInput.getCurrentPos();
@@ -157,14 +157,12 @@ public class GUIControls implements GuiInstance {
         Render.configuration.setWireframe(wireframe.get());
         Render.configuration.setSelectedFilter(selectedFilter.get());
 
-        boolean consumed = imGuiIO.getWantCaptureMouse() || imGuiIO.getWantCaptureKeyboard();
-        if (consumed) {
+        if (imGuiIO.getWantCaptureMouse() || imGuiIO.getWantCaptureKeyboard()) {
             windowInventory.handleGuiInput(scene, window);
             windowCatalog.handleGuiInput(scene, window);
             windowSceneControls.handleGuiInput(scene, window);
             windowImages.handleGuiInput(scene, window);
         }
-        return consumed;
     }
 
     /**
