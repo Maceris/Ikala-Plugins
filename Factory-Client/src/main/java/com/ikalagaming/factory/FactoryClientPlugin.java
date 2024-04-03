@@ -7,11 +7,14 @@ import com.ikalagaming.factory.gui.*;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
+import com.ikalagaming.util.SafeResourceLoader;
+import com.ikalagaming.util.SystemProperties;
 
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.File;
 import java.util.*;
 import java.util.stream.Stream;
 
@@ -24,6 +27,10 @@ import java.util.stream.Stream;
 public class FactoryClientPlugin extends Plugin {
     /** The name of the plugin in Java for convenience, should match the name in plugin.yml. */
     public static final String PLUGIN_NAME = "Factory-Client";
+
+    /** The path to the folder where all the game save data will be stored. */
+    public static final String SAVE_FOLDER =
+            SystemProperties.getHomeDir() + File.separator + ".lotomation";
 
     /**
      * The resource bundle for the Graphics plugin.
@@ -58,6 +65,7 @@ public class FactoryClientPlugin extends Plugin {
 
     @Override
     public boolean onEnable() {
+        createSaveFolder();
         guiManager = new GuiManager();
         GraphicsManager.setGUI(guiManager);
         guiManager.addComponent(DEBUG_TOOLBAR.getName(), new DebugToolbar());
@@ -67,6 +75,15 @@ public class FactoryClientPlugin extends Plugin {
                 .map(DefaultComponents::getName)
                 .forEach(guiManager::enable);
         return true;
+    }
+
+    private void createSaveFolder() {
+        File folder = new File(SAVE_FOLDER);
+        if (!folder.exists() && (!folder.mkdir())) {
+            log.error(
+                    SafeResourceLoader.getStringFormatted(
+                            "SAVE_FOLDER_CREATION_FAILED", resourceBundle, SAVE_FOLDER));
+        }
     }
 
     @Override
