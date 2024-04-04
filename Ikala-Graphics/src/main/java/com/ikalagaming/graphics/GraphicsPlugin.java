@@ -40,7 +40,7 @@ public class GraphicsPlugin extends Plugin {
     @Override
     public Set<Listener> getListeners() {
         if (listeners == null) {
-            listeners = Collections.synchronizedSet(new HashSet<Listener>());
+            listeners = Collections.synchronizedSet(new HashSet<>());
         }
 
         return listeners;
@@ -73,7 +73,7 @@ public class GraphicsPlugin extends Plugin {
                     ResourceBundle.getBundle(
                             "com.ikalagaming.graphics.strings", Localization.getLocale()));
         } catch (MissingResourceException missingResource) {
-            // don't localize this since it would fail anyways
+            // don't localize this since it would fail anyway
             log.warn("Locale not found for Ikala-Graphics in onLoad()");
         }
         return true;
