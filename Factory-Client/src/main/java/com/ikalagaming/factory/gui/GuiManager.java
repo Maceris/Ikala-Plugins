@@ -1,13 +1,16 @@
 package com.ikalagaming.factory.gui;
 
 import com.ikalagaming.graphics.GuiInstance;
+import com.ikalagaming.graphics.MouseInput;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
 
 import imgui.ImGui;
+import imgui.ImGuiIO;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
+import org.joml.Vector2f;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -99,6 +102,13 @@ public class GuiManager implements GuiInstance {
 
     @Override
     public void handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+        ImGuiIO imGuiIO = ImGui.getIO();
+        MouseInput mouseInput = window.getMouseInput();
+        Vector2f mousePos = mouseInput.getCurrentPos();
+        imGuiIO.setMousePos(mousePos.x, mousePos.y);
+        imGuiIO.setMouseDown(0, mouseInput.isLeftButtonPressed());
+        imGuiIO.setMouseDown(1, mouseInput.isRightButtonPressed());
+
         windows.values().stream()
                 .filter(GuiWindow::isVisible)
                 .forEach(component -> component.handleGuiInput(scene, window));

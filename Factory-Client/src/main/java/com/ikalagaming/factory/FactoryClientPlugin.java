@@ -56,7 +56,7 @@ public class FactoryClientPlugin extends Plugin {
     @Override
     public Set<Listener> getListeners() {
         if (null == listeners) {
-            listeners = new HashSet<>();
+            listeners = Collections.synchronizedSet(new HashSet<>());
         }
         return listeners;
     }
@@ -77,10 +77,10 @@ public class FactoryClientPlugin extends Plugin {
         createSaveFolder();
         guiManager = new GuiManager();
         GraphicsManager.setGUI(guiManager);
-        guiManager.addWindow(DEBUG_TOOLBAR.getName(), new DebugToolbar());
+        guiManager.addWindow(DEBUG_TOOLBAR.getName(), new DebugToolbar(guiManager));
         guiManager.addWindow(BIOME_DEBUG.getName(), new BiomeDebug());
         guiManager.addWindow(MAIN_MENU.getName(), new MainMenu(guiManager));
-        Stream.of(DEBUG_TOOLBAR, BIOME_DEBUG, MAIN_MENU)
+        Stream.of(DEBUG_TOOLBAR, MAIN_MENU)
                 .map(DefaultComponents::getName)
                 .forEach(guiManager::enable);
         return true;

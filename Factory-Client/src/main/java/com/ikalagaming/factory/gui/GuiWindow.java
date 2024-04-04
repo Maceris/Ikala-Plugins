@@ -19,6 +19,5 @@ public abstract class GuiWindow implements GuiInstance {
     /** Whether the window should show. */
     protected boolean visible;
 
-    @Override
     public void handleGuiInput(@NonNull Scene scene, @NonNull Window window) {}
 }

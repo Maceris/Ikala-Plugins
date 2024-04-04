@@ -21,8 +21,8 @@ import lombok.NonNull;
 public class MainMenu extends GuiWindow {
     private final GuiManager guiManager;
     private final Button singlePlayer;
-    private final String textMultiplayer;
-    private final String textOptions;
+    private final Button multiPlayer;
+    private final Button options;
     private final ImVec2 windowSize;
     private final int windowFlags;
     private final ImBoolean windowOpen;
@@ -36,12 +36,15 @@ public class MainMenu extends GuiWindow {
                 SafeResourceLoader.getString(
                         "MENU_TEXT_SINGLE_PLAYER", FactoryClientPlugin.getResourceBundle());
         singlePlayer = new Button(textSinglePlayer);
-        textMultiplayer =
+        var textMultiplayer =
                 SafeResourceLoader.getString(
                         "MENU_TEXT_MULTI_PLAYER", FactoryClientPlugin.getResourceBundle());
-        textOptions =
+        multiPlayer = new Button(textMultiplayer);
+        var textOptions =
                 SafeResourceLoader.getString(
                         "MENU_TEXT_OPTIONS", FactoryClientPlugin.getResourceBundle());
+        options = new Button(textOptions);
+
         windowFlags =
                 ImGuiWindowFlags.NoScrollbar
                         | ImGuiWindowFlags.NoScrollWithMouse
@@ -52,34 +55,31 @@ public class MainMenu extends GuiWindow {
 
     @Override
     public void drawGui() {
-        int offset = guiManager.isEnabled(DEBUG_TOOLBAR.getName()) ? 20 : 0;
+        final int offset = guiManager.isEnabled(DEBUG_TOOLBAR.getName()) ? 20 : 0;
         var window = GraphicsManager.getWindow();
         windowSize.x = window.getWidth();
         windowSize.y = window.getHeight() - offset;
-        SizeConstants sizes = guiManager.getCurrentSizes();
+        final SizeConstants sizes = guiManager.getCurrentSizes();
 
         ImGui.setNextWindowPos(0, offset, ImGuiCond.Always);
         ImGui.setNextWindowSize(windowSize.x, windowSize.y, ImGuiCond.Always);
         ImGui.begin("Main Menu", windowOpen, windowFlags);
 
-        float centerX = windowSize.x / 2;
-        float centerY = windowSize.y / 2;
+        final float centerX = windowSize.x / 2;
+        final float centerY = windowSize.y / 2;
 
         ImGui.setCursorPosX(centerX - sizes.buttonWidth() / 2f);
         ImGui.setCursorPosY(centerY - sizes.buttonHeight() - sizes.padding());
-        singlePlayer.draw(sizes.buttonWidth(), sizes.buttonHeight());
+        singlePlayer.draw(sizes);
 
         ImGui.setCursorPosX(centerX - sizes.buttonWidth() / 2f);
         ImGui.setCursorPosY(centerY);
-        if (ImGui.button(textMultiplayer, sizes.buttonWidth(), sizes.buttonHeight())) {
-            // TODO(ches) Joining remote servers FACT-13
-        }
+        multiPlayer.draw(sizes);
 
         ImGui.setCursorPosX(centerX - sizes.buttonWidth() / 2f);
         ImGui.setCursorPosY(centerY + sizes.buttonHeight() + sizes.padding());
-        if (ImGui.button(textOptions, sizes.buttonWidth(), sizes.buttonHeight())) {
-            // TODO(ches) Options menu FACT-14
-        }
+        options.draw(sizes);
+
         ImGui.end();
     }
 
@@ -87,6 +87,12 @@ public class MainMenu extends GuiWindow {
     public void handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
         if (singlePlayer.checkResult()) {
             guiManager.disable(MAIN_MENU.getName());
+        }
+        if (multiPlayer.checkResult()) {
+            // TODO(ches) Joining remote servers FACT-13
+        }
+        if (options.checkResult()) {
+            // TODO(ches) Options menu FACT-14
         }
     }
 }

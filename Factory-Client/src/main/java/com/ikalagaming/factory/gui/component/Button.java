@@ -1,5 +1,7 @@
 package com.ikalagaming.factory.gui.component;
 
+import com.ikalagaming.factory.gui.SizeConstants;
+
 import imgui.ImGui;
 import lombok.RequiredArgsConstructor;
 
@@ -21,8 +23,8 @@ public class Button implements Component, Interactive {
     }
 
     @Override
-    public void draw(int width, int height) {
-        if (ImGui.button(text, width, height)) {
+    public void draw(final SizeConstants size) {
+        if (ImGui.button(text, size.buttonWidth(), size.buttonHeight())) {
             pressed = true;
         }
     }

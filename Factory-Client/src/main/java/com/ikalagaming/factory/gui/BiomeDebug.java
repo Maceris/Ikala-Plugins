@@ -2,17 +2,14 @@ package com.ikalagaming.factory.gui;
 
 import static org.lwjgl.opengl.GL11.glIsTexture;
 
-import com.ikalagaming.graphics.MouseInput;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.random.RandomGen;
 
 import imgui.ImGui;
-import imgui.ImGuiIO;
 import imgui.flag.ImGuiCond;
 import lombok.NonNull;
-import org.joml.Vector2f;
 
 import java.awt.image.BufferedImage;
 import java.nio.ByteBuffer;
@@ -114,13 +111,6 @@ public class BiomeDebug extends GuiWindow {
 
     @Override
     public void handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
-        ImGuiIO imGuiIO = ImGui.getIO();
-        MouseInput mouseInput = window.getMouseInput();
-        Vector2f mousePos = mouseInput.getCurrentPos();
-        imGuiIO.setMousePos(mousePos.x, mousePos.y);
-        imGuiIO.setMouseDown(0, mouseInput.isLeftButtonPressed());
-        imGuiIO.setMouseDown(1, mouseInput.isRightButtonPressed());
-
         if (generateRequested.compareAndExchange(true, false)) {
             long seed = RandomGen.generateSeed();
 
