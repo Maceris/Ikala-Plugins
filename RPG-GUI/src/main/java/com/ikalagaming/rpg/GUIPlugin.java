@@ -40,7 +40,7 @@ public class GUIPlugin extends Plugin {
     @Override
     public Set<Listener> getListeners() {
         if (listeners == null) {
-            listeners = Collections.synchronizedSet(new HashSet<Listener>());
+            listeners = Collections.synchronizedSet(new HashSet<>());
             listener = new GUIEventListener();
             listeners.add(listener);
         }
@@ -71,7 +71,7 @@ public class GUIPlugin extends Plugin {
                     ResourceBundle.getBundle(
                             "com.ikalagaming.rpg.strings", Localization.getLocale()));
         } catch (MissingResourceException missingResource) {
-            // don't localize this since it would fail anyways
+            // don't localize this since it would fail anyway
             log.warn("Locale not found for RPG-GUI in onLoad()");
         }
         return true;

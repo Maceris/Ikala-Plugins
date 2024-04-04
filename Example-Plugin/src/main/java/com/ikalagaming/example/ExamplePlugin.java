@@ -7,6 +7,7 @@ import com.ikalagaming.plugins.config.PluginConfig;
 
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -25,7 +26,7 @@ public class ExamplePlugin extends Plugin {
     @Override
     public Set<Listener> getListeners() {
         if (null == this.listeners) {
-            this.listeners = new HashSet<>();
+            this.listeners = Collections.synchronizedSet(new HashSet<>());
             this.listeners.add(new ExampleListener());
         }
         return this.listeners;

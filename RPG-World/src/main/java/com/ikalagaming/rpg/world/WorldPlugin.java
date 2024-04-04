@@ -3,6 +3,7 @@ package com.ikalagaming.rpg.world;
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.plugins.Plugin;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -20,7 +21,7 @@ public class WorldPlugin extends Plugin {
     @Override
     public Set<Listener> getListeners() {
         if (null == listeners) {
-            listeners = new HashSet<>();
+            listeners = Collections.synchronizedSet(new HashSet<>());
         }
         return listeners;
     }
