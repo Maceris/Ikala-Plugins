@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import java.util.List;
 
 /** Update the tag registry with new information. */
+@Getter
 @RequiredArgsConstructor
 public abstract class UpdateTagRegistry implements Request {
     /** What we need to do with the provided tags. */
@@ -22,7 +23,7 @@ public abstract class UpdateTagRegistry implements Request {
     }
 
     /** Determines what we need to do with the provided tags. */
-    @Getter @NonNull protected final UpdateType updateType;
+    @NonNull protected final UpdateType updateType;
 
     /**
      * Returns the list of tags that we need to update the registry with.
@@ -30,4 +31,9 @@ public abstract class UpdateTagRegistry implements Request {
      * @return The tags.
      */
     public abstract List<String> getTags();
+
+    @Override
+    public void handleUsing(@NonNull ServerRequestHandler handler) {
+        handler.handle(this);
+    }
 }

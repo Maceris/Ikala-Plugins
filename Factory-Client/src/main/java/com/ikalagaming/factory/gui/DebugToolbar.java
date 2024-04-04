@@ -1,9 +1,11 @@
 package com.ikalagaming.factory.gui;
 
+import com.ikalagaming.factory.FactoryClientPlugin;
 import com.ikalagaming.factory.gui.component.Checkbox;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.events.Shutdown;
+import com.ikalagaming.util.SafeResourceLoader;
 
 import imgui.ImColor;
 import imgui.ImGui;
@@ -17,7 +19,10 @@ public class DebugToolbar extends GuiWindow {
 
     public DebugToolbar(@NonNull GuiManager guiManager) {
         this.guiManager = guiManager;
-        biomeDebug = new Checkbox("Biome Debug", false);
+        var textBiomeDebug =
+                SafeResourceLoader.getString(
+                        "TEXT_BIOME_DEBUG", FactoryClientPlugin.getResourceBundle());
+        biomeDebug = new Checkbox(textBiomeDebug, false);
     }
 
     @Override

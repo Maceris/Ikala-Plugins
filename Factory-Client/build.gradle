@@ -53,6 +53,7 @@ configurations {
 
 dependencies {
 	implementation project(':Ikala-Core')
+	compileOnly project(':Factory-Core')
 	compileOnly project(':Ikala-Graphics')
 	compileOnly project(':Random')
 	
