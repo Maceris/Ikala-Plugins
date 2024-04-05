@@ -6,5 +6,6 @@ authors: [maceris]
 main-class: com.ikalagaming.factory.FactoryClientPlugin
 dependencies:
   - Factory-Core
+  - Factory-Server
   - Ikala-Graphics
   - Random
