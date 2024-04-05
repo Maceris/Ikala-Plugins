@@ -3,8 +3,8 @@ package com.ikalagaming.factory.server;
 import com.ikalagaming.event.EventHandler;
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.event.Order;
-import com.ikalagaming.factory.events.registry.*;
-import com.ikalagaming.factory.events.server.ServerLoaded;
+import com.ikalagaming.factory.registry.events.*;
+import com.ikalagaming.factory.server.events.ServerLoaded;
 
 import lombok.RequiredArgsConstructor;
 

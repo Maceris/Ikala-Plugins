@@ -1,8 +1,8 @@
 package com.ikalagaming.factory.server;
 
 import com.ikalagaming.factory.FactoryServerPlugin;
-import com.ikalagaming.factory.events.registry.LoadingTags;
 import com.ikalagaming.factory.registry.Registries;
+import com.ikalagaming.factory.registry.events.LoadingTags;
 import com.ikalagaming.factory.world.World;
 import com.ikalagaming.util.SafeResourceLoader;
 

@@ -1,4 +1,4 @@
-package com.ikalagaming.factory.events.server;
+package com.ikalagaming.factory.server.events;
 
 import com.ikalagaming.event.CancelableEvent;
 
