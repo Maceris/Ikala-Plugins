@@ -1,5 +1,6 @@
 package com.ikalagaming.factory.networking.request.server;
 
+import com.ikalagaming.factory.networking.base.Connection;
 import com.ikalagaming.factory.networking.base.Request;
 
 import lombok.Getter;
@@ -33,7 +34,12 @@ public abstract class UpdateTagRegistry implements Request {
     public abstract List<String> getTags();
 
     @Override
-    public void handleUsing(@NonNull ServerRequestHandler handler) {
+    public void handleUsing(@NonNull ServerConnection handler) {
         handler.handle(this);
+    }
+
+    @Override
+    public void sendUsing(@NonNull Connection connection) {
+        connection.dispatch(this);
     }
 }

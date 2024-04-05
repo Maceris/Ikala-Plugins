@@ -2,12 +2,12 @@ package com.ikalagaming.factory.networking.base;
 
 import lombok.NonNull;
 
-/** A connection to either a local or remote client/server, used to transmit data. */
-public abstract class Connection {
+/** One end of a connection, handles the requests that are sent or received. */
+public interface Connection {
     /**
-     * Send a request to the remote.
+     * Process a request from a client or server.
      *
-     * @param request The data to send.
+     * @param request The data to send or that was received.
      */
-    public abstract void send(@NonNull Request request);
+    void dispatch(@NonNull Request request);
 }

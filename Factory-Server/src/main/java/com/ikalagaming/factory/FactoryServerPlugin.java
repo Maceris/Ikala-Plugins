@@ -31,7 +31,7 @@ public class FactoryServerPlugin extends Plugin {
     @Getter @Setter private static ResourceBundle resourceBundle;
 
     /** The server that we will use, which starts out not running. */
-    private final Server server = new Server();
+    @Getter private final Server server = new Server();
 
     private Set<Listener> listeners;
 
