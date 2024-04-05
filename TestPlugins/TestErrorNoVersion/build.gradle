@@ -12,6 +12,7 @@ plugins {
 }
 
 import io.franzbecker.gradle.lombok.task.DelombokTask
+import org.yaml.snakeyaml.Yaml
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
@@ -19,7 +20,7 @@ java {
 }
 
 def resourcesDir = sourceSets.main.resources.srcDirs.first()
-def config = new org.yaml.snakeyaml.Yaml().load( new File("${resourcesDir}/plugin.yml").newInputStream() )
+def config = new Yaml().load( new File("${resourcesDir}/plugin.yml").newInputStream() )
 
 // Hardcoded since this is broken on purpose
 archivesBaseName = "${config.name}"

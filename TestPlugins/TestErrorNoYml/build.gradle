@@ -6,6 +6,7 @@ plugins {
 }
 
 import io.franzbecker.gradle.lombok.task.DelombokTask
+import org.yaml.snakeyaml.Yaml
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
