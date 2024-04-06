@@ -12,7 +12,7 @@ import java.util.Optional;
  *
  * @param <T> The type we are storing, typically a definition.
  */
-public class RegistryTemplate<T> {
+public class Registry<T> {
     /**
      * A map from the item name in {@link RegistryConstants#FULLY_QUALIFIED_NAME_FORMAT} format to
      * the definition.
@@ -49,5 +49,14 @@ public class RegistryTemplate<T> {
      */
     public List<String> getNames() {
         return List.copyOf(definitions.keySet());
+    }
+
+    /**
+     * Fetch an unmodifiable copy of the list of values that currently exist.
+     *
+     * @return An unmodifiable copy of the values.
+     */
+    public List<T> getValues() {
+        return List.copyOf(definitions.values());
     }
 }

@@ -76,8 +76,8 @@ class TestItemRegistry {
         tags = List.of("throwable");
         itemRegistry = new ItemRegistry(tagRegistry, materialRegistry);
 
-        given(tagRegistry.tagExists(anyString())).willReturn(true);
-        given(materialRegistry.materialExists(anyString())).willReturn(true);
+        given(tagRegistry.containsKey(anyString())).willReturn(true);
+        given(materialRegistry.containsKey(anyString())).willReturn(true);
     }
 
     @Test
@@ -134,7 +134,7 @@ class TestItemRegistry {
     void testRegisterInvalidMaterial() {
         var definition = new ItemDefinition(modName, itemName, material, tags, List.of(attribute));
 
-        given(materialRegistry.materialExists(anyString())).willReturn(false);
+        given(materialRegistry.containsKey(anyString())).willReturn(false);
 
         assertFalse(itemRegistry.register(combinedName, definition));
     }
@@ -160,7 +160,7 @@ class TestItemRegistry {
     void testRegisterInvalidTag() {
         var definition = new ItemDefinition(modName, itemName, material, tags, List.of(attribute));
 
-        given(tagRegistry.tagExists(anyString())).willReturn(false);
+        given(tagRegistry.containsKey(anyString())).willReturn(false);
 
         assertFalse(itemRegistry.register(combinedName, definition));
     }

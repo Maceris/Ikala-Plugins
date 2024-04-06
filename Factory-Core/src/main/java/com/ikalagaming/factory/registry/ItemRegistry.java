@@ -11,7 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 /** Stores the definitions of items, */
 @Slf4j
 @RequiredArgsConstructor
-public class ItemRegistry extends RegistryTemplate<ItemDefinition> {
+public class ItemRegistry extends Registry<ItemDefinition> {
 
     private final TagRegistry tagRegistry;
     private final MaterialRegistry materialRegistry;
@@ -83,14 +83,14 @@ public class ItemRegistry extends RegistryTemplate<ItemDefinition> {
                             value.itemName()));
             return false;
         }
-        if (value.material() != null && !materialRegistry.materialExists(value.material())) {
+        if (value.material() != null && !materialRegistry.containsKey(value.material())) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
                             "MAT_MISSING", FactoryPlugin.getResourceBundle(), value.material()));
             return false;
         }
         for (String tag : value.tags()) {
-            if (!tagRegistry.tagExists(tag)) {
+            if (!tagRegistry.containsKey(tag)) {
                 log.warn(
                         SafeResourceLoader.getStringFormatted(
                                 "TAG_MISSING",

@@ -10,9 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.*;
 
 @Slf4j
-public class TagRegistry {
-    /** Used to store and look tags up by name. */
-    private Map<String, Tag> tags = new HashMap<>();
+public class TagRegistry extends Registry<Tag> {
 
     /**
      * Add a tag to the list of tags. If the tag already exists, this will fail.
@@ -33,13 +31,13 @@ public class TagRegistry {
      * @return Whether we successfully added the tag.
      */
     public boolean addTag(@NonNull String tag, String parentName) {
-        if (tagExists(tag)) {
+        if (containsKey(tag)) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
                             "TAG_DUPLICATE", FactoryPlugin.getResourceBundle(), tag));
             return false;
         }
-        if (parentName != null && !tagExists(parentName)) {
+        if (parentName != null && !containsKey(parentName)) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
                             "TAG_MISSING_PARENT",
@@ -55,7 +53,7 @@ public class TagRegistry {
             parent = findTag(parentName).orElse(null);
         }
 
-        tags.put(tag, new Tag(tag, parent));
+        definitions.put(tag, new Tag(tag, parent));
 
         return true;
     }
@@ -68,40 +66,12 @@ public class TagRegistry {
      * @throws NullPointerException If the tag name is null.
      */
     public Optional<Tag> findTag(@NonNull String tagName) {
-        if (tags.containsKey(tagName)) {
-            return Optional.of(tags.get(tagName));
+        if (containsKey(tagName)) {
+            return Optional.of(definitions.get(tagName));
         }
         log.error(
                 SafeResourceLoader.getString("TAG_MISSING", FactoryPlugin.getResourceBundle()),
                 tagName);
         return Optional.empty();
-    }
-
-    /**
-     * Fetch an unmodifiable copy of the list of tag names that currently exist.
-     *
-     * @return An unmodifiable copy of the tag names.
-     */
-    public List<String> getTagNames() {
-        return List.copyOf(tags.keySet());
-    }
-
-    /**
-     * Fetch an unmodifiable copy of the list of tags that currently exist.
-     *
-     * @return An unmodifiable copy of the tag values.
-     */
-    public List<Tag> getTags() {
-        return List.copyOf(tags.values());
-    }
-
-    /**
-     * Checks if the specified tag exists.
-     *
-     * @param tag The tag we are looking for.
-     * @return Whether the tag exists.
-     */
-    public boolean tagExists(@NonNull String tag) {
-        return tags.containsKey(tag);
     }
 }

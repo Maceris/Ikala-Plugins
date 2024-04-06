@@ -9,19 +9,14 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 @Slf4j
 @RequiredArgsConstructor
-public class MaterialRegistry {
+public class MaterialRegistry extends Registry<Material> {
 
     private final TagRegistry tagRegistry;
-
-    /** Used to store and look materials up by name. */
-    private final Map<String, Material> materials = new HashMap<>();
 
     /**
      * Create a new material record without any tags or parent material.
@@ -55,13 +50,13 @@ public class MaterialRegistry {
      * @return Whether we successfully created a material.
      */
     public boolean addMaterial(@NonNull String name, List<String> materialTags, String parentName) {
-        if (materialExists(name)) {
+        if (containsKey(name)) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
                             "MAT_DUPLICATE", FactoryPlugin.getResourceBundle(), name));
             return false;
         }
-        if (parentName != null && !materialExists(parentName)) {
+        if (parentName != null && !containsKey(parentName)) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
                             "MAT_MISSING_PARENT",
@@ -96,7 +91,7 @@ public class MaterialRegistry {
         }
         result.deduplicateTags();
 
-        materials.put(name, result);
+        definitions.put(name, result);
 
         return true;
     }
@@ -120,41 +115,13 @@ public class MaterialRegistry {
      * @throws NullPointerException If the material name is null.
      */
     public Optional<Material> findMaterial(@NonNull String materialName) {
-        if (materials.containsKey(materialName)) {
-            return Optional.of(materials.get(materialName));
+        if (definitions.containsKey(materialName)) {
+            return Optional.of(definitions.get(materialName));
         }
         log.error(
                 SafeResourceLoader.getString("MATERIAL_MISSING", FactoryPlugin.getResourceBundle()),
                 materialName);
         return Optional.empty();
-    }
-
-    /**
-     * Fetch an unmodifiable copy of the list of material names that currently exist.
-     *
-     * @return An unmodifiable copy of the material names.
-     */
-    public List<String> getMaterialNames() {
-        return List.copyOf(materials.keySet());
-    }
-
-    /**
-     * Fetch an unmodifiable copy of the list of materials that currently exist.
-     *
-     * @return An unmodifiable copy of the material values.
-     */
-    public List<Material> getMaterials() {
-        return List.copyOf(materials.values());
-    }
-
-    /**
-     * Checks if the specified material exists.
-     *
-     * @param material The material we are looking for.
-     * @return Whether the material exists.
-     */
-    public boolean materialExists(@NonNull String material) {
-        return materials.containsKey(material);
     }
 
     /**
@@ -165,7 +132,7 @@ public class MaterialRegistry {
      * @return True if the material has the tag, false if it does not or either tag or material
      *     don't exist.
      */
-    public boolean materialHasTag(@NonNull Material material, @NonNull String tag) {
+    public static boolean materialHasTag(@NonNull Material material, @NonNull String tag) {
         return Tag.containsTag(tag, material.tags());
     }
 
@@ -178,10 +145,10 @@ public class MaterialRegistry {
      *     don't exist.
      */
     public boolean materialHasTag(@NonNull String materialName, @NonNull String tag) {
-        if (!tagRegistry.tagExists(tag) || !materials.containsKey(materialName)) {
+        if (!tagRegistry.containsKey(tag) || !definitions.containsKey(materialName)) {
             return false;
         }
 
-        return materialHasTag(materials.get(materialName), tag);
+        return materialHasTag(definitions.get(materialName), tag);
     }
 }

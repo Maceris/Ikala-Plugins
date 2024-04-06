@@ -65,7 +65,7 @@ class TestTagRegistry {
 
         final String parentName = "liquid";
         Assertions.assertTrue(tagRegistry.addTag(parentName));
-        Assertions.assertTrue(tagRegistry.tagExists(parentName));
+        Assertions.assertTrue(tagRegistry.containsKey(parentName));
 
         Optional<com.ikalagaming.factory.world.Tag> maybeLiquid = tagRegistry.findTag(parentName);
         Assertions.assertTrue(maybeLiquid.isPresent());
@@ -73,8 +73,8 @@ class TestTagRegistry {
 
         final String childName = "sludge";
         Assertions.assertTrue(tagRegistry.addTag(childName, parentName));
-        Assertions.assertTrue(tagRegistry.tagExists(parentName));
-        Assertions.assertTrue(tagRegistry.tagExists(childName));
+        Assertions.assertTrue(tagRegistry.containsKey(parentName));
+        Assertions.assertTrue(tagRegistry.containsKey(childName));
 
         Optional<Tag> maybeSludge = tagRegistry.findTag(childName);
         Assertions.assertTrue(maybeSludge.isPresent());

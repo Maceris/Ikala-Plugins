@@ -71,8 +71,8 @@ class TestBlockRegistry {
         tags = List.of("organic");
         blockRegistry = new BlockRegistry(tagRegistry, materialRegistry);
 
-        given(tagRegistry.tagExists(anyString())).willReturn(true);
-        given(materialRegistry.materialExists(anyString())).willReturn(true);
+        given(tagRegistry.containsKey(anyString())).willReturn(true);
+        given(materialRegistry.containsKey(anyString())).willReturn(true);
     }
 
     @Test
@@ -128,7 +128,7 @@ class TestBlockRegistry {
     void testRegisterInvalidMaterial() {
         var definition = new BlockDefinition(modName, blockName, material, tags);
 
-        given(materialRegistry.materialExists(anyString())).willReturn(false);
+        given(materialRegistry.containsKey(anyString())).willReturn(false);
 
         assertFalse(blockRegistry.register(combinedName, definition));
     }
@@ -153,7 +153,7 @@ class TestBlockRegistry {
     void testRegisterInvalidTag() {
         var definition = new BlockDefinition(modName, blockName, material, tags);
 
-        given(tagRegistry.tagExists(anyString())).willReturn(false);
+        given(tagRegistry.containsKey(anyString())).willReturn(false);
 
         assertFalse(blockRegistry.register(combinedName, definition));
     }
