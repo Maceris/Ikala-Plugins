@@ -56,6 +56,7 @@ dependencies {
 	implementation project(':Ikala-Core')
 	implementation project(':Factory-Core')
 	implementation "com.opencsv:opencsv:${openCSVVersion}"
+	implementation "io.netty:netty-all:${nettyVersion}"
 
 	// Testing
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"

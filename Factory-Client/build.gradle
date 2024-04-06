@@ -57,7 +57,8 @@ dependencies {
 	compileOnly project(':Factory-Core')
 	compileOnly project(':Ikala-Graphics')
 	compileOnly project(':Random')
-	
+	implementation "io.netty:netty-all:${nettyVersion}"
+
 	implementation "org.joml:joml:${jomlVersion}"
 	implementation "org.lwjgl:lwjgl:${lwjglVersion}"
 	implementation "org.lwjgl:lwjgl-glfw:${lwjglVersion}"
