@@ -59,7 +59,7 @@ public class TreeBinarySerialization {
         }
 
         /**
-         * If we have read all of the input.
+         * If we have read all the input.
          *
          * @return Whether we have read the total amount of bytes.
          */
@@ -210,7 +210,7 @@ public class TreeBinarySerialization {
             // NOTE(ches) The size that we just read.
             count.recordRead(8);
 
-            return Optional.ofNullable(TreeBinarySerialization.readNode(input, count, totalSize));
+            return Optional.of(TreeBinarySerialization.readNode(input, count, totalSize));
         } catch (IOException e) {
             log.warn(
                     SafeResourceLoader.getString(
@@ -634,7 +634,7 @@ public class TreeBinarySerialization {
         short value = 0;
 
         for (int i = 0; i < BYTES; ++i) {
-            value |= (data[i] & 0x00FF) << (8 * (BYTES - 1 - i));
+            value |= (short) ((data[i] & 0x00FF) << (8 * (BYTES - 1 - i)));
         }
 
         return value;
@@ -817,7 +817,7 @@ public class TreeBinarySerialization {
                 boolean value = values.get(index);
 
                 if (value) {
-                    result |= 1 << 7 - j;
+                    result |= (byte) (1 << 7 - j);
                 }
             }
             TreeBinarySerialization.writeByte(result, stream);
