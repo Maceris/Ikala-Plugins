@@ -53,11 +53,13 @@ configurations {
 }
 
 dependencies {
-	implementation project(':Ikala-Core')
+	compileOnly project(':Ikala-Core')
 	compileOnly project(':Random')
 	implementation "com.opencsv:opencsv:${openCSVVersion}"
+	implementation "io.netty:netty-all:${nettyVersion}"
 
 	// Testing
+	testImplementation project(':Ikala-Core')
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
 	testImplementation "org.mockito:mockito-core:${mockitoVersion}"
 	testImplementation "org.mockito:mockito-junit-jupiter:${mockitoVersion}"

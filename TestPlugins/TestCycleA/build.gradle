@@ -53,7 +53,7 @@ sourceSets {
  }
  
 dependencies {
-	implementation project(':Ikala-Core')
+	compileOnly project(':Ikala-Core')
 	
 	// Testing
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"

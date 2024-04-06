@@ -54,7 +54,7 @@ configurations {
 }
 
 dependencies {
-	implementation project(':Ikala-Core')
+	compileOnly project(':Ikala-Core')
 	
 	api "javax.xml.bind:jaxb-api:${jaxbAPIVersion}"
 	api "javax.activation:activation:${activationVersion}"

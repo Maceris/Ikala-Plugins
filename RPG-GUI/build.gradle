@@ -47,7 +47,7 @@ idea {
 }
 
 dependencies {
-	implementation project(':Ikala-Core')
+	compileOnly project(':Ikala-Core')
 	compileOnly project(':Ikala-Graphics')
 	compileOnly project(':RPG-Item')
 	compileOnly project(':Ikala-Attributes')

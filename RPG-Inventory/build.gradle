@@ -47,12 +47,13 @@ idea {
 }
 
 dependencies {
-	implementation project(':Ikala-Core')
+	compileOnly project(':Ikala-Core')
 	compileOnly project(':RPG-Item')
 	compileOnly project(':Random')
 	compileOnly project(':EntityComponentSystem')
 
 	// Testing
+	testImplementation project(':Ikala-Core')
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
 	testImplementation project(':RPG-Item')
 	testImplementation project(':Ikala-Database')

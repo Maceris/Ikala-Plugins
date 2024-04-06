@@ -44,7 +44,7 @@ idea {
 }
 
 dependencies {
-	implementation project(':Ikala-Core')
+	compileOnly project(':Ikala-Core')
 	compileOnly project(':TestCycleA')
 
 	// Testing

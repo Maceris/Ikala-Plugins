@@ -53,11 +53,10 @@ configurations {
 }
 
 dependencies {
-	implementation project(':Ikala-Core')
+	compileOnly project(':Ikala-Core')
 	compileOnly project(':Factory-Core')
 	compileOnly project(':Ikala-Graphics')
 	compileOnly project(':Random')
-	implementation "io.netty:netty-all:${nettyVersion}"
 
 	implementation "org.joml:joml:${jomlVersion}"
 	implementation "org.lwjgl:lwjgl:${lwjglVersion}"

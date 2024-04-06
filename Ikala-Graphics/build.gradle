@@ -51,7 +51,7 @@ idea {
 }
 
 dependencies {
-	implementation project(':Ikala-Core')
+	compileOnly project(':Ikala-Core')
 	compileOnly project(':Random')
 	
 	implementation "org.joml:joml:${jomlVersion}"
