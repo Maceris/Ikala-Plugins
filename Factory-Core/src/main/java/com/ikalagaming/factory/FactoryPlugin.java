@@ -1,6 +1,7 @@
 package com.ikalagaming.factory;
 
 import com.ikalagaming.event.Listener;
+import com.ikalagaming.factory.networking.RequestRegistry;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 
@@ -53,6 +54,13 @@ public class FactoryPlugin extends Plugin {
             // don't localize this since it would fail anyway
             log.warn("Locale not found for Factory-Core in onLoad()");
         }
+
+        try {
+            RequestRegistry.registerDefaults();
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
+
         return true;
     }
 

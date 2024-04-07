@@ -1,7 +1,7 @@
 package com.ikalagaming.factory.server;
 
 import com.ikalagaming.factory.FactoryServerPlugin;
-import com.ikalagaming.factory.networking.request.client.ClientConnection;
+import com.ikalagaming.factory.networking.request.serverbound.ServerBoundConnection;
 import com.ikalagaming.factory.registry.Registries;
 import com.ikalagaming.factory.registry.events.LoadingTags;
 import com.ikalagaming.factory.world.World;
@@ -20,7 +20,7 @@ public class Server {
     private World loadedWorld;
     @Getter private Registries registries;
     private final AtomicBoolean running;
-    private final List<ClientConnection> activeConnections;
+    private final List<ServerBoundConnection> activeConnections;
 
     public Server() {
         running = new AtomicBoolean(false);

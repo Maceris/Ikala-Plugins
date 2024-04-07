@@ -57,6 +57,7 @@ dependencies {
 	compileOnly project(':Random')
 	implementation "com.opencsv:opencsv:${openCSVVersion}"
 	implementation "io.netty:netty-all:${nettyVersion}"
+	implementation "com.google.guava:guava:${guavaVersion}"
 
 	// Testing
 	testImplementation project(':Ikala-Core')

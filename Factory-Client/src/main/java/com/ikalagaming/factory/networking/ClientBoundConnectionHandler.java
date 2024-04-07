@@ -1,13 +1,13 @@
 package com.ikalagaming.factory.networking;
 
 import com.ikalagaming.factory.networking.base.Request;
-import com.ikalagaming.factory.networking.request.server.ServerConnection;
-import com.ikalagaming.factory.networking.request.server.UpdateTagRegistry;
+import com.ikalagaming.factory.networking.request.clientbound.ClientBoundConnection;
+import com.ikalagaming.factory.networking.request.clientbound.UpdateTagRegistry;
 
 import lombok.NonNull;
 
 /** Handles requests from the server. */
-public class ServerConnectionHandler implements ServerConnection {
+public class ClientBoundConnectionHandler implements ClientBoundConnection {
 
     @Override
     public void dispatch(@NonNull Request request) {
