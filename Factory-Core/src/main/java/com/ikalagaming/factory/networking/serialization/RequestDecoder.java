@@ -1,8 +1,9 @@
-package com.ikalagaming.factory.networking;
+package com.ikalagaming.factory.networking.serialization;
 
 import com.ikalagaming.factory.FactoryPlugin;
 import com.ikalagaming.factory.kvt.KVT;
 import com.ikalagaming.factory.kvt.TreeBinarySerialization;
+import com.ikalagaming.factory.networking.RequestRegistry;
 import com.ikalagaming.factory.networking.base.Request;
 import com.ikalagaming.factory.networking.base.RequestDirection;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -17,6 +18,9 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.InputStream;
 import java.util.List;
 
+/**
+ * Decodes requests that were sent over the network.
+ */
 @Slf4j
 @RequiredArgsConstructor
 public class RequestDecoder extends ByteToMessageDecoder {

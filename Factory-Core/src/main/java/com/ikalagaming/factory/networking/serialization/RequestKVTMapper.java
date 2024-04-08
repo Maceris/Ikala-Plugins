@@ -1,4 +1,4 @@
-package com.ikalagaming.factory.networking;
+package com.ikalagaming.factory.networking.serialization;
 
 import com.ikalagaming.factory.FactoryPlugin;
 import com.ikalagaming.factory.kvt.KVT;
