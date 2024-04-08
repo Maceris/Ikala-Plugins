@@ -266,6 +266,12 @@ public class TreeStringSerialization {
         return tree.toString();
     }
 
+    /**
+     * Remove (a single set of) quotes from the ends of text, if they are there.
+     *
+     * @param text The string, which may or may not be surrounded by double quotes.
+     * @return The string without quotes on the outside.
+     */
     private static String trimQuotes(final @NonNull String text) {
         if (text.length() > 2 && text.startsWith("\"") && text.endsWith("\"")) {
             return text.substring(1, text.length() - 1);
