@@ -19,9 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.IOException;
 import java.io.OutputStream;
 
-/**
- * Encodes requests for sending them over the network.
- */
+/** Encodes requests for sending them over the network. */
 @Slf4j
 @RequiredArgsConstructor
 public class RequestEncoder extends MessageToByteEncoder<Request> {

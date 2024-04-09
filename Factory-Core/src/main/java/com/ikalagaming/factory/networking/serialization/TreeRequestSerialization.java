@@ -4,17 +4,19 @@ import com.ikalagaming.factory.FactoryPlugin;
 import com.ikalagaming.factory.kvt.KVT;
 import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.util.SafeResourceLoader;
+
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.ParameterizedType;
 import java.util.*;
 
 /**
- * Converts KVT data to and from requests. There are several limitations on the kinds of objects that can be serialized
- * this way. They must have a constructor including all fields with the same names as the fields
- * (see {@link lombok.AllArgsConstructor @AllArgsConstructor}), and only have fields that can be represented by KVTs.
- * It is expected that all arrays are represented as lists.
+ * Converts KVT data to and from requests. There are several limitations on the kinds of objects
+ * that can be serialized this way. They must have a constructor including all fields with the same
+ * names as the fields (see {@link lombok.AllArgsConstructor @AllArgsConstructor}), and only have
+ * fields that can be represented by KVTs. It is expected that all arrays are represented as lists.
  */
 @Slf4j
 public class TreeRequestSerialization {
@@ -25,17 +27,23 @@ public class TreeRequestSerialization {
         try {
             addToNode(input, result);
         } catch (IllegalAccessException e) {
-            log.error(SafeResourceLoader.getStringFormatted("ERROR_ENCODING_KVT",
-                    FactoryPlugin.getResourceBundle(), input.getClass().getSimpleName()));
+            log.error(
+                    SafeResourceLoader.getStringFormatted(
+                            "ERROR_ENCODING_KVT",
+                            FactoryPlugin.getResourceBundle(),
+                            input.getClass().getSimpleName()));
             return Optional.empty();
         }
 
         return Optional.empty();
     }
 
-    private static void addToNode(@NonNull Object input, @NonNull Node node) throws IllegalAccessException {
+    private static void addToNode(@NonNull Object input, @NonNull Node node)
+            throws IllegalAccessException {
         var clazz = input.getClass();
-        var fields = fieldCache.computeIfAbsent(clazz, TreeRequestSerialization::findFieldsAndSetAccessible);
+        var fields =
+                fieldCache.computeIfAbsent(
+                        clazz, TreeRequestSerialization::findFieldsAndSetAccessible);
 
         for (var entry : fields.entrySet()) {
             var name = entry.getKey();
@@ -80,19 +88,58 @@ public class TreeRequestSerialization {
                 continue;
             }
             if (List.class.isAssignableFrom(type)) {
+                Class<?> entryType =
+                        ((ParameterizedType) field.getGenericType())
+                                .getActualTypeArguments()[0].getClass();
 
-                //TODO(ches) lists
+                List<?> list = (List<?>) field.get(input);
+
+                if (entryType == Short.class) {
+                    node.addShortArray(name, (List<Short>) list);
+                    continue;
+                }
+                if (entryType == Integer.class) {
+                    node.addIntegerArray(name, (List<Integer>) list);
+                    continue;
+                }
+                if (entryType == Long.class) {
+                    node.addLongArray(name, (List<Long>) list);
+                    continue;
+                }
+                if (entryType == Float.class) {
+                    node.addFloatArray(name, (List<Float>) list);
+                    continue;
+                }
+                if (entryType == Double.class) {
+                    node.addDoubleArray(name, (List<Double>) list);
+                    continue;
+                }
+                if (entryType == Boolean.class) {
+                    node.addBooleanArray(name, (List<Boolean>) list);
+                    continue;
+                }
+                if (entryType == String.class) {
+                    node.addStringArray(name, (List<String>) list);
+                    continue;
+                }
+                if (entryType.isEnum()) {
+                    var enumList = (Class<List<? extends Enum<?>>>) type;
+                    var value = enumList.cast(field.get(input)).stream().map(Enum::name).toList();
+                    node.addStringArray(name, value);
+                    continue;
+                }
+                if (entryType == Node.class) {
+                    node.addNodeArray(name, (List<Node>) list);
+                    continue;
+                }
             }
-
-
             node.addNode(name);
-
-
         }
     }
 
     /**
-     * Find all the fields in a class and make them accessible, then fill out a map from names to field and return that.
+     * Find all the fields in a class and make them accessible, then fill out a map from names to
+     * field and return that.
      *
      * @param clazz The class we want fields for.
      * @return A map from name to corresponding field, which has been made accessible.
@@ -101,7 +148,7 @@ public class TreeRequestSerialization {
         Field[] fields = clazz.getDeclaredFields();
         Map<String, Field> fieldMap = new TreeMap<>();
         for (var field : fields) {
-            field.setAccessible(true);//NOSONAR
+            field.setAccessible(true); // NOSONAR
             fieldMap.put(field.getName(), field);
         }
         return fieldMap;
@@ -117,5 +164,4 @@ public class TreeRequestSerialization {
     private TreeRequestSerialization() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
     }
-
 }

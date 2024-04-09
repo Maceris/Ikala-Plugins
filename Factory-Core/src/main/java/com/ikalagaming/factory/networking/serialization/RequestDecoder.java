@@ -18,9 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.InputStream;
 import java.util.List;
 
-/**
- * Decodes requests that were sent over the network.
- */
+/** Decodes requests that were sent over the network. */
 @Slf4j
 @RequiredArgsConstructor
 public class RequestDecoder extends ByteToMessageDecoder {
