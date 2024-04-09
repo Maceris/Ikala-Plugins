@@ -7,6 +7,7 @@ import com.ikalagaming.factory.networking.base.Connection;
 import com.ikalagaming.factory.networking.base.Request;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +18,7 @@ import java.util.List;
 /** Update the tag registry with new information. */
 @Slf4j
 @Getter
-@RequiredArgsConstructor
+@AllArgsConstructor
 public class UpdateTagRegistry implements Request {
 
     /**
