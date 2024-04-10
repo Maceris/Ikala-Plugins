@@ -8,7 +8,9 @@ import com.ikalagaming.util.SafeResourceLoader;
 
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
+import lombok.Getter;
 import lombok.NonNull;
+import lombok.Synchronized;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Optional;
@@ -22,14 +24,30 @@ public class RequestRegistry {
     /** Requests headed towards the server. */
     private static final BiMap<Integer, Class<? extends Request>> serverBound = HashBiMap.create();
 
+    /** Whether we have set up the registry. */
+    @Getter private static boolean setUp;
+
     /**
      * Register all the default packets. Should only ever be called once, and internally by this
      * plugin.
      *
      * @throws IllegalArgumentException If there was a problem registering defaults.
      */
+    @Synchronized
     public static void registerDefaults() {
-        registerServerBound(UpdateTagRegistry.class);
+        if (setUp) {
+            return;
+        }
+        setUp = true;
+        registerClientBound(UpdateTagRegistry.class);
+    }
+
+    /** Clean out all definitions. Only really applicable for testing or reloading plugins. */
+    @Synchronized
+    public static void purge() {
+        setUp = false;
+        clientBound.clear();
+        serverBound.clear();
     }
 
     /**

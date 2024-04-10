@@ -66,6 +66,7 @@ public class FactoryPlugin extends Plugin {
 
     @Override
     public boolean onUnload() {
+        RequestRegistry.purge();
         FactoryPlugin.setResourceBundle(null);
         return true;
     }
