@@ -35,7 +35,7 @@ public class TreeRequestSerialization {
             return Optional.empty();
         }
 
-        return Optional.empty();
+        return Optional.of(result);
     }
 
     private static void addToNode(@NonNull Object input, @NonNull Node node)
