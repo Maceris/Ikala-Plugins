@@ -20,7 +20,7 @@ import java.util.*;
  */
 @Slf4j
 public class TreeRequestSerialization {
-    private static Map<Class<?>, Map<String, Field>> fieldCache = new HashMap<>();
+    private static final Map<Class<?>, Map<String, Field>> fieldCache = new HashMap<>();
 
     public static <T> Optional<Node> fromObject(@NonNull T input) {
         var result = new Node();
@@ -49,92 +49,107 @@ public class TreeRequestSerialization {
             var name = entry.getKey();
             var field = entry.getValue();
             var type = field.getType();
-            if (type == short.class || type == Short.class) {
-                node.addShort(name, field.getShort(input));
+            if (fetchSingleValue(input, node, type, name, field)) {
                 continue;
             }
-            if (type == int.class || type == Integer.class) {
-                node.addInteger(name, field.getInt(input));
+            if (List.class.isAssignableFrom(type) && (fetchList(input, node, type, name, field))) {
                 continue;
-            }
-            if (type == long.class || type == Long.class) {
-                node.addLong(name, field.getLong(input));
-                continue;
-            }
-            if (type == float.class || type == Float.class) {
-                node.addFloat(name, field.getFloat(input));
-                continue;
-            }
-            if (type == double.class || type == Double.class) {
-                node.addDouble(name, field.getDouble(input));
-                continue;
-            }
-            if (type == boolean.class || type == Boolean.class) {
-                node.addBoolean(name, field.getBoolean(input));
-                continue;
-            }
-            if (type == String.class) {
-                node.addString(name, (String) field.get(input));
-                continue;
-            }
-            if (type.isEnum()) {
-                var enumSubclass = (Class<? extends Enum<?>>) type;
-                var value = enumSubclass.cast(field.get(input)).name();
-                node.addString(name, value);
-                continue;
-            }
-            if (type == Node.class) {
-                node.addNode(name, (Node) field.get(input));
-                continue;
-            }
-            if (List.class.isAssignableFrom(type)) {
-                Class<?> entryType =
-                        ((ParameterizedType) field.getGenericType())
-                                .getActualTypeArguments()[0].getClass();
-
-                List<?> list = (List<?>) field.get(input);
-
-                if (entryType == Short.class) {
-                    node.addShortArray(name, (List<Short>) list);
-                    continue;
-                }
-                if (entryType == Integer.class) {
-                    node.addIntegerArray(name, (List<Integer>) list);
-                    continue;
-                }
-                if (entryType == Long.class) {
-                    node.addLongArray(name, (List<Long>) list);
-                    continue;
-                }
-                if (entryType == Float.class) {
-                    node.addFloatArray(name, (List<Float>) list);
-                    continue;
-                }
-                if (entryType == Double.class) {
-                    node.addDoubleArray(name, (List<Double>) list);
-                    continue;
-                }
-                if (entryType == Boolean.class) {
-                    node.addBooleanArray(name, (List<Boolean>) list);
-                    continue;
-                }
-                if (entryType == String.class) {
-                    node.addStringArray(name, (List<String>) list);
-                    continue;
-                }
-                if (entryType.isEnum()) {
-                    var enumList = (Class<List<? extends Enum<?>>>) type;
-                    var value = enumList.cast(field.get(input)).stream().map(Enum::name).toList();
-                    node.addStringArray(name, value);
-                    continue;
-                }
-                if (entryType == Node.class) {
-                    node.addNodeArray(name, (List<Node>) list);
-                    continue;
-                }
             }
             node.addNode(name);
         }
+    }
+
+    private static boolean fetchList(
+            Object input, Node node, Class<?> type, String name, Field field)
+            throws IllegalAccessException {
+        Class<?> entryType =
+                ((ParameterizedType) field.getGenericType()).getActualTypeArguments()[0].getClass();
+
+        List<?> list = (List<?>) field.get(input);
+
+        if (entryType == Short.class) {
+            node.addShortArray(name, (List<Short>) list);
+            return true;
+        }
+        if (entryType == Integer.class) {
+            node.addIntegerArray(name, (List<Integer>) list);
+            return true;
+        }
+        if (entryType == Long.class) {
+            node.addLongArray(name, (List<Long>) list);
+            return true;
+        }
+        if (entryType == Float.class) {
+            node.addFloatArray(name, (List<Float>) list);
+            return true;
+        }
+        if (entryType == Double.class) {
+            node.addDoubleArray(name, (List<Double>) list);
+            return true;
+        }
+        if (entryType == Boolean.class) {
+            node.addBooleanArray(name, (List<Boolean>) list);
+            return true;
+        }
+        if (entryType == String.class) {
+            node.addStringArray(name, (List<String>) list);
+            return true;
+        }
+        if (entryType.isEnum()) {
+            var enumList = (Class<List<? extends Enum<?>>>) type;
+            var value = enumList.cast(field.get(input)).stream().map(Enum::name).toList();
+            node.addStringArray(name, value);
+            return true;
+        }
+        if (entryType == Node.class) {
+            node.addNodeArray(name, (List<Node>) list);
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean fetchSingleValue(
+            Object input, Node node, Class<?> type, String name, Field field)
+            throws IllegalAccessException {
+        if (type == short.class || type == Short.class) {
+            node.addShort(name, field.getShort(input));
+            return true;
+        }
+        if (type == int.class || type == Integer.class) {
+            node.addInteger(name, field.getInt(input));
+            return true;
+        }
+        if (type == long.class || type == Long.class) {
+            node.addLong(name, field.getLong(input));
+            return true;
+        }
+        if (type == float.class || type == Float.class) {
+            node.addFloat(name, field.getFloat(input));
+            return true;
+        }
+        if (type == double.class || type == Double.class) {
+            node.addDouble(name, field.getDouble(input));
+            return true;
+        }
+        if (type == boolean.class || type == Boolean.class) {
+            node.addBoolean(name, field.getBoolean(input));
+            return true;
+        }
+        if (type == String.class) {
+            node.addString(name, (String) field.get(input));
+            return true;
+        }
+        if (type.isEnum()) {
+            var enumSubclass = (Class<? extends Enum<?>>) type;
+            var value = enumSubclass.cast(field.get(input)).name();
+            node.addString(name, value);
+            return true;
+        }
+        if (type == Node.class) {
+            node.addNode(name, (Node) field.get(input));
+            return true;
+        }
+        return false;
     }
 
     /**
