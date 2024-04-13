@@ -97,6 +97,10 @@ public class TreeRequestSerialization {
 
         List<?> list = (List<?>) field.get(input);
 
+        if (list == null) {
+            return true;
+        }
+
         if (entryType == Short.class) {
             node.addShortArray(name, (List<Short>) list);
             return true;
@@ -156,6 +160,11 @@ public class TreeRequestSerialization {
     private static boolean fetchSingleValueFromObject(
             Object input, Node node, Class<?> type, String name, Field field)
             throws IllegalAccessException {
+
+        if (field.get(input) == null) {
+            return true;
+        }
+
         if (type == short.class || type == Short.class) {
             node.addShort(name, field.getShort(input));
             return true;
@@ -250,6 +259,9 @@ public class TreeRequestSerialization {
             var name = entry.getKey();
             var fieldType = entry.getValue().getType();
             var value = fetchFieldFromKVT(tree, fieldType, name);
+            if (value == null) {
+                continue;
+            }
 
             if (List.class.isAssignableFrom(fieldType)) {
                 Class<?> entryType =
@@ -303,6 +315,9 @@ public class TreeRequestSerialization {
         if (type.isEnum()) {
             var enumSubclass = (Class<? extends Enum>) type;
             String value = tree.get(fieldName);
+            if (value == null) {
+                return null;
+            }
             return (T) Enum.valueOf(enumSubclass, value);
         }
         T result = tree.get(fieldName);

@@ -6,6 +6,7 @@ import com.ikalagaming.factory.FactoryPlugin;
 import com.ikalagaming.factory.kvt.KVT;
 import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.factory.networking.ComplexRequest;
+import com.ikalagaming.factory.networking.SimpleRequest;
 import com.ikalagaming.localization.Localization;
 
 import org.junit.jupiter.api.AfterAll;
@@ -118,7 +119,7 @@ class TestTreeRequestSerialization {
     }
 
     @Test
-    void testSerialization() {
+    void testComplexSerialization() {
         var encoded = TreeRequestSerialization.fromObject(expectedRequest);
         assertNotNull(encoded);
         assertTrue(encoded.isPresent());
@@ -149,5 +150,53 @@ class TestTreeRequestSerialization {
         assertArrayEquals(expectedShortList.toArray(), result.getShortList().toArray());
         assertArrayEquals(expectedStringList.toArray(), result.getStringList().toArray());
         assertArrayEquals(expectedEnumList.toArray(), result.getEnumList().toArray());
+    }
+
+    @Test
+    void testNullSerialization() {
+        var empty = new ComplexRequest();
+        var encoded = TreeRequestSerialization.fromObject(empty);
+        assertNotNull(encoded);
+        assertTrue(encoded.isPresent());
+
+        var decoded = TreeRequestSerialization.toObject(encoded.get(), ComplexRequest.class);
+        assertNotNull(decoded);
+        assertTrue(decoded.isPresent());
+
+        var result = decoded.get();
+        assertFalse(result.isBoolValue());
+        assertEquals((byte) 0, result.getByteValue());
+        assertEquals(0d, result.getDoubleValue());
+        assertEquals(0f, result.getFloatValue());
+        assertEquals(0, result.getIntValue());
+        assertEquals(0L, result.getLongValue());
+        assertNull(result.getKvtValue());
+        assertEquals((short) 0, result.getShortValue());
+        assertNull(result.getStringValue());
+        assertNull(result.getEnumValue());
+
+        assertNull(result.getBoolList());
+        assertNull(result.getByteList());
+        assertNull(result.getDoubleList());
+        assertNull(result.getFloatList());
+        assertNull(result.getIntList());
+        assertNull(result.getLongList());
+        assertNull(result.getKvtList());
+        assertNull(result.getShortList());
+        assertNull(result.getStringList());
+        assertNull(result.getEnumList());
+    }
+
+    @Test
+    void testSimpleSerialization() {
+        var original = new SimpleRequest();
+
+        var encoded = TreeRequestSerialization.fromObject(original);
+        assertNotNull(encoded);
+        assertTrue(encoded.isPresent());
+
+        var decoded = TreeRequestSerialization.toObject(encoded.get(), SimpleRequest.class);
+        assertNotNull(decoded);
+        assertTrue(decoded.isPresent());
     }
 }

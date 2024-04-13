@@ -9,7 +9,7 @@ import lombok.NonNull;
 
 import java.util.List;
 
-/** A request used to test serialization. */
+/** A request with maximal contents used to test serialization. */
 @Data
 public class ComplexRequest implements Request {
     @Override
