@@ -17,12 +17,24 @@ import java.util.*;
  * that can be serialized this way. They must have a constructor including all fields with the same
  * names as the fields (see {@link lombok.AllArgsConstructor @AllArgsConstructor}), and only have
  * fields that can be represented by KVTs. It is expected that all arrays are represented as lists.
+ * Any child objects must have the same properties.
  */
 @Slf4j
 public class TreeRequestSerialization {
     private static final Map<Class<?>, Map<String, Field>> fieldCache = new HashMap<>();
 
-    public static <T> Optional<Node> fromObject(@NonNull T input) {
+    /**
+     * Convert an object into KVT data. There are several limitations on the kinds of objects that
+     * can be serialized this way. They must have a constructor including all fields with the same
+     * names as the fields (see {@link lombok.AllArgsConstructor @AllArgsConstructor}), and only
+     * have fields that can be represented by KVTs. It is expected that all arrays are represented
+     * as lists. Any child objects * must have the same properties.
+     *
+     * @param input The input object.
+     * @return An optional containing KVT data, or an empty optional if we could not convert the
+     *     object.
+     */
+    public static Optional<Node> fromObject(@NonNull Object input) {
         var result = new Node();
         try {
             addToNode(input, result);
@@ -38,6 +50,13 @@ public class TreeRequestSerialization {
         return Optional.of(result);
     }
 
+    /**
+     * Add an object to a specified node, which may recursively handle sub-objects.
+     *
+     * @param input The input object.
+     * @param node The node that corresponds to this object in a KVT.
+     * @throws IllegalAccessException If we cannot make fields accessible or read from them.
+     */
     private static void addToNode(@NonNull Object input, @NonNull Node node)
             throws IllegalAccessException {
         var clazz = input.getClass();
@@ -49,17 +68,29 @@ public class TreeRequestSerialization {
             var name = entry.getKey();
             var field = entry.getValue();
             var type = field.getType();
-            if (fetchSingleValue(input, node, type, name, field)) {
+            if (fetchSingleValueFromObject(input, node, type, name, field)) {
                 continue;
             }
-            if (List.class.isAssignableFrom(type) && (fetchList(input, node, type, name, field))) {
+            if (List.class.isAssignableFrom(type)
+                    && (fetchListFromObject(input, node, type, name, field))) {
                 continue;
             }
             node.addNode(name);
         }
     }
 
-    private static boolean fetchList(
+    /**
+     * Fetch a list of values from an object and store it in KVT.
+     *
+     * @param input The object we are converting.
+     * @param node The KVT node we are storing data in.
+     * @param type The type of the field.
+     * @param name The name of the field.
+     * @param field The field itself.
+     * @return If we found a value that could be mapped.
+     * @throws IllegalAccessException If we have issues casting things.
+     */
+    private static boolean fetchListFromObject(
             Object input, Node node, Class<?> type, String name, Field field)
             throws IllegalAccessException {
         Class<?> entryType =
@@ -108,7 +139,18 @@ public class TreeRequestSerialization {
         return false;
     }
 
-    private static boolean fetchSingleValue(
+    /**
+     * Fetch a single value from an object and store it in KVT.
+     *
+     * @param input The object we are converting.
+     * @param node The KVT node we are storing data in.
+     * @param type The type of the field.
+     * @param name The name of the field.
+     * @param field The field itself.
+     * @return If we found a value that could be mapped.
+     * @throws IllegalAccessException If we have issues casting things.
+     */
+    private static boolean fetchSingleValueFromObject(
             Object input, Node node, Class<?> type, String name, Field field)
             throws IllegalAccessException {
         if (type == short.class || type == Short.class) {
