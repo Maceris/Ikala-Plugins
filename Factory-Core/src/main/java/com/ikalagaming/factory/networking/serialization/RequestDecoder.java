@@ -45,7 +45,7 @@ public class RequestDecoder extends ByteToMessageDecoder {
             KVT contents =
                     TreeBinarySerialization.read(input).orElseThrow(IllegalArgumentException::new);
 
-            var result = RequestKVTMapper.fromKVT(contents, type);
+            var result = TreeRequestSerialization.toObject(contents, type);
             out.add(result);
         } catch (IllegalArgumentException ignored) {
             log.error(

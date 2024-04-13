@@ -1,7 +1,6 @@
 package com.ikalagaming.factory.networking.serialization;
 
 import com.ikalagaming.factory.FactoryPlugin;
-import com.ikalagaming.factory.kvt.KVT;
 import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.factory.kvt.TreeBinarySerialization;
 import com.ikalagaming.factory.networking.RequestRegistry;
@@ -41,10 +40,12 @@ public class RequestEncoder extends MessageToByteEncoder<Request> {
         }
 
         try (OutputStream output = new ByteBufOutputStream(out)) {
-            KVT tree = RequestKVTMapper.toKVT(msg);
+            Node tree =
+                    TreeRequestSerialization.fromObject(msg)
+                            .orElseThrow(IllegalArgumentException::new);
 
             output.write(id);
-            TreeBinarySerialization.write((Node) tree, output);
+            TreeBinarySerialization.write(tree, output);
         } catch (IllegalArgumentException ignored) {
             log.error(
                     SafeResourceLoader.getStringFormatted(
