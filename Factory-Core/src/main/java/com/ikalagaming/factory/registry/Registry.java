@@ -20,6 +20,16 @@ public class Registry<T> {
     protected final Map<String, T> definitions = new HashMap<>();
 
     /**
+     * Returns true if this registry contains a definition for the specified key.
+     *
+     * @param name The name of the key.
+     * @return true if this registry contains a mapping for the specified key.
+     */
+    public boolean containsKey(@NonNull String name) {
+        return definitions.containsKey(name);
+    }
+
+    /**
      * Look up the definition by fully qualified name.
      *
      * @param name The name.
@@ -30,16 +40,6 @@ public class Registry<T> {
             return Optional.empty();
         }
         return Optional.ofNullable(definitions.get(name));
-    }
-
-    /**
-     * Returns true if this registry contains a definition for the specified key.
-     *
-     * @param name The name of the key.
-     * @return true if this registry contains a mapping for the specified key.
-     */
-    public boolean containsKey(@NonNull String name) {
-        return definitions.containsKey(name);
     }
 
     /**

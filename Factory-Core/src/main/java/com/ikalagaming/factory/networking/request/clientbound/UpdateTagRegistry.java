@@ -1,6 +1,5 @@
 package com.ikalagaming.factory.networking.request.clientbound;
 
-import com.ikalagaming.factory.networking.base.Connection;
 import com.ikalagaming.factory.networking.base.Request;
 
 import lombok.Data;
@@ -31,12 +30,7 @@ public class UpdateTagRegistry implements Request {
     private List<String> tags;
 
     @Override
-    public void handleUsing(@NonNull ClientBoundConnection handler) {
+    public void handleUsing(@NonNull ClientBoundRequestHandler handler) {
         handler.handle(this);
-    }
-
-    @Override
-    public void sendUsing(@NonNull Connection connection) {
-        connection.dispatch(this);
     }
 }

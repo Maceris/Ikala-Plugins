@@ -23,30 +23,6 @@ class TestTreeRequestSerialization {
 
     private static MockedStatic<FactoryPlugin> fakePlugin;
 
-    private boolean expectedBoolValue;
-    private byte expectedByteValue;
-    private double expectedDoubleValue;
-    private float expectedFloatValue;
-    private int expectedIntValue;
-    private long expectedLongValue;
-    private KVT expectedKvtValue;
-    private short expectedShortValue;
-    private String expectedStringValue;
-    private ComplexRequest.SampleEnum expectedEnumValue;
-
-    private List<Boolean> expectedBoolList;
-    private List<Byte> expectedByteList;
-    private List<Double> expectedDoubleList;
-    private List<Float> expectedFloatList;
-    private List<Integer> expectedIntList;
-    private List<Long> expectedLongList;
-    private List<KVT> expectedKvtList;
-    private List<Short> expectedShortList;
-    private List<String> expectedStringList;
-    private List<ComplexRequest.SampleEnum> expectedEnumList;
-
-    private ComplexRequest expectedRequest;
-
     @BeforeAll
     static void setUpBeforeClass() {
         var bundle =
@@ -61,6 +37,32 @@ class TestTreeRequestSerialization {
     static void tearDownAfterClass() {
         fakePlugin.close();
     }
+
+    private boolean expectedBoolValue;
+    private byte expectedByteValue;
+    private double expectedDoubleValue;
+    private float expectedFloatValue;
+    private int expectedIntValue;
+    private long expectedLongValue;
+    private KVT expectedKvtValue;
+    private short expectedShortValue;
+
+    private String expectedStringValue;
+    private ComplexRequest.SampleEnum expectedEnumValue;
+    private List<Boolean> expectedBoolList;
+    private List<Byte> expectedByteList;
+    private List<Double> expectedDoubleList;
+    private List<Float> expectedFloatList;
+    private List<Integer> expectedIntList;
+    private List<Long> expectedLongList;
+    private List<KVT> expectedKvtList;
+    private List<Short> expectedShortList;
+
+    private List<String> expectedStringList;
+
+    private List<ComplexRequest.SampleEnum> expectedEnumList;
+
+    private ComplexRequest expectedRequest;
 
     @BeforeEach
     void setup() {

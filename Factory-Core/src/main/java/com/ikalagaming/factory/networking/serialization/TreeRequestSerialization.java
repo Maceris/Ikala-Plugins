@@ -23,33 +23,6 @@ public class TreeRequestSerialization {
     private static final Map<Class<?>, Map<String, Field>> fieldCache = new HashMap<>();
 
     /**
-     * Convert an object into KVT data. There are several limitations on the kinds of objects that
-     * can be serialized this way. They must have a no-arg constructor, as well as setter methods
-     * based on the field names (see {@link lombok.Setter @Setter}), and only have fields that can
-     * be represented by KVTs. It is expected that all arrays are represented as lists. Any child
-     * objects must have the same properties.
-     *
-     * @param input The input object.
-     * @return An optional containing KVT data, or an empty optional if we could not convert the
-     *     object.
-     */
-    public static Optional<Node> fromObject(@NonNull Object input) {
-        var result = new Node();
-        try {
-            addToNode(input, result);
-        } catch (IllegalAccessException e) {
-            log.error(
-                    SafeResourceLoader.getStringFormatted(
-                            "ERROR_ENCODING_KVT",
-                            FactoryPlugin.getResourceBundle(),
-                            input.getClass().getSimpleName()));
-            return Optional.empty();
-        }
-
-        return Optional.of(result);
-    }
-
-    /**
      * Add an object to a specified node, which may recursively handle sub-objects.
      *
      * @param input The input object.
@@ -76,6 +49,106 @@ public class TreeRequestSerialization {
             }
             node.addNode(name);
         }
+    }
+
+    /**
+     * Construct an object of the specified type from KVT data.
+     *
+     * @param tree The data used to construct the object.
+     * @param type The class we want to construct.
+     * @return The object, or null if we failed to construct it.
+     * @param <T> The type we are constructing.
+     * @throws InvocationTargetException If an error occurs.
+     * @throws InstantiationException If an error occurs.
+     * @throws IllegalAccessException If an error occurs.
+     * @throws NoSuchMethodException If an error occurs.
+     */
+    private static <T> T constructObject(final @NonNull KVT tree, final @NonNull Class<T> type)
+            throws InvocationTargetException,
+                    InstantiationException,
+                    IllegalAccessException,
+                    NoSuchMethodException {
+
+        T result = type.getConstructor().newInstance();
+
+        var fields =
+                fieldCache.computeIfAbsent(
+                        type, TreeRequestSerialization::findFieldsAndSetAccessible);
+
+        for (var entry : fields.entrySet()) {
+            var name = entry.getKey();
+            var fieldType = entry.getValue().getType();
+            var value = fetchFieldFromKVT(tree, fieldType, name);
+            if (value == null) {
+                continue;
+            }
+
+            if (List.class.isAssignableFrom(fieldType)) {
+                Class<?> entryType =
+                        (Class<?>)
+                                ((ParameterizedType) entry.getValue().getGenericType())
+                                        .getActualTypeArguments()[0];
+                if (entryType.isEnum() && value != null) {
+                    List<?> list = (List<?>) value;
+                    var enumSubclass = (Class<? extends Enum>) entryType;
+
+                    value =
+                            list.stream()
+                                    .map(
+                                            enumValue ->
+                                                    Enum.valueOf(enumSubclass, (String) enumValue))
+                                    .toList();
+                }
+            }
+
+            var setterName =
+                    String.format(
+                            "set%c%s", Character.toUpperCase(name.charAt(0)), name.substring(1));
+
+            var setter = type.getMethod(setterName, fieldType);
+            setter.invoke(result, value);
+        }
+
+        return result;
+    }
+
+    /**
+     * Grab a specific field from kvt data of the specified type.
+     *
+     * @param tree The KVT data we are reading from.
+     * @param type The type of the field we want to read.
+     * @param fieldName The name of the field we want to retrieve.
+     * @return The field value, which may be null.
+     * @param <T> The type of the field.
+     * @throws InvocationTargetException If an error occurs.
+     * @throws InstantiationException If an error occurs.
+     * @throws IllegalAccessException If an error occurs.
+     * @throws NoSuchMethodException If an error occurs.
+     */
+    private static <T> T fetchFieldFromKVT(
+            final @NonNull KVT tree, final @NonNull Class<T> type, final @NonNull String fieldName)
+            throws InvocationTargetException,
+                    InstantiationException,
+                    IllegalAccessException,
+                    NoSuchMethodException {
+
+        if (type.isEnum()) {
+            var enumSubclass = (Class<? extends Enum>) type;
+            String value = tree.get(fieldName);
+            if (value == null) {
+                return null;
+            }
+            return (T) Enum.valueOf(enumSubclass, value);
+        }
+        T result = tree.get(fieldName);
+        if (result != null) {
+            return result;
+        }
+        var field = tree.getNode(fieldName);
+        if (field == null) {
+            return null;
+        }
+        return constructObject(field, type);
     }
 
     /**
@@ -232,103 +305,30 @@ public class TreeRequestSerialization {
     }
 
     /**
-     * Construct an object of the specified type from KVT data.
+     * Convert an object into KVT data. There are several limitations on the kinds of objects that
+     * can be serialized this way. They must have a no-arg constructor, as well as setter methods
+     * based on the field names (see {@link lombok.Setter @Setter}), and only have fields that can
+     * be represented by KVTs. It is expected that all arrays are represented as lists. Any child
+     * objects must have the same properties.
      *
-     * @param tree The data used to construct the object.
-     * @param type The class we want to construct.
-     * @return The object, or null if we failed to construct it.
-     * @param <T> The type we are constructing.
-     * @throws InvocationTargetException If an error occurs.
-     * @throws InstantiationException If an error occurs.
-     * @throws IllegalAccessException If an error occurs.
-     * @throws NoSuchMethodException If an error occurs.
+     * @param input The input object.
+     * @return An optional containing KVT data, or an empty optional if we could not convert the
+     *     object.
      */
-    private static <T> T constructObject(final @NonNull KVT tree, final @NonNull Class<T> type)
-            throws InvocationTargetException,
-                    InstantiationException,
-                    IllegalAccessException,
-                    NoSuchMethodException {
-
-        T result = type.getConstructor().newInstance();
-
-        var fields =
-                fieldCache.computeIfAbsent(
-                        type, TreeRequestSerialization::findFieldsAndSetAccessible);
-
-        for (var entry : fields.entrySet()) {
-            var name = entry.getKey();
-            var fieldType = entry.getValue().getType();
-            var value = fetchFieldFromKVT(tree, fieldType, name);
-            if (value == null) {
-                continue;
-            }
-
-            if (List.class.isAssignableFrom(fieldType)) {
-                Class<?> entryType =
-                        (Class<?>)
-                                ((ParameterizedType) entry.getValue().getGenericType())
-                                        .getActualTypeArguments()[0];
-                if (entryType.isEnum() && value != null) {
-                    List<?> list = (List<?>) value;
-                    var enumSubclass = (Class<? extends Enum>) entryType;
-
-                    value =
-                            list.stream()
-                                    .map(
-                                            enumValue ->
-                                                    Enum.valueOf(enumSubclass, (String) enumValue))
-                                    .toList();
-                }
-            }
-
-            var setterName =
-                    String.format(
-                            "set%c%s", Character.toUpperCase(name.charAt(0)), name.substring(1));
-
-            var setter = type.getMethod(setterName, fieldType);
-            setter.invoke(result, value);
+    public static Optional<Node> fromObject(@NonNull Object input) {
+        var result = new Node();
+        try {
+            addToNode(input, result);
+        } catch (IllegalAccessException e) {
+            log.error(
+                    SafeResourceLoader.getStringFormatted(
+                            "ERROR_ENCODING_KVT",
+                            FactoryPlugin.getResourceBundle(),
+                            input.getClass().getSimpleName()));
+            return Optional.empty();
         }
 
-        return result;
-    }
-
-    /**
-     * Grab a specific field from kvt data of the specified type.
-     *
-     * @param tree The KVT data we are reading from.
-     * @param type The type of the field we want to read.
-     * @param fieldName The name of the field we want to retrieve.
-     * @return The field value, which may be null.
-     * @param <T> The type of the field.
-     * @throws InvocationTargetException If an error occurs.
-     * @throws InstantiationException If an error occurs.
-     * @throws IllegalAccessException If an error occurs.
-     * @throws NoSuchMethodException If an error occurs.
-     */
-    private static <T> T fetchFieldFromKVT(
-            final @NonNull KVT tree, final @NonNull Class<T> type, final @NonNull String fieldName)
-            throws InvocationTargetException,
-                    InstantiationException,
-                    IllegalAccessException,
-                    NoSuchMethodException {
-
-        if (type.isEnum()) {
-            var enumSubclass = (Class<? extends Enum>) type;
-            String value = tree.get(fieldName);
-            if (value == null) {
-                return null;
-            }
-            return (T) Enum.valueOf(enumSubclass, value);
-        }
-        T result = tree.get(fieldName);
-        if (result != null) {
-            return result;
-        }
-        var field = tree.getNode(fieldName);
-        if (field == null) {
-            return null;
-        }
-        return constructObject(field, type);
+        return Optional.of(result);
     }
 
     /**

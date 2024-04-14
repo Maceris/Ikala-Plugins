@@ -25,19 +25,6 @@ public class SaveUtil {
             FactoryClientPlugin.DATA_FOLDER + File.separator + "saves";
 
     /**
-     * List the names of all existing saves.
-     *
-     * @return The list of save game names.
-     */
-    public static List<String> getSaves() {
-        return FileUtils.getFile(SAVES_FOLDER).map(File::listFiles).stream()
-                .flatMap(Arrays::stream)
-                .filter(File::isDirectory)
-                .map(File::getName)
-                .toList();
-    }
-
-    /**
      * Create a folder for the save game if it does not already exist.
      *
      * @param name The save name, which must follow the {@link #NAME_FORMAT} format.
@@ -53,6 +40,19 @@ public class SaveUtil {
             return false;
         }
         return FileUtils.createFolder(SAVES_FOLDER, name.trim());
+    }
+
+    /**
+     * List the names of all existing saves.
+     *
+     * @return The list of save game names.
+     */
+    public static List<String> getSaves() {
+        return FileUtils.getFile(SAVES_FOLDER).map(File::listFiles).stream()
+                .flatMap(Arrays::stream)
+                .filter(File::isDirectory)
+                .map(File::getName)
+                .toList();
     }
 
     /** Private constructor so this class is not instantiated. */

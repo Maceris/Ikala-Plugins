@@ -28,82 +28,6 @@ public class RequestRegistry {
     @Getter private static boolean setUp;
 
     /**
-     * Register all the default packets. Should only ever be called once, and internally by this
-     * plugin.
-     *
-     * @throws IllegalArgumentException If there was a problem registering defaults.
-     */
-    @Synchronized
-    public static void registerDefaults() {
-        if (setUp) {
-            return;
-        }
-        setUp = true;
-        registerClientBound(UpdateTagRegistry.class);
-    }
-
-    /** Clean out all definitions. Only really applicable for testing or reloading plugins. */
-    @Synchronized
-    public static void purge() {
-        setUp = false;
-        clientBound.clear();
-        serverBound.clear();
-    }
-
-    /**
-     * Register a request that is headed towards the client.
-     *
-     * @param type The type of request to register.
-     * @throws IllegalArgumentException If the request is already added to the collection.
-     */
-    private static void registerClientBound(@NonNull Class<? extends Request> type) {
-        if (clientBound.containsValue(type)) {
-            logDuplicateException(type);
-        }
-        clientBound.put(clientBound.size(), type);
-    }
-
-    /**
-     * Register a request that is headed towards the server.
-     *
-     * @param type The type of request to register.
-     * @throws IllegalArgumentException If the request is already added to the collection.
-     */
-    private static void registerServerBound(@NonNull Class<? extends Request> type) {
-        if (serverBound.containsValue(type)) {
-            logDuplicateException(type);
-        }
-        serverBound.put(serverBound.size(), type);
-    }
-
-    /**
-     * Register a request that is headed towards both the server and client.
-     *
-     * @param type The type of request to register.
-     * @throws IllegalArgumentException If the request is already added to the collection.
-     */
-    private static void registerShared(@NonNull Class<? extends Request> type) {
-        if (clientBound.containsValue(type) || serverBound.containsValue(type)) {
-            logDuplicateException(type);
-        }
-        clientBound.put(clientBound.size(), type);
-        serverBound.put(serverBound.size(), type);
-    }
-
-    /**
-     * Log the fact the request is already registered before an exception is thrown.
-     *
-     * @param type The class that we were trying to register.
-     */
-    private static void logDuplicateException(@NonNull Class<? extends Request> type) {
-        log.warn(
-                SafeResourceLoader.getStringFormatted(
-                        "REQUEST_ALREADY_REGISTERED",
-                        FactoryPlugin.getResourceBundle(),
-                        type.getSimpleName()));
-    }
-
-    /**
      * Fetch the ID for the specified type.
      *
      * @param direction The direction we are interested in.
@@ -136,5 +60,81 @@ public class RequestRegistry {
                 };
 
         return map.get(id);
+    }
+
+    /**
+     * Log the fact the request is already registered before an exception is thrown.
+     *
+     * @param type The class that we were trying to register.
+     */
+    private static void logDuplicateException(@NonNull Class<? extends Request> type) {
+        log.warn(
+                SafeResourceLoader.getStringFormatted(
+                        "REQUEST_ALREADY_REGISTERED",
+                        FactoryPlugin.getResourceBundle(),
+                        type.getSimpleName()));
+    }
+
+    /** Clean out all definitions. Only really applicable for testing or reloading plugins. */
+    @Synchronized
+    public static void purge() {
+        setUp = false;
+        clientBound.clear();
+        serverBound.clear();
+    }
+
+    /**
+     * Register a request that is headed towards the client.
+     *
+     * @param type The type of request to register.
+     * @throws IllegalArgumentException If the request is already added to the collection.
+     */
+    private static void registerClientBound(@NonNull Class<? extends Request> type) {
+        if (clientBound.containsValue(type)) {
+            logDuplicateException(type);
+        }
+        clientBound.put(clientBound.size(), type);
+    }
+
+    /**
+     * Register all the default packets. Should only ever be called once, and internally by this
+     * plugin.
+     *
+     * @throws IllegalArgumentException If there was a problem registering defaults.
+     */
+    @Synchronized
+    public static void registerDefaults() {
+        if (setUp) {
+            return;
+        }
+        setUp = true;
+        registerClientBound(UpdateTagRegistry.class);
+    }
+
+    /**
+     * Register a request that is headed towards the server.
+     *
+     * @param type The type of request to register.
+     * @throws IllegalArgumentException If the request is already added to the collection.
+     */
+    private static void registerServerBound(@NonNull Class<? extends Request> type) {
+        if (serverBound.containsValue(type)) {
+            logDuplicateException(type);
+        }
+        serverBound.put(serverBound.size(), type);
+    }
+
+    /**
+     * Register a request that is headed towards both the server and client.
+     *
+     * @param type The type of request to register.
+     * @throws IllegalArgumentException If the request is already added to the collection.
+     */
+    private static void registerShared(@NonNull Class<? extends Request> type) {
+        if (clientBound.containsValue(type) || serverBound.containsValue(type)) {
+            logDuplicateException(type);
+        }
+        clientBound.put(clientBound.size(), type);
+        serverBound.put(serverBound.size(), type);
     }
 }

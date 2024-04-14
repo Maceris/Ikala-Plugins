@@ -16,6 +16,18 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class MaterialRegistry extends Registry<Material> {
 
+    /**
+     * Checks if the material has the given tag.
+     *
+     * @param material The material we are checking.
+     * @param tag The name of the tag we are looking for.
+     * @return True if the material has the tag, false if it does not or either tag or material
+     *     don't exist.
+     */
+    public static boolean materialHasTag(@NonNull Material material, @NonNull String tag) {
+        return Tag.containsTag(tag, material.tags());
+    }
+
     private final TagRegistry tagRegistry;
 
     /**
@@ -122,18 +134,6 @@ public class MaterialRegistry extends Registry<Material> {
                 SafeResourceLoader.getString("MATERIAL_MISSING", FactoryPlugin.getResourceBundle()),
                 materialName);
         return Optional.empty();
-    }
-
-    /**
-     * Checks if the material has the given tag.
-     *
-     * @param material The material we are checking.
-     * @param tag The name of the tag we are looking for.
-     * @return True if the material has the tag, false if it does not or either tag or material
-     *     don't exist.
-     */
-    public static boolean materialHasTag(@NonNull Material material, @NonNull String tag) {
-        return Tag.containsTag(tag, material.tags());
     }
 
     /**

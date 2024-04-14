@@ -30,16 +30,6 @@ public class Checkbox implements Component, Interactive {
         this.state = new ImBoolean(initialState);
     }
 
-    /**
-     * Fetch the current state of the checkbox.
-     *
-     * @return Whether the checkbox is checked.
-     * @see #checkResult() To see if this value has changed.
-     */
-    public boolean getState() {
-        return state.get();
-    }
-
     @Override
     public boolean checkResult() {
         var result = changed;
@@ -52,5 +42,15 @@ public class Checkbox implements Component, Interactive {
         if (ImGui.checkbox(text, state)) {
             changed = true;
         }
+    }
+
+    /**
+     * Fetch the current state of the checkbox.
+     *
+     * @return Whether the checkbox is checked.
+     * @see #checkResult() To see if this value has changed.
+     */
+    public boolean getState() {
+        return state.get();
     }
 }

@@ -39,25 +39,6 @@ public class GuiManager implements GuiInstance {
     }
 
     /**
-     * Remove a component by name.
-     *
-     * @param name The name od the component to remove.
-     */
-    public void removeWindow(@NonNull String name) {
-        this.windows.remove(name);
-    }
-
-    /**
-     * Enable a component by name.
-     *
-     * @param name The name od the component to show.
-     * @see #setEnabled(String, boolean)
-     */
-    public void enable(@NonNull String name) {
-        setEnabled(name, true);
-    }
-
-    /**
      * Disable a component by name.
      *
      * @param name The name od the component to hide.
@@ -65,29 +46,6 @@ public class GuiManager implements GuiInstance {
      */
     public void disable(@NonNull String name) {
         setEnabled(name, false);
-    }
-
-    /**
-     * Enable/disable a component by name.
-     *
-     * @param name The name of the component to show/hide.
-     * @param enabled True if the component should show, false if it should be hidden.
-     * @see #setEnabled(String, boolean)
-     */
-    public void setEnabled(@NonNull String name, boolean enabled) {
-        Optional.ofNullable(this.windows.get(name))
-                .ifPresent(component -> component.setVisible(enabled));
-    }
-
-    /**
-     * Returns whether a component is enabled. Components that are not found are considered
-     * disabled.
-     *
-     * @param name The name of the component to check.
-     * @return Whether the specified component is enabled.
-     */
-    public boolean isEnabled(@NonNull String name) {
-        return Optional.ofNullable(this.windows.get(name)).map(GuiWindow::isVisible).orElse(false);
     }
 
     @Override
@@ -98,6 +56,16 @@ public class GuiManager implements GuiInstance {
 
         ImGui.endFrame();
         ImGui.render();
+    }
+
+    /**
+     * Enable a component by name.
+     *
+     * @param name The name od the component to show.
+     * @see #setEnabled(String, boolean)
+     */
+    public void enable(@NonNull String name) {
+        setEnabled(name, true);
     }
 
     @Override
@@ -112,5 +80,37 @@ public class GuiManager implements GuiInstance {
         windows.values().stream()
                 .filter(GuiWindow::isVisible)
                 .forEach(component -> component.handleGuiInput(scene, window));
+    }
+
+    /**
+     * Returns whether a component is enabled. Components that are not found are considered
+     * disabled.
+     *
+     * @param name The name of the component to check.
+     * @return Whether the specified component is enabled.
+     */
+    public boolean isEnabled(@NonNull String name) {
+        return Optional.ofNullable(this.windows.get(name)).map(GuiWindow::isVisible).orElse(false);
+    }
+
+    /**
+     * Remove a component by name.
+     *
+     * @param name The name od the component to remove.
+     */
+    public void removeWindow(@NonNull String name) {
+        this.windows.remove(name);
+    }
+
+    /**
+     * Enable/disable a component by name.
+     *
+     * @param name The name of the component to show/hide.
+     * @param enabled True if the component should show, false if it should be hidden.
+     * @see #setEnabled(String, boolean)
+     */
+    public void setEnabled(@NonNull String name, boolean enabled) {
+        Optional.ofNullable(this.windows.get(name))
+                .ifPresent(component -> component.setVisible(enabled));
     }
 }

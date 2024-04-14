@@ -1,19 +1,15 @@
 package com.ikalagaming.factory.networking;
 
 import com.ikalagaming.factory.kvt.KVT;
-import com.ikalagaming.factory.networking.base.Connection;
 import com.ikalagaming.factory.networking.base.Request;
 
 import lombok.Data;
-import lombok.NonNull;
 
 import java.util.List;
 
 /** A request with maximal contents used to test serialization. */
 @Data
 public class ComplexRequest implements Request {
-    @Override
-    public void sendUsing(@NonNull Connection connection) {}
 
     public enum SampleEnum {
         COUCH,
