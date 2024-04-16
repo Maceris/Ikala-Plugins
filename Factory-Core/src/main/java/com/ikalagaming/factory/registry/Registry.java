@@ -14,8 +14,8 @@ import java.util.Optional;
  */
 public class Registry<T> {
     /**
-     * A map from the item name in {@link RegistryConstants#FULLY_QUALIFIED_NAME_FORMAT} format to
-     * the definition.
+     * A map from the name in {@link RegistryConstants#FULLY_QUALIFIED_NAME_FORMAT} format to the
+     * definition.
      */
     protected final Map<String, T> definitions = new HashMap<>();
 
