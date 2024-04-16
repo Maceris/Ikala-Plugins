@@ -41,11 +41,24 @@ public record BiomeParameters(
      * @return The total distance in all dimensions.
      */
     public float getDistance(@NonNull final ParameterPack parameters) {
-
         return Math.abs(parameters.temperature() - temperature().getMidpoint())
                 + Math.abs(parameters.height() - height().getMidpoint())
                 + Math.abs(parameters.erosion() - erosion().getMidpoint())
                 + Math.abs(parameters.precipitation() - precipitation().getMidpoint())
                 + Math.abs(parameters.weirdness() - weirdness().getMidpoint());
+    }
+
+    /**
+     * Calculate the sum of all parameter pack widths, as a broad measure of how general or specific
+     * the biome range is.
+     *
+     * @return The sum of the widths of all the parameters.
+     */
+    public float getTotalWidth() {
+        return temperature().getWidth()
+                + height().getWidth()
+                + erosion().getWidth()
+                + precipitation.getWidth()
+                + weirdness().getWidth();
     }
 }
