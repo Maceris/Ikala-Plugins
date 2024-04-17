@@ -11,29 +11,57 @@ public class RecipeRegistry {
      * A map from the machine name in {@link RegistryConstants#FULLY_QUALIFIED_NAME_FORMAT} format
      * to the list of recipes that apply to that machine.
      */
-    protected final Map<String, List<Recipe>> definitions = new HashMap<>();
+    private final Map<String, List<Recipe>> definitions = new HashMap<>();
+
+    /**
+     * Add a recipe to a single machine.
+     *
+     * @param machineName The machine name in {@link RegistryConstants#FULLY_QUALIFIED_NAME_FORMAT}
+     *     format.
+     * @param recipe The recipe to add to that machine.
+     */
+    public void add(@NonNull String machineName, @NonNull Recipe recipe) {
+        var list = definitions.computeIfAbsent(machineName, ignored -> new ArrayList<>());
+        if (!list.contains(recipe)) {
+            list.add(recipe);
+        }
+    }
+
+    /**
+     * Add a recipe to multiple machines.
+     *
+     * @param machineNames The list of machine names in {@link
+     *     RegistryConstants#FULLY_QUALIFIED_NAME_FORMAT} format. Discards duplicate or null names.
+     * @param recipe The recipe to add to each machine.
+     */
+    public void add(@NonNull List<String> machineNames, @NonNull Recipe recipe) {
+        machineNames.stream()
+                .distinct()
+                .filter(Objects::nonNull)
+                .forEach(machineName -> add(machineName, recipe));
+    }
 
     /**
      * Returns true if this registry contains a machine corresponding the specified key.
      *
-     * @param name The name of the key.
+     * @param machineName The name of the key.
      * @return true if this registry contains a mapping for the specified key.
      */
-    public boolean containsKey(@NonNull String name) {
-        return definitions.containsKey(name);
+    public boolean containsKey(@NonNull String machineName) {
+        return definitions.containsKey(machineName);
     }
 
     /**
      * Look up the list of recipes by fully qualified name.
      *
-     * @param name The name.
+     * @param machineName The name.
      * @return An optional that will contain the definition, if it can be found.
      */
-    public Optional<List<Recipe>> find(@NonNull String name) {
-        if (!definitions.containsKey(name)) {
+    public Optional<List<Recipe>> find(@NonNull String machineName) {
+        if (!definitions.containsKey(machineName)) {
             return Optional.empty();
         }
-        return Optional.ofNullable(definitions.get(name));
+        return Optional.ofNullable(definitions.get(machineName));
     }
 
     /**

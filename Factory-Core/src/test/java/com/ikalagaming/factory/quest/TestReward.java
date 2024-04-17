@@ -95,13 +95,7 @@ class TestReward {
         var input = new InputItem(itemStack);
         var output = new IngredientPower(50);
 
-        var recipe =
-                Recipe.builder()
-                        .withInput(input)
-                        .withOutput(output)
-                        .withMachine("furnace")
-                        .withTime(10)
-                        .build();
+        var recipe = Recipe.builder().withInput(input).withOutput(output).withTime(10).build();
 
         var result = new RewardRecipe(recipe);
 

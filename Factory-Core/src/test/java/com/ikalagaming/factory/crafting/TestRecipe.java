@@ -43,9 +43,6 @@ class TestRecipe {
     private Ingredient ingredientInputItem;
     private ItemStack expectedOutputItem;
     private Ingredient ingredientOutputItem;
-
-    private String expectedMachine;
-
     private long expectedTime;
 
     @BeforeEach
@@ -54,15 +51,7 @@ class TestRecipe {
         ingredientInputItem = new InputItem(expectedInputItem);
         expectedOutputItem = new ItemStack(new Item("lotomation:sword"));
         ingredientOutputItem = new OutputItem(expectedOutputItem);
-        expectedMachine = "lotomation:hand";
         expectedTime = 1;
-    }
-
-    @Test
-    void testAndIngredientForMachine() {
-        var builder = Recipe.builder().withMachine(expectedMachine);
-
-        assertThrows(IllegalArgumentException.class, () -> builder.and(ingredientInputItem));
     }
 
     @Test
@@ -70,27 +59,6 @@ class TestRecipe {
         var builder = Recipe.builder();
 
         assertThrows(UnsupportedOperationException.class, () -> builder.and(ingredientInputItem));
-    }
-
-    @Test
-    void testAndStringForInputs() {
-        var builder = Recipe.builder().withInput(ingredientInputItem);
-
-        assertThrows(IllegalArgumentException.class, () -> builder.and(expectedMachine));
-    }
-
-    @Test
-    void testAndStringForOutputs() {
-        var builder = Recipe.builder().withOutput(ingredientOutputItem);
-
-        assertThrows(IllegalArgumentException.class, () -> builder.and(expectedMachine));
-    }
-
-    @Test
-    void testAndStringWithoutList() {
-        var builder = Recipe.builder();
-
-        assertThrows(UnsupportedOperationException.class, () -> builder.and(expectedMachine));
     }
 
     @Test
@@ -150,31 +118,6 @@ class TestRecipe {
         var builder = Recipe.builder();
 
         assertThrows(IllegalArgumentException.class, () -> builder.withInput(ingredientOutputItem));
-    }
-
-    @Test
-    void testMachines() {
-        var machineTwo = "lotomation:crusher";
-        var expectedResult = List.of(expectedMachine, machineTwo);
-        var result =
-                Recipe.builder()
-                        .withMachines(List.of(expectedMachine, machineTwo))
-                        .build()
-                        .machines();
-
-        assertNotNull(result);
-        assertArrayEquals(expectedResult.toArray(), result.toArray());
-    }
-
-    @Test
-    void testMachinesWithAnd() {
-        var machineTwo = "lotomation:crusher";
-        var expectedResult = List.of(expectedMachine, machineTwo);
-        var result =
-                Recipe.builder().withMachine(expectedMachine).and(machineTwo).build().machines();
-
-        assertNotNull(result);
-        assertArrayEquals(expectedResult.toArray(), result.toArray());
     }
 
     @Test

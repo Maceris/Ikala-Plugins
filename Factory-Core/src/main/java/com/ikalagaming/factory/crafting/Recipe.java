@@ -16,15 +16,11 @@ import java.util.function.Consumer;
  *
  * @param inputs The ingredients for the recipe.
  * @param outputs The results of the recipe.
- * @param machines Which machines the recipe is applicable to.
  * @param time The base time for the recipe, in ticks.
  */
 @Slf4j
 public record Recipe(
-        @NonNull List<Ingredient> inputs,
-        @NonNull List<Ingredient> outputs,
-        @NonNull List<String> machines,
-        long time) {
+        @NonNull List<Ingredient> inputs, @NonNull List<Ingredient> outputs, long time) {
 
     /**
      * Start a builder for more readable recipe creation.
@@ -37,15 +33,12 @@ public record Recipe(
 
     /** Used for building recipes step-by-step. */
     public static class RecipeBuilder {
-        /**
-         * Used to track the last list that was modified, to support {@link #and(Ingredient)} and
-         * {@link #and(String)}.
-         */
+        /** Used to track the last list that was modified, to support {@link #and(Ingredient)}. */
         @AllArgsConstructor
         private enum LastList {
             INPUT("RECIPE_LIST_INPUT"),
-            OUTPUT("RECIPE_LIST_OUTPUT"),
-            MACHINES("RECIPE_LIST_MACHINES");
+            OUTPUT("RECIPE_LIST_OUTPUT");
+
             final String i18nKey;
 
             @Override
@@ -54,10 +47,6 @@ public record Recipe(
             }
         }
 
-        /** The i18n key for trying to use the wrong type for a list. */
-        private static final String MISMATCHED_LIST = "LIST_MISMATCHED_TYPE";
-
-        private List<String> machines;
         private long time;
         private List<Ingredient> inputs;
         private List<Ingredient> outputs;
@@ -91,57 +80,14 @@ public record Recipe(
                     switch (lastList) {
                         case INPUT -> this.inputs;
                         case OUTPUT -> this.outputs;
-                        case MACHINES ->
-                                throw new IllegalArgumentException(
-                                        SafeResourceLoader.getStringFormatted(
-                                                MISMATCHED_LIST,
-                                                FactoryPlugin.getResourceBundle(),
-                                                lastList.toString()));
                     };
             Consumer<Ingredient> check =
                     switch (lastList) {
                         case INPUT -> this::validateInput;
                         case OUTPUT -> this::validateOutput;
-                        case MACHINES ->
-                                throw new IllegalStateException(
-                                        SafeResourceLoader.getStringFormatted(
-                                                MISMATCHED_LIST,
-                                                FactoryPlugin.getResourceBundle(),
-                                                lastList.toString()));
                     };
             check.accept(ingredient);
             list.add(ingredient);
-            return this;
-        }
-
-        /**
-         * Add to the last list we had added a string to. Intended to be used like {@code
-         * .withMachine("foo").and("bar")}.
-         *
-         * @param machine The machine to add to the list.
-         * @return The builder.
-         * @throws UnsupportedOperationException If we have not started adding to a list.
-         * @throws IllegalArgumentException If the last list we added to did not accept strings.
-         */
-        public RecipeBuilder and(@NonNull String machine) {
-            if (lastList == null) {
-                var message =
-                        SafeResourceLoader.getString(
-                                "NOT_STARTED_LIST", FactoryPlugin.getResourceBundle());
-                log.warn(message);
-                throw new UnsupportedOperationException(message);
-            }
-            var list =
-                    switch (lastList) {
-                        case INPUT, OUTPUT ->
-                                throw new IllegalArgumentException(
-                                        SafeResourceLoader.getStringFormatted(
-                                                MISMATCHED_LIST,
-                                                FactoryPlugin.getResourceBundle(),
-                                                lastList.toString()));
-                        case MACHINES -> this.machines;
-                    };
-            list.add(machine);
             return this;
         }
 
@@ -158,11 +104,7 @@ public record Recipe(
             if (this.outputs == null) {
                 this.outputs = new ArrayList<>();
             }
-            if (this.machines == null) {
-                this.machines = new ArrayList<>();
-            }
-            return new Recipe(
-                    List.copyOf(inputs), List.copyOf(outputs), List.copyOf(machines), time);
+            return new Recipe(List.copyOf(inputs), List.copyOf(outputs), time);
         }
 
         /**
@@ -232,34 +174,6 @@ public record Recipe(
         public RecipeBuilder withInputs(@NonNull List<Ingredient> inputs) {
             inputs.forEach(this::validateInput);
             this.inputs = inputs;
-            return this;
-        }
-
-        /**
-         * Adds the machine to the list of machines, creating a list if none exists. This can be
-         * chained, but also see {@link #and(String)}.
-         *
-         * @param machine The machine name.
-         * @return The builder.
-         */
-        public RecipeBuilder withMachine(@NonNull String machine) {
-            if (this.machines == null) {
-                this.machines = new ArrayList<>();
-            }
-            this.machines.add(machine);
-            this.lastList = LastList.MACHINES;
-            return this;
-        }
-
-        /**
-         * Specify the list of machines that the recipe is valid in.
-         *
-         * @param machines The names of machines that the recipe is valid for.
-         * @return The builder.
-         */
-        public RecipeBuilder withMachines(@NonNull List<String> machines) {
-            this.machines = machines;
-            this.lastList = LastList.MACHINES;
             return this;
         }
 
