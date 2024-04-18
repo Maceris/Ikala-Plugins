@@ -30,11 +30,6 @@ import java.util.ResourceBundle;
 class TestRecipeRegistry {
     private static MockedStatic<FactoryPlugin> fakePlugin;
 
-    private RecipeRegistry registry;
-
-    private Recipe expectedRecipe;
-    private Recipe secondRecipe;
-
     /** Set up before all the tests. */
     @BeforeAll
     static void setUpBeforeClass() {
@@ -51,6 +46,12 @@ class TestRecipeRegistry {
     static void tearDownAfterClass() {
         fakePlugin.close();
     }
+
+    private RecipeRegistry registry;
+
+    private Recipe expectedRecipe;
+
+    private Recipe secondRecipe;
 
     @BeforeEach
     void setup() {

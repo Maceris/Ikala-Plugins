@@ -20,9 +20,9 @@ public class SaveUtil {
      */
     public static final String NAME_FORMAT = "[0-9a-zA-Z][0-9a-zA-Z-._ ]*";
 
-    /** The folder where all the game saves will be stored. */
-    private static final String SAVES_FOLDER =
-            FactoryClientPlugin.DATA_FOLDER + File.separator + "saves";
+    /** The full path to the folder where all the save folders will be stored. */
+    public static final String SAVES_FOLDER =
+            UserDataUtil.USER_DATA_FOLDER + File.separator + "saves";
 
     /**
      * Create a folder for the save game if it does not already exist.

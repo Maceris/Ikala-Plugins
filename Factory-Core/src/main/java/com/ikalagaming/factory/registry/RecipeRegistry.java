@@ -14,20 +14,6 @@ public class RecipeRegistry {
     private final Map<String, List<Recipe>> definitions = new HashMap<>();
 
     /**
-     * Add a recipe to a single machine.
-     *
-     * @param machineName The machine name in {@link RegistryConstants#FULLY_QUALIFIED_NAME_FORMAT}
-     *     format.
-     * @param recipe The recipe to add to that machine.
-     */
-    public void add(@NonNull String machineName, @NonNull Recipe recipe) {
-        var list = definitions.computeIfAbsent(machineName, ignored -> new ArrayList<>());
-        if (!list.contains(recipe)) {
-            list.add(recipe);
-        }
-    }
-
-    /**
      * Add a recipe to multiple machines.
      *
      * @param machineNames The list of machine names in {@link
@@ -39,6 +25,20 @@ public class RecipeRegistry {
                 .distinct()
                 .filter(Objects::nonNull)
                 .forEach(machineName -> add(machineName, recipe));
+    }
+
+    /**
+     * Add a recipe to a single machine.
+     *
+     * @param machineName The machine name in {@link RegistryConstants#FULLY_QUALIFIED_NAME_FORMAT}
+     *     format.
+     * @param recipe The recipe to add to that machine.
+     */
+    public void add(@NonNull String machineName, @NonNull Recipe recipe) {
+        var list = definitions.computeIfAbsent(machineName, ignored -> new ArrayList<>());
+        if (!list.contains(recipe)) {
+            list.add(recipe);
+        }
     }
 
     /**

@@ -47,7 +47,7 @@ public class FactoryPlugin extends Plugin {
     @Override
     public boolean onLoad() {
         try {
-            FactoryPlugin.setResourceBundle(
+            setResourceBundle(
                     ResourceBundle.getBundle(
                             "com.ikalagaming.factory.strings", Localization.getLocale()));
         } catch (MissingResourceException missingResource) {
@@ -67,7 +67,7 @@ public class FactoryPlugin extends Plugin {
     @Override
     public boolean onUnload() {
         RequestRegistry.purge();
-        FactoryPlugin.setResourceBundle(null);
+        setResourceBundle(null);
         return true;
     }
 }
