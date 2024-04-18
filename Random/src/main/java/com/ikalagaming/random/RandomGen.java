@@ -2,15 +2,13 @@ package com.ikalagaming.random;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.Getter;
 import lombok.NonNull;
 
 import java.awt.image.BufferedImage;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.SplittableRandom;
+import java.util.*;
 
 /**
  * Random generation functions.
@@ -78,13 +76,18 @@ public class RandomGen {
      */
     private record WeightEntry(int index, int weight) {}
 
-    private static SplittableRandom random;
+    /** A secure source of strong random data, for use in things like cryptography. */
+    @Getter private static final SecureRandom secureRandom;
+
+    /** A fast source of random data, for use in non-security related things. */
+    @Getter private static final SplittableRandom fastRandom;
 
     static {
         try {
-            RandomGen.random = new SplittableRandom(SecureRandom.getInstanceStrong().nextLong());
+            secureRandom = SecureRandom.getInstanceStrong();
+            fastRandom = new SplittableRandom(secureRandom.nextLong());
         } catch (NoSuchAlgorithmException e) {
-            RandomGen.random = new SplittableRandom();
+            throw new UnsupportedOperationException(e);
         }
     }
 
@@ -139,7 +142,7 @@ public class RandomGen {
         final int MAP_WIDTH = 20;
         final int MAP_HEIGHT = 20;
         final int TILE_SIZE = 32;
-        final long seed = RandomGen.random.nextLong();
+        final long seed = RandomGen.fastRandom.nextLong();
 
         BufferedImage tiles =
                 new BufferedImage(
@@ -166,7 +169,7 @@ public class RandomGen {
         for (y = 0; y < MAP_HEIGHT; ++y) {
             map[y] = new int[MAP_WIDTH];
             for (x = 0; x < MAP_WIDTH; ++x) {
-                if (RandomGen.random.nextInt(10) <= 5) {
+                if (RandomGen.fastRandom.nextInt(10) <= 5) {
                     map[y][x] = 1;
                 }
             }
@@ -321,14 +324,14 @@ public class RandomGen {
                             continue;
                         }
 
+                        final int divisor =
+                                ((p2y - p3y) * (p1x - p3x)) + ((p3x - p2x) * (p1y - p3y));
                         w1 =
                                 ((double) (p2y - p3y) * (px - p3x) + (p3x - p2x) * (py - p3y))
-                                        / (((p2y - p3y) * (p1x - p3x))
-                                                + ((p3x - p2x) * (p1y - p3y)));
+                                        / divisor;
                         w2 =
                                 ((double) ((p3y - p1y) * (px - p3x)) + ((p1x - p3x) * (py - p3y)))
-                                        / (((p2y - p3y) * (p1x - p3x))
-                                                + ((p3x - p2x) * (p1y - p3y)));
+                                        / divisor;
                         w1 /= 2;
                         w2 /= 2;
                         w3 = 1 - w1 - w2;
@@ -362,7 +365,7 @@ public class RandomGen {
      * @return A pseudo-randomly chosen long value.
      */
     public static long generateSeed() {
-        return RandomGen.random.nextLong();
+        return RandomGen.secureRandom.nextLong();
     }
 
     /**
@@ -521,7 +524,7 @@ public class RandomGen {
      */
     public static <T extends Enum<T>> T selectEnumValue(Class<T> enumClass) {
         final T[] enumValues = enumClass.getEnumConstants();
-        return enumValues[RandomGen.random.nextInt(enumValues.length)];
+        return enumValues[RandomGen.fastRandom.nextInt(enumValues.length)];
     }
 
     /**
@@ -562,7 +565,7 @@ public class RandomGen {
      * @return The selection index.
      */
     private static int selectFromWeightedList(Interval[] intervals) {
-        double selection = RandomGen.random.nextDouble();
+        double selection = RandomGen.fastRandom.nextDouble();
 
         return Arrays.binarySearch(
                 intervals,
@@ -654,7 +657,7 @@ public class RandomGen {
             if (size == 0) {
                 break;
             }
-            WeightEntry selection = validChoices.get(RandomGen.random.nextInt(size));
+            WeightEntry selection = validChoices.get(RandomGen.fastRandom.nextInt(size));
             remainingWeight -= Math.abs(selection.weight());
             selections.add(selection.index());
         }
@@ -707,7 +710,7 @@ public class RandomGen {
             if (size == 0) {
                 break;
             }
-            WeightEntry selection = validChoices.get(RandomGen.random.nextInt(size));
+            WeightEntry selection = validChoices.get(RandomGen.fastRandom.nextInt(size));
             remainingWeight -= Math.abs(selection.weight());
             selections.add(selection.index());
         }
