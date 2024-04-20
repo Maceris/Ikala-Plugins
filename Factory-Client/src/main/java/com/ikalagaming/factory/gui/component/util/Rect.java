@@ -31,7 +31,7 @@ public class Rect {
      * @return true if the point is inside the rectangle, false otherwise.
      */
     public boolean contains(@NonNull Vec2D point) {
-        return contains(point.x, point.y);
+        return contains(point.getX(), point.getY());
     }
 
     /**

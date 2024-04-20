@@ -7,8 +7,8 @@ import lombok.*;
 @Getter
 @Setter
 public class Vec2D {
-    public float x;
-    public float y;
+    private float x;
+    private float y;
 
     /**
      * Sets the x and y values.

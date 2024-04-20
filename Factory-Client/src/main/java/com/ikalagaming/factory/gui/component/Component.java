@@ -1,6 +1,7 @@
 package com.ikalagaming.factory.gui.component;
 
 import com.ikalagaming.factory.gui.SizeConstants;
+
 import lombok.NonNull;
 
 /** Something that can be rendered. */

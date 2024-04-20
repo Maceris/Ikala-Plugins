@@ -65,9 +65,7 @@ public class BaseWindow {
     /** A list of sub-windows this window contains */
     private final List<BaseWindow> children;
 
-    /**
-     * The height of the window, or z depth. Higher numbers are drawn on top.
-     */
+    /** The height of the window, or z depth. Higher numbers are drawn on top. */
     @Getter private int height;
 
     /**
@@ -104,11 +102,11 @@ public class BaseWindow {
             final @NonNull Alignment alignment,
             final @NonNull Vec2D scale) {
         visible = true;
-        localDisplace = new Vec2D(displacement.x, displacement.y);
+        localDisplace = new Vec2D(displacement.getX(), displacement.getY());
         globalDisplacement = new Vec2D();
         globalScale = new Vec2D();
         align = alignment;
-        this.scale = new Vec2D(scale.x, scale.y);
+        this.scale = new Vec2D(scale.getX(), scale.getY());
         children = new ArrayList<>();
         consumeInputs = true;
         dirty();
@@ -180,7 +178,7 @@ public class BaseWindow {
         if (dirty) {
             recalculate();
         }
-        return globalDisplacement.x;
+        return globalDisplacement.getX();
     }
 
     /**
@@ -193,7 +191,7 @@ public class BaseWindow {
         if (dirty) {
             recalculate();
         }
-        return globalDisplacement.y;
+        return globalDisplacement.getY();
     }
 
     /**
@@ -205,7 +203,7 @@ public class BaseWindow {
         if (dirty) {
             recalculate();
         }
-        return globalScale.y;
+        return globalScale.getY();
     }
 
     /**
@@ -217,7 +215,7 @@ public class BaseWindow {
         if (dirty) {
             recalculate();
         }
-        return globalScale.x;
+        return globalScale.getX();
     }
 
     /**
@@ -232,10 +230,10 @@ public class BaseWindow {
             recalculate();
         }
         Rect bounds = new Rect();
-        float x = globalDisplacement.x;
-        float y = globalDisplacement.y;
-        float w = globalScale.x;
-        float h = globalScale.y;
+        float x = globalDisplacement.getX();
+        float y = globalDisplacement.getY();
+        float w = globalScale.getX();
+        float h = globalScale.getY();
         bounds.set(
                 (int) (x * screen.getWidth()),
                 (int) (y * screen.getHeight()),
@@ -260,7 +258,7 @@ public class BaseWindow {
      * @return The local height.
      */
     public float getLocalHeight() {
-        return scale.y;
+        return scale.getY();
     }
 
     /**
@@ -270,7 +268,7 @@ public class BaseWindow {
      * @return The local width.
      */
     public float getLocalWidth() {
-        return scale.x;
+        return scale.getX();
     }
 
     /**
@@ -343,25 +341,25 @@ public class BaseWindow {
 
         final float xDisplacement =
                 switch (align) {
-                    case CENTER, NORTH, SOUTH -> (1 - scale.x) / 2;
-                    case EAST, NORTH_EAST, SOUTH_EAST -> 1 - (localDisplace.x + scale.x);
-                    case NORTH_WEST, SOUTH_WEST, WEST -> localDisplace.x;
+                    case CENTER, NORTH, SOUTH -> (1 - scale.getX()) / 2;
+                    case EAST, NORTH_EAST, SOUTH_EAST -> 1 - (localDisplace.getX() + scale.getX());
+                    case NORTH_WEST, SOUTH_WEST, WEST -> localDisplace.getX();
                 };
         final float yDisplacement =
                 switch (align) {
-                    case CENTER, WEST, EAST -> (1 - scale.y) / 2;
-                    case NORTH, NORTH_WEST, NORTH_EAST -> localDisplace.y;
-                    case SOUTH, SOUTH_WEST, SOUTH_EAST -> 1 - (localDisplace.y + scale.y);
+                    case CENTER, WEST, EAST -> (1 - scale.getY()) / 2;
+                    case NORTH, NORTH_WEST, NORTH_EAST -> localDisplace.getY();
+                    case SOUTH, SOUTH_WEST, SOUTH_EAST -> 1 - (localDisplace.getY() + scale.getY());
                 };
         final float parentWidth = parent != null ? parent.getActualWidth() : 1.0f;
         final float parentHeight = parent != null ? parent.getActualHeight() : 1.0f;
         final float parentDisplaceX = parent != null ? parent.getActualDisplaceX() : 0.0f;
         final float parentDisplaceY = parent != null ? parent.getActualDisplaceY() : 0.0f;
 
-        globalDisplacement.x = xDisplacement * parentWidth + parentDisplaceX;
-        globalDisplacement.y = yDisplacement * parentHeight + parentDisplaceY;
-        globalScale.y = scale.y * parentHeight;
-        globalScale.x = scale.x * parentWidth;
+        globalDisplacement.setX(xDisplacement * parentWidth + parentDisplaceX);
+        globalDisplacement.setY(yDisplacement * parentHeight + parentDisplaceY);
+        globalScale.setY(scale.getY() * parentHeight);
+        globalScale.setX(scale.getX() * parentWidth);
 
         dirty = false;
     }
@@ -399,7 +397,7 @@ public class BaseWindow {
      * @param displace The displacement to use.
      */
     public void setDisplacement(final @NonNull Vec2D displace) {
-        localDisplace.set(displace.x, displace.y);
+        localDisplace.set(displace.getX(), displace.getY());
         dirty();
     }
 
@@ -409,7 +407,7 @@ public class BaseWindow {
      * @param height The new height of the window as a decimal percentage of the parent.
      */
     public void setLocalHeight(final float height) {
-        scale.y = height;
+        scale.setY(height);
         dirty();
     }
 
@@ -419,7 +417,7 @@ public class BaseWindow {
      * @param width The new width of the window as a decimal percentage of the parent.
      */
     public void setLocalWidth(final float width) {
-        scale.x = width;
+        scale.setX(width);
         dirty();
     }
 
