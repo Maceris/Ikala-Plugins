@@ -31,22 +31,15 @@ public class BaseWindow {
      */
     protected Vec2D localDisplace;
 
-    /**
-     * The displacement from the parent as measured from the northwest corner of this window. This
-     * is used for calculating real screen coordinates, and recalculated whenever the window is
-     * changed or dirtied.
-     */
-    private Vec2D localDisplaceNW;
-
     /** The global screen displacement of the window. */
-    private Vec2D globalDisplacement;
+    private final Vec2D globalDisplacement;
 
     /**
      * The true screen width of the window. This is a percentage of the canvas this is drawn on.
      * Should be positive and <= 1.0f, where 1 is the entire canvas. X represents width, and Y
      * represents height.
      */
-    private Vec2D globalScale;
+    private final Vec2D globalScale;
 
     /** Where in the parent should this window snap to, or have displacement measured from. */
     protected Alignment align;
@@ -72,6 +65,9 @@ public class BaseWindow {
     /** A list of sub-windows this window contains */
     private final List<BaseWindow> children;
 
+    /**
+     * The height of the window, or z depth. Higher numbers are drawn on top.
+     */
     @Getter private int height;
 
     /**
@@ -109,7 +105,6 @@ public class BaseWindow {
             final @NonNull Vec2D scale) {
         visible = true;
         localDisplace = new Vec2D(displacement.x, displacement.y);
-        localDisplaceNW = new Vec2D();
         globalDisplacement = new Vec2D();
         globalScale = new Vec2D();
         align = alignment;
@@ -123,7 +118,7 @@ public class BaseWindow {
      * Adds a child to the window, sets the child to have this as a parent, and then dirties this
      * window (and thus children).
      *
-     * @param item the child to add to the window
+     * @param item The child to add to the window.
      */
     public void addChild(@NonNull BaseWindow item) {
         children.add(item);
@@ -192,7 +187,7 @@ public class BaseWindow {
      * Returns the actual displacement value of the window as it would be used on a canvas as a
      * decimal percentage of the whole, from the top of the window.
      *
-     * @return The width, which should be >=0 and <=1.0 but is not guaranteed to be
+     * @return The width, which should be >=0 and <=1.0 but is not guaranteed to be.
      */
     public float getActualDisplaceY() {
         if (dirty) {
@@ -204,7 +199,7 @@ public class BaseWindow {
     /**
      * Returns the actual scale value of the window as it would be used on a canvas.
      *
-     * @return The width, which should be >=0 and <=1.0 but is not guaranteed to be
+     * @return The width, which should be >=0 and <=1.0 but is not guaranteed to be.
      */
     public float getActualHeight() {
         if (dirty) {
@@ -216,7 +211,7 @@ public class BaseWindow {
     /**
      * Returns the actual scale value of the window as it would be used on a canvas.
      *
-     * @return The width, which should be >=0 and <=1.0 but is not guaranteed to be
+     * @return The width, which should be >=0 and <=1.0 but is not guaranteed to be.
      */
     public float getActualWidth() {
         if (dirty) {
@@ -230,7 +225,7 @@ public class BaseWindow {
      * mapped onto the given canvas, using actual pixels.
      *
      * @param screen The screen area we are drawing on.
-     * @return The rectangle representing where this would be located on the canvas
+     * @return The rectangle representing where this would be located on the canvas.
      */
     public Rect getBoundingRect(@NonNull Rect screen) {
         if (dirty) {
@@ -279,61 +274,6 @@ public class BaseWindow {
     }
 
     /**
-     * Returns the parents actual displacement, which is determined by recursing up the tree of
-     * windows. If the parent is null (that is, this is a root window), returns 0.0f to not change
-     * calculations (it measures from (0,0)).
-     *
-     * @return The parents actual displace percentage, or 0 if there is no parent.
-     */
-    private float getParentRealDisplaceX() {
-        if (parent == null) {
-            return 0.0f;
-        }
-        return parent.getActualDisplaceX();
-    }
-
-    /**
-     * Returns the parents actual displacement, which is determined by recursing up the tree of
-     * windows. If the parent is null (that is, this is a root window), returns 0.0f to not change
-     * calculations (it measures from (0,0)).
-     *
-     * @return The parents actual displace percentage, or 0 if there is no parent.
-     */
-    private float getParentRealDisplaceY() {
-        if (parent == null) {
-            return 0.0f;
-        }
-        return parent.getActualDisplaceY();
-    }
-
-    /**
-     * Returns the parents actual height, which is determined by recursing up the tree of windows.
-     * If the parent is null (that is, this is a root window), returns 1.0f to not change
-     * calculations.
-     *
-     * @return The parents actual height percentage, or 1 if there is no parent.
-     */
-    private float getParentRealHeight() {
-        if (parent == null) {
-            return 1.0f;
-        }
-        return parent.getActualHeight();
-    }
-
-    /**
-     * Returns the parents actual width, which is determined by recursing up the tree of windows. If
-     * the parent is null (that is, this is a root window), returns 1.0f to not change calculations.
-     *
-     * @return The parents actual width percentage, or 1 if there is no parent.
-     */
-    private float getParentRealWidth() {
-        if (parent == null) {
-            return 1.0f;
-        }
-        return parent.getActualWidth();
-    }
-
-    /**
      * Returns an actual reference to the current window style. If one does not exist, the default
      * style is returned instead. This should not be modified without proper thread safety in mind
      * as it could cause unpredictable results otherwise.
@@ -358,9 +298,9 @@ public class BaseWindow {
     }
 
     /**
-     * Returns true if this window should be drawn on the screen
+     * Returns true if this window should be drawn on the screen.
      *
-     * @return True if this window is visible
+     * @return True if this window is visible.
      */
     public boolean isVisible() {
         if (parent != null && (!parent.isVisible())) {
@@ -385,9 +325,7 @@ public class BaseWindow {
         if (win != null) {
             win.removeChild(this);
         }
-        for (BaseWindow child : children) {
-            child.updateHeights();
-        }
+        children.forEach(BaseWindow::updateHeights);
     }
 
     /**
@@ -403,36 +341,29 @@ public class BaseWindow {
             parent.recalculate();
         }
 
-        recalculateLocalDisplaceNW();
-
-        globalDisplacement.x = localDisplaceNW.x * getParentRealWidth() + getParentRealDisplaceX();
-        globalDisplacement.y = localDisplaceNW.y * getParentRealHeight() + getParentRealDisplaceY();
-        globalScale.y = scale.y * getParentRealHeight();
-        globalScale.x = scale.x * getParentRealWidth();
-
-        dirty = false;
-    }
-
-    /**
-     * Calculates what the displacement would be, should it be from the northwest corner. This is
-     * used for screen displacement.
-     */
-    private void recalculateLocalDisplaceNW() {
-        float xDispl =
+        final float xDisplacement =
                 switch (align) {
                     case CENTER, NORTH, SOUTH -> (1 - scale.x) / 2;
                     case EAST, NORTH_EAST, SOUTH_EAST -> 1 - (localDisplace.x + scale.x);
                     case NORTH_WEST, SOUTH_WEST, WEST -> localDisplace.x;
                 };
-
-        float yDispl =
+        final float yDisplacement =
                 switch (align) {
                     case CENTER, WEST, EAST -> (1 - scale.y) / 2;
                     case NORTH, NORTH_WEST, NORTH_EAST -> localDisplace.y;
                     case SOUTH, SOUTH_WEST, SOUTH_EAST -> 1 - (localDisplace.y + scale.y);
                 };
+        final float parentWidth = parent != null ? parent.getActualWidth() : 1.0f;
+        final float parentHeight = parent != null ? parent.getActualHeight() : 1.0f;
+        final float parentDisplaceX = parent != null ? parent.getActualDisplaceX() : 0.0f;
+        final float parentDisplaceY = parent != null ? parent.getActualDisplaceY() : 0.0f;
 
-        localDisplaceNW.set(xDispl, yDispl);
+        globalDisplacement.x = xDisplacement * parentWidth + parentDisplaceX;
+        globalDisplacement.y = yDisplacement * parentHeight + parentDisplaceY;
+        globalScale.y = scale.y * parentHeight;
+        globalScale.x = scale.x * parentWidth;
+
+        dirty = false;
     }
 
     /**
@@ -440,12 +371,11 @@ public class BaseWindow {
      * orphan itself. If this is overridden be sure {@link #orphanSelf()} and this do not
      * recursively call each other infinitely.
      *
-     * @param item the item to remove
+     * @param item The item to remove.
      */
-    public void removeChild(BaseWindow item) {
+    public void removeChild(@NonNull BaseWindow item) {
         children.remove(item);
-        // so this does not recurse until crashing
-        if (item != null && item.parent != null) {
+        if (item.parent != null) {
             item.orphanSelf();
         }
     }
@@ -454,9 +384,9 @@ public class BaseWindow {
      * Sets the alignment of the window to the given one. This determines from where the window is
      * displaced in the parent.
      *
-     * @param newAlignment the new alignment to use
+     * @param newAlignment The new alignment to use.
      */
-    public void setAlignment(final Alignment newAlignment) {
+    public void setAlignment(final @NonNull Alignment newAlignment) {
         align = newAlignment;
         dirty();
     }
@@ -466,9 +396,9 @@ public class BaseWindow {
      * alignment of the window in its parent, one or both of these values may not be used as it may
      * be centered and thus ignore the value. Flags the window as dirty.
      *
-     * @param displace the displacement to use
+     * @param displace The displacement to use.
      */
-    public void setDisplacement(final Vec2D displace) {
+    public void setDisplacement(final @NonNull Vec2D displace) {
         localDisplace.set(displace.x, displace.y);
         dirty();
     }
@@ -476,7 +406,7 @@ public class BaseWindow {
     /**
      * Sets the local height percentage and flags the window as dirty.
      *
-     * @param height the new height of the window as a decimal percentage of the parent
+     * @param height The new height of the window as a decimal percentage of the parent.
      */
     public void setLocalHeight(final float height) {
         scale.y = height;
@@ -486,7 +416,7 @@ public class BaseWindow {
     /**
      * Sets the local width percentage and flags the window as dirty.
      *
-     * @param width the new width of the window as a decimal percentage of the parent
+     * @param width The new width of the window as a decimal percentage of the parent.
      */
     public void setLocalWidth(final float width) {
         scale.x = width;
@@ -496,11 +426,11 @@ public class BaseWindow {
     /**
      * Sets the new parent of this window and adds this to the new parent's children.
      *
-     * @param newParent the new parent of this window
+     * @param newParent The new parent of this window.
      */
     public void setParent(final BaseWindow newParent) {
         parent = newParent;
-        if (!parent.hasChild(this)) {
+        if (parent != null && !parent.hasChild(this)) {
             parent.addChild(this);
         }
         dirty();

@@ -3,6 +3,7 @@ package com.ikalagaming.factory.gui.component;
 import com.ikalagaming.factory.gui.SizeConstants;
 
 import imgui.ImGui;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 /** A button, which may have text. */
@@ -23,7 +24,7 @@ public class Button implements Component, Interactive {
     }
 
     @Override
-    public void draw(final SizeConstants size) {
+    public void draw(final @NonNull SizeConstants size) {
         if (ImGui.button(text, size.buttonWidth(), size.buttonHeight())) {
             pressed = true;
         }

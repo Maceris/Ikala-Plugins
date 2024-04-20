@@ -4,6 +4,7 @@ import com.ikalagaming.factory.gui.SizeConstants;
 
 import imgui.ImGui;
 import imgui.type.ImBoolean;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 /** A checkbox with text. */
@@ -38,7 +39,7 @@ public class Checkbox implements Component, Interactive {
     }
 
     @Override
-    public void draw(final SizeConstants size) {
+    public void draw(final @NonNull SizeConstants size) {
         if (ImGui.checkbox(text, state)) {
             changed = true;
         }
