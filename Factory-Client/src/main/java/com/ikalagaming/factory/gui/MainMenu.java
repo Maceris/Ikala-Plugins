@@ -54,7 +54,7 @@ public class MainMenu extends GuiWindow {
     }
 
     @Override
-    public void drawGui() {
+    public void draw() {
         final int offset = guiManager.isEnabled(DEBUG_TOOLBAR.getName()) ? 20 : 0;
         var window = GraphicsManager.getWindow();
         windowSize.x = window.getWidth();
@@ -70,23 +70,24 @@ public class MainMenu extends GuiWindow {
 
         ImGui.setCursorPosX(centerX - sizes.buttonWidth() / 2f);
         ImGui.setCursorPosY(centerY - sizes.buttonHeight() - sizes.padding());
-        singlePlayer.draw(sizes);
+        singlePlayer.draw();
 
         ImGui.setCursorPosX(centerX - sizes.buttonWidth() / 2f);
         ImGui.setCursorPosY(centerY);
-        multiPlayer.draw(sizes);
+        multiPlayer.draw();
 
         ImGui.setCursorPosX(centerX - sizes.buttonWidth() / 2f);
         ImGui.setCursorPosY(centerY + sizes.buttonHeight() + sizes.padding());
-        options.draw(sizes);
+        options.draw();
 
         ImGui.end();
     }
 
     @Override
-    public void handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+    public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
         if (singlePlayer.checkResult()) {
             guiManager.disable(MAIN_MENU.getName());
+            return true;
         }
         if (multiPlayer.checkResult()) {
             // TODO(ches) Joining remote servers FACT-13
@@ -94,5 +95,6 @@ public class MainMenu extends GuiWindow {
         if (options.checkResult()) {
             // TODO(ches) Options menu FACT-14
         }
+        return false;
     }
 }

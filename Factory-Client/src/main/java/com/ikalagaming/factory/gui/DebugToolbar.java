@@ -26,11 +26,10 @@ public class DebugToolbar extends GuiWindow {
     }
 
     @Override
-    public void drawGui() {
-        final var sizes = guiManager.getCurrentSizes();
+    public void draw() {
         if (ImGui.beginMainMenuBar()) {
             if (ImGui.beginMenu("Windows")) {
-                biomeDebug.draw(sizes);
+                biomeDebug.draw();
                 ImGui.endMenu();
             }
             ImGui.pushStyleColor(ImGuiCol.Text, ImColor.rgba(1f, 0.1f, 0.1f, 1.0f));
@@ -44,9 +43,11 @@ public class DebugToolbar extends GuiWindow {
     }
 
     @Override
-    public void handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+    public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
         if (biomeDebug.checkResult()) {
             guiManager.setEnabled(DefaultComponents.BIOME_DEBUG.getName(), biomeDebug.getState());
+            return true;
         }
+        return false;
     }
 }

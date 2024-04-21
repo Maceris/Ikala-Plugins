@@ -1,14 +1,13 @@
 package com.ikalagaming.factory.gui.component;
 
-import com.ikalagaming.factory.gui.SizeConstants;
+import com.ikalagaming.factory.gui.GuiWindow;
 
 import imgui.ImGui;
-import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 /** A button, which may have text. */
 @RequiredArgsConstructor
-public class Button implements Component, Interactive {
+public class Button extends GuiWindow implements Component, Interactive {
 
     /** The text to show on the button. */
     private final String text;
@@ -24,8 +23,8 @@ public class Button implements Component, Interactive {
     }
 
     @Override
-    public void draw(final @NonNull SizeConstants size) {
-        if (ImGui.button(text, size.buttonWidth(), size.buttonHeight())) {
+    public void draw() {
+        if (ImGui.button(text, getActualWidth(), getActualHeight())) {
             pressed = true;
         }
     }

@@ -1,15 +1,14 @@
 package com.ikalagaming.factory.gui.component;
 
-import com.ikalagaming.factory.gui.SizeConstants;
+import com.ikalagaming.factory.gui.GuiWindow;
 
 import imgui.ImGui;
 import imgui.type.ImBoolean;
-import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 /** A checkbox with text. */
 @RequiredArgsConstructor
-public class Checkbox implements Component, Interactive {
+public class Checkbox extends GuiWindow implements Component, Interactive {
 
     /** The text to show next to the checkbox. */
     private final String text;
@@ -39,7 +38,7 @@ public class Checkbox implements Component, Interactive {
     }
 
     @Override
-    public void draw(final @NonNull SizeConstants size) {
+    public void draw() {
         if (ImGui.checkbox(text, state)) {
             changed = true;
         }

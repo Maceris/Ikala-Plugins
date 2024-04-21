@@ -39,8 +39,7 @@ public class BiomeDebug extends GuiWindow {
 
     private Texture biomes;
 
-    @Override
-    public void drawGui() {
+    public void draw() {
         ImGui.setNextWindowPos(20, 20, ImGuiCond.Once);
         ImGui.setNextWindowSize(1300, 900, ImGuiCond.Once);
         ImGui.begin("World Generation");
@@ -110,7 +109,7 @@ public class BiomeDebug extends GuiWindow {
     }
 
     @Override
-    public void handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+    public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
         if (generateRequested.compareAndExchange(true, false)) {
             long seed = RandomGen.generateSeed();
 
@@ -196,5 +195,6 @@ public class BiomeDebug extends GuiWindow {
                                     .build());
             weirdness = generateTexture(weirdnessImage);
         }
+        return false;
     }
 }

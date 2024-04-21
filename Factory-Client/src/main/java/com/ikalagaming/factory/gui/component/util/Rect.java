@@ -1,6 +1,7 @@
 package com.ikalagaming.factory.gui.component.util;
 
 import lombok.*;
+import org.joml.Vector2f;
 
 @AllArgsConstructor
 @NoArgsConstructor
@@ -30,8 +31,8 @@ public class Rect {
      * @param point The point to check.
      * @return true if the point is inside the rectangle, false otherwise.
      */
-    public boolean contains(@NonNull Vec2D point) {
-        return contains(point.getX(), point.getY());
+    public boolean contains(@NonNull Vector2f point) {
+        return contains(point.x, point.y);
     }
 
     /**

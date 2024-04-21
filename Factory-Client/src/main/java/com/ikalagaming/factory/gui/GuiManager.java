@@ -52,7 +52,7 @@ public class GuiManager implements GuiInstance {
     public void drawGui() {
         ImGui.newFrame();
 
-        windows.values().stream().filter(GuiWindow::isVisible).forEach(GuiInstance::drawGui);
+        windows.values().stream().filter(GuiWindow::isVisible).forEach(GuiWindow::draw);
 
         ImGui.endFrame();
         ImGui.render();
