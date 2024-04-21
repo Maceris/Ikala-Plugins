@@ -62,12 +62,10 @@ public class FactoryClientPlugin extends Plugin {
         UserDataUtil.createUserDataFolder();
         guiManager = new GuiManager();
         GraphicsManager.setGUI(guiManager);
-        guiManager.addWindow(DEBUG_TOOLBAR.getName(), new DebugToolbar(guiManager));
+        guiManager.setToolbar(new DebugToolbar(guiManager));
         guiManager.addWindow(BIOME_DEBUG.getName(), new BiomeDebug());
         guiManager.addWindow(MAIN_MENU.getName(), new MainMenu(guiManager));
-        Stream.of(DEBUG_TOOLBAR, MAIN_MENU)
-                .map(DefaultComponents::getName)
-                .forEach(guiManager::enable);
+        Stream.of(MAIN_MENU).map(DefaultComponents::getName).forEach(guiManager::show);
         return true;
     }
 

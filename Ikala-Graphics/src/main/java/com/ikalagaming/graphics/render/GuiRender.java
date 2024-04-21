@@ -146,12 +146,12 @@ public class GuiRender {
      *
      * @param scene The scene we are drawing.
      */
-    public void render(@NonNull Scene scene) {
+    public void render(@NonNull Window window, @NonNull Scene scene) {
         GuiInstance guiInstance = GraphicsManager.getGuiInstance();
         if (guiInstance == null) {
             return;
         }
-        guiInstance.drawGui();
+        guiInstance.drawGui(window.getWidth(), window.getHeight());
 
         shaderProgram.bind();
 

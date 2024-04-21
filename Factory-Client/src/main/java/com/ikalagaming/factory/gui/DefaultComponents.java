@@ -7,7 +7,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 @Getter
 public enum DefaultComponents {
-    DEBUG_TOOLBAR("Debug Toolbar"),
+    ROOT_WINDOW("Root Window"),
     BIOME_DEBUG("Biome Debug"),
     MAIN_MENU("Main Menu");
     private final String name;

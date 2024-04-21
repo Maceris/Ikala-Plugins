@@ -1,18 +1,14 @@
 package com.ikalagaming.factory.gui;
 
-import static com.ikalagaming.factory.gui.DefaultComponents.DEBUG_TOOLBAR;
 import static com.ikalagaming.factory.gui.DefaultComponents.MAIN_MENU;
 
 import com.ikalagaming.factory.FactoryClientPlugin;
 import com.ikalagaming.factory.gui.component.Button;
-import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.factory.gui.component.util.Alignment;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.SafeResourceLoader;
 
-import imgui.ImGui;
-import imgui.ImVec2;
-import imgui.flag.ImGuiCond;
 import imgui.flag.ImGuiWindowFlags;
 import imgui.type.ImBoolean;
 import lombok.NonNull;
@@ -23,70 +19,52 @@ public class MainMenu extends GuiWindow {
     private final Button singlePlayer;
     private final Button multiPlayer;
     private final Button options;
-    private final ImVec2 windowSize;
-    private final int windowFlags;
-    private final ImBoolean windowOpen;
 
     public MainMenu(@NonNull GuiManager guiManager) {
+        super(
+                MAIN_MENU.getName(),
+                ImGuiWindowFlags.NoScrollbar
+                        | ImGuiWindowFlags.NoScrollWithMouse
+                        | ImGuiWindowFlags.NoResize
+                        | ImGuiWindowFlags.NoTitleBar
+                        | ImGuiWindowFlags.NoDecoration,
+                new ImBoolean(true));
         this.guiManager = guiManager;
-        windowSize = new ImVec2();
-        windowOpen = new ImBoolean(true);
+        setScale(1.0f, 0.98f);
+        setDisplacement(0.0f, 0.02f);
 
         var textSinglePlayer =
                 SafeResourceLoader.getString(
                         "MENU_TEXT_SINGLE_PLAYER", FactoryClientPlugin.getResourceBundle());
         singlePlayer = new Button(textSinglePlayer);
+        singlePlayer.setAlignment(Alignment.CENTER);
+        singlePlayer.setDisplacement(0.0f, -0.15f);
+        singlePlayer.setScale(0.10f, 0.10f);
+
         var textMultiplayer =
                 SafeResourceLoader.getString(
                         "MENU_TEXT_MULTI_PLAYER", FactoryClientPlugin.getResourceBundle());
         multiPlayer = new Button(textMultiplayer);
+        multiPlayer.setAlignment(Alignment.CENTER);
+        multiPlayer.setScale(0.10f, 0.10f);
+
         var textOptions =
                 SafeResourceLoader.getString(
                         "MENU_TEXT_OPTIONS", FactoryClientPlugin.getResourceBundle());
         options = new Button(textOptions);
+        options.setAlignment(Alignment.CENTER);
+        options.setDisplacement(0.0f, 0.15f);
+        options.setScale(0.10f, 0.10f);
 
-        windowFlags =
-                ImGuiWindowFlags.NoScrollbar
-                        | ImGuiWindowFlags.NoScrollWithMouse
-                        | ImGuiWindowFlags.NoResize
-                        | ImGuiWindowFlags.NoTitleBar
-                        | ImGuiWindowFlags.NoDecoration;
-    }
-
-    @Override
-    public void draw() {
-        final int offset = guiManager.isEnabled(DEBUG_TOOLBAR.getName()) ? 20 : 0;
-        var window = GraphicsManager.getWindow();
-        windowSize.x = window.getWidth();
-        windowSize.y = window.getHeight() - offset;
-        final SizeConstants sizes = guiManager.getCurrentSizes();
-
-        ImGui.setNextWindowPos(0, offset, ImGuiCond.Always);
-        ImGui.setNextWindowSize(windowSize.x, windowSize.y, ImGuiCond.Always);
-        ImGui.begin("Main Menu", windowOpen, windowFlags);
-
-        final float centerX = windowSize.x / 2;
-        final float centerY = windowSize.y / 2;
-
-        ImGui.setCursorPosX(centerX - sizes.buttonWidth() / 2f);
-        ImGui.setCursorPosY(centerY - sizes.buttonHeight() - sizes.padding());
-        singlePlayer.draw();
-
-        ImGui.setCursorPosX(centerX - sizes.buttonWidth() / 2f);
-        ImGui.setCursorPosY(centerY);
-        multiPlayer.draw();
-
-        ImGui.setCursorPosX(centerX - sizes.buttonWidth() / 2f);
-        ImGui.setCursorPosY(centerY + sizes.buttonHeight() + sizes.padding());
-        options.draw();
-
-        ImGui.end();
+        addChild(singlePlayer);
+        addChild(multiPlayer);
+        addChild(options);
     }
 
     @Override
     public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
         if (singlePlayer.checkResult()) {
-            guiManager.disable(MAIN_MENU.getName());
+            guiManager.hide(MAIN_MENU.getName());
             return true;
         }
         if (multiPlayer.checkResult()) {

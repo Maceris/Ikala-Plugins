@@ -107,7 +107,7 @@ public class GUIControls implements GuiInstance {
     }
 
     @Override
-    public void drawGui() {
+    public void drawGui(final int width, final int height) {
         oneTimeSetups();
 
         ImGui.newFrame();

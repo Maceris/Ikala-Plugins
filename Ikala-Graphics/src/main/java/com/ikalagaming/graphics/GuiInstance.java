@@ -13,10 +13,12 @@ import lombok.NonNull;
 /** Defines a Graphical User Interface that we can interact with. */
 public interface GuiInstance {
     /**
-     * Used to construct the GUI, where we define the window and widgets that will be used to
-     * construct the GUI meshes.
+     * Used to draw the GUI.
+     *
+     * @param width The width of the window, in pixels.
+     * @param height The width of the height, in pixels.
      */
-    void drawGui();
+    void drawGui(final int width, final int height);
 
     /**
      * Process GUI inputs, which might happen at a different frequency than rendering.

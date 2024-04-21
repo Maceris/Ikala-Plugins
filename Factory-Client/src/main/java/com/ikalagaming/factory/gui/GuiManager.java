@@ -1,5 +1,6 @@
 package com.ikalagaming.factory.gui;
 
+import com.ikalagaming.factory.gui.component.MainToolbar;
 import com.ikalagaming.graphics.GuiInstance;
 import com.ikalagaming.graphics.MouseInput;
 import com.ikalagaming.graphics.Window;
@@ -18,54 +19,62 @@ import java.util.Optional;
 
 /** Tracks and engages all the things we want to render with ImGui. */
 public class GuiManager implements GuiInstance {
-    private final Map<String, GuiWindow> windows;
+    /** A table for looking up specific window by name. */
+    private final Map<String, GuiWindow> components;
+
+    @Getter @Setter private MainToolbar toolbar;
 
     /** The component sizes to use for UIs. */
     @Getter @Setter @NonNull private SizeConstants currentSizes = SizeConstants.MEDIUM;
 
     public GuiManager() {
-        windows = new HashMap<>();
+        components = new HashMap<>();
     }
 
     /**
-     * Register a named gui component. This is expected for larger things like a menu or floating
-     * window, rather than a button or list.
+     * Add and register a named gui window.
      *
-     * @param name The unique name of the component.
+     * @param name The unique name of the window.
      * @param component The component.
      */
     public void addWindow(@NonNull String name, @NonNull GuiWindow component) {
-        this.windows.put(name, component);
+        this.components.put(name, component);
     }
 
     /**
      * Disable a component by name.
      *
-     * @param name The name od the component to hide.
-     * @see #setEnabled(String, boolean)
+     * @param name The name of the component to hide.
+     * @see #setVisible(String, boolean)
      */
-    public void disable(@NonNull String name) {
-        setEnabled(name, false);
+    public void hide(@NonNull String name) {
+        setVisible(name, false);
     }
 
     @Override
-    public void drawGui() {
+    public void drawGui(final int width, final int height) {
         ImGui.newFrame();
 
-        windows.values().stream().filter(GuiWindow::isVisible).forEach(GuiWindow::draw);
+        components.values().stream()
+                .filter(Component::isVisible)
+                .forEach(window -> window.draw(width, height));
+
+        if (toolbar != null) {
+            toolbar.draw(width, height);
+        }
 
         ImGui.endFrame();
         ImGui.render();
     }
 
     /**
-     * Enable a component by name.
+     * Make a component visible based on the name.
      *
      * @param name The name od the component to show.
-     * @see #setEnabled(String, boolean)
+     * @see #setVisible(String, boolean)
      */
-    public void enable(@NonNull String name) {
-        setEnabled(name, true);
+    public void show(@NonNull String name) {
+        setVisible(name, true);
     }
 
     @Override
@@ -77,8 +86,12 @@ public class GuiManager implements GuiInstance {
         imGuiIO.setMouseDown(0, mouseInput.isLeftButtonPressed());
         imGuiIO.setMouseDown(1, mouseInput.isRightButtonPressed());
 
-        windows.values().stream()
-                .filter(GuiWindow::isVisible)
+        if (toolbar != null) {
+            toolbar.handleGuiInput(scene, window);
+        }
+
+        components.values().stream()
+                .filter(Component::isVisible)
                 .forEach(component -> component.handleGuiInput(scene, window));
     }
 
@@ -89,28 +102,30 @@ public class GuiManager implements GuiInstance {
      * @param name The name of the component to check.
      * @return Whether the specified component is enabled.
      */
-    public boolean isEnabled(@NonNull String name) {
-        return Optional.ofNullable(this.windows.get(name)).map(GuiWindow::isVisible).orElse(false);
+    public boolean isVisible(@NonNull String name) {
+        return Optional.ofNullable(this.components.get(name))
+                .map(Component::isVisible)
+                .orElse(false);
     }
 
     /**
-     * Remove a component by name.
+     * Remove and unregister a component by name.
      *
-     * @param name The name od the component to remove.
+     * @param name The name of the component to remove.
      */
     public void removeWindow(@NonNull String name) {
-        this.windows.remove(name);
+        this.components.remove(name);
     }
 
     /**
-     * Enable/disable a component by name.
+     * Show/hide a component by name.
      *
      * @param name The name of the component to show/hide.
-     * @param enabled True if the component should show, false if it should be hidden.
-     * @see #setEnabled(String, boolean)
+     * @param visible True if the component should show, false if it should be hidden.
+     * @see #setVisible(String, boolean)
      */
-    public void setEnabled(@NonNull String name, boolean enabled) {
-        Optional.ofNullable(this.windows.get(name))
-                .ifPresent(component -> component.setVisible(enabled));
+    public void setVisible(@NonNull String name, boolean visible) {
+        Optional.ofNullable(this.components.get(name))
+                .ifPresent(component -> component.setVisible(visible));
     }
 }

@@ -8,7 +8,8 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.random.RandomGen;
 
 import imgui.ImGui;
-import imgui.flag.ImGuiCond;
+import imgui.flag.ImGuiWindowFlags;
+import imgui.type.ImBoolean;
 import lombok.NonNull;
 
 import java.awt.image.BufferedImage;
@@ -16,6 +17,10 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class BiomeDebug extends GuiWindow {
+
+    public BiomeDebug() {
+        super(DefaultComponents.BIOME_DEBUG.getName(), ImGuiWindowFlags.None, new ImBoolean(false));
+    }
 
     private static byte[] intARGBtoByteRGBA(int[] argb) {
         byte[] rgba = new byte[argb.length * 4];
@@ -31,18 +36,16 @@ public class BiomeDebug extends GuiWindow {
     }
 
     private final AtomicBoolean generateRequested = new AtomicBoolean();
-    private Texture temperature;
-    private Texture height;
-    private Texture erosion;
-    private Texture vegetation;
-    private Texture weirdness;
+    private Texture temperatureMap;
+    private Texture heightMap;
+    private Texture erosionMap;
+    private Texture vegetationMap;
+    private Texture weirdnessMap;
 
-    private Texture biomes;
+    private Texture biomeMap;
 
-    public void draw() {
-        ImGui.setNextWindowPos(20, 20, ImGuiCond.Once);
-        ImGui.setNextWindowSize(1300, 900, ImGuiCond.Once);
-        ImGui.begin("World Generation");
+    @Override
+    public void draw(final int width, final int height) {
 
         if (ImGui.button("Generate textures")) {
             generateRequested.set(true);
@@ -50,28 +53,26 @@ public class BiomeDebug extends GuiWindow {
 
         ImGui.beginGroup();
         ImGui.text("Temperature");
-        drawImage(temperature);
+        drawImage(temperatureMap);
         ImGui.text("Erosion");
-        drawImage(erosion);
+        drawImage(erosionMap);
         ImGui.endGroup();
 
         ImGui.sameLine();
         ImGui.beginGroup();
         ImGui.text("Height");
-        drawImage(height);
+        drawImage(heightMap);
         ImGui.text("Vegetation");
-        drawImage(vegetation);
+        drawImage(vegetationMap);
         ImGui.endGroup();
 
         ImGui.sameLine();
         ImGui.beginGroup();
         ImGui.text("Weirdness");
-        drawImage(weirdness);
+        drawImage(weirdnessMap);
         ImGui.text("Biomes");
-        drawImage(biomes);
+        drawImage(biomeMap);
         ImGui.endGroup();
-
-        ImGui.end();
     }
 
     /**
@@ -113,8 +114,8 @@ public class BiomeDebug extends GuiWindow {
         if (generateRequested.compareAndExchange(true, false)) {
             long seed = RandomGen.generateSeed();
 
-            if (temperature != null) {
-                temperature.cleanup();
+            if (temperatureMap != null) {
+                temperatureMap.cleanup();
             }
             int w = 400;
             int h = 400;
@@ -129,10 +130,10 @@ public class BiomeDebug extends GuiWindow {
                                     .scale(0.001)
                                     .octaves(4)
                                     .build());
-            temperature = generateTexture(tempImage);
+            temperatureMap = generateTexture(tempImage);
 
-            if (height != null) {
-                height.cleanup();
+            if (heightMap != null) {
+                heightMap.cleanup();
             }
             BufferedImage heightImage =
                     RandomGen.generateSimplexNoise(
@@ -145,10 +146,10 @@ public class BiomeDebug extends GuiWindow {
                                     .scale(0.002)
                                     .octaves(10)
                                     .build());
-            height = generateTexture(heightImage);
+            heightMap = generateTexture(heightImage);
 
-            if (erosion != null) {
-                erosion.cleanup();
+            if (erosionMap != null) {
+                erosionMap.cleanup();
             }
             BufferedImage erosionImage =
                     RandomGen.generateSimplexNoise(
@@ -161,10 +162,10 @@ public class BiomeDebug extends GuiWindow {
                                     .scale(0.002)
                                     .octaves(6)
                                     .build());
-            erosion = generateTexture(erosionImage);
+            erosionMap = generateTexture(erosionImage);
 
-            if (vegetation != null) {
-                vegetation.cleanup();
+            if (vegetationMap != null) {
+                vegetationMap.cleanup();
             }
             BufferedImage vegetationImage =
                     RandomGen.generateSimplexNoise(
@@ -177,10 +178,10 @@ public class BiomeDebug extends GuiWindow {
                                     .scale(0.001)
                                     .octaves(5)
                                     .build());
-            vegetation = generateTexture(vegetationImage);
+            vegetationMap = generateTexture(vegetationImage);
 
-            if (weirdness != null) {
-                weirdness.cleanup();
+            if (weirdnessMap != null) {
+                weirdnessMap.cleanup();
             }
             BufferedImage weirdnessImage =
                     RandomGen.generateSimplexNoise(
@@ -193,7 +194,7 @@ public class BiomeDebug extends GuiWindow {
                                     .scale(0.002)
                                     .octaves(6)
                                     .build());
-            weirdness = generateTexture(weirdnessImage);
+            weirdnessMap = generateTexture(weirdnessImage);
         }
         return false;
     }
