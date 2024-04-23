@@ -46,7 +46,7 @@ public class DebugToolbar extends MainToolbar {
     @Override
     public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
         if (biomeDebug.checkResult()) {
-            guiManager.setVisible(DefaultComponents.BIOME_DEBUG.getName(), biomeDebug.getState());
+            guiManager.setVisible(DefaultWindows.BIOME_DEBUG.getName(), biomeDebug.getState());
             return true;
         }
         return false;

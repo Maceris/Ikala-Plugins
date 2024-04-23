@@ -1,9 +1,11 @@
-package com.ikalagaming.factory.gui;
+package com.ikalagaming.factory.gui.window;
 
-import static com.ikalagaming.factory.gui.DefaultComponents.MAIN_MENU;
+import static com.ikalagaming.factory.gui.DefaultWindows.MAIN_MENU;
 
 import com.ikalagaming.factory.FactoryClientPlugin;
+import com.ikalagaming.factory.gui.GuiManager;
 import com.ikalagaming.factory.gui.component.Button;
+import com.ikalagaming.factory.gui.component.GuiWindow;
 import com.ikalagaming.factory.gui.component.util.Alignment;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;

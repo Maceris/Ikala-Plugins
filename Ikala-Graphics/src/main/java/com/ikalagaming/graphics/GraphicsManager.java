@@ -63,10 +63,10 @@ public class GraphicsManager {
     public static final int TARGET_UPS = 60;
 
     /** The (fractional) number of seconds between frame renders at the target FPS. */
-    private static final float FRAME_TIME = 1f / GraphicsManager.TARGET_FPS;
+    private static final float FRAME_TIME = 1f / TARGET_FPS;
 
     /** The (fractional) number of seconds between updates at the target UPS. */
-    private static final float UPDATE_TIME = 1f / GraphicsManager.TARGET_UPS;
+    private static final float UPDATE_TIME = 1f / TARGET_UPS;
 
     /** The time when the next render call should happen to maintain the target FPS. */
     private static double nextRenderTime;
@@ -121,58 +121,53 @@ public class GraphicsManager {
      * window already exists.
      */
     public static void createWindow() {
-        if ((null != GraphicsManager.window)
-                || !GraphicsManager.initialized.compareAndSet(false, true)) {
+        if ((null != window) || !initialized.compareAndSet(false, true)) {
             return;
         }
-        GraphicsManager.shutdownFlag.set(false);
+        shutdownFlag.set(false);
 
         Window.WindowOptions opts = new Window.WindowOptions();
         opts.antiAliasing = true;
         opts.fps = 144;
-        GraphicsManager.window =
+        window =
                 new Window(
                         "Ikala Gaming",
                         opts,
                         () -> {
-                            GraphicsManager.resize();
+                            resize();
                             return null;
                         });
 
         log.debug(
                 SafeResourceLoader.getString("WINDOW_CREATED", GraphicsPlugin.getResourceBundle()));
-        new WindowCreated(GraphicsManager.window.getWindowHandle()).fire();
+        new WindowCreated(window.getWindowHandle()).fire();
 
-        GraphicsManager.render = new Render(GraphicsManager.window);
+        render = new Render(window);
 
         log.debug(
                 SafeResourceLoader.getString(
                         "RENDERER_CREATED", GraphicsPlugin.getResourceBundle()));
 
-        GraphicsManager.scene =
-                new Scene(GraphicsManager.window.getWidth(), GraphicsManager.window.getHeight());
+        scene = new Scene(window.getWidth(), window.getHeight());
 
-        GraphicsManager.cameraManager =
-                new CameraManager(GraphicsManager.scene.getCamera(), GraphicsManager.window);
+        cameraManager = new CameraManager(scene.getCamera(), window);
 
-        GraphicsManager.init();
+        init();
 
-        GraphicsManager.renderTimer = new Timer();
-        GraphicsManager.renderTimer.init();
-        GraphicsManager.nextRenderTime =
-                GraphicsManager.renderTimer.getLastLoopTime() + GraphicsManager.FRAME_TIME;
+        renderTimer = new Timer();
+        renderTimer.init();
+        nextRenderTime = renderTimer.getLastLoopTime() + FRAME_TIME;
 
-        GraphicsManager.updateTimer = new Timer();
-        GraphicsManager.updateTimer.init();
-        GraphicsManager.nextUpdateTime =
-                GraphicsManager.renderTimer.getLastLoopTime() + GraphicsManager.UPDATE_TIME;
+        updateTimer = new Timer();
+        updateTimer.init();
+        nextUpdateTime = renderTimer.getLastLoopTime() + UPDATE_TIME;
 
-        GraphicsManager.lastTime = glfwGetTime();
+        lastTime = glfwGetTime();
     }
 
     /** Initialize the application. */
     private static void init() {
-        GraphicsManager.render.setupData(GraphicsManager.scene);
+        render.setupData(scene);
     }
 
     /**
@@ -181,12 +176,12 @@ public class GraphicsManager {
      * @return If we have already set up the window.
      */
     public static boolean isInitialized() {
-        return GraphicsManager.initialized.get();
+        return initialized.get();
     }
 
     /** Set up the render data after adding/removing renderables. */
     public static void refreshRenderData() {
-        GraphicsManager.refreshRequested.set(true);
+        refreshRequested.set(true);
     }
 
     /**
@@ -195,24 +190,24 @@ public class GraphicsManager {
      * @param elapsedTime The time since the last render.
      */
     private static void render(final float elapsedTime) {
-        GraphicsManager.render.render(GraphicsManager.window, GraphicsManager.scene);
+        render.render(window, scene);
 
-        GraphicsManager.window.update();
-        ++GraphicsManager.framesSinceLastCalculation;
+        window.update();
+        ++framesSinceLastCalculation;
 
         final double currentTime = glfwGetTime();
-        if (currentTime - GraphicsManager.lastTime >= 1d) {
-            GraphicsManager.lastFPS = GraphicsManager.framesSinceLastCalculation;
-            GraphicsManager.framesSinceLastCalculation = 0;
-            GraphicsManager.lastTime = currentTime;
+        if (currentTime - lastTime >= 1d) {
+            lastFPS = framesSinceLastCalculation;
+            framesSinceLastCalculation = 0;
+            lastTime = currentTime;
         }
     }
 
     private static void resize() {
-        int width = GraphicsManager.window.getWidth();
-        int height = GraphicsManager.window.getHeight();
-        GraphicsManager.scene.resize(width, height);
-        GraphicsManager.render.resize(width, height);
+        int width = window.getWidth();
+        int height = window.getHeight();
+        scene.resize(width, height);
+        render.resize(width, height);
     }
 
     /**
@@ -221,23 +216,23 @@ public class GraphicsManager {
      * @param gui The user interface.
      */
     public static void setGUI(GuiInstance gui) {
-        GraphicsManager.guiInstance = gui;
+        guiInstance = gui;
     }
 
     /**
      * Terminate GLFW and free the error callback. If any windows still remain, they are destroyed.
      */
     public static void terminate() {
-        GraphicsManager.render.cleanup();
+        render.cleanup();
 
-        if (null != GraphicsManager.window) {
-            GraphicsManager.window.destroy();
-            GraphicsManager.window = null;
+        if (null != window) {
+            window.destroy();
+            window = null;
         }
 
         glfwTerminate();
         glfwSetErrorCallback(null).free();
-        GraphicsManager.initialized.set(false);
+        initialized.set(false);
     }
 
     /**
@@ -247,51 +242,48 @@ public class GraphicsManager {
      * @return True if the window updated, false if has been destroyed.
      */
     static int tick() {
-        if (null == GraphicsManager.window) {
+        if (null == window) {
             return Launcher.STATUS_ERROR;
         }
-        if (GraphicsManager.shutdownFlag.get()) {
-            GraphicsManager.terminate();
+        if (shutdownFlag.get()) {
+            terminate();
             return Launcher.STATUS_OK;
         }
 
-        if (GraphicsManager.window.windowShouldClose()) {
-            GraphicsManager.window.destroy();
-            GraphicsManager.window = null;
+        if (window.windowShouldClose()) {
+            window.destroy();
+            window = null;
             return Launcher.STATUS_REQUEST_REMOVAL;
         }
 
-        GraphicsManager.window.pollEvents();
+        window.pollEvents();
 
         ModelLoader.loadModel();
 
-        if (GraphicsManager.updateTimer.getTime() >= GraphicsManager.nextUpdateTime) {
-            final float elapsedTime = GraphicsManager.updateTimer.getElapsedTime();
+        if (updateTimer.getTime() >= nextUpdateTime) {
+            final float elapsedTime = updateTimer.getElapsedTime();
 
-            GraphicsManager.window.getMouseInput().input();
-            GraphicsManager.cameraManager.updateCamera(elapsedTime);
+            window.getMouseInput().input();
+            cameraManager.updateCamera(elapsedTime);
 
-            if (GraphicsManager.guiInstance != null) {
-                GraphicsManager.guiInstance.handleGuiInput(
-                        GraphicsManager.scene, GraphicsManager.window);
+            if (guiInstance != null) {
+                guiInstance.handleGuiInput(scene, window);
             }
 
-            if (GraphicsManager.refreshRequested.compareAndSet(true, false)) {
-                GraphicsManager.render.setupData(GraphicsManager.scene);
+            if (refreshRequested.compareAndSet(true, false)) {
+                render.setupData(scene);
             }
 
             // Update the next time we should update models
-            GraphicsManager.nextUpdateTime =
-                    GraphicsManager.updateTimer.getLastLoopTime() + GraphicsManager.UPDATE_TIME;
+            nextUpdateTime = updateTimer.getLastLoopTime() + UPDATE_TIME;
         }
 
-        if (GraphicsManager.renderTimer.getTime() >= GraphicsManager.nextRenderTime) {
-            final float elapsedTime = GraphicsManager.renderTimer.getElapsedTime();
+        if (renderTimer.getTime() >= nextRenderTime) {
+            final float elapsedTime = renderTimer.getElapsedTime();
 
-            GraphicsManager.render(elapsedTime);
+            render(elapsedTime);
             // Update the next time we should render a frame
-            GraphicsManager.nextRenderTime =
-                    GraphicsManager.renderTimer.getLastLoopTime() + GraphicsManager.FRAME_TIME;
+            nextRenderTime = renderTimer.getLastLoopTime() + FRAME_TIME;
         }
 
         return Launcher.STATUS_OK;

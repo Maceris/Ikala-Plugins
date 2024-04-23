@@ -1,7 +1,9 @@
-package com.ikalagaming.factory.gui;
+package com.ikalagaming.factory.gui.window;
 
 import static org.lwjgl.opengl.GL11.glIsTexture;
 
+import com.ikalagaming.factory.gui.DefaultWindows;
+import com.ikalagaming.factory.gui.component.GuiWindow;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.graphics.scene.Scene;
@@ -19,7 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class BiomeDebug extends GuiWindow {
 
     public BiomeDebug() {
-        super(DefaultComponents.BIOME_DEBUG.getName(), ImGuiWindowFlags.None, new ImBoolean(false));
+        super(DefaultWindows.BIOME_DEBUG.getName(), ImGuiWindowFlags.None, new ImBoolean(false));
     }
 
     private static byte[] intARGBtoByteRGBA(int[] argb) {

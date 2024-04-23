@@ -1,9 +1,11 @@
 package com.ikalagaming.factory;
 
-import static com.ikalagaming.factory.gui.DefaultComponents.*;
+import static com.ikalagaming.factory.gui.DefaultWindows.*;
 
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.factory.gui.*;
+import com.ikalagaming.factory.gui.window.BiomeDebug;
+import com.ikalagaming.factory.gui.window.MainMenu;
 import com.ikalagaming.factory.saves.UserDataUtil;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.localization.Localization;
@@ -65,7 +67,7 @@ public class FactoryClientPlugin extends Plugin {
         guiManager.setToolbar(new DebugToolbar(guiManager));
         guiManager.addWindow(BIOME_DEBUG.getName(), new BiomeDebug());
         guiManager.addWindow(MAIN_MENU.getName(), new MainMenu(guiManager));
-        Stream.of(MAIN_MENU).map(DefaultComponents::getName).forEach(guiManager::show);
+        Stream.of(MAIN_MENU).map(DefaultWindows::getName).forEach(guiManager::show);
         return true;
     }
 

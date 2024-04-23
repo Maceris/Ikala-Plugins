@@ -1,4 +1,6 @@
-package com.ikalagaming.factory.gui;
+package com.ikalagaming.factory.gui.component;
+
+import com.ikalagaming.factory.gui.Component;
 
 import imgui.ImGui;
 import imgui.flag.ImGuiCond;

@@ -1,5 +1,6 @@
 package com.ikalagaming.factory.gui;
 
+import com.ikalagaming.factory.gui.component.GuiWindow;
 import com.ikalagaming.factory.gui.component.MainToolbar;
 import com.ikalagaming.graphics.GuiInstance;
 import com.ikalagaming.graphics.MouseInput;
@@ -23,9 +24,6 @@ public class GuiManager implements GuiInstance {
     private final Map<String, GuiWindow> components;
 
     @Getter @Setter private MainToolbar toolbar;
-
-    /** The component sizes to use for UIs. */
-    @Getter @Setter @NonNull private SizeConstants currentSizes = SizeConstants.MEDIUM;
 
     public GuiManager() {
         components = new HashMap<>();

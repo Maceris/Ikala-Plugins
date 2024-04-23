@@ -1,12 +1,14 @@
 package com.ikalagaming.factory.gui;
 
 import com.ikalagaming.factory.gui.component.Drawable;
+import com.ikalagaming.factory.gui.component.GuiWindow;
 import com.ikalagaming.factory.gui.component.util.Alignment;
 import com.ikalagaming.factory.gui.component.util.Rect;
 import com.ikalagaming.factory.gui.component.util.Style;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
 
+import imgui.ImGui;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -172,6 +174,7 @@ public class Component implements Drawable {
             return;
         }
         recalculate();
+        ImGui.text(String.format("%d, %d", width, height));
         children.forEach(Component::recalculate);
         children.forEach(window -> window.draw(width, height));
     }
