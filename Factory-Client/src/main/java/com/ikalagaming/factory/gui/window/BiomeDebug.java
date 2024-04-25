@@ -4,14 +4,15 @@ import static org.lwjgl.opengl.GL11.glIsTexture;
 
 import com.ikalagaming.factory.gui.DefaultWindows;
 import com.ikalagaming.factory.gui.component.GuiWindow;
+import com.ikalagaming.factory.gui.component.util.Alignment;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.random.RandomGen;
 
 import imgui.ImGui;
+import imgui.flag.ImGuiCond;
 import imgui.flag.ImGuiWindowFlags;
-import imgui.type.ImBoolean;
 import lombok.NonNull;
 
 import java.awt.image.BufferedImage;
@@ -21,7 +22,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class BiomeDebug extends GuiWindow {
 
     public BiomeDebug() {
-        super(DefaultWindows.BIOME_DEBUG.getName(), ImGuiWindowFlags.None, new ImBoolean(false));
+        super(DefaultWindows.BIOME_DEBUG.getName(), ImGuiWindowFlags.None);
+        setScale(0.10f, 0.10f);
+        setDisplacement(0.01f, 0.05f);
+        setAlignment(Alignment.NORTH_WEST);
     }
 
     private static byte[] intARGBtoByteRGBA(int[] argb) {
@@ -48,6 +52,11 @@ public class BiomeDebug extends GuiWindow {
 
     @Override
     public void draw(final int width, final int height) {
+        ImGui.setNextWindowPos(
+                getActualDisplaceX() * width, getActualDisplaceY() * height, ImGuiCond.Once);
+        ImGui.setNextWindowSize(
+                getActualWidth() * width, getActualHeight() * height, ImGuiCond.Once);
+        ImGui.begin(title, windowOpen, windowFlags);
 
         if (ImGui.button("Generate textures")) {
             generateRequested.set(true);
@@ -75,6 +84,8 @@ public class BiomeDebug extends GuiWindow {
         ImGui.text("Biomes");
         drawImage(biomeMap);
         ImGui.endGroup();
+
+        ImGui.end();
     }
 
     /**

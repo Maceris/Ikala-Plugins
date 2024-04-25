@@ -11,7 +11,7 @@ import lombok.RequiredArgsConstructor;
 public class GuiWindow extends Component {
     protected final String title;
     protected final int windowFlags;
-    protected final ImBoolean windowOpen;
+    protected final ImBoolean windowOpen = new ImBoolean(true);
 
     @Override
     public void draw(final int width, final int height) {

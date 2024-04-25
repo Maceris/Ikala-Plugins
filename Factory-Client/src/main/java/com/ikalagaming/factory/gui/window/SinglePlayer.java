@@ -1,15 +1,26 @@
 package com.ikalagaming.factory.gui.window;
 
-import com.ikalagaming.factory.gui.GuiManager;
-import com.ikalagaming.factory.gui.component.GuiWindow;
-import imgui.flag.ImGuiWindowFlags;
-import imgui.type.ImBoolean;
-import lombok.NonNull;
-
+import static com.ikalagaming.factory.gui.DefaultWindows.MAIN_MENU;
 import static com.ikalagaming.factory.gui.DefaultWindows.SINGLE_PLAYER;
 
+import com.ikalagaming.factory.FactoryClientPlugin;
+import com.ikalagaming.factory.gui.GuiManager;
+import com.ikalagaming.factory.gui.component.Button;
+import com.ikalagaming.factory.gui.component.GuiWindow;
+import com.ikalagaming.factory.gui.component.util.Alignment;
+import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.util.SafeResourceLoader;
+
+import imgui.flag.ImGuiWindowFlags;
+import lombok.NonNull;
+
+/** The screen for selecting a single player game to play. */
 public class SinglePlayer extends GuiWindow {
     private final GuiManager guiManager;
+    private final Button back;
+    private final Button newGame;
+    private final Button play;
 
     public SinglePlayer(@NonNull GuiManager guiManager) {
         super(
@@ -18,10 +29,54 @@ public class SinglePlayer extends GuiWindow {
                         | ImGuiWindowFlags.NoScrollWithMouse
                         | ImGuiWindowFlags.NoResize
                         | ImGuiWindowFlags.NoTitleBar
-                        | ImGuiWindowFlags.NoDecoration,
-                new ImBoolean(true));
+                        | ImGuiWindowFlags.NoDecoration);
         this.guiManager = guiManager;
         setScale(1.0f, 0.98f);
         setDisplacement(0.0f, 0.02f);
+
+        var textSinglePlayer =
+                SafeResourceLoader.getString(
+                        "MENU_COMMON_BACK", FactoryClientPlugin.getResourceBundle());
+        back = new Button(textSinglePlayer);
+        back.setAlignment(Alignment.SOUTH_WEST);
+        back.setDisplacement(0.05f, 0.01f);
+        back.setScale(0.10f, 0.10f);
+
+        var textMultiplayer =
+                SafeResourceLoader.getString(
+                        "MENU_SINGLE_PLAYER_NEW_GAME", FactoryClientPlugin.getResourceBundle());
+        newGame = new Button(textMultiplayer);
+        newGame.setAlignment(Alignment.SOUTH);
+        newGame.setDisplacement(0.0f, 0.01f);
+        newGame.setScale(0.10f, 0.10f);
+
+        var textOptions =
+                SafeResourceLoader.getString(
+                        "MENU_SINGLE_PLAYER_PLAY", FactoryClientPlugin.getResourceBundle());
+        play = new Button(textOptions);
+        play.setAlignment(Alignment.SOUTH_EAST);
+        play.setDisplacement(0.05f, 0.01f);
+        play.setScale(0.10f, 0.10f);
+
+        addChild(back);
+        addChild(newGame);
+        addChild(play);
+    }
+
+    @Override
+    public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+        if (back.checkResult()) {
+            guiManager.hide(SINGLE_PLAYER.getName());
+            guiManager.show(MAIN_MENU.getName());
+            return true;
+        }
+        if (newGame.checkResult()) {
+            // TODO(ches) New Game menu screen FACT-15
+        }
+        if (play.checkResult()) {
+            // TODO(ches) Play game FACT-16
+            guiManager.hide(SINGLE_PLAYER.getName());
+        }
+        return false;
     }
 }
