@@ -24,88 +24,88 @@ import java.util.List;
  */
 public class Component implements Drawable {
 
-    /** Whether the window should show. */
+    /** Whether the component should show. */
     @Setter protected boolean visible;
 
-    /** The style to use if a window does not have a style specifically set. */
+    /** The style to use if a component does not have a style specifically set. */
     @Getter @Setter
     private static Style defaultStyle =
             new Style(Style.Shape.SQUARE, Style.ColorScheme.BLUE, true, true);
 
     /**
-     * The style to use in drawing the window. If it is null, the default style is used. If not
+     * The style to use in drawing the component. If it is null, the default style is used. If not
      * null, it overrides the default.
      */
     @Setter private Style style;
 
     /**
-     * How far from the alignment edge the window should be placed. The x and y values are floats
+     * How far from the alignment edge the component should be placed. The x and y values are floats
      * representing the percentage of the parent's respective width or height to be shifted by.
      * These should be between 0.0f and 1.0f, otherwise it will be outside the parent.
      */
     protected Vector2f localDisplace;
 
-    /** The global screen displacement of the window. */
+    /** The global screen displacement of the component. */
     private final Vector2f globalDisplacement;
 
     /**
-     * The true screen width of the window. This is a percentage of the canvas this is drawn on.
+     * The true screen width of the component. This is a percentage of the canvas this is drawn on.
      * Should be positive and <= 1.0f, where 1 is the entire canvas. X represents width, and Y
      * represents height.
      */
     private final Vector2f globalScale;
 
-    /** Where in the parent should this window snap to, or have displacement measured from. */
+    /** Where in the parent should this component snap to, or have displacement measured from. */
     protected Alignment align;
 
     /**
-     * The percent of the parent window's width to take up. Should be positive and <= 1.0f, where 1
-     * is the entire window. X represents width, and Y represents height.
+     * The percent of the parent component's width to take up. Should be positive and <= 1.0f, where 1
+     * is the entire component. X represents width, and Y represents height.
      */
     protected Vector2f scale;
 
     /**
-     * The parent window, or null if there is no parent window. A null parent means this window is a
+     * The parent component, or null if there is no parent component. A null parent means this component is a
      * root.
      */
     protected Component parent;
 
-    /** True if the window has been changed and needs to be recalculated. */
+    /** True if the component has been changed and needs to be recalculated. */
     protected boolean dirty;
 
-    /** A list of sub-windows this window contains */
+    /** A list of sub-components this component contains */
     protected final List<Component> children;
 
-    /** The height of the window, or z depth. Higher numbers are drawn on top. */
+    /** The height of the component, or z depth. Higher numbers are drawn on top. */
     @Getter private int height;
 
     /**
-     * True if this window absorbs touches and stops them from reaching lower windows, false if
-     * input can reach lower windows. Defaults to true.
+     * True if this component absorbs touches and stops them from reaching lower components, false if
+     * input can reach lower components. Defaults to true.
      *
-     * <p>This value only affects whether this window blocks inputs. This means windows are allowed
+     * <p>This value only affects whether this component blocks inputs. This means components are allowed
      * to absorb inputs and do nothing, or not absorb inputs and perform an action while allowing
-     * lower windows to be interacted with by the same event.
+     * lower components to be interacted with by the same event.
      *
-     * @return True if input events should stop when they hit this window, false if they can pass
-     *     through and potentially affect lower windows.
+     * @return True if input events should stop when they hit this component, false if they can pass
+     *     through and potentially affect lower components.
      */
     @Getter @Setter private boolean consumeInputs;
 
-    /** Creates a default window and initializes internal variables. */
+    /** Creates a default component and initializes internal variables. */
     public Component() {
         this(new Vector2f(0, 0), Alignment.NORTH_WEST, new Vector2f(1, 1));
     }
 
     /**
-     * Constructs a new window with displacement, alignment, and size as given. These are points
-     * with x and y values given as floats representing decimal percentage of the parent window's
+     * Constructs a new component with displacement, alignment, and size as given. These are points
+     * with x and y values given as floats representing decimal percentage of the parent component's
      * size.
      *
      * @param displacement The percent of the parent to displace away from whatever edge it is
      *     aligned to.
      * @param alignment What part of the parent should the displacement be measured from.
-     * @param scale The width and height of this window as a percent of the parents respective width
+     * @param scale The width and height of this component as a percent of the parents respective width
      *     and height.
      */
     public Component(
@@ -124,10 +124,10 @@ public class Component implements Drawable {
     }
 
     /**
-     * Adds a child to the window, sets the child to have this as a parent, and then dirties this
-     * window (and thus children).
+     * Adds a child to the component, sets the child to have this as a parent, and then dirties this
+     * component (and thus children).
      *
-     * @param item The child to add to the window.
+     * @param item The child to add to the component.
      */
     public void addChild(@NonNull Component item) {
         children.add(item);
@@ -140,13 +140,13 @@ public class Component implements Drawable {
     }
 
     /**
-     * Returns true if this window contains the given point, given a certain screen width and
+     * Returns true if this component contains the given point, given a certain screen width and
      * height.
      *
-     * @param screenWidth The width of the screen/canvas the window is in.
-     * @param screenHeight The height of the screen/canvas the window is in.
+     * @param screenWidth The width of the screen/canvas the component is in.
+     * @param screenHeight The height of the screen/canvas the component is in.
      * @param p The point to check for.
-     * @return True if the window contains the point, otherwise false.
+     * @return True if the component contains the point, otherwise false.
      */
     public boolean containsPoint(final int screenWidth, final int screenHeight, final Vector2f p) {
         var actualRect =
@@ -159,8 +159,8 @@ public class Component implements Drawable {
     }
 
     /**
-     * Sets the dirty flag for this window and also calls dirty on all children. This signifies the
-     * window needs to be recalculated.
+     * Sets the dirty flag for this component and also calls dirty on all children. This signifies the
+     * component needs to be recalculated.
      */
     public void dirty() {
         dirty = true;
@@ -174,12 +174,12 @@ public class Component implements Drawable {
         }
         recalculate();
         children.forEach(Component::recalculate);
-        children.forEach(window -> window.draw(width, height));
+        children.forEach(child -> child.draw(width, height));
     }
 
     /**
-     * Returns the actual displacement value of the window as it would be used on a canvas as a
-     * decimal percentage of the whole, from the left side of the window.
+     * Returns the actual displacement value of the component as it would be used on a canvas as a
+     * decimal percentage of the whole, from the left side of the component.
      *
      * @return The width, which should be >=0 and <=1.0 but is not guaranteed to be
      */
@@ -189,8 +189,8 @@ public class Component implements Drawable {
     }
 
     /**
-     * Returns the actual displacement value of the window as it would be used on a canvas as a
-     * decimal percentage of the whole, from the top of the window.
+     * Returns the actual displacement value of the component as it would be used on a canvas as a
+     * decimal percentage of the whole, from the top of the component.
      *
      * @return The width, which should be >=0 and <=1.0 but is not guaranteed to be.
      */
@@ -200,7 +200,7 @@ public class Component implements Drawable {
     }
 
     /**
-     * Returns the actual scale value of the window as it would be used on a canvas.
+     * Returns the actual scale value of the component as it would be used on a canvas.
      *
      * @return The width, which should be >=0 and <=1.0 but is not guaranteed to be.
      */
@@ -210,7 +210,7 @@ public class Component implements Drawable {
     }
 
     /**
-     * Returns the actual scale value of the window as it would be used on a canvas.
+     * Returns the actual scale value of the component as it would be used on a canvas.
      *
      * @return The width, which should be >=0 and <=1.0 but is not guaranteed to be.
      */
@@ -220,7 +220,7 @@ public class Component implements Drawable {
     }
 
     /**
-     * Returns a rectangle representing the actual size and location of this window should it be
+     * Returns a rectangle representing the actual size and location of this component should it be
      * mapped onto the given canvas, using actual pixels.
      *
      * @param screen The screen area we are drawing on.
@@ -242,7 +242,7 @@ public class Component implements Drawable {
     }
 
     /**
-     * Returns the number of children belonging to this window.
+     * Returns the number of children belonging to this component.
      *
      * @return The size of the children list.
      */
@@ -251,8 +251,8 @@ public class Component implements Drawable {
     }
 
     /**
-     * Returns the float value representing the decimal percentage of the parent window's height
-     * that this window takes up.
+     * Returns the float value representing the decimal percentage of the parent component's height
+     * that this component takes up.
      *
      * @return The local height.
      */
@@ -261,8 +261,8 @@ public class Component implements Drawable {
     }
 
     /**
-     * Returns the float value representing the decimal percentage of the parent window's width that
-     * this window takes up.
+     * Returns the float value representing the decimal percentage of the parent component's width that
+     * this component takes up.
      *
      * @return The local width.
      */
@@ -271,11 +271,11 @@ public class Component implements Drawable {
     }
 
     /**
-     * Returns an actual reference to the current window style. If one does not exist, the default
+     * Returns an actual reference to the current component style. If one does not exist, the default
      * style is returned instead. This should not be modified without proper thread safety in mind
      * as it could cause unpredictable results otherwise.
      *
-     * @return The current window style object, or if null, the default style.
+     * @return The current component style object, or if null, the default style.
      */
     protected Style getStyle() {
         if (style == null) {
@@ -285,10 +285,10 @@ public class Component implements Drawable {
     }
 
     /**
-     * Returns true if this window has the given child as one of its children
+     * Returns true if this component has the given child as one of its children
      *
      * @param child The child to look for.
-     * @return True if this window is the child's direct parent, false otherwise.
+     * @return True if this component is the child's direct parent, false otherwise.
      */
     public boolean hasChild(final Component child) {
         return children.contains(child);
@@ -305,9 +305,9 @@ public class Component implements Drawable {
     }
 
     /**
-     * Returns true if this window should be drawn on the screen.
+     * Returns true if this component should be drawn on the screen.
      *
-     * @return True if this window is visible.
+     * @return True if this component is visible.
      */
     public boolean isVisible() {
         if (parent != null && (!parent.isVisible())) {
@@ -335,7 +335,7 @@ public class Component implements Drawable {
     }
 
     /**
-     * Recalculates all real displacements and scale, first recursing to the top dirty window and
+     * Recalculates all real displacements and scale, first recursing to the top dirty component and
      * then trickling down until it has recalculated this and everything above it.
      */
     protected void recalculate() {
@@ -373,7 +373,7 @@ public class Component implements Drawable {
     }
 
     /**
-     * Removes the given child from this window. If the child recognizes this as its parent, it will
+     * Removes the given child from this component. If the child recognizes this as its parent, it will
      * orphan itself. If this is overridden be sure {@link #orphanSelf()} and this do not
      * recursively call each other infinitely.
      *
@@ -387,7 +387,7 @@ public class Component implements Drawable {
     }
 
     /**
-     * Sets the alignment of the window to the given one. This determines from where the window is
+     * Sets the alignment of the component to the given one. This determines from where the component is
      * displaced in the parent.
      *
      * @param newAlignment The new alignment to use.
@@ -398,9 +398,9 @@ public class Component implements Drawable {
     }
 
     /**
-     * Sets the local displacement of a window, as a percentage of x and y. Depending on the
-     * alignment of the window in its parent, one or both of these values may not be used as it may
-     * be centered and thus ignore the value. Flags the window as dirty.
+     * Sets the local displacement of a component, as a percentage of x and y. Depending on the
+     * alignment of the component in its parent, one or both of these values may not be used as it may
+     * be centered and thus ignore the value. Flags the component as dirty.
      *
      * @param displace The displacement to use.
      */
@@ -409,12 +409,12 @@ public class Component implements Drawable {
     }
 
     /**
-     * Sets the local displacement of a window, as a percentage of x and y. Depending on the
-     * alignment of the window in its parent, one or both of these values may not be used as it may
-     * be centered and thus ignore the value. Flags the window as dirty.
+     * Sets the local displacement of a component, as a percentage of x and y. Depending on the
+     * alignment of the component in its parent, one or both of these values may not be used as it may
+     * be centered and thus ignore the value. Flags the component as dirty.
      *
-     * @param x The x displacement to use as a percentage of the parent window's width.
-     * @param y The y displacement to use as a percentage of the parent window's height.
+     * @param x The x displacement to use as a percentage of the parent component's width.
+     * @param y The y displacement to use as a percentage of the parent component's height.
      */
     public void setDisplacement(final float x, final float y) {
         localDisplace.set(x, y);
@@ -422,8 +422,8 @@ public class Component implements Drawable {
     }
 
     /**
-     * Set the percent of the parent window's width to take up. Should be positive and <= 1.0f,
-     * where 1 is the entire window. X represents width, and Y represents height.
+     * Set the percent of the parent component's width to take up. Should be positive and <= 1.0f,
+     * where 1 is the entire component. X represents width, and Y represents height.
      *
      * @param scale The new scale to use.
      */
@@ -432,11 +432,11 @@ public class Component implements Drawable {
     }
 
     /**
-     * Set the percent of the parent window's width to take up. Should be positive and <= 1.0f,
-     * where 1 is the entire window.
+     * Set the percent of the parent component's width to take up. Should be positive and <= 1.0f,
+     * where 1 is the entire component.
      *
-     * @param width The decimal percentage of the parent window's width to take up.
-     * @param height The decimal percentage of the parent window's height to take up.
+     * @param width The decimal percentage of the parent component's width to take up.
+     * @param height The decimal percentage of the parent component's height to take up.
      */
     public void setScale(final float width, final float height) {
         scale.x = width;
@@ -445,9 +445,9 @@ public class Component implements Drawable {
     }
 
     /**
-     * Sets the local height percentage and flags the window as dirty.
+     * Sets the local height percentage and flags the component as dirty.
      *
-     * @param height The new height of the window as a decimal percentage of the parent.
+     * @param height The new height of the component as a decimal percentage of the parent.
      */
     public void setLocalHeight(final float height) {
         scale.y = height;
@@ -455,9 +455,9 @@ public class Component implements Drawable {
     }
 
     /**
-     * Sets the local width percentage and flags the window as dirty.
+     * Sets the local width percentage and flags the component as dirty.
      *
-     * @param width The new width of the window as a decimal percentage of the parent.
+     * @param width The new width of the component as a decimal percentage of the parent.
      */
     public void setLocalWidth(final float width) {
         scale.x = width;
@@ -465,9 +465,9 @@ public class Component implements Drawable {
     }
 
     /**
-     * Sets the new parent of this window and adds this to the new parent's children.
+     * Sets the new parent of this component and adds this to the new parent's children.
      *
-     * @param newParent The new parent of this window.
+     * @param newParent The new parent of this component.
      */
     public void setParent(final Component newParent) {
         parent = newParent;
@@ -477,7 +477,7 @@ public class Component implements Drawable {
         dirty();
     }
 
-    /** Updates the heights of the window to 1 above the parent, recursively to all children. */
+    /** Updates the heights of the component to 1 above the parent, recursively to all children. */
     protected void updateHeights() {
         if (parent == null) {
             this.height = 0;
