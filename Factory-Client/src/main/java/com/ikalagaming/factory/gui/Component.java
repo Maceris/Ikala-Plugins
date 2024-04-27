@@ -59,14 +59,14 @@ public class Component implements Drawable {
     protected Alignment align;
 
     /**
-     * The percent of the parent component's width to take up. Should be positive and <= 1.0f, where 1
-     * is the entire component. X represents width, and Y represents height.
+     * The percent of the parent component's width to take up. Should be positive and <= 1.0f, where
+     * 1 is the entire component. X represents width, and Y represents height.
      */
     protected Vector2f scale;
 
     /**
-     * The parent component, or null if there is no parent component. A null parent means this component is a
-     * root.
+     * The parent component, or null if there is no parent component. A null parent means this
+     * component is a root.
      */
     protected Component parent;
 
@@ -80,12 +80,12 @@ public class Component implements Drawable {
     @Getter private int height;
 
     /**
-     * True if this component absorbs touches and stops them from reaching lower components, false if
-     * input can reach lower components. Defaults to true.
+     * True if this component absorbs touches and stops them from reaching lower components, false
+     * if input can reach lower components. Defaults to true.
      *
-     * <p>This value only affects whether this component blocks inputs. This means components are allowed
-     * to absorb inputs and do nothing, or not absorb inputs and perform an action while allowing
-     * lower components to be interacted with by the same event.
+     * <p>This value only affects whether this component blocks inputs. This means components are
+     * allowed to absorb inputs and do nothing, or not absorb inputs and perform an action while
+     * allowing lower components to be interacted with by the same event.
      *
      * @return True if input events should stop when they hit this component, false if they can pass
      *     through and potentially affect lower components.
@@ -105,8 +105,8 @@ public class Component implements Drawable {
      * @param displacement The percent of the parent to displace away from whatever edge it is
      *     aligned to.
      * @param alignment What part of the parent should the displacement be measured from.
-     * @param scale The width and height of this component as a percent of the parents respective width
-     *     and height.
+     * @param scale The width and height of this component as a percent of the parents respective
+     *     width and height.
      */
     public Component(
             final @NonNull Vector2f displacement,
@@ -159,8 +159,8 @@ public class Component implements Drawable {
     }
 
     /**
-     * Sets the dirty flag for this component and also calls dirty on all children. This signifies the
-     * component needs to be recalculated.
+     * Sets the dirty flag for this component and also calls dirty on all children. This signifies
+     * the component needs to be recalculated.
      */
     public void dirty() {
         dirty = true;
@@ -261,8 +261,8 @@ public class Component implements Drawable {
     }
 
     /**
-     * Returns the float value representing the decimal percentage of the parent component's width that
-     * this component takes up.
+     * Returns the float value representing the decimal percentage of the parent component's width
+     * that this component takes up.
      *
      * @return The local width.
      */
@@ -271,9 +271,9 @@ public class Component implements Drawable {
     }
 
     /**
-     * Returns an actual reference to the current component style. If one does not exist, the default
-     * style is returned instead. This should not be modified without proper thread safety in mind
-     * as it could cause unpredictable results otherwise.
+     * Returns an actual reference to the current component style. If one does not exist, the
+     * default style is returned instead. This should not be modified without proper thread safety
+     * in mind as it could cause unpredictable results otherwise.
      *
      * @return The current component style object, or if null, the default style.
      */
@@ -373,8 +373,8 @@ public class Component implements Drawable {
     }
 
     /**
-     * Removes the given child from this component. If the child recognizes this as its parent, it will
-     * orphan itself. If this is overridden be sure {@link #orphanSelf()} and this do not
+     * Removes the given child from this component. If the child recognizes this as its parent, it
+     * will orphan itself. If this is overridden be sure {@link #orphanSelf()} and this do not
      * recursively call each other infinitely.
      *
      * @param item The item to remove.
@@ -387,8 +387,8 @@ public class Component implements Drawable {
     }
 
     /**
-     * Sets the alignment of the component to the given one. This determines from where the component is
-     * displaced in the parent.
+     * Sets the alignment of the component to the given one. This determines from where the
+     * component is displaced in the parent.
      *
      * @param newAlignment The new alignment to use.
      */
@@ -399,8 +399,8 @@ public class Component implements Drawable {
 
     /**
      * Sets the local displacement of a component, as a percentage of x and y. Depending on the
-     * alignment of the component in its parent, one or both of these values may not be used as it may
-     * be centered and thus ignore the value. Flags the component as dirty.
+     * alignment of the component in its parent, one or both of these values may not be used as it
+     * may be centered and thus ignore the value. Flags the component as dirty.
      *
      * @param displace The displacement to use.
      */
@@ -410,8 +410,8 @@ public class Component implements Drawable {
 
     /**
      * Sets the local displacement of a component, as a percentage of x and y. Depending on the
-     * alignment of the component in its parent, one or both of these values may not be used as it may
-     * be centered and thus ignore the value. Flags the component as dirty.
+     * alignment of the component in its parent, one or both of these values may not be used as it
+     * may be centered and thus ignore the value. Flags the component as dirty.
      *
      * @param x The x displacement to use as a percentage of the parent component's width.
      * @param y The y displacement to use as a percentage of the parent component's height.

@@ -21,12 +21,12 @@ import java.util.Optional;
 /** Tracks and engages all the things we want to render with ImGui. */
 public class GuiManager implements GuiInstance {
     /** A table for looking up specific window by name. */
-    private final Map<String, GuiWindow> components;
+    private final Map<String, GuiWindow> windows;
 
     @Getter @Setter private MainToolbar toolbar;
 
     public GuiManager() {
-        components = new HashMap<>();
+        windows = new HashMap<>();
     }
 
     /**
@@ -36,7 +36,7 @@ public class GuiManager implements GuiInstance {
      * @param component The component.
      */
     public void addWindow(@NonNull String name, @NonNull GuiWindow component) {
-        this.components.put(name, component);
+        this.windows.put(name, component);
     }
 
     /**
@@ -53,7 +53,7 @@ public class GuiManager implements GuiInstance {
     public void drawGui(final int width, final int height) {
         ImGui.newFrame();
 
-        components.values().stream()
+        windows.values().stream()
                 .filter(Component::isVisible)
                 .forEach(window -> window.draw(width, height));
 
@@ -88,7 +88,7 @@ public class GuiManager implements GuiInstance {
             toolbar.handleGuiInput(scene, window);
         }
 
-        components.values().stream()
+        windows.values().stream()
                 .filter(Component::isVisible)
                 .forEach(component -> component.handleGuiInput(scene, window));
     }
@@ -101,9 +101,7 @@ public class GuiManager implements GuiInstance {
      * @return Whether the specified component is enabled.
      */
     public boolean isVisible(@NonNull String name) {
-        return Optional.ofNullable(this.components.get(name))
-                .map(Component::isVisible)
-                .orElse(false);
+        return Optional.ofNullable(this.windows.get(name)).map(Component::isVisible).orElse(false);
     }
 
     /**
@@ -112,7 +110,7 @@ public class GuiManager implements GuiInstance {
      * @param name The name of the component to remove.
      */
     public void removeWindow(@NonNull String name) {
-        this.components.remove(name);
+        this.windows.remove(name);
     }
 
     /**
@@ -123,7 +121,7 @@ public class GuiManager implements GuiInstance {
      * @see #setVisible(String, boolean)
      */
     public void setVisible(@NonNull String name, boolean visible) {
-        Optional.ofNullable(this.components.get(name))
+        Optional.ofNullable(this.windows.get(name))
                 .ifPresent(component -> component.setVisible(visible));
     }
 }
