@@ -12,7 +12,7 @@ import lombok.Setter;
  */
 @Getter
 @Setter
-class CommandBuffer {
+public class CommandBuffer {
     /**
      * The animated model render command buffer ID.
      *

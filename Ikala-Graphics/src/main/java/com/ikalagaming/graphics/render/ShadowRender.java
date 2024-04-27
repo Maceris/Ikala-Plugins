@@ -112,7 +112,7 @@ public class ShadowRender {
                     GL_FRAMEBUFFER,
                     GL_DEPTH_ATTACHMENT,
                     GL_TEXTURE_2D,
-                    shadowBuffer.getDepthMap().getIDs()[i],
+                    shadowBuffer.getTextures()[i],
                     0);
             glClear(GL_DEPTH_BUFFER_BIT);
         }
@@ -133,7 +133,7 @@ public class ShadowRender {
                     GL_FRAMEBUFFER,
                     GL_DEPTH_ATTACHMENT,
                     GL_TEXTURE_2D,
-                    shadowBuffer.getDepthMap().getIDs()[i],
+                    shadowBuffer.getTextures()[i],
                     0);
 
             CascadeShadow shadowCascade = cascadeShadows.get(i);
@@ -161,7 +161,7 @@ public class ShadowRender {
                     GL_FRAMEBUFFER,
                     GL_DEPTH_ATTACHMENT,
                     GL_TEXTURE_2D,
-                    shadowBuffer.getDepthMap().getIDs()[i],
+                    shadowBuffer.getTextures()[i],
                     0);
 
             CascadeShadow shadowCascade = cascadeShadows.get(i);
