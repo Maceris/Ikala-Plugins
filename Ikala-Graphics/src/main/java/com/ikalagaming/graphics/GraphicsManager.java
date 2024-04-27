@@ -9,6 +9,7 @@ import com.ikalagaming.graphics.render.Render;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.Launcher;
+import com.ikalagaming.launcher.events.Shutdown;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.AccessLevel;
@@ -253,6 +254,7 @@ public class GraphicsManager {
         if (window.windowShouldClose()) {
             window.destroy();
             window = null;
+            new Shutdown().fire();
             return Launcher.STATUS_REQUEST_REMOVAL;
         }
 
