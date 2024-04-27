@@ -23,7 +23,7 @@ public class BiomeDebug extends GuiWindow {
 
     public BiomeDebug() {
         super(DefaultWindows.BIOME_DEBUG.getName(), ImGuiWindowFlags.None);
-        setScale(0.10f, 0.10f);
+        setScale(0.70f, 0.90f);
         setDisplacement(0.01f, 0.05f);
         setAlignment(Alignment.NORTH_WEST);
     }
