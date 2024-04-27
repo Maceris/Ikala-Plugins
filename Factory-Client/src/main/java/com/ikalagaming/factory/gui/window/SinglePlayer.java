@@ -7,6 +7,7 @@ import com.ikalagaming.factory.FactoryClientPlugin;
 import com.ikalagaming.factory.gui.GuiManager;
 import com.ikalagaming.factory.gui.component.Button;
 import com.ikalagaming.factory.gui.component.GuiWindow;
+import com.ikalagaming.factory.gui.component.ScrollBox;
 import com.ikalagaming.factory.gui.component.util.Alignment;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
@@ -21,6 +22,7 @@ public class SinglePlayer extends GuiWindow {
     private final Button back;
     private final Button newGame;
     private final Button play;
+    private final ScrollBox saves;
 
     public SinglePlayer(@NonNull GuiManager guiManager) {
         super(
@@ -58,9 +60,15 @@ public class SinglePlayer extends GuiWindow {
         play.setDisplacement(0.05f, 0.01f);
         play.setScale(0.10f, 0.10f);
 
+        saves = new ScrollBox("Saves");
+        saves.setAlignment(Alignment.NORTH);
+        saves.setDisplacement(0.0f, 0.10f);
+        saves.setScale(0.80f, 0.70f);
+
         addChild(back);
         addChild(newGame);
         addChild(play);
+        addChild(saves);
     }
 
     @Override
