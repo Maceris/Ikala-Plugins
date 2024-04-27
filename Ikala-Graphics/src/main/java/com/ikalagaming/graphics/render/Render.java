@@ -316,6 +316,7 @@ public class Render {
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, screenTexture);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            glViewport(0, 0, window.getWidth(), window.getHeight());
         }
         guiRender.render(window, scene);
     }
@@ -329,6 +330,7 @@ public class Render {
     public void resize(int width, int height) {
         deleteRenderBuffers();
         generateRenderBuffers(width, height);
+        guiRender.resize(width, height);
     }
 
     /**

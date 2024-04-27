@@ -72,4 +72,6 @@ public class GuiMesh {
         glDeleteBuffers(verticesVBO);
         glDeleteVertexArrays(vaoID);
     }
+
+    public void resize() {}
 }
