@@ -210,17 +210,6 @@ public class GuiRender {
         glDisable(GL_BLEND);
     }
 
-    /**
-     * Update the GUI when the screen has been resized.
-     *
-     * @param width The new screen width, in pixels.
-     * @param height The new screen height, in pixels.
-     */
-    public void resize(int width, int height) {
-        ImGuiIO imGuiIO = ImGui.getIO();
-        imGuiIO.setDisplaySize(width, height);
-    }
-
     /** Set up nonstandard key codes to make sure they work. */
     private void setUpImGuiKeys() {
         ImGuiIO io = ImGui.getIO();

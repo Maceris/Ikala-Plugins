@@ -35,7 +35,6 @@ import static org.lwjgl.opengl.GL30.glRenderbufferStorage;
 import static org.lwjgl.opengl.GL40.GL_DRAW_INDIRECT_BUFFER;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
-import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.GBuffer;
@@ -118,37 +117,37 @@ public class Render {
     public static final RenderConfig configuration = new RenderConfig();
 
     /** The animation render handler. */
-    private AnimationRender animationRender;
+    private final AnimationRender animationRender;
 
     /** Geometry buffer. */
-    private GBuffer gBuffer;
+    private final GBuffer gBuffer;
 
     /** The GUI render handler. */
-    private GuiRender guiRender;
+    private final GuiRender guiRender;
 
     /** The lights render handler. */
-    private LightRender lightRender;
+    private final LightRender lightRender;
 
     /** The buffers for indirect drawing of models. */
-    private RenderBuffers renderBuffers;
+    private final RenderBuffers renderBuffers;
 
     /** The scene render handler. */
-    private SceneRender sceneRender;
+    private final SceneRender sceneRender;
 
     /** The shadow render handler. */
-    private ShadowRender shadowRender;
+    private final ShadowRender shadowRender;
 
     /** The skybox render handler. */
-    private SkyBoxRender skyBoxRender;
+    private final SkyBoxRender skyBoxRender;
 
     /** Render a filter on top of the final result. */
-    private FilterRender filterRender;
+    private final FilterRender filterRender;
 
     /**
      * Whether we have set up the buffers for the scene. If we have, but need to set data up for the
      * scene again, we will need to clear them out and start over.
      */
-    private AtomicBoolean buffersPopulated;
+    private final AtomicBoolean buffersPopulated;
 
     /** The buffers for the batches. */
     CommandBuffer commandBuffers;
@@ -189,41 +188,7 @@ public class Render {
         buffersPopulated = new AtomicBoolean();
         commandBuffers = new CommandBuffer();
 
-        glActiveTexture(GL_TEXTURE0);
-        screenTexture = glGenTextures();
-        glBindTexture(GL_TEXTURE_2D, screenTexture);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexImage2D(
-                GL_TEXTURE_2D,
-                0,
-                GL_RGBA,
-                GraphicsManager.getWindow().getWidth(),
-                GraphicsManager.getWindow().getHeight(),
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                0);
-        glBindTexture(GL_TEXTURE_2D, 0);
-
-        screenRBODepth = glGenRenderbuffers();
-        glBindRenderbuffer(GL_RENDERBUFFER, screenRBODepth);
-        glRenderbufferStorage(
-                GL_RENDERBUFFER,
-                GL_DEPTH_COMPONENT16,
-                GraphicsManager.getWindow().getWidth(),
-                GraphicsManager.getWindow().getHeight());
-        glBindRenderbuffer(GL_RENDERBUFFER, 0);
-
-        screenFBO = glGenFramebuffers();
-        glBindFramebuffer(GL_FRAMEBUFFER, screenFBO);
-        glFramebufferTexture2D(
-                GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, screenTexture, 0);
-        glFramebufferRenderbuffer(
-                GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, screenRBODepth);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        generateRenderBuffers(window.getWidth(), window.getHeight());
     }
 
     /** Clean up all the rendering resources. */
@@ -238,9 +203,46 @@ public class Render {
         gBuffer.cleanUp();
         renderBuffers.cleanup();
         commandBuffers.cleanup();
+        deleteRenderBuffers();
+    }
+
+    /** Free up the current render buffers. */
+    void deleteRenderBuffers() {
         glDeleteRenderbuffers(screenRBODepth);
         glDeleteFramebuffers(screenFBO);
         glDeleteTextures(screenTexture);
+    }
+
+    /**
+     * Generate new render buffers. {@link #deleteRenderBuffers()} should be called before doing
+     * this if they already exist.
+     *
+     * @param width The width of the window/buffers in pixels.
+     * @param height The height of the window/buffers in pixels.
+     */
+    private void generateRenderBuffers(int width, int height) {
+        glActiveTexture(GL_TEXTURE0);
+        screenTexture = glGenTextures();
+        glBindTexture(GL_TEXTURE_2D, screenTexture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        screenRBODepth = glGenRenderbuffers();
+        glBindRenderbuffer(GL_RENDERBUFFER, screenRBODepth);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, width, height);
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+        screenFBO = glGenFramebuffers();
+        glBindFramebuffer(GL_FRAMEBUFFER, screenFBO);
+        glFramebufferTexture2D(
+                GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, screenTexture, 0);
+        glFramebufferRenderbuffer(
+                GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, screenRBODepth);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
     /** Reset the blending after we are done with the light rendering. */
@@ -325,16 +327,8 @@ public class Render {
      * @param height The new screen height in pixels.
      */
     public void resize(int width, int height) {
-        guiRender.resize(width, height);
-
-        // Resize the screen space texture
-        glBindTexture(GL_TEXTURE_2D, screenTexture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-        glBindTexture(GL_TEXTURE_2D, 0);
-
-        glBindRenderbuffer(GL_RENDERBUFFER, screenRBODepth);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, width, height);
-        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+        deleteRenderBuffers();
+        generateRenderBuffers(width, height);
     }
 
     /**
