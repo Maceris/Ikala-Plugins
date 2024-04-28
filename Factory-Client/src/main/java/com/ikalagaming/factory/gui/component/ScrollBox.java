@@ -8,8 +8,8 @@ import imgui.flag.ImGuiWindowFlags;
 /** A scrollable area that contains other components. */
 public class ScrollBox extends Component {
 
-    protected final String title;
-    protected final int windowFlags;
+    private final String title;
+    private final int windowFlags;
 
     /**
      * Add a scrollable area.
@@ -19,7 +19,7 @@ public class ScrollBox extends Component {
      */
     public ScrollBox(String title) {
         this.title = title;
-        this.windowFlags = ImGuiWindowFlags.AlwaysVerticalScrollbar;
+        this.windowFlags = ImGuiWindowFlags.None;
     }
 
     @Override

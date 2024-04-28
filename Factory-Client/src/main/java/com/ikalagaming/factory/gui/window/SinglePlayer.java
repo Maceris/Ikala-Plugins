@@ -4,6 +4,7 @@ import static com.ikalagaming.factory.gui.DefaultWindows.MAIN_MENU;
 import static com.ikalagaming.factory.gui.DefaultWindows.SINGLE_PLAYER;
 
 import com.ikalagaming.factory.FactoryClientPlugin;
+import com.ikalagaming.factory.gui.Component;
 import com.ikalagaming.factory.gui.GuiManager;
 import com.ikalagaming.factory.gui.component.Button;
 import com.ikalagaming.factory.gui.component.GuiWindow;
@@ -69,6 +70,24 @@ public class SinglePlayer extends GuiWindow {
         addChild(newGame);
         addChild(play);
         addChild(saves);
+        populateSaves();
+    }
+
+    private void populateSaves() {
+        addSaveEntry();
+    }
+
+    private void addSaveEntry() {
+        var box = new Component();
+        box.setAlignment(Alignment.NORTH_WEST);
+        box.setScale(0.99f, 0.10f);
+        box.setDisplacement(0.00f, 0.10f * saves.getChildCount());
+
+        var delete = new Button("X");
+        delete.setScale(0.10f, 0.90f);
+        delete.setAlignment(Alignment.EAST);
+        box.addChild(delete);
+        saves.addChild(box);
     }
 
     @Override

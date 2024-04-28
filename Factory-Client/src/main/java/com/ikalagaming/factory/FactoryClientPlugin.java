@@ -68,7 +68,7 @@ public class FactoryClientPlugin extends Plugin {
         guiManager.addWindow(SINGLE_PLAYER.getName(), new SinglePlayer(guiManager));
         guiManager.addWindow(DEBUG.getName(), new Debug());
         guiManager.addWindow(IMGUI_DEMO.getName(), new ImGuiDemo());
-        Stream.of(MAIN_MENU, DEBUG).map(DefaultWindows::getName).forEach(guiManager::show);
+        Stream.of(MAIN_MENU).map(DefaultWindows::getName).forEach(guiManager::show);
 
         guiManager.setToolbar(new DebugToolbar(guiManager));
         return true;
