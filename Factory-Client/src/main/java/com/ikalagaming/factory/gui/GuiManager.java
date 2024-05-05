@@ -20,6 +20,7 @@ import java.util.Optional;
 
 /** Tracks and engages all the things we want to render with ImGui. */
 public class GuiManager implements GuiInstance {
+
     /** A table for looking up specific window by name. */
     private final Map<String, GuiWindow> windows;
 

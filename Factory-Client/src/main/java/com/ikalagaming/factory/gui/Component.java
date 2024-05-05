@@ -159,6 +159,26 @@ public class Component implements Drawable {
     }
 
     /**
+     * Returns true if this component contains the given point, given a certain screen width and
+     * height.
+     *
+     * @param screenWidth The width of the screen/canvas the component is in.
+     * @param screenHeight The height of the screen/canvas the component is in.
+     * @param x The x location to check for.
+     * @param y The y location to check for.
+     * @return True if the component contains the point, otherwise false.
+     */
+    public boolean containsPoint(
+            final int screenWidth, final int screenHeight, final float x, final float y) {
+        final var left = getActualDisplaceX() * screenWidth;
+        final var top = getActualDisplaceY() * screenHeight;
+        final var right = (getActualDisplaceX() + getActualWidth()) * screenWidth;
+        final var bottom = (getActualDisplaceY() + getActualHeight()) * screenHeight;
+
+        return (x >= left) && (x <= right) && (y >= top) && (y <= bottom);
+    }
+
+    /**
      * Sets the dirty flag for this component and also calls dirty on all children. This signifies
      * the component needs to be recalculated.
      */
