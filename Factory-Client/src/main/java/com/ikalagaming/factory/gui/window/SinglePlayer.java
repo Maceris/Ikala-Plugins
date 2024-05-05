@@ -4,11 +4,11 @@ import static com.ikalagaming.factory.gui.DefaultWindows.MAIN_MENU;
 import static com.ikalagaming.factory.gui.DefaultWindows.SINGLE_PLAYER;
 
 import com.ikalagaming.factory.FactoryClientPlugin;
-import com.ikalagaming.factory.gui.Component;
 import com.ikalagaming.factory.gui.GuiManager;
 import com.ikalagaming.factory.gui.component.Button;
 import com.ikalagaming.factory.gui.component.GuiWindow;
 import com.ikalagaming.factory.gui.component.ScrollBox;
+import com.ikalagaming.factory.gui.component.menu.SaveEntry;
 import com.ikalagaming.factory.gui.component.util.Alignment;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
@@ -74,20 +74,17 @@ public class SinglePlayer extends GuiWindow {
     }
 
     private void populateSaves() {
-        addSaveEntry();
+        for (int i = 1; i <= 15; ++i) {
+            addSaveEntry("Test Save " + i);
+        }
     }
 
-    private void addSaveEntry() {
-        var box = new Component();
-        box.setAlignment(Alignment.NORTH_WEST);
-        box.setScale(0.99f, 0.10f);
-        box.setDisplacement(0.00f, 0.10f * saves.getChildCount());
-
-        var delete = new Button("X");
-        delete.setScale(0.10f, 0.90f);
-        delete.setAlignment(Alignment.EAST);
-        box.addChild(delete);
-        saves.addChild(box);
+    private void addSaveEntry(final @NonNull String saveName) {
+        var entry = new SaveEntry(saveName);
+        entry.setAlignment(Alignment.NORTH_WEST);
+        entry.setScale(0.99f, 0.10f);
+        entry.setDisplacement(0.00f, 0.10f * saves.getChildCount());
+        saves.addChild(entry);
     }
 
     @Override
