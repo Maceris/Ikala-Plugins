@@ -1,6 +1,8 @@
 rootProject.name = 'Factory-Client'
 include ':Factory-Core'
 project(':Factory-Core').projectDir = new File('../Factory-Core')
+include ':Factory-Server'
+project(':Factory-Server').projectDir = new File('../Factory-Server')
 include ':Ikala-Core'
 project(':Ikala-Core').projectDir = new File('../../Ikala-Core')
 include ':Ikala-Graphics'

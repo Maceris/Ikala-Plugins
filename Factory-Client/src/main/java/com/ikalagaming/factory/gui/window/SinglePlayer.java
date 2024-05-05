@@ -4,18 +4,25 @@ import static com.ikalagaming.factory.gui.DefaultWindows.MAIN_MENU;
 import static com.ikalagaming.factory.gui.DefaultWindows.SINGLE_PLAYER;
 
 import com.ikalagaming.factory.FactoryClientPlugin;
+import com.ikalagaming.factory.FactoryServerPlugin;
 import com.ikalagaming.factory.gui.GuiManager;
 import com.ikalagaming.factory.gui.component.Button;
 import com.ikalagaming.factory.gui.component.GuiWindow;
 import com.ikalagaming.factory.gui.component.ScrollBox;
 import com.ikalagaming.factory.gui.component.menu.SaveEntry;
 import com.ikalagaming.factory.gui.component.util.Alignment;
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.graph.Model;
+import com.ikalagaming.graphics.render.Render;
+import com.ikalagaming.graphics.scene.*;
+import com.ikalagaming.graphics.scene.lights.AmbientLight;
+import com.ikalagaming.graphics.scene.lights.PointLight;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import imgui.flag.ImGuiWindowFlags;
 import lombok.NonNull;
+import org.joml.Vector3f;
 
 /** The screen for selecting a single player game to play. */
 public class SinglePlayer extends GuiWindow {
@@ -100,7 +107,44 @@ public class SinglePlayer extends GuiWindow {
         if (play.checkResult()) {
             // TODO(ches) Play game FACT-16
             guiManager.hide(SINGLE_PLAYER.getName());
+            startGame();
         }
         return false;
+    }
+
+    void startGame() {
+        // TODO(ches) actually start the server properly, and connect to it
+        FactoryServerPlugin.getServer().start();
+
+        Model cubeModel =
+                ModelLoader.loadModel(
+                        new ModelLoader.ModelLoadRequest(
+                                "cube",
+                                FactoryClientPlugin.PLUGIN_NAME,
+                                "models/cube.obj",
+                                GraphicsManager.getScene().getMaterialCache(),
+                                false));
+        GraphicsManager.getScene().addModel(cubeModel);
+        Entity cube = new Entity("TheCube", cubeModel.getId());
+        GraphicsManager.getScene().addEntity(cube);
+        GraphicsManager.getScene()
+                .getSceneLights()
+                .setAmbientLight(new AmbientLight(new Vector3f(1.0f, 1.0f, 1.0f), 0.6f));
+        GraphicsManager.getScene()
+                .getSceneLights()
+                .getPointLights()
+                .add(
+                        new PointLight(
+                                new Vector3f(1.0f, 0.0f, 0.0f),
+                                new Vector3f(3.0f, 0.0f, 0.0f),
+                                1.0f));
+        GraphicsManager.refreshRenderData();
+        Render.configuration.setRenderingScene(true);
+        GraphicsManager.getScene().getCamera().setPosition(-1, 0, 0);
+        GraphicsManager.getScene()
+                .setSkyBox(
+                        new SkyBox(
+                                "models/skybox/skybox.obj",
+                                GraphicsManager.getScene().getMaterialCache()));
     }
 }

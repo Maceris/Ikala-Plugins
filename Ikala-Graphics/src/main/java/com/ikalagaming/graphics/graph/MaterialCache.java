@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.List;
 
 /** A cache of materials so that we can reuse them. */
+@Getter
 public class MaterialCache {
     /** The default index to use for materials. */
     public static final int DEFAULT_MATERIAL_INDEX = 0;
@@ -23,7 +24,7 @@ public class MaterialCache {
      *
      * @return The list of materials in the cache.
      */
-    @Getter private List<Material> materialsList;
+    private final List<Material> materialsList;
 
     /** Set up a new cache with a default material. */
     public MaterialCache() {

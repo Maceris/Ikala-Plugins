@@ -185,12 +185,8 @@ public class GraphicsManager {
         refreshRequested.set(true);
     }
 
-    /**
-     * Render to the screen.
-     *
-     * @param elapsedTime The time since the last render.
-     */
-    private static void render(final float elapsedTime) {
+    /** Render to the screen. */
+    private static void render() {
         render.render(window, scene);
 
         window.update();
@@ -283,7 +279,7 @@ public class GraphicsManager {
         if (renderTimer.getTime() >= nextRenderTime) {
             final float elapsedTime = renderTimer.getElapsedTime();
 
-            render(elapsedTime);
+            render();
             // Update the next time we should render a frame
             nextRenderTime = renderTimer.getLastLoopTime() + FRAME_TIME;
         }

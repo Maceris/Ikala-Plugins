@@ -68,10 +68,10 @@ public class ModelLoader {
      * @param modelPath The path to the model from the resource directory.
      * @param materialCache The material cache so we can reuse materials.
      * @param animation Whether we want to set up vertices for animation.
-     * @param flags Post processing flags for {@link Assimp#aiImportFile(CharSequence, int) Assimp
+     * @param flags Post-processing flags for {@link Assimp#aiImportFile(CharSequence, int) Assimp
      *     file import}.
      */
-    public static record ModelLoadRequest(
+    public record ModelLoadRequest(
             @NonNull String modelId,
             @NonNull String pluginName,
             @NonNull String modelPath,
@@ -80,7 +80,7 @@ public class ModelLoader {
             int flags) {
 
         /**
-         * Load a model using some standard post processing flags, and return it.
+         * Load a model using some standard post-processing flags, and return it.
          *
          * @param modelId The ID to supply the model.
          * @param pluginName The plugin that contains the model.
@@ -155,7 +155,7 @@ public class ModelLoader {
      * @param weights The weight list.
      * @param boneIDs The bone ID list.
      */
-    public static record AnimMeshData(float[] weights, int[] boneIDs) {}
+    public record AnimMeshData(float[] weights, int[] boneIDs) {}
 
     /**
      * A bone for animation.
@@ -164,7 +164,7 @@ public class ModelLoader {
      * @param boneName The name of the bone.
      * @param offsetMatrix The offset matrix for the bone.
      */
-    private static record Bone(int boneID, String boneName, Matrix4f offsetMatrix) {}
+    private record Bone(int boneID, String boneName, Matrix4f offsetMatrix) {}
 
     /**
      * A mapping of how much a specific bone affects a specific vertex.

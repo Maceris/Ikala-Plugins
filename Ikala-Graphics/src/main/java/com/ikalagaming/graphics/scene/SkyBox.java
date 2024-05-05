@@ -83,7 +83,7 @@ public class SkyBox {
      * Create a new skybox.
      *
      * @param skyBoxModelPath The path to the model from the resource directory.
-     * @param materialCache The texture cache to use.
+     * @param materialCache The material cache to use.
      */
     public SkyBox(@NonNull String skyBoxModelPath, @NonNull MaterialCache materialCache) {
         skyBoxModel =
@@ -102,7 +102,7 @@ public class SkyBox {
     }
 
     /** Clean up the mesh. */
-    public void cleanuo() {
+    public void cleanup() {
         glDeleteBuffers(vboIDList);
         glDeleteVertexArrays(vaoID);
     }

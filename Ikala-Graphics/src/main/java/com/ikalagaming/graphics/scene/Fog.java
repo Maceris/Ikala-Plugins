@@ -18,7 +18,7 @@ import org.joml.Vector3f;
 @AllArgsConstructor
 public class Fog {
     /**
-     * Whether or not the fog is active.
+     * Whether the fog is active.
      *
      * @param active If the fog should be active.
      * @return Whether the fog is active.
