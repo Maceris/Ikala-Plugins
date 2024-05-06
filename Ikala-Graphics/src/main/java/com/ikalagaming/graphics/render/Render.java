@@ -311,14 +311,14 @@ public class Render {
             skyBoxRender.render(scene);
             lightRenderFinish();
 
-            filterRender.render(scene, screenTexture);
+            filterRender.render(screenTexture);
         } else {
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, screenTexture);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             glViewport(0, 0, window.getWidth(), window.getHeight());
         }
-        guiRender.render(window, scene);
+        guiRender.render(window);
     }
 
     /**

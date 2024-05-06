@@ -23,7 +23,6 @@ import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.graph.QuadMesh;
 import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.UniformsMap;
-import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.plugins.config.ConfigManager;
@@ -34,17 +33,14 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /** Handle post-processing filters. */
 @Slf4j
 public class FilterRender {
 
     /** A map of filter shaders that have been picked up from a filters folder. */
-    private Map<String, ShaderProgram> shaders;
+    private final Map<String, ShaderProgram> shaders;
 
     /** A mesh for rendering the scene onto. */
     private QuadMesh quadMesh;
@@ -75,7 +71,9 @@ public class FilterRender {
 
         List<ShaderProgram.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
 
-        for (File vert : filtersFolder.listFiles((dir, name) -> name.endsWith(".vert"))) {
+        for (File vert :
+                Objects.requireNonNull(
+                        filtersFolder.listFiles((dir, name) -> name.endsWith(".vert")))) {
             shaderModuleDataList.clear();
             String name = vert.getName();
             // Strip file ending
@@ -153,10 +151,9 @@ public class FilterRender {
     /**
      * Render a scene.
      *
-     * @param scene The scene we are rendering.
      * @param screenTexture The screen texture for post-processing.
      */
-    public void render(@NonNull Scene scene, int screenTexture) {
+    public void render(int screenTexture) {
         glDepthMask(false);
 
         String name =

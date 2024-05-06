@@ -31,7 +31,6 @@ import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.util.FileUtils;
 import com.ikalagaming.util.SafeResourceLoader;
 
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -41,50 +40,37 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** An OpenGL shader program. */
+@Getter
 @Slf4j
 public class ShaderProgram {
 
-    /** A file and what type of shader that is. */
-    @Getter
-    @AllArgsConstructor
-    public static class ShaderModuleData {
-        /**
-         * The path to the shader file including name.
-         *
-         * @param The shader file to load.
-         * @return The shader file to load.
-         */
-        private final String shaderFile;
-
-        /**
-         * The type of shader to be created. One of:<br>
-         *
-         * <ul>
-         *   <li>{@link#GL_VERTEX_SHADER VERTEX_SHADER}
-         *   <li>{@link#GL_FRAGMENT_SHADER FRAGMENT_SHADER}
-         *   <li>{@linkGL_GEOMETRY_SHADER GEOMETRY_SHADER}
-         *   <li>{@linkGL_TESS_CONTROL_SHADER TESS_CONTROL_SHADER}
-         *   <li>{@linkGL_TESS_EVALUATION_SHADER GL_TESS_EVALUATION_SHADER}
-         * </ul>
-         *
-         * @param shaderType The type of shader.
-         * @return The type of shader.
-         */
-        private final int shaderType;
-    }
+    /**
+     * A file and what type of shader that is.
+     *
+     * @param shaderFile The path to the shader file including name.
+     * @param shaderType The type of shader to be created. One of:<br>
+     *     <ul>
+     *       <li>{@link GL20#GL_VERTEX_SHADER VERTEX_SHADER}
+     *       <li>{@link org.lwjgl.opengl.GL46#GL_FRAGMENT_SHADER FRAGMENT_SHADER}
+     *       <li>{@link org.lwjgl.opengl.GL33#GL_GEOMETRY_SHADER GEOMETRY_SHADER}
+     *       <li>{@link org.lwjgl.opengl.GL46#GL_TESS_CONTROL_SHADER TESS_CONTROL_SHADER}
+     *       <li>{@link org.lwjgl.opengl.GL46#GL_TESS_EVALUATION_SHADER GL_TESS_EVALUATION_SHADER}
+     *     </ul>
+     */
+    public record ShaderModuleData(@NonNull String shaderFile, int shaderType) {}
 
     /**
      * The Program ID for the program.
      *
      * @return The opengl program ID.
      */
-    @Getter private final int programID;
+    private final int programID;
 
     /**
      * Create a new shader program.
      *
      * @param shaderModuleDataList The list of shader modules for the program.
-     * @throws ShaderException If an new program could not be created.
+     * @throws ShaderException If a new program could not be created.
      */
     public ShaderProgram(@NonNull List<ShaderModuleData> shaderModuleDataList) {
         programID = glCreateProgram();

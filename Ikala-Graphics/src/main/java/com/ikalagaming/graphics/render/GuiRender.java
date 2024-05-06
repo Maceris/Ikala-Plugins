@@ -42,7 +42,6 @@ import com.ikalagaming.graphics.graph.GuiMesh;
 import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.graphics.graph.UniformsMap;
-import com.ikalagaming.graphics.scene.Scene;
 
 import imgui.ImDrawData;
 import imgui.ImFontAtlas;
@@ -68,7 +67,7 @@ public class GuiRender {
     private Vector2f scale;
 
     /** The shader program for rendering the UI. */
-    private ShaderProgram shaderProgram;
+    private final ShaderProgram shaderProgram;
 
     /** The texture we store font data in. */
     private Texture font;
@@ -128,12 +127,8 @@ public class GuiRender {
         scale = new Vector2f();
     }
 
-    /**
-     * Render the GUI over the given scene.
-     *
-     * @param scene The scene we are drawing.
-     */
-    public void render(@NonNull Window window, @NonNull Scene scene) {
+    /** Render the GUI over the given scene. */
+    public void render(@NonNull Window window) {
         GuiInstance guiInstance = GraphicsManager.getGuiInstance();
         if (guiInstance == null) {
             return;
