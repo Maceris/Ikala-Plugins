@@ -1,6 +1,7 @@
 package com.ikalagaming.factory.gui.component;
 
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
@@ -16,8 +17,9 @@ public interface Drawable {
      *
      * @param width The width of the window in pixels.
      * @param height The height of the window in pixels.
+     * @param textureHandler The texture handler implementation to use.
      */
-    void draw(final int width, final int height);
+    void draw(final int width, final int height, @NonNull TextureHandler textureHandler);
 
     /**
      * Process GUI inputs, which might happen at a different frequency than rendering.

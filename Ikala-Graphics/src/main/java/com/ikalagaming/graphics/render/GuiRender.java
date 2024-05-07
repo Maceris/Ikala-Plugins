@@ -38,9 +38,10 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GuiInstance;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.backend.base.TextureHandler;
+import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.graph.GuiMesh;
 import com.ikalagaming.graphics.graph.ShaderProgram;
-import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.graphics.graph.UniformsMap;
 
 import imgui.ImDrawData;
@@ -79,8 +80,9 @@ public class GuiRender {
      * Set up a new GUI renderer for the window.
      *
      * @param window The window we are rendering in.
+     * @param textureHandler The texture handler implementation to use.
      */
-    public GuiRender(@NonNull Window window) {
+    public GuiRender(@NonNull Window window, @NonNull TextureHandler textureHandler) {
         List<ShaderProgram.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
                 new ShaderProgram.ShaderModuleData("shaders/gui.vert", GL_VERTEX_SHADER));
@@ -88,21 +90,26 @@ public class GuiRender {
                 new ShaderProgram.ShaderModuleData("shaders/gui.frag", GL_FRAGMENT_SHADER));
         shaderProgram = new ShaderProgram(shaderModuleDataList);
         createUniforms();
-        createUIResources(window);
+        createUIResources(window, textureHandler);
     }
 
-    /** Clean up shaders and textures. */
-    public void cleanup() {
+    /**
+     * Clean up shaders and textures.
+     *
+     * @param textureHandler The texture handler implementation to use.
+     */
+    public void cleanup(@NonNull TextureHandler textureHandler) {
         shaderProgram.cleanup();
-        font.cleanup();
+        textureHandler.cleanup(font);
     }
 
     /**
      * Set up imgui and create fonts, textures, meshes, etc.
      *
      * @param window The window we are using.
+     * @param textureHandler The texture handler implementation to use.
      */
-    private void createUIResources(@NonNull Window window) {
+    private void createUIResources(@NonNull Window window, @NonNull TextureHandler textureHandler) {
         ImGui.createContext();
 
         ImGuiIO imGuiIO = ImGui.getIO();
@@ -114,8 +121,8 @@ public class GuiRender {
         ImInt width = new ImInt();
         ImInt height = new ImInt();
         ByteBuffer buf = fontAtlas.getTexDataAsRGBA32(width, height);
-        font = new Texture(width.get(), height.get(), buf);
-        fontAtlas.setTexID(font.getTextureID());
+        font = textureHandler.load(buf, width.get(), height.get());
+        fontAtlas.setTexID(font.id());
 
         guiMesh = new GuiMesh();
     }
@@ -127,13 +134,17 @@ public class GuiRender {
         scale = new Vector2f();
     }
 
-    /** Render the GUI over the given scene. */
-    public void render(@NonNull Window window) {
+    /**
+     * Render the GUI over the given scene.
+     *
+     * @param textureHandler The texture handler implementation to use.
+     */
+    public void render(@NonNull Window window, @NonNull TextureHandler textureHandler) {
         GuiInstance guiInstance = GraphicsManager.getGuiInstance();
         if (guiInstance == null) {
             return;
         }
-        guiInstance.drawGui(window.getWidth(), window.getHeight());
+        guiInstance.drawGui(window.getWidth(), window.getHeight(), textureHandler);
 
         shaderProgram.bind();
 

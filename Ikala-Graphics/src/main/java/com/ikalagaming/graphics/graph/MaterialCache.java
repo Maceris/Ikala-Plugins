@@ -6,6 +6,8 @@
  */
 package com.ikalagaming.graphics.graph;
 
+import com.ikalagaming.graphics.frontend.Material;
+
 import lombok.Getter;
 import lombok.NonNull;
 

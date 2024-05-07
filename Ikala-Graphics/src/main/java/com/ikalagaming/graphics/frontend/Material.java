@@ -4,7 +4,7 @@
  * v2.0. Changes have been made related to formatting, functionality, and
  * naming.
  */
-package com.ikalagaming.graphics.graph;
+package com.ikalagaming.graphics.frontend;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -20,52 +20,22 @@ public class Material {
     /** The default color to use when unspecified. */
     public static final Vector4f DEFAULT_COLOR = new Vector4f(0.0f, 0.0f, 0.0f, 1.0f);
 
-    /**
-     * The ambient color of the material.
-     *
-     * @param ambientColor The new color.
-     * @return The ambient color.
-     */
+    /** The ambient color of the material. */
     @NonNull private Vector4f ambientColor;
 
-    /**
-     * The diffuse color of the material.
-     *
-     * @param diffuseColor The new color.
-     * @return The diffuse color.
-     */
+    /** The diffuse color of the material. */
     @NonNull private Vector4f diffuseColor;
 
-    /**
-     * The path to the normal map for this material, from the resource directory.
-     *
-     * @param normalMapPath The file path to the normal map.
-     * @return The file path to the normal map.
-     */
+    /** The handle for the normal map texture, which might be null. */
     private Texture normalMap;
 
-    /**
-     * The reflectance value of the material.
-     *
-     * @param reflectance The new color.
-     * @return The reflectance value.
-     */
+    /** The reflectance value of the material. */
     private float reflectance;
 
-    /**
-     * The specular color of the material.
-     *
-     * @param specularColor The new color.
-     * @return The specular color.
-     */
+    /** The specular color of the material. */
     @NonNull private Vector4f specularColor;
 
-    /**
-     * The path to the texture for this material, from the resource directory.
-     *
-     * @param texturePath The file path to the texture.
-     * @return The file path to the texture.
-     */
+    /** The handle for the texture, which might be null. */
     private Texture texture;
 
     /** Create a default, non-reflective material with no texture. */
@@ -77,10 +47,9 @@ public class Material {
 
     @Override
     public boolean equals(Object obj) {
-        if (!(obj instanceof Material)) {
+        if (!(obj instanceof Material other)) {
             return false;
         }
-        Material other = (Material) obj;
 
         final float delta = 0.001f;
         if (!ambientColor.equals(other.ambientColor, delta)
@@ -89,11 +58,13 @@ public class Material {
                 || !Objects.equals(texture, other.texture)) {
             return false;
         }
-        if (!Objects.equals(normalMap, other.normalMap)
-                || (Math.abs(reflectance - other.reflectance) > delta)) {
-            return false;
-        }
+        return Objects.equals(normalMap, other.normalMap)
+                && (Math.abs(reflectance - other.reflectance) <= delta);
+    }
 
-        return true;
+    @Override
+    public int hashCode() {
+        return Objects.hash(
+                ambientColor, diffuseColor, specularColor, texture, normalMap, reflectance);
     }
 }

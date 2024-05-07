@@ -16,9 +16,10 @@ import static org.lwjgl.opengl.GL20.GL_VERTEX_SHADER;
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
 
 import com.ikalagaming.graphics.ShaderUniforms;
-import com.ikalagaming.graphics.graph.Material;
+import com.ikalagaming.graphics.backend.base.TextureHandler;
+import com.ikalagaming.graphics.frontend.Material;
+import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.graph.ShaderProgram;
-import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
@@ -73,8 +74,9 @@ public class SkyBoxRender {
      * Render the skybox.
      *
      * @param scene The scene to render.
+     * @param textureHandler The texture handler implementation to use.
      */
-    public void render(@NonNull Scene scene) {
+    public void render(@NonNull Scene scene, @NonNull TextureHandler textureHandler) {
         SkyBox skyBox = scene.getSkyBox();
 
         if (skyBox == null) {
@@ -101,7 +103,7 @@ public class SkyBoxRender {
         boolean hasTexture = false;
         if (texture != null) {
             glActiveTexture(GL_TEXTURE0);
-            texture.bind();
+            textureHandler.bind(texture);
             hasTexture = true;
         }
 

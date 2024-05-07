@@ -5,6 +5,7 @@ import com.ikalagaming.factory.gui.component.MainToolbar;
 import com.ikalagaming.graphics.GuiInstance;
 import com.ikalagaming.graphics.MouseInput;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.scene.Scene;
 
 import imgui.ImGui;
@@ -51,15 +52,15 @@ public class GuiManager implements GuiInstance {
     }
 
     @Override
-    public void drawGui(final int width, final int height) {
+    public void drawGui(final int width, final int height, @NonNull TextureHandler textureHandler) {
         ImGui.newFrame();
 
         windows.values().stream()
                 .filter(Component::isVisible)
-                .forEach(window -> window.draw(width, height));
+                .forEach(window -> window.draw(width, height, textureHandler));
 
         if (toolbar != null) {
-            toolbar.draw(width, height);
+            toolbar.draw(width, height, textureHandler);
         }
 
         ImGui.endFrame();

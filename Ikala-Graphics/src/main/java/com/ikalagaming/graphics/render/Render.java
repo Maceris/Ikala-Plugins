@@ -37,6 +37,8 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.backend.base.TextureHandler;
+import com.ikalagaming.graphics.backend.opengl.TextureHandlerOpenGL;
 import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.graph.RenderBuffers;
@@ -161,12 +163,15 @@ public class Render {
     /** The texture ID we render to before applying filters. */
     private int screenTexture;
 
+    private final TextureHandler textureHandler;
+
     /**
      * Set up a new rendering pipeline.
      *
      * @param window The window we are drawing on.
      */
     public Render(@NonNull Window window) {
+        textureHandler = new TextureHandlerOpenGL();
         GL.createCapabilities();
         glEnable(GL_MULTISAMPLE);
         glEnable(GL_DEPTH_TEST);
@@ -176,8 +181,8 @@ public class Render {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        sceneRender = new SceneRender();
-        guiRender = new GuiRender(window);
+        sceneRender = new SceneRender(textureHandler);
+        guiRender = new GuiRender(window, textureHandler);
         skyBoxRender = new SkyBoxRender();
         shadowRender = new ShadowRender();
         lightRender = new LightRender();
@@ -194,7 +199,7 @@ public class Render {
     /** Clean up all the rendering resources. */
     public void cleanup() {
         sceneRender.cleanup();
-        guiRender.cleanup();
+        guiRender.cleanup(textureHandler);
         skyBoxRender.cleanup();
         shadowRender.cleanup();
         lightRender.cleanup();
@@ -300,7 +305,7 @@ public class Render {
                 glDisable(GL_TEXTURE_2D);
             }
 
-            sceneRender.render(scene, renderBuffers, gBuffer, commandBuffers);
+            sceneRender.render(scene, renderBuffers, gBuffer, commandBuffers, textureHandler);
 
             if (Render.configuration.wireframe) {
                 glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -308,7 +313,7 @@ public class Render {
             }
             lightRenderStart(window);
             lightRender.render(scene, shadowRender, gBuffer);
-            skyBoxRender.render(scene);
+            skyBoxRender.render(scene, textureHandler);
             lightRenderFinish();
 
             filterRender.render(screenTexture);
@@ -318,7 +323,7 @@ public class Render {
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             glViewport(0, 0, window.getWidth(), window.getHeight());
         }
-        guiRender.render(window);
+        guiRender.render(window, textureHandler);
     }
 
     /**

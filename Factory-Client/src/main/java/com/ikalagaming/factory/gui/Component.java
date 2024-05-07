@@ -6,6 +6,7 @@ import com.ikalagaming.factory.gui.component.util.Alignment;
 import com.ikalagaming.factory.gui.component.util.Rect;
 import com.ikalagaming.factory.gui.component.util.Style;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.Getter;
@@ -188,13 +189,13 @@ public class Component implements Drawable {
     }
 
     @Override
-    public void draw(final int width, final int height) {
+    public void draw(final int width, final int height, @NonNull TextureHandler textureHandler) {
         if (!isVisible()) {
             return;
         }
         recalculate();
         children.forEach(Component::recalculate);
-        children.forEach(child -> child.draw(width, height));
+        children.forEach(child -> child.draw(width, height, textureHandler));
     }
 
     /**

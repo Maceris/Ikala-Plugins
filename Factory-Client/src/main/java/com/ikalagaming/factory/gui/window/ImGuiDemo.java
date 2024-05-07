@@ -4,9 +4,11 @@ import static com.ikalagaming.factory.gui.DefaultWindows.IMGUI_DEMO;
 
 import com.ikalagaming.factory.gui.component.GuiWindow;
 import com.ikalagaming.factory.gui.component.util.Alignment;
+import com.ikalagaming.graphics.backend.base.TextureHandler;
 
 import imgui.ImGui;
 import imgui.flag.ImGuiWindowFlags;
+import lombok.NonNull;
 
 /** Used to show the ImGui demo window. */
 public class ImGuiDemo extends GuiWindow {
@@ -19,7 +21,7 @@ public class ImGuiDemo extends GuiWindow {
     }
 
     @Override
-    public void draw(int width, int height) {
+    public void draw(int width, int height, @NonNull TextureHandler textureHandler) {
         ImGui.showDemoWindow();
     }
 }

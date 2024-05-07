@@ -5,6 +5,7 @@ import static com.ikalagaming.factory.gui.DefaultWindows.DEBUG;
 import com.ikalagaming.factory.gui.component.GuiWindow;
 import com.ikalagaming.factory.gui.component.util.Alignment;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.scene.Scene;
 
 import imgui.ImGui;
@@ -25,7 +26,7 @@ public class Debug extends GuiWindow {
     }
 
     @Override
-    public void draw(final int width, final int height) {
+    public void draw(final int width, final int height, @NonNull TextureHandler textureHandler) {
         ImGui.setNextWindowViewport(ImGui.getMainViewport().getID());
         ImGui.setNextWindowPos(
                 getActualDisplaceX() * width, getActualDisplaceY() * height, ImGuiCond.Always);

@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics;
 
+import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
@@ -11,8 +12,9 @@ public interface GuiInstance {
      *
      * @param width The width of the window, in pixels.
      * @param height The width of the height, in pixels.
+     * @param textureHandler The texture handler implementation to use.
      */
-    void drawGui(final int width, final int height);
+    void drawGui(final int width, final int height, @NonNull TextureHandler textureHandler);
 
     /**
      * Process GUI inputs, which might happen at a different frequency than rendering.

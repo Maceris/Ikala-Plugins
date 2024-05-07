@@ -9,12 +9,13 @@ package com.ikalagaming.graphics.scene;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Utils;
+import com.ikalagaming.graphics.backend.base.TextureHandler;
+import com.ikalagaming.graphics.backend.opengl.TextureHandlerOpenGL;
 import com.ikalagaming.graphics.exceptions.ModelException;
-import com.ikalagaming.graphics.graph.Material;
+import com.ikalagaming.graphics.frontend.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
-import com.ikalagaming.graphics.graph.Texture;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -60,6 +61,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 /** Utility class for loading in models from file. */
 @Slf4j
 public class ModelLoader {
+
+    /**
+     * TODO(ches) remove this. It is a hack to get this working until we can actually defer texture
+     * loading.
+     */
+    @Deprecated private static final TextureHandler textureHandler = new TextureHandlerOpenGL();
+
     /**
      * Information needed to load a model.
      *
@@ -379,28 +387,31 @@ public class ModelLoader {
      * @param request Data required to load the model.
      * @return The newly loaded model.
      */
-    public static Model loadModel(ModelLoadRequest request) {
+    public static Model loadModel(@NonNull ModelLoadRequest request) {
         File file =
                 PluginFolder.getResource(
                         request.pluginName(), ResourceType.DATA, request.modelPath());
         String fixedPath = file.getAbsolutePath();
 
         if (!file.exists()) {
+
             String error =
-                    SafeResourceLoader.getString(
-                            "MODEL_PATH_MISSING", GraphicsPlugin.getResourceBundle());
-            log.info(error, file.getAbsolutePath());
-            throw new ModelException(error.replaceFirst("\\{\\}", file.getAbsolutePath()));
+                    SafeResourceLoader.getStringFormatted(
+                            "MODEL_PATH_MISSING",
+                            GraphicsPlugin.getResourceBundle(),
+                            file.getAbsolutePath());
+            log.info(error);
+            throw new ModelException(error);
         }
         String modelDir = file.getParent();
 
         AIScene aiScene = Assimp.aiImportFile(fixedPath, request.flags());
         if (aiScene == null) {
             String error =
-                    SafeResourceLoader.getString(
-                            "MODEL_ERROR_LOADING", GraphicsPlugin.getResourceBundle());
-            log.info(error, fixedPath);
-            throw new ModelException(error.replaceFirst("\\{\\}", fixedPath));
+                    SafeResourceLoader.getStringFormatted(
+                            "MODEL_ERROR_LOADING", GraphicsPlugin.getResourceBundle(), fixedPath);
+            log.info(error);
+            throw new ModelException(error);
         }
 
         int numMaterials = aiScene.mNumMaterials();
@@ -629,7 +640,7 @@ public class ModelLoader {
     }
 
     /**
-     * Process the raw material into something easier for us to use. Any materials colors not
+     * Process the raw material into something easier for us to use. Any materials color not
      * specified are the {@link Material#DEFAULT_COLOR default}.
      *
      * @param aiMaterial The material to process.
@@ -706,7 +717,8 @@ public class ModelLoader {
             String texturePath = aiTexturePath.dataString();
             if (texturePath != null && texturePath.length() > 0) {
                 texturePath = modelDir + File.separator + new File(texturePath).getName();
-                material.setTexture(new Texture(texturePath));
+                // TODO(ches) find a way to defer texture loading
+                material.setTexture(textureHandler.load(texturePath));
                 material.setDiffuseColor(Material.DEFAULT_COLOR);
             }
 
@@ -725,7 +737,8 @@ public class ModelLoader {
             String normalMapPath = aiNormalMapPath.dataString();
             if (normalMapPath != null && normalMapPath.length() > 0) {
                 normalMapPath = modelDir + File.separator + new File(normalMapPath).getName();
-                material.setNormalMap(new Texture(normalMapPath));
+                // TODO(ches) find a way to defer texture loading
+                material.setNormalMap(textureHandler.load(normalMapPath));
             }
 
             return material;

@@ -1,8 +1,10 @@
 package com.ikalagaming.factory.gui.component;
 
 import com.ikalagaming.factory.gui.Component;
+import com.ikalagaming.graphics.backend.base.TextureHandler;
 
 import imgui.ImGui;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 /** A button, which may have text. */
@@ -23,7 +25,7 @@ public class Button extends Component implements Interactive {
     }
 
     @Override
-    public void draw(final int width, final int height) {
+    public void draw(final int width, final int height, @NonNull TextureHandler textureHandler) {
         ImGui.setCursorPosX(getActualDisplaceX() * width - ImGui.getWindowPosX());
         ImGui.setCursorPosY(getActualDisplaceY() * height - ImGui.getWindowPosY());
 

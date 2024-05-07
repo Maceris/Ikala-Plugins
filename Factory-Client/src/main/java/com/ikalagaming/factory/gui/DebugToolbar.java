@@ -6,6 +6,7 @@ import com.ikalagaming.factory.FactoryClientPlugin;
 import com.ikalagaming.factory.gui.component.Checkbox;
 import com.ikalagaming.factory.gui.component.MainToolbar;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.events.Shutdown;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -41,12 +42,12 @@ public class DebugToolbar extends MainToolbar {
     }
 
     @Override
-    public void draw(final int width, final int height) {
+    public void draw(final int width, final int height, @NonNull TextureHandler textureHandler) {
         if (ImGui.beginMainMenuBar()) {
             if (ImGui.beginMenu("Windows")) {
-                biomeDebug.draw(width, height);
-                debug.draw(width, height);
-                demoWindow.draw(width, height);
+                biomeDebug.draw(width, height, textureHandler);
+                debug.draw(width, height, textureHandler);
+                demoWindow.draw(width, height, textureHandler);
                 ImGui.endMenu();
             }
             ImGui.pushStyleColor(ImGuiCol.Text, ImColor.rgba(1f, 0.1f, 0.1f, 1.0f));
