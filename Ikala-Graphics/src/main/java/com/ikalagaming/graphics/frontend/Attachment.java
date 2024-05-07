@@ -27,6 +27,12 @@ public class Attachment {
         CAN_ALIAS(0x0001);
         private final int bits;
 
+        /**
+         * Combine the bitmasks of multiple flags.
+         *
+         * @param flags The list of flags we want to combine the bits of.
+         * @return The resulting integer bitmask, with all the provided flags set.
+         */
         public static int combining(@NonNull Flag... flags) {
             int result = 0;
             for (var flag : flags) {
@@ -35,6 +41,12 @@ public class Attachment {
             return result;
         }
 
+        /**
+         * Convert a bitmask to a list of flags that it represents.
+         *
+         * @param flagBits The bitmask we want to pull flags from.
+         * @return The corresponding list of flags.
+         */
         public static List<Flag> fromBits(final int flagBits) {
             var result = new ArrayList<Flag>();
             for (var flag : Flag.values()) {
@@ -79,6 +91,12 @@ public class Attachment {
 
         private final int bits;
 
+        /**
+         * Combine the bitmasks of multiple flags.
+         *
+         * @param flags The list of flags we want to combine the bits of.
+         * @return The resulting integer bitmask, with all the provided flags set.
+         */
         public static int combining(@NonNull SampleCountFlag... flags) {
             int result = 0;
             for (var flag : flags) {
@@ -87,6 +105,12 @@ public class Attachment {
             return result;
         }
 
+        /**
+         * Convert a bitmask to a list of flags that it represents.
+         *
+         * @param flagBits The bitmask we want to pull flags from.
+         * @return The corresponding list of flags.
+         */
         public static List<SampleCountFlag> fromBits(final int flagBits) {
             var result = new ArrayList<SampleCountFlag>();
             for (var flag : SampleCountFlag.values()) {
