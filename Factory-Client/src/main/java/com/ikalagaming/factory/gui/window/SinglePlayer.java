@@ -5,17 +5,20 @@ import static com.ikalagaming.factory.gui.DefaultWindows.SINGLE_PLAYER;
 
 import com.ikalagaming.factory.FactoryClientPlugin;
 import com.ikalagaming.factory.FactoryServerPlugin;
-import com.ikalagaming.factory.gui.GuiManager;
-import com.ikalagaming.factory.gui.component.Button;
-import com.ikalagaming.factory.gui.component.GuiWindow;
-import com.ikalagaming.factory.gui.component.ScrollBox;
 import com.ikalagaming.factory.gui.component.menu.SaveEntry;
-import com.ikalagaming.factory.gui.component.util.Alignment;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.frontend.gui.WindowManager;
+import com.ikalagaming.graphics.frontend.gui.component.Button;
+import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
+import com.ikalagaming.graphics.frontend.gui.component.ScrollBox;
+import com.ikalagaming.graphics.frontend.gui.util.Alignment;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.render.Render;
-import com.ikalagaming.graphics.scene.*;
+import com.ikalagaming.graphics.scene.Entity;
+import com.ikalagaming.graphics.scene.ModelLoader;
+import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.SkyBox;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.PointLight;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -26,13 +29,13 @@ import org.joml.Vector3f;
 
 /** The screen for selecting a single player game to play. */
 public class SinglePlayer extends GuiWindow {
-    private final GuiManager guiManager;
+    private final WindowManager windowManager;
     private final Button back;
     private final Button newGame;
     private final Button play;
     private final ScrollBox saves;
 
-    public SinglePlayer(@NonNull GuiManager guiManager) {
+    public SinglePlayer(@NonNull WindowManager windowManager) {
         super(
                 SINGLE_PLAYER.getName(),
                 ImGuiWindowFlags.NoScrollbar
@@ -40,7 +43,7 @@ public class SinglePlayer extends GuiWindow {
                         | ImGuiWindowFlags.NoResize
                         | ImGuiWindowFlags.NoTitleBar
                         | ImGuiWindowFlags.NoDecoration);
-        this.guiManager = guiManager;
+        this.windowManager = windowManager;
         setScale(1.0f, 0.98f);
         setDisplacement(0.0f, 0.02f);
 
@@ -97,8 +100,8 @@ public class SinglePlayer extends GuiWindow {
     @Override
     public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
         if (back.checkResult()) {
-            guiManager.hide(SINGLE_PLAYER.getName());
-            guiManager.show(MAIN_MENU.getName());
+            windowManager.hide(SINGLE_PLAYER.getName());
+            windowManager.show(MAIN_MENU.getName());
             return true;
         }
         if (newGame.checkResult()) {
@@ -106,7 +109,7 @@ public class SinglePlayer extends GuiWindow {
         }
         if (play.checkResult()) {
             // TODO(ches) Play game FACT-16
-            guiManager.hide(SINGLE_PLAYER.getName());
+            windowManager.hide(SINGLE_PLAYER.getName());
             startGame();
         }
         return false;

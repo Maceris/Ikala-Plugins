@@ -1,4 +1,4 @@
-package com.ikalagaming.factory.gui.component.util;
+package com.ikalagaming.graphics.frontend.gui.util;
 
 import lombok.*;
 

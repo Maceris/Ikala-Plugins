@@ -4,11 +4,11 @@ import static com.ikalagaming.factory.gui.DefaultWindows.MAIN_MENU;
 import static com.ikalagaming.factory.gui.DefaultWindows.SINGLE_PLAYER;
 
 import com.ikalagaming.factory.FactoryClientPlugin;
-import com.ikalagaming.factory.gui.GuiManager;
-import com.ikalagaming.factory.gui.component.Button;
-import com.ikalagaming.factory.gui.component.GuiWindow;
-import com.ikalagaming.factory.gui.component.util.Alignment;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.frontend.gui.WindowManager;
+import com.ikalagaming.graphics.frontend.gui.component.Button;
+import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
+import com.ikalagaming.graphics.frontend.gui.util.Alignment;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -17,12 +17,12 @@ import lombok.NonNull;
 
 /** The main menu we start up the game showing. */
 public class MainMenu extends GuiWindow {
-    private final GuiManager guiManager;
+    private final WindowManager windowManager;
     private final Button singlePlayer;
     private final Button multiPlayer;
     private final Button options;
 
-    public MainMenu(@NonNull GuiManager guiManager) {
+    public MainMenu(@NonNull WindowManager windowManager) {
         super(
                 MAIN_MENU.getName(),
                 ImGuiWindowFlags.NoScrollbar
@@ -30,7 +30,7 @@ public class MainMenu extends GuiWindow {
                         | ImGuiWindowFlags.NoResize
                         | ImGuiWindowFlags.NoTitleBar
                         | ImGuiWindowFlags.NoDecoration);
-        this.guiManager = guiManager;
+        this.windowManager = windowManager;
         setScale(1.0f, 0.98f);
         setDisplacement(0.0f, 0.02f);
 
@@ -65,8 +65,8 @@ public class MainMenu extends GuiWindow {
     @Override
     public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
         if (singlePlayer.checkResult()) {
-            guiManager.hide(MAIN_MENU.getName());
-            guiManager.show(SINGLE_PLAYER.getName());
+            windowManager.hide(MAIN_MENU.getName());
+            windowManager.show(SINGLE_PLAYER.getName());
             return true;
         }
         if (multiPlayer.checkResult()) {

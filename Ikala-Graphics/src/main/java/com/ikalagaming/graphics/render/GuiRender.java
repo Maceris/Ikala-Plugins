@@ -35,11 +35,11 @@ import static org.lwjgl.opengl.GL20.GL_VERTEX_SHADER;
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
 
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.GuiInstance;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.frontend.Texture;
+import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.graph.GuiMesh;
 import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.UniformsMap;
@@ -140,11 +140,11 @@ public class GuiRender {
      * @param textureHandler The texture handler implementation to use.
      */
     public void render(@NonNull Window window, @NonNull TextureHandler textureHandler) {
-        GuiInstance guiInstance = GraphicsManager.getGuiInstance();
-        if (guiInstance == null) {
+        WindowManager windowManager = GraphicsManager.getWindowManager();
+        if (windowManager == null) {
             return;
         }
-        guiInstance.drawGui(window.getWidth(), window.getHeight(), textureHandler);
+        windowManager.drawGui(window.getWidth(), window.getHeight(), textureHandler);
 
         shaderProgram.bind();
 

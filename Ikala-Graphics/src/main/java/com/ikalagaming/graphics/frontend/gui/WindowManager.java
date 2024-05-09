@@ -1,11 +1,11 @@
-package com.ikalagaming.factory.gui;
+package com.ikalagaming.graphics.frontend.gui;
 
-import com.ikalagaming.factory.gui.component.GuiWindow;
-import com.ikalagaming.factory.gui.component.MainToolbar;
-import com.ikalagaming.graphics.GuiInstance;
 import com.ikalagaming.graphics.MouseInput;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
+import com.ikalagaming.graphics.frontend.gui.component.Component;
+import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
+import com.ikalagaming.graphics.frontend.gui.component.MainToolbar;
 import com.ikalagaming.graphics.scene.Scene;
 
 import imgui.ImGui;
@@ -20,14 +20,14 @@ import java.util.Map;
 import java.util.Optional;
 
 /** Tracks and engages all the things we want to render with ImGui. */
-public class GuiManager implements GuiInstance {
+public class WindowManager {
 
     /** A table for looking up specific window by name. */
     private final Map<String, GuiWindow> windows;
 
     @Getter @Setter private MainToolbar toolbar;
 
-    public GuiManager() {
+    public WindowManager() {
         windows = new HashMap<>();
     }
 
@@ -51,7 +51,13 @@ public class GuiManager implements GuiInstance {
         setVisible(name, false);
     }
 
-    @Override
+    /**
+     * Used to draw the GUI.
+     *
+     * @param width The width of the window, in pixels.
+     * @param height The width of the height, in pixels.
+     * @param textureHandler The texture handler implementation to use.
+     */
     public void drawGui(final int width, final int height, @NonNull TextureHandler textureHandler) {
         ImGui.newFrame();
 
@@ -77,7 +83,12 @@ public class GuiManager implements GuiInstance {
         setVisible(name, true);
     }
 
-    @Override
+    /**
+     * Process GUI inputs, which might happen at a different frequency than rendering.
+     *
+     * @param scene The scene we are rendering.
+     * @param window The window we are using.
+     */
     public void handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
         ImGuiIO imGuiIO = ImGui.getIO();
         MouseInput mouseInput = window.getMouseInput();

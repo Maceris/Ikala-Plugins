@@ -1,6 +1,5 @@
-package com.ikalagaming.factory.gui.component;
+package com.ikalagaming.graphics.frontend.gui.component;
 
-import com.ikalagaming.factory.gui.Component;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
 
 import imgui.ImGui;

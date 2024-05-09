@@ -1,4 +1,4 @@
-package com.ikalagaming.factory.gui.component;
+package com.ikalagaming.graphics.frontend.gui.component;
 
 /**
  * Something that we can interact with on the UI, which returns a boolean result indicating whether

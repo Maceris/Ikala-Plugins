@@ -1,8 +1,9 @@
-package com.ikalagaming.factory.gui;
+package gui.component;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.ikalagaming.factory.gui.component.util.Alignment;
+import com.ikalagaming.graphics.frontend.gui.component.Component;
+import com.ikalagaming.graphics.frontend.gui.util.Alignment;
 
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;

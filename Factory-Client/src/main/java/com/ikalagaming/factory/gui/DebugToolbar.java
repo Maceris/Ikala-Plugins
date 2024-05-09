@@ -3,10 +3,11 @@ package com.ikalagaming.factory.gui;
 import static com.ikalagaming.factory.gui.DefaultWindows.*;
 
 import com.ikalagaming.factory.FactoryClientPlugin;
-import com.ikalagaming.factory.gui.component.Checkbox;
-import com.ikalagaming.factory.gui.component.MainToolbar;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
+import com.ikalagaming.graphics.frontend.gui.WindowManager;
+import com.ikalagaming.graphics.frontend.gui.component.Checkbox;
+import com.ikalagaming.graphics.frontend.gui.component.MainToolbar;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.events.Shutdown;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -18,27 +19,27 @@ import lombok.NonNull;
 
 /** A menu bar at the top of the screen for debugging. */
 public class DebugToolbar extends MainToolbar {
-    private final GuiManager guiManager;
+    private final WindowManager windowManager;
     private final Checkbox biomeDebug;
     private final Checkbox debug;
     private final Checkbox demoWindow;
 
-    public DebugToolbar(@NonNull GuiManager guiManager) {
-        this.guiManager = guiManager;
+    public DebugToolbar(@NonNull WindowManager windowManager) {
+        this.windowManager = windowManager;
         var textBiomeDebug =
                 SafeResourceLoader.getString(
                         "TOOLBAR_DEBUG_BIOME_DEBUG", FactoryClientPlugin.getResourceBundle());
-        biomeDebug = new Checkbox(textBiomeDebug, guiManager.isVisible(BIOME_DEBUG.getName()));
+        biomeDebug = new Checkbox(textBiomeDebug, windowManager.isVisible(BIOME_DEBUG.getName()));
 
         var textDebug =
                 SafeResourceLoader.getString(
                         "TOOLBAR_DEBUG_DEBUG", FactoryClientPlugin.getResourceBundle());
-        debug = new Checkbox(textDebug, guiManager.isVisible(DEBUG.getName()));
+        debug = new Checkbox(textDebug, windowManager.isVisible(DEBUG.getName()));
 
         var textDemo =
                 SafeResourceLoader.getString(
                         "TOOLBAR_DEBUG_DEMO", FactoryClientPlugin.getResourceBundle());
-        demoWindow = new Checkbox(textDemo, guiManager.isVisible(IMGUI_DEMO.getName()));
+        demoWindow = new Checkbox(textDemo, windowManager.isVisible(IMGUI_DEMO.getName()));
     }
 
     @Override
@@ -63,15 +64,15 @@ public class DebugToolbar extends MainToolbar {
     @Override
     public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
         if (biomeDebug.checkResult()) {
-            guiManager.setVisible(BIOME_DEBUG.getName(), biomeDebug.getState());
+            windowManager.setVisible(BIOME_DEBUG.getName(), biomeDebug.getState());
             return true;
         }
         if (debug.checkResult()) {
-            guiManager.setVisible(DEBUG.getName(), debug.getState());
+            windowManager.setVisible(DEBUG.getName(), debug.getState());
             return true;
         }
         if (demoWindow.checkResult()) {
-            guiManager.setVisible(IMGUI_DEMO.getName(), demoWindow.getState());
+            windowManager.setVisible(IMGUI_DEMO.getName(), demoWindow.getState());
             return true;
         }
         return false;

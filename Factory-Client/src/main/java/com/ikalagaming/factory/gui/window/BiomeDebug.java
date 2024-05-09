@@ -3,11 +3,11 @@ package com.ikalagaming.factory.gui.window;
 import static org.lwjgl.opengl.GL11.glIsTexture;
 
 import com.ikalagaming.factory.gui.DefaultWindows;
-import com.ikalagaming.factory.gui.component.GuiWindow;
-import com.ikalagaming.factory.gui.component.util.Alignment;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.frontend.Texture;
+import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
+import com.ikalagaming.graphics.frontend.gui.util.Alignment;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.random.RandomGen;
 
@@ -55,7 +55,7 @@ public class BiomeDebug extends GuiWindow {
 
     @Override
     public void draw(final int width, final int height, @NonNull TextureHandler textureHandler) {
-        if (this.textureHandler != null) {
+        if (this.textureHandler == null) {
             this.textureHandler = textureHandler;
         }
         ImGui.setNextWindowPos(

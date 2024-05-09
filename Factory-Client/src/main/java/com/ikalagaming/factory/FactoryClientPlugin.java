@@ -7,6 +7,7 @@ import com.ikalagaming.factory.gui.*;
 import com.ikalagaming.factory.gui.window.*;
 import com.ikalagaming.factory.saves.UserDataUtil;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 
@@ -37,7 +38,7 @@ public class FactoryClientPlugin extends Plugin {
 
     private Set<Listener> listeners;
 
-    @Getter private GuiManager guiManager;
+    @Getter private WindowManager guiManager;
 
     @Override
     public Set<Listener> getListeners() {
@@ -53,16 +54,9 @@ public class FactoryClientPlugin extends Plugin {
     }
 
     @Override
-    public boolean onDisable() {
-        GraphicsManager.setGUI(null);
-        return true;
-    }
-
-    @Override
     public boolean onEnable() {
         UserDataUtil.createUserDataFolder();
-        guiManager = new GuiManager();
-        GraphicsManager.setGUI(guiManager);
+        guiManager = GraphicsManager.getWindowManager();
         guiManager.addWindow(BIOME_DEBUG.getName(), new BiomeDebug());
         guiManager.addWindow(MAIN_MENU.getName(), new MainMenu(guiManager));
         guiManager.addWindow(SINGLE_PLAYER.getName(), new SinglePlayer(guiManager));

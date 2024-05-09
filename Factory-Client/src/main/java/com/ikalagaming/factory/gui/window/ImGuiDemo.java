@@ -2,9 +2,9 @@ package com.ikalagaming.factory.gui.window;
 
 import static com.ikalagaming.factory.gui.DefaultWindows.IMGUI_DEMO;
 
-import com.ikalagaming.factory.gui.component.GuiWindow;
-import com.ikalagaming.factory.gui.component.util.Alignment;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
+import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
+import com.ikalagaming.graphics.frontend.gui.util.Alignment;
 
 import imgui.ImGui;
 import imgui.flag.ImGuiWindowFlags;

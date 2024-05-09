@@ -1,12 +1,10 @@
-package com.ikalagaming.factory.gui;
+package com.ikalagaming.graphics.frontend.gui.component;
 
-import com.ikalagaming.factory.gui.component.Drawable;
-import com.ikalagaming.factory.gui.component.GuiWindow;
-import com.ikalagaming.factory.gui.component.util.Alignment;
-import com.ikalagaming.factory.gui.component.util.Rect;
-import com.ikalagaming.factory.gui.component.util.Style;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
+import com.ikalagaming.graphics.frontend.gui.util.Alignment;
+import com.ikalagaming.graphics.frontend.gui.util.Rect;
+import com.ikalagaming.graphics.frontend.gui.util.Style;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.Getter;
@@ -21,7 +19,7 @@ import java.util.List;
  * A component that we can draw on the screen, can handle input, and can be enabled/disabled. It is
  * expected that any component other than a {@link GuiWindow} is placed inside a window, with a
  * couple notable exceptions like members of a {@link
- * com.ikalagaming.factory.gui.component.MainToolbar MainToolbar}.
+ * com.ikalagaming.graphics.frontend.gui.component.MainToolbar MainToolbar}.
  */
 public class Component implements Drawable {
 
@@ -74,7 +72,7 @@ public class Component implements Drawable {
     /** True if the component has been changed and needs to be recalculated. */
     protected boolean dirty;
 
-    /** A list of sub-components this component contains */
+    /** A list of subcomponents this component contains */
     protected final List<Component> children;
 
     /** The height of the component, or z depth. Higher numbers are drawn on top. */

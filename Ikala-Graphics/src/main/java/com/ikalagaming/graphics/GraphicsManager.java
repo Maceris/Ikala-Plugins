@@ -5,6 +5,7 @@ import static org.lwjgl.glfw.GLFW.glfwSetErrorCallback;
 import static org.lwjgl.glfw.GLFW.glfwTerminate;
 
 import com.ikalagaming.graphics.events.WindowCreated;
+import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.render.Render;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
@@ -16,7 +17,9 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.lwjgl.glfw.GLFWErrorCallback;
 
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -25,10 +28,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class GraphicsManager {
 
     /** Whether we are currently initialized. */
-    static AtomicBoolean initialized = new AtomicBoolean(false);
+    static final AtomicBoolean initialized = new AtomicBoolean(false);
 
     /** Whether we want to refresh the scene information. */
-    private static AtomicBoolean refreshRequested = new AtomicBoolean(false);
+    private static final AtomicBoolean refreshRequested = new AtomicBoolean(false);
 
     /**
      * The scene we are rendering.
@@ -90,7 +93,7 @@ public class GraphicsManager {
 
     /** Whether we should shut down. */
     @Getter(value = AccessLevel.PACKAGE)
-    private static AtomicBoolean shutdownFlag = new AtomicBoolean(false);
+    private static final AtomicBoolean shutdownFlag = new AtomicBoolean(false);
 
     /**
      * Used to track the tick method reference in the framework.
@@ -110,12 +113,11 @@ public class GraphicsManager {
     @Getter private static Window window;
 
     /**
-     * The GUI instance to use for rendering.
+     * The window manager for drawing GUIs.
      *
-     * @param guiInstance The new GUI to use.
-     * @return The current GUI.
+     * @return The window manager.
      */
-    @Getter private static GuiInstance guiInstance;
+    @Getter private static final WindowManager windowManager = new WindowManager();
 
     /**
      * Creates a graphics window, fires off a {@link WindowCreated} event. Won't do anything if a
@@ -208,15 +210,6 @@ public class GraphicsManager {
     }
 
     /**
-     * Set the GUI instance to use.
-     *
-     * @param gui The user interface.
-     */
-    public static void setGUI(GuiInstance gui) {
-        guiInstance = gui;
-    }
-
-    /**
      * Terminate GLFW and free the error callback. If any windows still remain, they are destroyed.
      */
     public static void terminate() {
@@ -228,15 +221,14 @@ public class GraphicsManager {
         }
 
         glfwTerminate();
-        glfwSetErrorCallback(null).free();
+        Optional.ofNullable(glfwSetErrorCallback(null)).ifPresent(GLFWErrorCallback::free);
         initialized.set(false);
     }
 
     /**
-     * Does a graphical update. Returns the value of if it still exists. That is, returns false if
-     * the window was destroyed and true if it still exists.
+     * Does a graphical update.
      *
-     * @return True if the window updated, false if has been destroyed.
+     * @return A status indicating to the launcher the status of this main loop stage.
      */
     static int tick() {
         if (null == window) {
@@ -264,9 +256,7 @@ public class GraphicsManager {
             window.getMouseInput().input();
             cameraManager.updateCamera(elapsedTime);
 
-            if (guiInstance != null) {
-                guiInstance.handleGuiInput(scene, window);
-            }
+            windowManager.handleGuiInput(scene, window);
 
             if (refreshRequested.compareAndSet(true, false)) {
                 render.setupData(scene);
@@ -277,8 +267,6 @@ public class GraphicsManager {
         }
 
         if (renderTimer.getTime() >= nextRenderTime) {
-            final float elapsedTime = renderTimer.getElapsedTime();
-
             render();
             // Update the next time we should render a frame
             nextRenderTime = renderTimer.getLastLoopTime() + FRAME_TIME;

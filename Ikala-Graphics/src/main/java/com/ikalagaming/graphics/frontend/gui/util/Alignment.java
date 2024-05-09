@@ -1,4 +1,4 @@
-package com.ikalagaming.factory.gui.component.util;
+package com.ikalagaming.graphics.frontend.gui.util;
 
 /**
  * The area of a parent window or screen that a window should call the origin with respect to

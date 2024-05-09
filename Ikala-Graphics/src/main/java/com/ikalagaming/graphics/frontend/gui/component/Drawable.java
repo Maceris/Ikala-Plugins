@@ -1,4 +1,4 @@
-package com.ikalagaming.factory.gui.component;
+package com.ikalagaming.graphics.frontend.gui.component;
 
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
@@ -6,10 +6,7 @@ import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
 
-/**
- * Something that can be rendered on the screen as part of a {@link
- * com.ikalagaming.graphics.GuiInstance GuiInstance}.
- */
+/** Something that can be rendered on the screen as part of a GUI. */
 public interface Drawable {
 
     /**
