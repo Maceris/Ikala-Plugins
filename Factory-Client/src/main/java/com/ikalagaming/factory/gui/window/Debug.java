@@ -2,6 +2,7 @@ package com.ikalagaming.factory.gui.window;
 
 import static com.ikalagaming.factory.gui.DefaultWindows.DEBUG;
 
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
@@ -29,9 +30,9 @@ public class Debug extends GuiWindow {
     public void draw(final int width, final int height, @NonNull TextureHandler textureHandler) {
         ImGui.setNextWindowViewport(ImGui.getMainViewport().getID());
         ImGui.setNextWindowPos(
-                getActualDisplaceX() * width, getActualDisplaceY() * height, ImGuiCond.Always);
+                getActualDisplaceX() * width, getActualDisplaceY() * height, ImGuiCond.Once);
         ImGui.setNextWindowSize(
-                getActualWidth() * width, getActualHeight() * height, ImGuiCond.Always);
+                getActualWidth() * width, getActualHeight() * height, ImGuiCond.Once);
         ImGui.begin(title, windowOpen, windowFlags);
 
         ImGui.text(String.format("Canvas size: %d, %d", width, height));
@@ -51,6 +52,19 @@ public class Debug extends GuiWindow {
                 String.format(
                         "This window's actual position: %.2f, %.2f",
                         getActualDisplaceX() * width, getActualDisplaceY() * height));
+
+        var camera = GraphicsManager.getCameraManager().getCamera();
+        ImGui.text(
+                String.format(
+                        "Camera position: x:%.2f, y:%.2f, z:%.2f",
+                        camera.getPosition().x(),
+                        camera.getPosition().y(),
+                        camera.getPosition().z()));
+
+        ImGui.text(
+                String.format(
+                        "Camera rotation: x:%.2f, y:%.2f",
+                        camera.getRotation().x(), camera.getRotation().y()));
 
         ImGui.end();
     }
