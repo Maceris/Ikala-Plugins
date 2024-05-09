@@ -1,3 +1,7 @@
 package com.ikalagaming.graphics.frontend;
 
-public class RenderPass {}
+import java.util.List;
+
+public class RenderPass {
+    private List<RenderSubpass> subpasses;
+}

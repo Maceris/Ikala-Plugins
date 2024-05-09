@@ -29,7 +29,7 @@ import java.util.List;
 /** Handles computations for animated models. */
 public class AnimationRender {
     /** The compute shader for animations. */
-    private ShaderProgram shaderProgram;
+    private final ShaderProgram shaderProgram;
 
     /** The uniforms for the program. */
     private UniformsMap uniformsMap;

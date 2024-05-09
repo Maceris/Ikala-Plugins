@@ -101,28 +101,6 @@ public class ShaderUniforms {
         }
 
         /**
-         * Used to calculate the attenuation function of light. Controls the way light falls off
-         * with distance. Calculated using the formula:
-         *
-         * <p>{@code 1.0/(constant + linear * dist + exponent * dist^2)}.
-         *
-         * @author Ches Burks
-         */
-        public static class Attenuation {
-            /** A constant factor. */
-            public static final String CONSTANT = "constant";
-
-            /** The factor at which light falls of exponentially. */
-            public static final String EXPONENT = "exponent";
-
-            /** The factor at which light falls off linearly. */
-            public static final String LINEAR = "linear";
-
-            /** Private constructor so this class is not instantiated. */
-            private Attenuation() {}
-        }
-
-        /**
          * A cascade shadow.
          *
          * @author Ches Burks
@@ -174,51 +152,6 @@ public class ShaderUniforms {
 
             /** Private constructor so this class is not instantiated. */
             private Fog() {}
-        }
-
-        /**
-         * A point light.
-         *
-         * @author Ches Burks
-         */
-        public static class PointLight {
-            /**
-             * Information about attenuation.
-             *
-             * @see Attenuation
-             */
-            public static final String ATTENUATION = "attenuation";
-
-            /** The color of the light. */
-            public static final String COLOR = "color";
-
-            /** The intensity, a number between 0 and 1. */
-            public static final String INTENSITY = "intensity";
-
-            /** The position of the light. */
-            public static final String POSITION = "position";
-
-            /** Private constructor so this class is not instantiated. */
-            private PointLight() {}
-        }
-
-        /**
-         * A Spot light.
-         *
-         * @author Ches Burks
-         */
-        public static class SpotLight {
-            /** The direction the light is facing. */
-            public static final String CONE_DIRECTION = "coneDirection";
-
-            /** The cutoff angle, in radians. */
-            public static final String CUTOFF = "cutoff";
-
-            /** The point light that stores lighting information. */
-            public static final String POINT_LIGHT = "pointLight";
-
-            /** Private constructor so this class is not instantiated. */
-            private SpotLight() {}
         }
 
         /**
@@ -278,7 +211,7 @@ public class ShaderUniforms {
         /** A sampler for the specular values. */
         public static final String SPECULAR_SAMPLER = "specularSampler";
 
-        /** How many spot lights we have in the spot light SSBO. */
+        /** How many spotlights we have in the spotlight SSBO. */
         public static final String SPOT_LIGHT_COUNT = "spotLightCount";
 
         /** Private constructor so this class is not instantiated. */

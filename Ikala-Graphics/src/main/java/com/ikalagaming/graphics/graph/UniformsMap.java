@@ -34,10 +34,10 @@ import java.util.Map;
 @Slf4j
 public class UniformsMap {
     /** The shader program identifier. */
-    private int programID;
+    private final int programID;
 
     /** The mapping of uniform name to integer location for the shader program. */
-    private Map<String, Integer> uniforms;
+    private final Map<String, Integer> uniforms;
 
     /**
      * Create a new uniform map for the given program ID.
@@ -86,7 +86,7 @@ public class UniformsMap {
             log.info(error, uniformName, programID);
             throw new ShaderException(SafeResourceLoader.format(error, uniformName));
         }
-        return location.intValue();
+        return location;
     }
 
     /**

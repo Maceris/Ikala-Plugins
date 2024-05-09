@@ -39,6 +39,7 @@ import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.backend.opengl.TextureHandlerOpenGL;
+import com.ikalagaming.graphics.frontend.Pipeline;
 import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.graph.RenderBuffers;
@@ -61,7 +62,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Renders things on the screen. */
-public class Render {
+public class Render implements Pipeline {
+
     /** Rendering configuration. */
     @Getter
     @Setter
@@ -119,31 +121,31 @@ public class Render {
     public static final RenderConfig configuration = new RenderConfig();
 
     /** The animation render handler. */
-    private final AnimationRender animationRender;
+    private AnimationRender animationRender;
 
     /** Geometry buffer. */
-    private final GBuffer gBuffer;
+    private GBuffer gBuffer;
 
     /** The GUI render handler. */
-    private final GuiRender guiRender;
+    private GuiRender guiRender;
 
     /** The lights render handler. */
-    private final LightRender lightRender;
+    private LightRender lightRender;
 
     /** The buffers for indirect drawing of models. */
-    private final RenderBuffers renderBuffers;
+    private RenderBuffers renderBuffers;
 
     /** The scene render handler. */
-    private final SceneRender sceneRender;
+    private SceneRender sceneRender;
 
     /** The shadow render handler. */
-    private final ShadowRender shadowRender;
+    private ShadowRender shadowRender;
 
     /** The skybox render handler. */
-    private final SkyBoxRender skyBoxRender;
+    private SkyBoxRender skyBoxRender;
 
     /** Render a filter on top of the final result. */
-    private final FilterRender filterRender;
+    private FilterRender filterRender;
 
     /**
      * Whether we have set up the buffers for the scene. If we have, but need to set data up for the
@@ -163,15 +165,15 @@ public class Render {
     /** The texture ID we render to before applying filters. */
     private int screenTexture;
 
-    private final TextureHandler textureHandler;
+    private TextureHandler textureHandler;
 
-    /**
-     * Set up a new rendering pipeline.
-     *
-     * @param window The window we are drawing on.
-     */
-    public Render(@NonNull Window window) {
-        textureHandler = new TextureHandlerOpenGL();
+    /** Set up a new rendering pipeline. */
+    public Render() {
+        buffersPopulated = new AtomicBoolean();
+    }
+
+    @Override
+    public void initialize(@NonNull Window window) {
         GL.createCapabilities();
         glEnable(GL_MULTISAMPLE);
         glEnable(GL_DEPTH_TEST);
@@ -181,6 +183,7 @@ public class Render {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+        textureHandler = new TextureHandlerOpenGL();
         sceneRender = new SceneRender(textureHandler);
         guiRender = new GuiRender(window, textureHandler);
         skyBoxRender = new SkyBoxRender();
@@ -190,13 +193,12 @@ public class Render {
         filterRender = new FilterRender();
         gBuffer = new GBuffer(window);
         renderBuffers = new RenderBuffers();
-        buffersPopulated = new AtomicBoolean();
         commandBuffers = new CommandBuffer();
 
         generateRenderBuffers(window.getWidth(), window.getHeight());
     }
 
-    /** Clean up all the rendering resources. */
+    @Override
     public void cleanup() {
         sceneRender.cleanup();
         guiRender.cleanup(textureHandler);
@@ -278,21 +280,7 @@ public class Render {
         glBlendFunc(GL_ONE, GL_ONE);
     }
 
-    /**
-     * Set up uniforms for textures and materials.
-     *
-     * @param scene The scene to render.
-     */
-    public void recalculateMaterials(@NonNull Scene scene) {
-        sceneRender.recalculateMaterials(scene);
-    }
-
-    /**
-     * Render a scene on the window.
-     *
-     * @param window The window we are drawing in.
-     * @param scene The scene to render.
-     */
+    @Override
     public void render(@NonNull Window window, @NonNull Scene scene) {
         if (configuration.renderingScene) {
             updateModelMatrices(scene);
@@ -326,12 +314,7 @@ public class Render {
         guiRender.render(window, textureHandler);
     }
 
-    /**
-     * Update the GUI when we resize the screen.
-     *
-     * @param width The new screen width in pixels.
-     * @param height The new screen height in pixels.
-     */
+    @Override
     public void resize(int width, int height) {
         deleteRenderBuffers();
         generateRenderBuffers(width, height);
@@ -419,11 +402,7 @@ public class Render {
         MemoryUtil.memFree(drawElements);
     }
 
-    /**
-     * Set up model data before rendering.
-     *
-     * @param scene The scene to read models from.
-     */
+    @Override
     public void setupData(@NonNull Scene scene) {
         if (buffersPopulated.getAndSet(false)) {
             renderBuffers.cleanup();

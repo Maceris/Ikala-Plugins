@@ -5,6 +5,7 @@ import static org.lwjgl.glfw.GLFW.glfwSetErrorCallback;
 import static org.lwjgl.glfw.GLFW.glfwTerminate;
 
 import com.ikalagaming.graphics.events.WindowCreated;
+import com.ikalagaming.graphics.frontend.Pipeline;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.render.Render;
 import com.ikalagaming.graphics.scene.ModelLoader;
@@ -41,11 +42,11 @@ public class GraphicsManager {
     @Getter private static Scene scene;
 
     /**
-     * The rendering handler.
+     * The rendering pipeline.
      *
-     * @return The render stages.
+     * @return The render pipeline.
      */
-    @Getter private static Render render;
+    @Getter private static Pipeline render;
 
     /**
      * The camera manager.
@@ -145,7 +146,8 @@ public class GraphicsManager {
                 SafeResourceLoader.getString("WINDOW_CREATED", GraphicsPlugin.getResourceBundle()));
         new WindowCreated(window.getWindowHandle()).fire();
 
-        render = new Render(window);
+        render = new Render();
+        render.initialize(window);
 
         log.debug(
                 SafeResourceLoader.getString(

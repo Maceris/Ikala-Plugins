@@ -68,12 +68,12 @@ public class SceneRender {
     private static final int MAX_TEXTURES = 16;
 
     /** The shader program for the scene. */
-    private ShaderProgram shaderProgram;
+    private final ShaderProgram shaderProgram;
 
     /** The uniform map for the shader program. */
     private UniformsMap uniformsMap;
 
-    private Texture defaultTexture;
+    private final Texture defaultTexture;
 
     /**
      * Set up a new scene renderer.

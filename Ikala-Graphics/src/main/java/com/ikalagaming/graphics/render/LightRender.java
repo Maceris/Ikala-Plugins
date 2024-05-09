@@ -320,7 +320,7 @@ public class LightRender {
     }
 
     /**
-     * Load all the spot lights into the SSBO for rendering.
+     * Load all the spotlights into the SSBO for rendering.
      *
      * @param scene The scene to fetch lights from.
      */
