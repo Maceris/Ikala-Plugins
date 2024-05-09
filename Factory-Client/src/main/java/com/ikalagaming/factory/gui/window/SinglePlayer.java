@@ -139,11 +139,12 @@ public class SinglePlayer extends GuiWindow {
                 .add(
                         new PointLight(
                                 new Vector3f(1.0f, 0.0f, 0.0f),
-                                new Vector3f(3.0f, 0.0f, 0.0f),
+                                new Vector3f(2.0f, 1.1f, 0.0f),
                                 1.0f));
         GraphicsManager.refreshRenderData();
         Render.configuration.setRenderingScene(true);
-        GraphicsManager.getScene().getCamera().setPosition(-1, 0, 0);
+        GraphicsManager.getScene().getCamera().setPosition(1.86f, 2.43f, 2.33f);
+        GraphicsManager.getScene().getCamera().setRotation(0.64f, 5.62f);
         GraphicsManager.getScene()
                 .setSkyBox(
                         new SkyBox(
