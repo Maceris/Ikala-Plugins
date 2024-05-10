@@ -5,6 +5,7 @@ import static org.lwjgl.opengl.GL46.*;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.exceptions.TextureException;
+import com.ikalagaming.graphics.frontend.Format;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -29,7 +30,8 @@ public class TextureHandlerOpenGL implements TextureHandler {
     }
 
     @Override
-    public Texture load(@NonNull ByteBuffer buffer, final int width, final int height) {
+    public Texture load(
+            @NonNull ByteBuffer buffer, @NonNull Format format, final int width, final int height) {
         int textureID = glGenTextures();
 
         glBindTexture(GL_TEXTURE_2D, textureID);
@@ -37,7 +39,15 @@ public class TextureHandlerOpenGL implements TextureHandler {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexImage2D(
-                GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer);
+                GL_TEXTURE_2D,
+                0,
+                FormatMapperOpenGL.mapFormat(format),
+                width,
+                height,
+                0,
+                FormatMapperOpenGL.mapFormat(format),
+                FormatMapperOpenGL.mapType(format),
+                buffer);
         glGenerateMipmap(GL_TEXTURE_2D);
 
         return new Texture(textureID, width, height);
@@ -63,7 +73,7 @@ public class TextureHandlerOpenGL implements TextureHandler {
                 throw new TextureException(error);
             }
 
-            result = load(buffer, width.get(), height.get());
+            result = load(buffer, Format.R8G8B8A8_UINT, width.get(), height.get());
 
             STBImage.stbi_image_free(buffer);
         }

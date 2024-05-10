@@ -4,7 +4,7 @@
  * v2.0. Changes have been made related to formatting, functionality, and
  * naming.
  */
-package com.ikalagaming.graphics.render;
+package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE;
@@ -35,22 +35,17 @@ import static org.lwjgl.opengl.GL30.glRenderbufferStorage;
 import static org.lwjgl.opengl.GL40.GL_DRAW_INDIRECT_BUFFER;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
-import com.ikalagaming.graphics.backend.opengl.TextureHandlerOpenGL;
 import com.ikalagaming.graphics.frontend.Pipeline;
 import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.graph.RenderBuffers;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.util.SafeResourceLoader;
 
-import lombok.AccessLevel;
-import lombok.Getter;
 import lombok.NonNull;
-import lombok.Setter;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryUtil;
 
@@ -62,45 +57,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Renders things on the screen. */
-public class Render implements Pipeline {
-
-    /** Rendering configuration. */
-    @Getter
-    @Setter
-    public static class RenderConfig {
-        /** Enable wireframe. */
-        private boolean wireframe;
-
-        /** Post-processing filter that has been selected. */
-        private int selectedFilter;
-
-        /** Whether we are actually drawing the scene. */
-        private boolean renderingScene;
-
-        /**
-         * The list of filter names that are available. We use an array to make ImGui access easier.
-         */
-        @Setter(value = AccessLevel.PACKAGE)
-        private String[] filterNames;
-
-        /**
-         * Sets the post-processing filter. Must be a valid index in the array of filters or an
-         * exception will be thrown.
-         *
-         * @param newFilter The index of the filter to use.
-         */
-        public void setSelectedFilter(int newFilter) {
-            if (newFilter < 0 || newFilter > filterNames.length) {
-                throw new IllegalArgumentException(
-                        SafeResourceLoader.getStringFormatted(
-                                "ILLEGAL_FILTER_SELECTION",
-                                GraphicsPlugin.getResourceBundle(),
-                                newFilter + "",
-                                filterNames.length + ""));
-            }
-            selectedFilter = newFilter;
-        }
-    }
+public class PipelineOpenGL implements Pipeline {
 
     /** The size of a draw command. */
     private static final int COMMAND_SIZE = 5 * 4;
@@ -116,9 +73,6 @@ public class Render implements Pipeline {
 
     /** The binding for the model matrices buffer SSBO. */
     static final int MODEL_MATRICES_BINDING = 2;
-
-    /** Rendering configurations. */
-    public static final RenderConfig configuration = new RenderConfig();
 
     /** The animation render handler. */
     private AnimationRender animationRender;
@@ -166,9 +120,10 @@ public class Render implements Pipeline {
     private int screenTexture;
 
     private TextureHandler textureHandler;
+    private QuadMeshHandler quadMeshHandler;
 
     /** Set up a new rendering pipeline. */
-    public Render() {
+    public PipelineOpenGL() {
         buffersPopulated = new AtomicBoolean();
     }
 
@@ -184,13 +139,14 @@ public class Render implements Pipeline {
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         textureHandler = new TextureHandlerOpenGL();
+        quadMeshHandler = new QuadMeshHandlerOpenGL();
         sceneRender = new SceneRender(textureHandler);
         guiRender = new GuiRender(window, textureHandler);
         skyBoxRender = new SkyBoxRender();
         shadowRender = new ShadowRender();
-        lightRender = new LightRender();
+        lightRender = new LightRender(quadMeshHandler);
         animationRender = new AnimationRender();
-        filterRender = new FilterRender();
+        filterRender = new FilterRender(quadMeshHandler);
         gBuffer = new GBuffer(window);
         renderBuffers = new RenderBuffers();
         commandBuffers = new CommandBuffer();
@@ -204,9 +160,9 @@ public class Render implements Pipeline {
         guiRender.cleanup(textureHandler);
         skyBoxRender.cleanup();
         shadowRender.cleanup();
-        lightRender.cleanup();
+        lightRender.cleanup(quadMeshHandler);
         animationRender.cleanup();
-        filterRender.cleanup();
+        filterRender.cleanup(quadMeshHandler);
         gBuffer.cleanUp();
         renderBuffers.cleanup();
         commandBuffers.cleanup();
@@ -282,20 +238,20 @@ public class Render implements Pipeline {
 
     @Override
     public void render(@NonNull Window window, @NonNull Scene scene) {
-        if (configuration.renderingScene) {
+        if (Pipeline.configuration.isRenderingScene()) {
             updateModelMatrices(scene);
 
             animationRender.render(scene, renderBuffers);
             shadowRender.render(scene, renderBuffers, commandBuffers);
 
-            if (Render.configuration.wireframe) {
+            if (Pipeline.configuration.isWireframe()) {
                 glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
                 glDisable(GL_TEXTURE_2D);
             }
 
             sceneRender.render(scene, renderBuffers, gBuffer, commandBuffers, textureHandler);
 
-            if (Render.configuration.wireframe) {
+            if (Pipeline.configuration.isWireframe()) {
                 glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
                 glEnable(GL_TEXTURE_2D);
             }
@@ -343,13 +299,14 @@ public class Render implements Pipeline {
 
         // currently contains the size of the list of entities
         FloatBuffer modelMatrices =
-                MemoryUtil.memAllocFloat(totalEntities * Render.MODEL_MATRIX_SIZE);
+                MemoryUtil.memAllocFloat(totalEntities * PipelineOpenGL.MODEL_MATRIX_SIZE);
 
         int entityIndex = 0;
         for (Model model : modelList) {
             List<Entity> entities = model.getEntitiesList();
             for (Entity entity : entities) {
-                entity.getModelMatrix().get(entityIndex * Render.MODEL_MATRIX_SIZE, modelMatrices);
+                entity.getModelMatrix()
+                        .get(entityIndex * PipelineOpenGL.MODEL_MATRIX_SIZE, modelMatrices);
                 entitiesIndexMap.put(entity.getEntityID(), entityIndex);
                 entityIndex++;
             }
@@ -362,8 +319,9 @@ public class Render implements Pipeline {
 
         int firstIndex = 0;
         int baseInstance = 0;
-        ByteBuffer commandBuffer = MemoryUtil.memAlloc(numMeshes * Render.COMMAND_SIZE);
-        ByteBuffer drawElements = MemoryUtil.memAlloc(drawElementCount * Render.DRAW_ELEMENT_SIZE);
+        ByteBuffer commandBuffer = MemoryUtil.memAlloc(numMeshes * PipelineOpenGL.COMMAND_SIZE);
+        ByteBuffer drawElements =
+                MemoryUtil.memAlloc(drawElementCount * PipelineOpenGL.DRAW_ELEMENT_SIZE);
         for (Model model : modelList) {
             for (RenderBuffers.MeshDrawData meshDrawData : model.getMeshDrawDataList()) {
                 // count
@@ -387,7 +345,8 @@ public class Render implements Pipeline {
         commandBuffer.flip();
         drawElements.flip();
 
-        commandBuffers.setAnimatedDrawCount(commandBuffer.remaining() / Render.COMMAND_SIZE);
+        commandBuffers.setAnimatedDrawCount(
+                commandBuffer.remaining() / PipelineOpenGL.COMMAND_SIZE);
 
         int animRenderBufferHandle = glGenBuffers();
         commandBuffers.setAnimatedCommandBuffer(animRenderBufferHandle);
@@ -438,13 +397,14 @@ public class Render implements Pipeline {
 
         // currently contains the size of the list of entities
         FloatBuffer modelMatrices =
-                MemoryUtil.memAllocFloat(totalEntities * Render.MODEL_MATRIX_SIZE);
+                MemoryUtil.memAllocFloat(totalEntities * PipelineOpenGL.MODEL_MATRIX_SIZE);
 
         int entityIndex = 0;
         for (Model model : modelList) {
             List<Entity> entities = model.getEntitiesList();
             for (Entity entity : entities) {
-                entity.getModelMatrix().get(entityIndex * Render.MODEL_MATRIX_SIZE, modelMatrices);
+                entity.getModelMatrix()
+                        .get(entityIndex * PipelineOpenGL.MODEL_MATRIX_SIZE, modelMatrices);
                 entitiesIndexMap.put(entity.getEntityID(), entityIndex);
                 entityIndex++;
             }
@@ -457,8 +417,9 @@ public class Render implements Pipeline {
 
         int firstIndex = 0;
         int baseInstance = 0;
-        ByteBuffer commandBuffer = MemoryUtil.memAlloc(numMeshes * Render.COMMAND_SIZE);
-        ByteBuffer drawElements = MemoryUtil.memAlloc(drawElementCount * Render.DRAW_ELEMENT_SIZE);
+        ByteBuffer commandBuffer = MemoryUtil.memAlloc(numMeshes * PipelineOpenGL.COMMAND_SIZE);
+        ByteBuffer drawElements =
+                MemoryUtil.memAlloc(drawElementCount * PipelineOpenGL.DRAW_ELEMENT_SIZE);
 
         for (Model model : modelList) {
             List<Entity> entities = model.getEntitiesList();
@@ -488,7 +449,7 @@ public class Render implements Pipeline {
         commandBuffer.flip();
         drawElements.flip();
 
-        commandBuffers.setStaticDrawCount(commandBuffer.remaining() / Render.COMMAND_SIZE);
+        commandBuffers.setStaticDrawCount(commandBuffer.remaining() / PipelineOpenGL.COMMAND_SIZE);
 
         int staticRenderBufferHandle = glGenBuffers();
         commandBuffers.setStaticCommandBuffer(staticRenderBufferHandle);
@@ -517,13 +478,14 @@ public class Render implements Pipeline {
 
         // currently contains the size of the list of entities
         FloatBuffer modelMatrices =
-                MemoryUtil.memAllocFloat(totalEntities * Render.MODEL_MATRIX_SIZE);
+                MemoryUtil.memAllocFloat(totalEntities * PipelineOpenGL.MODEL_MATRIX_SIZE);
 
         int entityIndex = 0;
         for (Model model : models) {
             List<Entity> entities = model.getEntitiesList();
             for (Entity entity : entities) {
-                entity.getModelMatrix().get(entityIndex * Render.MODEL_MATRIX_SIZE, modelMatrices);
+                entity.getModelMatrix()
+                        .get(entityIndex * PipelineOpenGL.MODEL_MATRIX_SIZE, modelMatrices);
                 entityIndex++;
             }
         }

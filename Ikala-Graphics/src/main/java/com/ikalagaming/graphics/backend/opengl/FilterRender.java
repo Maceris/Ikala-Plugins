@@ -4,7 +4,7 @@
  * v2.0. Changes have been made related to formatting, functionality, and
  * naming.
  */
-package com.ikalagaming.graphics.render;
+package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.opengl.GL11.GL_TEXTURE_2D;
 import static org.lwjgl.opengl.GL11.GL_TRIANGLES;
@@ -20,6 +20,8 @@ import static org.lwjgl.opengl.GL30.glBindVertexArray;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
+import com.ikalagaming.graphics.frontend.Pipeline;
 import com.ikalagaming.graphics.graph.QuadMesh;
 import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.UniformsMap;
@@ -49,7 +51,7 @@ public class FilterRender {
     private UniformsMap uniformsMap;
 
     /** Set up the filter renderer. */
-    public FilterRender() {
+    public FilterRender(@NonNull QuadMeshHandler quadMeshHandler) {
         shaders = new HashMap<>();
 
         PluginConfig config = ConfigManager.loadConfig(GraphicsPlugin.PLUGIN_NAME);
@@ -111,11 +113,12 @@ public class FilterRender {
                             "DEFAULT_FILTER_MISSING", GraphicsPlugin.getResourceBundle()),
                     defaultFilter);
 
-            Render.configuration.setFilterNames(new String[0]);
-            Render.configuration.setSelectedFilter(0);
+            Pipeline.configuration.setFilterNames(new String[0]);
+            Pipeline.configuration.setSelectedFilter(0);
             return;
         }
         quadMesh = new QuadMesh();
+        quadMeshHandler.initialize(quadMesh);
         createUniforms(defaultFilter);
 
         String[] names = shaders.keySet().toArray(new String[0]);
@@ -127,13 +130,13 @@ public class FilterRender {
                 break;
             }
         }
-        Render.configuration.setFilterNames(names);
-        Render.configuration.setSelectedFilter(defaultIndex);
+        Pipeline.configuration.setFilterNames(names);
+        Pipeline.configuration.setSelectedFilter(defaultIndex);
     }
 
     /** Clean up resources. */
-    public void cleanup() {
-        quadMesh.cleanup();
+    public void cleanup(@NonNull QuadMeshHandler quadMeshHandler) {
+        quadMeshHandler.cleanup(quadMesh);
         shaders.forEach((name, program) -> program.cleanup());
         shaders.clear();
     }
@@ -157,7 +160,7 @@ public class FilterRender {
         glDepthMask(false);
 
         String name =
-                Render.configuration.getFilterNames()[Render.configuration.getSelectedFilter()];
+                Pipeline.configuration.getFilterNames()[Pipeline.configuration.getSelectedFilter()];
         ShaderProgram program = shaders.get(name);
 
         program.bind();
@@ -168,7 +171,7 @@ public class FilterRender {
         uniformsMap.setUniform(ShaderUniforms.Filter.SCREEN_TEXTURE, 0);
 
         glBindVertexArray(quadMesh.getVaoID());
-        glDrawElements(GL_TRIANGLES, quadMesh.getVertexCount(), GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, QuadMesh.VERTEX_COUNT, GL_UNSIGNED_INT, 0);
 
         program.unbind();
 

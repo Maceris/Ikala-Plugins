@@ -4,7 +4,7 @@
  * v2.0. Changes have been made related to formatting, functionality, and
  * naming.
  */
-package com.ikalagaming.graphics.render;
+package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.opengl.GL11.GL_TRIANGLES;
 import static org.lwjgl.opengl.GL11.GL_UNSIGNED_INT;

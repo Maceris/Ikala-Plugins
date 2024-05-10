@@ -1,9 +1,13 @@
 package com.ikalagaming.graphics.frontend;
 
+import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.util.SafeResourceLoader;
 
+import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 
 public interface Pipeline {
     /**
@@ -39,4 +43,43 @@ public interface Pipeline {
      */
     @Deprecated
     void setupData(@NonNull Scene scene);
+
+    @Getter
+    @Setter
+    class RenderConfig {
+        /** Enable wireframe. */
+        private boolean wireframe;
+
+        /** Post-processing filter that has been selected. */
+        private int selectedFilter;
+
+        /** Whether we are actually drawing the scene. */
+        private boolean renderingScene;
+
+        /**
+         * The list of filter names that are available. We use an array to make ImGui access easier.
+         */
+        private String[] filterNames;
+
+        /**
+         * Sets the post-processing filter. Must be a valid index in the array of filters or an
+         * exception will be thrown.
+         *
+         * @param newFilter The index of the filter to use.
+         */
+        public void setSelectedFilter(int newFilter) {
+            if (newFilter < 0 || newFilter > filterNames.length) {
+                throw new IllegalArgumentException(
+                        SafeResourceLoader.getStringFormatted(
+                                "ILLEGAL_FILTER_SELECTION",
+                                GraphicsPlugin.getResourceBundle(),
+                                newFilter + "",
+                                filterNames.length + ""));
+            }
+            selectedFilter = newFilter;
+        }
+    }
+
+    /** Rendering configurations. */
+    RenderConfig configuration = new RenderConfig();
 }

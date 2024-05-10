@@ -1,4 +1,4 @@
-package com.ikalagaming.graphics.render;
+package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.opengl.GL15.glDeleteBuffers;
 

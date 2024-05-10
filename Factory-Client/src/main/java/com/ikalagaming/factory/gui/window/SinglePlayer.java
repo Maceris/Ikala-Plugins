@@ -8,13 +8,13 @@ import com.ikalagaming.factory.FactoryServerPlugin;
 import com.ikalagaming.factory.gui.component.menu.SaveEntry;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.frontend.Pipeline;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.frontend.gui.component.Button;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
 import com.ikalagaming.graphics.frontend.gui.component.ScrollBox;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
 import com.ikalagaming.graphics.graph.Model;
-import com.ikalagaming.graphics.render.Render;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
@@ -142,7 +142,7 @@ public class SinglePlayer extends GuiWindow {
                                 new Vector3f(2.0f, 1.1f, 0.0f),
                                 1.0f));
         GraphicsManager.refreshRenderData();
-        Render.configuration.setRenderingScene(true);
+        Pipeline.configuration.setRenderingScene(true);
         GraphicsManager.getScene().getCamera().setPosition(1.86f, 2.43f, 2.33f);
         GraphicsManager.getScene().getCamera().setRotation(0.64f, 5.62f);
         GraphicsManager.getScene()

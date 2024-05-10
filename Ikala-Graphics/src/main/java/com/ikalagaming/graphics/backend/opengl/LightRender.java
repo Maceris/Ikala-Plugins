@@ -4,7 +4,7 @@
  * v2.0. Changes have been made related to formatting, functionality, and
  * naming.
  */
-package com.ikalagaming.graphics.render;
+package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.opengl.GL11.GL_TEXTURE_2D;
 import static org.lwjgl.opengl.GL11.GL_TRIANGLES;
@@ -25,6 +25,7 @@ import static org.lwjgl.opengl.GL30.glBindVertexArray;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.QuadMesh;
@@ -73,11 +74,11 @@ public class LightRender {
     /** An SSBO for point lights. */
     private int pointLightBuffer;
 
-    /** An SSBO for spot lights. */
+    /** An SSBO for spotlights. */
     private int spotLightBuffer;
 
     /** Set up the light renderer. */
-    public LightRender() {
+    public LightRender(@NonNull QuadMeshHandler quadMeshHandler) {
         List<ShaderProgram.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
                 new ShaderProgram.ShaderModuleData("shaders/lights.vert", GL_VERTEX_SHADER));
@@ -85,13 +86,14 @@ public class LightRender {
                 new ShaderProgram.ShaderModuleData("shaders/lights.frag", GL_FRAGMENT_SHADER));
         shaderProgram = new ShaderProgram(shaderModuleDataList);
         quadMesh = new QuadMesh();
+        quadMeshHandler.initialize(quadMesh);
         createUniforms();
         initSSBOs();
     }
 
     /** Clean up resources. */
-    public void cleanup() {
-        quadMesh.cleanup();
+    public void cleanup(@NonNull QuadMeshHandler quadMeshHandler) {
+        quadMeshHandler.cleanup(quadMesh);
         shaderProgram.cleanup();
         glDeleteBuffers(pointLightBuffer);
         glDeleteBuffers(spotLightBuffer);
@@ -258,7 +260,7 @@ public class LightRender {
                 ShaderUniforms.Light.INVERSE_VIEW_MATRIX, scene.getCamera().getInvViewMatrix());
 
         glBindVertexArray(quadMesh.getVaoID());
-        glDrawElements(GL_TRIANGLES, quadMesh.getVertexCount(), GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, QuadMesh.VERTEX_COUNT, GL_UNSIGNED_INT, 0);
 
         shaderProgram.unbind();
     }

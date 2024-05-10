@@ -5,6 +5,7 @@ import static org.lwjgl.opengl.GL11.glIsTexture;
 import com.ikalagaming.factory.gui.DefaultWindows;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
+import com.ikalagaming.graphics.frontend.Format;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
@@ -125,7 +126,7 @@ public class BiomeDebug extends GuiWindow {
         buffer.put(rgba);
         buffer.rewind();
 
-        return textureHandler.load(buffer, image.getWidth(), image.getHeight());
+        return textureHandler.load(buffer, Format.R8G8B8_UINT, image.getWidth(), image.getHeight());
     }
 
     @Override

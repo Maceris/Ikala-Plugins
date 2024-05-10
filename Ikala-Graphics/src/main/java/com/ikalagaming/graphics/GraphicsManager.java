@@ -4,10 +4,10 @@ import static org.lwjgl.glfw.GLFW.glfwGetTime;
 import static org.lwjgl.glfw.GLFW.glfwSetErrorCallback;
 import static org.lwjgl.glfw.GLFW.glfwTerminate;
 
+import com.ikalagaming.graphics.backend.opengl.PipelineOpenGL;
 import com.ikalagaming.graphics.events.WindowCreated;
 import com.ikalagaming.graphics.frontend.Pipeline;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
-import com.ikalagaming.graphics.render.Render;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.Launcher;
@@ -146,7 +146,7 @@ public class GraphicsManager {
                 SafeResourceLoader.getString("WINDOW_CREATED", GraphicsPlugin.getResourceBundle()));
         new WindowCreated(window.getWindowHandle()).fire();
 
-        render = new Render();
+        render = new PipelineOpenGL();
         render.initialize(window);
 
         log.debug(
