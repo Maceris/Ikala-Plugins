@@ -23,7 +23,7 @@ public class Image extends Component {
             glBindTexture(GL_TEXTURE_2D, texture.id());
             ImGui.image(texture.id(), getActualWidth() * width, getActualHeight() * height);
         } else {
-            ImGui.text("Texture somehow does not exist!");
+            ImGui.text("x");
         }
     }
 }

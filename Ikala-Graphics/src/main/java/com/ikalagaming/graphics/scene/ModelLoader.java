@@ -63,12 +63,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ModelLoader {
 
     /**
-     * TODO(ches) remove this. It is a hack to get this working until we can actually defer texture
-     * loading.
-     */
-    @Deprecated private static final TextureLoader TEXTURE_LOADER = new TextureLoaderOpenGL();
-
-    /**
      * Information needed to load a model.
      *
      * @param modelId The ID to supply the model.
@@ -718,7 +712,7 @@ public class ModelLoader {
             if (texturePath != null && texturePath.length() > 0) {
                 texturePath = modelDir + File.separator + new File(texturePath).getName();
                 // TODO(ches) find a way to defer texture loading
-                material.setTexture(TEXTURE_LOADER.load(texturePath));
+                material.setTexture(GraphicsManager.getTextureLoader().load(texturePath));
                 material.setDiffuseColor(Material.DEFAULT_COLOR);
             }
 
@@ -738,7 +732,7 @@ public class ModelLoader {
             if (normalMapPath != null && normalMapPath.length() > 0) {
                 normalMapPath = modelDir + File.separator + new File(normalMapPath).getName();
                 // TODO(ches) find a way to defer texture loading
-                material.setNormalMap(TEXTURE_LOADER.load(normalMapPath));
+                material.setNormalMap(GraphicsManager.getTextureLoader().load(normalMapPath));
             }
 
             return material;

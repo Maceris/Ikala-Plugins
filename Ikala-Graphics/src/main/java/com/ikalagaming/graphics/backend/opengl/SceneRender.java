@@ -19,13 +19,13 @@ import static org.lwjgl.opengl.GL40.GL_DRAW_INDIRECT_BUFFER;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL43.glMultiDrawElementsIndirect;
 
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Material;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
-import com.ikalagaming.graphics.frontend.TextureLoader;
 import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.scene.Scene;
@@ -65,12 +65,8 @@ public class SceneRender {
 
     private final Texture defaultTexture;
 
-    /**
-     * Set up a new scene renderer.
-     *
-     * @param textureLoader The texture handler implementation to use.
-     */
-    public SceneRender(@NonNull TextureLoader textureLoader) {
+    /** Set up a new scene renderer. */
+    public SceneRender() {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData("shaders/scene.vert", Shader.Type.VERTEX));
@@ -78,7 +74,7 @@ public class SceneRender {
                 new Shader.ShaderModuleData("shaders/scene.frag", Shader.Type.FRAGMENT));
         shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         createUniforms();
-        defaultTexture = textureLoader.load(DEFAULT_TEXTURE_PATH);
+        defaultTexture = GraphicsManager.getTextureLoader().load(DEFAULT_TEXTURE_PATH);
     }
 
     /** Clean up buffers and shaders. */

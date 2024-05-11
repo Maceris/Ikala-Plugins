@@ -32,7 +32,6 @@ import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Format;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
-import com.ikalagaming.graphics.frontend.TextureLoader;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
 
 import imgui.ImDrawData;
@@ -109,9 +108,8 @@ public class GuiRender {
      * Set up a new GUI renderer for the window.
      *
      * @param window The window we are rendering in.
-     * @param textureLoader The texture handler implementation to use.
      */
-    public GuiRender(@NonNull Window window, @NonNull TextureLoader textureLoader) {
+    public GuiRender(@NonNull Window window) {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData("shaders/gui.vert", Shader.Type.VERTEX));
@@ -119,7 +117,7 @@ public class GuiRender {
                 new Shader.ShaderModuleData("shaders/gui.frag", Shader.Type.FRAGMENT));
         shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         createUniforms();
-        createUIResources(window, textureLoader);
+        createUIResources(window);
     }
 
     /** Clean up shaders and textures. */
@@ -135,9 +133,8 @@ public class GuiRender {
      * Set up imgui and create fonts, textures, meshes, etc.
      *
      * @param window The window we are using.
-     * @param textureLoader The texture handler implementation to use.
      */
-    private void createUIResources(@NonNull Window window, @NonNull TextureLoader textureLoader) {
+    private void createUIResources(@NonNull Window window) {
         ImGui.createContext();
 
         ImGuiIO imGuiIO = ImGui.getIO();
@@ -149,7 +146,9 @@ public class GuiRender {
         ImInt width = new ImInt();
         ImInt height = new ImInt();
         ByteBuffer buf = fontAtlas.getTexDataAsRGBA32(width, height);
-        font = textureLoader.load(buf, Format.R8G8B8A8_UINT, width.get(), height.get());
+        font =
+                GraphicsManager.getTextureLoader()
+                        .load(buf, Format.R8G8B8A8_UINT, width.get(), height.get());
         fontAtlas.setTexID(font.id());
 
         guiMesh = GuiMesh.create();

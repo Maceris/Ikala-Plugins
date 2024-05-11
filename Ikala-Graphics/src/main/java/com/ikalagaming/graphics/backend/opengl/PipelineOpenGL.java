@@ -42,7 +42,6 @@ import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
 import com.ikalagaming.graphics.frontend.DeletionQueue;
 import com.ikalagaming.graphics.frontend.Pipeline;
 import com.ikalagaming.graphics.frontend.Texture;
-import com.ikalagaming.graphics.frontend.TextureLoader;
 import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
@@ -122,7 +121,6 @@ public class PipelineOpenGL implements Pipeline {
     /** The texture ID we render to before applying filters. */
     private int screenTexture;
 
-    private TextureLoader textureLoader;
     private QuadMeshHandler quadMeshHandler;
     private GBufferHandler gBufferHandler;
 
@@ -142,12 +140,11 @@ public class PipelineOpenGL implements Pipeline {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        textureLoader = new TextureLoaderOpenGL();
         quadMeshHandler = new QuadMeshHandlerOpenGL();
         gBufferHandler = new GBufferHandlerOpenGL();
 
-        sceneRender = new SceneRender(textureLoader);
-        guiRender = new GuiRender(window, textureLoader);
+        sceneRender = new SceneRender();
+        guiRender = new GuiRender(window);
         skyBoxRender = new SkyBoxRender();
         shadowRender = new ShadowRender();
         lightRender = new LightRender(quadMeshHandler);
