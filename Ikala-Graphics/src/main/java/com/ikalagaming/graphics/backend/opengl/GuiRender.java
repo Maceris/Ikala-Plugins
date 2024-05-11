@@ -1,9 +1,3 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_BACKSPACE;
@@ -25,14 +19,11 @@ import static org.lwjgl.glfw.GLFW.GLFW_KEY_UP;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL14.GL_FUNC_ADD;
 import static org.lwjgl.opengl.GL14.glBlendEquation;
-import static org.lwjgl.opengl.GL15.GL_ARRAY_BUFFER;
-import static org.lwjgl.opengl.GL15.GL_ELEMENT_ARRAY_BUFFER;
-import static org.lwjgl.opengl.GL15.GL_STREAM_DRAW;
-import static org.lwjgl.opengl.GL15.glBindBuffer;
-import static org.lwjgl.opengl.GL15.glBufferData;
-import static org.lwjgl.opengl.GL20.GL_FRAGMENT_SHADER;
-import static org.lwjgl.opengl.GL20.GL_VERTEX_SHADER;
-import static org.lwjgl.opengl.GL30.glBindVertexArray;
+import static org.lwjgl.opengl.GL15.*;
+import static org.lwjgl.opengl.GL15.glGenBuffers;
+import static org.lwjgl.opengl.GL20.*;
+import static org.lwjgl.opengl.GL20.glVertexAttribPointer;
+import static org.lwjgl.opengl.GL30.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.ShaderUniforms;
@@ -41,7 +32,6 @@ import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.frontend.Format;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
-import com.ikalagaming.graphics.graph.GuiMesh;
 import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.UniformsMap;
 
@@ -62,6 +52,44 @@ import java.util.List;
 
 /** A utility for handling the rendering of a Graphical User Interface. */
 public class GuiRender {
+
+    /**
+     * Used to provide ImGUI with the VBOs it needs to render. This should be created using the
+     * {@link GuiMesh#create()} method instead of a constructor.
+     *
+     * @param vaoID The VAO.
+     * @param verticesVBO The vertices VBO, set up for ImGui.
+     * @param indicesVBO The indices VBO.
+     */
+    private record GuiMesh(int vaoID, int verticesVBO, int indicesVBO) {
+        /**
+         * Create a new GUI mesh, and set it up with OpenGL. This should be called instead of a
+         * constructor.
+         *
+         * @return The newly created GUI mesh.
+         */
+        public static GuiMesh create() {
+            int vaoID = glGenVertexArrays();
+            glBindVertexArray(vaoID);
+
+            int verticesVBO = glGenBuffers();
+            glBindBuffer(GL_ARRAY_BUFFER, verticesVBO);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 2, GL_FLOAT, false, ImDrawData.SIZEOF_IM_DRAW_VERT, 0);
+            glEnableVertexAttribArray(1);
+            glVertexAttribPointer(1, 2, GL_FLOAT, false, ImDrawData.SIZEOF_IM_DRAW_VERT, 8);
+            glEnableVertexAttribArray(2);
+            glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, true, ImDrawData.SIZEOF_IM_DRAW_VERT, 16);
+
+            int indicesVBO = glGenBuffers();
+
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            glBindVertexArray(0);
+
+            return new GuiMesh(vaoID, verticesVBO, indicesVBO);
+        }
+    }
+
     /** The mesh to render. */
     private GuiMesh guiMesh;
 
@@ -102,6 +130,9 @@ public class GuiRender {
     public void cleanup(@NonNull TextureHandler textureHandler) {
         shaderProgram.cleanup();
         textureHandler.cleanup(font);
+        glDeleteBuffers(guiMesh.indicesVBO());
+        glDeleteBuffers(guiMesh.verticesVBO());
+        glDeleteVertexArrays(guiMesh.vaoID());
     }
 
     /**
@@ -125,7 +156,7 @@ public class GuiRender {
         font = textureHandler.load(buf, Format.R8G8B8A8_UINT, width.get(), height.get());
         fontAtlas.setTexID(font.id());
 
-        guiMesh = new GuiMesh();
+        guiMesh = GuiMesh.create();
     }
 
     /** Set up uniforms for the GUI shader. */
@@ -155,10 +186,10 @@ public class GuiRender {
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_CULL_FACE);
 
-        glBindVertexArray(guiMesh.getVaoID());
+        glBindVertexArray(guiMesh.vaoID());
 
-        glBindBuffer(GL_ARRAY_BUFFER, guiMesh.getVerticesVBO());
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, guiMesh.getIndicesVBO());
+        glBindBuffer(GL_ARRAY_BUFFER, guiMesh.verticesVBO());
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, guiMesh.indicesVBO());
 
         ImGuiIO io = ImGui.getIO();
         scale.x = 2.0f / io.getDisplaySizeX();

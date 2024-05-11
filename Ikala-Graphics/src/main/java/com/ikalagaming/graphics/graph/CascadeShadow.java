@@ -1,9 +1,3 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics.graph;
 
 import com.ikalagaming.graphics.scene.Projection;
@@ -66,7 +60,7 @@ public class CascadeShadow {
     public static void updateCascadeShadows(
             @NonNull List<CascadeShadow> cascadeShadows, @NonNull Scene scene) {
         final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
-        final Matrix4f projMatrix = scene.getProjection().getProjMatrix();
+        final Matrix4f projectionMatrix = scene.getProjection().getProjectionMatrix();
         final Vector3f lightDir = scene.getSceneLights().getDirLight().getDirection();
 
         final float nearClip = Projection.Z_NEAR;
@@ -90,7 +84,7 @@ public class CascadeShadow {
             };
 
             // Project frustum corners into world space
-            Matrix4f invertedCamera = (new Matrix4f(projMatrix).mul(viewMatrix)).invert();
+            Matrix4f invertedCamera = (new Matrix4f(projectionMatrix).mul(viewMatrix)).invert();
             for (int j = 0; j < frustumCorners.length; ++j) {
                 Vector4f invCorner = new Vector4f(frustumCorners[j], 1.0f).mul(invertedCamera);
                 frustumCorners[j] =

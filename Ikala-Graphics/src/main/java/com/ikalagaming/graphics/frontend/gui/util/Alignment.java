@@ -2,7 +2,7 @@ package com.ikalagaming.graphics.frontend.gui.util;
 
 /**
  * The area of a parent window or screen that a window should call the origin with respect to
- * displacement. Centered alignments ignore displacement in whatever axis/axes they are centered on.
+ * displacement.
  *
  * @author Ches Burks
  */

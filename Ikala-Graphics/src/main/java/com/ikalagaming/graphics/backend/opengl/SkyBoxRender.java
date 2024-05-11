@@ -86,7 +86,8 @@ public class SkyBoxRender {
         shaderProgram.bind();
 
         uniformsMap.setUniform(
-                ShaderUniforms.Skybox.PROJECTION_MATRIX, scene.getProjection().getProjMatrix());
+                ShaderUniforms.Skybox.PROJECTION_MATRIX,
+                scene.getProjection().getProjectionMatrix());
         viewMatrix.set(scene.getCamera().getViewMatrix());
         viewMatrix.m30(0);
         viewMatrix.m31(0);

@@ -24,10 +24,16 @@ public class QuadMeshHandlerOpenGL implements QuadMeshHandler {
     public void initialize(@NonNull QuadMesh mesh) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             float[] positions = {
-                -1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f,
+                -1.0f, +1.0f, 0.0f, // Position 0
+                +1.0f, +1.0f, 0.0f, // Position 1
+                -1.0f, -1.0f, 0.0f, // Position 2
+                +1.0f, -1.0f, 0.0f, // Position 3
             };
             float[] textureCoordinates = {
-                0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+                0.0f, 1.0f, // Position 0
+                1.0f, 1.0f, // Position 1
+                0.0f, 0.0f, // Position 2
+                1.0f, 0.0f, // Position 3
             };
             int[] indices = {0, 2, 1, 1, 2, 3};
 

@@ -1,9 +1,3 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics.scene;
 
 import lombok.Getter;
@@ -29,14 +23,14 @@ public class Projection {
      *
      * @return The inverse projection matrix.
      */
-    private Matrix4f invProjMatrix;
+    private final Matrix4f inverseProjectionMatrix;
 
     /**
      * The current projection matrix.
      *
      * @return The projection matrix.
      */
-    private Matrix4f projMatrix;
+    private final Matrix4f projectionMatrix;
 
     /**
      * Create a new projection matrix.
@@ -45,8 +39,8 @@ public class Projection {
      * @param height The height of the screen in pixels.
      */
     public Projection(int width, int height) {
-        projMatrix = new Matrix4f();
-        invProjMatrix = new Matrix4f();
+        projectionMatrix = new Matrix4f();
+        inverseProjectionMatrix = new Matrix4f();
         updateProjMatrix(width, height);
     }
 
@@ -57,8 +51,9 @@ public class Projection {
      * @param height The new height of the screen in pixels.
      */
     public void updateProjMatrix(int width, int height) {
-        projMatrix.setPerspective(
+        // TODO(ches) support Directx/Vulkan [0, 1] Z range, or force it to be always [0, 1]
+        projectionMatrix.setPerspective(
                 Projection.FOV, (float) width / height, Projection.Z_NEAR, Projection.Z_FAR);
-        invProjMatrix.set(projMatrix).invert();
+        inverseProjectionMatrix.set(projectionMatrix).invert();
     }
 }

@@ -147,7 +147,8 @@ public class SceneRender {
         shaderProgram.bind();
 
         uniformsMap.setUniform(
-                ShaderUniforms.Scene.PROJECTION_MATRIX, scene.getProjection().getProjMatrix());
+                ShaderUniforms.Scene.PROJECTION_MATRIX,
+                scene.getProjection().getProjectionMatrix());
         uniformsMap.setUniform(ShaderUniforms.Scene.VIEW_MATRIX, scene.getCamera().getViewMatrix());
 
         glActiveTexture(GL_TEXTURE0);

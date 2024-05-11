@@ -255,7 +255,7 @@ public class LightRender {
 
         uniformsMap.setUniform(
                 ShaderUniforms.Light.INVERSE_PROJECTION_MATRIX,
-                scene.getProjection().getInvProjMatrix());
+                scene.getProjection().getInverseProjectionMatrix());
         uniformsMap.setUniform(
                 ShaderUniforms.Light.INVERSE_VIEW_MATRIX, scene.getCamera().getInvViewMatrix());
 
