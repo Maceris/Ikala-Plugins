@@ -25,9 +25,8 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL43.glMultiDrawElementsIndirect;
 
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.CascadeShadow;
-import com.ikalagaming.graphics.graph.RenderBuffers;
-import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.ShadowBuffer;
 import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Scene;
@@ -45,27 +44,27 @@ public class ShadowRender {
      *
      * @return The cascade shadows.
      */
-    @Getter private ArrayList<CascadeShadow> cascadeShadows;
+    @Getter private final ArrayList<CascadeShadow> cascadeShadows;
 
     /** The shader program for the shadow rendering. */
-    private ShaderProgram shaderProgram;
+    private final Shader shaderProgram;
 
     /**
      * The buffer we render shadows to.
      *
      * @return The shadow buffer.
      */
-    @Getter private ShadowBuffer shadowBuffer;
+    @Getter private final ShadowBuffer shadowBuffer;
 
     /** The uniform map for the shader program. */
     private UniformsMap uniformsMap;
 
     /** Set up a new shadow renderer. */
     public ShadowRender() {
-        List<ShaderProgram.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
-                new ShaderProgram.ShaderModuleData("shaders/shadow.vert", GL_VERTEX_SHADER));
-        shaderProgram = new ShaderProgram(shaderModuleDataList);
+                new Shader.ShaderModuleData("shaders/shadow.vert", GL_VERTEX_SHADER));
+        shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
         shadowBuffer = new ShadowBuffer();
 

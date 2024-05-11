@@ -32,11 +32,10 @@ import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.frontend.Material;
+import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.MaterialCache;
-import com.ikalagaming.graphics.graph.RenderBuffers;
-import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.PluginFolder;
@@ -68,7 +67,7 @@ public class SceneRender {
     private static final int MAX_TEXTURES = 16;
 
     /** The shader program for the scene. */
-    private final ShaderProgram shaderProgram;
+    private final Shader shaderProgram;
 
     /** The uniform map for the shader program. */
     private UniformsMap uniformsMap;
@@ -81,12 +80,12 @@ public class SceneRender {
      * @param textureHandler The texture handler implementation to use.
      */
     public SceneRender(@NonNull TextureHandler textureHandler) {
-        List<ShaderProgram.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
-                new ShaderProgram.ShaderModuleData("shaders/scene.vert", GL_VERTEX_SHADER));
+                new Shader.ShaderModuleData("shaders/scene.vert", GL_VERTEX_SHADER));
         shaderModuleDataList.add(
-                new ShaderProgram.ShaderModuleData("shaders/scene.frag", GL_FRAGMENT_SHADER));
-        shaderProgram = new ShaderProgram(shaderModuleDataList);
+                new Shader.ShaderModuleData("shaders/scene.frag", GL_FRAGMENT_SHADER));
+        shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         createUniforms();
         defaultTexture = textureHandler.load(DEFAULT_TEXTURE_PATH);
     }

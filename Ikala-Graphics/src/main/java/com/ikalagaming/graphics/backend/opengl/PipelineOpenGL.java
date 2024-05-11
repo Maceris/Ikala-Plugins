@@ -42,7 +42,6 @@ import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.frontend.Pipeline;
 import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.Model;
-import com.ikalagaming.graphics.graph.RenderBuffers;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 

@@ -1,33 +1,12 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
-package com.ikalagaming.graphics.graph;
+package com.ikalagaming.graphics.backend.opengl;
 
-import static org.lwjgl.opengl.GL20.GL_COMPILE_STATUS;
-import static org.lwjgl.opengl.GL20.GL_LINK_STATUS;
-import static org.lwjgl.opengl.GL20.GL_VALIDATE_STATUS;
-import static org.lwjgl.opengl.GL20.glAttachShader;
-import static org.lwjgl.opengl.GL20.glCompileShader;
-import static org.lwjgl.opengl.GL20.glCreateProgram;
-import static org.lwjgl.opengl.GL20.glCreateShader;
-import static org.lwjgl.opengl.GL20.glDeleteProgram;
-import static org.lwjgl.opengl.GL20.glDetachShader;
+import static org.lwjgl.opengl.GL20.*;
 import static org.lwjgl.opengl.GL20.glGetProgramInfoLog;
-import static org.lwjgl.opengl.GL20.glGetProgrami;
-import static org.lwjgl.opengl.GL20.glGetShaderInfoLog;
-import static org.lwjgl.opengl.GL20.glGetShaderi;
-import static org.lwjgl.opengl.GL20.glLinkProgram;
-import static org.lwjgl.opengl.GL20.glShaderSource;
-import static org.lwjgl.opengl.GL20.glUseProgram;
-import static org.lwjgl.opengl.GL20.glValidateProgram;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.exceptions.ShaderException;
+import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.launcher.PluginFolder;
-import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.util.FileUtils;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -39,32 +18,10 @@ import org.lwjgl.opengl.GL20;
 import java.util.ArrayList;
 import java.util.List;
 
-/** An OpenGL shader program. */
-@Getter
 @Slf4j
-public class ShaderProgram {
-
-    /**
-     * A file and what type of shader that is.
-     *
-     * @param shaderFile The path to the shader file including name.
-     * @param shaderType The type of shader to be created. One of:<br>
-     *     <ul>
-     *       <li>{@link GL20#GL_VERTEX_SHADER VERTEX_SHADER}
-     *       <li>{@link org.lwjgl.opengl.GL46#GL_FRAGMENT_SHADER FRAGMENT_SHADER}
-     *       <li>{@link org.lwjgl.opengl.GL33#GL_GEOMETRY_SHADER GEOMETRY_SHADER}
-     *       <li>{@link org.lwjgl.opengl.GL46#GL_TESS_CONTROL_SHADER TESS_CONTROL_SHADER}
-     *       <li>{@link org.lwjgl.opengl.GL46#GL_TESS_EVALUATION_SHADER GL_TESS_EVALUATION_SHADER}
-     *     </ul>
-     */
-    public record ShaderModuleData(@NonNull String shaderFile, int shaderType) {}
-
-    /**
-     * The Program ID for the program.
-     *
-     * @return The opengl program ID.
-     */
-    private final int programID;
+public class ShaderOpenGL implements Shader {
+    /** The Program ID for the program. */
+    @Getter private final int programID;
 
     /**
      * Create a new shader program.
@@ -72,7 +29,7 @@ public class ShaderProgram {
      * @param shaderModuleDataList The list of shader modules for the program.
      * @throws ShaderException If a new program could not be created.
      */
-    public ShaderProgram(@NonNull List<ShaderModuleData> shaderModuleDataList) {
+    public ShaderOpenGL(@NonNull List<ShaderModuleData> shaderModuleDataList) {
         programID = glCreateProgram();
         if (programID == 0) {
             String error =
@@ -91,20 +48,20 @@ public class ShaderProgram {
                                         FileUtils.readAsString(
                                                 PluginFolder.getResource(
                                                         GraphicsPlugin.PLUGIN_NAME,
-                                                        ResourceType.DATA,
-                                                        data.shaderFile)),
-                                        data.shaderType)));
+                                                        PluginFolder.ResourceType.DATA,
+                                                        data.shaderFile())),
+                                        data.shaderType())));
 
         link(shaderModules);
         validate();
     }
 
-    /** Install this program as part of the current rendering state. */
+    @Override
     public void bind() {
         glUseProgram(programID);
     }
 
-    /** Unbind and delete this program. */
+    @Override
     public void cleanup() {
         unbind();
         if (programID != 0) {
@@ -167,13 +124,13 @@ public class ShaderProgram {
         shaderModules.forEach(GL20::glDeleteShader);
     }
 
-    /** Stop using this program. */
+    @Override
     public void unbind() {
         glUseProgram(0);
     }
 
     /** Validate the program. */
-    public void validate() {
+    private void validate() {
         glValidateProgram(programID);
         if (glGetProgrami(programID, GL_VALIDATE_STATUS) == 0) {
             String error =

@@ -26,10 +26,10 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
+import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.QuadMesh;
-import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Fog;
 import com.ikalagaming.graphics.scene.Scene;
@@ -63,7 +63,7 @@ public class LightRender {
     private static final int MAX_LIGHTS_SUPPORTED = 1000;
 
     /** The shader program for rendering lights. */
-    private final ShaderProgram shaderProgram;
+    private final Shader shaderProgram;
 
     /** A mesh for rendering lighting onto. */
     private QuadMesh quadMesh;
@@ -79,12 +79,12 @@ public class LightRender {
 
     /** Set up the light renderer. */
     public LightRender(@NonNull QuadMeshHandler quadMeshHandler) {
-        List<ShaderProgram.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
-                new ShaderProgram.ShaderModuleData("shaders/lights.vert", GL_VERTEX_SHADER));
+                new Shader.ShaderModuleData("shaders/lights.vert", GL_VERTEX_SHADER));
         shaderModuleDataList.add(
-                new ShaderProgram.ShaderModuleData("shaders/lights.frag", GL_FRAGMENT_SHADER));
-        shaderProgram = new ShaderProgram(shaderModuleDataList);
+                new Shader.ShaderModuleData("shaders/lights.frag", GL_FRAGMENT_SHADER));
+        shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         quadMesh = new QuadMesh();
         quadMeshHandler.initialize(quadMesh);
         createUniforms();

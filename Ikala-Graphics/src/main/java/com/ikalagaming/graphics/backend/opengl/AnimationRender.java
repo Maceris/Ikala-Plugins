@@ -14,9 +14,8 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL43.glDispatchCompute;
 
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.Model;
-import com.ikalagaming.graphics.graph.RenderBuffers;
-import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
@@ -29,17 +28,17 @@ import java.util.List;
 /** Handles computations for animated models. */
 public class AnimationRender {
     /** The compute shader for animations. */
-    private final ShaderProgram shaderProgram;
+    private final Shader shaderProgram;
 
     /** The uniforms for the program. */
     private UniformsMap uniformsMap;
 
     /** Set up a new animation renderer. */
     public AnimationRender() {
-        List<ShaderProgram.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
-                new ShaderProgram.ShaderModuleData("shaders/anim.comp", GL_COMPUTE_SHADER));
-        shaderProgram = new ShaderProgram(shaderModuleDataList);
+                new Shader.ShaderModuleData("shaders/anim.comp", GL_COMPUTE_SHADER));
+        shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         createUniforms();
     }
 
@@ -84,7 +83,7 @@ public class AnimationRender {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, renderBuffer.getBindingPosesBuffer());
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, renderBuffer.getBonesIndicesWeightsBuffer());
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, renderBuffer.getBonesMatricesBuffer());
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, renderBuffer.getDestAnimationBuffer());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, renderBuffer.getDestinationAnimationBuffer());
 
         int dstOffset = 0;
         for (Model model : scene.getModelMap().values()) {

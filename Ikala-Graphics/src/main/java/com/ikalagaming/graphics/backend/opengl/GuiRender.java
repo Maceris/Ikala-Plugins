@@ -30,9 +30,9 @@ import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.frontend.Format;
+import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
-import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.UniformsMap;
 
 import imgui.ImDrawData;
@@ -97,7 +97,7 @@ public class GuiRender {
     private Vector2f scale;
 
     /** The shader program for rendering the UI. */
-    private final ShaderProgram shaderProgram;
+    private final Shader shaderProgram;
 
     /** The texture we store font data in. */
     private Texture font;
@@ -112,12 +112,11 @@ public class GuiRender {
      * @param textureHandler The texture handler implementation to use.
      */
     public GuiRender(@NonNull Window window, @NonNull TextureHandler textureHandler) {
-        List<ShaderProgram.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        shaderModuleDataList.add(new Shader.ShaderModuleData("shaders/gui.vert", GL_VERTEX_SHADER));
         shaderModuleDataList.add(
-                new ShaderProgram.ShaderModuleData("shaders/gui.vert", GL_VERTEX_SHADER));
-        shaderModuleDataList.add(
-                new ShaderProgram.ShaderModuleData("shaders/gui.frag", GL_FRAGMENT_SHADER));
-        shaderProgram = new ShaderProgram(shaderModuleDataList);
+                new Shader.ShaderModuleData("shaders/gui.frag", GL_FRAGMENT_SHADER));
+        shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         createUniforms();
         createUIResources(window, textureHandler);
     }

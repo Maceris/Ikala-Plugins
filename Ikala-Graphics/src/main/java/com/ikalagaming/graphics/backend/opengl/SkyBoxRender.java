@@ -18,8 +18,8 @@ import static org.lwjgl.opengl.GL30.glBindVertexArray;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.frontend.Material;
+import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
-import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
@@ -34,7 +34,7 @@ import java.util.List;
 /** Handles rendering for the skybox. */
 public class SkyBoxRender {
     /** The shader program for the skybox. */
-    private ShaderProgram shaderProgram;
+    private Shader shaderProgram;
 
     /** The uniform map for the shader program. */
     private UniformsMap uniformsMap;
@@ -44,12 +44,12 @@ public class SkyBoxRender {
 
     /** Set up the renderer. */
     public SkyBoxRender() {
-        List<ShaderProgram.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
-                new ShaderProgram.ShaderModuleData("shaders/skybox.vert", GL_VERTEX_SHADER));
+                new Shader.ShaderModuleData("shaders/skybox.vert", GL_VERTEX_SHADER));
         shaderModuleDataList.add(
-                new ShaderProgram.ShaderModuleData("shaders/skybox.frag", GL_FRAGMENT_SHADER));
-        shaderProgram = new ShaderProgram(shaderModuleDataList);
+                new Shader.ShaderModuleData("shaders/skybox.frag", GL_FRAGMENT_SHADER));
+        shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         viewMatrix = new Matrix4f();
         createUniforms();
     }

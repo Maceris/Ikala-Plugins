@@ -4,7 +4,7 @@
  * v2.0. Changes have been made related to formatting, functionality, and
  * naming.
  */
-package com.ikalagaming.graphics.graph;
+package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.opengl.GL11.GL_FLOAT;
 import static org.lwjgl.opengl.GL15.GL_ARRAY_BUFFER;
@@ -20,6 +20,8 @@ import static org.lwjgl.opengl.GL30.glDeleteVertexArrays;
 import static org.lwjgl.opengl.GL30.glGenVertexArrays;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
+import com.ikalagaming.graphics.graph.MeshData;
+import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
@@ -110,7 +112,7 @@ public class RenderBuffers {
      *
      * @return The processed animation data.
      */
-    @Getter private int destAnimationBuffer;
+    @Getter private int destinationAnimationBuffer;
 
     /**
      * The Vertex Array Object ID, for static models.
@@ -120,7 +122,7 @@ public class RenderBuffers {
     @Getter private int staticVaoID;
 
     /** The list of Vertex Buffer Objects that this class set up. */
-    private List<Integer> vboIDList;
+    private final List<Integer> vboIDList;
 
     /** Set up a new render buffer. */
     public RenderBuffers() {
@@ -129,14 +131,14 @@ public class RenderBuffers {
 
     /** Clean up all the data. */
     public void cleanup() {
-        vboIDList.stream().forEach(GL15::glDeleteBuffers);
+        vboIDList.forEach(GL15::glDeleteBuffers);
         vboIDList.clear();
         glDeleteVertexArrays(staticVaoID);
         glDeleteVertexArrays(animVaoID);
     }
 
     /** Used to define the vertex attribute arrays. */
-    private void defineVertexAttribs() {
+    private void defineVertexAttributes() {
         final int stride = (3 * 4) * 4 + 2 * 4;
         int pointer = 0;
         // Positions
@@ -177,7 +179,7 @@ public class RenderBuffers {
         glBindVertexArray(animVaoID);
         int positionsSize = 0;
         int normalsSize = 0;
-        int textureCoordsSize = 0;
+        int textureCoordinatesSize = 0;
         int indicesSize = 0;
         int offset = 0;
         int chunkBindingPoseOffset = 0;
@@ -194,7 +196,7 @@ public class RenderBuffers {
                 for (MeshData meshData : model.getMeshDataList()) {
                     positionsSize += meshData.getPositions().length;
                     normalsSize += meshData.getNormals().length;
-                    textureCoordsSize += meshData.getTextureCoordinates().length;
+                    textureCoordinatesSize += meshData.getTextureCoordinates().length;
                     indicesSize += meshData.getIndices().length;
 
                     int meshSizeInBytes =
@@ -220,10 +222,10 @@ public class RenderBuffers {
             chunkWeightsOffset += weightsOffset;
         }
 
-        destAnimationBuffer = glGenBuffers();
-        vboIDList.add(destAnimationBuffer);
+        destinationAnimationBuffer = glGenBuffers();
+        vboIDList.add(destinationAnimationBuffer);
         FloatBuffer meshesBuffer =
-                MemoryUtil.memAllocFloat(positionsSize + normalsSize * 3 + textureCoordsSize);
+                MemoryUtil.memAllocFloat(positionsSize + normalsSize * 3 + textureCoordinatesSize);
         for (Model model : modelList) {
             model.getEntitiesList()
                     .forEach(
@@ -234,11 +236,11 @@ public class RenderBuffers {
                             });
         }
         meshesBuffer.flip();
-        glBindBuffer(GL_ARRAY_BUFFER, destAnimationBuffer);
+        glBindBuffer(GL_ARRAY_BUFFER, destinationAnimationBuffer);
         glBufferData(GL_ARRAY_BUFFER, meshesBuffer, GL_STATIC_DRAW);
         MemoryUtil.memFree(meshesBuffer);
 
-        defineVertexAttribs();
+        defineVertexAttributes();
 
         // Index VBO
         int vboId = glGenBuffers();
@@ -263,7 +265,7 @@ public class RenderBuffers {
     }
 
     /**
-     * Store binding pose information for all of the meshes that are associated with the animated
+     * Store binding pose information for all the meshes that are associated with the animated
      * models.
      *
      * @param modelList The models to load binding pose information for.
@@ -297,7 +299,7 @@ public class RenderBuffers {
     }
 
     /**
-     * Store all of the bone index and weight information for the animated models.
+     * Store all the bone index and weight information for the animated models.
      *
      * @param modelList The list of models to load bone index and weight information for.
      */
@@ -398,7 +400,7 @@ public class RenderBuffers {
         glBindVertexArray(staticVaoID);
         int positionsSize = 0;
         int normalsSize = 0;
-        int textureCoordsSize = 0;
+        int textureCoordinatesSize = 0;
         int indicesSize = 0;
         int offset = 0;
         for (Model model : modelList) {
@@ -407,7 +409,7 @@ public class RenderBuffers {
             for (MeshData meshData : model.getMeshDataList()) {
                 positionsSize += meshData.getPositions().length;
                 normalsSize += meshData.getNormals().length;
-                textureCoordsSize += meshData.getTextureCoordinates().length;
+                textureCoordinatesSize += meshData.getTextureCoordinates().length;
                 indicesSize += meshData.getIndices().length;
 
                 int meshSizeInBytes = meshData.getPositions().length * 14 * 4;
@@ -424,7 +426,7 @@ public class RenderBuffers {
         int vboID = glGenBuffers();
         vboIDList.add(vboID);
         FloatBuffer meshesBuffer =
-                MemoryUtil.memAllocFloat(positionsSize + normalsSize * 3 + textureCoordsSize);
+                MemoryUtil.memAllocFloat(positionsSize + normalsSize * 3 + textureCoordinatesSize);
         for (Model model : modelList) {
             for (MeshData meshData : model.getMeshDataList()) {
                 populateMeshBuffer(meshesBuffer, meshData);
@@ -435,7 +437,7 @@ public class RenderBuffers {
         glBufferData(GL_ARRAY_BUFFER, meshesBuffer, GL_STATIC_DRAW);
         MemoryUtil.memFree(meshesBuffer);
 
-        defineVertexAttribs();
+        defineVertexAttributes();
 
         // Index VBO
         vboID = glGenBuffers();
@@ -466,12 +468,12 @@ public class RenderBuffers {
         float[] normals = meshData.getNormals();
         float[] tangents = meshData.getTangents();
         float[] bitangents = meshData.getBitangents();
-        float[] textCoords = meshData.getTextureCoordinates();
+        float[] textureCoordinates = meshData.getTextureCoordinates();
 
         int rows = positions.length / 3;
         for (int row = 0; row < rows; row++) {
             int startPos = row * 3;
-            int startTextCoord = row * 2;
+            int startTextureCoordinate = row * 2;
             meshesBuffer.put(positions[startPos]);
             meshesBuffer.put(positions[startPos + 1]);
             meshesBuffer.put(positions[startPos + 2]);
@@ -484,8 +486,8 @@ public class RenderBuffers {
             meshesBuffer.put(bitangents[startPos]);
             meshesBuffer.put(bitangents[startPos + 1]);
             meshesBuffer.put(bitangents[startPos + 2]);
-            meshesBuffer.put(textCoords[startTextCoord]);
-            meshesBuffer.put(textCoords[startTextCoord + 1]);
+            meshesBuffer.put(textureCoordinates[startTextureCoordinate]);
+            meshesBuffer.put(textureCoordinates[startTextureCoordinate + 1]);
         }
     }
 }

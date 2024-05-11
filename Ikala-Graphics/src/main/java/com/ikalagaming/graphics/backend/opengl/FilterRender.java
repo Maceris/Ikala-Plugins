@@ -22,8 +22,8 @@ import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
 import com.ikalagaming.graphics.frontend.Pipeline;
+import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.QuadMesh;
-import com.ikalagaming.graphics.graph.ShaderProgram;
 import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
@@ -42,7 +42,7 @@ import java.util.*;
 public class FilterRender {
 
     /** A map of filter shaders that have been picked up from a filters folder. */
-    private final Map<String, ShaderProgram> shaders;
+    private final Map<String, Shader> shaders;
 
     /** A mesh for rendering the scene onto. */
     private QuadMesh quadMesh;
@@ -71,7 +71,7 @@ public class FilterRender {
             folderPath = folderPath.concat(File.separator);
         }
 
-        List<ShaderProgram.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
 
         for (File vert :
                 Objects.requireNonNull(
@@ -90,12 +90,12 @@ public class FilterRender {
             }
 
             shaderModuleDataList.add(
-                    new ShaderProgram.ShaderModuleData(
+                    new Shader.ShaderModuleData(
                             folderPath.concat(vert.getName()), GL_VERTEX_SHADER));
             shaderModuleDataList.add(
-                    new ShaderProgram.ShaderModuleData(
+                    new Shader.ShaderModuleData(
                             folderPath.concat(frag.getName()), GL_FRAGMENT_SHADER));
-            ShaderProgram fullProgram = new ShaderProgram(shaderModuleDataList);
+            Shader fullProgram = new ShaderOpenGL(shaderModuleDataList);
 
             // Clean up names
             name = name.replaceAll("[^a-zA-Z0-9_-]+", "");
@@ -161,7 +161,7 @@ public class FilterRender {
 
         String name =
                 Pipeline.configuration.getFilterNames()[Pipeline.configuration.getSelectedFilter()];
-        ShaderProgram program = shaders.get(name);
+        Shader program = shaders.get(name);
 
         program.bind();
 

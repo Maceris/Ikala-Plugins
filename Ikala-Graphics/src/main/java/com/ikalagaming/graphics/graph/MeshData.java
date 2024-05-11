@@ -111,7 +111,7 @@ public class MeshData {
      *     of the positive X texture axis.
      * @param bitangents A list of bitangent values, in x, y, z order. Bitangents point in the
      *     direction of the positive Y texture axis.
-     * @param textCoords A list of texture coordinates, in x, y order.
+     * @param textureCoordinates A list of texture coordinates, in x, y order.
      * @param indices The indices of all the faces.
      * @param boneIndices Lists of bone IDs that affect the vertices, ordered by vertex ID. Each
      *     vertex has {@link ModelLoader#MAX_WEIGHTS} entries in the list.
@@ -127,7 +127,7 @@ public class MeshData {
             float[] normals,
             float[] tangents,
             float[] bitangents,
-            float[] textCoords,
+            float[] textureCoordinates,
             int[] indices,
             int[] boneIndices,
             float[] weights,
@@ -138,7 +138,7 @@ public class MeshData {
         this.normals = normals;
         this.tangents = tangents;
         this.bitangents = bitangents;
-        textureCoordinates = textCoords;
+        this.textureCoordinates = textureCoordinates;
         this.indices = indices;
         this.boneIndices = boneIndices;
         this.weights = weights;

@@ -6,6 +6,7 @@
  */
 package com.ikalagaming.graphics.graph;
 
+import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
 import com.ikalagaming.graphics.scene.Entity;
 
 import lombok.Getter;
@@ -27,7 +28,7 @@ public class Model {
          *
          * @return The bone transformation matrices.
          */
-        private Matrix4f[] bonesMatrices;
+        private final Matrix4f[] bonesMatrices;
 
         /**
          * The position in the list of bone transformation matrices.
@@ -68,28 +69,28 @@ public class Model {
      *
      * @return The list of animations.
      */
-    private List<Animation> animationList;
+    private final List<Animation> animationList;
 
     /**
      * A list of entities that use this model.
      *
      * @return The list of entities.
      */
-    private List<Entity> entitiesList;
+    private final List<Entity> entitiesList;
 
     /**
      * A list of mesh data for this model.
      *
      * @return The list of mesh data.
      */
-    private List<MeshData> meshDataList;
+    private final List<MeshData> meshDataList;
 
     /**
      * A list of mesh draw data for this model.
      *
      * @return The list of mesh draw data.
      */
-    private List<RenderBuffers.MeshDrawData> meshDrawDataList;
+    private final List<RenderBuffers.MeshDrawData> meshDrawDataList;
 
     /**
      * Create a new model.
