@@ -250,8 +250,11 @@ public class LightRender {
                             + ShaderUniforms.Light.CascadeShadow.SPLIT_DISTANCE,
                     cascadeShadow.getSplitDistance());
         }
-        glActiveTexture(GL_TEXTURE0 + nextTexture);
-        shadowRender.getShadowBuffer().bindTextures(GL_TEXTURE0 + nextTexture);
+
+        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+            glActiveTexture(GL_TEXTURE0 + nextTexture + i);
+            glBindTexture(GL_TEXTURE_2D, shadowRender.getShadowTextures()[i]);
+        }
 
         uniformsMap.setUniform(
                 ShaderUniforms.Light.INVERSE_PROJECTION_MATRIX,
