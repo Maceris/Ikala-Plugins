@@ -1,7 +1,6 @@
 package com.ikalagaming.graphics.frontend.gui.component;
 
 import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
 import com.ikalagaming.graphics.frontend.gui.util.Rect;
 import com.ikalagaming.graphics.frontend.gui.util.Style;
@@ -187,13 +186,13 @@ public class Component implements Drawable {
     }
 
     @Override
-    public void draw(final int width, final int height, @NonNull TextureHandler textureHandler) {
+    public void draw(final int width, final int height) {
         if (!isVisible()) {
             return;
         }
         recalculate();
         children.forEach(Component::recalculate);
-        children.forEach(child -> child.draw(width, height, textureHandler));
+        children.forEach(child -> child.draw(width, height));
     }
 
     /**

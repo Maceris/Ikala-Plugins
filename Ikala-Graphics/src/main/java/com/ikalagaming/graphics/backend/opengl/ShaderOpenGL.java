@@ -19,6 +19,7 @@ import org.lwjgl.opengl.GL20;
 import java.util.ArrayList;
 import java.util.List;
 
+@Getter
 @Slf4j
 public class ShaderOpenGL implements Shader {
 
@@ -37,7 +38,7 @@ public class ShaderOpenGL implements Shader {
     }
 
     /** The Program ID for the program. */
-    @Getter private final int programID;
+    private final int programID;
 
     /**
      * Create a new shader program.

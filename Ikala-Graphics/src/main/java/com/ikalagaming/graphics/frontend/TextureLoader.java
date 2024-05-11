@@ -1,28 +1,11 @@
-package com.ikalagaming.graphics.backend.base;
-
-import com.ikalagaming.graphics.frontend.Format;
-import com.ikalagaming.graphics.frontend.Texture;
+package com.ikalagaming.graphics.frontend;
 
 import lombok.NonNull;
 
 import java.nio.ByteBuffer;
 
 /** Defines the methods that are required for dealing with textures in each backend. */
-public interface TextureHandler {
-    /**
-     * Bind a texture for rendering.
-     *
-     * @param texture The texture to bind.
-     */
-    void bind(@NonNull Texture texture);
-
-    /**
-     * Clean up the texture resources.
-     *
-     * @param texture The texture to clean up.
-     */
-    void cleanup(@NonNull Texture texture);
-
+public interface TextureLoader {
     /**
      * Load a texture to the GPU from a byte buffer.
      *

@@ -6,15 +6,8 @@
  */
 package com.ikalagaming.graphics.backend.opengl;
 
-import static org.lwjgl.opengl.GL11.GL_BLEND;
-import static org.lwjgl.opengl.GL11.GL_COLOR_BUFFER_BIT;
-import static org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT;
-import static org.lwjgl.opengl.GL11.GL_TRIANGLES;
-import static org.lwjgl.opengl.GL11.GL_UNSIGNED_INT;
-import static org.lwjgl.opengl.GL11.glClear;
-import static org.lwjgl.opengl.GL11.glDisable;
-import static org.lwjgl.opengl.GL11.glEnable;
-import static org.lwjgl.opengl.GL11.glViewport;
+import static org.lwjgl.opengl.GL11.*;
+import static org.lwjgl.opengl.GL11.GL_TEXTURE_2D;
 import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
 import static org.lwjgl.opengl.GL13.glActiveTexture;
 import static org.lwjgl.opengl.GL15.glBindBuffer;
@@ -28,11 +21,11 @@ import static org.lwjgl.opengl.GL43.glMultiDrawElementsIndirect;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
-import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Material;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
+import com.ikalagaming.graphics.frontend.TextureLoader;
 import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.scene.Scene;
@@ -75,9 +68,9 @@ public class SceneRender {
     /**
      * Set up a new scene renderer.
      *
-     * @param textureHandler The texture handler implementation to use.
+     * @param textureLoader The texture handler implementation to use.
      */
-    public SceneRender(@NonNull TextureHandler textureHandler) {
+    public SceneRender(@NonNull TextureLoader textureLoader) {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData("shaders/scene.vert", Shader.Type.VERTEX));
@@ -85,7 +78,7 @@ public class SceneRender {
                 new Shader.ShaderModuleData("shaders/scene.frag", Shader.Type.FRAGMENT));
         shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         createUniforms();
-        defaultTexture = textureHandler.load(DEFAULT_TEXTURE_PATH);
+        defaultTexture = textureLoader.load(DEFAULT_TEXTURE_PATH);
     }
 
     /** Clean up buffers and shaders. */
@@ -134,8 +127,7 @@ public class SceneRender {
             @NonNull Scene scene,
             @NonNull RenderBuffers renderBuffers,
             @NonNull GBuffer gBuffer,
-            @NonNull CommandBuffer commandBuffers,
-            @NonNull TextureHandler textureHandler) {
+            @NonNull CommandBuffer commandBuffers) {
 
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gBuffer.getGBufferId());
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -149,13 +141,13 @@ public class SceneRender {
         uniformsMap.setUniform(ShaderUniforms.Scene.VIEW_MATRIX, scene.getCamera().getViewMatrix());
 
         glActiveTexture(GL_TEXTURE0);
-        textureHandler.bind(defaultTexture);
+        glBindTexture(GL_TEXTURE_2D, defaultTexture.id());
 
         int nextTexture = 1;
         for (Material material : scene.getMaterialCache().getMaterialsList()) {
             if (material.getNormalMap() != null) {
                 glActiveTexture(GL_TEXTURE0 + nextTexture);
-                textureHandler.bind(material.getNormalMap());
+                glBindTexture(GL_TEXTURE_2D, material.getNormalMap().id());
                 uniformsMap.setUniform(
                         ShaderUniforms.Scene.TEXTURE_SAMPLER + "[" + nextTexture + "]",
                         nextTexture);
@@ -163,7 +155,7 @@ public class SceneRender {
             }
             if (material.getTexture() != null) {
                 glActiveTexture(GL_TEXTURE0 + nextTexture);
-                textureHandler.bind(material.getTexture());
+                glBindTexture(GL_TEXTURE_2D, material.getTexture().id());
                 uniformsMap.setUniform(
                         ShaderUniforms.Scene.TEXTURE_SAMPLER + "[" + nextTexture + "]",
                         nextTexture);

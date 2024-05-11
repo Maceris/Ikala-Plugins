@@ -9,10 +9,10 @@ package com.ikalagaming.graphics.scene;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Utils;
-import com.ikalagaming.graphics.backend.base.TextureHandler;
-import com.ikalagaming.graphics.backend.opengl.TextureHandlerOpenGL;
+import com.ikalagaming.graphics.backend.opengl.TextureLoaderOpenGL;
 import com.ikalagaming.graphics.exceptions.ModelException;
 import com.ikalagaming.graphics.frontend.Material;
+import com.ikalagaming.graphics.frontend.TextureLoader;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
@@ -66,7 +66,7 @@ public class ModelLoader {
      * TODO(ches) remove this. It is a hack to get this working until we can actually defer texture
      * loading.
      */
-    @Deprecated private static final TextureHandler textureHandler = new TextureHandlerOpenGL();
+    @Deprecated private static final TextureLoader TEXTURE_LOADER = new TextureLoaderOpenGL();
 
     /**
      * Information needed to load a model.
@@ -718,7 +718,7 @@ public class ModelLoader {
             if (texturePath != null && texturePath.length() > 0) {
                 texturePath = modelDir + File.separator + new File(texturePath).getName();
                 // TODO(ches) find a way to defer texture loading
-                material.setTexture(textureHandler.load(texturePath));
+                material.setTexture(TEXTURE_LOADER.load(texturePath));
                 material.setDiffuseColor(Material.DEFAULT_COLOR);
             }
 
@@ -738,7 +738,7 @@ public class ModelLoader {
             if (normalMapPath != null && normalMapPath.length() > 0) {
                 normalMapPath = modelDir + File.separator + new File(normalMapPath).getName();
                 // TODO(ches) find a way to defer texture loading
-                material.setNormalMap(textureHandler.load(normalMapPath));
+                material.setNormalMap(TEXTURE_LOADER.load(normalMapPath));
             }
 
             return material;

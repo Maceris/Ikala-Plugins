@@ -1,10 +1,7 @@
 package com.ikalagaming.graphics.frontend.gui.component;
 
-import com.ikalagaming.graphics.backend.base.TextureHandler;
-
 import imgui.ImGui;
 import imgui.type.ImBoolean;
-import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 /** A checkbox with text. */
@@ -39,7 +36,7 @@ public class Checkbox extends Component implements Interactive {
     }
 
     @Override
-    public void draw(final int width, final int height, @NonNull TextureHandler textureHandler) {
+    public void draw(final int width, final int height) {
         if (ImGui.checkbox(text, state)) {
             changed = true;
         }

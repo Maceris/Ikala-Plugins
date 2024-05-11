@@ -1,25 +1,23 @@
 package com.ikalagaming.factory.gui.window;
 
-import static org.lwjgl.opengl.GL11.glIsTexture;
-
 import com.ikalagaming.factory.gui.DefaultWindows;
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.frontend.Format;
 import com.ikalagaming.graphics.frontend.Texture;
+import com.ikalagaming.graphics.frontend.gui.component.Button;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
+import com.ikalagaming.graphics.frontend.gui.component.Image;
+import com.ikalagaming.graphics.frontend.gui.component.Text;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.random.RandomGen;
 
-import imgui.ImGui;
-import imgui.flag.ImGuiCond;
 import imgui.flag.ImGuiWindowFlags;
 import lombok.NonNull;
 
 import java.awt.image.BufferedImage;
 import java.nio.ByteBuffer;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public class BiomeDebug extends GuiWindow {
 
@@ -28,6 +26,64 @@ public class BiomeDebug extends GuiWindow {
         setScale(0.70f, 0.90f);
         setDisplacement(0.01f, 0.05f);
         setAlignment(Alignment.NORTH_WEST);
+
+        temperatureMap = new Image();
+        temperatureMap.setScale(0.25f, 0.40f);
+        temperatureMap.setDisplacement(0.00f, 0.10f);
+        erosionMap = new Image();
+        erosionMap.setScale(0.25f, 0.40f);
+        erosionMap.setDisplacement(0.00f, 0.60f);
+        heightMap = new Image();
+        heightMap.setScale(0.25f, 0.40f);
+        heightMap.setDisplacement(0.35f, 0.10f);
+        vegetationMap = new Image();
+        vegetationMap.setScale(0.25f, 0.40f);
+        vegetationMap.setDisplacement(0.35f, 0.60f);
+        weirdnessMap = new Image();
+        weirdnessMap.setScale(0.25f, 0.40f);
+        weirdnessMap.setDisplacement(0.65f, 0.10f);
+        biomeMap = new Image();
+        biomeMap.setScale(0.25f, 0.40f);
+        biomeMap.setDisplacement(0.65f, 0.60f);
+
+        var temperature = new Text("Temperature");
+        temperature.setScale(0.25f, 0.05f);
+        temperature.setDisplacement(0.00f, 0.05f);
+        var erosion = new Text("Erosion");
+        erosion.setScale(0.25f, 0.05f);
+        erosion.setDisplacement(0.00f, 0.55f);
+        var height = new Text("Height");
+        height.setScale(0.25f, 0.05f);
+        height.setDisplacement(0.35f, 0.05f);
+        var vegetation = new Text("Vegetation");
+        vegetation.setScale(0.30f, 0.05f);
+        vegetation.setDisplacement(0.35f, 0.55f);
+        var weirdness = new Text("Weirdness");
+        weirdness.setScale(0.25f, 0.05f);
+        weirdness.setDisplacement(0.65f, 0.05f);
+        var biomes = new Text("Biomes");
+        biomes.setScale(0.25f, 0.05f);
+        biomes.setDisplacement(0.65f, 0.55f);
+
+        addChild(temperature);
+        addChild(erosion);
+        addChild(height);
+        addChild(vegetation);
+        addChild(weirdness);
+        addChild(biomes);
+
+        addChild(temperatureMap);
+        addChild(erosionMap);
+        addChild(heightMap);
+        addChild(vegetationMap);
+        addChild(weirdnessMap);
+        addChild(biomeMap);
+
+        generateButton = new Button("Generate textures");
+        generateButton.setScale(0.05f, 0.05f);
+        generateButton.setDisplacement(0.05f, 0.05f);
+        generateButton.setAlignment(Alignment.NORTH_EAST);
+        addChild(generateButton);
     }
 
     private static byte[] intARGBtoByteRGBA(int[] argb) {
@@ -43,73 +99,15 @@ public class BiomeDebug extends GuiWindow {
         return rgba;
     }
 
-    private final AtomicBoolean generateRequested = new AtomicBoolean();
-    private Texture temperatureMap;
-    private Texture heightMap;
-    private Texture erosionMap;
-    private Texture vegetationMap;
-    private Texture weirdnessMap;
+    private final Image temperatureMap;
+    private final Image heightMap;
+    private final Image erosionMap;
+    private final Image vegetationMap;
+    private final Image weirdnessMap;
 
-    private Texture biomeMap;
+    private final Image biomeMap;
 
-    private TextureHandler textureHandler;
-
-    @Override
-    public void draw(final int width, final int height, @NonNull TextureHandler textureHandler) {
-        if (this.textureHandler == null) {
-            this.textureHandler = textureHandler;
-        }
-        ImGui.setNextWindowPos(
-                getActualDisplaceX() * width, getActualDisplaceY() * height, ImGuiCond.Once);
-        ImGui.setNextWindowSize(
-                getActualWidth() * width, getActualHeight() * height, ImGuiCond.Once);
-        ImGui.begin(title, windowOpen, windowFlags);
-
-        if (ImGui.button("Generate textures")) {
-            generateRequested.set(true);
-        }
-
-        ImGui.beginGroup();
-        ImGui.text("Temperature");
-        drawImage(temperatureMap, textureHandler);
-        ImGui.text("Erosion");
-        drawImage(erosionMap, textureHandler);
-        ImGui.endGroup();
-
-        ImGui.sameLine();
-        ImGui.beginGroup();
-        ImGui.text("Height");
-        drawImage(heightMap, textureHandler);
-        ImGui.text("Vegetation");
-        drawImage(vegetationMap, textureHandler);
-        ImGui.endGroup();
-
-        ImGui.sameLine();
-        ImGui.beginGroup();
-        ImGui.text("Weirdness");
-        drawImage(weirdnessMap, textureHandler);
-        ImGui.text("Biomes");
-        drawImage(biomeMap, textureHandler);
-        ImGui.endGroup();
-
-        ImGui.end();
-    }
-
-    /**
-     * Draw a texture as an image, wherever we currently are in a window.
-     *
-     * @param image The texture to draw.
-     */
-    private void drawImage(Texture image, @NonNull TextureHandler textureHandler) {
-        if (image != null) {
-            if (glIsTexture(image.id())) {
-                textureHandler.bind(image);
-                ImGui.image(image.id(), image.width(), image.height());
-            } else {
-                ImGui.text("Texture somehow does not exist!");
-            }
-        }
-    }
+    private final Button generateButton;
 
     /**
      * Convert a buffered image to a texture that the graphics library understands.
@@ -117,7 +115,7 @@ public class BiomeDebug extends GuiWindow {
      * @param image The image to turn into a texture.
      * @return The generated texture.
      */
-    private Texture generateTexture(BufferedImage image, @NonNull TextureHandler textureHandler) {
+    private Texture generateTexture(@NonNull BufferedImage image) {
         int[] rgbValues =
                 image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
         byte[] rgba = intARGBtoByteRGBA(rgbValues);
@@ -126,16 +124,18 @@ public class BiomeDebug extends GuiWindow {
         buffer.put(rgba);
         buffer.rewind();
 
-        return textureHandler.load(buffer, Format.R8G8B8_UINT, image.getWidth(), image.getHeight());
+        return GraphicsManager.getTextureLoader()
+                .load(buffer, Format.R8G8B8A8_UINT, image.getWidth(), image.getHeight());
     }
 
     @Override
     public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
-        if (generateRequested.compareAndExchange(true, false)) {
+        if (generateButton.checkResult()) {
             long seed = RandomGen.generateSeed();
 
-            if (temperatureMap != null) {
-                textureHandler.cleanup(temperatureMap);
+            if (temperatureMap.getTexture() != null) {
+                GraphicsManager.getDeletionQueue().add(temperatureMap.getTexture());
+                temperatureMap.setTexture(null);
             }
             int w = 400;
             int h = 400;
@@ -150,10 +150,11 @@ public class BiomeDebug extends GuiWindow {
                                     .scale(0.001)
                                     .octaves(4)
                                     .build());
-            temperatureMap = generateTexture(tempImage, textureHandler);
+            temperatureMap.setTexture(generateTexture(tempImage));
 
-            if (heightMap != null) {
-                textureHandler.cleanup(heightMap);
+            if (heightMap.getTexture() != null) {
+                GraphicsManager.getDeletionQueue().add(heightMap.getTexture());
+                heightMap.setTexture(null);
             }
             BufferedImage heightImage =
                     RandomGen.generateSimplexNoise(
@@ -166,10 +167,11 @@ public class BiomeDebug extends GuiWindow {
                                     .scale(0.002)
                                     .octaves(10)
                                     .build());
-            heightMap = generateTexture(heightImage, textureHandler);
+            heightMap.setTexture(generateTexture(heightImage));
 
-            if (erosionMap != null) {
-                textureHandler.cleanup(erosionMap);
+            if (erosionMap.getTexture() != null) {
+                GraphicsManager.getDeletionQueue().add(erosionMap.getTexture());
+                erosionMap.setTexture(null);
             }
             BufferedImage erosionImage =
                     RandomGen.generateSimplexNoise(
@@ -182,10 +184,11 @@ public class BiomeDebug extends GuiWindow {
                                     .scale(0.002)
                                     .octaves(6)
                                     .build());
-            erosionMap = generateTexture(erosionImage, textureHandler);
+            erosionMap.setTexture(generateTexture(erosionImage));
 
-            if (vegetationMap != null) {
-                textureHandler.cleanup(vegetationMap);
+            if (vegetationMap.getTexture() != null) {
+                GraphicsManager.getDeletionQueue().add(vegetationMap.getTexture());
+                vegetationMap.setTexture(null);
             }
             BufferedImage vegetationImage =
                     RandomGen.generateSimplexNoise(
@@ -198,10 +201,11 @@ public class BiomeDebug extends GuiWindow {
                                     .scale(0.001)
                                     .octaves(5)
                                     .build());
-            vegetationMap = generateTexture(vegetationImage, textureHandler);
+            vegetationMap.setTexture(generateTexture(vegetationImage));
 
-            if (weirdnessMap != null) {
-                textureHandler.cleanup(weirdnessMap);
+            if (weirdnessMap.getTexture() != null) {
+                GraphicsManager.getDeletionQueue().add(weirdnessMap.getTexture());
+                weirdnessMap.setTexture(null);
             }
             BufferedImage weirdnessImage =
                     RandomGen.generateSimplexNoise(
@@ -214,7 +218,7 @@ public class BiomeDebug extends GuiWindow {
                                     .scale(0.002)
                                     .octaves(6)
                                     .build());
-            weirdnessMap = generateTexture(weirdnessImage, textureHandler);
+            weirdnessMap.setTexture(generateTexture(weirdnessImage));
         }
         return false;
     }

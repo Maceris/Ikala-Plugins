@@ -28,11 +28,11 @@ import static org.lwjgl.opengl.GL30.*;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Format;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
+import com.ikalagaming.graphics.frontend.TextureLoader;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
 
 import imgui.ImDrawData;
@@ -109,9 +109,9 @@ public class GuiRender {
      * Set up a new GUI renderer for the window.
      *
      * @param window The window we are rendering in.
-     * @param textureHandler The texture handler implementation to use.
+     * @param textureLoader The texture handler implementation to use.
      */
-    public GuiRender(@NonNull Window window, @NonNull TextureHandler textureHandler) {
+    public GuiRender(@NonNull Window window, @NonNull TextureLoader textureLoader) {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData("shaders/gui.vert", Shader.Type.VERTEX));
@@ -119,17 +119,13 @@ public class GuiRender {
                 new Shader.ShaderModuleData("shaders/gui.frag", Shader.Type.FRAGMENT));
         shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         createUniforms();
-        createUIResources(window, textureHandler);
+        createUIResources(window, textureLoader);
     }
 
-    /**
-     * Clean up shaders and textures.
-     *
-     * @param textureHandler The texture handler implementation to use.
-     */
-    public void cleanup(@NonNull TextureHandler textureHandler) {
+    /** Clean up shaders and textures. */
+    public void cleanup() {
         shaderProgram.cleanup();
-        textureHandler.cleanup(font);
+        glDeleteTextures(font.id());
         glDeleteBuffers(guiMesh.indicesVBO());
         glDeleteBuffers(guiMesh.verticesVBO());
         glDeleteVertexArrays(guiMesh.vaoID());
@@ -139,9 +135,9 @@ public class GuiRender {
      * Set up imgui and create fonts, textures, meshes, etc.
      *
      * @param window The window we are using.
-     * @param textureHandler The texture handler implementation to use.
+     * @param textureLoader The texture handler implementation to use.
      */
-    private void createUIResources(@NonNull Window window, @NonNull TextureHandler textureHandler) {
+    private void createUIResources(@NonNull Window window, @NonNull TextureLoader textureLoader) {
         ImGui.createContext();
 
         ImGuiIO imGuiIO = ImGui.getIO();
@@ -153,7 +149,7 @@ public class GuiRender {
         ImInt width = new ImInt();
         ImInt height = new ImInt();
         ByteBuffer buf = fontAtlas.getTexDataAsRGBA32(width, height);
-        font = textureHandler.load(buf, Format.R8G8B8A8_UINT, width.get(), height.get());
+        font = textureLoader.load(buf, Format.R8G8B8A8_UINT, width.get(), height.get());
         fontAtlas.setTexID(font.id());
 
         guiMesh = GuiMesh.create();
@@ -166,17 +162,13 @@ public class GuiRender {
         scale = new Vector2f();
     }
 
-    /**
-     * Render the GUI over the given scene.
-     *
-     * @param textureHandler The texture handler implementation to use.
-     */
-    public void render(@NonNull Window window, @NonNull TextureHandler textureHandler) {
+    /** Render the GUI over the given scene. */
+    public void render(@NonNull Window window) {
         WindowManager windowManager = GraphicsManager.getWindowManager();
         if (windowManager == null) {
             return;
         }
-        windowManager.drawGui(window.getWidth(), window.getHeight(), textureHandler);
+        windowManager.drawGui(window.getWidth(), window.getHeight());
 
         shaderProgram.bind();
 

@@ -5,8 +5,11 @@ import static org.lwjgl.glfw.GLFW.glfwSetErrorCallback;
 import static org.lwjgl.glfw.GLFW.glfwTerminate;
 
 import com.ikalagaming.graphics.backend.opengl.PipelineOpenGL;
+import com.ikalagaming.graphics.backend.opengl.TextureLoaderOpenGL;
 import com.ikalagaming.graphics.events.WindowCreated;
+import com.ikalagaming.graphics.frontend.DeletionQueue;
 import com.ikalagaming.graphics.frontend.Pipeline;
+import com.ikalagaming.graphics.frontend.TextureLoader;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
@@ -120,6 +123,11 @@ public class GraphicsManager {
      */
     @Getter private static final WindowManager windowManager = new WindowManager();
 
+    @Getter private static TextureLoader textureLoader;
+
+    /** A queue used to delete resources. */
+    @Getter private static final DeletionQueue deletionQueue = new DeletionQueue();
+
     /**
      * Creates a graphics window, fires off a {@link WindowCreated} event. Won't do anything if a
      * window already exists.
@@ -146,6 +154,7 @@ public class GraphicsManager {
                 SafeResourceLoader.getString("WINDOW_CREATED", GraphicsPlugin.getResourceBundle()));
         new WindowCreated(window.getWindowHandle()).fire();
 
+        textureLoader = new TextureLoaderOpenGL();
         render = new PipelineOpenGL();
         render.initialize(window);
 
@@ -157,7 +166,7 @@ public class GraphicsManager {
 
         cameraManager = new CameraManager(scene.getCamera(), window);
 
-        init();
+        render.setupData(scene);
 
         renderTimer = new Timer();
         renderTimer.init();
@@ -168,11 +177,6 @@ public class GraphicsManager {
         nextUpdateTime = renderTimer.getLastLoopTime() + UPDATE_TIME;
 
         lastTime = glfwGetTime();
-    }
-
-    /** Initialize the application. */
-    private static void init() {
-        render.setupData(scene);
     }
 
     /**

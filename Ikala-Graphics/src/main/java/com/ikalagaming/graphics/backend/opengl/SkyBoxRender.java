@@ -6,15 +6,13 @@
  */
 package com.ikalagaming.graphics.backend.opengl;
 
-import static org.lwjgl.opengl.GL11.GL_TRIANGLES;
-import static org.lwjgl.opengl.GL11.GL_UNSIGNED_INT;
-import static org.lwjgl.opengl.GL11.glDrawElements;
+import static org.lwjgl.opengl.GL11.*;
+import static org.lwjgl.opengl.GL11.GL_TEXTURE_2D;
 import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
 import static org.lwjgl.opengl.GL13.glActiveTexture;
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
 
 import com.ikalagaming.graphics.ShaderUniforms;
-import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Material;
 import com.ikalagaming.graphics.frontend.Shader;
@@ -72,9 +70,8 @@ public class SkyBoxRender {
      * Render the skybox.
      *
      * @param scene The scene to render.
-     * @param textureHandler The texture handler implementation to use.
      */
-    public void render(@NonNull Scene scene, @NonNull TextureHandler textureHandler) {
+    public void render(@NonNull Scene scene) {
         SkyBox skyBox = scene.getSkyBox();
 
         if (skyBox == null) {
@@ -102,7 +99,7 @@ public class SkyBoxRender {
         boolean hasTexture = false;
         if (texture != null) {
             glActiveTexture(GL_TEXTURE0);
-            textureHandler.bind(texture);
+            glBindTexture(GL_TEXTURE_2D, texture.id());
             hasTexture = true;
         }
 

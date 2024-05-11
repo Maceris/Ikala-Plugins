@@ -38,8 +38,8 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.GBufferHandler;
 import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
-import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.frontend.Pipeline;
+import com.ikalagaming.graphics.frontend.TextureLoader;
 import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
@@ -119,7 +119,7 @@ public class PipelineOpenGL implements Pipeline {
     /** The texture ID we render to before applying filters. */
     private int screenTexture;
 
-    private TextureHandler textureHandler;
+    private TextureLoader textureLoader;
     private QuadMeshHandler quadMeshHandler;
     private GBufferHandler gBufferHandler;
 
@@ -139,12 +139,12 @@ public class PipelineOpenGL implements Pipeline {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        textureHandler = new TextureHandlerOpenGL();
+        textureLoader = new TextureLoaderOpenGL();
         quadMeshHandler = new QuadMeshHandlerOpenGL();
         gBufferHandler = new GBufferHandlerOpenGL();
 
-        sceneRender = new SceneRender(textureHandler);
-        guiRender = new GuiRender(window, textureHandler);
+        sceneRender = new SceneRender(textureLoader);
+        guiRender = new GuiRender(window, textureLoader);
         skyBoxRender = new SkyBoxRender();
         shadowRender = new ShadowRender();
         lightRender = new LightRender(quadMeshHandler);
@@ -161,7 +161,7 @@ public class PipelineOpenGL implements Pipeline {
     @Override
     public void cleanup() {
         sceneRender.cleanup();
-        guiRender.cleanup(textureHandler);
+        guiRender.cleanup();
         skyBoxRender.cleanup();
         shadowRender.cleanup();
         lightRender.cleanup(quadMeshHandler);
@@ -253,7 +253,7 @@ public class PipelineOpenGL implements Pipeline {
                 glDisable(GL_TEXTURE_2D);
             }
 
-            sceneRender.render(scene, renderBuffers, gBuffer, commandBuffers, textureHandler);
+            sceneRender.render(scene, renderBuffers, gBuffer, commandBuffers);
 
             if (Pipeline.configuration.isWireframe()) {
                 glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -261,7 +261,7 @@ public class PipelineOpenGL implements Pipeline {
             }
             lightRenderStart(window);
             lightRender.render(scene, shadowRender, gBuffer);
-            skyBoxRender.render(scene, textureHandler);
+            skyBoxRender.render(scene);
             lightRenderFinish();
 
             filterRender.render(screenTexture);
@@ -271,7 +271,7 @@ public class PipelineOpenGL implements Pipeline {
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             glViewport(0, 0, window.getWidth(), window.getHeight());
         }
-        guiRender.render(window, textureHandler);
+        guiRender.render(window);
     }
 
     @Override

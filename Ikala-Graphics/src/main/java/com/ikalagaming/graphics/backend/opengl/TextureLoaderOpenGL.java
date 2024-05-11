@@ -3,10 +3,10 @@ package com.ikalagaming.graphics.backend.opengl;
 import static org.lwjgl.opengl.GL46.*;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
-import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.graphics.frontend.Format;
 import com.ikalagaming.graphics.frontend.Texture;
+import com.ikalagaming.graphics.frontend.TextureLoader;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
@@ -18,17 +18,7 @@ import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 
 @Slf4j
-public class TextureHandlerOpenGL implements TextureHandler {
-    @Override
-    public void bind(@NonNull Texture texture) {
-        glBindTexture(GL_TEXTURE_2D, texture.id());
-    }
-
-    @Override
-    public void cleanup(@NonNull Texture texture) {
-        glDeleteTextures(texture.id());
-    }
-
+public class TextureLoaderOpenGL implements TextureLoader {
     @Override
     public Texture load(
             @NonNull ByteBuffer buffer, @NonNull Format format, final int width, final int height) {

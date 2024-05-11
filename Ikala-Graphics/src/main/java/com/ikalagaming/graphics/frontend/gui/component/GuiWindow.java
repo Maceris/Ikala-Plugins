@@ -1,11 +1,8 @@
 package com.ikalagaming.graphics.frontend.gui.component;
 
-import com.ikalagaming.graphics.backend.base.TextureHandler;
-
 import imgui.ImGui;
 import imgui.flag.ImGuiCond;
 import imgui.type.ImBoolean;
-import lombok.NonNull;
 
 public class GuiWindow extends Component {
     protected final String title;
@@ -27,7 +24,7 @@ public class GuiWindow extends Component {
     }
 
     @Override
-    public void draw(final int width, final int height, @NonNull TextureHandler textureHandler) {
+    public void draw(final int width, final int height) {
         ImGui.setNextWindowViewport(ImGui.getMainViewport().getID());
         ImGui.setNextWindowPos(
                 getActualDisplaceX() * width, getActualDisplaceY() * height, ImGuiCond.Always);
@@ -35,7 +32,7 @@ public class GuiWindow extends Component {
                 getActualWidth() * width, getActualHeight() * height, ImGuiCond.Always);
         ImGui.begin(title, windowOpen, windowFlags);
 
-        super.draw(width, height, textureHandler);
+        super.draw(width, height);
 
         ImGui.end();
     }

@@ -2,7 +2,6 @@ package com.ikalagaming.graphics.frontend.gui;
 
 import com.ikalagaming.graphics.MouseInput;
 import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.frontend.gui.component.Component;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
 import com.ikalagaming.graphics.frontend.gui.component.MainToolbar;
@@ -56,17 +55,16 @@ public class WindowManager {
      *
      * @param width The width of the window, in pixels.
      * @param height The width of the height, in pixels.
-     * @param textureHandler The texture handler implementation to use.
      */
-    public void drawGui(final int width, final int height, @NonNull TextureHandler textureHandler) {
+    public void drawGui(final int width, final int height) {
         ImGui.newFrame();
 
         windows.values().stream()
                 .filter(Component::isVisible)
-                .forEach(window -> window.draw(width, height, textureHandler));
+                .forEach(window -> window.draw(width, height));
 
         if (toolbar != null) {
-            toolbar.draw(width, height, textureHandler);
+            toolbar.draw(width, height);
         }
 
         ImGui.endFrame();
