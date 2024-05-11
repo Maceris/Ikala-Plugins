@@ -35,10 +35,13 @@ import static org.lwjgl.opengl.GL30.glRenderbufferStorage;
 import static org.lwjgl.opengl.GL40.GL_DRAW_INDIRECT_BUFFER;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.GBufferHandler;
 import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
+import com.ikalagaming.graphics.frontend.DeletionQueue;
 import com.ikalagaming.graphics.frontend.Pipeline;
+import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.frontend.TextureLoader;
 import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.Model;
@@ -181,6 +184,20 @@ public class PipelineOpenGL implements Pipeline {
     }
 
     /**
+     * Process resource deletion.
+     *
+     * @param entry The deletion queue entry to handle.
+     */
+    private void deleteResource(@NonNull DeletionQueue.Entry entry) {
+        switch (entry.type()) {
+            case TEXTURE -> {
+                var texture = (Texture) entry.resource();
+                glDeleteTextures(texture.id());
+            }
+        }
+    }
+
+    /**
      * Generate new render buffers. {@link #deleteRenderBuffers()} should be called before doing
      * this if they already exist.
      *
@@ -238,6 +255,14 @@ public class PipelineOpenGL implements Pipeline {
         glEnable(GL_BLEND);
         glBlendEquation(GL_FUNC_ADD);
         glBlendFunc(GL_ONE, GL_ONE);
+    }
+
+    @Override
+    public void processResources() {
+        var toDelete = GraphicsManager.getDeletionQueue().pop();
+        if (toDelete != null) {
+            deleteResource(toDelete);
+        }
     }
 
     @Override

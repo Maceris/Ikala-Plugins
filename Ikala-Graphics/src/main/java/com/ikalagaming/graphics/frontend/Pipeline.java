@@ -21,6 +21,12 @@ public interface Pipeline {
     void cleanup();
 
     /**
+     * Do any periodic resource management that is required. Things like deleting resources in the
+     * resource queue.
+     */
+    void processResources();
+
+    /**
      * Render a scene on the window.
      *
      * @param window The window we are drawing in.

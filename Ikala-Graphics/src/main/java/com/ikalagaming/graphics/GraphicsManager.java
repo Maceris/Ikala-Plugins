@@ -256,6 +256,8 @@ public class GraphicsManager {
 
         ModelLoader.loadModel();
 
+        render.processResources();
+
         if (updateTimer.getTime() >= nextUpdateTime) {
             final float elapsedTime = updateTimer.getElapsedTime();
 

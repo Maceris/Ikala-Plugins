@@ -2,7 +2,6 @@ package com.ikalagaming.graphics.frontend;
 
 import lombok.NonNull;
 
-import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -37,9 +36,9 @@ public class DeletionQueue {
     /**
      * Fetch (and remove from the queue) the next item to be deleted.
      *
-     * @return An optional containing the object, or an empty optional if the queue is empty.
+     * @return The object to delete, or null if there is not one in the queue.
      */
-    public Optional<Entry> pop() {
-        return Optional.ofNullable(queue.poll());
+    public Entry pop() {
+        return queue.poll();
     }
 }
