@@ -11,8 +11,6 @@ import static org.lwjgl.opengl.GL11.GL_UNSIGNED_INT;
 import static org.lwjgl.opengl.GL11.glDrawElements;
 import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
 import static org.lwjgl.opengl.GL13.glActiveTexture;
-import static org.lwjgl.opengl.GL20.GL_FRAGMENT_SHADER;
-import static org.lwjgl.opengl.GL20.GL_VERTEX_SHADER;
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
 
 import com.ikalagaming.graphics.ShaderUniforms;
@@ -46,9 +44,9 @@ public class SkyBoxRender {
     public SkyBoxRender() {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/skybox.vert", GL_VERTEX_SHADER));
+                new Shader.ShaderModuleData("shaders/skybox.vert", Shader.Type.VERTEX));
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/skybox.frag", GL_FRAGMENT_SHADER));
+                new Shader.ShaderModuleData("shaders/skybox.frag", Shader.Type.FRAGMENT));
         shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         viewMatrix = new Matrix4f();
         createUniforms();

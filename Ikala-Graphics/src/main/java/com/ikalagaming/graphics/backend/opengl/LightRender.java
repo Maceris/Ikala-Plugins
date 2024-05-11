@@ -18,8 +18,6 @@ import static org.lwjgl.opengl.GL15.glBufferData;
 import static org.lwjgl.opengl.GL15.glBufferSubData;
 import static org.lwjgl.opengl.GL15.glDeleteBuffers;
 import static org.lwjgl.opengl.GL15.glGenBuffers;
-import static org.lwjgl.opengl.GL20.GL_FRAGMENT_SHADER;
-import static org.lwjgl.opengl.GL20.GL_VERTEX_SHADER;
 import static org.lwjgl.opengl.GL30.glBindBufferBase;
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
@@ -81,9 +79,9 @@ public class LightRender {
     public LightRender(@NonNull QuadMeshHandler quadMeshHandler) {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/lights.vert", GL_VERTEX_SHADER));
+                new Shader.ShaderModuleData("shaders/lights.vert", Shader.Type.VERTEX));
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/lights.frag", GL_FRAGMENT_SHADER));
+                new Shader.ShaderModuleData("shaders/lights.frag", Shader.Type.FRAGMENT));
         shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         quadMesh = new QuadMesh();
         quadMeshHandler.initialize(quadMesh);

@@ -18,8 +18,6 @@ import static org.lwjgl.opengl.GL11.glViewport;
 import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
 import static org.lwjgl.opengl.GL13.glActiveTexture;
 import static org.lwjgl.opengl.GL15.glBindBuffer;
-import static org.lwjgl.opengl.GL20.GL_FRAGMENT_SHADER;
-import static org.lwjgl.opengl.GL20.GL_VERTEX_SHADER;
 import static org.lwjgl.opengl.GL30.GL_DRAW_FRAMEBUFFER;
 import static org.lwjgl.opengl.GL30.glBindBufferBase;
 import static org.lwjgl.opengl.GL30.glBindFramebuffer;
@@ -82,9 +80,9 @@ public class SceneRender {
     public SceneRender(@NonNull TextureHandler textureHandler) {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/scene.vert", GL_VERTEX_SHADER));
+                new Shader.ShaderModuleData("shaders/scene.vert", Shader.Type.VERTEX));
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/scene.frag", GL_FRAGMENT_SHADER));
+                new Shader.ShaderModuleData("shaders/scene.frag", Shader.Type.FRAGMENT));
         shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         createUniforms();
         defaultTexture = textureHandler.load(DEFAULT_TEXTURE_PATH);

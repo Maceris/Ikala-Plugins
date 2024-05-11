@@ -8,7 +8,6 @@ package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.opengl.GL30.glBindBufferBase;
 import static org.lwjgl.opengl.GL42.glMemoryBarrier;
-import static org.lwjgl.opengl.GL43.GL_COMPUTE_SHADER;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BARRIER_BIT;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL43.glDispatchCompute;
@@ -37,7 +36,7 @@ public class AnimationRender {
     public AnimationRender() {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/anim.comp", GL_COMPUTE_SHADER));
+                new Shader.ShaderModuleData("shaders/anim.comp", Shader.Type.COMPUTE));
         shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         createUniforms();
     }

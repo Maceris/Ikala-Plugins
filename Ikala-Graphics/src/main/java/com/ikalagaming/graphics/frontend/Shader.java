@@ -1,7 +1,6 @@
 package com.ikalagaming.graphics.frontend;
 
 import lombok.NonNull;
-import org.lwjgl.opengl.GL20;
 
 /** A shader program. */
 public interface Shader {
@@ -9,16 +8,16 @@ public interface Shader {
      * A file and what type of shader that is.
      *
      * @param shaderFile The path to the shader file including name.
-     * @param shaderType The type of shader to be created. One of:<br>
-     *     <ul>
-     *       <li>{@link GL20#GL_VERTEX_SHADER VERTEX_SHADER}
-     *       <li>{@link org.lwjgl.opengl.GL46#GL_FRAGMENT_SHADER FRAGMENT_SHADER}
-     *       <li>{@link org.lwjgl.opengl.GL33#GL_GEOMETRY_SHADER GEOMETRY_SHADER}
-     *       <li>{@link org.lwjgl.opengl.GL46#GL_TESS_CONTROL_SHADER TESS_CONTROL_SHADER}
-     *       <li>{@link org.lwjgl.opengl.GL46#GL_TESS_EVALUATION_SHADER GL_TESS_EVALUATION_SHADER}
-     *     </ul>
+     * @param shaderType The type of shader to be created.
      */
-    record ShaderModuleData(@NonNull String shaderFile, int shaderType) {}
+    record ShaderModuleData(@NonNull String shaderFile, Type shaderType) {}
+
+    /** The type of shader module. */
+    enum Type {
+        VERTEX,
+        FRAGMENT,
+        COMPUTE
+    }
 
     /** Install this program as part of the current rendering state. */
     void bind();

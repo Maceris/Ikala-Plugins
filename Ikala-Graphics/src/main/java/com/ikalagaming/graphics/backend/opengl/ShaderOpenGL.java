@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.opengl.GL20.*;
 import static org.lwjgl.opengl.GL20.glGetProgramInfoLog;
+import static org.lwjgl.opengl.GL43.GL_COMPUTE_SHADER;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.exceptions.ShaderException;
@@ -20,6 +21,21 @@ import java.util.List;
 
 @Slf4j
 public class ShaderOpenGL implements Shader {
+
+    /**
+     * Map the shader type to an OpenGL constant version.
+     *
+     * @param type The type of shader.
+     * @return The corresponding OpenGL type.
+     */
+    private static int mapShaderType(@NonNull Shader.Type type) {
+        return switch (type) {
+            case VERTEX -> GL_VERTEX_SHADER;
+            case FRAGMENT -> GL_FRAGMENT_SHADER;
+            case COMPUTE -> GL_COMPUTE_SHADER;
+        };
+    }
+
     /** The Program ID for the program. */
     @Getter private final int programID;
 
@@ -50,7 +66,7 @@ public class ShaderOpenGL implements Shader {
                                                         GraphicsPlugin.PLUGIN_NAME,
                                                         PluginFolder.ResourceType.DATA,
                                                         data.shaderFile())),
-                                        data.shaderType())));
+                                        mapShaderType(data.shaderType()))));
 
         link(shaderModules);
         validate();

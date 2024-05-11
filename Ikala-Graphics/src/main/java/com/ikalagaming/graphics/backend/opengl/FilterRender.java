@@ -14,8 +14,6 @@ import static org.lwjgl.opengl.GL11.glDepthMask;
 import static org.lwjgl.opengl.GL11.glDrawElements;
 import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
 import static org.lwjgl.opengl.GL13.glActiveTexture;
-import static org.lwjgl.opengl.GL20.GL_FRAGMENT_SHADER;
-import static org.lwjgl.opengl.GL20.GL_VERTEX_SHADER;
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
@@ -91,10 +89,10 @@ public class FilterRender {
 
             shaderModuleDataList.add(
                     new Shader.ShaderModuleData(
-                            folderPath.concat(vert.getName()), GL_VERTEX_SHADER));
+                            folderPath.concat(vert.getName()), Shader.Type.VERTEX));
             shaderModuleDataList.add(
                     new Shader.ShaderModuleData(
-                            folderPath.concat(frag.getName()), GL_FRAGMENT_SHADER));
+                            folderPath.concat(frag.getName()), Shader.Type.FRAGMENT));
             Shader fullProgram = new ShaderOpenGL(shaderModuleDataList);
 
             // Clean up names

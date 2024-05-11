@@ -113,9 +113,10 @@ public class GuiRender {
      */
     public GuiRender(@NonNull Window window, @NonNull TextureHandler textureHandler) {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
-        shaderModuleDataList.add(new Shader.ShaderModuleData("shaders/gui.vert", GL_VERTEX_SHADER));
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/gui.frag", GL_FRAGMENT_SHADER));
+                new Shader.ShaderModuleData("shaders/gui.vert", Shader.Type.VERTEX));
+        shaderModuleDataList.add(
+                new Shader.ShaderModuleData("shaders/gui.frag", Shader.Type.FRAGMENT));
         shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         createUniforms();
         createUIResources(window, textureHandler);
