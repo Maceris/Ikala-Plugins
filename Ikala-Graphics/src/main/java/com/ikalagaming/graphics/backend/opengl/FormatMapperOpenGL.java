@@ -9,9 +9,13 @@ import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
 
+/** Used to map our generic formats to values that OpenGL can understand. */
 public class FormatMapperOpenGL {
 
+    /** Used for error messages. */
     private static final String UNSUPPORTED_TEXTURE_FORMAT = "UNSUPPORTED_TEXTURE_FORMAT";
+
+    /** The backend name in error messages. */
     private static final String BACKEND_NAME = "OpenGL";
 
     /**

@@ -27,7 +27,7 @@ public class CascadeShadow {
      * We calculate the splits once, and use the same values every time we calculate the cascade
      * shadows.
      */
-    private static float[] cachedSplits = new float[CascadeShadow.SHADOW_MAP_CASCADE_COUNT];
+    private static final float[] cachedSplits = new float[CascadeShadow.SHADOW_MAP_CASCADE_COUNT];
 
     static {
         final float nearClip = Projection.Z_NEAR;
@@ -108,14 +108,14 @@ public class CascadeShadow {
 
             // Get frustum center
             Vector3f frustumCenter = new Vector3f(0.0f);
-            for (int j = 0; j < frustumCorners.length; j++) {
-                frustumCenter.add(frustumCorners[j]);
+            for (Vector3f frustumCorner : frustumCorners) {
+                frustumCenter.add(frustumCorner);
             }
             frustumCenter.div(8.0f);
 
             float radius = 0.0f;
-            for (int j = 0; j < frustumCorners.length; j++) {
-                float distance = (new Vector3f(frustumCorners[j]).sub(frustumCenter)).length();
+            for (Vector3f frustumCorner : frustumCorners) {
+                float distance = (new Vector3f(frustumCorner).sub(frustumCenter)).length();
                 radius = Math.max(radius, distance);
             }
             radius = (float) Math.ceil(radius * 16.0f) / 16.0f;

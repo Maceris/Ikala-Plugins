@@ -36,6 +36,7 @@ import static org.lwjgl.opengl.GL40.GL_DRAW_INDIRECT_BUFFER;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.backend.base.GBufferHandler;
 import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
 import com.ikalagaming.graphics.frontend.Pipeline;
@@ -121,6 +122,7 @@ public class PipelineOpenGL implements Pipeline {
 
     private TextureHandler textureHandler;
     private QuadMeshHandler quadMeshHandler;
+    private GBufferHandler gBufferHandler;
 
     /** Set up a new rendering pipeline. */
     public PipelineOpenGL() {
@@ -140,6 +142,8 @@ public class PipelineOpenGL implements Pipeline {
 
         textureHandler = new TextureHandlerOpenGL();
         quadMeshHandler = new QuadMeshHandlerOpenGL();
+        gBufferHandler = new GBufferHandlerOpenGL();
+
         sceneRender = new SceneRender(textureHandler);
         guiRender = new GuiRender(window, textureHandler);
         skyBoxRender = new SkyBoxRender();
@@ -147,7 +151,8 @@ public class PipelineOpenGL implements Pipeline {
         lightRender = new LightRender(quadMeshHandler);
         animationRender = new AnimationRender();
         filterRender = new FilterRender(quadMeshHandler);
-        gBuffer = new GBuffer(window);
+        gBuffer = new GBuffer();
+        gBufferHandler.initialize(gBuffer, window);
         renderBuffers = new RenderBuffers();
         commandBuffers = new CommandBuffer();
 
@@ -163,7 +168,7 @@ public class PipelineOpenGL implements Pipeline {
         lightRender.cleanup(quadMeshHandler);
         animationRender.cleanup();
         filterRender.cleanup(quadMeshHandler);
-        gBuffer.cleanUp();
+        gBufferHandler.cleanup(gBuffer);
         renderBuffers.cleanup();
         commandBuffers.cleanup();
         deleteRenderBuffers();
