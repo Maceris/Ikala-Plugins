@@ -17,10 +17,10 @@ import static org.lwjgl.opengl.GL30.glBindVertexArray;
 
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
+import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Material;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
-import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.SkyBox;
@@ -61,7 +61,7 @@ public class SkyBoxRender {
 
     /** Set up uniforms for the shader. */
     private void createUniforms() {
-        uniformsMap = new UniformsMap(shaderProgram.getProgramID());
+        uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
         uniformsMap.createUniform(ShaderUniforms.Skybox.PROJECTION_MATRIX);
         uniformsMap.createUniform(ShaderUniforms.Skybox.VIEW_MATRIX);
         uniformsMap.createUniform(ShaderUniforms.Skybox.MODEL_MATRIX);

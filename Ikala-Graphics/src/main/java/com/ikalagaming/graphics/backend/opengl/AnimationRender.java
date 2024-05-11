@@ -14,9 +14,9 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL43.glDispatchCompute;
 
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.Model;
-import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 
@@ -49,7 +49,7 @@ public class AnimationRender {
 
     /** Create the uniforms for the compute shader. */
     private void createUniforms() {
-        uniformsMap = new UniformsMap(shaderProgram.getProgramID());
+        uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
         uniformsMap.createUniform(
                 ShaderUniforms.Animation.DRAW_PARAMETERS
                         + "."

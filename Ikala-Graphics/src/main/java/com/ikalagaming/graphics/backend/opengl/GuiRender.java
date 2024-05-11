@@ -29,11 +29,11 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
+import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Format;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
-import com.ikalagaming.graphics.graph.UniformsMap;
 
 import imgui.ImDrawData;
 import imgui.ImFontAtlas;
@@ -160,7 +160,7 @@ public class GuiRender {
 
     /** Set up uniforms for the GUI shader. */
     private void createUniforms() {
-        uniformsMap = new UniformsMap(shaderProgram.getProgramID());
+        uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
         uniformsMap.createUniform(ShaderUniforms.GUI.SCALE);
         scale = new Vector2f();
     }

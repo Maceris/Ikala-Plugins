@@ -1,10 +1,4 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
-package com.ikalagaming.graphics.graph;
+package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.opengl.GL20.glGetUniformLocation;
 import static org.lwjgl.opengl.GL20.glUniform1f;
@@ -15,6 +9,7 @@ import static org.lwjgl.opengl.GL20.glUniform4f;
 import static org.lwjgl.opengl.GL20.glUniformMatrix4fv;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
+import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -30,9 +25,8 @@ import java.nio.FloatBuffer;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Allows for creation and usage of uniforms for a shader program. */
 @Slf4j
-public class UniformsMap {
+public class UniformsMapOpenGL implements UniformsMap {
     /** The shader program identifier. */
     private final int programID;
 
@@ -44,17 +38,12 @@ public class UniformsMap {
      *
      * @param programId The shader program identifier.
      */
-    public UniformsMap(int programId) {
+    public UniformsMapOpenGL(int programId) {
         programID = programId;
         uniforms = new HashMap<>();
     }
 
-    /**
-     * Create a new uniform, which should match the one defined in the shader code.
-     *
-     * @param uniformName The name of the new uniform.
-     * @throws RuntimeException If the uniform isn't found.
-     */
+    @Override
     public void createUniform(@NonNull String uniformName) {
         int uniformLocation = glGetUniformLocation(programID, uniformName);
         if (uniformLocation < 0) {
@@ -75,7 +64,7 @@ public class UniformsMap {
      *
      * @param uniformName The name of the uniform.
      * @return The uniform location.
-     * @throws RuntimeException If the uniform can't be found.
+     * @throws ShaderException If the uniform can't be found.
      */
     private int getUniformLocation(@NonNull String uniformName) {
         Integer location = uniforms.get(uniformName);
@@ -89,32 +78,17 @@ public class UniformsMap {
         return location;
     }
 
-    /**
-     * Set a float uniform.
-     *
-     * @param uniformName The name of the uniform.
-     * @param value The value to set.
-     */
+    @Override
     public void setUniform(@NonNull String uniformName, float value) {
         glUniform1f(getUniformLocation(uniformName), value);
     }
 
-    /**
-     * Set an int uniform.
-     *
-     * @param uniformName The name of the uniform.
-     * @param value The value to set.
-     */
+    @Override
     public void setUniform(@NonNull String uniformName, int value) {
         glUniform1i(getUniformLocation(uniformName), value);
     }
 
-    /**
-     * Set a Matrix4f uniform.
-     *
-     * @param uniformName The name of the uniform.
-     * @param value The value to set.
-     */
+    @Override
     public void setUniform(@NonNull String uniformName, @NonNull Matrix4f value) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             glUniformMatrix4fv(
@@ -122,12 +96,7 @@ public class UniformsMap {
         }
     }
 
-    /**
-     * Set a uniform of matrix arrays.
-     *
-     * @param uniformName The name of the uniform.
-     * @param matrices The values to set.
-     */
+    @Override
     public void setUniform(@NonNull String uniformName, @NonNull Matrix4f[] matrices) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             final int length = matrices.length;
@@ -139,32 +108,17 @@ public class UniformsMap {
         }
     }
 
-    /**
-     * Set a Vector2f uniform.
-     *
-     * @param uniformName The name of the uniform.
-     * @param value The value to set.
-     */
+    @Override
     public void setUniform(@NonNull String uniformName, @NonNull Vector2f value) {
         glUniform2f(getUniformLocation(uniformName), value.x, value.y);
     }
 
-    /**
-     * Set a Vector3f uniform.
-     *
-     * @param uniformName The name of the uniform.
-     * @param value The value to set.
-     */
+    @Override
     public void setUniform(@NonNull String uniformName, @NonNull Vector3f value) {
         glUniform3f(getUniformLocation(uniformName), value.x, value.y, value.z);
     }
 
-    /**
-     * Set a Vector4f uniform.
-     *
-     * @param uniformName The name of the uniform.
-     * @param value The value to set.
-     */
+    @Override
     public void setUniform(@NonNull String uniformName, @NonNull Vector4f value) {
         glUniform4f(getUniformLocation(uniformName), value.x, value.y, value.z, value.w);
     }

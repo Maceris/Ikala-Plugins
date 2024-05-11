@@ -26,11 +26,11 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
+import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.QuadMesh;
-import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Fog;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
@@ -101,7 +101,7 @@ public class LightRender {
 
     /** Set up the uniforms for the shader program. */
     private void createUniforms() {
-        uniformsMap = new UniformsMap(shaderProgram.getProgramID());
+        uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
         uniformsMap.createUniform(ShaderUniforms.Light.ALBEDO_SAMPLER);
         uniformsMap.createUniform(ShaderUniforms.Light.NORMAL_SAMPLER);
         uniformsMap.createUniform(ShaderUniforms.Light.SPECULAR_SAMPLER);

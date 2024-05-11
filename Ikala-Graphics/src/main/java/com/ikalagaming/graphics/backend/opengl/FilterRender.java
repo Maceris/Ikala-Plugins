@@ -21,10 +21,10 @@ import static org.lwjgl.opengl.GL30.glBindVertexArray;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
+import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Pipeline;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.QuadMesh;
-import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.plugins.config.ConfigManager;
@@ -147,7 +147,7 @@ public class FilterRender {
      * @param defaultFilter The name of the default shader, which should have the standard uniforms.
      */
     private void createUniforms(@NonNull final String defaultFilter) {
-        uniformsMap = new UniformsMap(shaders.get(defaultFilter).getProgramID());
+        uniformsMap = new UniformsMapOpenGL(shaders.get(defaultFilter).getProgramID());
         uniformsMap.createUniform(ShaderUniforms.Filter.SCREEN_TEXTURE);
     }
 

@@ -35,10 +35,10 @@ import static org.lwjgl.opengl.GL43.glMultiDrawElementsIndirect;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.CascadeShadow;
-import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -145,7 +145,7 @@ public class ShadowRender {
 
     /** Create the uniforms for the shadow shader. */
     private void createUniforms() {
-        uniformsMap = new UniformsMap(shaderProgram.getProgramID());
+        uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
         uniformsMap.createUniform(ShaderUniforms.Shadow.PROJECTION_VIEW_MATRIX);
     }
 

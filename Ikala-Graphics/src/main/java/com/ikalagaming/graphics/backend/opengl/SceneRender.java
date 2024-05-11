@@ -31,12 +31,12 @@ import static org.lwjgl.opengl.GL43.glMultiDrawElementsIndirect;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.TextureHandler;
+import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Material;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.MaterialCache;
-import com.ikalagaming.graphics.graph.UniformsMap;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.PluginFolder;
 
@@ -97,7 +97,7 @@ public class SceneRender {
 
     /** Set up the uniforms for the shader. */
     private void createUniforms() {
-        uniformsMap = new UniformsMap(shaderProgram.getProgramID());
+        uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
         uniformsMap.createUniform(ShaderUniforms.Scene.PROJECTION_MATRIX);
         uniformsMap.createUniform(ShaderUniforms.Scene.VIEW_MATRIX);
 
