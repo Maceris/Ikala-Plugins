@@ -27,7 +27,7 @@ public class Scene {
     /**
      * The camera for the scene.
      *
-     * @return The scenes camera.
+     * @return The scene's camera.
      */
     private Camera camera;
 
@@ -63,14 +63,6 @@ public class Scene {
      * @return The lights used in the scene.
      */
     @NonNull private SceneLights sceneLights;
-
-    /**
-     * The backdrop for the scene.
-     *
-     * @param skyBox The new skybox.
-     * @return The skybox to draw.
-     */
-    @Setter private SkyBox skyBox;
 
     /** A list of entities that we tried to add, but did not yet have models loaded. */
     private List<Entity> entityQueue;

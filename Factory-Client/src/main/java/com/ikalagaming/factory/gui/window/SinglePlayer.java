@@ -18,7 +18,6 @@ import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.graphics.scene.SkyBox;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.PointLight;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -145,10 +144,5 @@ public class SinglePlayer extends GuiWindow {
         Pipeline.configuration.setRenderingScene(true);
         GraphicsManager.getScene().getCamera().setPosition(1.86f, 2.43f, 2.33f);
         GraphicsManager.getScene().getCamera().setRotation(0.64f, 5.62f);
-        GraphicsManager.getScene()
-                .setSkyBox(
-                        new SkyBox(
-                                "models/skybox/skybox.obj",
-                                GraphicsManager.getScene().getMaterialCache()));
     }
 }
