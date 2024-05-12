@@ -20,6 +20,7 @@ import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.PointLight;
+import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import imgui.flag.ImGuiWindowFlags;
@@ -144,5 +145,14 @@ public class SinglePlayer extends GuiWindow {
         Pipeline.configuration.setRenderingScene(true);
         GraphicsManager.getScene().getCamera().setPosition(1.86f, 2.43f, 2.33f);
         GraphicsManager.getScene().getCamera().setRotation(0.64f, 5.62f);
+
+        var texturePath =
+                PluginFolder.getResource(
+                                FactoryClientPlugin.PLUGIN_NAME,
+                                PluginFolder.ResourceType.DATA,
+                                "textures/skybox.png")
+                        .getAbsolutePath();
+        GraphicsManager.getScene()
+                .setSkyboxTexture(GraphicsManager.getTextureLoader().load(texturePath));
     }
 }

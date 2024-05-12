@@ -16,19 +16,14 @@ import static org.lwjgl.opengl.GL20.glEnableVertexAttribArray;
 import static org.lwjgl.opengl.GL20.glVertexAttribPointer;
 import static org.lwjgl.opengl.GL30.*;
 
-import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
-import com.ikalagaming.graphics.frontend.Material;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.launcher.PluginFolder;
 
 import lombok.NonNull;
 import org.joml.Matrix4f;
-import org.joml.Vector4f;
 import org.lwjgl.system.MemoryStack;
 
 import java.nio.FloatBuffer;
@@ -57,8 +52,6 @@ public class SkyBoxRender {
     /** The number of vertices in the skybox mesh. */
     private int vertexCount;
 
-    private final Material skyboxMaterial;
-
     /** Set up the renderer. */
     public SkyBoxRender() {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
@@ -70,18 +63,6 @@ public class SkyBoxRender {
         viewMatrix = new Matrix4f();
         createUniforms();
         setupBuffers();
-        skyboxMaterial = new Material();
-        skyboxMaterial.setDiffuseColor(new Vector4f(0.65f, 0.65f, 0.65f, 1f));
-        skyboxMaterial.setAmbientColor(new Vector4f(0.65f, 0.65f, 0.65f, 1f));
-        skyboxMaterial.setSpecularColor(new Vector4f(0.65f, 0.65f, 0.65f, 1f));
-        skyboxMaterial.setReflectance(0f);
-        var texturePath =
-                PluginFolder.getResource(
-                                GraphicsPlugin.PLUGIN_NAME,
-                                PluginFolder.ResourceType.DATA,
-                                "textures/skybox.png")
-                        .getAbsolutePath();
-        skyboxMaterial.setTexture(GraphicsManager.getTextureLoader().load(texturePath));
     }
 
     /** Load the mesh data into VBOs. */
@@ -235,9 +216,9 @@ public class SkyBoxRender {
         uniformsMap.setUniform(ShaderUniforms.Skybox.VIEW_MATRIX, viewMatrix);
         uniformsMap.setUniform(ShaderUniforms.Skybox.TEXTURE_SAMPLER, 0);
 
-        uniformsMap.setUniform(ShaderUniforms.Skybox.DIFFUSE, skyboxMaterial.getDiffuseColor());
+        uniformsMap.setUniform(ShaderUniforms.Skybox.DIFFUSE, scene.getSkyboxDiffuse());
 
-        Texture texture = skyboxMaterial.getTexture();
+        Texture texture = scene.getSkyboxTexture();
         boolean hasTexture = false;
         if (texture != null) {
             glActiveTexture(GL_TEXTURE0);

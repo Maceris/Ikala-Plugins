@@ -6,6 +6,8 @@
  */
 package com.ikalagaming.graphics.scene;
 
+import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
@@ -13,6 +15,7 @@ import com.ikalagaming.graphics.scene.lights.SceneLights;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
+import org.joml.Vector4f;
 
 import java.util.Collections;
 import java.util.Iterator;
@@ -29,7 +32,7 @@ public class Scene {
      *
      * @return The scene's camera.
      */
-    private Camera camera;
+    private final Camera camera;
 
     /**
      * The fog for the scene.
@@ -44,17 +47,17 @@ public class Scene {
      *
      * @return The material cache.
      */
-    private MaterialCache materialCache;
+    private final MaterialCache materialCache;
 
     /** The list of models, mapped by ID. */
-    private Map<String, Model> modelMap;
+    private final Map<String, Model> modelMap;
 
     /**
      * The projection matrix for the scene.
      *
      * @return The projection matrix information.
      */
-    private Projection projection;
+    private final Projection projection;
 
     /**
      * The scene lighting information.
@@ -62,10 +65,19 @@ public class Scene {
      * @param sceneLights The lights to render with.
      * @return The lights used in the scene.
      */
-    @NonNull private SceneLights sceneLights;
+    @NonNull private final SceneLights sceneLights;
 
     /** A list of entities that we tried to add, but did not yet have models loaded. */
-    private List<Entity> entityQueue;
+    private final List<Entity> entityQueue;
+
+    /**
+     * The texture of the skybox, which may be null if we want the sky to be just a single diffuse
+     * color.
+     */
+    private Texture skyboxTexture;
+
+    /** The diffuse color of the skybox, for use when there is no texture. */
+    private final Vector4f skyboxDiffuse;
 
     /**
      * Set up a new scene.
@@ -81,6 +93,7 @@ public class Scene {
         camera = new Camera();
         fog = new Fog();
         entityQueue = Collections.synchronizedList(new LinkedList<>());
+        skyboxDiffuse = new Vector4f(0.65f, 0.65f, 0.65f, 1f);
     }
 
     /**
@@ -123,5 +136,17 @@ public class Scene {
      */
     public void resize(int width, int height) {
         projection.updateProjMatrix(width, height);
+    }
+
+    /**
+     * Set the new skybox texture.
+     *
+     * @param texture The texture, or null if the skybox should be untextured.
+     */
+    public void setSkyboxTexture(Texture texture) {
+        if (skyboxTexture != null) {
+            GraphicsManager.getDeletionQueue().add(skyboxTexture);
+        }
+        skyboxTexture = texture;
     }
 }
