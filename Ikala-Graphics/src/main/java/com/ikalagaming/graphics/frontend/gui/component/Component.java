@@ -3,7 +3,6 @@ package com.ikalagaming.graphics.frontend.gui.component;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
 import com.ikalagaming.graphics.frontend.gui.util.Rect;
-import com.ikalagaming.graphics.frontend.gui.util.Style;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.Getter;
@@ -24,17 +23,6 @@ public class Component implements Drawable {
 
     /** Whether the component should show. */
     @Setter protected boolean visible;
-
-    /** The style to use if a component does not have a style specifically set. */
-    @Getter @Setter
-    private static Style defaultStyle =
-            new Style(Style.Shape.SQUARE, Style.ColorScheme.BLUE, true, true);
-
-    /**
-     * The style to use in drawing the component. If it is null, the default style is used. If not
-     * null, it overrides the default.
-     */
-    @Setter private Style style;
 
     /**
      * How far from the alignment edge the component should be placed. The x and y values are floats
@@ -286,20 +274,6 @@ public class Component implements Drawable {
      */
     public float getLocalWidth() {
         return scale.x;
-    }
-
-    /**
-     * Returns an actual reference to the current component style. If one does not exist, the
-     * default style is returned instead. This should not be modified without proper thread safety
-     * in mind as it could cause unpredictable results otherwise.
-     *
-     * @return The current component style object, or if null, the default style.
-     */
-    protected Style getStyle() {
-        if (style == null) {
-            return Component.getDefaultStyle();
-        }
-        return style;
     }
 
     /**

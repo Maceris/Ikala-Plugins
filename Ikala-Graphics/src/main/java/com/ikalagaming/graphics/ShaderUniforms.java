@@ -294,9 +294,6 @@ public class ShaderUniforms {
         /** Whether there is a texture, 1 if enabled. */
         public static final String HAS_TEXTURE = "hasTexture";
 
-        /** The model transformation matrix. */
-        public static final String MODEL_MATRIX = "modelMatrix";
-
         /** Used to calculate the position when projected onto the screen space. */
         public static final String PROJECTION_MATRIX = "projectionMatrix";
 
