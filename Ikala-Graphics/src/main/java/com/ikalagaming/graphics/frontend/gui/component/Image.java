@@ -1,7 +1,5 @@
 package com.ikalagaming.graphics.frontend.gui.component;
 
-import static org.lwjgl.opengl.GL11.*;
-
 import com.ikalagaming.graphics.frontend.Texture;
 
 import imgui.ImGui;
@@ -18,9 +16,7 @@ public class Image extends Component {
     public void draw(final int width, final int height) {
         ImGui.setCursorPosX(getActualDisplaceX() * width - ImGui.getWindowPosX());
         ImGui.setCursorPosY(getActualDisplaceY() * height - ImGui.getWindowPosY());
-        if (texture != null && glIsTexture(texture.id())) {
-            // TODO(ches) move this to the render backend
-            glBindTexture(GL_TEXTURE_2D, texture.id());
+        if (texture != null) {
             ImGui.image(texture.id(), getActualWidth() * width, getActualHeight() * height);
         } else {
             ImGui.text("x");

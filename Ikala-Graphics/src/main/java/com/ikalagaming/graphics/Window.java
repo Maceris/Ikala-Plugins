@@ -7,8 +7,6 @@
 package com.ikalagaming.graphics;
 
 import static org.lwjgl.glfw.GLFW.*;
-import static org.lwjgl.opengl.GL11.GL_FALSE;
-import static org.lwjgl.opengl.GL11.GL_TRUE;
 
 import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.graphics.exceptions.WindowCreationException;
@@ -111,8 +109,8 @@ public class Window {
         }
 
         glfwDefaultWindowHints();
-        glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
-        glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
         if (opts.antiAliasing) {
             glfwWindowHint(GLFW_SAMPLES, 4);
@@ -123,7 +121,7 @@ public class Window {
             glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
         } else {
             glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-            glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+            glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
         }
 
         if (opts.width > 0 && opts.height > 0) {
@@ -132,6 +130,13 @@ public class Window {
         } else {
             glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
             GLFWVidMode vidMode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+            if (vidMode == null) {
+                String error =
+                        SafeResourceLoader.getString(
+                                "WINDOW_ERROR_CREATION", GraphicsPlugin.getResourceBundle());
+                log.warn(error);
+                throw new WindowCreationException(error);
+            }
             width = vidMode.width();
             height = vidMode.height();
         }

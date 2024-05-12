@@ -112,7 +112,7 @@ public class SkyBox {
      *
      * @param meshData The data to load.
      */
-    private void setupBuffers(MeshData meshData) {
+    private void setupBuffers(@NonNull MeshData meshData) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             vertexCount = meshData.getIndices().length;
             vboIDList = new int[VBO_COUNT];
@@ -135,11 +135,11 @@ public class SkyBox {
             glVertexAttribPointer(0, 3, GL_FLOAT, false, 0, 0);
 
             // Texture coordinates VBO
-            FloatBuffer textCoordsBuffer =
+            FloatBuffer textureCoordinatesBuffer =
                     stack.callocFloat(meshData.getTextureCoordinates().length);
-            textCoordsBuffer.put(0, meshData.getTextureCoordinates());
+            textureCoordinatesBuffer.put(0, meshData.getTextureCoordinates());
             glBindBuffer(GL_ARRAY_BUFFER, vboTextureCoordinates);
-            glBufferData(GL_ARRAY_BUFFER, textCoordsBuffer, GL_STATIC_DRAW);
+            glBufferData(GL_ARRAY_BUFFER, textureCoordinatesBuffer, GL_STATIC_DRAW);
             glEnableVertexAttribArray(1);
             glVertexAttribPointer(1, 2, GL_FLOAT, false, 0, 0);
 
