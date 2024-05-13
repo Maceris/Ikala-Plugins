@@ -24,8 +24,8 @@ public class WorldGenerator {
      */
     private static final int WORLD_HEIGHT_SCALE = World.WORLD_HEIGHT_TOTAL / 4;
 
-    private static Map<String, BiomeParameters> biomes = new HashMap<>();
-    private static Map<String, Byte> biomeEncoding = new HashMap<>();
+    private static final Map<String, BiomeParameters> biomes = new HashMap<>();
+    private static final Map<String, Byte> biomeEncoding = new HashMap<>();
 
     /**
      * Convert from the height parameter to the actual world height in blocks. This serves as the
@@ -94,7 +94,7 @@ public class WorldGenerator {
                         ParameterPack.generateParameters(
                                 RandomGen::generateSimplexNoise, seed, actualX, actualZ);
                 var biomeName = pickBiome(biomes, params, actualX, actualZ);
-                chunk.biomes[x][z] = biomeEncoding.get(biomeName);
+                chunk.setBiome(x, z, biomeEncoding.get(biomeName));
             }
         }
         return chunk;

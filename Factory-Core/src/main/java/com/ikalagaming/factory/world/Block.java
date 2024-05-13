@@ -1,11 +1,16 @@
 package com.ikalagaming.factory.world;
 
-import java.util.List;
+import com.ikalagaming.factory.kvt.KVT;
 
+import lombok.*;
+
+@Getter
+@Setter
+@AllArgsConstructor
+@EqualsAndHashCode
 public class Block {
+    /** The fully qualified name. */
+    private final @NonNull String name;
 
-    private String modName;
-    private String identifier;
-    private Material material;
-    private List<String> tags;
+    private KVT data;
 }
