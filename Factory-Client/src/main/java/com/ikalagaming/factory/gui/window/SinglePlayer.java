@@ -153,6 +153,7 @@ public class SinglePlayer extends GuiWindow {
                                 "textures/skybox.png")
                         .getAbsolutePath();
         GraphicsManager.getScene()
-                .setSkyboxTexture(GraphicsManager.getTextureLoader().load(texturePath));
+                .setSkyboxTexture(
+                        GraphicsManager.getRenderInstance().getTextureLoader().load(texturePath));
     }
 }

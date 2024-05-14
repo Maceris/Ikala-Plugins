@@ -61,7 +61,7 @@ public class Window {
     }
 
     /**
-     * The OpenGL window handle.
+     * The GLFW window handle.
      *
      * @return The window handle.
      */

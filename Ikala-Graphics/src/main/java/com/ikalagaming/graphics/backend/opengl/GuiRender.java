@@ -147,7 +147,8 @@ public class GuiRender {
         ImInt height = new ImInt();
         ByteBuffer buf = fontAtlas.getTexDataAsRGBA32(width, height);
         font =
-                GraphicsManager.getTextureLoader()
+                GraphicsManager.getRenderInstance()
+                        .getTextureLoader()
                         .load(buf, Format.R8G8B8A8_UINT, width.get(), height.get());
         fontAtlas.setTexID(font.id());
 

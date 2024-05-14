@@ -74,7 +74,8 @@ public class SceneRender {
                 new Shader.ShaderModuleData("shaders/scene.frag", Shader.Type.FRAGMENT));
         shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         createUniforms();
-        defaultTexture = GraphicsManager.getTextureLoader().load(DEFAULT_TEXTURE_PATH);
+        defaultTexture =
+                GraphicsManager.getRenderInstance().getTextureLoader().load(DEFAULT_TEXTURE_PATH);
     }
 
     /** Clean up buffers and shaders. */

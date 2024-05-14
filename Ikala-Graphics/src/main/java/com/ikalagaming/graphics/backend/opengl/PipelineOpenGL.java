@@ -35,20 +35,16 @@ import static org.lwjgl.opengl.GL30.glRenderbufferStorage;
 import static org.lwjgl.opengl.GL40.GL_DRAW_INDIRECT_BUFFER;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
-import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.GBufferHandler;
 import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
-import com.ikalagaming.graphics.frontend.DeletionQueue;
 import com.ikalagaming.graphics.frontend.Pipeline;
-import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
-import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
@@ -131,7 +127,6 @@ public class PipelineOpenGL implements Pipeline {
 
     @Override
     public void initialize(@NonNull Window window) {
-        GL.createCapabilities();
         glEnable(GL_MULTISAMPLE);
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
@@ -178,20 +173,6 @@ public class PipelineOpenGL implements Pipeline {
         glDeleteRenderbuffers(screenRBODepth);
         glDeleteFramebuffers(screenFBO);
         glDeleteTextures(screenTexture);
-    }
-
-    /**
-     * Process resource deletion.
-     *
-     * @param entry The deletion queue entry to handle.
-     */
-    private void deleteResource(@NonNull DeletionQueue.Entry entry) {
-        switch (entry.type()) {
-            case TEXTURE -> {
-                var texture = (Texture) entry.resource();
-                glDeleteTextures(texture.id());
-            }
-        }
     }
 
     /**
@@ -252,14 +233,6 @@ public class PipelineOpenGL implements Pipeline {
         glEnable(GL_BLEND);
         glBlendEquation(GL_FUNC_ADD);
         glBlendFunc(GL_ONE, GL_ONE);
-    }
-
-    @Override
-    public void processResources() {
-        var toDelete = GraphicsManager.getDeletionQueue().pop();
-        if (toDelete != null) {
-            deleteResource(toDelete);
-        }
     }
 
     @Override

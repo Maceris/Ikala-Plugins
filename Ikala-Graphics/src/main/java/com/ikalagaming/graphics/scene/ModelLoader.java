@@ -710,7 +710,8 @@ public class ModelLoader {
             if (texturePath != null && texturePath.length() > 0) {
                 texturePath = modelDir + File.separator + new File(texturePath).getName();
                 // TODO(ches) find a way to defer texture loading
-                material.setTexture(GraphicsManager.getTextureLoader().load(texturePath));
+                material.setTexture(
+                        GraphicsManager.getRenderInstance().getTextureLoader().load(texturePath));
                 material.setDiffuseColor(Material.DEFAULT_COLOR);
             }
 
@@ -730,7 +731,8 @@ public class ModelLoader {
             if (normalMapPath != null && normalMapPath.length() > 0) {
                 normalMapPath = modelDir + File.separator + new File(normalMapPath).getName();
                 // TODO(ches) find a way to defer texture loading
-                material.setNormalMap(GraphicsManager.getTextureLoader().load(normalMapPath));
+                material.setNormalMap(
+                        GraphicsManager.getRenderInstance().getTextureLoader().load(normalMapPath));
             }
 
             return material;

@@ -4,12 +4,10 @@ import static org.lwjgl.glfw.GLFW.glfwGetTime;
 import static org.lwjgl.glfw.GLFW.glfwSetErrorCallback;
 import static org.lwjgl.glfw.GLFW.glfwTerminate;
 
-import com.ikalagaming.graphics.backend.opengl.PipelineOpenGL;
-import com.ikalagaming.graphics.backend.opengl.TextureLoaderOpenGL;
+import com.ikalagaming.graphics.backend.opengl.OpenGLInstance;
 import com.ikalagaming.graphics.events.WindowCreated;
 import com.ikalagaming.graphics.frontend.DeletionQueue;
-import com.ikalagaming.graphics.frontend.Pipeline;
-import com.ikalagaming.graphics.frontend.TextureLoader;
+import com.ikalagaming.graphics.frontend.Instance;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
@@ -45,11 +43,11 @@ public class GraphicsManager {
     @Getter private static Scene scene;
 
     /**
-     * The rendering pipeline.
+     * The rendering instance.
      *
-     * @return The render pipeline.
+     * @return The rendering instance.
      */
-    @Getter private static Pipeline render;
+    @Getter private static Instance renderInstance;
 
     /**
      * The camera manager.
@@ -123,8 +121,6 @@ public class GraphicsManager {
      */
     @Getter private static final WindowManager windowManager = new WindowManager();
 
-    @Getter private static TextureLoader textureLoader;
-
     /** A queue used to delete resources. */
     @Getter private static final DeletionQueue deletionQueue = new DeletionQueue();
 
@@ -154,9 +150,8 @@ public class GraphicsManager {
                 SafeResourceLoader.getString("WINDOW_CREATED", GraphicsPlugin.getResourceBundle()));
         new WindowCreated(window.getWindowHandle()).fire();
 
-        textureLoader = new TextureLoaderOpenGL();
-        render = new PipelineOpenGL();
-        render.initialize(window);
+        renderInstance = new OpenGLInstance();
+        renderInstance.initialize(window);
 
         log.debug(
                 SafeResourceLoader.getString(
@@ -166,7 +161,7 @@ public class GraphicsManager {
 
         cameraManager = new CameraManager(scene.getCamera(), window);
 
-        render.setupData(scene);
+        renderInstance.getPipeline().setupData(scene);
 
         renderTimer = new Timer();
         renderTimer.init();
@@ -195,7 +190,7 @@ public class GraphicsManager {
 
     /** Render to the screen. */
     private static void render() {
-        render.render(window, scene);
+        renderInstance.getPipeline().render(window, scene);
 
         window.update();
         ++framesSinceLastCalculation;
@@ -212,14 +207,14 @@ public class GraphicsManager {
         int width = window.getWidth();
         int height = window.getHeight();
         scene.resize(width, height);
-        render.resize(width, height);
+        renderInstance.getPipeline().resize(width, height);
     }
 
     /**
      * Terminate GLFW and free the error callback. If any windows still remain, they are destroyed.
      */
     public static void terminate() {
-        render.cleanup();
+        renderInstance.cleanup();
 
         if (null != window) {
             window.destroy();
@@ -256,7 +251,7 @@ public class GraphicsManager {
 
         ModelLoader.loadModel();
 
-        render.processResources();
+        renderInstance.processResources();
 
         if (updateTimer.getTime() >= nextUpdateTime) {
             final float elapsedTime = updateTimer.getElapsedTime();
@@ -267,7 +262,7 @@ public class GraphicsManager {
             windowManager.handleGuiInput(scene, window);
 
             if (refreshRequested.compareAndSet(true, false)) {
-                render.setupData(scene);
+                renderInstance.getPipeline().setupData(scene);
             }
 
             // Update the next time we should update models

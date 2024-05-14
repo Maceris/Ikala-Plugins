@@ -124,7 +124,8 @@ public class BiomeDebug extends GuiWindow {
         buffer.put(rgba);
         buffer.rewind();
 
-        return GraphicsManager.getTextureLoader()
+        return GraphicsManager.getRenderInstance()
+                .getTextureLoader()
                 .load(buffer, Format.R8G8B8A8_UINT, image.getWidth(), image.getHeight());
     }
 
