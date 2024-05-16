@@ -60,6 +60,7 @@ public class GuiRender {
      * @param verticesVBO The vertices VBO, set up for ImGui.
      * @param indicesVBO The indices VBO.
      */
+    @Deprecated
     private record GuiMesh(int vaoID, int verticesVBO, int indicesVBO) {
         /**
          * Create a new GUI mesh, and set it up with OpenGL. This should be called instead of a
@@ -123,7 +124,7 @@ public class GuiRender {
     /** Clean up shaders and textures. */
     public void cleanup() {
         shaderProgram.cleanup();
-        glDeleteTextures(font.id());
+        glDeleteTextures((int) font.id());
         glDeleteBuffers(guiMesh.indicesVBO());
         glDeleteBuffers(guiMesh.verticesVBO());
         glDeleteVertexArrays(guiMesh.vaoID());
@@ -150,7 +151,7 @@ public class GuiRender {
                 GraphicsManager.getRenderInstance()
                         .getTextureLoader()
                         .load(buf, Format.R8G8B8A8_UINT, width.get(), height.get());
-        fontAtlas.setTexID(font.id());
+        fontAtlas.setTexID((int) font.id());
 
         guiMesh = GuiMesh.create();
     }

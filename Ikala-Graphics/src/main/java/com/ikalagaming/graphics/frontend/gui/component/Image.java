@@ -17,7 +17,7 @@ public class Image extends Component {
         ImGui.setCursorPosX(getActualDisplaceX() * width - ImGui.getWindowPosX());
         ImGui.setCursorPosY(getActualDisplaceY() * height - ImGui.getWindowPosY());
         if (texture != null) {
-            ImGui.image(texture.id(), getActualWidth() * width, getActualHeight() * height);
+            ImGui.image((int) texture.id(), getActualWidth() * width, getActualHeight() * height);
         } else {
             ImGui.text("x");
         }

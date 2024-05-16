@@ -216,7 +216,7 @@ public class SkyBoxRender {
         boolean hasTexture = false;
         if (texture != null) {
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, texture.id());
+            glBindTexture(GL_TEXTURE_2D, (int) texture.id());
             hasTexture = true;
         }
 

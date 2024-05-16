@@ -45,12 +45,6 @@ public class SceneRender {
                             "models/default/default_texture.png")
                     .getAbsolutePath();
 
-    /** The maximum number of draw elements that we can process. */
-    public static final int MAX_DRAW_ELEMENTS = 300;
-
-    /** The maximum number of entities that we can process. */
-    public static final int MAX_ENTITIES = 100;
-
     /** The maximum number of materials we can have. */
     private static final int MAX_MATERIALS = 30;
 
@@ -138,13 +132,13 @@ public class SceneRender {
         uniformsMap.setUniform(ShaderUniforms.Scene.VIEW_MATRIX, scene.getCamera().getViewMatrix());
 
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, defaultTexture.id());
+        glBindTexture(GL_TEXTURE_2D, (int) defaultTexture.id());
 
         int nextTexture = 1;
         for (Material material : scene.getMaterialCache().getMaterialsList()) {
             if (material.getNormalMap() != null) {
                 glActiveTexture(GL_TEXTURE0 + nextTexture);
-                glBindTexture(GL_TEXTURE_2D, material.getNormalMap().id());
+                glBindTexture(GL_TEXTURE_2D, (int) material.getNormalMap().id());
                 uniformsMap.setUniform(
                         ShaderUniforms.Scene.TEXTURE_SAMPLER + "[" + nextTexture + "]",
                         nextTexture);
@@ -152,7 +146,7 @@ public class SceneRender {
             }
             if (material.getTexture() != null) {
                 glActiveTexture(GL_TEXTURE0 + nextTexture);
-                glBindTexture(GL_TEXTURE_2D, material.getTexture().id());
+                glBindTexture(GL_TEXTURE_2D, (int) material.getTexture().id());
                 uniformsMap.setUniform(
                         ShaderUniforms.Scene.TEXTURE_SAMPLER + "[" + nextTexture + "]",
                         nextTexture);

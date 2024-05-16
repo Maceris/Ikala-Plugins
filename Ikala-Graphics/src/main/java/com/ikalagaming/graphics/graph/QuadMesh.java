@@ -15,6 +15,7 @@ import java.util.List;
 /** Defines a quad that is used to render in the lighting pass. */
 @Getter
 @Setter
+@Deprecated
 public class QuadMesh {
     /** The number of vertices in the mesh. */
     public static final int VERTEX_COUNT = 6;

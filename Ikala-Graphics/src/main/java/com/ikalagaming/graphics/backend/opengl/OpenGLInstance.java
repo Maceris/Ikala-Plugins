@@ -66,7 +66,7 @@ public class OpenGLInstance implements Instance {
         switch (entry.type()) {
             case TEXTURE -> {
                 var texture = (Texture) entry.resource();
-                glDeleteTextures(texture.id());
+                glDeleteTextures((int) texture.id());
             }
         }
     }

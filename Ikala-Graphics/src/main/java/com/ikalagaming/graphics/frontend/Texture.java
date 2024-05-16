@@ -7,4 +7,4 @@ package com.ikalagaming.graphics.frontend;
  * @param width The width of the texture, in pixels.
  * @param height The height of the texture, in pixels.
  */
-public record Texture(int id, int width, int height) {}
+public record Texture(long id, int width, int height) {}

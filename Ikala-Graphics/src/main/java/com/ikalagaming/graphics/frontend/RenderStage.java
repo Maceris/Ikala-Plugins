@@ -1,8 +1,9 @@
 package com.ikalagaming.graphics.frontend;
 
-import java.util.List;
+import com.ikalagaming.graphics.scene.Scene;
 
-public abstract class RenderStage {
-    private List<Attachment> attachments;
-    private Shader shader;
+import lombok.NonNull;
+
+public interface RenderStage {
+    void render(@NonNull Scene scene);
 }

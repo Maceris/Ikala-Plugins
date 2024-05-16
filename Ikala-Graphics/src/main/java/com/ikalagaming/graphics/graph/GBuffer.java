@@ -6,6 +6,7 @@ import lombok.Setter;
 /** A buffer for the geometry pass that is used for deferred shading. */
 @Getter
 @Setter
+@Deprecated
 public class GBuffer {
     /**
      * The maximum number of textures, which are used for albedo, normals, specular, and depth,

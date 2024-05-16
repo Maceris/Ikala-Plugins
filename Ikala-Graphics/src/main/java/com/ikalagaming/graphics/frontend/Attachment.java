@@ -7,8 +7,40 @@ import lombok.RequiredArgsConstructor;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Specifies an attachment description. */
-public class Attachment {
+/**
+ * Specifies an attachment description.
+ *
+ * @param flagBits Specifies additional properties of an attachment.
+ * @param format The format of the image used in the attachment.
+ * @param sampleCountFlagBits Bit mask specifying the number of samples per pixel that are supported
+ *     by the image.
+ * @param loadOp If there is a color format, used for the color data. If the format has depth and/or
+ *     stencil components, this applies only to depth data. If an attachment is not used, this is
+ *     ignored.
+ * @param storeOp If there is a color format, used for the color data. If the format has depth
+ *     and/or stencil components, this applies only to depth data. If an attachment is not used,
+ *     this is ignored.
+ * @param stencilLoadOp If there is a color format, this is ignored. If the format has depth and/or
+ *     stencil components, this applies only to the stencil data. If an attachment is not used, this
+ *     is ignored.
+ * @param stencilStoreOp If there is a color format, this is ignored. If the format has depth and/or
+ *     stencil components, this applies only to the stencil data. If an attachment is not used, this
+ *     is ignored.
+ * @param initialLayout The layout which the attachment image resource will be in when the render
+ *     pass instance begins.
+ * @param finalLayout The layout which the attachment image resource will be transitioned to when a
+ *     render pass ends.
+ */
+public record Attachment(
+        int flagBits,
+        Format format,
+        int sampleCountFlagBits,
+        LoadOp loadOp,
+        StoreOp storeOp,
+        LoadOp stencilLoadOp,
+        StoreOp stencilStoreOp,
+        ImageLayout initialLayout,
+        ImageLayout finalLayout) {
     /**
      * Specifies additional properties of an attachment. Values are:
      *
@@ -169,59 +201,4 @@ public class Attachment {
         /** The render area will not be written to. */
         NONE
     }
-
-    /**
-     * Specifies additional properties of an attachment.
-     *
-     * @see Attachment.Flag
-     */
-    private int flagBits;
-
-    /** The format of the image used in the attachment. */
-    private Format format;
-
-    /**
-     * Bit mask specifying the number of samples per pixel that are supported by the image.
-     *
-     * @see Attachment.SampleCountFlag
-     */
-    private int sampleCountFlagBits;
-
-    /**
-     * If there is a color format, used for the color data. If the format has depth and/or stencil
-     * components, this applies only to depth data. If an attachment is not used, this is ignored.
-     */
-    private LoadOp loadOp;
-
-    /**
-     * If there is a color format, used for the color data. If the format has depth and/or stencil
-     * components, this applies only to depth data. If an attachment is not used, this is ignored.
-     */
-    private StoreOp storeOp;
-
-    /**
-     * If there is a color format, this is ignored. If the format has depth and/or stencil
-     * components, this applies only to the stencil data. If an attachment is not used, this is
-     * ignored.
-     */
-    private LoadOp stencilLoadOp;
-
-    /**
-     * If there is a color format, this is ignored. If the format has depth and/or stencil
-     * components, this applies only to the stencil data. If an attachment is not used, this is
-     * ignored.
-     */
-    private StoreOp stencilStoreOp;
-
-    /**
-     * The layout which the attachment image resource will be in when the render pass instance
-     * begins.
-     */
-    private ImageLayout initialLayout;
-
-    /**
-     * The layout which the attachment image resource will be transitioned to when a render pass
-     * ends.
-     */
-    private ImageLayout finalLayout;
 }
