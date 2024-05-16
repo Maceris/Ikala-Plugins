@@ -5,26 +5,27 @@ import static org.lwjgl.opengl.GL11.glDeleteTextures;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.frontend.*;
+import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
 import org.lwjgl.opengl.GL;
 
 public class OpenGLInstance implements Instance {
 
-    private Pipeline pipeline;
+    private Renderer renderer;
     private TextureLoader textureLoader;
 
     @Override
     public void initialize(@NonNull Window window) {
         GL.createCapabilities();
-        pipeline = new PipelineOpenGL();
+        renderer = new RendererOpenGL();
         textureLoader = new TextureLoaderOpenGL();
-        pipeline.initialize(window);
+        renderer.initialize(window);
     }
 
     @Override
     public void cleanup() {
-        pipeline.cleanup();
+        renderer.cleanup();
     }
 
     @Override
@@ -41,8 +42,19 @@ public class OpenGLInstance implements Instance {
     }
 
     @Override
-    public Pipeline getPipeline() {
-        return pipeline;
+    public void render(@NonNull Window window, @NonNull Scene scene) {
+        renderer.render(window, scene);
+    }
+
+    @Override
+    public void resize(int width, int height) {
+        // TODO(ches) move this out of the render pass itself
+        renderer.resize(width, height);
+    }
+
+    @Override
+    public void setupData(@NonNull Scene scene) {
+        renderer.setupData(scene);
     }
 
     /**

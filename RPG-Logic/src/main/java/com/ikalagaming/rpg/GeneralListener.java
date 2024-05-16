@@ -3,7 +3,7 @@ package com.ikalagaming.rpg;
 import com.ikalagaming.event.EventHandler;
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.frontend.Pipeline;
+import com.ikalagaming.graphics.frontend.Renderer;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.ModelLoader;
@@ -480,7 +480,7 @@ public class GeneralListener implements Listener {
             }
         }
         GraphicsManager.refreshRenderData();
-        Pipeline.configuration.setRenderingScene(true);
+        Renderer.configuration.setRenderingScene(true);
     }
 
     /**

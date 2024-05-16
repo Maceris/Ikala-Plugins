@@ -9,7 +9,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 
-public interface Pipeline {
+public interface Renderer {
     /**
      * Initialize the pipeline to prepare for rendering for the first time.
      *
@@ -48,13 +48,13 @@ public interface Pipeline {
     @Setter
     class RenderConfig {
         /** Enable wireframe. */
-        private boolean wireframe;
+        @Deprecated private boolean wireframe;
 
         /** Post-processing filter that has been selected. */
         private int selectedFilter;
 
         /** Whether we are actually drawing the scene. */
-        private boolean renderingScene;
+        @Deprecated private boolean renderingScene;
 
         /**
          * The list of filter names that are available. We use an array to make ImGui access easier.

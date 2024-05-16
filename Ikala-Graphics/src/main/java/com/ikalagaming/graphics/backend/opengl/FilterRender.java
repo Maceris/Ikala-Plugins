@@ -20,7 +20,7 @@ import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
-import com.ikalagaming.graphics.frontend.Pipeline;
+import com.ikalagaming.graphics.frontend.Renderer;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.QuadMesh;
 import com.ikalagaming.launcher.PluginFolder;
@@ -111,8 +111,8 @@ public class FilterRender {
                             "DEFAULT_FILTER_MISSING", GraphicsPlugin.getResourceBundle()),
                     defaultFilter);
 
-            Pipeline.configuration.setFilterNames(new String[0]);
-            Pipeline.configuration.setSelectedFilter(0);
+            Renderer.configuration.setFilterNames(new String[0]);
+            Renderer.configuration.setSelectedFilter(0);
             return;
         }
         quadMesh = new QuadMesh();
@@ -128,8 +128,8 @@ public class FilterRender {
                 break;
             }
         }
-        Pipeline.configuration.setFilterNames(names);
-        Pipeline.configuration.setSelectedFilter(defaultIndex);
+        Renderer.configuration.setFilterNames(names);
+        Renderer.configuration.setSelectedFilter(defaultIndex);
     }
 
     /** Clean up resources. */
@@ -158,7 +158,7 @@ public class FilterRender {
         glDepthMask(false);
 
         String name =
-                Pipeline.configuration.getFilterNames()[Pipeline.configuration.getSelectedFilter()];
+                Renderer.configuration.getFilterNames()[Renderer.configuration.getSelectedFilter()];
         Shader program = shaders.get(name);
 
         program.bind();

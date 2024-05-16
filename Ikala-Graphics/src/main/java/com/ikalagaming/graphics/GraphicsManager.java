@@ -161,7 +161,7 @@ public class GraphicsManager {
 
         cameraManager = new CameraManager(scene.getCamera(), window);
 
-        renderInstance.getPipeline().setupData(scene);
+        renderInstance.setupData(scene);
 
         renderTimer = new Timer();
         renderTimer.init();
@@ -190,7 +190,7 @@ public class GraphicsManager {
 
     /** Render to the screen. */
     private static void render() {
-        renderInstance.getPipeline().render(window, scene);
+        renderInstance.render(window, scene);
 
         window.update();
         ++framesSinceLastCalculation;
@@ -207,7 +207,7 @@ public class GraphicsManager {
         int width = window.getWidth();
         int height = window.getHeight();
         scene.resize(width, height);
-        renderInstance.getPipeline().resize(width, height);
+        renderInstance.resize(width, height);
     }
 
     /**
@@ -262,7 +262,7 @@ public class GraphicsManager {
             windowManager.handleGuiInput(scene, window);
 
             if (refreshRequested.compareAndSet(true, false)) {
-                renderInstance.getPipeline().setupData(scene);
+                renderInstance.setupData(scene);
             }
 
             // Update the next time we should update models

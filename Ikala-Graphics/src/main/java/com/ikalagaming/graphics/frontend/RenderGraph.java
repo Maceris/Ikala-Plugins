@@ -1,3 +1,7 @@
 package com.ikalagaming.graphics.frontend;
 
-public class RenderGraph {}
+import java.util.List;
+
+public class RenderGraph {
+    List<RenderStage> stages;
+}

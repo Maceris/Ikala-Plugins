@@ -8,7 +8,7 @@ import com.ikalagaming.factory.FactoryServerPlugin;
 import com.ikalagaming.factory.gui.component.menu.SaveEntry;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.frontend.Pipeline;
+import com.ikalagaming.graphics.frontend.Renderer;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.frontend.gui.component.Button;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
@@ -142,7 +142,7 @@ public class SinglePlayer extends GuiWindow {
                                 new Vector3f(2.0f, 1.1f, 0.0f),
                                 1.0f));
         GraphicsManager.refreshRenderData();
-        Pipeline.configuration.setRenderingScene(true);
+        Renderer.configuration.setRenderingScene(true);
         GraphicsManager.getScene().getCamera().setPosition(1.86f, 2.43f, 2.33f);
         GraphicsManager.getScene().getCamera().setRotation(0.64f, 5.62f);
 

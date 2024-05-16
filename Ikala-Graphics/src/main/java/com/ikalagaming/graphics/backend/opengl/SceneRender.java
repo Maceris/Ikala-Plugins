@@ -163,11 +163,11 @@ public class SceneRender {
         // Static meshes
         glBindBufferBase(
                 GL_SHADER_STORAGE_BUFFER,
-                PipelineOpenGL.DRAW_ELEMENT_BINDING,
+                RendererOpenGL.DRAW_ELEMENT_BINDING,
                 commandBuffers.getStaticDrawElementBuffer());
         glBindBufferBase(
                 GL_SHADER_STORAGE_BUFFER,
-                PipelineOpenGL.MODEL_MATRICES_BINDING,
+                RendererOpenGL.MODEL_MATRICES_BINDING,
                 commandBuffers.getStaticModelMatricesBuffer());
         glBindBuffer(GL_DRAW_INDIRECT_BUFFER, commandBuffers.getStaticCommandBuffer());
         glBindVertexArray(renderBuffers.getStaticVaoID());
@@ -177,11 +177,11 @@ public class SceneRender {
         // Animated meshes
         glBindBufferBase(
                 GL_SHADER_STORAGE_BUFFER,
-                PipelineOpenGL.DRAW_ELEMENT_BINDING,
+                RendererOpenGL.DRAW_ELEMENT_BINDING,
                 commandBuffers.getAnimatedDrawElementBuffer());
         glBindBufferBase(
                 GL_SHADER_STORAGE_BUFFER,
-                PipelineOpenGL.MODEL_MATRICES_BINDING,
+                RendererOpenGL.MODEL_MATRICES_BINDING,
                 commandBuffers.getAnimatedModelMatricesBuffer());
         glBindBuffer(GL_DRAW_INDIRECT_BUFFER, commandBuffers.getAnimatedCommandBuffer());
         glBindVertexArray(renderBuffers.getAnimVaoID());
