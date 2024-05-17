@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import com.ikalagaming.graphics.frontend.gui.component.Component;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -40,5 +41,51 @@ class ComponentTest {
 
         assertEquals(expectedX, component.getActualDisplaceX(), DELTA);
         assertEquals(expectedY, component.getActualDisplaceY(), DELTA);
+    }
+
+    @Test
+    void testRootScale() {
+        var component = new Component();
+        component.setScale(0.50f, 0.50f);
+
+        assertEquals(0.50f, component.getActualWidth(), DELTA);
+        assertEquals(0.50f, component.getActualHeight(), DELTA);
+    }
+
+    @Test
+    void testChildScale() {
+        var parent = new Component();
+        parent.setScale(0.50f, 0.50f);
+
+        var child = new Component();
+        child.setScale(0.50f, 0.50f);
+        parent.addChild(child);
+
+        assertEquals(0.25f, child.getActualWidth(), DELTA);
+        assertEquals(0.25f, child.getActualHeight(), DELTA);
+
+        child.setParent(null);
+
+        assertEquals(0.50f, child.getActualWidth(), DELTA);
+        assertEquals(0.50f, child.getActualHeight(), DELTA);
+    }
+
+    @Test
+    void testChildDisplacement() {
+        var parent = new Component();
+        parent.setScale(0.50f, 0.50f);
+        parent.setDisplacement(0.10f, 0.10f);
+
+        var child = new Component();
+        child.setDisplacement(0.50f, 0.50f);
+        parent.addChild(child);
+
+        assertEquals(0.35f, child.getActualDisplaceX(), DELTA);
+        assertEquals(0.35f, child.getActualDisplaceY(), DELTA);
+
+        child.orphanSelf();
+
+        assertEquals(0.35f, child.getActualDisplaceX(), DELTA);
+        assertEquals(0.35f, child.getActualDisplaceY(), DELTA);
     }
 }
