@@ -253,7 +253,7 @@ public class LightRender {
 
         for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
             glActiveTexture(GL_TEXTURE0 + nextTexture + i);
-            glBindTexture(GL_TEXTURE_2D, shadowRender.getShadowTextures()[i]);
+            glBindTexture(GL_TEXTURE_2D, (int) shadowRender.getDepthMap().textures()[i]);
         }
 
         uniformsMap.setUniform(
