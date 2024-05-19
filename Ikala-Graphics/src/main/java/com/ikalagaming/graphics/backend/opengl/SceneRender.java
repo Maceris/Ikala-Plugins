@@ -23,10 +23,10 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
+import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.frontend.Material;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
-import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.PluginFolder;
@@ -117,12 +117,12 @@ public class SceneRender {
     public void render(
             @NonNull Scene scene,
             @NonNull RenderBuffers renderBuffers,
-            @NonNull GBuffer gBuffer,
+            @NonNull Framebuffer gBuffer,
             @NonNull CommandBuffer commandBuffers) {
 
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gBuffer.getGBufferId());
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, (int) gBuffer.id());
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glViewport(0, 0, gBuffer.getWidth(), gBuffer.getHeight());
+        glViewport(0, 0, gBuffer.width(), gBuffer.height());
         glDisable(GL_BLEND);
         shaderProgram.bind();
 

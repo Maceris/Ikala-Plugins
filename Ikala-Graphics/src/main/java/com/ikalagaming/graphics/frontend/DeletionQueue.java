@@ -10,6 +10,7 @@ public class DeletionQueue {
 
     /** The types of resources that the queue supports deleting. */
     public enum ResourceType {
+        FRAME_BUFFER,
         TEXTURE
     }
 
@@ -23,6 +24,15 @@ public class DeletionQueue {
     public record Entry(@NonNull ResourceType type, @NonNull Object resource) {}
 
     private final Queue<Entry> queue = new ConcurrentLinkedQueue<>();
+
+    /**
+     * Add a framebuffer to the queue to be deleted.
+     *
+     * @param framebuffer The framebuffer handle.
+     */
+    public void add(@NonNull Framebuffer framebuffer) {
+        queue.add(new Entry(ResourceType.FRAME_BUFFER, framebuffer));
+    }
 
     /**
      * Add a texture to the queue to be deleted.

@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.opengl.GL11.glDeleteTextures;
+import static org.lwjgl.opengl.GL30.glDeleteFramebuffers;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
@@ -9,6 +10,8 @@ import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
 import org.lwjgl.opengl.GL;
+
+import java.util.Arrays;
 
 public class OpenGLInstance implements Instance {
 
@@ -64,6 +67,11 @@ public class OpenGLInstance implements Instance {
      */
     private void deleteResource(@NonNull DeletionQueue.Entry entry) {
         switch (entry.type()) {
+            case FRAME_BUFFER -> {
+                var framebuffer = (Framebuffer) entry.resource();
+                glDeleteFramebuffers((int) framebuffer.id());
+                Arrays.stream(framebuffer.textures()).forEach(id -> glDeleteTextures((int) id));
+            }
             case TEXTURE -> {
                 var texture = (Texture) entry.resource();
                 glDeleteTextures((int) texture.id());

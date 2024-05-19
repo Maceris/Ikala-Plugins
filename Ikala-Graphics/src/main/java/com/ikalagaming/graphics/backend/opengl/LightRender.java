@@ -25,9 +25,9 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
+import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.CascadeShadow;
-import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.QuadMesh;
 import com.ikalagaming.graphics.scene.Fog;
 import com.ikalagaming.graphics.scene.Scene;
@@ -200,18 +200,20 @@ public class LightRender {
      * @param gBuffer The buffer for geometry data.
      */
     public void render(
-            @NonNull Scene scene, @NonNull ShadowRender shadowRender, @NonNull GBuffer gBuffer) {
+            @NonNull Scene scene,
+            @NonNull ShadowRender shadowRender,
+            @NonNull Framebuffer gBuffer) {
         shaderProgram.bind();
 
         updateLights(scene);
 
         int nextTexture = 0;
         // Bind the G-Buffer textures
-        int[] textureIds = gBuffer.getTextureIDs();
+        long[] textureIds = gBuffer.textures();
         if (textureIds != null) {
-            for (int i = 0; i < textureIds.length; ++i) {
+            for (long textureId : textureIds) {
                 glActiveTexture(GL_TEXTURE0 + nextTexture++);
-                glBindTexture(GL_TEXTURE_2D, textureIds[i]);
+                glBindTexture(GL_TEXTURE_2D, (int) textureId);
             }
         }
 

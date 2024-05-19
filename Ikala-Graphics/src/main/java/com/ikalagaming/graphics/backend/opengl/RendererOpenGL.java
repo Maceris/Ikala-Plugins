@@ -19,36 +19,28 @@ import static org.lwjgl.opengl.GL15.GL_STATIC_DRAW;
 import static org.lwjgl.opengl.GL15.glBindBuffer;
 import static org.lwjgl.opengl.GL15.glBufferData;
 import static org.lwjgl.opengl.GL15.glGenBuffers;
-import static org.lwjgl.opengl.GL30.GL_COLOR_ATTACHMENT0;
-import static org.lwjgl.opengl.GL30.GL_DEPTH_ATTACHMENT;
-import static org.lwjgl.opengl.GL30.GL_FRAMEBUFFER;
-import static org.lwjgl.opengl.GL30.GL_RENDERBUFFER;
-import static org.lwjgl.opengl.GL30.glBindFramebuffer;
-import static org.lwjgl.opengl.GL30.glBindRenderbuffer;
-import static org.lwjgl.opengl.GL30.glDeleteFramebuffers;
-import static org.lwjgl.opengl.GL30.glDeleteRenderbuffers;
-import static org.lwjgl.opengl.GL30.glFramebufferRenderbuffer;
-import static org.lwjgl.opengl.GL30.glFramebufferTexture2D;
-import static org.lwjgl.opengl.GL30.glGenFramebuffers;
-import static org.lwjgl.opengl.GL30.glGenRenderbuffers;
-import static org.lwjgl.opengl.GL30.glRenderbufferStorage;
+import static org.lwjgl.opengl.GL20.glDrawBuffers;
+import static org.lwjgl.opengl.GL30.*;
 import static org.lwjgl.opengl.GL40.GL_DRAW_INDIRECT_BUFFER;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.backend.base.GBufferHandler;
 import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
+import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.frontend.Renderer;
-import com.ikalagaming.graphics.graph.GBuffer;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
+import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,7 +68,7 @@ public class RendererOpenGL implements Renderer {
     private AnimationRender animationRender;
 
     /** Geometry buffer. */
-    private GBuffer gBuffer;
+    private Framebuffer gBuffer;
 
     /** The GUI render handler. */
     private GuiRender guiRender;
@@ -118,7 +110,6 @@ public class RendererOpenGL implements Renderer {
     private int screenTexture;
 
     private QuadMeshHandler quadMeshHandler;
-    private GBufferHandler gBufferHandler;
 
     /** Set up a new rendering pipeline. */
     public RendererOpenGL() {
@@ -136,7 +127,6 @@ public class RendererOpenGL implements Renderer {
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         quadMeshHandler = new QuadMeshHandlerOpenGL();
-        gBufferHandler = new GBufferHandlerOpenGL();
 
         sceneRender = new SceneRender();
         guiRender = new GuiRender(window);
@@ -145,8 +135,7 @@ public class RendererOpenGL implements Renderer {
         lightRender = new LightRender(quadMeshHandler);
         animationRender = new AnimationRender();
         filterRender = new FilterRender(quadMeshHandler);
-        gBuffer = new GBuffer();
-        gBufferHandler.initialize(gBuffer, window);
+        gBuffer = generateGBuffer(window.getWidth(), window.getHeight());
         renderBuffers = new RenderBuffers();
         commandBuffers = new CommandBuffer();
 
@@ -162,7 +151,8 @@ public class RendererOpenGL implements Renderer {
         lightRender.cleanup(quadMeshHandler);
         animationRender.cleanup();
         filterRender.cleanup(quadMeshHandler);
-        gBufferHandler.cleanup(gBuffer);
+        GraphicsManager.getDeletionQueue().add(gBuffer);
+        gBuffer = null;
         renderBuffers.cleanup();
         commandBuffers.cleanup();
         deleteRenderBuffers();
@@ -173,6 +163,69 @@ public class RendererOpenGL implements Renderer {
         glDeleteRenderbuffers(screenRBODepth);
         glDeleteFramebuffers(screenFBO);
         glDeleteTextures(screenTexture);
+    }
+
+    /**
+     * Generate the geometry buffer.
+     *
+     * @param width The width of the buffer in pixels.
+     * @param height The height of the buffer in pixels.
+     * @return The newly generated buffer.
+     */
+    private Framebuffer generateGBuffer(final int width, final int height) {
+        int gBufferId = glGenFramebuffers();
+
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gBufferId);
+
+        int[] textures = new int[4];
+        glGenTextures(textures);
+
+        for (int i = 0; i < textures.length; ++i) {
+            glBindTexture(GL_TEXTURE_2D, textures[i]);
+            int attachmentType;
+            if (i == textures.length - 1) {
+                glTexImage2D(
+                        GL_TEXTURE_2D,
+                        0,
+                        GL_DEPTH_COMPONENT32F,
+                        width,
+                        height,
+                        0,
+                        GL_DEPTH_COMPONENT,
+                        GL_FLOAT,
+                        (ByteBuffer) null);
+                attachmentType = GL_DEPTH_ATTACHMENT;
+            } else {
+                glTexImage2D(
+                        GL_TEXTURE_2D,
+                        0,
+                        GL_RGBA32F,
+                        width,
+                        height,
+                        0,
+                        GL_RGBA,
+                        GL_FLOAT,
+                        (ByteBuffer) null);
+                attachmentType = GL_COLOR_ATTACHMENT0 + i;
+            }
+            glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+            glFramebufferTexture2D(GL_FRAMEBUFFER, attachmentType, GL_TEXTURE_2D, textures[i], 0);
+        }
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            IntBuffer intBuff = stack.mallocInt(textures.length - 1);
+            for (int i = 0; i < textures.length - 1; ++i) {
+                intBuff.put(i, GL_COLOR_ATTACHMENT0 + i);
+            }
+            glDrawBuffers(intBuff);
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        long[] textureIds = Arrays.stream(textures).mapToLong(i -> (long) i).toArray();
+        return new Framebuffer(gBufferId, width, height, textureIds);
     }
 
     /**
