@@ -18,11 +18,9 @@ import static org.lwjgl.opengl.GL30.glBindVertexArray;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
-import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Renderer;
 import com.ikalagaming.graphics.frontend.Shader;
-import com.ikalagaming.graphics.graph.QuadMesh;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.plugins.config.ConfigManager;
@@ -49,7 +47,7 @@ public class FilterRender {
     private UniformsMap uniformsMap;
 
     /** Set up the filter renderer. */
-    public FilterRender(@NonNull QuadMeshHandler quadMeshHandler) {
+    public FilterRender() {
         shaders = new HashMap<>();
 
         PluginConfig config = ConfigManager.loadConfig(GraphicsPlugin.PLUGIN_NAME);
@@ -115,8 +113,7 @@ public class FilterRender {
             Renderer.configuration.setSelectedFilter(0);
             return;
         }
-        quadMesh = new QuadMesh();
-        quadMeshHandler.initialize(quadMesh);
+        quadMesh = QuadMesh.getInstance();
         createUniforms(defaultFilter);
 
         String[] names = shaders.keySet().toArray(new String[0]);
@@ -133,8 +130,8 @@ public class FilterRender {
     }
 
     /** Clean up resources. */
-    public void cleanup(@NonNull QuadMeshHandler quadMeshHandler) {
-        quadMeshHandler.cleanup(quadMesh);
+    public void cleanup() {
+        quadMesh.cleanup();
         shaders.forEach((name, program) -> program.cleanup());
         shaders.clear();
     }
@@ -168,7 +165,7 @@ public class FilterRender {
 
         uniformsMap.setUniform(ShaderUniforms.Filter.SCREEN_TEXTURE, 0);
 
-        glBindVertexArray(quadMesh.getVaoID());
+        glBindVertexArray(quadMesh.vao());
         glDrawElements(GL_TRIANGLES, QuadMesh.VERTEX_COUNT, GL_UNSIGNED_INT, 0);
 
         program.unbind();

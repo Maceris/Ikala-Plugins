@@ -26,7 +26,6 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
 import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.frontend.Renderer;
 import com.ikalagaming.graphics.graph.Model;
@@ -109,8 +108,6 @@ public class RendererOpenGL implements Renderer {
     /** The texture ID we render to before applying filters. */
     private int screenTexture;
 
-    private QuadMeshHandler quadMeshHandler;
-
     /** Set up a new rendering pipeline. */
     public RendererOpenGL() {
         buffersPopulated = new AtomicBoolean();
@@ -126,15 +123,13 @@ public class RendererOpenGL implements Renderer {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        quadMeshHandler = new QuadMeshHandlerOpenGL();
-
         sceneRender = new SceneRender();
         guiRender = new GuiRender(window);
         skyBoxRender = new SkyBoxRender();
         shadowRender = new ShadowRender();
-        lightRender = new LightRender(quadMeshHandler);
+        lightRender = new LightRender();
         animationRender = new AnimationRender();
-        filterRender = new FilterRender(quadMeshHandler);
+        filterRender = new FilterRender();
         gBuffer = generateGBuffer(window.getWidth(), window.getHeight());
         renderBuffers = new RenderBuffers();
         commandBuffers = new CommandBuffer();
@@ -148,9 +143,9 @@ public class RendererOpenGL implements Renderer {
         guiRender.cleanup();
         skyBoxRender.cleanup();
         shadowRender.cleanup();
-        lightRender.cleanup(quadMeshHandler);
+        lightRender.cleanup();
         animationRender.cleanup();
-        filterRender.cleanup(quadMeshHandler);
+        filterRender.cleanup();
         GraphicsManager.getDeletionQueue().add(gBuffer);
         gBuffer = null;
         renderBuffers.cleanup();

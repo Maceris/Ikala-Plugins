@@ -23,12 +23,10 @@ import static org.lwjgl.opengl.GL30.glBindVertexArray;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 import com.ikalagaming.graphics.ShaderUniforms;
-import com.ikalagaming.graphics.backend.base.QuadMeshHandler;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.CascadeShadow;
-import com.ikalagaming.graphics.graph.QuadMesh;
 import com.ikalagaming.graphics.scene.Fog;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
@@ -54,7 +52,7 @@ public class LightRender {
     /** The binding for the point light SSBO. */
     static final int POINT_LIGHT_BINDING = 0;
 
-    /** The binding for the spot light SSBO. */
+    /** The binding for the spotlight SSBO. */
     static final int SPOT_LIGHT_BINDING = 1;
 
     /** How many lights of each type (spot, point) we currently support. */
@@ -76,22 +74,21 @@ public class LightRender {
     private int spotLightBuffer;
 
     /** Set up the light renderer. */
-    public LightRender(@NonNull QuadMeshHandler quadMeshHandler) {
+    public LightRender() {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData("shaders/lights.vert", Shader.Type.VERTEX));
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData("shaders/lights.frag", Shader.Type.FRAGMENT));
         shaderProgram = new ShaderOpenGL(shaderModuleDataList);
-        quadMesh = new QuadMesh();
-        quadMeshHandler.initialize(quadMesh);
+        quadMesh = QuadMesh.getInstance();
         createUniforms();
         initSSBOs();
     }
 
     /** Clean up resources. */
-    public void cleanup(@NonNull QuadMeshHandler quadMeshHandler) {
-        quadMeshHandler.cleanup(quadMesh);
+    public void cleanup() {
+        quadMesh.cleanup();
         shaderProgram.cleanup();
         glDeleteBuffers(pointLightBuffer);
         glDeleteBuffers(spotLightBuffer);
@@ -262,7 +259,7 @@ public class LightRender {
         uniformsMap.setUniform(
                 ShaderUniforms.Light.INVERSE_VIEW_MATRIX, scene.getCamera().getInvViewMatrix());
 
-        glBindVertexArray(quadMesh.getVaoID());
+        glBindVertexArray(quadMesh.vao());
         glDrawElements(GL_TRIANGLES, QuadMesh.VERTEX_COUNT, GL_UNSIGNED_INT, 0);
 
         shaderProgram.unbind();
