@@ -88,6 +88,12 @@ public class Window {
     private Callable<Void> resizeFunc;
 
     /**
+     * The title that was provided for the window.
+     */
+    @Getter
+    private final String title;
+
+    /**
      * Create a new window.
      *
      * @param title The title of the window to display.
@@ -141,6 +147,7 @@ public class Window {
             height = vidMode.height();
         }
 
+        this.title = title;
         windowHandle = glfwCreateWindow(width, height, title, MemoryUtil.NULL, MemoryUtil.NULL);
         if (windowHandle == MemoryUtil.NULL) {
             String error =

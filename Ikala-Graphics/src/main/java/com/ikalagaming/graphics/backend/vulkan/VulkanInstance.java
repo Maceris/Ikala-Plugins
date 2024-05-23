@@ -24,13 +24,13 @@ public class VulkanInstance implements Instance {
 
     @Override
     public void initialize(@NonNull Window window) {
-        createVulkanInstance();
+        createVulkanInstance(window);
     }
 
-    private void createVulkanInstance() {
+    private void createVulkanInstance(@NonNull Window window) {
         try (MemoryStack stack = stackPush()) {
 
-            ByteBuffer appName = stack.UTF8("Ikala-Graphics");
+            ByteBuffer appName = stack.UTF8(window.getTitle());
             ByteBuffer engineName = stack.UTF8("Ikala Engine");
 
             VkApplicationInfo applicationInfo = VkApplicationInfo.malloc(stack)
