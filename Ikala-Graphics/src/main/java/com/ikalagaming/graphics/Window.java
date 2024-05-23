@@ -87,11 +87,8 @@ public class Window {
     /** The resize function to call. */
     private Callable<Void> resizeFunc;
 
-    /**
-     * The title that was provided for the window.
-     */
-    @Getter
-    private final String title;
+    /** The title that was provided for the window. */
+    @Getter private final String title;
 
     /**
      * Create a new window.
