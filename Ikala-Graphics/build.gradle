@@ -76,6 +76,7 @@ dependencies {
 	jarInclude "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-windows"
 	jarInclude "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
 	jarInclude "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-windows"
+	jarInclude "org.lwjgl:lwjgl-vulkan:${lwjglVersion}"
 	jarInclude "org.lwjgl:lwjgl-stb:${lwjglVersion}"
 	jarInclude "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-windows"
 	jarInclude "org.lwjgl:lwjgl-assimp:${lwjglVersion}"
