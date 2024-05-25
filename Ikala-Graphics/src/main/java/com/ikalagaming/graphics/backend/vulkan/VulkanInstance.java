@@ -19,6 +19,7 @@ import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.VK;
 import org.lwjgl.vulkan.VkApplicationInfo;
+import org.lwjgl.vulkan.VkInstanceCreateInfo;
 import org.lwjgl.vulkan.VkLayerProperties;
 
 import java.nio.ByteBuffer;
@@ -67,6 +68,35 @@ public class VulkanInstance implements Instance {
     private void createVulkanInstance(@NonNull Window window) {
         try (MemoryStack stack = stackPush()) {
 
+            PointerBuffer requiredExtensionNames = glfwGetRequiredInstanceExtensions();
+            if (requiredExtensionNames == null) {
+                var message =
+                        SafeResourceLoader.getString(
+                                "GLFW_EXTENSIONS_NULL", GraphicsPlugin.getResourceBundle());
+                log.error(message);
+                throw new RenderException(message);
+            }
+
+            for (String requiredLayer : REQUIRED_EXTENSIONS) {
+                requiredExtensionNames.put(stack.ASCII(requiredLayer));
+            }
+
+            PointerBuffer requiredLayerNames = null;
+
+            if (ENABLE_VALIDATION) {
+                checkError(vkEnumerateInstanceLayerProperties(intOutput, null));
+                VkLayerProperties.Buffer availableLayers =
+                        VkLayerProperties.malloc(intOutput.get(0), stack);
+                checkError(vkEnumerateInstanceLayerProperties(intOutput, availableLayers));
+
+                requiredLayerNames = stack.mallocPointer(VALIDATION_LAYERS.length);
+                for (String validationLayer : VALIDATION_LAYERS) {
+                    requiredLayerNames.put(stack.ASCII(validationLayer));
+                }
+
+                checkLayers(availableLayers, requiredLayerNames);
+            }
+
             ByteBuffer appName = stack.UTF8(window.getTitle());
             ByteBuffer engineName = stack.UTF8("Ikala Engine");
 
@@ -80,39 +110,17 @@ public class VulkanInstance implements Instance {
                             .engineVersion(1)
                             .apiVersion(VK.getInstanceVersionSupported());
 
-            PointerBuffer extensionNames = stack.mallocPointer(64);
-            PointerBuffer glfwExtensions = glfwGetRequiredInstanceExtensions();
-            if (glfwExtensions == null) {
-                var message =
-                        SafeResourceLoader.getString(
-                                "GLFW_EXTENSIONS_NULL", GraphicsPlugin.getResourceBundle());
-                log.error(message);
-                throw new RenderException(message);
-            }
+            requiredExtensionNames.flip();
 
-            for (int i = 0; i < glfwExtensions.capacity(); ++i) {
-                extensionNames.put(glfwExtensions.get(i));
-            }
-
-            vkEnumerateInstanceLayerProperties(intOutput, null);
-
-            if (intOutput.get(0) > 0) {
-                VkLayerProperties.Buffer availableLayers =
-                        VkLayerProperties.malloc(intOutput.get(0), stack);
-                checkError(vkEnumerateInstanceLayerProperties(intOutput, availableLayers));
-
-                for (String requiredLayer : REQUIRED_EXTENSIONS) {
-                    extensionNames.put(stack.ASCII(requiredLayer));
-                }
-
-                if (ENABLE_VALIDATION) {
-                    for (String validationLayer : VALIDATION_LAYERS) {
-                        extensionNames.put(stack.ASCII(validationLayer));
-                    }
-                }
-                extensionNames.flip();
-                checkLayers(availableLayers, extensionNames);
-            }
+            VkInstanceCreateInfo instanceInfo =
+                    VkInstanceCreateInfo.malloc(stack)
+                            .sType$Default()
+                            .pNext(NULL)
+                            .flags(0)
+                            .pApplicationInfo(applicationInfo)
+                            .ppEnabledLayerNames(requiredLayerNames)
+                            .ppEnabledExtensionNames(requiredExtensionNames);
+            requiredExtensionNames.clear();
         }
     }
 
@@ -127,7 +135,9 @@ public class VulkanInstance implements Instance {
             @NonNull VkLayerProperties.Buffer availableLayerNames,
             PointerBuffer requiredLayerNames) {
 
+        requiredLayerNames.flip();
         List<String> missingLayers = new ArrayList<>();
+
         for (int i = 0; i < requiredLayerNames.limit(); ++i) {
             boolean found = false;
 
