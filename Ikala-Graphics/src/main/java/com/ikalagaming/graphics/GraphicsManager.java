@@ -5,7 +5,9 @@ import static org.lwjgl.glfw.GLFW.glfwSetErrorCallback;
 import static org.lwjgl.glfw.GLFW.glfwTerminate;
 
 import com.ikalagaming.graphics.backend.opengl.OpenGLInstance;
+import com.ikalagaming.graphics.backend.vulkan.VulkanInstance;
 import com.ikalagaming.graphics.events.WindowCreated;
+import com.ikalagaming.graphics.frontend.BackendType;
 import com.ikalagaming.graphics.frontend.DeletionQueue;
 import com.ikalagaming.graphics.frontend.Instance;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
@@ -124,6 +126,8 @@ public class GraphicsManager {
     /** A queue used to delete resources. */
     @Getter private static final DeletionQueue deletionQueue = new DeletionQueue();
 
+    @Getter private static BackendType backendType = BackendType.OPENGL;
+
     /**
      * Creates a graphics window, fires off a {@link WindowCreated} event. Won't do anything if a
      * window already exists.
@@ -150,7 +154,12 @@ public class GraphicsManager {
                 SafeResourceLoader.getString("WINDOW_CREATED", GraphicsPlugin.getResourceBundle()));
         new WindowCreated(window.getWindowHandle()).fire();
 
-        renderInstance = new OpenGLInstance();
+        renderInstance =
+                switch (backendType) {
+                    case OPENGL -> new OpenGLInstance();
+                    case VULKAN -> new VulkanInstance();
+                };
+
         renderInstance.initialize(window);
 
         log.debug(

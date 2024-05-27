@@ -1,8 +1,11 @@
 package com.ikalagaming.graphics.backend.vulkan;
 
+import static org.lwjgl.glfw.GLFWVulkan.glfwCreateWindowSurface;
 import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
 import static org.lwjgl.system.MemoryStack.stackPush;
+import static org.lwjgl.system.MemoryUtil.NULL;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
+import static org.lwjgl.vulkan.KHRSurface.vkGetPhysicalDeviceSurfaceSupportKHR;
 import static org.lwjgl.vulkan.VK10.*;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
@@ -29,18 +32,12 @@ import java.util.List;
 @Slf4j
 public class VulkanInstance implements Instance {
 
-    private static final long NULL = 0L;
-
     private static final String[] REQUIRED_EXTENSIONS = {};
 
-    /**
-     * The list of validation layers we want if validation is enabled.
-     */
+    /** The list of validation layers we want if validation is enabled. */
     private static final String[] VALIDATION_LAYERS = {"VK_LAYER_KHRONOS_validation"};
 
-    /**
-     * Whether to enable validation layers and logging.
-     */
+    /** Whether to enable validation layers and logging. */
     private static final boolean ENABLE_VALIDATION = true;
 
     private final IntBuffer intOutput = MemoryUtil.memAllocInt(1);
@@ -51,7 +48,8 @@ public class VulkanInstance implements Instance {
             VkDebugUtilsMessengerCallbackEXT.create(VulkanInstance::logDebugMessage);
 
     /**
-     * Log a debug message from Vulkan. Intended to be used by the {@link #debugLogger}, not called by us.
+     * Log a debug message from Vulkan. Intended to be used by the {@link #debugLogger}, not called
+     * by us.
      *
      * @param messageSeverity The severity of the message.
      * @param messageTypes The type(s) of the message.
@@ -120,6 +118,11 @@ public class VulkanInstance implements Instance {
     }
 
     private VkInstance instance;
+    private VkPhysicalDevice physicalDevice;
+    private long surfaceHandle;
+    private VkPhysicalDeviceProperties deviceProperties = VkPhysicalDeviceProperties.malloc();
+    private VkPhysicalDeviceFeatures deviceFeatures = VkPhysicalDeviceFeatures.malloc();
+    private QueueFamilyIndices queueFamilyIndices;
 
     @Override
     public void initialize(@NonNull Window window) {
@@ -133,6 +136,7 @@ public class VulkanInstance implements Instance {
      * @throws RenderException If an unrecoverable issue occurs setting up vulkan.
      */
     private void createVulkanInstance(@NonNull Window window) {
+
         try (MemoryStack stack = stackPush()) {
 
             PointerBuffer requiredExtensionNames = glfwGetRequiredInstanceExtensions();
@@ -237,6 +241,26 @@ public class VulkanInstance implements Instance {
             }
 
             instance = new VkInstance(pointerOutput.get(0), instanceInfo);
+
+            checkError(
+                    glfwCreateWindowSurface(instance, window.getWindowHandle(), null, longOutput));
+            surfaceHandle = longOutput.get(0);
+
+            checkError(vkEnumeratePhysicalDevices(instance, intOutput, null));
+
+            if (intOutput.get(0) > 0) {
+                PointerBuffer physicalDevices = stack.mallocPointer(intOutput.get(0));
+                checkError(vkEnumeratePhysicalDevices(instance, intOutput, physicalDevices));
+
+                List<VkPhysicalDevice> devices = new ArrayList<>();
+                for (int i = 0; i < physicalDevices.limit(); ++i) {
+                    devices.add(new VkPhysicalDevice(physicalDevices.get(i), instance));
+                }
+
+                physicalDevice = selectPhysicalDevice(devices);
+                vkGetPhysicalDeviceProperties(physicalDevice, deviceProperties);
+                vkGetPhysicalDeviceFeatures(physicalDevice, deviceFeatures);
+            }
         }
     }
 
@@ -301,6 +325,44 @@ public class VulkanInstance implements Instance {
     @Override
     public void cleanup() {}
 
+    /**
+     * Look up the queue family indices for the specified device.
+     *
+     * @param device The physical device.
+     * @return The queue family indices, which will be non-null but may have missing values.
+     */
+    private QueueFamilyIndices findQueueFamilies(@NonNull VkPhysicalDevice device) {
+        vkGetPhysicalDeviceQueueFamilyProperties(device, intOutput, null);
+        VkQueueFamilyProperties.Buffer queueProperties =
+                VkQueueFamilyProperties.malloc(intOutput.get(0));
+        vkGetPhysicalDeviceQueueFamilyProperties(device, intOutput, queueProperties);
+
+        int graphicsFamily = QueueFamilyIndices.MISSING;
+        int presentFamily = QueueFamilyIndices.MISSING;
+
+        for (int i = 0; i < queueProperties.limit(); ++i) {
+            var family = queueProperties.get(i);
+
+            if ((family.queueFlags() & VK_QUEUE_GRAPHICS_BIT) != 0) {
+                graphicsFamily = i;
+            }
+
+            checkError(vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surfaceHandle, intOutput));
+
+            if (intOutput.get(0) == VK_TRUE) {
+                presentFamily = i;
+            }
+
+            if (graphicsFamily != QueueFamilyIndices.MISSING
+                    && presentFamily != QueueFamilyIndices.MISSING) {
+                break;
+            }
+        }
+
+        queueProperties.free();
+        return new QueueFamilyIndices(graphicsFamily, presentFamily);
+    }
+
     @Override
     public void processResources() {}
 
@@ -314,6 +376,86 @@ public class VulkanInstance implements Instance {
 
     @Override
     public void resize(int width, int height) {}
+
+    /**
+     * Give a device a score based on how suitable it is, for use in device selection.
+     *
+     * @param device The device we want to score.
+     * @return The score for the device.
+     */
+    private int scoreDevice(@NonNull VkPhysicalDevice device) {
+
+        int score = 0;
+
+        vkGetPhysicalDeviceProperties(device, deviceProperties);
+        vkGetPhysicalDeviceFeatures(device, deviceFeatures);
+
+        if (!deviceFeatures.geometryShader()) {
+            return 0;
+        }
+
+        var queueFamilies = findQueueFamilies(device);
+
+        if (!queueFamilies.hasAllValues()) {
+            return 0;
+        }
+
+        if (!supportsRequiredExtensions(device)) {
+            return 0;
+        }
+
+        return score;
+    }
+
+    /**
+     * Select a physical device to use.
+     *
+     * @param vkPhysicalDevices The list of devices to choose from.
+     * @return The selected physical device.
+     * @throws RenderException If no device could possibly work.
+     */
+    private VkPhysicalDevice selectPhysicalDevice(
+            @NonNull List<VkPhysicalDevice> vkPhysicalDevices) {
+        VkPhysicalDevice bestChoice = null;
+        int highestScore = Integer.MIN_VALUE;
+
+        for (VkPhysicalDevice device : vkPhysicalDevices) {
+            int score = scoreDevice(device);
+            if (score > highestScore) {
+                highestScore = score;
+                bestChoice = device;
+            }
+        }
+
+        if (null == physicalDevice) {
+            var message =
+                    SafeResourceLoader.getString(
+                            "VULKAN_NO_PHYSICAL_DEVICE", GraphicsPlugin.getResourceBundle());
+            log.error(message);
+            throw new RenderException(message);
+        }
+
+        return bestChoice;
+    }
+
+    private boolean supportsRequiredExtensions(@NonNull VkPhysicalDevice device) {
+        vkEnumerateDeviceExtensionProperties(device, (String) null, intOutput, null);
+        var properties = VkExtensionProperties.malloc(intOutput.get(0));
+        vkEnumerateDeviceExtensionProperties(device, (String) null, intOutput, properties);
+
+        List<String> missingExtensions = new ArrayList<>(List.of(REQUIRED_EXTENSIONS));
+
+        for (int i = 0; i < properties.limit(); ++i) {
+            if (missingExtensions.isEmpty()) {
+                break;
+            }
+            var extension = properties.get(i).extensionNameString();
+            missingExtensions.remove(extension);
+        }
+
+        properties.free();
+        return missingExtensions.isEmpty();
+    }
 
     @Override
     public void setupData(@NonNull Scene scene) {}

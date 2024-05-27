@@ -7,9 +7,11 @@
 package com.ikalagaming.graphics;
 
 import static org.lwjgl.glfw.GLFW.*;
+import static org.lwjgl.system.MemoryUtil.NULL;
 
 import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.graphics.exceptions.WindowCreationException;
+import com.ikalagaming.graphics.frontend.BackendType;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.plugins.config.ConfigManager;
@@ -118,13 +120,19 @@ public class Window {
         if (opts.antiAliasing) {
             glfwWindowHint(GLFW_SAMPLES, 4);
         }
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-        if (opts.compatibleProfile) {
-            glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
-        } else {
-            glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-            glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+
+        if (BackendType.OPENGL == GraphicsManager.getBackendType()) {
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+            if (opts.compatibleProfile) {
+                glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
+            } else {
+                glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+                glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+            }
+        } else if (BackendType.VULKAN == GraphicsManager.getBackendType()) {
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         }
 
         if (opts.width > 0 && opts.height > 0) {
@@ -145,8 +153,8 @@ public class Window {
         }
 
         this.title = title;
-        windowHandle = glfwCreateWindow(width, height, title, MemoryUtil.NULL, MemoryUtil.NULL);
-        if (windowHandle == MemoryUtil.NULL) {
+        windowHandle = glfwCreateWindow(width, height, title, NULL, NULL);
+        if (windowHandle == NULL) {
             String error =
                     SafeResourceLoader.getString(
                             "WINDOW_ERROR_CREATION", GraphicsPlugin.getResourceBundle());
@@ -158,10 +166,7 @@ public class Window {
 
         glfwSetErrorCallback(
                 (int errorCode, long msgPtr) ->
-                        log.error(
-                                "Error code [{}], msg [{]]",
-                                errorCode,
-                                MemoryUtil.memUTF8(msgPtr)));
+                        log.error("Error code {} - [{}]", errorCode, MemoryUtil.memUTF8(msgPtr)));
 
         glfwSetKeyCallback(
                 windowHandle,
@@ -200,12 +205,14 @@ public class Window {
                     io.addInputCharacter(codepoint);
                 });
 
-        glfwMakeContextCurrent(windowHandle);
+        if (BackendType.OPENGL == GraphicsManager.getBackendType()) {
+            glfwMakeContextCurrent(windowHandle);
 
-        if (opts.fps > 0) {
-            glfwSwapInterval(0);
-        } else {
-            glfwSwapInterval(1);
+            if (opts.fps > 0) {
+                glfwSwapInterval(0);
+            } else {
+                glfwSwapInterval(1);
+            }
         }
 
         setWindowIcon();
@@ -223,7 +230,7 @@ public class Window {
 
     /** Destroy the window. */
     public void destroy() {
-        if (MemoryUtil.NULL == windowHandle) {
+        if (NULL == windowHandle) {
             return;
         }
 
@@ -233,7 +240,7 @@ public class Window {
         if (callback != null) {
             callback.free();
         }
-        windowHandle = MemoryUtil.NULL;
+        windowHandle = NULL;
         log.debug(
                 SafeResourceLoader.getString(
                         "WINDOW_DESTROYED", GraphicsPlugin.getResourceBundle()));
