@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.backend.vulkan;
 
 import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
 import static org.lwjgl.system.MemoryStack.stackPush;
+import static org.lwjgl.vulkan.EXTDebugUtils.*;
 import static org.lwjgl.vulkan.VK10.*;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
@@ -17,10 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
-import org.lwjgl.vulkan.VK;
-import org.lwjgl.vulkan.VkApplicationInfo;
-import org.lwjgl.vulkan.VkInstanceCreateInfo;
-import org.lwjgl.vulkan.VkLayerProperties;
+import org.lwjgl.vulkan.*;
 
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
@@ -42,6 +40,45 @@ public class VulkanInstance implements Instance {
     private final LongBuffer longOutput = MemoryUtil.memAllocLong(1);
     private final PointerBuffer pointerOutput = MemoryUtil.memAllocPointer(1);
 
+    private final VkDebugUtilsMessengerCallbackEXT debugLogger =
+            VkDebugUtilsMessengerCallbackEXT.create(VulkanInstance::logDebugMessage);
+
+    private static int logDebugMessage(
+            int messageSeverity, int messageTypes, long callbackDataPointer, long userDataPointer) {
+        final var messageFormat = "[{}] {} - {}";
+
+        VkDebugUtilsMessengerCallbackDataEXT data =
+                VkDebugUtilsMessengerCallbackDataEXT.create(callbackDataPointer);
+
+        final String type = mapDebugMessageTypeName(messageTypes);
+
+        if ((messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0) {
+            log.error(messageFormat, type, data.pMessageIdNameString(), data.pMessageString());
+        } else if ((messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) != 0) {
+            log.warn(messageFormat, type, data.pMessageIdNameString(), data.pMessageString());
+        } else if ((messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) != 0) {
+            log.debug(messageFormat, type, data.pMessageIdNameString(), data.pMessageString());
+        } else {
+            // Info or anything else
+            log.info(messageFormat, type, data.pMessageIdNameString(), data.pMessageString());
+        }
+
+        return VK_FALSE;
+    }
+
+    private static String mapDebugMessageTypeName(int types) {
+        if ((types & VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT) != 0) {
+            return "General";
+        }
+        if ((types & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) != 0) {
+            return "Validation";
+        }
+        if ((types & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT) != 0) {
+            return "Performance";
+        }
+        return "Unknown";
+    }
+
     private static void checkError(int errorCode) {
         if (errorCode != 0) {
             var message =
@@ -53,6 +90,8 @@ public class VulkanInstance implements Instance {
             throw new RenderException(message);
         }
     }
+
+    private VkInstance instance;
 
     @Override
     public void initialize(@NonNull Window window) {
@@ -84,17 +123,20 @@ public class VulkanInstance implements Instance {
             PointerBuffer requiredLayerNames = null;
 
             if (ENABLE_VALIDATION) {
-                checkError(vkEnumerateInstanceLayerProperties(intOutput, null));
-                VkLayerProperties.Buffer availableLayers =
-                        VkLayerProperties.malloc(intOutput.get(0), stack);
-                checkError(vkEnumerateInstanceLayerProperties(intOutput, availableLayers));
-
                 requiredLayerNames = stack.mallocPointer(VALIDATION_LAYERS.length);
                 for (String validationLayer : VALIDATION_LAYERS) {
                     requiredLayerNames.put(stack.ASCII(validationLayer));
                 }
 
-                checkLayers(availableLayers, requiredLayerNames);
+                try (MemoryStack extraFrame = stackPush()) {
+                    checkError(vkEnumerateInstanceLayerProperties(intOutput, null));
+                    VkLayerProperties.Buffer availableLayers =
+                            VkLayerProperties.malloc(intOutput.get(0), extraFrame);
+                    checkError(vkEnumerateInstanceLayerProperties(intOutput, availableLayers));
+
+                    checkLayers(availableLayers, requiredLayerNames);
+                }
+                requiredLayerNames.flip();
             }
 
             ByteBuffer appName = stack.UTF8(window.getTitle());
@@ -111,7 +153,6 @@ public class VulkanInstance implements Instance {
                             .apiVersion(VK.getInstanceVersionSupported());
 
             requiredExtensionNames.flip();
-
             VkInstanceCreateInfo instanceInfo =
                     VkInstanceCreateInfo.malloc(stack)
                             .sType$Default()
@@ -121,6 +162,53 @@ public class VulkanInstance implements Instance {
                             .ppEnabledLayerNames(requiredLayerNames)
                             .ppEnabledExtensionNames(requiredExtensionNames);
             requiredExtensionNames.clear();
+
+            VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
+
+            if (ENABLE_VALIDATION) {
+                debugCreateInfo =
+                        VkDebugUtilsMessengerCreateInfoEXT.malloc(stack)
+                                .sType$Default()
+                                .pNext(NULL)
+                                .flags(0)
+                                .messageSeverity(
+                                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+                                                | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+                                .messageType(
+                                        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+                                                | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
+                                                | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)
+                                .pfnUserCallback(debugLogger)
+                                .pUserData(NULL);
+                instanceInfo.pNext(debugCreateInfo.address());
+            }
+
+            int error = vkCreateInstance(instanceInfo, null, pointerOutput);
+            if (error == VK_ERROR_INCOMPATIBLE_DRIVER) {
+                var message =
+                        SafeResourceLoader.getString(
+                                "VULKAN_INCOMPATIBLE_DRIVER", GraphicsPlugin.getResourceBundle());
+                log.error(message);
+                throw new RenderException(message);
+            }
+            if (error == VK_ERROR_EXTENSION_NOT_PRESENT) {
+                var message =
+                        SafeResourceLoader.getString(
+                                "VULKAN_EXTENSION_NOT_PRESENT", GraphicsPlugin.getResourceBundle());
+                log.error(message);
+                throw new RenderException(message);
+            }
+            if (error != 0) {
+                var message =
+                        SafeResourceLoader.getStringFormatted(
+                                "VULKAN_GENERIC_CREATION_FAILURE",
+                                GraphicsPlugin.getResourceBundle(),
+                                String.valueOf(error));
+                log.error(message);
+                throw new RenderException(message);
+            }
+
+            instance = new VkInstance(pointerOutput.get(0), instanceInfo);
         }
     }
 
