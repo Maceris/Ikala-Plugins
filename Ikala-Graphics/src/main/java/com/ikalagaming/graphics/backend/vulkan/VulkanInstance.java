@@ -30,10 +30,17 @@ import java.util.List;
 public class VulkanInstance implements Instance {
 
     private static final long NULL = 0L;
+
     private static final String[] REQUIRED_EXTENSIONS = {};
 
+    /**
+     * The list of validation layers we want if validation is enabled.
+     */
     private static final String[] VALIDATION_LAYERS = {"VK_LAYER_KHRONOS_validation"};
 
+    /**
+     * Whether to enable validation layers and logging.
+     */
     private static final boolean ENABLE_VALIDATION = true;
 
     private final IntBuffer intOutput = MemoryUtil.memAllocInt(1);
@@ -43,6 +50,15 @@ public class VulkanInstance implements Instance {
     private final VkDebugUtilsMessengerCallbackEXT debugLogger =
             VkDebugUtilsMessengerCallbackEXT.create(VulkanInstance::logDebugMessage);
 
+    /**
+     * Log a debug message from Vulkan. Intended to be used by the {@link #debugLogger}, not called by us.
+     *
+     * @param messageSeverity The severity of the message.
+     * @param messageTypes The type(s) of the message.
+     * @param callbackDataPointer A pointer for messenger callback data.
+     * @param userDataPointer Ignored by us.
+     * @return VK_FALSE, as mandated by Vulkan.
+     */
     private static int logDebugMessage(
             int messageSeverity, int messageTypes, long callbackDataPointer, long userDataPointer) {
         final var messageFormat = "[{}] {} - {}";
@@ -66,6 +82,12 @@ public class VulkanInstance implements Instance {
         return VK_FALSE;
     }
 
+    /**
+     * Convert a debug message type to a string form.
+     *
+     * @param types The message type provided by Vulkan.
+     * @return The string name for debugging.
+     */
     private static String mapDebugMessageTypeName(int types) {
         if ((types & VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT) != 0) {
             return "General";
@@ -79,6 +101,12 @@ public class VulkanInstance implements Instance {
         return "Unknown";
     }
 
+    /**
+     * Check for an error, and if there is one then log it and throw an exception.
+     *
+     * @param errorCode The result from a Vulkan function.
+     * @throws RenderException If the error code is not 0.
+     */
     private static void checkError(int errorCode) {
         if (errorCode != 0) {
             var message =
