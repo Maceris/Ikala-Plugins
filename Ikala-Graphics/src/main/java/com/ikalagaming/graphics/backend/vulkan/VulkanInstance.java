@@ -5,7 +5,7 @@ import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.system.MemoryUtil.NULL;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
-import static org.lwjgl.vulkan.KHRSurface.vkGetPhysicalDeviceSurfaceSupportKHR;
+import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.VK10.*;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
@@ -322,6 +322,34 @@ public class VulkanInstance implements Instance {
         }
     }
 
+    /**
+     * Check the swap chain support provided for the surface by the provided device.
+     *
+     * @param device The device.
+     * @return Swap chain support information provided for the surface by the provided device.
+     */
+    private SwapChainSupport checkSwapChainSupport(@NonNull VkPhysicalDevice device) {
+        var capabilities = VkSurfaceCapabilitiesKHR.malloc();
+        VkSurfaceFormatKHR.Buffer formats = null;
+        IntBuffer presentModes = null;
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surfaceHandle, capabilities);
+
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surfaceHandle, intOutput, null);
+        if (intOutput.get(0) != 0) {
+            formats = VkSurfaceFormatKHR.malloc(intOutput.get(0));
+            vkGetPhysicalDeviceSurfaceFormatsKHR(device, surfaceHandle, intOutput, formats);
+        }
+
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surfaceHandle, intOutput, null);
+        if (intOutput.get(0) != 0) {
+            presentModes = IntBuffer.allocate(intOutput.get(0));
+            vkGetPhysicalDeviceSurfacePresentModesKHR(
+                    device, surfaceHandle, intOutput, presentModes);
+        }
+
+        return new SwapChainSupport(capabilities, formats, presentModes);
+    }
+
     @Override
     public void cleanup() {}
 
@@ -403,6 +431,14 @@ public class VulkanInstance implements Instance {
         if (!supportsRequiredExtensions(device)) {
             return 0;
         }
+
+        var swapChainSupport = checkSwapChainSupport(device);
+        if (swapChainSupport.formats() == null || swapChainSupport.presentModes() == null) {
+            swapChainSupport.free();
+            return 0;
+        }
+
+        swapChainSupport.free();
 
         return score;
     }
