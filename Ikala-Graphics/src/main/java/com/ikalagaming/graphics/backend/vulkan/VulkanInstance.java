@@ -117,12 +117,8 @@ public class VulkanInstance implements Instance {
         }
     }
 
-    private VkInstance instance;
-    private VkPhysicalDevice physicalDevice;
-    private long surfaceHandle;
-    private VkPhysicalDeviceProperties deviceProperties = VkPhysicalDeviceProperties.malloc();
-    private VkPhysicalDeviceFeatures deviceFeatures = VkPhysicalDeviceFeatures.malloc();
-    private QueueFamilyIndices queueFamilyIndices;
+    /** Tracks the state and handles. */
+    private final VulkanState state = new VulkanState();
 
     @Override
     public void initialize(@NonNull Window window) {
@@ -248,26 +244,27 @@ public class VulkanInstance implements Instance {
                 throw new RenderException(message);
             }
 
-            instance = new VkInstance(pointerOutput.get(0), instanceInfo);
+            state.instance = new VkInstance(pointerOutput.get(0), instanceInfo);
 
             checkError(
-                    glfwCreateWindowSurface(instance, window.getWindowHandle(), null, longOutput));
-            surfaceHandle = longOutput.get(0);
+                    glfwCreateWindowSurface(
+                            state.instance, window.getWindowHandle(), null, longOutput));
+            state.surfaceHandle = longOutput.get(0);
 
-            checkError(vkEnumeratePhysicalDevices(instance, intOutput, null));
+            checkError(vkEnumeratePhysicalDevices(state.instance, intOutput, null));
 
             if (intOutput.get(0) > 0) {
                 PointerBuffer physicalDevices = stack.mallocPointer(intOutput.get(0));
-                checkError(vkEnumeratePhysicalDevices(instance, intOutput, physicalDevices));
+                checkError(vkEnumeratePhysicalDevices(state.instance, intOutput, physicalDevices));
 
                 List<VkPhysicalDevice> devices = new ArrayList<>();
                 for (int i = 0; i < physicalDevices.limit(); ++i) {
-                    devices.add(new VkPhysicalDevice(physicalDevices.get(i), instance));
+                    devices.add(new VkPhysicalDevice(physicalDevices.get(i), state.instance));
                 }
 
-                physicalDevice = selectPhysicalDevice(devices);
-                vkGetPhysicalDeviceProperties(physicalDevice, deviceProperties);
-                vkGetPhysicalDeviceFeatures(physicalDevice, deviceFeatures);
+                state.device.physical = selectPhysicalDevice(devices);
+                vkGetPhysicalDeviceProperties(state.device.physical, state.device.deviceProperties);
+                vkGetPhysicalDeviceFeatures(state.device.physical, state.device.deviceFeatures);
             }
         }
     }
@@ -340,19 +337,19 @@ public class VulkanInstance implements Instance {
         var capabilities = VkSurfaceCapabilitiesKHR.malloc();
         VkSurfaceFormatKHR.Buffer formats = null;
         IntBuffer presentModes = null;
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surfaceHandle, capabilities);
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, state.surfaceHandle, capabilities);
 
-        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surfaceHandle, intOutput, null);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, state.surfaceHandle, intOutput, null);
         if (intOutput.get(0) != 0) {
             formats = VkSurfaceFormatKHR.malloc(intOutput.get(0));
-            vkGetPhysicalDeviceSurfaceFormatsKHR(device, surfaceHandle, intOutput, formats);
+            vkGetPhysicalDeviceSurfaceFormatsKHR(device, state.surfaceHandle, intOutput, formats);
         }
 
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surfaceHandle, intOutput, null);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, state.surfaceHandle, intOutput, null);
         if (intOutput.get(0) != 0) {
             presentModes = IntBuffer.allocate(intOutput.get(0));
             vkGetPhysicalDeviceSurfacePresentModesKHR(
-                    device, surfaceHandle, intOutput, presentModes);
+                    device, state.surfaceHandle, intOutput, presentModes);
         }
 
         return new SwapChainSupport(capabilities, formats, presentModes);
@@ -383,7 +380,9 @@ public class VulkanInstance implements Instance {
                 graphicsFamily = i;
             }
 
-            checkError(vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surfaceHandle, intOutput));
+            checkError(
+                    vkGetPhysicalDeviceSurfaceSupportKHR(
+                            device, i, state.surfaceHandle, intOutput));
 
             if (intOutput.get(0) == VK_TRUE) {
                 presentFamily = i;
@@ -422,9 +421,9 @@ public class VulkanInstance implements Instance {
     private int scoreDevice(@NonNull VkPhysicalDevice device) {
         int score = 0;
 
-        vkGetPhysicalDeviceFeatures(device, deviceFeatures);
+        vkGetPhysicalDeviceFeatures(device, state.device.deviceFeatures);
 
-        if (!deviceFeatures.geometryShader()) {
+        if (!state.device.deviceFeatures.geometryShader()) {
             return 0;
         }
 
@@ -446,12 +445,12 @@ public class VulkanInstance implements Instance {
 
         swapChainSupport.free();
 
-        vkGetPhysicalDeviceProperties(device, deviceProperties);
-        if (deviceProperties.deviceType() == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+        vkGetPhysicalDeviceProperties(device, state.device.deviceProperties);
+        if (state.device.deviceProperties.deviceType() == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
             score += 1_000_000;
         }
 
-        score += deviceProperties.limits().maxImageDimension2D();
+        score += state.device.deviceProperties.limits().maxImageDimension2D();
 
         return score;
     }
@@ -476,7 +475,7 @@ public class VulkanInstance implements Instance {
             }
         }
 
-        if (null == physicalDevice) {
+        if (null == state.device.physical) {
             var message =
                     SafeResourceLoader.getString(
                             "VULKAN_NO_PHYSICAL_DEVICE", GraphicsPlugin.getResourceBundle());
