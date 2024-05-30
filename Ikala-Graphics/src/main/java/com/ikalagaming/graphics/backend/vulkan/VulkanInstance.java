@@ -149,7 +149,16 @@ public class VulkanInstance implements Instance {
             }
 
             for (String requiredLayer : REQUIRED_EXTENSIONS) {
-                requiredExtensionNames.put(stack.ASCII(requiredLayer));
+                boolean duplicate = false;
+                for (int i = 0; i < requiredExtensionNames.limit(); ++i) {
+                    if (requiredExtensionNames.getStringASCII(i).equals(requiredLayer)) {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (!duplicate) {
+                    requiredExtensionNames.put(stack.ASCII(requiredLayer));
+                }
             }
 
             PointerBuffer requiredLayerNames = null;
@@ -193,7 +202,6 @@ public class VulkanInstance implements Instance {
                             .pApplicationInfo(applicationInfo)
                             .ppEnabledLayerNames(requiredLayerNames)
                             .ppEnabledExtensionNames(requiredExtensionNames);
-            requiredExtensionNames.clear();
 
             VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
 
