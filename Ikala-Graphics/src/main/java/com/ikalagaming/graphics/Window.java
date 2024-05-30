@@ -23,10 +23,7 @@ import imgui.ImGuiIO;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.lwjgl.glfw.Callbacks;
-import org.lwjgl.glfw.GLFWErrorCallback;
-import org.lwjgl.glfw.GLFWImage;
-import org.lwjgl.glfw.GLFWVidMode;
+import org.lwjgl.glfw.*;
 import org.lwjgl.stb.STBImage;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
@@ -105,6 +102,7 @@ public class Window {
             @NonNull Callable<Void> resizeFunc) {
         this.resizeFunc = resizeFunc;
 
+        glfwInitHint(GLFW_COCOA_CHDIR_RESOURCES, GLFW_TRUE);
         if (!glfwInit()) {
             String error =
                     SafeResourceLoader.getString(
@@ -113,27 +111,16 @@ public class Window {
             throw new WindowCreationException(error);
         }
 
-        glfwDefaultWindowHints();
-        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-
-        if (opts.antiAliasing) {
-            glfwWindowHint(GLFW_SAMPLES, 4);
+        if (BackendType.VULKAN == GraphicsManager.getBackendType()
+                && !GLFWVulkan.glfwVulkanSupported()) {
+            String error =
+                    SafeResourceLoader.getString(
+                            "GLFW_VULKAN_UNSUPPORTED", GraphicsPlugin.getResourceBundle());
+            log.warn(error);
+            throw new WindowCreationException(error);
         }
 
-        if (BackendType.OPENGL == GraphicsManager.getBackendType()) {
-            glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
-            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-            if (opts.compatibleProfile) {
-                glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
-            } else {
-                glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-                glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
-            }
-        } else if (BackendType.VULKAN == GraphicsManager.getBackendType()) {
-            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        }
+        setWindowHints(opts);
 
         if (opts.width > 0 && opts.height > 0) {
             width = opts.width;
@@ -162,48 +149,7 @@ public class Window {
             throw new WindowCreationException(error);
         }
 
-        glfwSetFramebufferSizeCallback(windowHandle, (window, w, h) -> resized(w, h));
-
-        glfwSetErrorCallback(
-                (int errorCode, long msgPtr) ->
-                        log.error("Error code {} - [{}]", errorCode, MemoryUtil.memUTF8(msgPtr)));
-
-        glfwSetKeyCallback(
-                windowHandle,
-                (window, key, scancode, action, mods) -> {
-                    ImGuiIO io = ImGui.getIO();
-                    if (action == GLFW_PRESS) {
-                        io.setKeysDown(key, true);
-                    }
-                    if (action == GLFW_RELEASE) {
-                        io.setKeysDown(key, false);
-                    }
-                    io.setKeyCtrl(
-                            io.getKeysDown(GLFW_KEY_LEFT_CONTROL)
-                                    || io.getKeysDown(GLFW_KEY_RIGHT_CONTROL));
-                    io.setKeyShift(
-                            io.getKeysDown(GLFW_KEY_LEFT_SHIFT)
-                                    || io.getKeysDown(GLFW_KEY_RIGHT_SHIFT));
-                    io.setKeyAlt(
-                            io.getKeysDown(GLFW_KEY_LEFT_ALT)
-                                    || io.getKeysDown(GLFW_KEY_RIGHT_ALT));
-                    io.setKeySuper(
-                            io.getKeysDown(GLFW_KEY_LEFT_SUPER)
-                                    || io.getKeysDown(GLFW_KEY_RIGHT_SUPER));
-                });
-        glfwSetScrollCallback(
-                windowHandle,
-                (window, xOffset, yOffset) -> {
-                    ImGuiIO io = ImGui.getIO();
-                    io.setMouseWheelH((float) (io.getMouseWheelH() + xOffset));
-                    io.setMouseWheel((float) (io.getMouseWheel() + yOffset));
-                });
-        glfwSetCharCallback(
-                windowHandle,
-                (window, codepoint) -> {
-                    ImGuiIO io = ImGui.getIO();
-                    io.addInputCharacter(codepoint);
-                });
+        setCallbacks();
 
         if (BackendType.OPENGL == GraphicsManager.getBackendType()) {
             glfwMakeContextCurrent(windowHandle);
@@ -280,6 +226,81 @@ public class Window {
                     SafeResourceLoader.getString(
                             "RESIZE_ERROR", GraphicsPlugin.getResourceBundle()),
                     e);
+        }
+    }
+
+    /** Set up the window callbacks. */
+    private void setCallbacks() {
+        glfwSetFramebufferSizeCallback(windowHandle, (window, w, h) -> resized(w, h));
+
+        glfwSetErrorCallback(
+                (int errorCode, long msgPtr) ->
+                        log.error("Error code {} - {}", errorCode, MemoryUtil.memUTF8(msgPtr)));
+
+        glfwSetKeyCallback(
+                windowHandle,
+                (window, key, scancode, action, mods) -> {
+                    ImGuiIO io = ImGui.getIO();
+                    if (action == GLFW_PRESS) {
+                        io.setKeysDown(key, true);
+                    }
+                    if (action == GLFW_RELEASE) {
+                        io.setKeysDown(key, false);
+                    }
+                    io.setKeyCtrl(
+                            io.getKeysDown(GLFW_KEY_LEFT_CONTROL)
+                                    || io.getKeysDown(GLFW_KEY_RIGHT_CONTROL));
+                    io.setKeyShift(
+                            io.getKeysDown(GLFW_KEY_LEFT_SHIFT)
+                                    || io.getKeysDown(GLFW_KEY_RIGHT_SHIFT));
+                    io.setKeyAlt(
+                            io.getKeysDown(GLFW_KEY_LEFT_ALT)
+                                    || io.getKeysDown(GLFW_KEY_RIGHT_ALT));
+                    io.setKeySuper(
+                            io.getKeysDown(GLFW_KEY_LEFT_SUPER)
+                                    || io.getKeysDown(GLFW_KEY_RIGHT_SUPER));
+                });
+        glfwSetScrollCallback(
+                windowHandle,
+                (window, xOffset, yOffset) -> {
+                    ImGuiIO io = ImGui.getIO();
+                    io.setMouseWheelH((float) (io.getMouseWheelH() + xOffset));
+                    io.setMouseWheel((float) (io.getMouseWheel() + yOffset));
+                });
+        glfwSetCharCallback(
+                windowHandle,
+                (window, codepoint) -> {
+                    ImGuiIO io = ImGui.getIO();
+                    io.addInputCharacter(codepoint);
+                });
+    }
+
+    /**
+     * Set up the window hints.
+     *
+     * @param options The configuration to use.
+     */
+    private static void setWindowHints(@NonNull WindowOptions options) {
+        glfwDefaultWindowHints();
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+
+        if (options.antiAliasing) {
+            glfwWindowHint(GLFW_SAMPLES, 4);
+        }
+
+        if (BackendType.OPENGL == GraphicsManager.getBackendType()) {
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+            if (options.compatibleProfile) {
+                glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
+            } else {
+                glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+                glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+            }
+        } else if (BackendType.VULKAN == GraphicsManager.getBackendType()) {
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         }
     }
 
