@@ -412,10 +412,8 @@ public class VulkanInstance implements Instance {
      * @return The score for the device.
      */
     private int scoreDevice(@NonNull VkPhysicalDevice device) {
-
         int score = 0;
 
-        vkGetPhysicalDeviceProperties(device, deviceProperties);
         vkGetPhysicalDeviceFeatures(device, deviceFeatures);
 
         if (!deviceFeatures.geometryShader()) {
@@ -439,6 +437,13 @@ public class VulkanInstance implements Instance {
         }
 
         swapChainSupport.free();
+
+        vkGetPhysicalDeviceProperties(device, deviceProperties);
+        if (deviceProperties.deviceType() == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+            score += 1_000_000;
+        }
+
+        score += deviceProperties.limits().maxImageDimension2D();
 
         return score;
     }
