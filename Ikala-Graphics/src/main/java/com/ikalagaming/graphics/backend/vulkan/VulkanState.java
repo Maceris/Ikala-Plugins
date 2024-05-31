@@ -7,7 +7,7 @@ import java.nio.ByteBuffer;
 public class VulkanState {
 
     public VkInstance instance;
-    public Device device;
+    public Device device = new Device();
 
     public long surfaceHandle;
 
