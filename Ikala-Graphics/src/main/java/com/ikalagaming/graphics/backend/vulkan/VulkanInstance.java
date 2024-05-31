@@ -7,7 +7,6 @@ import static org.lwjgl.system.MemoryUtil.NULL;
 import static org.lwjgl.system.MemoryUtil.memAllocPointer;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
 import static org.lwjgl.vulkan.KHRSurface.*;
-import static org.lwjgl.vulkan.KHRWin32Surface.vkCreateWin32SurfaceKHR;
 import static org.lwjgl.vulkan.VK10.*;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
@@ -17,15 +16,12 @@ import com.ikalagaming.graphics.frontend.Instance;
 import com.ikalagaming.graphics.frontend.TextureLoader;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.SafeResourceLoader;
-import com.ikalagaming.util.SystemProperties;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.PointerBuffer;
-import org.lwjgl.glfw.GLFWNativeWin32;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
-import org.lwjgl.system.windows.WinBase;
 import org.lwjgl.vulkan.*;
 
 import java.nio.ByteBuffer;
@@ -348,20 +344,29 @@ public class VulkanInstance implements Instance {
     private SwapChainSupport checkSwapChainSupport(@NonNull VkPhysicalDevice device) {
         var capabilities = VkSurfaceCapabilitiesKHR.malloc();
         VkSurfaceFormatKHR.Buffer formats = null;
-        IntBuffer presentModes = null;
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, state.surfaceHandle, capabilities);
+        int[] presentModes = null;
+        checkError(
+                vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+                        device, state.surfaceHandle, capabilities));
 
-        vkGetPhysicalDeviceSurfaceFormatsKHR(device, state.surfaceHandle, intOutput, null);
-        if (intOutput.get(0) != 0) {
+        checkError(
+                vkGetPhysicalDeviceSurfaceFormatsKHR(device, state.surfaceHandle, intOutput, null));
+        if (intOutput.get(0) > 0) {
             formats = VkSurfaceFormatKHR.malloc(intOutput.get(0));
-            vkGetPhysicalDeviceSurfaceFormatsKHR(device, state.surfaceHandle, intOutput, formats);
+            checkError(
+                    vkGetPhysicalDeviceSurfaceFormatsKHR(
+                            device, state.surfaceHandle, intOutput, formats));
         }
 
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, state.surfaceHandle, intOutput, null);
-        if (intOutput.get(0) != 0) {
-            presentModes = IntBuffer.allocate(intOutput.get(0));
-            vkGetPhysicalDeviceSurfacePresentModesKHR(
-                    device, state.surfaceHandle, intOutput, presentModes);
+        checkError(
+                vkGetPhysicalDeviceSurfacePresentModesKHR(
+                        device, state.surfaceHandle, intOutput, null));
+        if (intOutput.get(0) > 0) {
+            presentModes = new int[intOutput.get(0)];
+            int[] presentModeCount = new int[] {intOutput.get(0)};
+            checkError(
+                    vkGetPhysicalDeviceSurfacePresentModesKHR(
+                            device, state.surfaceHandle, presentModeCount, presentModes));
         }
 
         return new SwapChainSupport(capabilities, formats, presentModes);
@@ -450,7 +455,7 @@ public class VulkanInstance implements Instance {
         }
 
         var swapChainSupport = checkSwapChainSupport(device);
-        if (swapChainSupport.formats() == null || swapChainSupport.presentModes() == null) {
+        if (swapChainSupport.isMissingSupport()) {
             swapChainSupport.free();
             return 0;
         }
