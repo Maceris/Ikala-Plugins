@@ -492,7 +492,7 @@ public class VulkanInstance implements Instance {
             }
         }
 
-        if (null == state.device.physical) {
+        if (null == bestChoice) {
             var message =
                     SafeResourceLoader.getString(
                             "VULKAN_NO_PHYSICAL_DEVICE", GraphicsPlugin.getResourceBundle());
