@@ -4,8 +4,10 @@ import static org.lwjgl.glfw.GLFWVulkan.glfwCreateWindowSurface;
 import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.system.MemoryUtil.NULL;
+import static org.lwjgl.system.MemoryUtil.memAllocPointer;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
 import static org.lwjgl.vulkan.KHRSurface.*;
+import static org.lwjgl.vulkan.KHRWin32Surface.vkCreateWin32SurfaceKHR;
 import static org.lwjgl.vulkan.VK10.*;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
@@ -15,12 +17,15 @@ import com.ikalagaming.graphics.frontend.Instance;
 import com.ikalagaming.graphics.frontend.TextureLoader;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.SafeResourceLoader;
+import com.ikalagaming.util.SystemProperties;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.PointerBuffer;
+import org.lwjgl.glfw.GLFWNativeWin32;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
+import org.lwjgl.system.windows.WinBase;
 import org.lwjgl.vulkan.*;
 
 import java.nio.ByteBuffer;
@@ -135,13 +140,19 @@ public class VulkanInstance implements Instance {
 
         try (MemoryStack stack = stackPush()) {
 
-            PointerBuffer requiredExtensionNames = glfwGetRequiredInstanceExtensions();
-            if (requiredExtensionNames == null) {
+            PointerBuffer requiredExtensionNames = memAllocPointer(64);
+
+            PointerBuffer glfwExtensionNames = glfwGetRequiredInstanceExtensions();
+            if (glfwExtensionNames == null) {
                 var message =
                         SafeResourceLoader.getString(
                                 "GLFW_EXTENSIONS_NULL", GraphicsPlugin.getResourceBundle());
                 log.error(message);
                 throw new RenderException(message);
+            }
+
+            for (int i = 0; i < glfwExtensionNames.limit(); ++i) {
+                requiredExtensionNames.put(glfwExtensionNames.get(i));
             }
 
             for (String requiredLayer : REQUIRED_EXTENSIONS) {
@@ -179,7 +190,7 @@ public class VulkanInstance implements Instance {
             ByteBuffer appName = stack.UTF8(window.getTitle());
             ByteBuffer engineName = stack.UTF8("Ikala Engine");
 
-            VkApplicationInfo applicationInfo =
+            var applicationInfo =
                     VkApplicationInfo.malloc(stack)
                             .sType$Default()
                             .pNext(NULL)
@@ -187,10 +198,10 @@ public class VulkanInstance implements Instance {
                             .applicationVersion(1)
                             .pEngineName(engineName)
                             .engineVersion(1)
-                            .apiVersion(VK.getInstanceVersionSupported());
+                            .apiVersion(VK_MAKE_API_VERSION(0, 1, 3, 0));
 
             requiredExtensionNames.flip();
-            VkInstanceCreateInfo instanceInfo =
+            var instanceInfo =
                     VkInstanceCreateInfo.malloc(stack)
                             .sType$Default()
                             .pNext(NULL)
@@ -220,6 +231,7 @@ public class VulkanInstance implements Instance {
             }
 
             int error = vkCreateInstance(instanceInfo, null, pointerOutput);
+            requiredExtensionNames.free();
             if (error == VK_ERROR_INCOMPATIBLE_DRIVER) {
                 var message =
                         SafeResourceLoader.getString(
