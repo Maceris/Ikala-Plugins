@@ -47,10 +47,7 @@ public record SwapChainSupport(
         if (!Objects.equals(formats, other.formats)) {
             return false;
         }
-        if (!Arrays.equals(presentModes, other.presentModes)) {
-            return false;
-        }
-        return true;
+        return Arrays.equals(presentModes, other.presentModes);
     }
 
     @Override
@@ -62,8 +59,8 @@ public record SwapChainSupport(
     public String toString() {
         return String.format(
                 "[capabilities=%s, formats=%s, presentModes=%s]",
-                Objects.toString(capabilities),
-                Objects.toString(formats),
+                capabilities,
+                formats,
                 Arrays.toString(presentModes));
     }
 }
