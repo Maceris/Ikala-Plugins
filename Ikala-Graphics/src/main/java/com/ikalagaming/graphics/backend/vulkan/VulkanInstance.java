@@ -33,7 +33,13 @@ import java.util.List;
 @Slf4j
 public class VulkanInstance implements Instance {
 
-    private static final String[] REQUIRED_EXTENSIONS = {};
+    private static final List<String> REQUIRED_INSTANCE_EXTENSION_NAMES = List.of("VK_KHR_surface");
+    private static final ByteBuffer[] REQUIRED_INSTANCE_EXTENSIONS =
+            REQUIRED_INSTANCE_EXTENSION_NAMES.stream()
+                    .map(MemoryUtil::memASCII)
+                    .toArray(ByteBuffer[]::new);
+
+    private static final List<String> REQUIRED_DEVICE_EXTENSIONS = List.of("VK_KHR_swapchain");
 
     /** The list of validation layers we want if validation is enabled. */
     private static final String[] VALIDATION_LAYERS = {"VK_LAYER_KHRONOS_validation"};
@@ -124,6 +130,7 @@ public class VulkanInstance implements Instance {
     @Override
     public void initialize(@NonNull Window window) {
         createVulkanInstance(window);
+        createSwapchain(window);
     }
 
     /**
@@ -133,36 +140,11 @@ public class VulkanInstance implements Instance {
      * @throws RenderException If an unrecoverable issue occurs setting up vulkan.
      */
     private void createVulkanInstance(@NonNull Window window) {
-
         try (MemoryStack stack = stackPush()) {
 
             PointerBuffer requiredExtensionNames = memAllocPointer(64);
 
-            PointerBuffer glfwExtensionNames = glfwGetRequiredInstanceExtensions();
-            if (glfwExtensionNames == null) {
-                var message =
-                        SafeResourceLoader.getString(
-                                "GLFW_EXTENSIONS_NULL", GraphicsPlugin.getResourceBundle());
-                log.error(message);
-                throw new RenderException(message);
-            }
-
-            for (int i = 0; i < glfwExtensionNames.limit(); ++i) {
-                requiredExtensionNames.put(glfwExtensionNames.get(i));
-            }
-
-            for (String requiredLayer : REQUIRED_EXTENSIONS) {
-                boolean duplicate = false;
-                for (int i = 0; i < requiredExtensionNames.limit(); ++i) {
-                    if (requiredExtensionNames.getStringASCII(i).equals(requiredLayer)) {
-                        duplicate = true;
-                        break;
-                    }
-                }
-                if (!duplicate) {
-                    requiredExtensionNames.put(stack.ASCII(requiredLayer));
-                }
-            }
+            populateRequiredExtensions(requiredExtensionNames);
 
             PointerBuffer requiredLayerNames = null;
 
@@ -275,6 +257,50 @@ public class VulkanInstance implements Instance {
                 vkGetPhysicalDeviceFeatures(state.device.physical, state.device.deviceFeatures);
             }
         }
+    }
+
+    /**
+     * Populate the list of required instance extensions based on what we need to run.
+     *
+     * @param requiredExtensionNames The buffer to store the required extension names in.
+     */
+    private static void populateRequiredExtensions(@NonNull PointerBuffer requiredExtensionNames) {
+        PointerBuffer glfwExtensionNames = glfwGetRequiredInstanceExtensions();
+        if (glfwExtensionNames == null) {
+            var message =
+                    SafeResourceLoader.getString(
+                            "GLFW_EXTENSIONS_NULL", GraphicsPlugin.getResourceBundle());
+            log.error(message);
+            throw new RenderException(message);
+        }
+
+        for (int i = 0; i < glfwExtensionNames.limit(); ++i) {
+            requiredExtensionNames.put(glfwExtensionNames.get(i));
+        }
+
+        assert REQUIRED_INSTANCE_EXTENSIONS.length == REQUIRED_INSTANCE_EXTENSION_NAMES.size();
+
+        var limit = glfwExtensionNames.limit();
+
+        for (int i = 0; i < REQUIRED_INSTANCE_EXTENSIONS.length; ++i) {
+            boolean duplicate = false;
+            for (int j = 0; j < limit; ++j) {
+                if (requiredExtensionNames
+                        .getStringASCII(j)
+                        .equals(REQUIRED_INSTANCE_EXTENSION_NAMES.get(i))) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate) {
+                requiredExtensionNames.put(REQUIRED_INSTANCE_EXTENSIONS[i]);
+                ++limit;
+            }
+        }
+    }
+
+    private void createSwapchain(@NonNull Window window) {
+        try (MemoryStack stack = stackPush()) {}
     }
 
     /**
@@ -503,12 +529,18 @@ public class VulkanInstance implements Instance {
         return bestChoice;
     }
 
+    /**
+     * Check if the specified device supports the required device extensions.
+     *
+     * @param device The device
+     * @return
+     */
     private boolean supportsRequiredExtensions(@NonNull VkPhysicalDevice device) {
         vkEnumerateDeviceExtensionProperties(device, (String) null, intOutput, null);
         var properties = VkExtensionProperties.malloc(intOutput.get(0));
         vkEnumerateDeviceExtensionProperties(device, (String) null, intOutput, properties);
 
-        List<String> missingExtensions = new ArrayList<>(List.of(REQUIRED_EXTENSIONS));
+        List<String> missingExtensions = new ArrayList<>(REQUIRED_DEVICE_EXTENSIONS);
 
         for (int i = 0; i < properties.limit(); ++i) {
             if (missingExtensions.isEmpty()) {

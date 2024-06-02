@@ -59,8 +59,6 @@ public record SwapChainSupport(
     public String toString() {
         return String.format(
                 "[capabilities=%s, formats=%s, presentModes=%s]",
-                capabilities,
-                formats,
-                Arrays.toString(presentModes));
+                capabilities, formats, Arrays.toString(presentModes));
     }
 }
