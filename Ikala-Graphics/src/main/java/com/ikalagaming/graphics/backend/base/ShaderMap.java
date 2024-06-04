@@ -14,9 +14,9 @@ import java.util.*;
 
 /** Tracks the current shader for each render stage. */
 @Slf4j
-public class ShaderCache {
+public class ShaderMap {
 
-    private final Map<RenderStage.Type, Shader> shaderMap = new HashMap<>();
+    private final Map<RenderStage.Type, Shader> shaders = new HashMap<>();
 
     /**
      * Add a shader to the cache. If there is already a shader for that stage, the old one will be
@@ -26,18 +26,18 @@ public class ShaderCache {
      * @param shader The shader to store.
      */
     public void addShader(@NonNull RenderStage.Type type, @NonNull Shader shader) {
-        Shader existing = shaderMap.get(type);
+        Shader existing = shaders.get(type);
 
         if (existing != null) {
             GraphicsManager.getDeletionQueue().add(existing);
         }
-        shaderMap.put(type, shader);
+        shaders.put(type, shader);
     }
 
     /** Clear out all shaders and schedule them for deletion. */
     public void clearAll() {
-        shaderMap.forEach((type, shader) -> GraphicsManager.getDeletionQueue().add(shader));
-        shaderMap.clear();
+        shaders.forEach((type, shader) -> GraphicsManager.getDeletionQueue().add(shader));
+        shaders.clear();
     }
 
     /**
@@ -46,7 +46,7 @@ public class ShaderCache {
      * @param type The type of shader to remove.
      */
     public void removeShader(@NonNull RenderStage.Type type) {
-        Shader existing = shaderMap.remove(type);
+        Shader existing = shaders.remove(type);
         if (existing != null) {
             GraphicsManager.getDeletionQueue().add(existing);
         }
@@ -61,7 +61,7 @@ public class ShaderCache {
      * @throws ShaderException If the shader is not found.
      */
     public Shader getShader(@NonNull RenderStage.Type type) {
-        var result = shaderMap.get(type);
+        var result = shaders.get(type);
 
         if (result == null) {
             var message =

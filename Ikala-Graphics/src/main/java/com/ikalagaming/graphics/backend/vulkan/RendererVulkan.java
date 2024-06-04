@@ -1,7 +1,7 @@
 package com.ikalagaming.graphics.backend.vulkan;
 
 import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.backend.base.ShaderCache;
+import com.ikalagaming.graphics.backend.base.ShaderMap;
 import com.ikalagaming.graphics.frontend.Renderer;
 import com.ikalagaming.graphics.scene.Scene;
 
@@ -16,11 +16,11 @@ public class RendererVulkan implements Renderer {
     public void cleanup() {}
 
     @Override
-    public void render(@NonNull Scene scene, @NonNull ShaderCache shaders) {}
+    public void render(@NonNull Scene scene, @NonNull ShaderMap shaders) {}
 
     @Override
     public void resize(int width, int height) {}
 
     @Override
-    public void setupData(@NonNull Scene scene, @NonNull ShaderCache shaders) {}
+    public void setupData(@NonNull Scene scene, @NonNull ShaderMap shaders) {}
 }

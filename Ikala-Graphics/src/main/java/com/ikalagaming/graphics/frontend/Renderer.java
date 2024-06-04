@@ -1,7 +1,7 @@
 package com.ikalagaming.graphics.frontend;
 
 import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.backend.base.ShaderCache;
+import com.ikalagaming.graphics.backend.base.ShaderMap;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.Getter;
@@ -25,7 +25,7 @@ public interface Renderer {
      * @param scene The scene to render.
      * @param shaders The shaders to use for rendering.
      */
-    void render(@NonNull Scene scene, @NonNull ShaderCache shaders);
+    void render(@NonNull Scene scene, @NonNull ShaderMap shaders);
 
     /**
      * Update the buffers and GUI when we resize the screen.
@@ -39,9 +39,10 @@ public interface Renderer {
      * Set up model data before rendering.
      *
      * @param scene The scene to read models from.
+     * @param shaders The shaders that will be used for rendering.
      */
     @Deprecated
-    void setupData(@NonNull Scene scene, @NonNull ShaderCache shaders);
+    void setupData(@NonNull Scene scene, @NonNull ShaderMap shaders);
 
     @Getter
     @Setter

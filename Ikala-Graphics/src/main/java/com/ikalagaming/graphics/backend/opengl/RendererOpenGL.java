@@ -27,7 +27,7 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.backend.base.ShaderCache;
+import com.ikalagaming.graphics.backend.base.ShaderMap;
 import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.frontend.RenderStage;
@@ -333,7 +333,7 @@ public class RendererOpenGL implements Renderer {
     }
 
     @Override
-    public void render(@NonNull Scene scene, @NonNull ShaderCache shaders) {
+    public void render(@NonNull Scene scene, @NonNull ShaderMap shaders) {
         if (Renderer.configuration.isRenderingScene()) {
             updateModelMatrices(scene);
 
@@ -494,7 +494,7 @@ public class RendererOpenGL implements Renderer {
     }
 
     @Override
-    public void setupData(@NonNull Scene scene, @NonNull ShaderCache shaders) {
+    public void setupData(@NonNull Scene scene, @NonNull ShaderMap shaders) {
         if (buffersPopulated.getAndSet(false)) {
             renderBuffers.cleanup();
             commandBuffers.cleanup();

@@ -9,7 +9,7 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.backend.base.ShaderCache;
+import com.ikalagaming.graphics.backend.base.ShaderMap;
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.CascadeShadow;
@@ -33,14 +33,14 @@ public class OpenGLInstance implements Instance {
 
     private Renderer renderer;
     private TextureLoader textureLoader;
-    private ShaderCache shaderCache;
+    private ShaderMap shaderMap;
 
     @Override
     public void initialize(@NonNull Window window) {
         GL.createCapabilities();
         renderer = new RendererOpenGL();
         textureLoader = new TextureLoaderOpenGL();
-        shaderCache = new ShaderCache();
+        shaderMap = new ShaderMap();
         initializeShaders();
         renderer.initialize(window);
     }
@@ -90,7 +90,7 @@ public class OpenGLInstance implements Instance {
                         + ShaderUniforms.Animation.DrawParameters.DESTINATION_OFFSET);
         shaderProgram.setUniforms(uniformsMap);
 
-        shaderCache.addShader(RenderStage.Type.ANIMATION, shaderProgram);
+        shaderMap.addShader(RenderStage.Type.ANIMATION, shaderProgram);
     }
 
     /** Set up the shadow shader and uniforms. */
@@ -104,7 +104,7 @@ public class OpenGLInstance implements Instance {
         uniformsMap.createUniform(ShaderUniforms.Shadow.PROJECTION_VIEW_MATRIX);
         shaderProgram.setUniforms(uniformsMap);
 
-        shaderCache.addShader(RenderStage.Type.SHADOW, shaderProgram);
+        shaderMap.addShader(RenderStage.Type.SHADOW, shaderProgram);
     }
 
     /** Set up the scene shader and uniforms. */
@@ -134,7 +134,7 @@ public class OpenGLInstance implements Instance {
         }
         shaderProgram.setUniforms(uniformsMap);
 
-        shaderCache.addShader(RenderStage.Type.SCENE, shaderProgram);
+        shaderMap.addShader(RenderStage.Type.SCENE, shaderProgram);
     }
 
     /** Set up the light shader and uniforms. */
@@ -199,7 +199,7 @@ public class OpenGLInstance implements Instance {
         }
         shaderProgram.setUniforms(uniformsMap);
 
-        shaderCache.addShader(RenderStage.Type.LIGHT, shaderProgram);
+        shaderMap.addShader(RenderStage.Type.LIGHT, shaderProgram);
     }
 
     /** Set up the skybox shader and uniforms. */
@@ -219,7 +219,7 @@ public class OpenGLInstance implements Instance {
         uniformsMap.createUniform(ShaderUniforms.Skybox.HAS_TEXTURE);
         shaderProgram.setUniforms(uniformsMap);
 
-        shaderCache.addShader(RenderStage.Type.SKYBOX, shaderProgram);
+        shaderMap.addShader(RenderStage.Type.SKYBOX, shaderProgram);
     }
 
     /**
@@ -285,7 +285,7 @@ public class OpenGLInstance implements Instance {
         uniformsMap.createUniform(ShaderUniforms.Filter.SCREEN_TEXTURE);
         shaderProgram.setUniforms(uniformsMap);
 
-        shaderCache.addShader(RenderStage.Type.FILTER, shaderProgram);
+        shaderMap.addShader(RenderStage.Type.FILTER, shaderProgram);
     }
 
     /** Set up the GUI shader and uniforms. */
@@ -301,13 +301,13 @@ public class OpenGLInstance implements Instance {
         uniformsMap.createUniform(ShaderUniforms.GUI.SCALE);
         shaderProgram.setUniforms(uniformsMap);
 
-        shaderCache.addShader(RenderStage.Type.GUI, shaderProgram);
+        shaderMap.addShader(RenderStage.Type.GUI, shaderProgram);
     }
 
     @Override
     public void cleanup() {
         renderer.cleanup();
-        shaderCache.clearAll();
+        shaderMap.clearAll();
 
         var nextEntry = GraphicsManager.getDeletionQueue().pop();
         while (nextEntry != null) {
@@ -331,7 +331,7 @@ public class OpenGLInstance implements Instance {
 
     @Override
     public void render(@NonNull Scene scene) {
-        renderer.render(scene, shaderCache);
+        renderer.render(scene, shaderMap);
     }
 
     @Override
@@ -342,7 +342,7 @@ public class OpenGLInstance implements Instance {
 
     @Override
     public void setupData(@NonNull Scene scene) {
-        renderer.setupData(scene, shaderCache);
+        renderer.setupData(scene, shaderMap);
     }
 
     /**
