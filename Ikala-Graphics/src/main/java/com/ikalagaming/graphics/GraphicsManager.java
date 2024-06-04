@@ -199,7 +199,7 @@ public class GraphicsManager {
 
     /** Render to the screen. */
     private static void render() {
-        renderInstance.render(window, scene);
+        renderInstance.render(scene);
 
         window.update();
         ++framesSinceLastCalculation;

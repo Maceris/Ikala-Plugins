@@ -15,7 +15,7 @@ public class RendererVulkan implements Renderer {
     public void cleanup() {}
 
     @Override
-    public void render(@NonNull Window window, @NonNull Scene scene) {}
+    public void render(@NonNull Scene scene) {}
 
     @Override
     public void resize(int width, int height) {}

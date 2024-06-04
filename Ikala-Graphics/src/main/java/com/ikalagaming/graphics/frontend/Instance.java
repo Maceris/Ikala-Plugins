@@ -28,10 +28,9 @@ public interface Instance {
     /**
      * Render a scene on the window.
      *
-     * @param window The window we are drawing in.
      * @param scene The scene to render.
      */
-    void render(@NonNull Window window, @NonNull Scene scene);
+    void render(@NonNull Scene scene);
 
     /**
      * Update the buffers and GUI when we resize the screen.

@@ -108,6 +108,12 @@ public class RendererOpenGL implements Renderer {
     /** The texture ID we render to before applying filters. */
     private int screenTexture;
 
+    /** The width of the drawable area in pixels. */
+    private int cachedWidth;
+
+    /** The width of the drawable area in pixels. */
+    private int cachedHeight;
+
     /** Set up a new rendering pipeline. */
     public RendererOpenGL() {
         buffersPopulated = new AtomicBoolean();
@@ -123,6 +129,9 @@ public class RendererOpenGL implements Renderer {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+        cachedWidth = window.getWidth();
+        cachedHeight = window.getHeight();
+
         sceneRender = new SceneRender();
         guiRender = new GuiRender(window);
         skyBoxRender = new SkyBoxRender();
@@ -130,7 +139,7 @@ public class RendererOpenGL implements Renderer {
         lightRender = new LightRender();
         animationRender = new AnimationRender();
         filterRender = new FilterRender();
-        gBuffer = generateGBuffer(window.getWidth(), window.getHeight());
+        gBuffer = generateGBuffer();
         renderBuffers = new RenderBuffers();
         commandBuffers = new CommandBuffer();
 
@@ -163,11 +172,9 @@ public class RendererOpenGL implements Renderer {
     /**
      * Generate the geometry buffer.
      *
-     * @param width The width of the buffer in pixels.
-     * @param height The height of the buffer in pixels.
      * @return The newly generated buffer.
      */
-    private Framebuffer generateGBuffer(final int width, final int height) {
+    private Framebuffer generateGBuffer() {
         int gBufferId = glGenFramebuffers();
 
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gBufferId);
@@ -183,8 +190,8 @@ public class RendererOpenGL implements Renderer {
                         GL_TEXTURE_2D,
                         0,
                         GL_DEPTH_COMPONENT32F,
-                        width,
-                        height,
+                        cachedWidth,
+                        cachedHeight,
                         0,
                         GL_DEPTH_COMPONENT,
                         GL_FLOAT,
@@ -195,8 +202,8 @@ public class RendererOpenGL implements Renderer {
                         GL_TEXTURE_2D,
                         0,
                         GL_RGBA32F,
-                        width,
-                        height,
+                        cachedWidth,
+                        cachedHeight,
                         0,
                         GL_RGBA,
                         GL_FLOAT,
@@ -220,7 +227,7 @@ public class RendererOpenGL implements Renderer {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         long[] textureIds = Arrays.stream(textures).mapToLong(i -> (long) i).toArray();
-        return new Framebuffer(gBufferId, width, height, textureIds);
+        return new Framebuffer(gBufferId, cachedWidth, cachedHeight, textureIds);
     }
 
     /**
@@ -263,12 +270,8 @@ public class RendererOpenGL implements Renderer {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
-    /**
-     * Set up for rendering lights.
-     *
-     * @param window The window we are rendering in.
-     */
-    private void lightRenderStart(@NonNull Window window) {
+    /** Set up for rendering lights. */
+    private void lightRenderStart() {
         glBindFramebuffer(GL_FRAMEBUFFER, screenFBO);
         glBindRenderbuffer(GL_RENDERBUFFER, screenRBODepth);
 
@@ -276,7 +279,7 @@ public class RendererOpenGL implements Renderer {
         glBindTexture(GL_TEXTURE_2D, screenTexture);
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glViewport(0, 0, window.getWidth(), window.getHeight());
+        glViewport(0, 0, cachedWidth, cachedHeight);
 
         glEnable(GL_BLEND);
         glBlendEquation(GL_FUNC_ADD);
@@ -284,7 +287,7 @@ public class RendererOpenGL implements Renderer {
     }
 
     @Override
-    public void render(@NonNull Window window, @NonNull Scene scene) {
+    public void render(@NonNull Scene scene) {
         if (Renderer.configuration.isRenderingScene()) {
             updateModelMatrices(scene);
 
@@ -302,7 +305,7 @@ public class RendererOpenGL implements Renderer {
                 glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
                 glEnable(GL_TEXTURE_2D);
             }
-            lightRenderStart(window);
+            lightRenderStart();
             lightRender.render(scene, shadowRender, gBuffer);
             skyBoxRender.render(scene);
             lightRenderFinish();
@@ -312,13 +315,15 @@ public class RendererOpenGL implements Renderer {
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, screenTexture);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            glViewport(0, 0, window.getWidth(), window.getHeight());
+            glViewport(0, 0, cachedWidth, cachedHeight);
         }
-        guiRender.render(window);
+        guiRender.render();
     }
 
     @Override
-    public void resize(int width, int height) {
+    public void resize(final int width, final int height) {
+        cachedWidth = width;
+        cachedHeight = height;
         deleteRenderBuffers();
         generateRenderBuffers(width, height);
         guiRender.resize(width, height);

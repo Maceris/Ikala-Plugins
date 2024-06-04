@@ -45,8 +45,8 @@ public class OpenGLInstance implements Instance {
     }
 
     @Override
-    public void render(@NonNull Window window, @NonNull Scene scene) {
-        renderer.render(window, scene);
+    public void render(@NonNull Scene scene) {
+        renderer.render(scene);
     }
 
     @Override

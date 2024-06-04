@@ -105,6 +105,12 @@ public class GuiRender {
     /** The uniforms for the shader program. */
     private UniformsMap uniformsMap;
 
+    /** The width of the drawable area in pixels. */
+    private int cachedWidth;
+
+    /** The width of the drawable area in pixels. */
+    private int cachedHeight;
+
     /**
      * Set up a new GUI renderer for the window.
      *
@@ -118,7 +124,9 @@ public class GuiRender {
                 new Shader.ShaderModuleData("shaders/gui.frag", Shader.Type.FRAGMENT));
         shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         createUniforms();
-        createUIResources(window);
+        cachedWidth = window.getWidth();
+        cachedHeight = window.getHeight();
+        createUIResources();
     }
 
     /** Clean up shaders and textures. */
@@ -130,17 +138,13 @@ public class GuiRender {
         glDeleteVertexArrays(guiMesh.vaoID());
     }
 
-    /**
-     * Set up imgui and create fonts, textures, meshes, etc.
-     *
-     * @param window The window we are using.
-     */
-    private void createUIResources(@NonNull Window window) {
+    /** Set up imgui and create fonts, textures, meshes, etc. */
+    private void createUIResources() {
         ImGui.createContext();
 
         ImGuiIO imGuiIO = ImGui.getIO();
         imGuiIO.setIniFilename(null);
-        imGuiIO.setDisplaySize(window.getWidth(), window.getHeight());
+        imGuiIO.setDisplaySize(cachedWidth, cachedHeight);
         setUpImGuiKeys();
 
         ImFontAtlas fontAtlas = ImGui.getIO().getFonts();
@@ -164,12 +168,12 @@ public class GuiRender {
     }
 
     /** Render the GUI over the given scene. */
-    public void render(@NonNull Window window) {
+    public void render() {
         WindowManager windowManager = GraphicsManager.getWindowManager();
         if (windowManager == null) {
             return;
         }
-        windowManager.drawGui(window.getWidth(), window.getHeight());
+        windowManager.drawGui(cachedWidth, cachedHeight);
 
         shaderProgram.bind();
 
@@ -235,6 +239,8 @@ public class GuiRender {
      * @param height The new screen height in pixels.
      */
     public void resize(final int width, final int height) {
+        cachedWidth = width;
+        cachedHeight = height;
         ImGuiIO imGuiIO = ImGui.getIO();
         imGuiIO.setDisplaySize(width, height);
     }

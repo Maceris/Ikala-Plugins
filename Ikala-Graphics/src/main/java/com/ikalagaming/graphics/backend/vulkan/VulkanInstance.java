@@ -450,7 +450,7 @@ public class VulkanInstance implements Instance {
     }
 
     @Override
-    public void render(@NonNull Window window, @NonNull Scene scene) {}
+    public void render(@NonNull Scene scene) {}
 
     @Override
     public void resize(int width, int height) {}
