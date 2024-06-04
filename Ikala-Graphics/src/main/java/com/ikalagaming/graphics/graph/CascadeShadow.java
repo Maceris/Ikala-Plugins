@@ -17,6 +17,12 @@ public class CascadeShadow {
     /** The number of partitions that we split the camera frustum into. */
     public static final int SHADOW_MAP_CASCADE_COUNT = 3;
 
+    /** The width of the shadow map in pixels. */
+    public static final int SHADOW_MAP_WIDTH = 4096;
+
+    /** The height of the shadow map in pixels. */
+    public static final int SHADOW_MAP_HEIGHT = 4096;
+
     /**
      * We calculate the splits once, and use the same values every time we calculate the cascade
      * shadows.

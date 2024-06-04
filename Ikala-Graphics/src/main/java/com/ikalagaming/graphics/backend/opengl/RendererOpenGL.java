@@ -25,12 +25,16 @@ import static org.lwjgl.opengl.GL40.GL_DRAW_INDIRECT_BUFFER;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.frontend.Renderer;
+import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
 import org.lwjgl.system.MemoryStack;
@@ -39,10 +43,7 @@ import org.lwjgl.system.MemoryUtil;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Renders things on the screen. */
@@ -114,9 +115,19 @@ public class RendererOpenGL implements Renderer {
     /** The width of the drawable area in pixels. */
     private int cachedHeight;
 
+    /** The cascade shadow map. */
+    private final ArrayList<CascadeShadow> cascadeShadows;
+
+    /** The depth map for shadows. */
+    private Framebuffer shadowBuffers;
+
     /** Set up a new rendering pipeline. */
     public RendererOpenGL() {
         buffersPopulated = new AtomicBoolean();
+        cascadeShadows = new ArrayList<>();
+        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+            cascadeShadows.add(new CascadeShadow());
+        }
     }
 
     @Override
@@ -144,6 +155,58 @@ public class RendererOpenGL implements Renderer {
         commandBuffers = new CommandBuffer();
 
         generateRenderBuffers(window.getWidth(), window.getHeight());
+        shadowBuffers = createShadowBuffers();
+    }
+
+    private Framebuffer createShadowBuffers() {
+        int depthMapFBO = glGenFramebuffers();
+
+        int[] shadowTextures = new int[CascadeShadow.SHADOW_MAP_CASCADE_COUNT];
+
+        glGenTextures(shadowTextures);
+
+        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+            glBindTexture(GL_TEXTURE_2D, shadowTextures[i]);
+            glTexImage2D(
+                    GL_TEXTURE_2D,
+                    0,
+                    GL_DEPTH_COMPONENT,
+                    CascadeShadow.SHADOW_MAP_WIDTH,
+                    CascadeShadow.SHADOW_MAP_HEIGHT,
+                    0,
+                    GL_DEPTH_COMPONENT,
+                    GL_FLOAT,
+                    (ByteBuffer) null);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+        glFramebufferTexture2D(
+                GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTextures[0], 0);
+
+        // Set only depth
+        glDrawBuffer(GL_NONE);
+        glReadBuffer(GL_NONE);
+
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            throw new RenderException(
+                    SafeResourceLoader.getString(
+                            "FRAME_BUFFER_CREATION_FAIL", GraphicsPlugin.getResourceBundle()));
+        }
+
+        // Unbind
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        long[] textureIds = Arrays.stream(shadowTextures).mapToLong(i -> (long) i).toArray();
+        return new Framebuffer(
+                depthMapFBO,
+                CascadeShadow.SHADOW_MAP_WIDTH,
+                CascadeShadow.SHADOW_MAP_HEIGHT,
+                textureIds);
     }
 
     @Override
@@ -157,6 +220,8 @@ public class RendererOpenGL implements Renderer {
         filterRender.cleanup();
         GraphicsManager.getDeletionQueue().add(gBuffer);
         gBuffer = null;
+        GraphicsManager.getDeletionQueue().add(shadowBuffers);
+        shadowBuffers = null;
         renderBuffers.cleanup();
         commandBuffers.cleanup();
         deleteRenderBuffers();
@@ -292,7 +357,8 @@ public class RendererOpenGL implements Renderer {
             updateModelMatrices(scene);
 
             animationRender.render(scene, renderBuffers);
-            shadowRender.render(scene, renderBuffers, commandBuffers);
+            shadowRender.render(
+                    scene, renderBuffers, cascadeShadows, shadowBuffers, commandBuffers);
 
             if (Renderer.configuration.isWireframe()) {
                 glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -306,7 +372,7 @@ public class RendererOpenGL implements Renderer {
                 glEnable(GL_TEXTURE_2D);
             }
             lightRenderStart();
-            lightRender.render(scene, shadowRender, gBuffer);
+            lightRender.render(scene, cascadeShadows, shadowBuffers, gBuffer);
             skyBoxRender.render(scene);
             lightRenderFinish();
 

@@ -193,12 +193,14 @@ public class LightRender {
      * Render a scene.
      *
      * @param scene The scene we are rendering.
-     * @param shadowRender The shadow renderer.
+     * @param cascadeShadows The cascade shadows information.
+     * @param depthMap The depth map buffer.
      * @param gBuffer The buffer for geometry data.
      */
     public void render(
             @NonNull Scene scene,
-            @NonNull ShadowRender shadowRender,
+            @NonNull List<CascadeShadow> cascadeShadows,
+            @NonNull Framebuffer depthMap,
             @NonNull Framebuffer gBuffer) {
         shaderProgram.bind();
 
@@ -228,7 +230,6 @@ public class LightRender {
                 ShaderUniforms.Light.FOG + "." + ShaderUniforms.Light.Fog.DENSITY,
                 fog.getDensity());
 
-        List<CascadeShadow> cascadeShadows = shadowRender.getCascadeShadows();
         for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
             uniformsMap.setUniform(ShaderUniforms.Light.SHADOW_MAP_PREFIX + i, nextTexture + i);
             CascadeShadow cascadeShadow = cascadeShadows.get(i);
@@ -250,7 +251,7 @@ public class LightRender {
 
         for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
             glActiveTexture(GL_TEXTURE0 + nextTexture + i);
-            glBindTexture(GL_TEXTURE_2D, (int) shadowRender.getDepthMap().textures()[i]);
+            glBindTexture(GL_TEXTURE_2D, (int) depthMap.textures()[i]);
         }
 
         uniformsMap.setUniform(

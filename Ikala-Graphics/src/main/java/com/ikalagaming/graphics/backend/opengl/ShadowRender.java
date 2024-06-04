@@ -1,74 +1,26 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics.backend.opengl;
 
-import static org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT;
-import static org.lwjgl.opengl.GL11.GL_DEPTH_COMPONENT;
-import static org.lwjgl.opengl.GL11.GL_FLOAT;
-import static org.lwjgl.opengl.GL11.GL_LINEAR;
-import static org.lwjgl.opengl.GL11.GL_NONE;
-import static org.lwjgl.opengl.GL11.GL_TEXTURE_2D;
-import static org.lwjgl.opengl.GL11.GL_TEXTURE_MAG_FILTER;
-import static org.lwjgl.opengl.GL11.GL_TEXTURE_MIN_FILTER;
-import static org.lwjgl.opengl.GL11.GL_TEXTURE_WRAP_S;
-import static org.lwjgl.opengl.GL11.GL_TEXTURE_WRAP_T;
-import static org.lwjgl.opengl.GL11.GL_TRIANGLES;
-import static org.lwjgl.opengl.GL11.GL_UNSIGNED_INT;
-import static org.lwjgl.opengl.GL11.glBindTexture;
-import static org.lwjgl.opengl.GL11.glClear;
-import static org.lwjgl.opengl.GL11.glDrawBuffer;
-import static org.lwjgl.opengl.GL11.glReadBuffer;
-import static org.lwjgl.opengl.GL11.glTexParameteri;
-import static org.lwjgl.opengl.GL11.glViewport;
-import static org.lwjgl.opengl.GL13.GL_CLAMP_TO_BORDER;
-import static org.lwjgl.opengl.GL14.GL_TEXTURE_COMPARE_MODE;
+import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL15.glBindBuffer;
 import static org.lwjgl.opengl.GL30.*;
 import static org.lwjgl.opengl.GL40.GL_DRAW_INDIRECT_BUFFER;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL43.glMultiDrawElementsIndirect;
 
-import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
-import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.util.SafeResourceLoader;
 
-import lombok.Getter;
 import lombok.NonNull;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /** Handles rendering for shadows. */
 public class ShadowRender {
-
-    /** The width of the shadow map in pixels. */
-    private static final int SHADOW_MAP_WIDTH = 4096;
-
-    /** The height of the shadow map in pixels. */
-    private static final int SHADOW_MAP_HEIGHT = 4096;
-
-    /** The Frame Buffer Object ID. */
-    @Getter private Framebuffer depthMap;
-
-    /**
-     * The cascade shadow map.
-     *
-     * @return The cascade shadows.
-     */
-    @Getter private final ArrayList<CascadeShadow> cascadeShadows;
 
     /** The shader program for the shadow rendering. */
     private final Shader shaderProgram;
@@ -83,68 +35,12 @@ public class ShadowRender {
                 new Shader.ShaderModuleData("shaders/shadow.vert", Shader.Type.VERTEX));
         shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
-        depthMap = createShadowBuffers();
-
-        cascadeShadows = new ArrayList<>();
-        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
-            cascadeShadows.add(new CascadeShadow());
-        }
-
         createUniforms();
-    }
-
-    private Framebuffer createShadowBuffers() {
-        int depthMapFBO = glGenFramebuffers();
-
-        int[] shadowTextures = new int[CascadeShadow.SHADOW_MAP_CASCADE_COUNT];
-
-        glGenTextures(shadowTextures);
-
-        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
-            glBindTexture(GL_TEXTURE_2D, shadowTextures[i]);
-            glTexImage2D(
-                    GL_TEXTURE_2D,
-                    0,
-                    GL_DEPTH_COMPONENT,
-                    SHADOW_MAP_WIDTH,
-                    SHADOW_MAP_HEIGHT,
-                    0,
-                    GL_DEPTH_COMPONENT,
-                    GL_FLOAT,
-                    (ByteBuffer) null);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-        }
-
-        glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
-        glFramebufferTexture2D(
-                GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTextures[0], 0);
-
-        // Set only depth
-        glDrawBuffer(GL_NONE);
-        glReadBuffer(GL_NONE);
-
-        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-            throw new RenderException(
-                    SafeResourceLoader.getString(
-                            "FRAME_BUFFER_CREATION_FAIL", GraphicsPlugin.getResourceBundle()));
-        }
-
-        // Unbind
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-        long[] textureIds = Arrays.stream(shadowTextures).mapToLong(i -> (long) i).toArray();
-        return new Framebuffer(depthMapFBO, SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT, textureIds);
     }
 
     /** Clean up buffers and shaders. */
     public void cleanup() {
         shaderProgram.cleanup();
-        GraphicsManager.getDeletionQueue().add(depthMap);
-        depthMap = null;
     }
 
     /** Create the uniforms for the shadow shader. */
@@ -157,17 +53,21 @@ public class ShadowRender {
      * Render the shadows for the scene.
      *
      * @param scene The scene we are rendering.
+     * @param cascadeShadows Cascade shadow information.
+     * @param depthMap The depth map buffers.
      * @param renderBuffers The buffers for indirect drawing of models.
      * @param commandBuffers The rendering command buffers.
      */
     public void render(
             @NonNull Scene scene,
             @NonNull RenderBuffers renderBuffers,
+            @NonNull List<CascadeShadow> cascadeShadows,
+            @NonNull Framebuffer depthMap,
             @NonNull CommandBuffer commandBuffers) {
         CascadeShadow.updateCascadeShadows(cascadeShadows, scene);
 
         glBindFramebuffer(GL_FRAMEBUFFER, (int) depthMap.id());
-        glViewport(0, 0, SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);
+        glViewport(0, 0, CascadeShadow.SHADOW_MAP_WIDTH, CascadeShadow.SHADOW_MAP_HEIGHT);
 
         shaderProgram.bind();
 
