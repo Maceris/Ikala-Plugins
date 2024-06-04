@@ -11,7 +11,6 @@ import static org.lwjgl.opengl.GL20.glVertexAttribPointer;
 import static org.lwjgl.opengl.GL30.*;
 
 import com.ikalagaming.graphics.ShaderUniforms;
-import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.scene.Scene;
@@ -22,17 +21,9 @@ import org.lwjgl.system.MemoryStack;
 
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
-import java.util.ArrayList;
-import java.util.List;
 
 /** Handles rendering for the skybox. */
 public class SkyBoxRender {
-
-    /** The shader program for the skybox. */
-    private final Shader shaderProgram;
-
-    /** The uniform map for the shader program. */
-    private UniformsMap uniformsMap;
 
     /** The cameras view matrix. */
     private final Matrix4f viewMatrix;
@@ -48,14 +39,7 @@ public class SkyBoxRender {
 
     /** Set up the renderer. */
     public SkyBoxRender() {
-        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
-        shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/skybox.vert", Shader.Type.VERTEX));
-        shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/skybox.frag", Shader.Type.FRAGMENT));
-        shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         viewMatrix = new Matrix4f();
-        createUniforms();
         setupBuffers();
     }
 
@@ -177,19 +161,8 @@ public class SkyBoxRender {
 
     /** Clean up the shader. */
     public void cleanup() {
-        shaderProgram.cleanup();
         glDeleteBuffers(vboIDList);
         glDeleteVertexArrays(vaoID);
-    }
-
-    /** Set up uniforms for the shader. */
-    private void createUniforms() {
-        uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
-        uniformsMap.createUniform(ShaderUniforms.Skybox.PROJECTION_MATRIX);
-        uniformsMap.createUniform(ShaderUniforms.Skybox.VIEW_MATRIX);
-        uniformsMap.createUniform(ShaderUniforms.Skybox.DIFFUSE);
-        uniformsMap.createUniform(ShaderUniforms.Skybox.TEXTURE_SAMPLER);
-        uniformsMap.createUniform(ShaderUniforms.Skybox.HAS_TEXTURE);
     }
 
     /**
@@ -197,8 +170,9 @@ public class SkyBoxRender {
      *
      * @param scene The scene to render.
      */
-    public void render(@NonNull Scene scene) {
-        shaderProgram.bind();
+    public void render(@NonNull Scene scene, @NonNull Shader shader) {
+        shader.bind();
+        var uniformsMap = shader.getUniformMap();
 
         uniformsMap.setUniform(
                 ShaderUniforms.Skybox.PROJECTION_MATRIX,
@@ -228,6 +202,6 @@ public class SkyBoxRender {
 
         glBindVertexArray(0);
 
-        shaderProgram.unbind();
+        shader.unbind();
     }
 }

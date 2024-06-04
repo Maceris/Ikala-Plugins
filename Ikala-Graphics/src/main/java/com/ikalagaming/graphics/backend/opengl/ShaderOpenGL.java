@@ -5,6 +5,7 @@ import static org.lwjgl.opengl.GL20.glGetProgramInfoLog;
 import static org.lwjgl.opengl.GL43.GL_COMPUTE_SHADER;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
+import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.launcher.PluginFolder;
@@ -13,6 +14,7 @@ import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.opengl.GL20;
 
@@ -39,6 +41,9 @@ public class ShaderOpenGL implements Shader {
 
     /** The Program ID for the program. */
     private final int programID;
+
+    /** The uniform map for this shader. */
+    @Setter private @NonNull UniformsMap uniforms;
 
     /**
      * Create a new shader program.
@@ -78,14 +83,6 @@ public class ShaderOpenGL implements Shader {
         glUseProgram(programID);
     }
 
-    @Override
-    public void cleanup() {
-        unbind();
-        if (programID != 0) {
-            glDeleteProgram(programID);
-        }
-    }
-
     /**
      * Create a shader from code.
      *
@@ -119,6 +116,11 @@ public class ShaderOpenGL implements Shader {
         glAttachShader(programID, shaderId);
 
         return shaderId;
+    }
+
+    @Override
+    public UniformsMap getUniformMap() {
+        return uniforms;
     }
 
     /**

@@ -27,8 +27,6 @@ import static org.lwjgl.opengl.GL30.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.ShaderUniforms;
-import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Format;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
@@ -46,8 +44,6 @@ import lombok.NonNull;
 import org.joml.Vector2f;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
 
 /** A utility for handling the rendering of a Graphical User Interface. */
 public class GuiRender {
@@ -94,16 +90,10 @@ public class GuiRender {
     private GuiMesh guiMesh;
 
     /** The scale of the GUI. */
-    private Vector2f scale;
-
-    /** The shader program for rendering the UI. */
-    private final Shader shaderProgram;
+    private final Vector2f scale;
 
     /** The texture we store font data in. */
     private Texture font;
-
-    /** The uniforms for the shader program. */
-    private UniformsMap uniformsMap;
 
     /** The width of the drawable area in pixels. */
     private int cachedWidth;
@@ -114,24 +104,18 @@ public class GuiRender {
     /**
      * Set up a new GUI renderer for the window.
      *
-     * @param window The window we are rendering in.
+     * @param width The drawable area width in pixels.
+     * @param height The drawable area height in pixels.
      */
-    public GuiRender(@NonNull Window window) {
-        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
-        shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/gui.vert", Shader.Type.VERTEX));
-        shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/gui.frag", Shader.Type.FRAGMENT));
-        shaderProgram = new ShaderOpenGL(shaderModuleDataList);
-        createUniforms();
-        cachedWidth = window.getWidth();
-        cachedHeight = window.getHeight();
+    public GuiRender(final int width, final int height) {
+        scale = new Vector2f();
+        cachedWidth = width;
+        cachedHeight = height;
         createUIResources();
     }
 
     /** Clean up shaders and textures. */
     public void cleanup() {
-        shaderProgram.cleanup();
         glDeleteTextures((int) font.id());
         glDeleteBuffers(guiMesh.indicesVBO());
         glDeleteBuffers(guiMesh.verticesVBO());
@@ -160,22 +144,20 @@ public class GuiRender {
         guiMesh = GuiMesh.create();
     }
 
-    /** Set up uniforms for the GUI shader. */
-    private void createUniforms() {
-        uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
-        uniformsMap.createUniform(ShaderUniforms.GUI.SCALE);
-        scale = new Vector2f();
-    }
-
-    /** Render the GUI over the given scene. */
-    public void render() {
+    /**
+     * Render the GUI over the given scene.
+     *
+     * @param shader The shader to use for rendering.
+     */
+    public void render(@NonNull Shader shader) {
+        var uniformsMap = shader.getUniformMap();
         WindowManager windowManager = GraphicsManager.getWindowManager();
         if (windowManager == null) {
             return;
         }
         windowManager.drawGui(cachedWidth, cachedHeight);
 
-        shaderProgram.bind();
+        shader.bind();
 
         glEnable(GL_BLEND);
         glBlendEquation(GL_FUNC_ADD);
@@ -230,6 +212,7 @@ public class GuiRender {
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
         glDisable(GL_BLEND);
+        shader.unbind();
     }
 
     /**

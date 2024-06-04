@@ -1,9 +1,3 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.opengl.GL11.*;
@@ -22,7 +16,6 @@ import static org.lwjgl.opengl.GL43.glMultiDrawElementsIndirect;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
-import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.frontend.Material;
 import com.ikalagaming.graphics.frontend.Shader;
@@ -33,7 +26,6 @@ import com.ikalagaming.launcher.PluginFolder;
 
 import lombok.NonNull;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /** Handles rendering for the scene geometry. */
@@ -46,64 +38,28 @@ public class SceneRender {
                     .getAbsolutePath();
 
     /** The maximum number of materials we can have. */
-    private static final int MAX_MATERIALS = 30;
+    @Deprecated static final int MAX_MATERIALS = 30;
 
     /** The maximum number of textures we can have. */
-    private static final int MAX_TEXTURES = 16;
-
-    /** The shader program for the scene. */
-    private final Shader shaderProgram;
-
-    /** The uniform map for the shader program. */
-    private UniformsMap uniformsMap;
+    @Deprecated static final int MAX_TEXTURES = 16;
 
     private final Texture defaultTexture;
 
     /** Set up a new scene renderer. */
     public SceneRender() {
-        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
-        shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/scene.vert", Shader.Type.VERTEX));
-        shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/scene.frag", Shader.Type.FRAGMENT));
-        shaderProgram = new ShaderOpenGL(shaderModuleDataList);
-        createUniforms();
         defaultTexture =
                 GraphicsManager.getRenderInstance().getTextureLoader().load(DEFAULT_TEXTURE_PATH);
-    }
-
-    /** Clean up buffers and shaders. */
-    public void cleanup() {
-        shaderProgram.cleanup();
-    }
-
-    /** Set up the uniforms for the shader. */
-    private void createUniforms() {
-        uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
-        uniformsMap.createUniform(ShaderUniforms.Scene.PROJECTION_MATRIX);
-        uniformsMap.createUniform(ShaderUniforms.Scene.VIEW_MATRIX);
-
-        for (int i = 0; i < SceneRender.MAX_TEXTURES; ++i) {
-            uniformsMap.createUniform(ShaderUniforms.Scene.TEXTURE_SAMPLER + "[" + i + "]");
-        }
-
-        for (int i = 0; i < SceneRender.MAX_MATERIALS; ++i) {
-            String name = ShaderUniforms.Scene.MATERIALS + "[" + i + "].";
-            uniformsMap.createUniform(name + ShaderUniforms.Scene.Material.DIFFUSE);
-            uniformsMap.createUniform(name + ShaderUniforms.Scene.Material.SPECULAR);
-            uniformsMap.createUniform(name + ShaderUniforms.Scene.Material.REFLECTANCE);
-            uniformsMap.createUniform(name + ShaderUniforms.Scene.Material.NORMAL_MAP_INDEX);
-            uniformsMap.createUniform(name + ShaderUniforms.Scene.Material.TEXTURE_INDEX);
-        }
     }
 
     /**
      * Set up uniforms for textures and materials.
      *
      * @param scene The scene to render.
+     * @param shader The shader that we want to set materials for.
      */
-    public void recalculateMaterials(@NonNull Scene scene) {
-        setupMaterialsUniform(scene.getMaterialCache());
+    @Deprecated
+    public void recalculateMaterials(@NonNull Scene scene, @NonNull Shader shader) {
+        setupMaterialsUniform(scene.getMaterialCache(), shader);
     }
 
     /**
@@ -116,15 +72,17 @@ public class SceneRender {
      */
     public void render(
             @NonNull Scene scene,
+            @NonNull Shader shader,
             @NonNull RenderBuffers renderBuffers,
             @NonNull Framebuffer gBuffer,
             @NonNull CommandBuffer commandBuffers) {
 
+        var uniformsMap = shader.getUniformMap();
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, (int) gBuffer.id());
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glViewport(0, 0, gBuffer.width(), gBuffer.height());
         glDisable(GL_BLEND);
-        shaderProgram.bind();
+        shader.bind();
 
         uniformsMap.setUniform(
                 ShaderUniforms.Scene.PROJECTION_MATRIX,
@@ -183,7 +141,7 @@ public class SceneRender {
                 GL_TRIANGLES, GL_UNSIGNED_INT, 0, commandBuffers.getAnimatedDrawCount(), 0);
         glBindVertexArray(0);
         glEnable(GL_BLEND);
-        shaderProgram.unbind();
+        shader.unbind();
     }
 
     /**
@@ -191,8 +149,11 @@ public class SceneRender {
      *
      * @param materialCache The material cache.
      */
-    private void setupMaterialsUniform(@NonNull MaterialCache materialCache) {
-        shaderProgram.bind();
+    @Deprecated
+    private void setupMaterialsUniform(
+            @NonNull MaterialCache materialCache, @NonNull Shader shader) {
+        var uniformsMap = shader.getUniformMap();
+        shader.bind();
         List<Material> materialList = materialCache.getMaterialsList();
         int numMaterials = materialList.size();
 
@@ -221,6 +182,6 @@ public class SceneRender {
             }
             uniformsMap.setUniform(name + ShaderUniforms.Scene.Material.TEXTURE_INDEX, index);
         }
-        shaderProgram.unbind();
+        shader.unbind();
     }
 }

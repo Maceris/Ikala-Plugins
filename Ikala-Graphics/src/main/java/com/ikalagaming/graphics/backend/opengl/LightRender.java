@@ -1,9 +1,3 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.opengl.GL11.GL_TEXTURE_2D;
@@ -43,7 +37,6 @@ import org.joml.Vector4f;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.FloatBuffer;
-import java.util.ArrayList;
 import java.util.List;
 
 /** Handle light rendering. */
@@ -58,14 +51,8 @@ public class LightRender {
     /** How many lights of each type (spot, point) we currently support. */
     private static final int MAX_LIGHTS_SUPPORTED = 1000;
 
-    /** The shader program for rendering lights. */
-    private final Shader shaderProgram;
-
     /** A mesh for rendering lighting onto. */
     private QuadMesh quadMesh;
-
-    /** The uniforms for the shader program. */
-    private UniformsMap uniformsMap;
 
     /** An SSBO for point lights. */
     private int pointLightBuffer;
@@ -75,78 +62,15 @@ public class LightRender {
 
     /** Set up the light renderer. */
     public LightRender() {
-        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
-        shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/lights.vert", Shader.Type.VERTEX));
-        shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/lights.frag", Shader.Type.FRAGMENT));
-        shaderProgram = new ShaderOpenGL(shaderModuleDataList);
         quadMesh = QuadMesh.getInstance();
-        createUniforms();
         initSSBOs();
     }
 
     /** Clean up resources. */
     public void cleanup() {
         quadMesh.cleanup();
-        shaderProgram.cleanup();
         glDeleteBuffers(pointLightBuffer);
         glDeleteBuffers(spotLightBuffer);
-    }
-
-    /** Set up the uniforms for the shader program. */
-    private void createUniforms() {
-        uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
-        uniformsMap.createUniform(ShaderUniforms.Light.ALBEDO_SAMPLER);
-        uniformsMap.createUniform(ShaderUniforms.Light.NORMAL_SAMPLER);
-        uniformsMap.createUniform(ShaderUniforms.Light.SPECULAR_SAMPLER);
-        uniformsMap.createUniform(ShaderUniforms.Light.DEPTH_SAMPLER);
-        uniformsMap.createUniform(ShaderUniforms.Light.INVERSE_PROJECTION_MATRIX);
-        uniformsMap.createUniform(ShaderUniforms.Light.INVERSE_VIEW_MATRIX);
-        uniformsMap.createUniform(
-                ShaderUniforms.Light.AMBIENT_LIGHT
-                        + "."
-                        + ShaderUniforms.Light.AmbientLight.INTENSITY);
-        uniformsMap.createUniform(
-                ShaderUniforms.Light.AMBIENT_LIGHT + "." + ShaderUniforms.Light.AmbientLight.COLOR);
-
-        uniformsMap.createUniform(
-                ShaderUniforms.Light.DIRECTIONAL_LIGHT
-                        + "."
-                        + ShaderUniforms.Light.DirectionalLight.COLOR);
-        uniformsMap.createUniform(
-                ShaderUniforms.Light.DIRECTIONAL_LIGHT
-                        + "."
-                        + ShaderUniforms.Light.DirectionalLight.DIRECTION);
-        uniformsMap.createUniform(
-                ShaderUniforms.Light.DIRECTIONAL_LIGHT
-                        + "."
-                        + ShaderUniforms.Light.DirectionalLight.INTENSITY);
-
-        uniformsMap.createUniform(ShaderUniforms.Light.POINT_LIGHT_COUNT);
-        uniformsMap.createUniform(ShaderUniforms.Light.SPOT_LIGHT_COUNT);
-
-        uniformsMap.createUniform(
-                ShaderUniforms.Light.FOG + "." + ShaderUniforms.Light.Fog.ENABLED);
-        uniformsMap.createUniform(ShaderUniforms.Light.FOG + "." + ShaderUniforms.Light.Fog.COLOR);
-        uniformsMap.createUniform(
-                ShaderUniforms.Light.FOG + "." + ShaderUniforms.Light.Fog.DENSITY);
-
-        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
-            uniformsMap.createUniform(ShaderUniforms.Light.SHADOW_MAP_PREFIX + i);
-            uniformsMap.createUniform(
-                    ShaderUniforms.Light.CASCADE_SHADOWS
-                            + "["
-                            + i
-                            + "]."
-                            + ShaderUniforms.Light.CascadeShadow.PROJECTION_VIEW_MATRIX);
-            uniformsMap.createUniform(
-                    ShaderUniforms.Light.CASCADE_SHADOWS
-                            + "["
-                            + i
-                            + "]."
-                            + ShaderUniforms.Light.CascadeShadow.SPLIT_DISTANCE);
-        }
     }
 
     /** Initialize the lighting SSBOs and fill them with zeroes. */
@@ -199,12 +123,14 @@ public class LightRender {
      */
     public void render(
             @NonNull Scene scene,
+            @NonNull Shader shader,
             @NonNull List<CascadeShadow> cascadeShadows,
             @NonNull Framebuffer depthMap,
             @NonNull Framebuffer gBuffer) {
-        shaderProgram.bind();
+        shader.bind();
+        var uniformsMap = shader.getUniformMap();
 
-        updateLights(scene);
+        updateLights(scene, uniformsMap);
 
         int nextTexture = 0;
         // Bind the G-Buffer textures
@@ -263,7 +189,7 @@ public class LightRender {
         glBindVertexArray(quadMesh.vao());
         glDrawElements(GL_TRIANGLES, QuadMesh.VERTEX_COUNT, GL_UNSIGNED_INT, 0);
 
-        shaderProgram.unbind();
+        shader.unbind();
     }
 
     /**
@@ -271,7 +197,7 @@ public class LightRender {
      *
      * @param scene The scene to fetch lights from.
      */
-    private void setupPointLightBuffer(@NonNull Scene scene) {
+    private void setupPointLightBuffer(@NonNull Scene scene, @NonNull UniformsMap uniformsMap) {
         List<PointLight> pointLights = scene.getSceneLights().getPointLights();
         final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
 
@@ -327,7 +253,7 @@ public class LightRender {
      *
      * @param scene The scene to fetch lights from.
      */
-    private void setupSpotLightBuffer(@NonNull Scene scene) {
+    private void setupSpotLightBuffer(@NonNull Scene scene, @NonNull UniformsMap uniformsMap) {
         List<SpotLight> spotLights = scene.getSceneLights().getSpotLights();
         final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
 
@@ -389,7 +315,7 @@ public class LightRender {
      *
      * @param scene The scene we are updating.
      */
-    private void updateLights(@NonNull Scene scene) {
+    private void updateLights(@NonNull Scene scene, @NonNull UniformsMap uniformsMap) {
         Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
 
         SceneLights sceneLights = scene.getSceneLights();
@@ -423,7 +349,7 @@ public class LightRender {
                         + ShaderUniforms.Light.DirectionalLight.INTENSITY,
                 dirLight.getIntensity());
 
-        setupPointLightBuffer(scene);
-        setupSpotLightBuffer(scene);
+        setupPointLightBuffer(scene, uniformsMap);
+        setupSpotLightBuffer(scene, uniformsMap);
     }
 }

@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.frontend;
 
+import com.ikalagaming.graphics.backend.base.UniformsMap;
+
 import lombok.NonNull;
 
 /** A shader program. */
@@ -22,15 +24,19 @@ public interface Shader {
     /** Install this program as part of the current rendering state. */
     void bind();
 
-    /** Unbind and delete this program. */
-    void cleanup();
-
     /**
      * Returns the unique ID for the program.
      *
      * @return The implementation-specific unique ID.
      */
     int getProgramID();
+
+    /**
+     * Fetch the uniform map for this shader.
+     *
+     * @return The uniform map.
+     */
+    UniformsMap getUniformMap();
 
     /** Stop using this program. */
     void unbind();

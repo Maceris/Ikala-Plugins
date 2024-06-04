@@ -27,8 +27,10 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.backend.base.ShaderCache;
 import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.frontend.Framebuffer;
+import com.ikalagaming.graphics.frontend.RenderStage;
 import com.ikalagaming.graphics.frontend.Renderer;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.graph.Model;
@@ -144,7 +146,7 @@ public class RendererOpenGL implements Renderer {
         cachedHeight = window.getHeight();
 
         sceneRender = new SceneRender();
-        guiRender = new GuiRender(window);
+        guiRender = new GuiRender(cachedWidth, cachedHeight);
         skyBoxRender = new SkyBoxRender();
         shadowRender = new ShadowRender();
         lightRender = new LightRender();
@@ -154,7 +156,7 @@ public class RendererOpenGL implements Renderer {
         renderBuffers = new RenderBuffers();
         commandBuffers = new CommandBuffer();
 
-        generateRenderBuffers(window.getWidth(), window.getHeight());
+        generateRenderBuffers();
         shadowBuffers = createShadowBuffers();
     }
 
@@ -211,12 +213,9 @@ public class RendererOpenGL implements Renderer {
 
     @Override
     public void cleanup() {
-        sceneRender.cleanup();
         guiRender.cleanup();
         skyBoxRender.cleanup();
-        shadowRender.cleanup();
         lightRender.cleanup();
-        animationRender.cleanup();
         filterRender.cleanup();
         GraphicsManager.getDeletionQueue().add(gBuffer);
         gBuffer = null;
@@ -298,11 +297,8 @@ public class RendererOpenGL implements Renderer {
     /**
      * Generate new render buffers. {@link #deleteRenderBuffers()} should be called before doing
      * this if they already exist.
-     *
-     * @param width The width of the window/buffers in pixels.
-     * @param height The height of the window/buffers in pixels.
      */
-    private void generateRenderBuffers(int width, int height) {
+    private void generateRenderBuffers() {
         glActiveTexture(GL_TEXTURE0);
         screenTexture = glGenTextures();
         glBindTexture(GL_TEXTURE_2D, screenTexture);
@@ -310,12 +306,21 @@ public class RendererOpenGL implements Renderer {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+        glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGBA,
+                cachedWidth,
+                cachedHeight,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                0);
         glBindTexture(GL_TEXTURE_2D, 0);
 
         screenRBODepth = glGenRenderbuffers();
         glBindRenderbuffer(GL_RENDERBUFFER, screenRBODepth);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, width, height);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, cachedWidth, cachedHeight);
         glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
         screenFBO = glGenFramebuffers();
@@ -327,63 +332,72 @@ public class RendererOpenGL implements Renderer {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
-    /** Reset the blending after we are done with the light rendering. */
-    private void lightRenderFinish() {
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glBindRenderbuffer(GL_RENDERBUFFER, 0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    }
-
-    /** Set up for rendering lights. */
-    private void lightRenderStart() {
-        glBindFramebuffer(GL_FRAMEBUFFER, screenFBO);
-        glBindRenderbuffer(GL_RENDERBUFFER, screenRBODepth);
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, screenTexture);
-
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glViewport(0, 0, cachedWidth, cachedHeight);
-
-        glEnable(GL_BLEND);
-        glBlendEquation(GL_FUNC_ADD);
-        glBlendFunc(GL_ONE, GL_ONE);
-    }
-
     @Override
-    public void render(@NonNull Scene scene) {
+    public void render(@NonNull Scene scene, @NonNull ShaderCache shaders) {
         if (Renderer.configuration.isRenderingScene()) {
             updateModelMatrices(scene);
 
-            animationRender.render(scene, renderBuffers);
+            animationRender.render(
+                    scene, shaders.getShader(RenderStage.Type.ANIMATION), renderBuffers);
             shadowRender.render(
-                    scene, renderBuffers, cascadeShadows, shadowBuffers, commandBuffers);
+                    scene,
+                    shaders.getShader(RenderStage.Type.SHADOW),
+                    renderBuffers,
+                    cascadeShadows,
+                    shadowBuffers,
+                    commandBuffers);
 
             if (Renderer.configuration.isWireframe()) {
                 glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
                 glDisable(GL_TEXTURE_2D);
             }
 
-            sceneRender.render(scene, renderBuffers, gBuffer, commandBuffers);
+            sceneRender.render(
+                    scene,
+                    shaders.getShader(RenderStage.Type.SCENE),
+                    renderBuffers,
+                    gBuffer,
+                    commandBuffers);
 
             if (Renderer.configuration.isWireframe()) {
                 glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
                 glEnable(GL_TEXTURE_2D);
             }
-            lightRenderStart();
-            lightRender.render(scene, cascadeShadows, shadowBuffers, gBuffer);
-            skyBoxRender.render(scene);
-            lightRenderFinish();
 
-            filterRender.render(screenTexture);
+            glBindFramebuffer(GL_FRAMEBUFFER, screenFBO);
+            glBindRenderbuffer(GL_RENDERBUFFER, screenRBODepth);
+
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, screenTexture);
+
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            glViewport(0, 0, cachedWidth, cachedHeight);
+
+            glEnable(GL_BLEND);
+            glBlendEquation(GL_FUNC_ADD);
+            glBlendFunc(GL_ONE, GL_ONE);
+
+            lightRender.render(
+                    scene,
+                    shaders.getShader(RenderStage.Type.LIGHT),
+                    cascadeShadows,
+                    shadowBuffers,
+                    gBuffer);
+            skyBoxRender.render(scene, shaders.getShader(RenderStage.Type.SKYBOX));
+
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glBindRenderbuffer(GL_RENDERBUFFER, 0);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            filterRender.render(screenTexture, shaders.getShader(RenderStage.Type.FILTER));
         } else {
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, screenTexture);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             glViewport(0, 0, cachedWidth, cachedHeight);
         }
-        guiRender.render();
+        guiRender.render(shaders.getShader(RenderStage.Type.GUI));
     }
 
     @Override
@@ -391,7 +405,7 @@ public class RendererOpenGL implements Renderer {
         cachedWidth = width;
         cachedHeight = height;
         deleteRenderBuffers();
-        generateRenderBuffers(width, height);
+        generateRenderBuffers();
         guiRender.resize(width, height);
     }
 
@@ -480,14 +494,14 @@ public class RendererOpenGL implements Renderer {
     }
 
     @Override
-    public void setupData(@NonNull Scene scene) {
+    public void setupData(@NonNull Scene scene, @NonNull ShaderCache shaders) {
         if (buffersPopulated.getAndSet(false)) {
             renderBuffers.cleanup();
             commandBuffers.cleanup();
         }
         renderBuffers.loadStaticModels(scene);
         renderBuffers.loadAnimatedModels(scene);
-        sceneRender.recalculateMaterials(scene);
+        sceneRender.recalculateMaterials(scene, shaders.getShader(RenderStage.Type.SCENE));
         setupAnimCommandBuffer(scene);
         setupStaticCommandBuffer(scene);
         buffersPopulated.set(true);

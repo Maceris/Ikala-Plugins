@@ -1,9 +1,8 @@
 package com.ikalagaming.graphics.frontend;
 
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.backend.base.ShaderCache;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -24,8 +23,9 @@ public interface Renderer {
      * Render a scene on the window.
      *
      * @param scene The scene to render.
+     * @param shaders The shaders to use for rendering.
      */
-    void render(@NonNull Scene scene);
+    void render(@NonNull Scene scene, @NonNull ShaderCache shaders);
 
     /**
      * Update the buffers and GUI when we resize the screen.
@@ -41,44 +41,22 @@ public interface Renderer {
      * @param scene The scene to read models from.
      */
     @Deprecated
-    void setupData(@NonNull Scene scene);
+    void setupData(@NonNull Scene scene, @NonNull ShaderCache shaders);
 
     @Getter
     @Setter
+    @Deprecated
     class RenderConfig {
         /** Enable wireframe. */
         @Deprecated private boolean wireframe;
 
         /** Post-processing filter that has been selected. */
-        private int selectedFilter;
+        @Deprecated private int selectedFilter;
 
         /** Whether we are actually drawing the scene. */
         @Deprecated private boolean renderingScene;
-
-        /**
-         * The list of filter names that are available. We use an array to make ImGui access easier.
-         */
-        private String[] filterNames;
-
-        /**
-         * Sets the post-processing filter. Must be a valid index in the array of filters or an
-         * exception will be thrown.
-         *
-         * @param newFilter The index of the filter to use.
-         */
-        public void setSelectedFilter(int newFilter) {
-            if (newFilter < 0 || newFilter > filterNames.length) {
-                throw new IllegalArgumentException(
-                        SafeResourceLoader.getStringFormatted(
-                                "ILLEGAL_FILTER_SELECTION",
-                                GraphicsPlugin.getResourceBundle(),
-                                newFilter + "",
-                                filterNames.length + ""));
-            }
-            selectedFilter = newFilter;
-        }
     }
 
     /** Rendering configurations. */
-    RenderConfig configuration = new RenderConfig();
+    @Deprecated RenderConfig configuration = new RenderConfig();
 }

@@ -8,7 +8,6 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 import static org.lwjgl.opengl.GL43.glMultiDrawElementsIndirect;
 
 import com.ikalagaming.graphics.ShaderUniforms;
-import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.CascadeShadow;
@@ -16,38 +15,10 @@ import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /** Handles rendering for shadows. */
 public class ShadowRender {
-
-    /** The shader program for the shadow rendering. */
-    private final Shader shaderProgram;
-
-    /** The uniform map for the shader program. */
-    private UniformsMap uniformsMap;
-
-    /** Set up a new shadow renderer. */
-    public ShadowRender() {
-        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
-        shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/shadow.vert", Shader.Type.VERTEX));
-        shaderProgram = new ShaderOpenGL(shaderModuleDataList);
-
-        createUniforms();
-    }
-
-    /** Clean up buffers and shaders. */
-    public void cleanup() {
-        shaderProgram.cleanup();
-    }
-
-    /** Create the uniforms for the shadow shader. */
-    private void createUniforms() {
-        uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
-        uniformsMap.createUniform(ShaderUniforms.Shadow.PROJECTION_VIEW_MATRIX);
-    }
 
     /**
      * Render the shadows for the scene.
@@ -60,16 +31,19 @@ public class ShadowRender {
      */
     public void render(
             @NonNull Scene scene,
+            @NonNull Shader shader,
             @NonNull RenderBuffers renderBuffers,
             @NonNull List<CascadeShadow> cascadeShadows,
             @NonNull Framebuffer depthMap,
             @NonNull CommandBuffer commandBuffers) {
+
+        var uniformsMap = shader.getUniformMap();
         CascadeShadow.updateCascadeShadows(cascadeShadows, scene);
 
         glBindFramebuffer(GL_FRAMEBUFFER, (int) depthMap.id());
         glViewport(0, 0, CascadeShadow.SHADOW_MAP_WIDTH, CascadeShadow.SHADOW_MAP_HEIGHT);
 
-        shaderProgram.bind();
+        shader.bind();
 
         for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
             glFramebufferTexture2D(
@@ -138,6 +112,6 @@ public class ShadowRender {
         }
 
         glBindVertexArray(0);
-        shaderProgram.unbind();
+        shader.unbind();
     }
 }

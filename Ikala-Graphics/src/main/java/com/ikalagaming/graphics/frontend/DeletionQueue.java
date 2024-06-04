@@ -11,6 +11,7 @@ public class DeletionQueue {
     /** The types of resources that the queue supports deleting. */
     public enum ResourceType {
         FRAME_BUFFER,
+        SHADER,
         TEXTURE
     }
 
@@ -32,6 +33,15 @@ public class DeletionQueue {
      */
     public void add(@NonNull Framebuffer framebuffer) {
         queue.add(new Entry(ResourceType.FRAME_BUFFER, framebuffer));
+    }
+
+    /**
+     * Add a shader to the queue to be deleted.
+     *
+     * @param shader The shader object.
+     */
+    public void add(@NonNull Shader shader) {
+        queue.add(new Entry(ResourceType.SHADER, shader));
     }
 
     /**
