@@ -51,9 +51,6 @@ public interface Renderer {
         /** Enable wireframe. */
         @Deprecated private boolean wireframe;
 
-        /** Post-processing filter that has been selected. */
-        @Deprecated private int selectedFilter;
-
         /** Whether we are actually drawing the scene. */
         @Deprecated private boolean renderingScene;
     }
