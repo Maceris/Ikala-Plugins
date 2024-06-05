@@ -20,9 +20,6 @@ import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL14.GL_FUNC_ADD;
 import static org.lwjgl.opengl.GL14.glBlendEquation;
 import static org.lwjgl.opengl.GL15.*;
-import static org.lwjgl.opengl.GL15.glGenBuffers;
-import static org.lwjgl.opengl.GL20.*;
-import static org.lwjgl.opengl.GL20.glVertexAttribPointer;
 import static org.lwjgl.opengl.GL30.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
@@ -47,47 +44,6 @@ import java.nio.ByteBuffer;
 
 /** A utility for handling the rendering of a Graphical User Interface. */
 public class GuiRender {
-
-    /**
-     * Used to provide ImGUI with the VBOs it needs to render. This should be created using the
-     * {@link GuiMesh#create()} method instead of a constructor.
-     *
-     * @param vaoID The VAO.
-     * @param verticesVBO The vertices VBO, set up for ImGui.
-     * @param indicesVBO The indices VBO.
-     */
-    @Deprecated
-    private record GuiMesh(int vaoID, int verticesVBO, int indicesVBO) {
-        /**
-         * Create a new GUI mesh, and set it up with OpenGL. This should be called instead of a
-         * constructor.
-         *
-         * @return The newly created GUI mesh.
-         */
-        public static GuiMesh create() {
-            int vaoID = glGenVertexArrays();
-            glBindVertexArray(vaoID);
-
-            int verticesVBO = glGenBuffers();
-            glBindBuffer(GL_ARRAY_BUFFER, verticesVBO);
-            glEnableVertexAttribArray(0);
-            glVertexAttribPointer(0, 2, GL_FLOAT, false, ImDrawData.SIZEOF_IM_DRAW_VERT, 0);
-            glEnableVertexAttribArray(1);
-            glVertexAttribPointer(1, 2, GL_FLOAT, false, ImDrawData.SIZEOF_IM_DRAW_VERT, 8);
-            glEnableVertexAttribArray(2);
-            glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, true, ImDrawData.SIZEOF_IM_DRAW_VERT, 16);
-
-            int indicesVBO = glGenBuffers();
-
-            glBindBuffer(GL_ARRAY_BUFFER, 0);
-            glBindVertexArray(0);
-
-            return new GuiMesh(vaoID, verticesVBO, indicesVBO);
-        }
-    }
-
-    /** The mesh to render. */
-    private GuiMesh guiMesh;
 
     /** The scale of the GUI. */
     private final Vector2f scale;
@@ -117,9 +73,6 @@ public class GuiRender {
     /** Clean up shaders and textures. */
     public void cleanup() {
         glDeleteTextures((int) font.id());
-        glDeleteBuffers(guiMesh.indicesVBO());
-        glDeleteBuffers(guiMesh.verticesVBO());
-        glDeleteVertexArrays(guiMesh.vaoID());
     }
 
     /** Set up imgui and create fonts, textures, meshes, etc. */
@@ -140,8 +93,6 @@ public class GuiRender {
                         .getTextureLoader()
                         .load(buf, Format.R8G8B8A8_UINT, width.get(), height.get());
         fontAtlas.setTexID((int) font.id());
-
-        guiMesh = GuiMesh.create();
     }
 
     /**
@@ -149,7 +100,7 @@ public class GuiRender {
      *
      * @param shader The shader to use for rendering.
      */
-    public void render(@NonNull Shader shader) {
+    public void render(@NonNull Shader shader, @NonNull GuiMesh guiMesh) {
         var uniformsMap = shader.getUniformMap();
         WindowManager windowManager = GraphicsManager.getWindowManager();
         if (windowManager == null) {
@@ -176,22 +127,22 @@ public class GuiRender {
         uniformsMap.setUniform(ShaderUniforms.GUI.SCALE, scale);
 
         ImDrawData drawData = ImGui.getDrawData();
-        ImVec2 bufScale = drawData.getFramebufferScale();
-        ImVec2 displSize = drawData.getDisplaySize();
+        ImVec2 bufferScale = drawData.getFramebufferScale();
+        ImVec2 displaySize = drawData.getDisplaySize();
 
-        int fbHeight = (int) (displSize.y * bufScale.y);
+        int framebufferHeight = (int) (displaySize.y * bufferScale.y);
 
-        int numLists = drawData.getCmdListsCount();
-        for (int i = 0; i < numLists; ++i) {
+        int commandListCount = drawData.getCmdListsCount();
+        for (int i = 0; i < commandListCount; ++i) {
             glBufferData(GL_ARRAY_BUFFER, drawData.getCmdListVtxBufferData(i), GL_STREAM_DRAW);
             glBufferData(
                     GL_ELEMENT_ARRAY_BUFFER, drawData.getCmdListIdxBufferData(i), GL_STREAM_DRAW);
 
-            int numCmds = drawData.getCmdListCmdBufferSize(i);
-            for (int j = 0; j < numCmds; j++) {
-                final int elemCount = drawData.getCmdListCmdBufferElemCount(i, j);
-                final int idxBufferOffset = drawData.getCmdListCmdBufferIdxOffset(i, j);
-                final int indices = idxBufferOffset * ImDrawData.SIZEOF_IM_DRAW_IDX;
+            int commandCount = drawData.getCmdListCmdBufferSize(i);
+            for (int j = 0; j < commandCount; j++) {
+                final int elementCount = drawData.getCmdListCmdBufferElemCount(i, j);
+                final int indexBufferOffset = drawData.getCmdListCmdBufferIdxOffset(i, j);
+                final int indices = indexBufferOffset * ImDrawData.SIZEOF_IM_DRAW_IDX;
 
                 int id = drawData.getCmdListCmdBufferTextureId(i, j);
 
@@ -199,13 +150,13 @@ public class GuiRender {
 
                 glScissor(
                         (int) clipRect.x,
-                        (int) (fbHeight - clipRect.w),
+                        (int) (framebufferHeight - clipRect.w),
                         (int) (clipRect.z - clipRect.x),
                         (int) (clipRect.w - clipRect.y));
 
                 glBindTexture(GL_TEXTURE_2D, id);
 
-                glDrawElements(GL_TRIANGLES, elemCount, GL_UNSIGNED_SHORT, indices);
+                glDrawElements(GL_TRIANGLES, elementCount, GL_UNSIGNED_SHORT, indices);
             }
         }
 

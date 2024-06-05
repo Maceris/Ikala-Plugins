@@ -123,6 +123,9 @@ public class RendererOpenGL implements Renderer {
     /** The depth map for shadows. */
     private Framebuffer shadowBuffers;
 
+    /** The mesh to render. */
+    private GuiMesh guiMesh;
+
     /** Set up a new rendering pipeline. */
     public RendererOpenGL() {
         buffersPopulated = new AtomicBoolean();
@@ -146,6 +149,7 @@ public class RendererOpenGL implements Renderer {
         cachedHeight = window.getHeight();
 
         sceneRender = new SceneRender();
+        guiMesh = GuiMesh.create();
         guiRender = new GuiRender(cachedWidth, cachedHeight);
         skyBoxRender = new SkyBoxRender();
         shadowRender = new ShadowRender();
@@ -214,6 +218,7 @@ public class RendererOpenGL implements Renderer {
     @Override
     public void cleanup() {
         guiRender.cleanup();
+        guiMesh.cleanup();
         skyBoxRender.cleanup();
         lightRender.cleanup();
         filterRender.cleanup();
@@ -397,7 +402,7 @@ public class RendererOpenGL implements Renderer {
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             glViewport(0, 0, cachedWidth, cachedHeight);
         }
-        guiRender.render(shaders.getShader(RenderStage.Type.GUI));
+        guiRender.render(shaders.getShader(RenderStage.Type.GUI), guiMesh);
     }
 
     @Override

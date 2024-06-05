@@ -117,6 +117,7 @@ public class LightRender {
      * Render a scene.
      *
      * @param scene The scene we are rendering.
+     * @param shader The shader to use for rendering.
      * @param cascadeShadows The cascade shadows information.
      * @param depthMap The depth map buffer.
      * @param gBuffer The buffer for geometry data.
