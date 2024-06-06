@@ -176,7 +176,7 @@ public class VulkanInstance implements Instance {
                             .applicationVersion(1)
                             .pEngineName(engineName)
                             .engineVersion(1)
-                            .apiVersion(VK_MAKE_API_VERSION(0, 1, 3, 0));
+                            .apiVersion(VK_MAKE_API_VERSION(0, 1, 2, 0));
 
             requiredExtensionNames.flip();
             var instanceInfo =
