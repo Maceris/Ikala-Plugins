@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.backend.opengl;
 
+import static org.lwjgl.glfw.GLFW.*;
+import static org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER;
 import static org.lwjgl.opengl.GL11.glDeleteTextures;
 import static org.lwjgl.opengl.GL20.glDeleteProgram;
 import static org.lwjgl.opengl.GL20.glUseProgram;
@@ -19,6 +21,9 @@ import com.ikalagaming.plugins.config.ConfigManager;
 import com.ikalagaming.plugins.config.PluginConfig;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import imgui.ImGui;
+import imgui.ImGuiIO;
+import imgui.flag.ImGuiKey;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.opengl.GL;
@@ -42,7 +47,22 @@ public class OpenGLInstance implements Instance {
         textureLoader = new TextureLoaderOpenGL();
         shaderMap = new ShaderMap();
         initializeShaders();
+        initializeImGui(window);
         renderer.initialize(window);
+    }
+
+    /**
+     * Create an ImGui context and configure it.
+     *
+     * @param window The window to pull display info from.
+     */
+    private void initializeImGui(@NonNull Window window) {
+        ImGui.createContext();
+
+        ImGuiIO imGuiIO = ImGui.getIO();
+        imGuiIO.setIniFilename(null);
+        imGuiIO.setDisplaySize(window.getWidth(), window.getHeight());
+        setUpImGuiKeys();
     }
 
     /**
@@ -338,6 +358,8 @@ public class OpenGLInstance implements Instance {
     public void resize(int width, int height) {
         // TODO(ches) move this out of the render pass itself
         renderer.resize(width, height);
+        ImGuiIO imGuiIO = ImGui.getIO();
+        imGuiIO.setDisplaySize(width, height);
     }
 
     @Override
@@ -369,5 +391,26 @@ public class OpenGLInstance implements Instance {
                 }
             }
         }
+    }
+
+    /** Set up nonstandard key codes to make sure they work. */
+    private void setUpImGuiKeys() {
+        ImGuiIO io = ImGui.getIO();
+        io.setKeyMap(ImGuiKey.Tab, GLFW_KEY_TAB);
+        io.setKeyMap(ImGuiKey.LeftArrow, GLFW_KEY_LEFT);
+        io.setKeyMap(ImGuiKey.RightArrow, GLFW_KEY_RIGHT);
+        io.setKeyMap(ImGuiKey.UpArrow, GLFW_KEY_UP);
+        io.setKeyMap(ImGuiKey.DownArrow, GLFW_KEY_DOWN);
+        io.setKeyMap(ImGuiKey.PageUp, GLFW_KEY_PAGE_UP);
+        io.setKeyMap(ImGuiKey.PageDown, GLFW_KEY_PAGE_DOWN);
+        io.setKeyMap(ImGuiKey.Home, GLFW_KEY_HOME);
+        io.setKeyMap(ImGuiKey.End, GLFW_KEY_END);
+        io.setKeyMap(ImGuiKey.Insert, GLFW_KEY_INSERT);
+        io.setKeyMap(ImGuiKey.Delete, GLFW_KEY_DELETE);
+        io.setKeyMap(ImGuiKey.Backspace, GLFW_KEY_BACKSPACE);
+        io.setKeyMap(ImGuiKey.Space, GLFW_KEY_SPACE);
+        io.setKeyMap(ImGuiKey.Enter, GLFW_KEY_ENTER);
+        io.setKeyMap(ImGuiKey.Escape, GLFW_KEY_ESCAPE);
+        io.setKeyMap(ImGuiKey.KeyPadEnter, GLFW_KEY_KP_ENTER);
     }
 }

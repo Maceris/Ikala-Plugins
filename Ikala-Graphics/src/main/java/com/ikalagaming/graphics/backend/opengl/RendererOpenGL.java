@@ -29,15 +29,16 @@ import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.ShaderMap;
 import com.ikalagaming.graphics.exceptions.RenderException;
-import com.ikalagaming.graphics.frontend.Framebuffer;
-import com.ikalagaming.graphics.frontend.RenderStage;
-import com.ikalagaming.graphics.frontend.Renderer;
+import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import imgui.ImFontAtlas;
+import imgui.ImGui;
+import imgui.type.ImInt;
 import lombok.NonNull;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
@@ -126,6 +127,9 @@ public class RendererOpenGL implements Renderer {
     /** The mesh to render. */
     private GuiMesh guiMesh;
 
+    /** The texture we store font atlas on. */
+    private Texture font;
+
     /** Set up a new rendering pipeline. */
     public RendererOpenGL() {
         buffersPopulated = new AtomicBoolean();
@@ -150,7 +154,7 @@ public class RendererOpenGL implements Renderer {
 
         sceneRender = new SceneRender();
         guiMesh = GuiMesh.create();
-        guiRender = new GuiRender(cachedWidth, cachedHeight);
+        guiRender = new GuiRender();
         skyBoxRender = new SkyBoxRender();
         shadowRender = new ShadowRender();
         lightRender = new LightRender();
@@ -162,6 +166,19 @@ public class RendererOpenGL implements Renderer {
 
         generateRenderBuffers();
         shadowBuffers = createShadowBuffers();
+        createImGuiFont();
+    }
+
+    private void createImGuiFont() {
+        ImFontAtlas fontAtlas = ImGui.getIO().getFonts();
+        ImInt width = new ImInt();
+        ImInt height = new ImInt();
+        ByteBuffer buf = fontAtlas.getTexDataAsRGBA32(width, height);
+        font =
+                GraphicsManager.getRenderInstance()
+                        .getTextureLoader()
+                        .load(buf, Format.R8G8B8A8_UINT, width.get(), height.get());
+        fontAtlas.setTexID((int) font.id());
     }
 
     private Framebuffer createShadowBuffers() {
@@ -217,7 +234,8 @@ public class RendererOpenGL implements Renderer {
 
     @Override
     public void cleanup() {
-        guiRender.cleanup();
+        GraphicsManager.getDeletionQueue().add(font);
+        font = null;
         guiMesh.cleanup();
         skyBoxRender.cleanup();
         lightRender.cleanup();
@@ -411,7 +429,6 @@ public class RendererOpenGL implements Renderer {
         cachedHeight = height;
         deleteRenderBuffers();
         generateRenderBuffers();
-        guiRender.resize(width, height);
     }
 
     /**
