@@ -130,6 +130,8 @@ public class RendererOpenGL implements Renderer {
     /** The texture we store font atlas on. */
     private Texture font;
 
+    private SkyboxModel skybox;
+
     /** Set up a new rendering pipeline. */
     public RendererOpenGL() {
         buffersPopulated = new AtomicBoolean();
@@ -167,6 +169,8 @@ public class RendererOpenGL implements Renderer {
         generateRenderBuffers();
         shadowBuffers = createShadowBuffers();
         createImGuiFont();
+
+        skybox = SkyboxModel.create();
     }
 
     private void createImGuiFont() {
@@ -237,7 +241,8 @@ public class RendererOpenGL implements Renderer {
         GraphicsManager.getDeletionQueue().add(font);
         font = null;
         guiMesh.cleanup();
-        skyBoxRender.cleanup();
+        skybox.cleanup();
+        skybox = null;
         lightRender.cleanup();
         filterRender.cleanup();
         GraphicsManager.getDeletionQueue().add(gBuffer);
@@ -406,7 +411,7 @@ public class RendererOpenGL implements Renderer {
                     cascadeShadows,
                     shadowBuffers,
                     gBuffer);
-            skyBoxRender.render(scene, shaders.getShader(RenderStage.Type.SKYBOX));
+            skyBoxRender.render(scene, shaders.getShader(RenderStage.Type.SKYBOX), skybox);
 
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
