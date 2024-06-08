@@ -16,6 +16,7 @@ import static org.lwjgl.opengl.GL30.glBindBufferBase;
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
+import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.frontend.Framebuffer;
@@ -28,6 +29,7 @@ import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.scene.lights.PointLight;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
 import com.ikalagaming.graphics.scene.lights.SpotLight;
+import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -203,8 +205,9 @@ public class LightRender {
         final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
 
         if (pointLights.size() > LightRender.MAX_LIGHTS_SUPPORTED) {
-            log.error(
-                    "We only support {} point lights but are trying to render {}.",
+            log.warn(
+                    SafeResourceLoader.getString(
+                            "MAX_POINT_LIGHTS", GraphicsPlugin.getResourceBundle()),
                     LightRender.MAX_LIGHTS_SUPPORTED,
                     pointLights.size());
         }
@@ -259,8 +262,9 @@ public class LightRender {
         final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
 
         if (spotLights.size() > LightRender.MAX_LIGHTS_SUPPORTED) {
-            log.error(
-                    "We only support {} spot lights but are trying to render {}.",
+            log.warn(
+                    SafeResourceLoader.getString(
+                            "MAX_SPOT_LIGHTS", GraphicsPlugin.getResourceBundle()),
                     LightRender.MAX_LIGHTS_SUPPORTED,
                     spotLights.size());
         }
