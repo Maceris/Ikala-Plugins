@@ -131,6 +131,10 @@ public class RendererOpenGL implements Renderer {
     private Texture font;
 
     private SkyboxModel skybox;
+    private LightBuffers lightBuffers;
+
+    /** A mesh for rendering lighting onto. */
+    private QuadMesh lightingQuad;
 
     /** Set up a new rendering pipeline. */
     public RendererOpenGL() {
@@ -171,6 +175,8 @@ public class RendererOpenGL implements Renderer {
         createImGuiFont();
 
         skybox = SkyboxModel.create();
+        lightingQuad = QuadMesh.getInstance();
+        lightBuffers = LightBuffers.create();
     }
 
     private void createImGuiFont() {
@@ -243,7 +249,10 @@ public class RendererOpenGL implements Renderer {
         guiMesh.cleanup();
         skybox.cleanup();
         skybox = null;
-        lightRender.cleanup();
+        lightingQuad.cleanup();
+        lightingQuad = null;
+        lightBuffers.cleanup();
+        lightBuffers = null;
         filterRender.cleanup();
         GraphicsManager.getDeletionQueue().add(gBuffer);
         gBuffer = null;
@@ -409,8 +418,10 @@ public class RendererOpenGL implements Renderer {
                     scene,
                     shaders.getShader(RenderStage.Type.LIGHT),
                     cascadeShadows,
+                    lightBuffers,
                     shadowBuffers,
-                    gBuffer);
+                    gBuffer,
+                    lightingQuad);
             skyBoxRender.render(scene, shaders.getShader(RenderStage.Type.SKYBOX), skybox);
 
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);

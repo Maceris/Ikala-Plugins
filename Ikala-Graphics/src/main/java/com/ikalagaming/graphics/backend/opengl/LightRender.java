@@ -7,11 +7,7 @@ import static org.lwjgl.opengl.GL11.glBindTexture;
 import static org.lwjgl.opengl.GL11.glDrawElements;
 import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
 import static org.lwjgl.opengl.GL13.glActiveTexture;
-import static org.lwjgl.opengl.GL15.GL_STATIC_DRAW;
-import static org.lwjgl.opengl.GL15.glBufferData;
 import static org.lwjgl.opengl.GL15.glBufferSubData;
-import static org.lwjgl.opengl.GL15.glDeleteBuffers;
-import static org.lwjgl.opengl.GL15.glGenBuffers;
 import static org.lwjgl.opengl.GL30.glBindBufferBase;
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
@@ -51,69 +47,7 @@ public class LightRender {
     static final int SPOT_LIGHT_BINDING = 1;
 
     /** How many lights of each type (spot, point) we currently support. */
-    private static final int MAX_LIGHTS_SUPPORTED = 1000;
-
-    /** A mesh for rendering lighting onto. */
-    private QuadMesh quadMesh;
-
-    /** An SSBO for point lights. */
-    private int pointLightBuffer;
-
-    /** An SSBO for spotlights. */
-    private int spotLightBuffer;
-
-    /** Set up the light renderer. */
-    public LightRender() {
-        quadMesh = QuadMesh.getInstance();
-        initSSBOs();
-    }
-
-    /** Clean up resources. */
-    public void cleanup() {
-        quadMesh.cleanup();
-        glDeleteBuffers(pointLightBuffer);
-        glDeleteBuffers(spotLightBuffer);
-    }
-
-    /** Initialize the lighting SSBOs and fill them with zeroes. */
-    private void initSSBOs() {
-        pointLightBuffer = glGenBuffers();
-        spotLightBuffer = glGenBuffers();
-        /*
-         * Position (vec3 + ignored), color (vec3), intensity (1), Attenuation
-         * (3 + ignored), in that order.
-         */
-        final int POINT_LIGHT_SIZE = 4 + 3 + 1 + 4;
-        FloatBuffer pointLightFloatBuffer =
-                MemoryUtil.memAllocFloat(LightRender.MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE);
-
-        pointLightFloatBuffer
-                .put(new float[LightRender.MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE])
-                .flip();
-
-        glBindBufferBase(
-                GL_SHADER_STORAGE_BUFFER, LightRender.POINT_LIGHT_BINDING, pointLightBuffer);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, pointLightFloatBuffer, GL_STATIC_DRAW);
-
-        MemoryUtil.memFree(pointLightFloatBuffer);
-
-        /*
-         * Position (vec3 + ignored), color (vec3), intensity (1), Attenuation
-         * (3 + ignored), cone direction (vec3), cutoff (1) in that order.
-         */
-        final int SPOT_LIGHT_SIZE = 4 + 3 + 1 + 4 + 3 + 1;
-        FloatBuffer spotLightFloatBuffer =
-                MemoryUtil.memAllocFloat(LightRender.MAX_LIGHTS_SUPPORTED * SPOT_LIGHT_SIZE);
-
-        spotLightFloatBuffer
-                .put(new float[LightRender.MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE])
-                .flip();
-
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, LightRender.SPOT_LIGHT_BINDING, spotLightBuffer);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, spotLightFloatBuffer, GL_STATIC_DRAW);
-
-        MemoryUtil.memFree(spotLightFloatBuffer);
-    }
+    static final int MAX_LIGHTS_SUPPORTED = 1000;
 
     /**
      * Render a scene.
@@ -121,19 +55,23 @@ public class LightRender {
      * @param scene The scene we are rendering.
      * @param shader The shader to use for rendering.
      * @param cascadeShadows The cascade shadows information.
+     * @param lightBuffers The buffers to use for light info.
      * @param depthMap The depth map buffer.
      * @param gBuffer The buffer for geometry data.
+     * @param targetQuad The quad mesh to render onto.
      */
     public void render(
             @NonNull Scene scene,
             @NonNull Shader shader,
             @NonNull List<CascadeShadow> cascadeShadows,
+            @NonNull LightBuffers lightBuffers,
             @NonNull Framebuffer depthMap,
-            @NonNull Framebuffer gBuffer) {
+            @NonNull Framebuffer gBuffer,
+            @NonNull QuadMesh targetQuad) {
         shader.bind();
         var uniformsMap = shader.getUniformMap();
 
-        updateLights(scene, uniformsMap);
+        updateLights(scene, lightBuffers, uniformsMap);
 
         int nextTexture = 0;
         // Bind the G-Buffer textures
@@ -189,7 +127,7 @@ public class LightRender {
         uniformsMap.setUniform(
                 ShaderUniforms.Light.INVERSE_VIEW_MATRIX, scene.getCamera().getInvViewMatrix());
 
-        glBindVertexArray(quadMesh.vao());
+        glBindVertexArray(targetQuad.vao());
         glDrawElements(GL_TRIANGLES, QuadMesh.VERTEX_COUNT, GL_UNSIGNED_INT, 0);
 
         shader.unbind();
@@ -200,7 +138,8 @@ public class LightRender {
      *
      * @param scene The scene to fetch lights from.
      */
-    private void setupPointLightBuffer(@NonNull Scene scene, @NonNull UniformsMap uniformsMap) {
+    private void setupPointLightBuffer(
+            @NonNull Scene scene, int pointLightBuffer, @NonNull UniformsMap uniformsMap) {
         List<PointLight> pointLights = scene.getSceneLights().getPointLights();
         final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
 
@@ -257,7 +196,8 @@ public class LightRender {
      *
      * @param scene The scene to fetch lights from.
      */
-    private void setupSpotLightBuffer(@NonNull Scene scene, @NonNull UniformsMap uniformsMap) {
+    private void setupSpotLightBuffer(
+            @NonNull Scene scene, int spotLightBuffer, @NonNull UniformsMap uniformsMap) {
         List<SpotLight> spotLights = scene.getSceneLights().getSpotLights();
         final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
 
@@ -320,7 +260,10 @@ public class LightRender {
      *
      * @param scene The scene we are updating.
      */
-    private void updateLights(@NonNull Scene scene, @NonNull UniformsMap uniformsMap) {
+    private void updateLights(
+            @NonNull Scene scene,
+            @NonNull LightBuffers lightBuffers,
+            @NonNull UniformsMap uniformsMap) {
         Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
 
         SceneLights sceneLights = scene.getSceneLights();
@@ -354,7 +297,7 @@ public class LightRender {
                         + ShaderUniforms.Light.DirectionalLight.INTENSITY,
                 dirLight.getIntensity());
 
-        setupPointLightBuffer(scene, uniformsMap);
-        setupSpotLightBuffer(scene, uniformsMap);
+        setupPointLightBuffer(scene, lightBuffers.pointLightSSBO(), uniformsMap);
+        setupSpotLightBuffer(scene, lightBuffers.spotLightSSBO(), uniformsMap);
     }
 }
