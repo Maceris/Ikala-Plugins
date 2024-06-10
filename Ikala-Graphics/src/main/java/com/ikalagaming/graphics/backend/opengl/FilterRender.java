@@ -20,25 +20,12 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class FilterRender {
 
-    /** A mesh for rendering the scene onto. */
-    private final QuadMesh quadMesh;
-
-    /** Set up the filter renderer. */
-    public FilterRender() {
-        quadMesh = QuadMesh.getInstance();
-    }
-
-    /** Clean up resources. */
-    public void cleanup() {
-        quadMesh.cleanup();
-    }
-
     /**
      * Render a scene.
      *
      * @param screenTexture The screen texture for post-processing.
      */
-    public void render(int screenTexture, @NonNull Shader shader) {
+    public void render(int screenTexture, @NonNull Shader shader, @NonNull QuadMesh quadMesh) {
         glDepthMask(false);
 
         shader.bind();

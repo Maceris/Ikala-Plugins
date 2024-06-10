@@ -133,8 +133,8 @@ public class RendererOpenGL implements Renderer {
     private SkyboxModel skybox;
     private LightBuffers lightBuffers;
 
-    /** A mesh for rendering lighting onto. */
-    private QuadMesh lightingQuad;
+    /** A mesh for rendering onto. */
+    private QuadMesh quadMesh;
 
     /** Set up a new rendering pipeline. */
     public RendererOpenGL() {
@@ -175,7 +175,7 @@ public class RendererOpenGL implements Renderer {
         createImGuiFont();
 
         skybox = SkyboxModel.create();
-        lightingQuad = QuadMesh.getInstance();
+        quadMesh = QuadMesh.getInstance();
         lightBuffers = LightBuffers.create();
     }
 
@@ -249,11 +249,10 @@ public class RendererOpenGL implements Renderer {
         guiMesh.cleanup();
         skybox.cleanup();
         skybox = null;
-        lightingQuad.cleanup();
-        lightingQuad = null;
+        quadMesh.cleanup();
+        quadMesh = null;
         lightBuffers.cleanup();
         lightBuffers = null;
-        filterRender.cleanup();
         GraphicsManager.getDeletionQueue().add(gBuffer);
         gBuffer = null;
         GraphicsManager.getDeletionQueue().add(shadowBuffers);
@@ -421,7 +420,7 @@ public class RendererOpenGL implements Renderer {
                     lightBuffers,
                     shadowBuffers,
                     gBuffer,
-                    lightingQuad);
+                    quadMesh);
             skyBoxRender.render(scene, shaders.getShader(RenderStage.Type.SKYBOX), skybox);
 
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -429,7 +428,8 @@ public class RendererOpenGL implements Renderer {
             glBindRenderbuffer(GL_RENDERBUFFER, 0);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            filterRender.render(screenTexture, shaders.getShader(RenderStage.Type.FILTER));
+            filterRender.render(
+                    screenTexture, shaders.getShader(RenderStage.Type.FILTER), quadMesh);
         } else {
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, screenTexture);
