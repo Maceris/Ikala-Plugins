@@ -2,8 +2,6 @@ package com.ikalagaming.graphics.frontend;
 
 import com.ikalagaming.graphics.scene.Scene;
 
-import lombok.NonNull;
-
 public interface RenderStage {
     enum Type {
         ANIMATION,
@@ -15,5 +13,5 @@ public interface RenderStage {
         SKYBOX
     }
 
-    void render(@NonNull Scene scene);
+    void render(Scene scene, Shader shader, Framebuffer target);
 }
