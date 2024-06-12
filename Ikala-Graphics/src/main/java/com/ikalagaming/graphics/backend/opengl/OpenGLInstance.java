@@ -48,7 +48,7 @@ public class OpenGLInstance implements Instance {
         shaderMap = new ShaderMap();
         initializeShaders();
         initializeImGui(window);
-        renderer.initialize(window);
+        renderer.initialize(window, shaderMap);
     }
 
     /**

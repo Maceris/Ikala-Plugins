@@ -28,6 +28,8 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.ShaderMap;
+import com.ikalagaming.graphics.backend.opengl.stages.GuiRender;
+import com.ikalagaming.graphics.backend.opengl.stages.GuiRenderStandalone;
 import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.CascadeShadow;
@@ -74,7 +76,9 @@ public class RendererOpenGL implements Renderer {
     private Framebuffer gBuffer;
 
     /** The GUI render handler. */
-    private GuiRender guiRender;
+    private RenderStage guiRenderStandalone;
+
+    private RenderStage guiRenderRegular;
 
     /** The lights render handler. */
     private LightRender lightRender;
@@ -136,6 +140,9 @@ public class RendererOpenGL implements Renderer {
     /** A mesh for rendering onto. */
     private QuadMesh quadMesh;
 
+    /** The list of render stages that this renderer uses. */
+    private RenderStage[] renderStages;
+
     /** Set up a new rendering pipeline. */
     public RendererOpenGL() {
         buffersPopulated = new AtomicBoolean();
@@ -146,7 +153,7 @@ public class RendererOpenGL implements Renderer {
     }
 
     @Override
-    public void initialize(@NonNull Window window) {
+    public void initialize(@NonNull Window window, @NonNull ShaderMap shaders) {
         glEnable(GL_MULTISAMPLE);
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
@@ -160,7 +167,10 @@ public class RendererOpenGL implements Renderer {
 
         sceneRender = new SceneRender();
         guiMesh = GuiMesh.create();
-        guiRender = new GuiRender();
+        guiRenderStandalone =
+                new GuiRenderStandalone(
+                        shaders.getShader(RenderStage.Type.GUI), screenTexture, guiMesh);
+        guiRenderRegular = new GuiRender(shaders.getShader(RenderStage.Type.GUI), guiMesh);
         skyBoxRender = new SkyBoxRender();
         shadowRender = new ShadowRender();
         lightRender = new LightRender();
@@ -430,13 +440,10 @@ public class RendererOpenGL implements Renderer {
 
             filterRender.render(
                     screenTexture, shaders.getShader(RenderStage.Type.FILTER), quadMesh);
+            guiRenderRegular.render(scene);
         } else {
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, screenTexture);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            glViewport(0, 0, cachedWidth, cachedHeight);
+            guiRenderStandalone.render(scene);
         }
-        guiRender.render(shaders.getShader(RenderStage.Type.GUI), guiMesh);
     }
 
     @Override

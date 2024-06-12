@@ -13,8 +13,9 @@ public interface Renderer {
      * Initialize the pipeline to prepare for rendering for the first time.
      *
      * @param window The window we will be rendering to.
+     * @param shaders The shaders to use for rendering.
      */
-    void initialize(@NonNull Window window);
+    void initialize(@NonNull Window window, @NonNull ShaderMap shaders);
 
     /** Clean up all the rendering resources. */
     void cleanup();

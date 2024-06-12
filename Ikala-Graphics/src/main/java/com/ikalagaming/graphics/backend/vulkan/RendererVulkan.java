@@ -10,7 +10,7 @@ import lombok.NonNull;
 public class RendererVulkan implements Renderer {
 
     @Override
-    public void initialize(@NonNull Window window) {}
+    public void initialize(@NonNull Window window, @NonNull ShaderMap shaders) {}
 
     @Override
     public void cleanup() {}

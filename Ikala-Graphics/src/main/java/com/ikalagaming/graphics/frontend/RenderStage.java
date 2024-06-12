@@ -13,5 +13,5 @@ public interface RenderStage {
         SKYBOX
     }
 
-    void render(Scene scene, Shader shader, Framebuffer target);
+    void render(Scene scene);
 }
