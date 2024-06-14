@@ -15,6 +15,8 @@ import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.scene.Scene;
 
 import imgui.*;
+import lombok.NonNull;
+import lombok.Setter;
 import org.joml.Vector2f;
 
 public class GuiRender implements RenderStage {
@@ -26,14 +28,14 @@ public class GuiRender implements RenderStage {
     private final GuiMesh guiMesh;
 
     /** The shader to use for rendering. */
-    private final Shader shader;
+    @NonNull @Setter private Shader shader;
 
     /**
      * Set up the GUI render stage.
      *
      * @param guiMesh The mesh information ImGui uses.
      */
-    public GuiRender(final Shader shader, final GuiMesh guiMesh) {
+    public GuiRender(final @NonNull Shader shader, final @NonNull GuiMesh guiMesh) {
         scale = new Vector2f();
         this.shader = shader;
         this.guiMesh = guiMesh;
