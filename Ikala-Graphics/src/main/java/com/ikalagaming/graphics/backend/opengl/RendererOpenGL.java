@@ -28,15 +28,15 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.ShaderMap;
-import com.ikalagaming.graphics.backend.opengl.stages.AnimationRender;
-import com.ikalagaming.graphics.backend.opengl.stages.GuiRender;
-import com.ikalagaming.graphics.backend.opengl.stages.GuiRenderStandalone;
+import com.ikalagaming.graphics.backend.opengl.stages.*;
 import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.launcher.PluginFolder;
+import com.ikalagaming.plugins.config.ConfigManager;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import imgui.ImFontAtlas;
@@ -64,12 +64,6 @@ public class RendererOpenGL implements Renderer {
     /** The size of a model matrix. */
     private static final int MODEL_MATRIX_SIZE = 4 * 4;
 
-    /** The binding for the draw elements buffer SSBO. */
-    static final int DRAW_ELEMENT_BINDING = 1;
-
-    /** The binding for the model matrices buffer SSBO. */
-    static final int MODEL_MATRICES_BINDING = 2;
-
     /** The animation render handler. */
     private RenderStage animationRender;
 
@@ -88,10 +82,10 @@ public class RendererOpenGL implements Renderer {
     private RenderBuffers renderBuffers;
 
     /** The scene render handler. */
-    private SceneRender sceneRender;
+    private RenderStage sceneRender;
 
     /** The shadow render handler. */
-    private ShadowRender shadowRender;
+    private RenderStage shadowRender;
 
     /** The skybox render handler. */
     private SkyBoxRender skyBoxRender;
@@ -135,6 +129,9 @@ public class RendererOpenGL implements Renderer {
     /** The texture we store font atlas on. */
     private Texture font;
 
+    /** The texture to use by default if nothing is provided for a model. */
+    private Texture defaultTexture;
+
     private SkyboxModel skybox;
     private LightBuffers lightBuffers;
 
@@ -176,14 +173,37 @@ public class RendererOpenGL implements Renderer {
         quadMesh = QuadMesh.getInstance();
         lightBuffers = LightBuffers.create();
 
-        sceneRender = new SceneRender();
+        final String defaultTexturePath =
+                PluginFolder.getResource(
+                                GraphicsPlugin.PLUGIN_NAME,
+                                PluginFolder.ResourceType.DATA,
+                                ConfigManager.loadConfig(GraphicsPlugin.PLUGIN_NAME)
+                                        .getString("default-texture"))
+                        .getAbsolutePath();
+
+        defaultTexture =
+                GraphicsManager.getRenderInstance().getTextureLoader().load(defaultTexturePath);
+
+        sceneRender =
+                new SceneRender(
+                        shaders.getShader(RenderStage.Type.SCENE),
+                        renderBuffers,
+                        gBuffer,
+                        commandBuffers,
+                        defaultTexture);
         guiMesh = GuiMesh.create();
         guiRenderStandalone =
                 new GuiRenderStandalone(
                         shaders.getShader(RenderStage.Type.GUI), screenTexture, guiMesh);
         guiRenderRegular = new GuiRender(shaders.getShader(RenderStage.Type.GUI), guiMesh);
         skyBoxRender = new SkyBoxRender();
-        shadowRender = new ShadowRender();
+        shadowRender =
+                new ShadowRender(
+                        shaders.getShader(RenderStage.Type.SHADOW),
+                        renderBuffers,
+                        cascadeShadows,
+                        shadowBuffers,
+                        commandBuffers);
         lightRender = new LightRender();
         animationRender =
                 new AnimationRender(shaders.getShader(RenderStage.Type.GUI), renderBuffers);
@@ -385,25 +405,14 @@ public class RendererOpenGL implements Renderer {
             updateModelMatrices(scene);
 
             animationRender.render(scene);
-            shadowRender.render(
-                    scene,
-                    shaders.getShader(RenderStage.Type.SHADOW),
-                    renderBuffers,
-                    cascadeShadows,
-                    shadowBuffers,
-                    commandBuffers);
+            shadowRender.render(scene);
 
             if (Renderer.configuration.isWireframe()) {
                 glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
                 glDisable(GL_TEXTURE_2D);
             }
 
-            sceneRender.render(
-                    scene,
-                    shaders.getShader(RenderStage.Type.SCENE),
-                    renderBuffers,
-                    gBuffer,
-                    commandBuffers);
+            sceneRender.render(scene);
 
             if (Renderer.configuration.isWireframe()) {
                 glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -546,7 +555,6 @@ public class RendererOpenGL implements Renderer {
         }
         renderBuffers.loadStaticModels(scene);
         renderBuffers.loadAnimatedModels(scene);
-        sceneRender.recalculateMaterials(scene, shaders.getShader(RenderStage.Type.SCENE));
         setupAnimCommandBuffer(scene);
         setupStaticCommandBuffer(scene);
         buffersPopulated.set(true);

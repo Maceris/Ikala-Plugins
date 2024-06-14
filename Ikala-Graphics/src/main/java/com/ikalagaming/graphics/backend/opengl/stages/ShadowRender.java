@@ -1,42 +1,74 @@
-package com.ikalagaming.graphics.backend.opengl;
+package com.ikalagaming.graphics.backend.opengl.stages;
 
-import static org.lwjgl.opengl.GL11.*;
-import static org.lwjgl.opengl.GL15.glBindBuffer;
-import static org.lwjgl.opengl.GL30.*;
-import static org.lwjgl.opengl.GL40.GL_DRAW_INDIRECT_BUFFER;
-import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
-import static org.lwjgl.opengl.GL43.glMultiDrawElementsIndirect;
+import static org.lwjgl.opengl.GL30.glBindBufferBase;
+import static org.lwjgl.opengl.GL43.*;
 
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.backend.opengl.CommandBuffer;
+import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
 import com.ikalagaming.graphics.frontend.Framebuffer;
+import com.ikalagaming.graphics.frontend.RenderStage;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
+import lombok.Setter;
 
 import java.util.List;
 
-/** Handles rendering for shadows. */
-public class ShadowRender {
+/** Handles rendering of cascade shadows. */
+public class ShadowRender implements RenderStage {
+
+    /** The binding for the draw elements buffer SSBO. */
+    static final int DRAW_ELEMENT_BINDING = 1;
+
+    /** The binding for the model matrices buffer SSBO. */
+    static final int MODEL_MATRICES_BINDING = 2;
+
+    /** The shader to use for rendering. */
+    @NonNull @Setter private Shader shader;
+
+    /** The buffers for indirect drawing of models. */
+    private final RenderBuffers renderBuffers;
+
+    /** Cascade shadow information. */
+    @Setter @NonNull private List<CascadeShadow> cascadeShadows;
+
+    /** The buffers to render to. */
+    @Setter @NonNull private Framebuffer depthMap;
+
+    /** The scene object rendering command buffers. */
+    @Setter @NonNull private CommandBuffer commandBuffers;
 
     /**
-     * Render the shadows for the scene.
+     * Set up the shadow render stage.
      *
-     * @param scene The scene we are rendering.
+     * @param shader The shader to use for rendering.
+     * @param renderBuffers The buffers for indirect drawing of models.
      * @param cascadeShadows Cascade shadow information.
      * @param depthMap The depth map buffers.
-     * @param renderBuffers The buffers for indirect drawing of models.
      * @param commandBuffers The rendering command buffers.
      */
-    public void render(
-            @NonNull Scene scene,
-            @NonNull Shader shader,
-            @NonNull RenderBuffers renderBuffers,
-            @NonNull List<CascadeShadow> cascadeShadows,
-            @NonNull Framebuffer depthMap,
-            @NonNull CommandBuffer commandBuffers) {
+    public ShadowRender(
+            final @NonNull Shader shader,
+            final @NonNull RenderBuffers renderBuffers,
+            final @NonNull List<CascadeShadow> cascadeShadows,
+            final @NonNull Framebuffer depthMap,
+            final @NonNull CommandBuffer commandBuffers) {
+        this.shader = shader;
+        this.renderBuffers = renderBuffers;
+        this.cascadeShadows = cascadeShadows;
+        this.depthMap = depthMap;
+        this.commandBuffers = commandBuffers;
+    }
 
+    /**
+     * Compute animation transformations for all animated models in the scene.
+     *
+     * @param scene The scene we are rendering.
+     */
+    public void render(Scene scene) {
         var uniformsMap = shader.getUniformMap();
         CascadeShadow.updateCascadeShadows(cascadeShadows, scene);
 
@@ -58,11 +90,11 @@ public class ShadowRender {
         // Static meshes
         glBindBufferBase(
                 GL_SHADER_STORAGE_BUFFER,
-                RendererOpenGL.DRAW_ELEMENT_BINDING,
+                DRAW_ELEMENT_BINDING,
                 commandBuffers.getStaticDrawElementBuffer());
         glBindBufferBase(
                 GL_SHADER_STORAGE_BUFFER,
-                RendererOpenGL.MODEL_MATRICES_BINDING,
+                MODEL_MATRICES_BINDING,
                 commandBuffers.getStaticModelMatricesBuffer());
         glBindBuffer(GL_DRAW_INDIRECT_BUFFER, commandBuffers.getStaticCommandBuffer());
         glBindVertexArray(renderBuffers.getStaticVaoID());
@@ -86,11 +118,11 @@ public class ShadowRender {
         // Animated meshes
         glBindBufferBase(
                 GL_SHADER_STORAGE_BUFFER,
-                RendererOpenGL.DRAW_ELEMENT_BINDING,
+                DRAW_ELEMENT_BINDING,
                 commandBuffers.getAnimatedDrawElementBuffer());
         glBindBufferBase(
                 GL_SHADER_STORAGE_BUFFER,
-                RendererOpenGL.MODEL_MATRICES_BINDING,
+                MODEL_MATRICES_BINDING,
                 commandBuffers.getAnimatedModelMatricesBuffer());
         glBindBuffer(GL_DRAW_INDIRECT_BUFFER, commandBuffers.getAnimatedCommandBuffer());
         glBindVertexArray(renderBuffers.getAnimVaoID());

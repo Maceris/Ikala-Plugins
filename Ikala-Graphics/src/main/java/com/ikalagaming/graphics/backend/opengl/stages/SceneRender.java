@@ -1,81 +1,72 @@
-package com.ikalagaming.graphics.backend.opengl;
+package com.ikalagaming.graphics.backend.opengl.stages;
 
-import static org.lwjgl.opengl.GL11.*;
-import static org.lwjgl.opengl.GL11.GL_TEXTURE_2D;
-import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
-import static org.lwjgl.opengl.GL13.glActiveTexture;
-import static org.lwjgl.opengl.GL15.glBindBuffer;
-import static org.lwjgl.opengl.GL30.GL_DRAW_FRAMEBUFFER;
 import static org.lwjgl.opengl.GL30.glBindBufferBase;
-import static org.lwjgl.opengl.GL30.glBindFramebuffer;
-import static org.lwjgl.opengl.GL30.glBindVertexArray;
-import static org.lwjgl.opengl.GL40.GL_DRAW_INDIRECT_BUFFER;
-import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
-import static org.lwjgl.opengl.GL43.glMultiDrawElementsIndirect;
+import static org.lwjgl.opengl.GL43.*;
 
-import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
-import com.ikalagaming.graphics.frontend.Framebuffer;
-import com.ikalagaming.graphics.frontend.Material;
-import com.ikalagaming.graphics.frontend.Shader;
-import com.ikalagaming.graphics.frontend.Texture;
+import com.ikalagaming.graphics.backend.opengl.CommandBuffer;
+import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
+import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.launcher.PluginFolder;
 
 import lombok.NonNull;
+import lombok.Setter;
 
 import java.util.List;
 
-/** Handles rendering for the scene geometry. */
-public class SceneRender {
-    private static final String DEFAULT_TEXTURE_PATH =
-            PluginFolder.getResource(
-                            GraphicsPlugin.PLUGIN_NAME,
-                            PluginFolder.ResourceType.DATA,
-                            "models/default/default_texture.png")
-                    .getAbsolutePath();
+/** Handles rendering of cascade shadows. */
+public class SceneRender implements RenderStage {
 
     /** The maximum number of materials we can have. */
-    @Deprecated static final int MAX_MATERIALS = 30;
+    @Deprecated public static final int MAX_MATERIALS = 30;
 
     /** The maximum number of textures we can have. */
-    @Deprecated static final int MAX_TEXTURES = 16;
+    @Deprecated public static final int MAX_TEXTURES = 16;
 
-    private final Texture defaultTexture;
+    /** The shader to use for rendering. */
+    @NonNull @Setter private Shader shader;
 
-    /** Set up a new scene renderer. */
-    public SceneRender() {
-        defaultTexture =
-                GraphicsManager.getRenderInstance().getTextureLoader().load(DEFAULT_TEXTURE_PATH);
-    }
+    /** The buffers for indirect drawing of models. */
+    private final RenderBuffers renderBuffers;
 
-    /**
-     * Set up uniforms for textures and materials.
-     *
-     * @param scene The scene to render.
-     * @param shader The shader that we want to set materials for.
-     */
-    @Deprecated
-    public void recalculateMaterials(@NonNull Scene scene, @NonNull Shader shader) {
-        setupMaterialsUniform(scene.getMaterialCache(), shader);
-    }
+    /** The g-buffer for rendering geometry to. */
+    @Setter @NonNull private Framebuffer gBuffer;
+
+    /** The scene object rendering command buffers. */
+    @Setter @NonNull private CommandBuffer commandBuffers;
+
+    @Setter @NonNull private Texture defaultTexture;
 
     /**
-     * Render the scene.
+     * Set up the shadow render stage.
      *
-     * @param scene The scene to render.
+     * @param shader The shader to use for rendering.
      * @param renderBuffers The buffers for indirect drawing of models.
-     * @param gBuffer The buffer for geometry data.
-     * @param commandBuffers The render command buffers.
+     * @param gBuffer The depth map buffers.
+     * @param commandBuffers The rendering command buffers.
      */
-    public void render(
-            @NonNull Scene scene,
-            @NonNull Shader shader,
-            @NonNull RenderBuffers renderBuffers,
-            @NonNull Framebuffer gBuffer,
-            @NonNull CommandBuffer commandBuffers) {
+    public SceneRender(
+            final @NonNull Shader shader,
+            final @NonNull RenderBuffers renderBuffers,
+            final @NonNull Framebuffer gBuffer,
+            final @NonNull CommandBuffer commandBuffers,
+            final @NonNull Texture defaultTexture) {
+        this.shader = shader;
+        this.renderBuffers = renderBuffers;
+        this.gBuffer = gBuffer;
+        this.commandBuffers = commandBuffers;
+        this.defaultTexture = defaultTexture;
+    }
+
+    /**
+     * Compute animation transformations for all animated models in the scene.
+     *
+     * @param scene The scene we are rendering.
+     */
+    public void render(Scene scene) {
+
+        setupMaterialsUniform(scene.getMaterialCache(), shader); // TODO(ches) don't
 
         var uniformsMap = shader.getUniformMap();
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, (int) gBuffer.id());
@@ -115,11 +106,11 @@ public class SceneRender {
         // Static meshes
         glBindBufferBase(
                 GL_SHADER_STORAGE_BUFFER,
-                RendererOpenGL.DRAW_ELEMENT_BINDING,
+                ShadowRender.DRAW_ELEMENT_BINDING,
                 commandBuffers.getStaticDrawElementBuffer());
         glBindBufferBase(
                 GL_SHADER_STORAGE_BUFFER,
-                RendererOpenGL.MODEL_MATRICES_BINDING,
+                ShadowRender.MODEL_MATRICES_BINDING,
                 commandBuffers.getStaticModelMatricesBuffer());
         glBindBuffer(GL_DRAW_INDIRECT_BUFFER, commandBuffers.getStaticCommandBuffer());
         glBindVertexArray(renderBuffers.getStaticVaoID());
@@ -129,11 +120,11 @@ public class SceneRender {
         // Animated meshes
         glBindBufferBase(
                 GL_SHADER_STORAGE_BUFFER,
-                RendererOpenGL.DRAW_ELEMENT_BINDING,
+                ShadowRender.DRAW_ELEMENT_BINDING,
                 commandBuffers.getAnimatedDrawElementBuffer());
         glBindBufferBase(
                 GL_SHADER_STORAGE_BUFFER,
-                RendererOpenGL.MODEL_MATRICES_BINDING,
+                ShadowRender.MODEL_MATRICES_BINDING,
                 commandBuffers.getAnimatedModelMatricesBuffer());
         glBindBuffer(GL_DRAW_INDIRECT_BUFFER, commandBuffers.getAnimatedCommandBuffer());
         glBindVertexArray(renderBuffers.getAnimVaoID());
@@ -150,8 +141,7 @@ public class SceneRender {
      * @param materialCache The material cache.
      */
     @Deprecated
-    private void setupMaterialsUniform(
-            @NonNull MaterialCache materialCache, @NonNull Shader shader) {
+    private void setupMaterialsUniform(MaterialCache materialCache, Shader shader) {
         var uniformsMap = shader.getUniformMap();
         shader.bind();
         List<Material> materialList = materialCache.getMaterialsList();
