@@ -28,6 +28,7 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.ShaderMap;
+import com.ikalagaming.graphics.backend.opengl.stages.AnimationRender;
 import com.ikalagaming.graphics.backend.opengl.stages.GuiRender;
 import com.ikalagaming.graphics.backend.opengl.stages.GuiRenderStandalone;
 import com.ikalagaming.graphics.exceptions.RenderException;
@@ -70,7 +71,7 @@ public class RendererOpenGL implements Renderer {
     static final int MODEL_MATRICES_BINDING = 2;
 
     /** The animation render handler. */
-    private AnimationRender animationRender;
+    private RenderStage animationRender;
 
     /** Geometry buffer. */
     private Framebuffer gBuffer;
@@ -165,6 +166,16 @@ public class RendererOpenGL implements Renderer {
         cachedWidth = window.getWidth();
         cachedHeight = window.getHeight();
 
+        gBuffer = generateGBuffer();
+        renderBuffers = new RenderBuffers();
+        generateRenderBuffers();
+        commandBuffers = new CommandBuffer();
+        createImGuiFont();
+        shadowBuffers = createShadowBuffers();
+        skybox = SkyboxModel.create();
+        quadMesh = QuadMesh.getInstance();
+        lightBuffers = LightBuffers.create();
+
         sceneRender = new SceneRender();
         guiMesh = GuiMesh.create();
         guiRenderStandalone =
@@ -174,19 +185,9 @@ public class RendererOpenGL implements Renderer {
         skyBoxRender = new SkyBoxRender();
         shadowRender = new ShadowRender();
         lightRender = new LightRender();
-        animationRender = new AnimationRender();
+        animationRender =
+                new AnimationRender(shaders.getShader(RenderStage.Type.GUI), renderBuffers);
         filterRender = new FilterRender();
-        gBuffer = generateGBuffer();
-        renderBuffers = new RenderBuffers();
-        commandBuffers = new CommandBuffer();
-
-        generateRenderBuffers();
-        shadowBuffers = createShadowBuffers();
-        createImGuiFont();
-
-        skybox = SkyboxModel.create();
-        quadMesh = QuadMesh.getInstance();
-        lightBuffers = LightBuffers.create();
     }
 
     private void createImGuiFont() {
@@ -383,8 +384,7 @@ public class RendererOpenGL implements Renderer {
         if (Renderer.configuration.isRenderingScene()) {
             updateModelMatrices(scene);
 
-            animationRender.render(
-                    scene, shaders.getShader(RenderStage.Type.ANIMATION), renderBuffers);
+            animationRender.render(scene);
             shadowRender.render(
                     scene,
                     shaders.getShader(RenderStage.Type.SHADOW),

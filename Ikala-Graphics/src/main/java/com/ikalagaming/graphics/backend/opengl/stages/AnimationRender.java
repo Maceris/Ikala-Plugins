@@ -1,36 +1,54 @@
-package com.ikalagaming.graphics.backend.opengl;
+package com.ikalagaming.graphics.backend.opengl.stages;
 
 import static org.lwjgl.opengl.GL30.glBindBufferBase;
 import static org.lwjgl.opengl.GL42.glMemoryBarrier;
-import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BARRIER_BIT;
-import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
-import static org.lwjgl.opengl.GL43.glDispatchCompute;
+import static org.lwjgl.opengl.GL43.*;
 
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
+import com.ikalagaming.graphics.frontend.RenderStage;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
+import lombok.Setter;
 
 /** Handles computations for animated models. */
-public class AnimationRender {
+public class AnimationRender implements RenderStage {
+
+    /** The shader to use for rendering. */
+    @NonNull @Setter private Shader shader;
+
+    /** The buffers for indirect drawing of models. */
+    private final RenderBuffers renderBuffers;
+
+    /**
+     * Set up the animation render stage.
+     *
+     * @param shader The shader to use for rendering.
+     * @param renderBuffers The buffers for indirect drawing of models.
+     */
+    public AnimationRender(
+            final @NonNull Shader shader, final @NonNull RenderBuffers renderBuffers) {
+        this.shader = shader;
+        this.renderBuffers = renderBuffers;
+    }
 
     /**
      * Compute animation transformations for all animated models in the scene.
      *
      * @param scene The scene we are rendering.
-     * @param renderBuffer The buffers for indirect drawing of models.
      */
-    public void render(
-            @NonNull Scene scene, @NonNull Shader shader, @NonNull RenderBuffers renderBuffer) {
+    public void render(Scene scene) {
         shader.bind();
         var uniformsMap = shader.getUniformMap();
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, renderBuffer.getBindingPosesBuffer());
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, renderBuffer.getBonesIndicesWeightsBuffer());
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, renderBuffer.getBonesMatricesBuffer());
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, renderBuffer.getDestinationAnimationBuffer());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, renderBuffers.getBindingPosesBuffer());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, renderBuffers.getBonesIndicesWeightsBuffer());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, renderBuffers.getBonesMatricesBuffer());
+        glBindBufferBase(
+                GL_SHADER_STORAGE_BUFFER, 3, renderBuffers.getDestinationAnimationBuffer());
 
         int dstOffset = 0;
         for (Model model : scene.getModelMap().values()) {
