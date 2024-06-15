@@ -406,18 +406,7 @@ public class RendererOpenGL implements Renderer {
 
             animationRender.render(scene);
             shadowRender.render(scene);
-
-            if (Renderer.configuration.isWireframe()) {
-                glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-                glDisable(GL_TEXTURE_2D);
-            }
-
             sceneRender.render(scene);
-
-            if (Renderer.configuration.isWireframe()) {
-                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-                glEnable(GL_TEXTURE_2D);
-            }
 
             glBindFramebuffer(GL_FRAMEBUFFER, screenFBO);
             glBindRenderbuffer(GL_RENDERBUFFER, screenRBODepth);

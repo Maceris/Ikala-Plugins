@@ -15,7 +15,7 @@ import lombok.Setter;
 
 import java.util.List;
 
-/** Handles rendering of cascade shadows. */
+/** Handles rendering of scene geometry to the g-buffer. */
 public class SceneRender implements RenderStage {
 
     /** The maximum number of materials we can have. */
@@ -65,7 +65,25 @@ public class SceneRender implements RenderStage {
      * @param scene The scene we are rendering.
      */
     public void render(Scene scene) {
+        commonSceneRender(scene, shader, renderBuffers, gBuffer, commandBuffers, defaultTexture);
+    }
 
+    /**
+     * Common rendering code for the scene, shared between stages.
+     *
+     * @param scene The scene we are rendering.
+     * @param shader The shader to use for rendering.
+     * @param renderBuffers The buffers for indirect drawing of models.
+     * @param gBuffer The depth map buffers.
+     * @param commandBuffers The rendering command buffers.
+     */
+    static void commonSceneRender(
+            Scene scene,
+            Shader shader,
+            RenderBuffers renderBuffers,
+            Framebuffer gBuffer,
+            CommandBuffer commandBuffers,
+            Texture defaultTexture) {
         setupMaterialsUniform(scene.getMaterialCache(), shader); // TODO(ches) don't
 
         var uniformsMap = shader.getUniformMap();
@@ -141,7 +159,7 @@ public class SceneRender implements RenderStage {
      * @param materialCache The material cache.
      */
     @Deprecated
-    private void setupMaterialsUniform(MaterialCache materialCache, Shader shader) {
+    private static void setupMaterialsUniform(MaterialCache materialCache, Shader shader) {
         var uniformsMap = shader.getUniformMap();
         shader.bind();
         List<Material> materialList = materialCache.getMaterialsList();

@@ -49,9 +49,6 @@ public interface Renderer {
     @Setter
     @Deprecated
     class RenderConfig {
-        /** Enable wireframe. */
-        @Deprecated private boolean wireframe;
-
         /** Whether we are actually drawing the scene. */
         @Deprecated private boolean renderingScene;
     }
