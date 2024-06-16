@@ -1,14 +1,9 @@
 package com.ikalagaming.graphics.backend.opengl;
 
-import static org.lwjgl.opengl.GL11.GL_TEXTURE_2D;
-import static org.lwjgl.opengl.GL11.GL_TRIANGLES;
-import static org.lwjgl.opengl.GL11.GL_UNSIGNED_INT;
-import static org.lwjgl.opengl.GL11.glBindTexture;
-import static org.lwjgl.opengl.GL11.glDepthMask;
-import static org.lwjgl.opengl.GL11.glDrawElements;
+import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
 import static org.lwjgl.opengl.GL13.glActiveTexture;
-import static org.lwjgl.opengl.GL30.glBindVertexArray;
+import static org.lwjgl.opengl.GL30.*;
 
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.frontend.Shader;
@@ -21,7 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 public class FilterRender {
 
     /**
-     * Render a scene.
+     * Run the scene through a filter.
      *
      * @param screenTexture The screen texture for post-processing.
      */

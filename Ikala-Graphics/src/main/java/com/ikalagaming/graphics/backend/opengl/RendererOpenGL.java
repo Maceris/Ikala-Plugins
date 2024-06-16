@@ -12,8 +12,6 @@ import static org.lwjgl.opengl.GL13.GL_MULTISAMPLE;
 import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
 import static org.lwjgl.opengl.GL13.glActiveTexture;
 import static org.lwjgl.opengl.GL14.GL_DEPTH_COMPONENT16;
-import static org.lwjgl.opengl.GL14.GL_FUNC_ADD;
-import static org.lwjgl.opengl.GL14.glBlendEquation;
 import static org.lwjgl.opengl.GL15.GL_DYNAMIC_DRAW;
 import static org.lwjgl.opengl.GL15.GL_STATIC_DRAW;
 import static org.lwjgl.opengl.GL15.glBindBuffer;
@@ -92,6 +90,10 @@ public class RendererOpenGL implements Renderer {
 
     /** Render a filter on top of the final result. */
     private FilterRender filterRender;
+
+    private RenderStage screenTextureBinding;
+
+    private RenderStage backBufferBinding;
 
     /**
      * Whether we have set up the buffers for the scene. If we have, but need to set data up for the
@@ -193,8 +195,7 @@ public class RendererOpenGL implements Renderer {
                         defaultTexture);
         guiMesh = GuiMesh.create();
         guiRenderStandalone =
-                new GuiRenderStandalone(
-                        shaders.getShader(RenderStage.Type.GUI), screenTexture, guiMesh);
+                new GuiRenderStandalone(shaders.getShader(RenderStage.Type.GUI), guiMesh);
         guiRenderRegular = new GuiRender(shaders.getShader(RenderStage.Type.GUI), guiMesh);
         skyBoxRender = new SkyBoxRender();
         shadowRender =
@@ -208,6 +209,9 @@ public class RendererOpenGL implements Renderer {
         animationRender =
                 new AnimationRender(shaders.getShader(RenderStage.Type.GUI), renderBuffers);
         filterRender = new FilterRender();
+
+        screenTextureBinding = new FramebufferTransition(screenFBO, screenRBODepth, GL_ONE, GL_ONE);
+        backBufferBinding = new FramebufferTransition(0, 0, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     }
 
     private void createImGuiFont() {
@@ -408,15 +412,7 @@ public class RendererOpenGL implements Renderer {
             shadowRender.render(scene);
             sceneRender.render(scene);
 
-            glBindFramebuffer(GL_FRAMEBUFFER, screenFBO);
-            glBindRenderbuffer(GL_RENDERBUFFER, screenRBODepth);
-
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            glViewport(0, 0, cachedWidth, cachedHeight);
-
-            glEnable(GL_BLEND);
-            glBlendEquation(GL_FUNC_ADD);
-            glBlendFunc(GL_ONE, GL_ONE);
+            screenTextureBinding.render(scene);
 
             lightRender.render(
                     scene,
@@ -428,10 +424,7 @@ public class RendererOpenGL implements Renderer {
                     quadMesh);
             skyBoxRender.render(scene, shaders.getShader(RenderStage.Type.SKYBOX), skybox);
 
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
-            glBindRenderbuffer(GL_RENDERBUFFER, 0);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            backBufferBinding.render(scene);
 
             filterRender.render(
                     screenTexture, shaders.getShader(RenderStage.Type.FILTER), quadMesh);
