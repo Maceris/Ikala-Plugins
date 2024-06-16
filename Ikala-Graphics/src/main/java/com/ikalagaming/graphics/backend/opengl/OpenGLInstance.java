@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.backend.opengl;
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER;
 import static org.lwjgl.opengl.GL11.glDeleteTextures;
+import static org.lwjgl.opengl.GL15.glDeleteBuffers;
 import static org.lwjgl.opengl.GL20.glDeleteProgram;
 import static org.lwjgl.opengl.GL20.glUseProgram;
 import static org.lwjgl.opengl.GL30.glDeleteFramebuffers;
@@ -375,6 +376,10 @@ public class OpenGLInstance implements Instance {
      */
     private void deleteResource(@NonNull DeletionQueue.Entry entry) {
         switch (entry.type()) {
+            case BUFFER -> {
+                var buffer = (Buffer) entry.resource();
+                glDeleteBuffers((int) buffer.id());
+            }
             case FRAME_BUFFER -> {
                 var framebuffer = (Framebuffer) entry.resource();
                 glDeleteFramebuffers((int) framebuffer.id());

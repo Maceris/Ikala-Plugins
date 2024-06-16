@@ -10,6 +10,7 @@ public class DeletionQueue {
 
     /** The types of resources that the queue supports deleting. */
     public enum ResourceType {
+        BUFFER,
         FRAME_BUFFER,
         SHADER,
         TEXTURE
@@ -25,6 +26,15 @@ public class DeletionQueue {
     public record Entry(@NonNull ResourceType type, @NonNull Object resource) {}
 
     private final Queue<Entry> queue = new ConcurrentLinkedQueue<>();
+
+    /**
+     * Add a buffer to the queue to be deleted.
+     *
+     * @param buffer The buffer handle.
+     */
+    public void add(@NonNull Buffer buffer) {
+        queue.add(new Entry(ResourceType.BUFFER, buffer));
+    }
 
     /**
      * Add a framebuffer to the queue to be deleted.

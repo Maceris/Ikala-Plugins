@@ -1,9 +1,3 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.opengl.GL11.*;
@@ -62,6 +56,15 @@ public class RendererOpenGL implements Renderer {
     /** The size of a model matrix. */
     private static final int MODEL_MATRIX_SIZE = 4 * 4;
 
+    /** The binding for the point light SSBO. */
+    public static final int POINT_LIGHT_BINDING = 0;
+
+    /** The binding for the spotlight SSBO. */
+    public static final int SPOT_LIGHT_BINDING = 1;
+
+    /** How many lights of each type (spot, point) that are currently supported. */
+    public static final int MAX_LIGHTS_SUPPORTED = 1000;
+
     /** The animation render handler. */
     private RenderStage animationRender;
 
@@ -74,7 +77,7 @@ public class RendererOpenGL implements Renderer {
     private RenderStage guiRenderRegular;
 
     /** The lights render handler. */
-    private LightRender lightRender;
+    private RenderStage lightRender;
 
     /** The buffers for indirect drawing of models. */
     private RenderBuffers renderBuffers;
@@ -135,7 +138,12 @@ public class RendererOpenGL implements Renderer {
     private Texture defaultTexture;
 
     private SkyboxModel skybox;
-    private LightBuffers lightBuffers;
+
+    /** The buffer to use for storing point light info. */
+    private Buffer pointLights;
+
+    /** The buffer to use for storing spotlight info. */
+    private Buffer spotLights;
 
     /** A mesh for rendering onto. */
     private QuadMesh quadMesh;
@@ -173,7 +181,7 @@ public class RendererOpenGL implements Renderer {
         shadowBuffers = createShadowBuffers();
         skybox = SkyboxModel.create();
         quadMesh = QuadMesh.getInstance();
-        lightBuffers = LightBuffers.create();
+        createLightBuffers();
 
         final String defaultTexturePath =
                 PluginFolder.getResource(
@@ -205,7 +213,15 @@ public class RendererOpenGL implements Renderer {
                         cascadeShadows,
                         shadowBuffers,
                         commandBuffers);
-        lightRender = new LightRender();
+        lightRender =
+                new LightRender(
+                        shaders.getShader(RenderStage.Type.LIGHT),
+                        cascadeShadows,
+                        pointLights,
+                        spotLights,
+                        shadowBuffers,
+                        gBuffer,
+                        quadMesh);
         animationRender =
                 new AnimationRender(shaders.getShader(RenderStage.Type.GUI), renderBuffers);
         filterRender = new FilterRender();
@@ -224,6 +240,44 @@ public class RendererOpenGL implements Renderer {
                         .getTextureLoader()
                         .load(buf, Format.R8G8B8A8_UINT, width.get(), height.get());
         fontAtlas.setTexID((int) font.id());
+    }
+
+    /** Initialize the lighting SSBOs and fill them with zeroes. */
+    private void createLightBuffers() {
+        int pointLightBuffer = glGenBuffers();
+
+        /*
+         * Position (vec3 + ignored), color (vec3), intensity (1), Attenuation
+         * (3 + ignored), in that order.
+         */
+        final int POINT_LIGHT_SIZE = 4 + 3 + 1 + 4;
+        FloatBuffer pointLightFloatBuffer =
+                MemoryUtil.memAllocFloat(MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE);
+
+        pointLightFloatBuffer.put(new float[MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE]).flip();
+
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, POINT_LIGHT_BINDING, pointLightBuffer);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, pointLightFloatBuffer, GL_STATIC_DRAW);
+
+        MemoryUtil.memFree(pointLightFloatBuffer);
+        pointLights = new Buffer(pointLightBuffer, Buffer.Type.SHADER_STORAGE);
+
+        int spotLightBuffer = glGenBuffers();
+        /*
+         * Position (vec3 + ignored), color (vec3), intensity (1), Attenuation
+         * (3 + ignored), cone direction (vec3), cutoff (1) in that order.
+         */
+        final int SPOT_LIGHT_SIZE = 4 + 3 + 1 + 4 + 3 + 1;
+        FloatBuffer spotLightFloatBuffer =
+                MemoryUtil.memAllocFloat(MAX_LIGHTS_SUPPORTED * SPOT_LIGHT_SIZE);
+
+        spotLightFloatBuffer.put(new float[MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE]).flip();
+
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, SPOT_LIGHT_BINDING, spotLightBuffer);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, spotLightFloatBuffer, GL_STATIC_DRAW);
+
+        MemoryUtil.memFree(spotLightFloatBuffer);
+        spotLights = new Buffer(spotLightBuffer, Buffer.Type.SHADER_STORAGE);
     }
 
     private Framebuffer createShadowBuffers() {
@@ -286,8 +340,10 @@ public class RendererOpenGL implements Renderer {
         skybox = null;
         quadMesh.cleanup();
         quadMesh = null;
-        lightBuffers.cleanup();
-        lightBuffers = null;
+        GraphicsManager.getDeletionQueue().add(pointLights);
+        pointLights = null;
+        GraphicsManager.getDeletionQueue().add(spotLights);
+        spotLights = null;
         GraphicsManager.getDeletionQueue().add(gBuffer);
         gBuffer = null;
         GraphicsManager.getDeletionQueue().add(shadowBuffers);
@@ -414,14 +470,7 @@ public class RendererOpenGL implements Renderer {
 
             screenTextureBinding.render(scene);
 
-            lightRender.render(
-                    scene,
-                    shaders.getShader(RenderStage.Type.LIGHT),
-                    cascadeShadows,
-                    lightBuffers,
-                    shadowBuffers,
-                    gBuffer,
-                    quadMesh);
+            lightRender.render(scene);
             skyBoxRender.render(scene, shaders.getShader(RenderStage.Type.SKYBOX), skybox);
 
             backBufferBinding.render(scene);
