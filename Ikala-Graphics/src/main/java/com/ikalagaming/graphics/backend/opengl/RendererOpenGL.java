@@ -89,7 +89,7 @@ public class RendererOpenGL implements Renderer {
     private RenderStage shadowRender;
 
     /** The skybox render handler. */
-    private SkyBoxRender skyBoxRender;
+    private RenderStage skyBoxRender;
 
     /** Render a filter on top of the final result. */
     private FilterRender filterRender;
@@ -205,7 +205,7 @@ public class RendererOpenGL implements Renderer {
         guiRenderStandalone =
                 new GuiRenderStandalone(shaders.getShader(RenderStage.Type.GUI), guiMesh);
         guiRenderRegular = new GuiRender(shaders.getShader(RenderStage.Type.GUI), guiMesh);
-        skyBoxRender = new SkyBoxRender();
+        skyBoxRender = new SkyboxRender(shaders.getShader(RenderStage.Type.SKYBOX), skybox);
         shadowRender =
                 new ShadowRender(
                         shaders.getShader(RenderStage.Type.SHADOW),
@@ -471,7 +471,7 @@ public class RendererOpenGL implements Renderer {
             screenTextureBinding.render(scene);
 
             lightRender.render(scene);
-            skyBoxRender.render(scene, shaders.getShader(RenderStage.Type.SKYBOX), skybox);
+            skyBoxRender.render(scene);
 
             backBufferBinding.render(scene);
 

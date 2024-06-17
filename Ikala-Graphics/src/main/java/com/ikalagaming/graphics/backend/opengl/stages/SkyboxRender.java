@@ -1,39 +1,45 @@
-package com.ikalagaming.graphics.backend.opengl;
+package com.ikalagaming.graphics.backend.opengl.stages;
 
 import static org.lwjgl.opengl.GL11.*;
-import static org.lwjgl.opengl.GL11.GL_TEXTURE_2D;
 import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
 import static org.lwjgl.opengl.GL13.glActiveTexture;
-import static org.lwjgl.opengl.GL15.*;
-import static org.lwjgl.opengl.GL30.*;
+import static org.lwjgl.opengl.GL30.glBindVertexArray;
 
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.backend.opengl.SkyboxModel;
+import com.ikalagaming.graphics.frontend.RenderStage;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
+import lombok.Setter;
 import org.joml.Matrix4f;
 
-/** Handles rendering for the skybox. */
-public class SkyBoxRender {
+public class SkyboxRender implements RenderStage {
 
     /** The cameras view matrix. */
     private final Matrix4f viewMatrix;
 
-    /** Set up the renderer. */
-    public SkyBoxRender() {
-        viewMatrix = new Matrix4f();
-    }
+    /** The shader to use for rendering. */
+    @NonNull @Setter private Shader shader;
+
+    /** The model to use for the skybox. */
+    @NonNull @Setter private SkyboxModel skybox;
 
     /**
-     * Render the skybox.
+     * Set up the skybox render stage.
      *
-     * @param scene The scene to render.
      * @param shader The shader to use for rendering.
-     * @param skybox The actual skybox to render.
+     * @param skybox The model to use for drawing the skybox.
      */
-    public void render(@NonNull Scene scene, @NonNull Shader shader, @NonNull SkyboxModel skybox) {
+    public SkyboxRender(final @NonNull Shader shader, @NonNull SkyboxModel skybox) {
+        viewMatrix = new Matrix4f();
+        this.shader = shader;
+        this.skybox = skybox;
+    }
+
+    public void render(Scene scene) {
         shader.bind();
         var uniformsMap = shader.getUniformMap();
 
