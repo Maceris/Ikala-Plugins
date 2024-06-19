@@ -65,11 +65,11 @@ public class RendererOpenGL implements Renderer {
     /** How many lights of each type (spot, point) that are currently supported. */
     public static final int MAX_LIGHTS_SUPPORTED = 1000;
 
-    /** The animation render handler. */
-    private RenderStage animationRender;
-
     /** Geometry buffer. */
     private Framebuffer gBuffer;
+
+    /** The animation render handler. */
+    private RenderStage animationRender;
 
     /** The GUI render handler. */
     private RenderStage guiRenderStandalone;
@@ -92,7 +92,7 @@ public class RendererOpenGL implements Renderer {
     private RenderStage skyBoxRender;
 
     /** Render a filter on top of the final result. */
-    private FilterRender filterRender;
+    private RenderStage filterRender;
 
     private RenderStage screenTextureBinding;
 
@@ -107,14 +107,11 @@ public class RendererOpenGL implements Renderer {
     /** The buffers for the batches. */
     CommandBuffer commandBuffers;
 
-    /** The Frame Buffer Object for the pre-filter render target. */
-    private int screenFBO;
-
     /** The depth RBO for the pre-filter render target. */
     private int screenRBODepth;
 
-    /** The texture ID we render to before applying filters. */
-    private int screenTexture;
+    /** The buffer to render the scene to before post-processing. */
+    private Framebuffer screenTexture;
 
     /** The width of the drawable area in pixels. */
     private int cachedWidth;
@@ -224,9 +221,12 @@ public class RendererOpenGL implements Renderer {
                         quadMesh);
         animationRender =
                 new AnimationRender(shaders.getShader(RenderStage.Type.GUI), renderBuffers);
-        filterRender = new FilterRender();
+        filterRender =
+                new FilterRender(
+                        shaders.getShader(RenderStage.Type.FILTER), screenTexture, quadMesh);
 
-        screenTextureBinding = new FramebufferTransition(screenFBO, screenRBODepth, GL_ONE, GL_ONE);
+        screenTextureBinding =
+                new FramebufferTransition((int) screenTexture.id(), screenRBODepth, GL_ONE, GL_ONE);
         backBufferBinding = new FramebufferTransition(0, 0, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     }
 
@@ -355,9 +355,8 @@ public class RendererOpenGL implements Renderer {
 
     /** Free up the current render buffers. */
     void deleteRenderBuffers() {
+        GraphicsManager.getDeletionQueue().add(screenTexture);
         glDeleteRenderbuffers(screenRBODepth);
-        glDeleteFramebuffers(screenFBO);
-        glDeleteTextures(screenTexture);
     }
 
     /**
@@ -427,8 +426,10 @@ public class RendererOpenGL implements Renderer {
      */
     private void generateRenderBuffers() {
         glActiveTexture(GL_TEXTURE0);
-        screenTexture = glGenTextures();
-        glBindTexture(GL_TEXTURE_2D, screenTexture);
+
+        int textureID = glGenTextures();
+
+        glBindTexture(GL_TEXTURE_2D, textureID);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -450,13 +451,22 @@ public class RendererOpenGL implements Renderer {
         glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, cachedWidth, cachedHeight);
         glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
-        screenFBO = glGenFramebuffers();
+        int screenFBO = glGenFramebuffers();
         glBindFramebuffer(GL_FRAMEBUFFER, screenFBO);
-        glFramebufferTexture2D(
-                GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, screenTexture, 0);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureID, 0);
         glFramebufferRenderbuffer(
                 GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, screenRBODepth);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        screenTexture =
+                new Framebuffer(screenFBO, cachedWidth, cachedHeight, new long[] {textureID});
+
+        if (screenTextureBinding != null) {
+            ((FramebufferTransition) screenTextureBinding).setFbo(screenFBO);
+        }
+        if (filterRender != null) {
+            ((FilterRender) filterRender).setSceneTexture(screenTexture);
+        }
     }
 
     @Override
@@ -475,8 +485,7 @@ public class RendererOpenGL implements Renderer {
 
             backBufferBinding.render(scene);
 
-            filterRender.render(
-                    screenTexture, shaders.getShader(RenderStage.Type.FILTER), quadMesh);
+            filterRender.render(scene);
             guiRenderRegular.render(scene);
         } else {
             guiRenderStandalone.render(scene);

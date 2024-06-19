@@ -15,16 +15,17 @@ import com.ikalagaming.graphics.scene.Scene;
 import imgui.ImGui;
 import imgui.ImGuiIO;
 import lombok.AllArgsConstructor;
+import lombok.Setter;
 
 /** Binds and clears (color+depth) a framebuffer. */
 @AllArgsConstructor
 public class FramebufferTransition implements RenderStage {
 
     /** The framebuffer to bind. */
-    private final int fbo;
+    @Setter private int fbo;
 
     /** The renderbuffer to bind. */
-    private final int rbo;
+    @Setter private int rbo;
 
     /**
      * The source weighting factor for the additive blending equation to use for this framebuffer.
