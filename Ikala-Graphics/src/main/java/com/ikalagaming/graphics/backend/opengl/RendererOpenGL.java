@@ -37,6 +37,8 @@ import imgui.type.ImInt;
 import lombok.NonNull;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
@@ -64,6 +66,8 @@ public class RendererOpenGL implements Renderer {
 
     /** How many lights of each type (spot, point) that are currently supported. */
     public static final int MAX_LIGHTS_SUPPORTED = 1000;
+
+    private static final Logger log = LoggerFactory.getLogger(RendererOpenGL.class);
 
     /** Geometry buffer. */
     private Framebuffer gBuffer;
@@ -106,9 +110,6 @@ public class RendererOpenGL implements Renderer {
 
     /** The buffers for the batches. */
     CommandBuffer commandBuffers;
-
-    /** The depth RBO for the pre-filter render target. */
-    private int screenRBODepth;
 
     /** The buffer to render the scene to before post-processing. */
     private Framebuffer screenTexture;
@@ -225,9 +226,12 @@ public class RendererOpenGL implements Renderer {
                 new FilterRender(
                         shaders.getShader(RenderStage.Type.FILTER), screenTexture, quadMesh);
 
-        screenTextureBinding =
-                new FramebufferTransition((int) screenTexture.id(), screenRBODepth, GL_ONE, GL_ONE);
-        backBufferBinding = new FramebufferTransition(0, 0, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        screenTextureBinding = new FramebufferTransition(screenTexture, GL_ONE, GL_ONE);
+        backBufferBinding =
+                new FramebufferTransition(
+                        new Framebuffer(0, cachedWidth, cachedHeight, null, 0),
+                        GL_SRC_ALPHA,
+                        GL_ONE_MINUS_SRC_ALPHA);
     }
 
     private void createImGuiFont() {
@@ -328,7 +332,8 @@ public class RendererOpenGL implements Renderer {
                 depthMapFBO,
                 CascadeShadow.SHADOW_MAP_WIDTH,
                 CascadeShadow.SHADOW_MAP_HEIGHT,
-                textureIds);
+                textureIds,
+                0);
     }
 
     @Override
@@ -356,7 +361,6 @@ public class RendererOpenGL implements Renderer {
     /** Free up the current render buffers. */
     void deleteRenderBuffers() {
         GraphicsManager.getDeletionQueue().add(screenTexture);
-        glDeleteRenderbuffers(screenRBODepth);
     }
 
     /**
@@ -417,7 +421,7 @@ public class RendererOpenGL implements Renderer {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         long[] textureIds = Arrays.stream(textures).mapToLong(i -> (long) i).toArray();
-        return new Framebuffer(gBufferId, cachedWidth, cachedHeight, textureIds);
+        return new Framebuffer(gBufferId, cachedWidth, cachedHeight, textureIds, 0);
     }
 
     /**
@@ -425,10 +429,9 @@ public class RendererOpenGL implements Renderer {
      * this if they already exist.
      */
     private void generateRenderBuffers() {
-        glActiveTexture(GL_TEXTURE0);
-
         int textureID = glGenTextures();
 
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, textureID);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -446,7 +449,7 @@ public class RendererOpenGL implements Renderer {
                 0);
         glBindTexture(GL_TEXTURE_2D, 0);
 
-        screenRBODepth = glGenRenderbuffers();
+        int screenRBODepth = glGenRenderbuffers();
         glBindRenderbuffer(GL_RENDERBUFFER, screenRBODepth);
         glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, cachedWidth, cachedHeight);
         glBindRenderbuffer(GL_RENDERBUFFER, 0);
@@ -459,10 +462,14 @@ public class RendererOpenGL implements Renderer {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         screenTexture =
-                new Framebuffer(screenFBO, cachedWidth, cachedHeight, new long[] {textureID});
-
+                new Framebuffer(
+                        screenFBO,
+                        cachedWidth,
+                        cachedHeight,
+                        new long[] {textureID},
+                        screenRBODepth);
         if (screenTextureBinding != null) {
-            ((FramebufferTransition) screenTextureBinding).setFbo(screenFBO);
+            ((FramebufferTransition) screenTextureBinding).setFramebuffer(screenTexture);
         }
         if (filterRender != null) {
             ((FilterRender) filterRender).setSceneTexture(screenTexture);

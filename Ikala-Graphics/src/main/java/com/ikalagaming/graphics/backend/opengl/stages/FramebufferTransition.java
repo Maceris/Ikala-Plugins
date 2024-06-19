@@ -9,6 +9,7 @@ import static org.lwjgl.opengl.GL14.glBlendEquation;
 import static org.lwjgl.opengl.GL30.*;
 import static org.lwjgl.opengl.GL30.GL_RENDERBUFFER;
 
+import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.frontend.RenderStage;
 import com.ikalagaming.graphics.scene.Scene;
 
@@ -22,10 +23,7 @@ import lombok.Setter;
 public class FramebufferTransition implements RenderStage {
 
     /** The framebuffer to bind. */
-    @Setter private int fbo;
-
-    /** The renderbuffer to bind. */
-    @Setter private int rbo;
+    @Setter private Framebuffer framebuffer;
 
     /**
      * The source weighting factor for the additive blending equation to use for this framebuffer.
@@ -40,13 +38,13 @@ public class FramebufferTransition implements RenderStage {
 
     @Override
     public void render(Scene scene) {
+        glBindFramebuffer(GL_FRAMEBUFFER, (int) framebuffer.id());
+        glBindRenderbuffer(GL_RENDERBUFFER, (int) framebuffer.depthBuffer());
+
         ImGuiIO io = ImGui.getIO();
 
         final int width = (int) io.getDisplaySizeX();
         final int height = (int) io.getDisplaySizeY();
-
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-        glBindRenderbuffer(GL_RENDERBUFFER, rbo);
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glViewport(0, 0, width, height);

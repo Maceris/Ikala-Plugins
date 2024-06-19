@@ -49,7 +49,7 @@ public class FilterRender implements RenderStage {
         var uniformsMap = shader.getUniformMap();
 
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, (int) sceneTexture.id());
+        glBindTexture(GL_TEXTURE_2D, (int) sceneTexture.textures()[0]);
 
         uniformsMap.setUniform(ShaderUniforms.Filter.SCREEN_TEXTURE, 0);
 

@@ -7,6 +7,7 @@ import static org.lwjgl.opengl.GL15.glDeleteBuffers;
 import static org.lwjgl.opengl.GL20.glDeleteProgram;
 import static org.lwjgl.opengl.GL20.glUseProgram;
 import static org.lwjgl.opengl.GL30.glDeleteFramebuffers;
+import static org.lwjgl.opengl.GL30.glDeleteRenderbuffers;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
@@ -384,6 +385,9 @@ public class OpenGLInstance implements Instance {
                 var framebuffer = (Framebuffer) entry.resource();
                 glDeleteFramebuffers((int) framebuffer.id());
                 Arrays.stream(framebuffer.textures()).forEach(id -> glDeleteTextures((int) id));
+                if (framebuffer.depthBuffer() != 0) {
+                    glDeleteRenderbuffers((int) framebuffer.depthBuffer());
+                }
             }
             case TEXTURE -> {
                 var texture = (Texture) entry.resource();
