@@ -122,32 +122,37 @@ public class SceneRender implements RenderStage {
         }
 
         // Static meshes
-        glBindBufferBase(
-                GL_SHADER_STORAGE_BUFFER,
-                ShadowRender.DRAW_ELEMENT_BINDING,
-                commandBuffers.getStaticDrawElementBuffer());
-        glBindBufferBase(
-                GL_SHADER_STORAGE_BUFFER,
-                ShadowRender.MODEL_MATRICES_BINDING,
-                commandBuffers.getStaticModelMatricesBuffer());
-        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, commandBuffers.getStaticCommandBuffer());
-        glBindVertexArray(renderBuffers.getStaticVaoID());
-        glMultiDrawElementsIndirect(
-                GL_TRIANGLES, GL_UNSIGNED_INT, 0, commandBuffers.getStaticDrawCount(), 0);
+        if (commandBuffers.getStaticDrawCount() > 0) {
+            glBindBufferBase(
+                    GL_SHADER_STORAGE_BUFFER,
+                    ShadowRender.DRAW_ELEMENT_BINDING,
+                    commandBuffers.getStaticDrawElementBuffer());
+            glBindBufferBase(
+                    GL_SHADER_STORAGE_BUFFER,
+                    ShadowRender.MODEL_MATRICES_BINDING,
+                    commandBuffers.getStaticModelMatricesBuffer());
+            glBindBuffer(GL_DRAW_INDIRECT_BUFFER, commandBuffers.getStaticCommandBuffer());
+            glBindVertexArray(renderBuffers.getStaticVaoID());
+            glMultiDrawElementsIndirect(
+                    GL_TRIANGLES, GL_UNSIGNED_INT, 0, commandBuffers.getStaticDrawCount(), 0);
+        }
 
         // Animated meshes
-        glBindBufferBase(
-                GL_SHADER_STORAGE_BUFFER,
-                ShadowRender.DRAW_ELEMENT_BINDING,
-                commandBuffers.getAnimatedDrawElementBuffer());
-        glBindBufferBase(
-                GL_SHADER_STORAGE_BUFFER,
-                ShadowRender.MODEL_MATRICES_BINDING,
-                commandBuffers.getAnimatedModelMatricesBuffer());
-        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, commandBuffers.getAnimatedCommandBuffer());
-        glBindVertexArray(renderBuffers.getAnimVaoID());
-        glMultiDrawElementsIndirect(
-                GL_TRIANGLES, GL_UNSIGNED_INT, 0, commandBuffers.getAnimatedDrawCount(), 0);
+        if (commandBuffers.getAnimatedDrawCount() > 0) {
+            glBindBufferBase(
+                    GL_SHADER_STORAGE_BUFFER,
+                    ShadowRender.DRAW_ELEMENT_BINDING,
+                    commandBuffers.getAnimatedDrawElementBuffer());
+            glBindBufferBase(
+                    GL_SHADER_STORAGE_BUFFER,
+                    ShadowRender.MODEL_MATRICES_BINDING,
+                    commandBuffers.getAnimatedModelMatricesBuffer());
+            glBindBuffer(GL_DRAW_INDIRECT_BUFFER, commandBuffers.getAnimatedCommandBuffer());
+            glBindVertexArray(renderBuffers.getAnimVaoID());
+            glMultiDrawElementsIndirect(
+                    GL_TRIANGLES, GL_UNSIGNED_INT, 0, commandBuffers.getAnimatedDrawCount(), 0);
+        }
+
         glBindVertexArray(0);
         glEnable(GL_BLEND);
         shader.unbind();

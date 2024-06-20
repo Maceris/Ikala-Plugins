@@ -4,6 +4,7 @@ import static org.lwjgl.opengl.GL30.glBindBufferBase;
 import static org.lwjgl.opengl.GL43.*;
 
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.backend.opengl.CommandBuffer;
 import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
 import com.ikalagaming.graphics.frontend.Framebuffer;
@@ -86,36 +87,19 @@ public class ShadowRender implements RenderStage {
                     0);
             glClear(GL_DEPTH_BUFFER_BIT);
         }
-
-        // Static meshes
-        glBindBufferBase(
-                GL_SHADER_STORAGE_BUFFER,
-                DRAW_ELEMENT_BINDING,
-                commandBuffers.getStaticDrawElementBuffer());
-        glBindBufferBase(
-                GL_SHADER_STORAGE_BUFFER,
-                MODEL_MATRICES_BINDING,
-                commandBuffers.getStaticModelMatricesBuffer());
-        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, commandBuffers.getStaticCommandBuffer());
-        glBindVertexArray(renderBuffers.getStaticVaoID());
-        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
-            glFramebufferTexture2D(
-                    GL_FRAMEBUFFER,
-                    GL_DEPTH_ATTACHMENT,
-                    GL_TEXTURE_2D,
-                    (int) depthMap.textures()[i],
-                    0);
-
-            CascadeShadow shadowCascade = cascadeShadows.get(i);
-            uniformsMap.setUniform(
-                    ShaderUniforms.Shadow.PROJECTION_VIEW_MATRIX,
-                    shadowCascade.getProjViewMatrix());
-
-            glMultiDrawElementsIndirect(
-                    GL_TRIANGLES, GL_UNSIGNED_INT, 0, commandBuffers.getStaticDrawCount(), 0);
+        if (commandBuffers.getStaticDrawCount() > 0) {
+            renderStaticMeshes(uniformsMap);
         }
 
-        // Animated meshes
+        if (commandBuffers.getAnimatedDrawCount() > 0) {
+            renderAnimatedMeshes(uniformsMap);
+        }
+
+        glBindVertexArray(0);
+        shader.unbind();
+    }
+
+    private void renderAnimatedMeshes(UniformsMap uniformsMap) {
         glBindBufferBase(
                 GL_SHADER_STORAGE_BUFFER,
                 DRAW_ELEMENT_BINDING,
@@ -142,8 +126,34 @@ public class ShadowRender implements RenderStage {
             glMultiDrawElementsIndirect(
                     GL_TRIANGLES, GL_UNSIGNED_INT, 0, commandBuffers.getAnimatedDrawCount(), 0);
         }
+    }
 
-        glBindVertexArray(0);
-        shader.unbind();
+    private void renderStaticMeshes(UniformsMap uniformsMap) {
+        glBindBufferBase(
+                GL_SHADER_STORAGE_BUFFER,
+                DRAW_ELEMENT_BINDING,
+                commandBuffers.getStaticDrawElementBuffer());
+        glBindBufferBase(
+                GL_SHADER_STORAGE_BUFFER,
+                MODEL_MATRICES_BINDING,
+                commandBuffers.getStaticModelMatricesBuffer());
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, commandBuffers.getStaticCommandBuffer());
+        glBindVertexArray(renderBuffers.getStaticVaoID());
+        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+            glFramebufferTexture2D(
+                    GL_FRAMEBUFFER,
+                    GL_DEPTH_ATTACHMENT,
+                    GL_TEXTURE_2D,
+                    (int) depthMap.textures()[i],
+                    0);
+
+            CascadeShadow shadowCascade = cascadeShadows.get(i);
+            uniformsMap.setUniform(
+                    ShaderUniforms.Shadow.PROJECTION_VIEW_MATRIX,
+                    shadowCascade.getProjViewMatrix());
+
+            glMultiDrawElementsIndirect(
+                    GL_TRIANGLES, GL_UNSIGNED_INT, 0, commandBuffers.getStaticDrawCount(), 0);
+        }
     }
 }
