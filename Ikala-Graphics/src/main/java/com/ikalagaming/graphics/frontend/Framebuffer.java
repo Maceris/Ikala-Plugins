@@ -11,13 +11,12 @@ import java.util.Objects;
  * @param width The width of the images in pixels.
  * @param height The height of the image in pixels.
  * @param textures The texture IDs.
- * @param depthBuffer The depth attachment ID.
  */
-public record Framebuffer(long id, int width, int height, long[] textures, long depthBuffer) {
+public record Framebuffer(long id, int width, int height, long[] textures) {
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, width, height, Arrays.hashCode(textures), depthBuffer);
+        return Objects.hash(id, width, height, Arrays.hashCode(textures));
     }
 
     @Override
@@ -25,10 +24,7 @@ public record Framebuffer(long id, int width, int height, long[] textures, long 
         if (!(obj instanceof Framebuffer other)) {
             return false;
         }
-        if (other.id != id
-                || other.width != width
-                || other.height != height
-                || other.depthBuffer != depthBuffer) {
+        if (other.id != id || other.width != width || other.height != height) {
             return false;
         }
         return Arrays.equals(other.textures, textures);
@@ -37,7 +33,7 @@ public record Framebuffer(long id, int width, int height, long[] textures, long 
     @Override
     public String toString() {
         return String.format(
-                "[id=%d, width=%d, height=%d, textures=%s, depthBuffer=%d]",
-                id, width, height, Arrays.toString(textures), depthBuffer);
+                "[id=%d, width=%d, height=%d, textures=%s]",
+                id, width, height, Arrays.toString(textures));
     }
 }

@@ -7,7 +7,6 @@ import static org.lwjgl.opengl.GL11.glClear;
 import static org.lwjgl.opengl.GL11.glViewport;
 import static org.lwjgl.opengl.GL14.glBlendEquation;
 import static org.lwjgl.opengl.GL30.*;
-import static org.lwjgl.opengl.GL30.GL_RENDERBUFFER;
 
 import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.frontend.RenderStage;
@@ -39,7 +38,6 @@ public class FramebufferTransition implements RenderStage {
     @Override
     public void render(Scene scene) {
         glBindFramebuffer(GL_FRAMEBUFFER, (int) framebuffer.id());
-        glBindRenderbuffer(GL_RENDERBUFFER, (int) framebuffer.depthBuffer());
 
         ImGuiIO io = ImGui.getIO();
 

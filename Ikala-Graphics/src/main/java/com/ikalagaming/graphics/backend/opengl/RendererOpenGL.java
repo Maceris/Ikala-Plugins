@@ -3,8 +3,6 @@ package com.ikalagaming.graphics.backend.opengl;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE;
 import static org.lwjgl.opengl.GL13.GL_MULTISAMPLE;
-import static org.lwjgl.opengl.GL13.GL_TEXTURE0;
-import static org.lwjgl.opengl.GL13.glActiveTexture;
 import static org.lwjgl.opengl.GL14.GL_DEPTH_COMPONENT16;
 import static org.lwjgl.opengl.GL15.GL_DYNAMIC_DRAW;
 import static org.lwjgl.opengl.GL15.GL_STATIC_DRAW;
@@ -229,7 +227,7 @@ public class RendererOpenGL implements Renderer {
         screenTextureBinding = new FramebufferTransition(screenTexture, GL_ONE, GL_ONE);
         backBufferBinding =
                 new FramebufferTransition(
-                        new Framebuffer(0, cachedWidth, cachedHeight, null, 0),
+                        new Framebuffer(0, cachedWidth, cachedHeight, new long[] {}),
                         GL_SRC_ALPHA,
                         GL_ONE_MINUS_SRC_ALPHA);
     }
@@ -332,8 +330,7 @@ public class RendererOpenGL implements Renderer {
                 depthMapFBO,
                 CascadeShadow.SHADOW_MAP_WIDTH,
                 CascadeShadow.SHADOW_MAP_HEIGHT,
-                textureIds,
-                0);
+                textureIds);
     }
 
     @Override
@@ -421,7 +418,7 @@ public class RendererOpenGL implements Renderer {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         long[] textureIds = Arrays.stream(textures).mapToLong(i -> (long) i).toArray();
-        return new Framebuffer(gBufferId, cachedWidth, cachedHeight, textureIds, 0);
+        return new Framebuffer(gBufferId, cachedWidth, cachedHeight, textureIds);
     }
 
     /**
@@ -429,10 +426,10 @@ public class RendererOpenGL implements Renderer {
      * this if they already exist.
      */
     private void generateRenderBuffers() {
-        int textureID = glGenTextures();
+        int[] textures = new int[2];
+        glGenTextures(textures);
 
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, textureID);
+        glBindTexture(GL_TEXTURE_2D, textures[0]);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -447,27 +444,28 @@ public class RendererOpenGL implements Renderer {
                 GL_RGBA,
                 GL_UNSIGNED_BYTE,
                 0);
-        glBindTexture(GL_TEXTURE_2D, 0);
 
-        int screenRBODepth = glGenRenderbuffers();
-        glBindRenderbuffer(GL_RENDERBUFFER, screenRBODepth);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, cachedWidth, cachedHeight);
-        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+        glBindTexture(GL_TEXTURE_2D, textures[1]);
+        glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_DEPTH_COMPONENT16,
+                cachedWidth,
+                cachedHeight,
+                0,
+                GL_DEPTH_COMPONENT,
+                GL_FLOAT,
+                (ByteBuffer) null);
 
         int screenFBO = glGenFramebuffers();
         glBindFramebuffer(GL_FRAMEBUFFER, screenFBO);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureID, 0);
-        glFramebufferRenderbuffer(
-                GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, screenRBODepth);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textures[0], 0);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, textures[1], 0);
+
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-        screenTexture =
-                new Framebuffer(
-                        screenFBO,
-                        cachedWidth,
-                        cachedHeight,
-                        new long[] {textureID},
-                        screenRBODepth);
+        long[] textureIds = Arrays.stream(textures).mapToLong(i -> (long) i).toArray();
+        screenTexture = new Framebuffer(screenFBO, cachedWidth, cachedHeight, textureIds);
         if (screenTextureBinding != null) {
             ((FramebufferTransition) screenTextureBinding).setFramebuffer(screenTexture);
         }
