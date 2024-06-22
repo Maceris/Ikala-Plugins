@@ -1,16 +1,9 @@
 package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.opengl.GL11.*;
-import static org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE;
-import static org.lwjgl.opengl.GL13.GL_MULTISAMPLE;
-import static org.lwjgl.opengl.GL14.GL_DEPTH_COMPONENT16;
-import static org.lwjgl.opengl.GL15.GL_DYNAMIC_DRAW;
-import static org.lwjgl.opengl.GL15.GL_STATIC_DRAW;
-import static org.lwjgl.opengl.GL15.glBindBuffer;
-import static org.lwjgl.opengl.GL15.glBufferData;
-import static org.lwjgl.opengl.GL15.glGenBuffers;
 import static org.lwjgl.opengl.GL20.glDrawBuffers;
 import static org.lwjgl.opengl.GL30.*;
+import static org.lwjgl.opengl.GL30.GL_FRAMEBUFFER;
 import static org.lwjgl.opengl.GL40.GL_DRAW_INDIRECT_BUFFER;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
@@ -35,8 +28,6 @@ import imgui.type.ImInt;
 import lombok.NonNull;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
@@ -44,8 +35,7 @@ import java.nio.IntBuffer;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Renders things on the screen. */
-public class RendererOpenGL implements Renderer {
+public class PipelineManager {
 
     /** The size of a draw command. */
     private static final int COMMAND_SIZE = 5 * 4;
@@ -53,52 +43,8 @@ public class RendererOpenGL implements Renderer {
     /** The size of a draw element. */
     private static final int DRAW_ELEMENT_SIZE = 2 * 4;
 
-    /** The size of a model matrix. */
-    private static final int MODEL_MATRIX_SIZE = 4 * 4;
-
-    /** The binding for the point light SSBO. */
-    public static final int POINT_LIGHT_BINDING = 0;
-
-    /** The binding for the spotlight SSBO. */
-    public static final int SPOT_LIGHT_BINDING = 1;
-
-    /** How many lights of each type (spot, point) that are currently supported. */
-    public static final int MAX_LIGHTS_SUPPORTED = 1000;
-
-    private static final Logger log = LoggerFactory.getLogger(RendererOpenGL.class);
-
-    /** Geometry buffer. */
-    private Framebuffer gBuffer;
-
-    /** The animation render handler. */
-    private RenderStage animationRender;
-
-    /** The GUI render handler. */
-    private RenderStage guiRenderStandalone;
-
-    private RenderStage guiRenderRegular;
-
-    /** The lights render handler. */
-    private RenderStage lightRender;
-
-    /** The buffers for indirect drawing of models. */
-    private RenderBuffers renderBuffers;
-
-    /** The scene render handler. */
-    private RenderStage sceneRender;
-
-    /** The shadow render handler. */
-    private RenderStage shadowRender;
-
-    /** The skybox render handler. */
-    private RenderStage skyBoxRender;
-
-    /** Render a filter on top of the final result. */
-    private RenderStage filterRender;
-
-    private RenderStage screenTextureBinding;
-
-    private RenderStage backBufferBinding;
+    /** The size of a 4x4 model matrix ({@value}). */
+    public static final int MODEL_MATRIX_SIZE = 4 * 4;
 
     /**
      * Whether we have set up the buffers for the scene. If we have, but need to set data up for the
@@ -106,69 +52,78 @@ public class RendererOpenGL implements Renderer {
      */
     private final AtomicBoolean buffersPopulated;
 
-    /** The buffers for the batches. */
-    CommandBuffer commandBuffers;
-
-    /** The buffer to render the scene to before post-processing. */
-    private Framebuffer screenTexture;
+    /** The width of the drawable area in pixels. */
+    private int cachedHeight;
 
     /** The width of the drawable area in pixels. */
     private int cachedWidth;
 
-    /** The width of the drawable area in pixels. */
-    private int cachedHeight;
-
     /** The cascade shadow map. */
     private final ArrayList<CascadeShadow> cascadeShadows;
 
-    /** The depth map for shadows. */
-    private Framebuffer shadowBuffers;
-
-    /** The mesh to render. */
-    private GuiMesh guiMesh;
-
-    /** The texture we store font atlas on. */
-    private Texture font;
+    /** The buffers for the batches. */
+    private final CommandBuffer commandBuffers;
 
     /** The texture to use by default if nothing is provided for a model. */
     private Texture defaultTexture;
 
-    private SkyboxModel skybox;
+    /** The texture we store font atlas on. */
+    private Texture font;
+
+    /** Geometry buffer. */
+    private Framebuffer gBuffer;
+
+    /** The mesh to render. */
+    private GuiMesh guiMesh;
 
     /** The buffer to use for storing point light info. */
     private Buffer pointLights;
 
-    /** The buffer to use for storing spotlight info. */
-    private Buffer spotLights;
-
     /** A mesh for rendering onto. */
     private QuadMesh quadMesh;
 
-    /** The list of render stages that this renderer uses. */
-    private RenderStage[] renderStages;
+    /** The buffers for indirect drawing of models. */
+    private final RenderBuffers renderBuffers;
 
-    /** Set up a new rendering pipeline. */
-    public RendererOpenGL() {
+    /** The map from config value to the associated renderer. */
+    private final Map<Integer, Pipeline> renderers;
+
+    /** The buffer to render the scene to before post-processing. */
+    private Framebuffer screenTexture;
+
+    /** The depth map for shadows. */
+    private Framebuffer shadowBuffers;
+
+    /** Model used for rendering the skybox. */
+    private SkyboxModel skybox;
+
+    /** The buffer to use for storing spotlight info. */
+    private Buffer spotLights;
+
+    private final AnimationRender stageAnimationRender;
+    private final FramebufferTransition stageBackBufferBinding;
+    private final FilterRender stageFilterRender;
+    private final GuiRender stageGuiRender;
+    private final GuiRenderStandalone stageGuiRenderStandalone;
+    private final LightRender stageLightRender;
+    private final ModelMatrixUpdate stageModelMatrixUpdate;
+    private final SceneRender stageSceneRender;
+    private final SceneRenderWireframe stageSceneRenderWireframe;
+    private final FramebufferTransition stageScreenTextureBinding;
+    private final ShadowRender stageShadowRender;
+    private final SkyboxRender stageSkyboxRender;
+
+    public PipelineManager(@NonNull Window window, @NonNull ShaderMap shaders) {
         buffersPopulated = new AtomicBoolean();
         cascadeShadows = new ArrayList<>();
         for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
             cascadeShadows.add(new CascadeShadow());
         }
-    }
-
-    @Override
-    public void initialize(@NonNull Window window, @NonNull ShaderMap shaders) {
-        glEnable(GL_MULTISAMPLE);
-        glEnable(GL_DEPTH_TEST);
-        glEnable(GL_CULL_FACE);
-
-        // Support for transparencies
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         cachedWidth = window.getWidth();
         cachedHeight = window.getHeight();
 
+        renderers = new HashMap<>();
         gBuffer = generateGBuffer();
         renderBuffers = new RenderBuffers();
         generateRenderBuffers();
@@ -178,6 +133,7 @@ public class RendererOpenGL implements Renderer {
         skybox = SkyboxModel.create();
         quadMesh = QuadMesh.getInstance();
         createLightBuffers();
+        guiMesh = GuiMesh.create();
 
         final String defaultTexturePath =
                 PluginFolder.getResource(
@@ -190,26 +146,33 @@ public class RendererOpenGL implements Renderer {
         defaultTexture =
                 GraphicsManager.getRenderInstance().getTextureLoader().load(defaultTexturePath);
 
-        sceneRender =
+        stageModelMatrixUpdate = new ModelMatrixUpdate(commandBuffers);
+        stageSceneRender =
                 new SceneRender(
                         shaders.getShader(RenderStage.Type.SCENE),
                         renderBuffers,
                         gBuffer,
                         commandBuffers,
                         defaultTexture);
-        guiMesh = GuiMesh.create();
-        guiRenderStandalone =
+        stageSceneRenderWireframe =
+                new SceneRenderWireframe(
+                        shaders.getShader(RenderStage.Type.SCENE),
+                        renderBuffers,
+                        gBuffer,
+                        commandBuffers,
+                        defaultTexture);
+        stageGuiRenderStandalone =
                 new GuiRenderStandalone(shaders.getShader(RenderStage.Type.GUI), guiMesh);
-        guiRenderRegular = new GuiRender(shaders.getShader(RenderStage.Type.GUI), guiMesh);
-        skyBoxRender = new SkyboxRender(shaders.getShader(RenderStage.Type.SKYBOX), skybox);
-        shadowRender =
+        stageGuiRender = new GuiRender(shaders.getShader(RenderStage.Type.GUI), guiMesh);
+        stageSkyboxRender = new SkyboxRender(shaders.getShader(RenderStage.Type.SKYBOX), skybox);
+        stageShadowRender =
                 new ShadowRender(
                         shaders.getShader(RenderStage.Type.SHADOW),
                         renderBuffers,
                         cascadeShadows,
                         shadowBuffers,
                         commandBuffers);
-        lightRender =
+        stageLightRender =
                 new LightRender(
                         shaders.getShader(RenderStage.Type.LIGHT),
                         cascadeShadows,
@@ -218,18 +181,98 @@ public class RendererOpenGL implements Renderer {
                         shadowBuffers,
                         gBuffer,
                         quadMesh);
-        animationRender =
+        stageAnimationRender =
                 new AnimationRender(shaders.getShader(RenderStage.Type.GUI), renderBuffers);
-        filterRender =
+        stageFilterRender =
                 new FilterRender(
                         shaders.getShader(RenderStage.Type.FILTER), screenTexture, quadMesh);
-
-        screenTextureBinding = new FramebufferTransition(screenTexture, GL_ONE, GL_ONE);
-        backBufferBinding =
+        stageScreenTextureBinding = new FramebufferTransition(screenTexture, GL_ONE, GL_ONE);
+        stageBackBufferBinding =
                 new FramebufferTransition(
                         new Framebuffer(0, cachedWidth, cachedHeight, new long[] {}),
                         GL_SRC_ALPHA,
                         GL_ONE_MINUS_SRC_ALPHA);
+    }
+
+    private Pipeline buildPipeline(final int configuration) {
+        boolean renderingScene = false;
+        List<RenderStage> stages = new ArrayList<>();
+        if (RenderConfig.hasError(configuration)) {
+            // TODO(ches) handle this
+        }
+
+        if (RenderConfig.hasAnimationStage(configuration)) {
+            stages.add(stageAnimationRender);
+            renderingScene = true;
+        }
+        if (RenderConfig.hasShadowStage(configuration)) {
+            stages.add(stageShadowRender);
+            renderingScene = true;
+        }
+        if (RenderConfig.hasSceneStage(configuration)) {
+            if (RenderConfig.sceneIsWireframe(configuration)) {
+                stages.add(stageSceneRenderWireframe);
+            } else {
+                stages.add(stageSceneRender);
+            }
+            renderingScene = true;
+        }
+        if (RenderConfig.hasFilterStage(configuration)) {
+            // NOTE(ches) for post-processing we will need to render to a texture instead of the
+            // back buffer
+            stages.add(stageScreenTextureBinding);
+        } else {
+            stages.add(stageBackBufferBinding);
+        }
+        if (RenderConfig.hasLightingStage(configuration)) {
+            stages.add(stageLightRender);
+            renderingScene = true;
+        }
+        if (RenderConfig.hasSkyboxStage(configuration)) {
+            stages.add(stageSkyboxRender);
+            renderingScene = true;
+        }
+        if (RenderConfig.hasFilterStage(configuration)) {
+            stages.add(stageBackBufferBinding);
+            stages.add(stageFilterRender);
+            renderingScene = true;
+        }
+        if (renderingScene) {
+            stages.add(0, stageModelMatrixUpdate);
+        }
+        if (RenderConfig.hasGuiStage(configuration)) {
+            if (renderingScene) {
+                stages.add(stageGuiRender);
+            } else {
+                stages.add(stageGuiRenderStandalone);
+            }
+        }
+
+        return new PipelineOpenGL(stages.toArray(new RenderStage[0]));
+    }
+
+    /** Clean up all the rendering resources. */
+    public void cleanup() {
+        GraphicsManager.getDeletionQueue().add(font);
+        font = null;
+        GraphicsManager.getDeletionQueue().add(defaultTexture);
+        defaultTexture = null;
+        guiMesh.cleanup();
+        skybox.cleanup();
+        skybox = null;
+        quadMesh.cleanup();
+        quadMesh = null;
+        GraphicsManager.getDeletionQueue().add(pointLights);
+        pointLights = null;
+        GraphicsManager.getDeletionQueue().add(spotLights);
+        spotLights = null;
+        GraphicsManager.getDeletionQueue().add(gBuffer);
+        gBuffer = null;
+        GraphicsManager.getDeletionQueue().add(shadowBuffers);
+        shadowBuffers = null;
+        renderBuffers.cleanup();
+        commandBuffers.cleanup();
+        deleteRenderBuffers();
     }
 
     private void createImGuiFont() {
@@ -254,11 +297,14 @@ public class RendererOpenGL implements Renderer {
          */
         final int POINT_LIGHT_SIZE = 4 + 3 + 1 + 4;
         FloatBuffer pointLightFloatBuffer =
-                MemoryUtil.memAllocFloat(MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE);
+                MemoryUtil.memAllocFloat(PipelineOpenGL.MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE);
 
-        pointLightFloatBuffer.put(new float[MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE]).flip();
+        pointLightFloatBuffer
+                .put(new float[PipelineOpenGL.MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE])
+                .flip();
 
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, POINT_LIGHT_BINDING, pointLightBuffer);
+        glBindBufferBase(
+                GL_SHADER_STORAGE_BUFFER, PipelineOpenGL.POINT_LIGHT_BINDING, pointLightBuffer);
         glBufferData(GL_SHADER_STORAGE_BUFFER, pointLightFloatBuffer, GL_STATIC_DRAW);
 
         MemoryUtil.memFree(pointLightFloatBuffer);
@@ -271,11 +317,14 @@ public class RendererOpenGL implements Renderer {
          */
         final int SPOT_LIGHT_SIZE = 4 + 3 + 1 + 4 + 3 + 1;
         FloatBuffer spotLightFloatBuffer =
-                MemoryUtil.memAllocFloat(MAX_LIGHTS_SUPPORTED * SPOT_LIGHT_SIZE);
+                MemoryUtil.memAllocFloat(PipelineOpenGL.MAX_LIGHTS_SUPPORTED * SPOT_LIGHT_SIZE);
 
-        spotLightFloatBuffer.put(new float[MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE]).flip();
+        spotLightFloatBuffer
+                .put(new float[PipelineOpenGL.MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE])
+                .flip();
 
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, SPOT_LIGHT_BINDING, spotLightBuffer);
+        glBindBufferBase(
+                GL_SHADER_STORAGE_BUFFER, PipelineOpenGL.SPOT_LIGHT_BINDING, spotLightBuffer);
         glBufferData(GL_SHADER_STORAGE_BUFFER, spotLightFloatBuffer, GL_STATIC_DRAW);
 
         MemoryUtil.memFree(spotLightFloatBuffer);
@@ -331,28 +380,6 @@ public class RendererOpenGL implements Renderer {
                 CascadeShadow.SHADOW_MAP_WIDTH,
                 CascadeShadow.SHADOW_MAP_HEIGHT,
                 textureIds);
-    }
-
-    @Override
-    public void cleanup() {
-        GraphicsManager.getDeletionQueue().add(font);
-        font = null;
-        guiMesh.cleanup();
-        skybox.cleanup();
-        skybox = null;
-        quadMesh.cleanup();
-        quadMesh = null;
-        GraphicsManager.getDeletionQueue().add(pointLights);
-        pointLights = null;
-        GraphicsManager.getDeletionQueue().add(spotLights);
-        spotLights = null;
-        GraphicsManager.getDeletionQueue().add(gBuffer);
-        gBuffer = null;
-        GraphicsManager.getDeletionQueue().add(shadowBuffers);
-        shadowBuffers = null;
-        renderBuffers.cleanup();
-        commandBuffers.cleanup();
-        deleteRenderBuffers();
     }
 
     /** Free up the current render buffers. */
@@ -466,38 +493,24 @@ public class RendererOpenGL implements Renderer {
 
         long[] textureIds = Arrays.stream(textures).mapToLong(i -> (long) i).toArray();
         screenTexture = new Framebuffer(screenFBO, cachedWidth, cachedHeight, textureIds);
-        if (screenTextureBinding != null) {
-            ((FramebufferTransition) screenTextureBinding).setFramebuffer(screenTexture);
+        if (stageScreenTextureBinding != null) {
+            stageScreenTextureBinding.setFramebuffer(screenTexture);
         }
-        if (filterRender != null) {
-            ((FilterRender) filterRender).setSceneTexture(screenTexture);
-        }
-    }
-
-    @Override
-    public void render(@NonNull Scene scene, @NonNull ShaderMap shaders) {
-        if (Renderer.configuration.isRenderingScene()) {
-            updateModelMatrices(scene);
-
-            animationRender.render(scene);
-            shadowRender.render(scene);
-            sceneRender.render(scene);
-
-            screenTextureBinding.render(scene);
-
-            lightRender.render(scene);
-            skyBoxRender.render(scene);
-
-            backBufferBinding.render(scene);
-
-            filterRender.render(scene);
-            guiRenderRegular.render(scene);
-        } else {
-            guiRenderStandalone.render(scene);
+        if (stageFilterRender != null) {
+            stageFilterRender.setSceneTexture(screenTexture);
         }
     }
 
-    @Override
+    public Pipeline getPipeline(final int configuration) {
+        return renderers.computeIfAbsent(configuration, this::buildPipeline);
+    }
+
+    /**
+     * Update the buffers and GUI when we resize the screen.
+     *
+     * @param width The new screen width in pixels.
+     * @param height The new screen height in pixels.
+     */
     public void resize(final int width, final int height) {
         cachedWidth = width;
         cachedHeight = height;
@@ -526,15 +539,13 @@ public class RendererOpenGL implements Renderer {
         Map<String, Integer> entitiesIndexMap = new HashMap<>();
 
         // currently contains the size of the list of entities
-        FloatBuffer modelMatrices =
-                MemoryUtil.memAllocFloat(totalEntities * RendererOpenGL.MODEL_MATRIX_SIZE);
+        FloatBuffer modelMatrices = MemoryUtil.memAllocFloat(totalEntities * MODEL_MATRIX_SIZE);
 
         int entityIndex = 0;
         for (Model model : modelList) {
             List<Entity> entities = model.getEntitiesList();
             for (Entity entity : entities) {
-                entity.getModelMatrix()
-                        .get(entityIndex * RendererOpenGL.MODEL_MATRIX_SIZE, modelMatrices);
+                entity.getModelMatrix().get(entityIndex * MODEL_MATRIX_SIZE, modelMatrices);
                 entitiesIndexMap.put(entity.getEntityID(), entityIndex);
                 entityIndex++;
             }
@@ -547,9 +558,8 @@ public class RendererOpenGL implements Renderer {
 
         int firstIndex = 0;
         int baseInstance = 0;
-        ByteBuffer commandBuffer = MemoryUtil.memAlloc(numMeshes * RendererOpenGL.COMMAND_SIZE);
-        ByteBuffer drawElements =
-                MemoryUtil.memAlloc(drawElementCount * RendererOpenGL.DRAW_ELEMENT_SIZE);
+        ByteBuffer commandBuffer = MemoryUtil.memAlloc(numMeshes * COMMAND_SIZE);
+        ByteBuffer drawElements = MemoryUtil.memAlloc(drawElementCount * DRAW_ELEMENT_SIZE);
         for (Model model : modelList) {
             for (RenderBuffers.MeshDrawData meshDrawData : model.getMeshDrawDataList()) {
                 // count
@@ -573,8 +583,7 @@ public class RendererOpenGL implements Renderer {
         commandBuffer.flip();
         drawElements.flip();
 
-        commandBuffers.setAnimatedDrawCount(
-                commandBuffer.remaining() / RendererOpenGL.COMMAND_SIZE);
+        commandBuffers.setAnimatedDrawCount(commandBuffer.remaining() / COMMAND_SIZE);
 
         int animRenderBufferHandle = glGenBuffers();
         commandBuffers.setAnimatedCommandBuffer(animRenderBufferHandle);
@@ -589,8 +598,13 @@ public class RendererOpenGL implements Renderer {
         MemoryUtil.memFree(drawElements);
     }
 
-    @Override
-    public void setupData(@NonNull Scene scene, @NonNull ShaderMap shaders) {
+    /**
+     * Set up model data before rendering.
+     *
+     * @param scene The scene to read models from.
+     */
+    @Deprecated
+    public void setupData(@NonNull Scene scene) {
         if (buffersPopulated.getAndSet(false)) {
             renderBuffers.cleanup();
             commandBuffers.cleanup();
@@ -623,15 +637,13 @@ public class RendererOpenGL implements Renderer {
         Map<String, Integer> entitiesIndexMap = new HashMap<>();
 
         // currently contains the size of the list of entities
-        FloatBuffer modelMatrices =
-                MemoryUtil.memAllocFloat(totalEntities * RendererOpenGL.MODEL_MATRIX_SIZE);
+        FloatBuffer modelMatrices = MemoryUtil.memAllocFloat(totalEntities * MODEL_MATRIX_SIZE);
 
         int entityIndex = 0;
         for (Model model : modelList) {
             List<Entity> entities = model.getEntitiesList();
             for (Entity entity : entities) {
-                entity.getModelMatrix()
-                        .get(entityIndex * RendererOpenGL.MODEL_MATRIX_SIZE, modelMatrices);
+                entity.getModelMatrix().get(entityIndex * MODEL_MATRIX_SIZE, modelMatrices);
                 entitiesIndexMap.put(entity.getEntityID(), entityIndex);
                 entityIndex++;
             }
@@ -644,9 +656,8 @@ public class RendererOpenGL implements Renderer {
 
         int firstIndex = 0;
         int baseInstance = 0;
-        ByteBuffer commandBuffer = MemoryUtil.memAlloc(numMeshes * RendererOpenGL.COMMAND_SIZE);
-        ByteBuffer drawElements =
-                MemoryUtil.memAlloc(drawElementCount * RendererOpenGL.DRAW_ELEMENT_SIZE);
+        ByteBuffer commandBuffer = MemoryUtil.memAlloc(numMeshes * COMMAND_SIZE);
+        ByteBuffer drawElements = MemoryUtil.memAlloc(drawElementCount * DRAW_ELEMENT_SIZE);
 
         for (Model model : modelList) {
             List<Entity> entities = model.getEntitiesList();
@@ -676,7 +687,7 @@ public class RendererOpenGL implements Renderer {
         commandBuffer.flip();
         drawElements.flip();
 
-        commandBuffers.setStaticDrawCount(commandBuffer.remaining() / RendererOpenGL.COMMAND_SIZE);
+        commandBuffers.setStaticDrawCount(commandBuffer.remaining() / COMMAND_SIZE);
 
         int staticRenderBufferHandle = glGenBuffers();
         commandBuffers.setStaticCommandBuffer(staticRenderBufferHandle);
@@ -689,52 +700,5 @@ public class RendererOpenGL implements Renderer {
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, drawElementBuffer);
         glBufferData(GL_SHADER_STORAGE_BUFFER, drawElements, GL_STATIC_DRAW);
         MemoryUtil.memFree(drawElements);
-    }
-
-    /**
-     * Take a list of models and upload the model matrices to the appropriate buffer.
-     *
-     * @param models The list of models.
-     * @param bufferID The opengl ID of the buffer we want to buffer data to.
-     */
-    private void updateModelBuffer(List<Model> models, int bufferID) {
-        int totalEntities = 0;
-        for (Model model : models) {
-            totalEntities += model.getEntitiesList().size();
-        }
-
-        // currently contains the size of the list of entities
-        FloatBuffer modelMatrices =
-                MemoryUtil.memAllocFloat(totalEntities * RendererOpenGL.MODEL_MATRIX_SIZE);
-
-        int entityIndex = 0;
-        for (Model model : models) {
-            List<Entity> entities = model.getEntitiesList();
-            for (Entity entity : entities) {
-                entity.getModelMatrix()
-                        .get(entityIndex * RendererOpenGL.MODEL_MATRIX_SIZE, modelMatrices);
-                entityIndex++;
-            }
-        }
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, bufferID);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, modelMatrices, GL_STATIC_DRAW);
-        MemoryUtil.memFree(modelMatrices);
-    }
-
-    /**
-     * Update the model matrices buffers for all the scene objects.
-     *
-     * @param scene The scene we are rendering.
-     */
-    private void updateModelMatrices(@NonNull Scene scene) {
-        List<Model> animatedList =
-                scene.getModelMap().values().stream().filter(Model::isAnimated).toList();
-        int animatedBuffer = commandBuffers.getAnimatedModelMatricesBuffer();
-        updateModelBuffer(animatedList, animatedBuffer);
-
-        List<Model> staticList =
-                scene.getModelMap().values().stream().filter(m -> !m.isAnimated()).toList();
-        int staticBuffer = commandBuffers.getStaticModelMatricesBuffer();
-        updateModelBuffer(staticList, staticBuffer);
     }
 }

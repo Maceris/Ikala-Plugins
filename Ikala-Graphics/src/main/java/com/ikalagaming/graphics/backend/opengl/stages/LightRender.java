@@ -11,8 +11,8 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
+import com.ikalagaming.graphics.backend.opengl.PipelineOpenGL;
 import com.ikalagaming.graphics.backend.opengl.QuadMesh;
-import com.ikalagaming.graphics.backend.opengl.RendererOpenGL;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.scene.Fog;
@@ -138,11 +138,11 @@ public class LightRender implements RenderStage {
         List<PointLight> pointLights = scene.getSceneLights().getPointLights();
         final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
 
-        if (pointLights.size() > RendererOpenGL.MAX_LIGHTS_SUPPORTED) {
+        if (pointLights.size() > PipelineOpenGL.MAX_LIGHTS_SUPPORTED) {
             log.warn(
                     SafeResourceLoader.getString(
                             "MAX_POINT_LIGHTS", GraphicsPlugin.getResourceBundle()),
-                    RendererOpenGL.MAX_LIGHTS_SUPPORTED,
+                    PipelineOpenGL.MAX_LIGHTS_SUPPORTED,
                     pointLights.size());
         }
         /*
@@ -152,7 +152,7 @@ public class LightRender implements RenderStage {
         final int STRUCT_SIZE = 4 + 3 + 1 + 4;
 
         final int lightsToRender =
-                Math.min(RendererOpenGL.MAX_LIGHTS_SUPPORTED, pointLights.size());
+                Math.min(PipelineOpenGL.MAX_LIGHTS_SUPPORTED, pointLights.size());
 
         FloatBuffer lightBuffer = MemoryUtil.memAllocFloat(lightsToRender * STRUCT_SIZE);
 
@@ -179,7 +179,7 @@ public class LightRender implements RenderStage {
         lightBuffer.flip();
 
         glBindBufferBase(
-                GL_SHADER_STORAGE_BUFFER, RendererOpenGL.POINT_LIGHT_BINDING, pointLightBuffer);
+                GL_SHADER_STORAGE_BUFFER, PipelineOpenGL.POINT_LIGHT_BINDING, pointLightBuffer);
         glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, lightBuffer);
 
         MemoryUtil.memFree(lightBuffer);
@@ -197,11 +197,11 @@ public class LightRender implements RenderStage {
         List<SpotLight> spotLights = scene.getSceneLights().getSpotLights();
         final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
 
-        if (spotLights.size() > RendererOpenGL.MAX_LIGHTS_SUPPORTED) {
+        if (spotLights.size() > PipelineOpenGL.MAX_LIGHTS_SUPPORTED) {
             log.warn(
                     SafeResourceLoader.getString(
                             "MAX_SPOT_LIGHTS", GraphicsPlugin.getResourceBundle()),
-                    RendererOpenGL.MAX_LIGHTS_SUPPORTED,
+                    PipelineOpenGL.MAX_LIGHTS_SUPPORTED,
                     spotLights.size());
         }
 
@@ -211,7 +211,7 @@ public class LightRender implements RenderStage {
          */
         final int STRUCT_SIZE = 4 + 3 + 1 + 4 + 3 + 1;
 
-        final int lightsToRender = Math.min(RendererOpenGL.MAX_LIGHTS_SUPPORTED, spotLights.size());
+        final int lightsToRender = Math.min(PipelineOpenGL.MAX_LIGHTS_SUPPORTED, spotLights.size());
 
         FloatBuffer lightBuffer = MemoryUtil.memAllocFloat(lightsToRender * STRUCT_SIZE);
 
@@ -244,7 +244,7 @@ public class LightRender implements RenderStage {
         lightBuffer.flip();
 
         glBindBufferBase(
-                GL_SHADER_STORAGE_BUFFER, RendererOpenGL.SPOT_LIGHT_BINDING, spotLightBuffer);
+                GL_SHADER_STORAGE_BUFFER, PipelineOpenGL.SPOT_LIGHT_BINDING, spotLightBuffer);
         glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, lightBuffer);
 
         MemoryUtil.memFree(lightBuffer);

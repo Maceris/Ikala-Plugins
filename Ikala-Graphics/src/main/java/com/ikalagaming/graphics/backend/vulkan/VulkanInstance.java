@@ -556,4 +556,7 @@ public class VulkanInstance implements Instance {
 
     @Override
     public void setupData(@NonNull Scene scene) {}
+
+    @Override
+    public void swapPipeline(final int config) {}
 }

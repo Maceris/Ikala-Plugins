@@ -60,6 +60,35 @@ public class Window {
     }
 
     /**
+     * Set up the window hints.
+     *
+     * @param options The configuration to use.
+     */
+    private static void setWindowHints(@NonNull WindowOptions options) {
+        glfwDefaultWindowHints();
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+
+        if (options.antiAliasing) {
+            glfwWindowHint(GLFW_SAMPLES, 4);
+        }
+
+        if (BackendType.OPENGL == GraphicsManager.getBackendType()) {
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+            if (options.compatibleProfile) {
+                glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
+            } else {
+                glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+                glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+            }
+        } else if (BackendType.VULKAN == GraphicsManager.getBackendType()) {
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        }
+    }
+
+    /**
      * The GLFW window handle.
      *
      * @return The window handle.
@@ -273,35 +302,6 @@ public class Window {
                     ImGuiIO io = ImGui.getIO();
                     io.addInputCharacter(codepoint);
                 });
-    }
-
-    /**
-     * Set up the window hints.
-     *
-     * @param options The configuration to use.
-     */
-    private static void setWindowHints(@NonNull WindowOptions options) {
-        glfwDefaultWindowHints();
-        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-
-        if (options.antiAliasing) {
-            glfwWindowHint(GLFW_SAMPLES, 4);
-        }
-
-        if (BackendType.OPENGL == GraphicsManager.getBackendType()) {
-            glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
-            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-            if (options.compatibleProfile) {
-                glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
-            } else {
-                glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-                glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
-            }
-        } else if (BackendType.VULKAN == GraphicsManager.getBackendType()) {
-            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        }
     }
 
     /** Set up the window icon. */

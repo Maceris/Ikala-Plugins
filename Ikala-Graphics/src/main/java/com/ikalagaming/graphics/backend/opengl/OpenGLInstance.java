@@ -38,19 +38,22 @@ import java.util.List;
 @Slf4j
 public class OpenGLInstance implements Instance {
 
-    private Renderer renderer;
+    private Pipeline pipeline;
     private TextureLoader textureLoader;
     private ShaderMap shaderMap;
+    private PipelineManager pipelineManager;
 
     @Override
     public void initialize(@NonNull Window window) {
         GL.createCapabilities();
-        renderer = new RendererOpenGL();
+
         textureLoader = new TextureLoaderOpenGL();
         shaderMap = new ShaderMap();
         initializeShaders();
         initializeImGui(window);
-        renderer.initialize(window, shaderMap);
+        pipelineManager = new PipelineManager(window, shaderMap);
+        pipeline = pipelineManager.getPipeline(RenderConfig.builder().withGui().build());
+        pipeline.initialize(window, shaderMap);
     }
 
     /**
@@ -328,7 +331,7 @@ public class OpenGLInstance implements Instance {
 
     @Override
     public void cleanup() {
-        renderer.cleanup();
+        pipelineManager.cleanup();
         shaderMap.clearAll();
 
         var nextEntry = GraphicsManager.getDeletionQueue().pop();
@@ -353,20 +356,25 @@ public class OpenGLInstance implements Instance {
 
     @Override
     public void render(@NonNull Scene scene) {
-        renderer.render(scene, shaderMap);
+        pipeline.render(scene, shaderMap);
     }
 
     @Override
     public void resize(int width, int height) {
         // TODO(ches) move this out of the render pass itself
-        renderer.resize(width, height);
+        pipelineManager.resize(width, height);
         ImGuiIO imGuiIO = ImGui.getIO();
         imGuiIO.setDisplaySize(width, height);
     }
 
     @Override
     public void setupData(@NonNull Scene scene) {
-        renderer.setupData(scene, shaderMap);
+        pipelineManager.setupData(scene);
+    }
+
+    @Override
+    public void swapPipeline(final int config) {
+        pipeline = pipelineManager.getPipeline(config);
     }
 
     /**

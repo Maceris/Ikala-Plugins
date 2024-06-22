@@ -23,6 +23,11 @@ public interface Instance {
      */
     void processResources();
 
+    /**
+     * Return the texture loader for this instance.
+     *
+     * @return The texture loader.
+     */
     TextureLoader getTextureLoader();
 
     /**
@@ -47,4 +52,12 @@ public interface Instance {
      */
     @Deprecated
     void setupData(@NonNull Scene scene);
+
+    /**
+     * Change over to another rendering pipeline.
+     *
+     * @param config The configuration specifying the pipeline to switch to.
+     * @see RenderConfig For details on obtaining the values to pass here.
+     */
+    void swapPipeline(final int config);
 }

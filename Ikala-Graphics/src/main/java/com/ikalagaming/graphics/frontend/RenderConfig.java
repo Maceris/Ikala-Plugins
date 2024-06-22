@@ -1,5 +1,9 @@
 package com.ikalagaming.graphics.frontend;
 
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
 /**
  * Specifies a format for unique handles that specify a particular configuration of the rendering
  * pipeline.
@@ -20,6 +24,8 @@ package com.ikalagaming.graphics.frontend;
  *
  * @return The handle associated with the specified details.
  */
+@Getter
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class RenderConfig {
 
     private static final int ERROR_MASK = 0b1000_0000_0000_0000_0000_0000_0000_0000;
@@ -32,6 +38,9 @@ public class RenderConfig {
     private static final int GUI_ENABLED_MASK = 0b0000_0001_0000_0000_0000_0000_0000_0000;
     private static final int TRANSPARENCY_PASS_MASK = 0b0000_0000_0000_1000_0000_0000_0000_0000;
     private static final int SCENE_WIREFRAME_MASK = 0b0000_0000_0000_0000_1000_0000_0000_0000;
+
+    /** The integer representation of this particular configuration. */
+    private final int intValue;
 
     /** Used for constructing render config from scratch. */
     public static class ConfigBuilder {
@@ -116,6 +125,106 @@ public class RenderConfig {
      */
     public static ConfigBuilder builder() {
         return new ConfigBuilder();
+    }
+
+    /**
+     * Check if the provided configuration has the error flag set.
+     *
+     * @param configuration The configuration.
+     * @return True if the error flag is set.
+     */
+    public static boolean hasError(final int configuration) {
+        return (configuration & ERROR_MASK) != 0;
+    }
+
+    /**
+     * Check if the provided configuration has the animation stage enabled.
+     *
+     * @param configuration The configuration.
+     * @return True if the animation stage should run.
+     */
+    public static boolean hasAnimationStage(final int configuration) {
+        return (configuration & ANIMATION_ENABLED_MASK) != 0;
+    }
+
+    /**
+     * Check if the provided configuration has the shadow stage enabled.
+     *
+     * @param configuration The configuration.
+     * @return True if the shadow stage should run.
+     */
+    public static boolean hasShadowStage(final int configuration) {
+        return (configuration & SHADOW_ENABLED_MASK) != 0;
+    }
+
+    /**
+     * Check if the provided configuration has the scene stage enabled.
+     *
+     * @param configuration The configuration.
+     * @return True if the scene stage should run.
+     */
+    public static boolean hasSceneStage(final int configuration) {
+        return (configuration & SCENE_ENABLED_MASK) != 0;
+    }
+
+    /**
+     * Check if the provided configuration has the lighting stage enabled.
+     *
+     * @param configuration The configuration.
+     * @return True if the lighting stage should run.
+     */
+    public static boolean hasLightingStage(final int configuration) {
+        return (configuration & LIGHTING_ENABLED_MASK) != 0;
+    }
+
+    /**
+     * Check if the provided configuration has the skybox stage enabled.
+     *
+     * @param configuration The configuration.
+     * @return True if the skybox stage should run.
+     */
+    public static boolean hasSkyboxStage(final int configuration) {
+        return (configuration & SKYBOX_ENABLED_MASK) != 0;
+    }
+
+    /**
+     * Check if the provided configuration has the post-processing filter stage enabled.
+     *
+     * @param configuration The configuration.
+     * @return True if the post-processing filter stage should run.
+     */
+    public static boolean hasFilterStage(final int configuration) {
+        return (configuration & FILTER_ENABLED_MASK) != 0;
+    }
+
+    /**
+     * Check if the provided configuration has the GUI stage enabled.
+     *
+     * @param configuration The configuration.
+     * @return True if the GUI stage should run.
+     */
+    public static boolean hasGuiStage(final int configuration) {
+        return (configuration & GUI_ENABLED_MASK) != 0;
+    }
+
+    /**
+     * Check if the provided configuration has the forward rendered transparency pass enabled.
+     *
+     * @param configuration The configuration.
+     * @return True if the forward rendered transparency pass should run.
+     */
+    public static boolean hasTransparencyPass(final int configuration) {
+        return (configuration & TRANSPARENCY_PASS_MASK) != 0;
+    }
+
+    /**
+     * Check if the scene should render in wireframe mode.
+     *
+     * @param configuration The configuration.
+     * @return True if the scene should be rendered in wireframe mode.
+     */
+    public static boolean sceneIsWireframe(final int configuration) {
+        return (configuration & SCENE_WIREFRAME_MASK) != 0;
     }
 
     /** Private constructor so this is not instantiated. */
