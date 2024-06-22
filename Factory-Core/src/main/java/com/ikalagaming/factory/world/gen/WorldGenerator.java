@@ -1,5 +1,6 @@
 package com.ikalagaming.factory.world.gen;
 
+import com.ikalagaming.factory.world.Block;
 import com.ikalagaming.factory.world.Chunk;
 import com.ikalagaming.factory.world.World;
 import com.ikalagaming.random.RandomGen;
@@ -26,6 +27,7 @@ public class WorldGenerator {
 
     private static final Map<String, BiomeParameters> biomes = new HashMap<>();
     private static final Map<String, Byte> biomeEncoding = new HashMap<>();
+    private static final Map<String, BiomeDefinition> biomeDefinitions = new HashMap<>();
 
     /**
      * Convert from the height parameter to the actual world height in blocks. This serves as the
@@ -95,6 +97,16 @@ public class WorldGenerator {
                                 RandomGen::generateSimplexNoise, seed, actualX, actualZ);
                 var biomeName = pickBiome(biomes, params, actualX, actualZ);
                 chunk.setBiome(x, z, biomeEncoding.get(biomeName));
+
+                final int height = calculateHeight(params.height());
+
+                var definition = biomeDefinitions.get(biomeName);
+
+                int currentLayer = 0;
+
+                for (int y = height; y >= World.WORLD_HEIGHT_MIN; --y) {
+
+                }
             }
         }
         return chunk;
