@@ -7,7 +7,7 @@ import com.ikalagaming.graphics.scene.Scene;
 import lombok.NonNull;
 
 /**
- * Represents the rendering pipeline. Not to be confused with thinks like a Vulkan pipeline, as this
+ * Represents the rendering pipeline. Not to be confused with things like a Vulkan pipeline, as this
  * handles all rendering of a frame from start to finish, involving potentially multiple stages,
  * shaders, and render targets.
  */
