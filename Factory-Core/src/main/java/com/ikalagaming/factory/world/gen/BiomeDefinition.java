@@ -1,6 +1,7 @@
 package com.ikalagaming.factory.world.gen;
 
 import com.ikalagaming.factory.world.World;
+
 import lombok.NonNull;
 
 import java.util.List;
@@ -14,7 +15,8 @@ public record BiomeDefinition(@NonNull List<Layer> layers) {
     /**
      * A layer of material.
      *
-     * @param block The fully qualified block ID for the material the layer is composed of. If the string is empty, this layer is considered empty (as in, does not have blocks).
+     * @param block The fully qualified block ID for the material the layer is composed of. If the
+     *     string is empty, this layer is considered empty (as in, does not have blocks).
      * @param min The minimum number of blocks the layer can contain.
      * @param max The maximum number of blocks the layer can contain.
      */
@@ -24,11 +26,11 @@ public record BiomeDefinition(@NonNull List<Layer> layers) {
      * Check if the provided definition is in a valid format. Things that are invalid:
      *
      * <ul>
-     *     <li>Not having any layers</li>
-     *     <li>Having more layers than blocks in the full world height</li>
-     *     <li>Negative min or max values for a layer</li>
-     *     <li>Layer max value smaller than min value</li>
-     *     <li>Having the minimum values for all layers sum to greater than the world height</li>
+     *   <li>Not having any layers
+     *   <li>Having more layers than blocks in the full world height
+     *   <li>Negative min or max values for a layer
+     *   <li>Layer max value smaller than min value
+     *   <li>Having the minimum values for all layers sum to greater than the world height
      * </ul>
      *
      * @param definition The biome definition.
@@ -37,11 +39,11 @@ public record BiomeDefinition(@NonNull List<Layer> layers) {
     public static boolean validate(@NonNull BiomeDefinition definition) {
         final var layers = definition.layers;
         if (layers.isEmpty()) {
-            //TODO(ches) log this
+            // TODO(ches) log this
             return false;
         }
         if (layers.size() > World.WORLD_HEIGHT_TOTAL) {
-            //TODO(ches) log this
+            // TODO(ches) log this
             return false;
         }
 
@@ -49,17 +51,17 @@ public record BiomeDefinition(@NonNull List<Layer> layers) {
 
         for (Layer layer : layers) {
             if (layer.min < 0 || layer.max < 0) {
-                //TODO(ches) log this
+                // TODO(ches) log this
                 return false;
             }
             if (layer.max < layer.min) {
-                //TODO(ches) log this
+                // TODO(ches) log this
                 return false;
             }
             totalMin += layer.min;
         }
         if (totalMin > World.WORLD_HEIGHT_TOTAL) {
-            //TODO(ches) log this
+            // TODO(ches) log this
             return false;
         }
 

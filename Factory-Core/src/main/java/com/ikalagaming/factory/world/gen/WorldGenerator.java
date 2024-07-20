@@ -1,6 +1,5 @@
 package com.ikalagaming.factory.world.gen;
 
-import com.ikalagaming.factory.world.Block;
 import com.ikalagaming.factory.world.Chunk;
 import com.ikalagaming.factory.world.World;
 import com.ikalagaming.random.RandomGen;
@@ -104,9 +103,7 @@ public class WorldGenerator {
 
                 int currentLayer = 0;
 
-                for (int y = height; y >= World.WORLD_HEIGHT_MIN; --y) {
-
-                }
+                for (int y = height; y >= World.WORLD_HEIGHT_MIN; --y) {}
             }
         }
         return chunk;
