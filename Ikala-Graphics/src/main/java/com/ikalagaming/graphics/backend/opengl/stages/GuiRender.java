@@ -8,8 +8,8 @@ import static org.lwjgl.opengl.GL30.glBindVertexArray;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.opengl.GuiMesh;
-import com.ikalagaming.graphics.frontend.RenderStage;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.scene.Scene;

@@ -8,8 +8,8 @@ import static org.lwjgl.opengl.GL11.glViewport;
 import static org.lwjgl.opengl.GL14.glBlendEquation;
 import static org.lwjgl.opengl.GL30.*;
 
+import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.frontend.Framebuffer;
-import com.ikalagaming.graphics.frontend.RenderStage;
 import com.ikalagaming.graphics.scene.Scene;
 
 import imgui.ImGui;

@@ -12,6 +12,7 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.ShaderMap;
 import com.ikalagaming.graphics.backend.opengl.stages.SceneRender;
 import com.ikalagaming.graphics.exceptions.ShaderException;

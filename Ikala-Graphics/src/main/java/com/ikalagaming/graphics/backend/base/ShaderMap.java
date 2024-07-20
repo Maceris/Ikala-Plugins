@@ -3,7 +3,6 @@ package com.ikalagaming.graphics.backend.base;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.exceptions.ShaderException;
-import com.ikalagaming.graphics.frontend.RenderStage;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.util.SafeResourceLoader;
 

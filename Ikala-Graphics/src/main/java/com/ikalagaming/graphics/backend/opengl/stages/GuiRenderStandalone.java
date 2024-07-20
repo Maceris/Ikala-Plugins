@@ -3,8 +3,8 @@ package com.ikalagaming.graphics.backend.opengl.stages;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL11.glViewport;
 
+import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.opengl.GuiMesh;
-import com.ikalagaming.graphics.frontend.RenderStage;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.scene.Scene;
 

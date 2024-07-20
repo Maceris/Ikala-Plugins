@@ -4,6 +4,7 @@ import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL13.GL_MULTISAMPLE;
 
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.ShaderMap;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.scene.Scene;

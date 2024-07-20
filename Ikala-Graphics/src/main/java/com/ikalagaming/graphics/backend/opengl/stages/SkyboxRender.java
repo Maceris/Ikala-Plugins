@@ -6,8 +6,8 @@ import static org.lwjgl.opengl.GL13.glActiveTexture;
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
 
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.opengl.SkyboxModel;
-import com.ikalagaming.graphics.frontend.RenderStage;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.scene.Scene;

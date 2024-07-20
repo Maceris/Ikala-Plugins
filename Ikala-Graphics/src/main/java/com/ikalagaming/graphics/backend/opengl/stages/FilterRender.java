@@ -6,9 +6,9 @@ import static org.lwjgl.opengl.GL13.glActiveTexture;
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
 
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.opengl.QuadMesh;
 import com.ikalagaming.graphics.frontend.Framebuffer;
-import com.ikalagaming.graphics.frontend.RenderStage;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.scene.Scene;
 
@@ -25,7 +25,7 @@ public class FilterRender implements RenderStage {
     @Setter @NonNull private Framebuffer sceneTexture;
 
     /** A mesh for rendering onto. */
-    @NonNull private QuadMesh quadMesh;
+    @NonNull private final QuadMesh quadMesh;
 
     /**
      * Set up the skybox render stage.

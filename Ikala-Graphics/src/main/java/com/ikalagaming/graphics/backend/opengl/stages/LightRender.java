@@ -10,6 +10,7 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.backend.opengl.PipelineOpenGL;
 import com.ikalagaming.graphics.backend.opengl.QuadMesh;

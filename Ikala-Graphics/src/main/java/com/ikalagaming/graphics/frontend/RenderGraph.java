@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.frontend;
 
+import com.ikalagaming.graphics.backend.base.RenderStage;
+
 import lombok.NonNull;
 
 import java.util.List;

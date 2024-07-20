@@ -10,6 +10,7 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.ShaderMap;
 import com.ikalagaming.graphics.backend.opengl.stages.*;
 import com.ikalagaming.graphics.exceptions.RenderException;

@@ -4,6 +4,7 @@ import static org.lwjgl.opengl.GL30.glBindBufferBase;
 import static org.lwjgl.opengl.GL43.*;
 
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.opengl.CommandBuffer;
 import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
 import com.ikalagaming.graphics.frontend.*;

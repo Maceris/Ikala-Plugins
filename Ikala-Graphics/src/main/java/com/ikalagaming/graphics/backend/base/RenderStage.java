@@ -1,4 +1,4 @@
-package com.ikalagaming.graphics.frontend;
+package com.ikalagaming.graphics.backend.base;
 
 import com.ikalagaming.graphics.scene.Scene;
 
