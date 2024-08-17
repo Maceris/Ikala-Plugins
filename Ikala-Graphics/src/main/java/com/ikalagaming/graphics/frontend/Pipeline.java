@@ -26,5 +26,5 @@ public interface Pipeline {
      * @param scene The scene to render.
      * @param shaders The shaders to use for rendering.
      */
-    void render(@NonNull Scene scene, @NonNull ShaderMap shaders);
+    void render(Scene scene, ShaderMap shaders);
 }

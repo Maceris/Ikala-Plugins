@@ -13,5 +13,5 @@ public class PipelineVulkan implements Pipeline {
     public void initialize(@NonNull Window window, @NonNull ShaderMap shaders) {}
 
     @Override
-    public void render(@NonNull Scene scene, @NonNull ShaderMap shaders) {}
+    public void render(Scene scene, ShaderMap shaders) {}
 }

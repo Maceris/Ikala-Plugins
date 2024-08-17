@@ -40,7 +40,7 @@ public class PipelineOpenGL implements Pipeline {
     }
 
     @Override
-    public void render(@NonNull Scene scene, @NonNull ShaderMap shaders) {
+    public void render(Scene scene, ShaderMap shaders) {
         for (RenderStage stage : renderStages) {
             stage.render(scene);
         }
