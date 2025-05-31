@@ -1,8 +1,11 @@
 package com.ikalagaming.factory.world.gen;
 
+import com.ikalagaming.factory.FactoryPlugin;
 import com.ikalagaming.factory.world.World;
+import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 
@@ -11,6 +14,7 @@ import java.util.List;
  *
  * @param layers The materials that compose the biome, ordered from highest to lowest.
  */
+@Slf4j
 public record BiomeDefinition(@NonNull List<Layer> layers) {
     /**
      * A layer of material.
@@ -39,11 +43,15 @@ public record BiomeDefinition(@NonNull List<Layer> layers) {
     public static boolean validate(@NonNull BiomeDefinition definition) {
         final var layers = definition.layers;
         if (layers.isEmpty()) {
-            // TODO(ches) log this
+            log.warn(
+                    SafeResourceLoader.getString(
+                            "BIOME_DEFINITION_MISSING_LAYERS", FactoryPlugin.getResourceBundle()));
             return false;
         }
         if (layers.size() > World.WORLD_HEIGHT_TOTAL) {
-            // TODO(ches) log this
+            log.warn(
+                    SafeResourceLoader.getString(
+                            "BIOME_DEFINITION_TO_MANY_LAYERS", FactoryPlugin.getResourceBundle()));
             return false;
         }
 
@@ -51,17 +59,26 @@ public record BiomeDefinition(@NonNull List<Layer> layers) {
 
         for (Layer layer : layers) {
             if (layer.min < 0 || layer.max < 0) {
-                // TODO(ches) log this
+                log.warn(
+                        SafeResourceLoader.getString(
+                                "BIOME_DEFINITION_LAYER_NEGATIVE_VALUE",
+                                FactoryPlugin.getResourceBundle()));
                 return false;
             }
             if (layer.max < layer.min) {
-                // TODO(ches) log this
+                log.warn(
+                        SafeResourceLoader.getString(
+                                "BIOME_DEFINITION_LAYER_WRONG_ORDER",
+                                FactoryPlugin.getResourceBundle()));
                 return false;
             }
             totalMin += layer.min;
         }
         if (totalMin > World.WORLD_HEIGHT_TOTAL) {
-            // TODO(ches) log this
+            log.warn(
+                    SafeResourceLoader.getString(
+                            "BIOME_DEFINITION_TOTAL_MIN_HEIGHT_TOO_LARGE",
+                            FactoryPlugin.getResourceBundle()));
             return false;
         }
 
