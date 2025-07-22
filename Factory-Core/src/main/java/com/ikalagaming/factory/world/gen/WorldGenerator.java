@@ -1,5 +1,6 @@
 package com.ikalagaming.factory.world.gen;
 
+import com.ikalagaming.factory.world.Block;
 import com.ikalagaming.factory.world.Chunk;
 import com.ikalagaming.factory.world.World;
 import com.ikalagaming.random.RandomGen;
@@ -99,11 +100,23 @@ public class WorldGenerator {
 
                 final int height = calculateHeight(params.height());
 
-                var definition = biomeDefinitions.get(biomeName);
+                BiomeDefinition definition = biomeDefinitions.get(biomeName);
 
+                // Bottom to top
                 int currentLayer = 0;
-
-                for (int y = height; y >= World.WORLD_HEIGHT_MIN; --y) {}
+                for (int i = definition.layers().size() - 1; i >= 0; --i) {
+                    var layer = definition.layers().get(i);
+                    int proportionalExtraHeight =
+                            Math.round(
+                                    layer.extraProportion()
+                                            * (height - definition.totalMinHeight()));
+                    int actualHeight = layer.min() + proportionalExtraHeight;
+                    for (int j = 0; j < actualHeight; ++j) {
+                        String blockName = layer.block();
+                        chunk.setBlock(x, currentLayer, z, new Block(blockName, null));
+                        ++currentLayer;
+                    }
+                }
             }
         }
         return chunk;
