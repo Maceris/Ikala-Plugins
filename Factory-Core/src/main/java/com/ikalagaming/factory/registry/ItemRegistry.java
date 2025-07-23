@@ -27,7 +27,6 @@ public class ItemRegistry extends Registry<ItemDefinition> {
      * @return Whether we successfully registered the item.
      */
     public boolean register(@NonNull String name, @NonNull ItemDefinition definition) {
-
         if (!name.matches(RegistryConstants.FULLY_QUALIFIED_NAME_FORMAT)) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(

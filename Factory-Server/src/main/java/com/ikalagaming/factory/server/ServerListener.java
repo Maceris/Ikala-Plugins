@@ -5,6 +5,7 @@ import com.ikalagaming.event.Listener;
 import com.ikalagaming.event.Order;
 import com.ikalagaming.factory.registry.events.*;
 import com.ikalagaming.factory.server.events.ServerLoaded;
+import com.ikalagaming.factory.server.events.ServerStopping;
 
 import lombok.RequiredArgsConstructor;
 
@@ -12,41 +13,35 @@ import lombok.RequiredArgsConstructor;
 public class ServerListener implements Listener {
     private final Server server;
 
-    @EventHandler(order = Order.LATEST)
+    @EventHandler(order = Order.EARLY)
     public void handleLoadingBlocks(LoadingBlocks event) {
-        if (!event.isCanceled()) {
-            var registries = server.getRegistries();
-            DefinitionLoader.loadBlocks(
-                    registries.getBlockRegistry(), registries.getItemRegistry());
-        }
+        var registries = server.getRegistries();
+        DefinitionLoader.loadBlocks(registries.getBlockRegistry(), registries.getItemRegistry());
         new LoadingBlocksCompleted().fire();
         new LoadingItems().fire();
     }
 
-    @EventHandler(order = Order.LATEST)
+    @EventHandler(order = Order.EARLY)
     public void handleLoadingItems(LoadingItems event) {
-        if (!event.isCanceled()) {
-            DefinitionLoader.loadItems(server.getRegistries().getItemRegistry());
-        }
+        DefinitionLoader.loadItems(server.getRegistries().getItemRegistry());
         new LoadingItemsCompleted().fire();
         new ServerLoaded().fire();
     }
 
-    @EventHandler(order = Order.LATEST)
+    @EventHandler(order = Order.EARLY)
     public void handleLoadingMaterials(LoadingMaterials event) {
-        if (!event.isCanceled()) {
-            DefinitionLoader.loadMaterials(server.getRegistries().getMaterialRegistry());
-        }
+        DefinitionLoader.loadMaterials(server.getRegistries().getMaterialRegistry());
         new LoadingMaterialsCompleted().fire();
         new LoadingBlocks().fire();
     }
 
-    @EventHandler(order = Order.LATEST)
+    @EventHandler(order = Order.EARLY)
     public void handleLoadingTags(LoadingTags event) {
-        if (!event.isCanceled()) {
-            DefinitionLoader.loadTags(server.getRegistries().getTagRegistry());
-        }
+        DefinitionLoader.loadTags(server.getRegistries().getTagRegistry());
         new LoadingTagsCompleted().fire();
         new LoadingMaterials().fire();
     }
+
+    @EventHandler(order = Order.LATEST)
+    public void handleStopping(ServerStopping event) {}
 }

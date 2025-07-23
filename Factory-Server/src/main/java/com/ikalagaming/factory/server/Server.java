@@ -4,6 +4,7 @@ import com.ikalagaming.factory.FactoryServerPlugin;
 import com.ikalagaming.factory.networking.request.serverbound.ServerBoundRequestHandler;
 import com.ikalagaming.factory.registry.Registries;
 import com.ikalagaming.factory.registry.events.LoadingTags;
+import com.ikalagaming.factory.server.events.ServerStopping;
 import com.ikalagaming.factory.world.World;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -33,10 +34,15 @@ public class Server {
                     SafeResourceLoader.getString(
                             "SERVER_STARTING", FactoryServerPlugin.getResourceBundle()));
             new LoadingTags().fire();
+        } else {
+            log.warn(
+                    SafeResourceLoader.getString(
+                            "SERVER_ALREADY_RUNNING", FactoryServerPlugin.getResourceBundle()));
         }
     }
 
     public void stop() {
+        new ServerStopping().fire();
         if (running.compareAndExchange(true, false)) {
             log.info(
                     SafeResourceLoader.getString(

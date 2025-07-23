@@ -1,9 +1,9 @@
 package com.ikalagaming.factory.registry.events;
 
-import com.ikalagaming.event.CancelableEvent;
+import com.ikalagaming.event.Event;
 
 /**
  * We are in the process of loading tags. They will actually be loaded with an order of {@link
- * com.ikalagaming.event.Order#LATEST LATEST}, unless the event is canceled before then.
+ * com.ikalagaming.event.Order#EARLY EARLY}.
  */
-public class LoadingTags extends CancelableEvent {}
+public class LoadingTags extends Event {}
