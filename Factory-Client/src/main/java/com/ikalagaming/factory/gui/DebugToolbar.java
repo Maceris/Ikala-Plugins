@@ -22,6 +22,7 @@ public class DebugToolbar extends MainToolbar {
     private final Checkbox biomeDebug;
     private final Checkbox debug;
     private final Checkbox demoWindow;
+    private final Checkbox graphicsWindow;
 
     public DebugToolbar(@NonNull WindowManager windowManager) {
         this.windowManager = windowManager;
@@ -39,6 +40,12 @@ public class DebugToolbar extends MainToolbar {
                 SafeResourceLoader.getString(
                         "TOOLBAR_DEBUG_DEMO", FactoryClientPlugin.getResourceBundle());
         demoWindow = new Checkbox(textDemo, windowManager.isVisible(IMGUI_DEMO.getName()));
+
+        var textGraphics =
+                SafeResourceLoader.getString(
+                        "TOOLBAR_DEBUG_GRAPHICS_DEBUG", FactoryClientPlugin.getResourceBundle());
+        graphicsWindow =
+                new Checkbox(textGraphics, windowManager.isVisible(GRAPHICS_DEBUG.getName()));
     }
 
     @Override
@@ -48,6 +55,7 @@ public class DebugToolbar extends MainToolbar {
                 biomeDebug.draw(width, height);
                 debug.draw(width, height);
                 demoWindow.draw(width, height);
+                graphicsWindow.draw(width, height);
                 ImGui.endMenu();
             }
             ImGui.pushStyleColor(ImGuiCol.Text, ImColor.rgba(1f, 0.1f, 0.1f, 1.0f));
@@ -72,6 +80,10 @@ public class DebugToolbar extends MainToolbar {
         }
         if (demoWindow.checkResult()) {
             windowManager.setVisible(IMGUI_DEMO.getName(), demoWindow.getState());
+            return true;
+        }
+        if (graphicsWindow.checkResult()) {
+            windowManager.setVisible(GRAPHICS_DEBUG.getName(), graphicsWindow.getState());
             return true;
         }
         return false;

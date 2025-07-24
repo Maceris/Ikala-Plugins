@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 public enum DefaultWindows {
     BIOME_DEBUG("Biome Debug"),
     DEBUG("Debug"),
+    GRAPHICS_DEBUG("Graphics Debug"),
     IMGUI_DEMO("ImGui Demo"),
     MAIN_MENU("Main Menu"),
     ROOT_WINDOW("Root Window"),
