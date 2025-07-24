@@ -18,6 +18,20 @@ import java.util.*;
 @Builder(toBuilder = true)
 public class Item {
 
+    public static boolean isSameType(Item a, Item b) {
+        if (a == null || b == null) {
+            return a == b;
+        }
+        if (!a.getName().equals(b.getName())) {
+            return false;
+        }
+        if (!Objects.equals(a.getMaterial(), b.getMaterial())) {
+            return false;
+        }
+        // TODO(ches) tags, KVT
+        return true;
+    }
+
     /** The fully qualified name of the item. */
     private final @NonNull String name;
 

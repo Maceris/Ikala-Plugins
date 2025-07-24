@@ -9,16 +9,22 @@ import lombok.*;
 @AllArgsConstructor
 @EqualsAndHashCode
 public class ItemStack {
+    /** The maximum value that a stack can reach. */
+    public static final int MAX_STACK_SIZE = 2_000_000_000;
+
     /**
-     * Check if two item stacks are the same type of item. If either is null, checks whether they
+     * Check if two item stacks are the same type of item. If either stack is null, checks that they
      * both are.
      *
      * @param stack1 The first stack.
      * @param stack2 The second stack.
      * @return Whether the stacks are of the same item.
      */
-    public static boolean isSameType(@NonNull ItemStack stack1, @NonNull ItemStack stack2) {
-        return stack1.getItem().equals(stack2.getItem());
+    public static boolean isSameType(ItemStack stack1, ItemStack stack2) {
+        if (stack1 == null || stack2 == null) {
+            return stack1 == stack2;
+        }
+        return Item.isSameType(stack1.getItem(), stack2.getItem());
     }
 
     /**
