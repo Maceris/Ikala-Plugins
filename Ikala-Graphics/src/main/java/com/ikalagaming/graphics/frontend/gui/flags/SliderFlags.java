@@ -1,0 +1,9 @@
+package com.ikalagaming.graphics.frontend.gui.flags;
+
+public class SliderFlags {
+    public static final int NONE = 0;
+    public static final int ALWAYS_CLAMP = 1;
+    public static final int LOGARITHMIC = 1 << 1;
+    public static final int NO_ROUND_TO_FORMAT = 1 << 2;
+    public static final int NO_INPUT = 1 << 3;
+}
