@@ -13,7 +13,7 @@ public class GuiWindow extends Component {
      * Create a window with the specified title and window flags. Windows are not visible by
      * default.
      *
-     * @param title The title of the window, for use with ImGui.
+     * @param title The title of the window.
      * @param windowFlags The ImGui flags for the window.
      * @see imgui.flag.ImGuiWindowFlags
      */

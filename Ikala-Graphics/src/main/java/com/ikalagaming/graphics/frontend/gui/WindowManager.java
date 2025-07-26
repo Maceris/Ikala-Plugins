@@ -18,7 +18,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-/** Tracks and engages all the things we want to render with ImGui. */
+/** Tracks and engages all the things we want to render. */
 public class WindowManager {
 
     /** A table for looking up specific window by name. */
