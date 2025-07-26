@@ -15,16 +15,19 @@ public class IkGui {
     private static final DrawList WINDOW_DRAW_LIST;
     private static final DrawList BACKGROUND_DRAW_LIST;
     private static final DrawList FOREGROUND_DRAW_LIST;
+    private static final Storage STORAGE;
     private static final Viewport WINDOW_VIEWPORT;
+    private static final DrawData DRAW_DATA;
     private static final Style STYLE;
     private static final Font FONT;
+    private static final PlatformIO PLATFORM_IO;
 
     public static void init() {
         // TODO(ches) init
     }
 
     public static void createContext() {
-        CONTEXT = new Context();
+        // TODO(ches) create context
     }
 
     public static void destroyContext() {
@@ -4315,17 +4318,18 @@ public class IkGui {
     }
 
     static {
-        // TODO(ches) create context
+        CONTEXT = new Context();
         IO_STATE = new IOState();
         WINDOW_DRAW_LIST = new DrawList();
         BACKGROUND_DRAW_LIST = new DrawList();
         FOREGROUND_DRAW_LIST = new DrawList();
-        // TODO(ches) create storage
+        STORAGE = new Storage();
         WINDOW_VIEWPORT = new Viewport();
-        // TODO(ches) create draw data
+        DRAW_DATA = new DrawData();
         STYLE = new Style();
         FONT = new Font();
-        // TODO(ches) create platform IO
+        PLATFORM_IO = new PlatformIO();
+
         // TODO(ches) init data
     }
 }
