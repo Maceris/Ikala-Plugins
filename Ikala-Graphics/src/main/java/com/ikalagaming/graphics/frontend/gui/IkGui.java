@@ -8,48 +8,65 @@ import lombok.NonNull;
 import org.joml.Vector2f;
 import org.joml.Vector4f;
 
-/** Immediate mode GUI library inspired by ImGui. */
+/** Immediate mode GUI library based on ImGui. */
 public class IkGui {
-    private static Context CONTEXT;
-    private static final IOState IO_STATE;
-    private static final DrawList WINDOW_DRAW_LIST;
-    private static final DrawList BACKGROUND_DRAW_LIST;
-    private static final DrawList FOREGROUND_DRAW_LIST;
-    private static final Storage STORAGE;
-    private static final Viewport WINDOW_VIEWPORT;
-    private static final DrawData DRAW_DATA;
-    private static final Style STYLE;
-    private static final Font FONT;
-    private static final PlatformIO PLATFORM_IO;
+    private static Context context;
+    private static IkIO io;
+    private static PlatformIO platformIO;
+    private static DrawList windowDrawList;
+    private static DrawList backgroundDrawList;
+    private static DrawList foregroundDrawList;
+    private static Storage storage;
+    private static Viewport windowViewport;
+    private static DrawData drawData;
+    private static Style style;
+    private static Font font;
 
     public static void init() {
-        // TODO(ches) init
+        context = new Context();
+        io = new IkIO();
+        platformIO = new PlatformIO();
+        windowDrawList = new DrawList();
+        backgroundDrawList = new DrawList();
+        foregroundDrawList = new DrawList();
+        storage = new Storage();
+        windowViewport = new Viewport();
+        drawData = new DrawData();
+        style = new Style();
+        font = new Font();
     }
 
-    public static void createContext() {
-        // TODO(ches) create context
+    public static Context createContext() {
+        return new Context();
     }
 
     public static void destroyContext() {
-        // TODO(ches) destory context
-        CONTEXT = null;
+        //TODO(ches) destroy current context
+    }
+
+    public static void destroyContext(@NonNull Context context) {
+        //TODO(ches) destroy context
     }
 
     public static Context getCurrentContext() {
-        return CONTEXT;
+        return context;
     }
 
-    public static IOState getIO() {
-        return IO_STATE;
+    public static void setCurrentContext(@NonNull Context context) {
+        IkGui.context = context;
+    }
+
+    public static IkIO getIO() {
+        return io;
     }
 
     public static Style getStyle() {
-        return STYLE;
+        return style;
     }
 
     public static Viewport getWindowViewport() {
         // TODO(ches) complete this
-        return WINDOW_VIEWPORT;
+        return windowViewport;
     }
 
     public static void begin(@NonNull String title) {
@@ -465,7 +482,7 @@ public class IkGui {
 
     public static Font getFont() {
         // TODO(ches) complete this
-        return FONT;
+        return font;
     }
 
     public static int getFontSize() {
@@ -4317,19 +4334,4 @@ public class IkGui {
         return null;
     }
 
-    static {
-        CONTEXT = new Context();
-        IO_STATE = new IOState();
-        WINDOW_DRAW_LIST = new DrawList();
-        BACKGROUND_DRAW_LIST = new DrawList();
-        FOREGROUND_DRAW_LIST = new DrawList();
-        STORAGE = new Storage();
-        WINDOW_VIEWPORT = new Viewport();
-        DRAW_DATA = new DrawData();
-        STYLE = new Style();
-        FONT = new Font();
-        PLATFORM_IO = new PlatformIO();
-
-        // TODO(ches) init data
-    }
 }

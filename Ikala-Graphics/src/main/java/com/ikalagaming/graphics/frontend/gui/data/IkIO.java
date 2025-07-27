@@ -1,5 +1,5 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
-public class IOState {
+public class IkIO {
     // TODO(ches) IO state
 }
