@@ -13,7 +13,7 @@ public class IkGui {
     private static Context context;
     private static IkIO io;
     private static PlatformIO platformIO;
-    private static DrawList windowDrawList;
+    private static DrawList windowDrawList;//TODO(ches) is this just the current window? Can we store an ID instead?
     private static DrawList backgroundDrawList;
     private static DrawList foregroundDrawList;
     private static Storage storage;

@@ -3,17 +3,25 @@ package com.ikalagaming.graphics.frontend.gui.data;
 import com.ikalagaming.graphics.frontend.gui.flags.DrawFlags;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.joml.Vector2f;
+
+import java.util.ArrayList;
 
 public class DrawList {
 
-    public int getDrawListFlags() {
-        // TODO(ches) implement this
-        return 0;
-    }
+    private final ArrayList<Vertex> vertexBuffer;
+    private final ArrayList<Integer> indexBuffer;
+    private final ArrayList<DrawCommand> commandBuffer;
+    @Getter
+    @Setter
+    private int drawListFlags;
 
-    public void setDrawListFlags(int flags) {
-        // TODO(ches) implement this
+    public DrawList() {
+        vertexBuffer = new ArrayList<>();
+        indexBuffer = new ArrayList<>();
+        commandBuffer = new ArrayList<>();
     }
 
     public void addDrawListFlags(int flags) {
