@@ -14,9 +14,7 @@ public class DrawList {
     private final ArrayList<Vertex> vertexBuffer;
     private final ArrayList<Integer> indexBuffer;
     private final ArrayList<DrawCommand> commandBuffer;
-    @Getter
-    @Setter
-    private int drawListFlags;
+    @Getter @Setter private int drawListFlags;
 
     public DrawList() {
         vertexBuffer = new ArrayList<>();

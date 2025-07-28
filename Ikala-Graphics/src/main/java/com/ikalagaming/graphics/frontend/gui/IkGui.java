@@ -13,7 +13,9 @@ public class IkGui {
     private static Context context;
     private static IkIO io;
     private static PlatformIO platformIO;
-    private static DrawList windowDrawList;//TODO(ches) is this just the current window? Can we store an ID instead?
+    private static DrawList
+            windowDrawList; // TODO(ches) is this just the current window? Can we store an ID
+    // instead?
     private static DrawList backgroundDrawList;
     private static DrawList foregroundDrawList;
     private static Storage storage;
@@ -41,11 +43,11 @@ public class IkGui {
     }
 
     public static void destroyContext() {
-        //TODO(ches) destroy current context
+        // TODO(ches) destroy current context
     }
 
     public static void destroyContext(@NonNull Context context) {
-        //TODO(ches) destroy context
+        // TODO(ches) destroy context
     }
 
     public static Context getCurrentContext() {
@@ -4333,5 +4335,4 @@ public class IkGui {
         // TODO(ches) complete this
         return null;
     }
-
 }
