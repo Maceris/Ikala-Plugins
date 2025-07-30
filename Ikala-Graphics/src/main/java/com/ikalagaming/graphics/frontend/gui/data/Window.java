@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.frontend.gui.data;
 
 import com.ikalagaming.graphics.frontend.gui.enums.Direction;
 import com.ikalagaming.graphics.frontend.gui.util.Rect;
+import com.ikalagaming.util.FloatArrayList;
 
 import org.joml.Vector2f;
 
@@ -108,6 +109,6 @@ public class Window {
     private int currentTableIndex;
     private float currentItemWidth;
     private float currentTextWrapPosition;
-    private ArrayList<Float> itemWidthStack;
-    private ArrayList<Float> textWrapPositionStack;
+    private FloatArrayList itemWidthStack;
+    private FloatArrayList textWrapPositionStack;
 }
