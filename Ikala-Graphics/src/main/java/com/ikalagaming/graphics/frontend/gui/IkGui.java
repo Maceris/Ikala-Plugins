@@ -13,9 +13,7 @@ public class IkGui {
     private static Context context;
     private static IkIO io;
     private static PlatformIO platformIO;
-    private static DrawList
-            windowDrawList; // TODO(ches) is this just the current window? Can we store an ID
-    // instead?
+    private static Window activeWindow;
     private static DrawList backgroundDrawList;
     private static DrawList foregroundDrawList;
     private static Storage storage;
@@ -28,7 +26,6 @@ public class IkGui {
         context = new Context();
         io = new IkIO();
         platformIO = new PlatformIO();
-        windowDrawList = new DrawList();
         backgroundDrawList = new DrawList();
         foregroundDrawList = new DrawList();
         storage = new Storage();

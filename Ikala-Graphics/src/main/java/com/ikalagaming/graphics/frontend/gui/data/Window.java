@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.frontend.gui.data;
 import com.ikalagaming.graphics.frontend.gui.enums.Direction;
 import com.ikalagaming.graphics.frontend.gui.util.Rect;
 import com.ikalagaming.util.FloatArrayList;
+import com.ikalagaming.util.IntArrayList;
 
 import org.joml.Vector2f;
 
@@ -58,6 +59,8 @@ public class Window {
 
     private Direction borderBeingHovered;
     private Direction borderBeingDragged;
+
+    IntArrayList IDStack;
 
     /** The outer region of the window. */
     private Rect rectFull;
