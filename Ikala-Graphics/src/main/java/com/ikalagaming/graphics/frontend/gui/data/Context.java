@@ -83,4 +83,9 @@ public class Context {
     private double lastKeyModsChangeTime;
     private double lastKeyModsChangeFromNoneTime;
     private double lastKeyboardKeyPressTime;
+
+    private int currentFocusScopeID;
+    private int currentItemFlags;
+    private NextItemData nextItemData;
+
 }
