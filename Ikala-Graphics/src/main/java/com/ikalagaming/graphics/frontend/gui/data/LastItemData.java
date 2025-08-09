@@ -4,6 +4,7 @@ import com.ikalagaming.graphics.frontend.gui.util.Rect;
 
 public class LastItemData {
     private int ID;
+
     private int fieldFlags;
     private int statusFlags;
 

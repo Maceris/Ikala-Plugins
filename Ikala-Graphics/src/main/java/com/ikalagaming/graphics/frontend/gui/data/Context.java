@@ -88,5 +88,7 @@ public class Context {
     private int currentItemFlags;
     private NextItemData nextItemData;
     private LastItemData lastItemData;
+    private NextWindowData nextWindowData;
 
+    private boolean debugShowGroupRects;
 }
