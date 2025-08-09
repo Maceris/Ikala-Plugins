@@ -87,5 +87,6 @@ public class Context {
     private int currentFocusScopeID;
     private int currentItemFlags;
     private NextItemData nextItemData;
+    private LastItemData lastItemData;
 
 }
