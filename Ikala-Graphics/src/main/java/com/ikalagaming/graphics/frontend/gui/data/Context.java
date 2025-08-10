@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.frontend.gui.data;
 import com.ikalagaming.graphics.frontend.gui.enums.GuiInputSource;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
 import com.ikalagaming.graphics.frontend.gui.event.GuiInputEvent;
+import com.ikalagaming.util.IntArrayList;
 
 import org.joml.Vector2f;
 
@@ -91,4 +92,13 @@ public class Context {
     private NextWindowData nextWindowData;
 
     private boolean debugShowGroupRects;
+    private ArrayList<ColorMod> colorStack;
+    private ArrayList<StyleMod> styleVariableStack;
+    private ArrayList<FontStackInfo> fontStack;
+    private ArrayList<FocusScopeData> focusScopeStack;
+    private IntArrayList itemFlagsStack;
+    private ArrayList<GroupData> groupStack;
+    private ArrayList<PopupData> openPopupStack;
+    private ArrayList<PopupData> beginPopupStack;
+    private ArrayList<TreeNodeStackData> treeNodeStack;
 }
