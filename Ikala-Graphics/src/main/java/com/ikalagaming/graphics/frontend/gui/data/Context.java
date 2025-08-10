@@ -101,4 +101,36 @@ public class Context {
     private ArrayList<PopupData> openPopupStack;
     private ArrayList<PopupData> beginPopupStack;
     private ArrayList<TreeNodeStackData> treeNodeStack;
+
+    private ArrayList<Viewport> viewports;
+
+    private boolean navCursorVisible;
+    private boolean navHighlightIgnoreMouse;
+    private boolean navMousePosDirty;
+    private boolean navIDAlive;
+    private int navID;
+    private Window navFocusedWindow;
+    private int navFocusScopeID;
+    private int navActivateID;
+    private int navActivateDownID;
+    private int navActrivatePressedID;
+
+    /**
+     * @see com.ikalagaming.graphics.frontend.gui.flags.ActivateFlags
+     */
+    private int navActivateFlags;
+
+    private ArrayList<FocusScopeData> navFocusRoute;
+    private int navHighlightActivatedID;
+    private float navHighlightActivatedTimer;
+    private int navNextActivateID;
+
+    /**
+     * @see com.ikalagaming.graphics.frontend.gui.flags.ActivateFlags
+     */
+    private int navNextActivateFlags;
+
+    private GuiInputSource navInputSource;
+    private int navLastValidSelectionUserData;
+    private IkByte navCursorHideFrames;
 }
