@@ -1,8 +1,10 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
+import com.ikalagaming.graphics.frontend.gui.enums.Direction;
 import com.ikalagaming.graphics.frontend.gui.enums.GuiInputSource;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
 import com.ikalagaming.graphics.frontend.gui.event.GuiInputEvent;
+import com.ikalagaming.graphics.frontend.gui.util.Rect;
 import com.ikalagaming.util.IntArrayList;
 
 import org.joml.Vector2f;
@@ -133,4 +135,47 @@ public class Context {
     private GuiInputSource navInputSource;
     private int navLastValidSelectionUserData;
     private IkByte navCursorHideFrames;
+
+    private boolean navAnyRequest;
+    private boolean navInitRequest;
+    private boolean navInitRequestFromMove;
+    private NavItemData navInitResult;
+    private boolean navMoveSubmitted;
+    private boolean navMoveScoringItems;
+    private boolean navMoveForwardToNextFrame;
+
+    /**
+     * @see com.ikalagaming.graphics.frontend.gui.flags.NavMoveFlags
+     */
+    private int navMoveFlags;
+
+    /**
+     * @see com.ikalagaming.graphics.frontend.gui.flags.ScrollFlags
+     */
+    private int navMoveScrollFlags;
+
+    /**
+     * @see com.ikalagaming.graphics.frontend.gui.flags.KeyModFlags
+     */
+    private int navMoveKeyMods;
+
+    private Direction navMoveDirection;
+    private Direction navMoveDirectionForDebug;
+    private Rect navScoringRect;
+    private Rect navScoringNoClipRect;
+    private int navScoringDebugCount;
+    private int navTabbingDirection;
+    private int navTabbingCounter;
+
+    /** Best move request candidate within the nav window. */
+    private NavItemData navMoveResultLocal;
+
+    /** Best move request candidate within the nav window that are mostly visible. */
+    private NavItemData navMoveResultLocalVisible;
+
+    /** Best move request candidate within the nav window's flattened hierarchy. */
+    private NavItemData navMoveResultOther;
+
+    /** First tabbing request candidate within the nav window and flattened hierarchy. */
+    private NavItemData navTabbingResultFirst;
 }
