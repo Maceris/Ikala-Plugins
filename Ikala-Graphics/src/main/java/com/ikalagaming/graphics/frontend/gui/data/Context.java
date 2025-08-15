@@ -236,4 +236,6 @@ public class Context {
     private int dragDropAcceptFrameCount;
     private int dragDropHoldJustPressedID;
     private ByteBuffer dragDropPayloadBufferLocal;
+
+    private ArrayList<ListClipperData> clipperTempData;
 }
