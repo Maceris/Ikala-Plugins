@@ -9,6 +9,7 @@ import com.ikalagaming.util.IntArrayList;
 
 import org.joml.Vector2f;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Map;
 
@@ -178,4 +179,61 @@ public class Context {
 
     /** First tabbing request candidate within the nav window and flattened hierarchy. */
     private NavItemData navTabbingResultFirst;
+
+    private int navJustMovedFromFocusScopeID;
+    private int navJustMovedToID;
+    private int navJustMovedToFocusScopeID;
+
+    /**
+     * @see com.ikalagaming.graphics.frontend.gui.flags.KeyModFlags
+     */
+    private int navJustMovedToKeyMods;
+
+    /**
+     * @see com.ikalagaming.graphics.frontend.gui.flags.NavMoveFlags
+     */
+    private int navJustMovedToFlags;
+
+    private NavItemData navJustMovedToItemData;
+
+    private boolean configNavWindowingWithGamepad;
+    private Window navWindowingTarget;
+    private Window navWindowingTargetPrev;
+    private Window navWindowingListWindow;
+    private float navWindowingTimer;
+    private float navWindowingHighlightAlpha;
+    private GuiInputSource navWindowingInputSource;
+    private boolean navWindowingToggleLayer;
+    private Vector2f navWindowingAccumulatedDeltaPosition;
+    private Vector2f navWindowingAccumulatedDeltaSize;
+
+    private float dimBackgroundRatio;
+
+    private boolean dragDropActive;
+    private boolean dragDropWithinSource;
+    private boolean dragDropWithinTarget;
+
+    /**
+     * @see com.ikalagaming.graphics.frontend.gui.flags.DragDropFlags
+     */
+    private int dragDropSourceFlags;
+
+    private int dragDropSourceFrameCount;
+    private MouseButton dragDropMouseButton;
+    private Object dragDropPayload;
+    private Rect dragDropTargetRect;
+    private Rect dragDropTargetClipRect;
+    private int dragDropTargetID;
+
+    /**
+     * @see com.ikalagaming.graphics.frontend.gui.flags.DragDropFlags
+     */
+    private int dragDropAcceptFlags;
+
+    private float dragDropAcceptIDCurrentRectSurface;
+    private int dragDropAcceptIDCurrent;
+    private int dragDropAcceptIDPrev;
+    private int dragDropAcceptFrameCount;
+    private int dragDropHoldJustPressedID;
+    private ByteBuffer dragDropPayloadBufferLocal;
 }
