@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.frontend.gui.enums.GuiInputSource;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
 import com.ikalagaming.graphics.frontend.gui.event.GuiInputEvent;
 import com.ikalagaming.graphics.frontend.gui.util.Rect;
+import com.ikalagaming.util.FloatArrayList;
 import com.ikalagaming.util.IntArrayList;
 
 import org.joml.Vector2f;
@@ -238,4 +239,9 @@ public class Context {
     private ByteBuffer dragDropPayloadBufferLocal;
 
     private ArrayList<ListClipperData> clipperTempData;
+
+    private Table currentTable;
+    private ArrayList<TableTempData> tablesTempData;
+    private ArrayList<Table> tables;
+    private FloatArrayList tablesLastTimeActive;
 }
