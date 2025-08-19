@@ -6,6 +6,7 @@ Plugins for the Ikala Framework.
 
 Each plugin will likely have it's own README, but below are high level descriptions of what each is.
 
+* `Asset-Converter` - Converts game assets (textures, 3D models, etc.) into binary formats.
 * `EntityComponentSystem` - Provides a framework for the Entity Component System pattern.
 * `Example-Plugin` - An example plugin, set up and ready to build. This can be used as a framework to start building your own plugins.
 * `Factory-Client` - The client-side part of a factory game.

@@ -1,0 +1,6 @@
+---
+name: Asset-Converter
+version: 0.0.1-alpha
+description: Handles converting assets for games.
+authors: [maceris]
+main-class: com.ikalagaming.converter.ConverterPlugin
