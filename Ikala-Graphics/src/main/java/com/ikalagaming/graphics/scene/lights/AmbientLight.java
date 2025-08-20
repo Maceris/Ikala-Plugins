@@ -1,9 +1,3 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics.scene.lights;
 
 import lombok.AllArgsConstructor;
@@ -26,7 +20,8 @@ public class AmbientLight {
     @NonNull private Vector3f color;
 
     /**
-     * How bright the ambient light is.
+     * How bright the ambient light is, measured in candela per square meter (cd/m^2). This is
+     * visually like adding emissivity to everything in the scene.
      *
      * @param intensity The ambient light intensity.
      * @return The ambient light intensity.
@@ -35,17 +30,6 @@ public class AmbientLight {
 
     /** Create an ambient light with default values. */
     public AmbientLight() {
-        this(new Vector3f(1.0f, 1.0f, 1.0f), 1.0f);
-    }
-
-    /**
-     * Set the color.
-     *
-     * @param r The red component.
-     * @param g The green component.
-     * @param b The blue component.
-     */
-    public void setColor(float r, float g, float b) {
-        color.set(r, g, b);
+        this(new Vector3f(1.0f, 1.0f, 1.0f), 0.0f);
     }
 }

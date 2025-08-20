@@ -1,9 +1,3 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics.scene.lights;
 
 import lombok.Getter;
@@ -38,14 +32,14 @@ public class SceneLights {
      *
      * @return The list of point lights in the scene.
      */
-    private List<PointLight> pointLights;
+    private final List<PointLight> pointLights;
 
     /**
-     * The list of spot lights in a scene.
+     * The list of spotlights in a scene.
      *
-     * @return The list of spot lights in the scene.
+     * @return The list of spotlights in the scene.
      */
-    private List<SpotLight> spotLights;
+    private final List<SpotLight> spotLights;
 
     /** Create a new scene light setup without any lights configured. */
     public SceneLights() {

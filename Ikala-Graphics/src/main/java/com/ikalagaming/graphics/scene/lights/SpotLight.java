@@ -1,9 +1,3 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics.scene.lights;
 
 import lombok.AccessLevel;
@@ -53,17 +47,6 @@ public class SpotLight {
         this.pointLight = pointLight;
         this.coneDirection = coneDirection;
         setCutOffAngle(cutOffAngle);
-    }
-
-    /**
-     * Set the cone direction.
-     *
-     * @param x The x direction.
-     * @param y The y direction.
-     * @param z The z direction.
-     */
-    public void setConeDirection(float x, float y, float z) {
-        coneDirection.set(x, y, z);
     }
 
     /**

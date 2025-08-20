@@ -171,9 +171,6 @@ public class LightRender implements RenderStage {
             lightBuffer.put(light.getColor().y);
             lightBuffer.put(light.getColor().z);
             lightBuffer.put(light.getIntensity());
-            lightBuffer.put(light.getAttenuation().getConstant());
-            lightBuffer.put(light.getAttenuation().getLinear());
-            lightBuffer.put(light.getAttenuation().getExponent());
             lightBuffer.put(padding);
         }
 
@@ -231,9 +228,6 @@ public class LightRender implements RenderStage {
             lightBuffer.put(light.getPointLight().getColor().y);
             lightBuffer.put(light.getPointLight().getColor().z);
             lightBuffer.put(light.getPointLight().getIntensity());
-            lightBuffer.put(light.getPointLight().getAttenuation().getConstant());
-            lightBuffer.put(light.getPointLight().getAttenuation().getLinear());
-            lightBuffer.put(light.getPointLight().getAttenuation().getExponent());
             lightBuffer.put(padding);
             lightDirection.set(light.getConeDirection(), 1);
             lightDirection.mul(viewMatrix);

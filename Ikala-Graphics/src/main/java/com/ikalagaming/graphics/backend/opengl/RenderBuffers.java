@@ -1,9 +1,3 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.opengl.GL11.GL_FLOAT;
@@ -23,12 +17,10 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
-import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.Getter;
 import lombok.NonNull;
-import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL15;
 import org.lwjgl.system.MemoryUtil;
 
@@ -64,19 +56,7 @@ public class RenderBuffers {
             int materialIndex,
             int offset,
             int vertices,
-            AnimMeshDrawData animMeshDrawData) {
-        /**
-         * Set up mesh draw data for a mesh without animation draw data.
-         *
-         * @param sizeInBytes The size of the mesh in bytes.
-         * @param materialIndex The material index that the mesh is associated with.
-         * @param offset The offset in rows, measured in vertices.
-         * @param vertices The number of indices.
-         */
-        public MeshDrawData(int sizeInBytes, int materialIndex, int offset, int vertices) {
-            this(sizeInBytes, materialIndex, offset, vertices, null);
-        }
-    }
+            AnimMeshDrawData animMeshDrawData) {}
 
     /**
      * The Vertex Array Object ID, for animated models.
@@ -177,63 +157,23 @@ public class RenderBuffers {
 
         animVaoID = glGenVertexArrays();
         glBindVertexArray(animVaoID);
-        int positionsSize = 0;
-        int normalsSize = 0;
-        int textureCoordinatesSize = 0;
-        int indicesSize = 0;
-        int offset = 0;
-        int chunkBindingPoseOffset = 0;
-        int bindingPoseOffset = 0;
-        int chunkWeightsOffset = 0;
-        int weightsOffset = 0;
-        for (Model model : modelList) {
-            List<Entity> entities = model.getEntitiesList();
-            List<RenderBuffers.MeshDrawData> meshDrawDataList = model.getMeshDrawDataList();
-            meshDrawDataList.clear();
-            for (Entity entity : entities) {
-                bindingPoseOffset = chunkBindingPoseOffset;
-                weightsOffset = chunkWeightsOffset;
-                for (MeshData meshData : model.getMeshDataList()) {
-                    positionsSize += meshData.getPositions().length;
-                    normalsSize += meshData.getNormals().length;
-                    textureCoordinatesSize += meshData.getTextureCoordinates().length;
-                    indicesSize += meshData.getIndices().length;
 
-                    int meshSizeInBytes =
-                            (meshData.getPositions().length
-                                            + meshData.getNormals().length * 3
-                                            + meshData.getTextureCoordinates().length)
-                                    * 4;
-                    meshDrawDataList.add(
-                            new MeshDrawData(
-                                    meshSizeInBytes,
-                                    meshData.getMaterialIndex(),
-                                    offset,
-                                    meshData.getIndices().length,
-                                    new AnimMeshDrawData(
-                                            entity, bindingPoseOffset, weightsOffset)));
-                    bindingPoseOffset += meshSizeInBytes / 4;
-                    int groupSize = (int) Math.ceil((float) meshSizeInBytes / (14 * 4));
-                    weightsOffset += groupSize * 2 * 4;
-                    offset = positionsSize / 3;
-                }
+        int indicesSize = 0;
+        int verticesSize = 0;
+        for (Model model : modelList) {
+            for (MeshData meshData : model.getMeshDataList()) {
+                verticesSize += meshData.getVertexData().length;
+                indicesSize += meshData.getIndices().length;
             }
-            chunkBindingPoseOffset += bindingPoseOffset;
-            chunkWeightsOffset += weightsOffset;
         }
 
         destinationAnimationBuffer = glGenBuffers();
         vboIDList.add(destinationAnimationBuffer);
-        FloatBuffer meshesBuffer =
-                MemoryUtil.memAllocFloat(positionsSize + normalsSize * 3 + textureCoordinatesSize);
+        FloatBuffer meshesBuffer = FloatBuffer.allocate(verticesSize);
         for (Model model : modelList) {
-            model.getEntitiesList()
-                    .forEach(
-                            e -> {
-                                for (MeshData meshData : model.getMeshDataList()) {
-                                    populateMeshBuffer(meshesBuffer, meshData);
-                                }
-                            });
+            for (MeshData meshData : model.getMeshDataList()) {
+                meshesBuffer.put(meshData.getVertexData());
+            }
         }
         meshesBuffer.flip();
         glBindBuffer(GL_ARRAY_BUFFER, destinationAnimationBuffer);
@@ -247,13 +187,10 @@ public class RenderBuffers {
         vboIDList.add(vboId);
         IntBuffer indicesBuffer = MemoryUtil.memAllocInt(indicesSize);
         for (Model model : modelList) {
-            model.getEntitiesList()
-                    .forEach(
-                            e -> {
-                                for (MeshData meshData : model.getMeshDataList()) {
-                                    indicesBuffer.put(meshData.getIndices());
-                                }
-                            });
+            model.getEntitiesList().stream()
+                    .flatMap(ignored -> model.getMeshDataList().stream())
+                    .map(MeshData::getIndices)
+                    .forEach(indicesBuffer::put);
         }
         indicesBuffer.flip();
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vboId);
@@ -274,20 +211,16 @@ public class RenderBuffers {
         int meshSize = 0;
         for (Model model : modelList) {
             for (MeshData meshData : model.getMeshDataList()) {
-                meshSize +=
-                        meshData.getPositions().length
-                                // normal, tangent, bitangent
-                                + meshData.getNormals().length * 3
-                                + meshData.getTextureCoordinates().length;
+                meshSize += meshData.getVertexData().length;
             }
         }
 
         bindingPosesBuffer = glGenBuffers();
         vboIDList.add(bindingPosesBuffer);
-        FloatBuffer meshesBuffer = MemoryUtil.memAllocFloat(meshSize);
+        FloatBuffer meshesBuffer = FloatBuffer.allocate(meshSize);
         for (Model model : modelList) {
             for (MeshData meshData : model.getMeshDataList()) {
-                populateMeshBuffer(meshesBuffer, meshData);
+                meshesBuffer.put(meshData.getVertexData());
             }
         }
         meshesBuffer.flip();
@@ -307,26 +240,13 @@ public class RenderBuffers {
         int bufferSize = 0;
         for (Model model : modelList) {
             for (MeshData meshData : model.getMeshDataList()) {
-                bufferSize +=
-                        meshData.getBoneIndices().length * ModelLoader.MAX_WEIGHTS
-                                + meshData.getWeights().length * ModelLoader.MAX_WEIGHTS;
+                bufferSize += meshData.getBoneCount() * MeshData.MAX_WEIGHTS * 2;
             }
         }
         ByteBuffer dataBuffer = MemoryUtil.memAlloc(bufferSize);
         for (Model model : modelList) {
             for (MeshData meshData : model.getMeshDataList()) {
-                int[] bonesIndices = meshData.getBoneIndices();
-                float[] weights = meshData.getWeights();
-                int rows = bonesIndices.length / ModelLoader.MAX_WEIGHTS;
-                for (int row = 0; row < rows; row++) {
-                    int startPos = row * ModelLoader.MAX_WEIGHTS;
-                    for (int i = 0; i < ModelLoader.MAX_WEIGHTS; ++i) {
-                        dataBuffer.putFloat(weights[startPos + i]);
-                    }
-                    for (int i = 0; i < ModelLoader.MAX_WEIGHTS; ++i) {
-                        dataBuffer.putFloat(bonesIndices[startPos + i]);
-                    }
-                }
+                dataBuffer.put(meshData.getBoneWeightData());
             }
         }
         dataBuffer.flip();
@@ -351,11 +271,7 @@ public class RenderBuffers {
         for (Model model : modelList) {
             List<Model.Animation> animationsList = model.getAnimationList();
             for (Model.Animation animation : animationsList) {
-                List<Model.AnimatedFrame> frameList = animation.frames();
-                for (Model.AnimatedFrame frame : frameList) {
-                    Matrix4f[] matrices = frame.getBonesMatrices();
-                    bufferSize += matrices.length * matrixSize;
-                }
+                bufferSize += animation.frameCount() * animation.boneCount() * matrixSize;
             }
         }
 
@@ -364,15 +280,7 @@ public class RenderBuffers {
         for (Model model : modelList) {
             List<Model.Animation> animationsList = model.getAnimationList();
             for (Model.Animation animation : animationsList) {
-                List<Model.AnimatedFrame> frameList = animation.frames();
-                for (Model.AnimatedFrame frame : frameList) {
-                    frame.setOffset(dataBuffer.position() / matrixSize);
-                    Matrix4f[] matrices = frame.getBonesMatrices();
-                    for (Matrix4f matrix : matrices) {
-                        matrix.get(dataBuffer);
-                        dataBuffer.position(dataBuffer.position() + matrixSize);
-                    }
-                }
+                dataBuffer.put(animation.frameData());
             }
         }
         dataBuffer.flip();
@@ -394,42 +302,28 @@ public class RenderBuffers {
      * @param scene The scene to load models for.
      */
     public void loadStaticModels(@NonNull Scene scene) {
+        // TODO(ches) we need to load these separately, not in one big buffer
         List<Model> modelList =
                 scene.getModelMap().values().stream().filter(m -> !m.isAnimated()).toList();
         staticVaoID = glGenVertexArrays();
         glBindVertexArray(staticVaoID);
-        int positionsSize = 0;
-        int normalsSize = 0;
-        int textureCoordinatesSize = 0;
-        int indicesSize = 0;
-        int offset = 0;
-        for (Model model : modelList) {
-            List<RenderBuffers.MeshDrawData> meshDrawDataList = model.getMeshDrawDataList();
-            meshDrawDataList.clear();
-            for (MeshData meshData : model.getMeshDataList()) {
-                positionsSize += meshData.getPositions().length;
-                normalsSize += meshData.getNormals().length;
-                textureCoordinatesSize += meshData.getTextureCoordinates().length;
-                indicesSize += meshData.getIndices().length;
 
-                int meshSizeInBytes = meshData.getPositions().length * 14 * 4;
-                meshDrawDataList.add(
-                        new MeshDrawData(
-                                meshSizeInBytes,
-                                meshData.getMaterialIndex(),
-                                offset,
-                                meshData.getIndices().length));
-                offset = positionsSize / 3;
+        int indicesSize = 0;
+        int verticesSize = 0;
+        for (Model model : modelList) {
+            for (MeshData meshData : model.getMeshDataList()) {
+                verticesSize += meshData.getVertexData().length;
+                indicesSize += meshData.getIndices().length;
             }
         }
 
         int vboID = glGenBuffers();
         vboIDList.add(vboID);
-        FloatBuffer meshesBuffer =
-                MemoryUtil.memAllocFloat(positionsSize + normalsSize * 3 + textureCoordinatesSize);
+
+        FloatBuffer meshesBuffer = FloatBuffer.allocate(verticesSize);
         for (Model model : modelList) {
             for (MeshData meshData : model.getMeshDataList()) {
-                populateMeshBuffer(meshesBuffer, meshData);
+                meshesBuffer.put(meshData.getVertexData());
             }
         }
         meshesBuffer.flip();
@@ -455,39 +349,5 @@ public class RenderBuffers {
 
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindVertexArray(0);
-    }
-
-    /**
-     * Populate the meshes buffer from mesh data.
-     *
-     * @param meshesBuffer The buffer to populate.
-     * @param meshData The data to fill the buffer with.
-     */
-    private void populateMeshBuffer(@NonNull FloatBuffer meshesBuffer, @NonNull MeshData meshData) {
-        float[] positions = meshData.getPositions();
-        float[] normals = meshData.getNormals();
-        float[] tangents = meshData.getTangents();
-        float[] bitangents = meshData.getBitangents();
-        float[] textureCoordinates = meshData.getTextureCoordinates();
-
-        int rows = positions.length / 3;
-        for (int row = 0; row < rows; row++) {
-            int startPos = row * 3;
-            int startTextureCoordinate = row * 2;
-            meshesBuffer.put(positions[startPos]);
-            meshesBuffer.put(positions[startPos + 1]);
-            meshesBuffer.put(positions[startPos + 2]);
-            meshesBuffer.put(normals[startPos]);
-            meshesBuffer.put(normals[startPos + 1]);
-            meshesBuffer.put(normals[startPos + 2]);
-            meshesBuffer.put(tangents[startPos]);
-            meshesBuffer.put(tangents[startPos + 1]);
-            meshesBuffer.put(tangents[startPos + 2]);
-            meshesBuffer.put(bitangents[startPos]);
-            meshesBuffer.put(bitangents[startPos + 1]);
-            meshesBuffer.put(bitangents[startPos + 2]);
-            meshesBuffer.put(textureCoordinates[startTextureCoordinate]);
-            meshesBuffer.put(textureCoordinates[startTextureCoordinate + 1]);
-        }
     }
 }

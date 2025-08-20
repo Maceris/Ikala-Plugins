@@ -1,61 +1,65 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics.graph;
 
-import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
 import com.ikalagaming.graphics.scene.Entity;
 
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.Setter;
-import org.joml.Matrix4f;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /** A model for rendering. */
 @Getter
 public class Model {
-    /** A single key frame of the animation, which defines transformations to apply to the bones. */
-    @Getter
-    public static class AnimatedFrame {
-        /**
-         * The bone transformations.
-         *
-         * @return The bone transformation matrices.
-         */
-        private final Matrix4f[] bonesMatrices;
-
-        /**
-         * The position in the list of bone transformation matrices.
-         *
-         * @param offset The offset in the list of bone transformation matrices.
-         * @return The offset in the list of bone transformation matrices.
-         */
-        @Setter private int offset;
-
-        /**
-         * Create a new frame given the transformation matrices.
-         *
-         * @param bonesMatrices The bone transformation matrices.
-         */
-        public AnimatedFrame(@NonNull Matrix4f[] bonesMatrices) {
-            this.bonesMatrices = bonesMatrices;
-        }
-    }
 
     /**
      * A named animation.
      *
      * @param name The name of the animation.
      * @param duration The duration.
-     * @param frames The frames that make up the animation.
+     * @param boneCount The number of bones in a frame.
+     * @param frameCount The number of frames.
+     * @param frameData The frame data. Stored as a list of frames, each of which is an array of
+     *     boneCount mat4's.
      */
-    public record Animation(String name, double duration, List<AnimatedFrame> frames) {}
+    public record Animation(
+            @NonNull String name,
+            double duration,
+            int boneCount,
+            int frameCount,
+            byte[] frameData) {
+        @Override
+        public boolean equals(Object obj) {
+            if (!(obj instanceof Animation anim)) {
+                return false;
+            }
+            return Objects.equals(name, anim.name)
+                    && duration == anim.duration
+                    && boneCount == anim.boneCount
+                    && frameCount == anim.frameCount;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(name, duration, boneCount, frameCount);
+        }
+
+        @Override
+        public String toString() {
+            return "Animation{"
+                    + "frameCount="
+                    + frameCount
+                    + ", boneCount="
+                    + boneCount
+                    + ", duration="
+                    + duration
+                    + ", name='"
+                    + name
+                    + '\''
+                    + '}';
+        }
+    }
 
     /**
      * The ID for the model.
@@ -71,6 +75,7 @@ public class Model {
      */
     private final List<Animation> animationList;
 
+    // TODO(ches) this should probably be elsewhere
     /**
      * A list of entities that use this model.
      *
@@ -86,28 +91,15 @@ public class Model {
     private final List<MeshData> meshDataList;
 
     /**
-     * A list of mesh draw data for this model.
-     *
-     * @return The list of mesh draw data.
-     */
-    private final List<RenderBuffers.MeshDrawData> meshDrawDataList;
-
-    /**
      * Create a new model.
      *
      * @param id The model ID.
-     * @param meshDataList The mesh data for this model .
-     * @param animationList The animations for this model.
      */
-    public Model(
-            @NonNull String id,
-            @NonNull List<MeshData> meshDataList,
-            List<Animation> animationList) {
+    public Model(@NonNull String id) {
         entitiesList = new ArrayList<>();
         this.id = id;
-        this.meshDataList = meshDataList;
-        this.animationList = animationList;
-        meshDrawDataList = new ArrayList<>();
+        this.meshDataList = new ArrayList<>();
+        this.animationList = new ArrayList<>();
     }
 
     /**
@@ -116,6 +108,6 @@ public class Model {
      * @return If there are values in the animation list.
      */
     public boolean isAnimated() {
-        return animationList != null && !animationList.isEmpty();
+        return !animationList.isEmpty();
     }
 }

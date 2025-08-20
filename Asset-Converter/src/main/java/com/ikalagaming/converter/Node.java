@@ -1,13 +1,8 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
-package com.ikalagaming.graphics.scene;
+package com.ikalagaming.converter;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.joml.Matrix4f;
 
 import java.util.ArrayList;
@@ -22,13 +17,14 @@ import java.util.List;
  * children.
  */
 @Getter
-public class Node {
+@RequiredArgsConstructor
+class Node {
     /**
      * The list of children of this node.
      *
      * @return The child list, which might be empty but shouldn't be null.
      */
-    private final List<Node> children;
+    private final List<Node> children = new ArrayList<>();
 
     /**
      * The name of the node. The name might be empty (length of zero) but all nodes which need to be
@@ -53,7 +49,7 @@ public class Node {
     private final String name;
 
     /**
-     * The parent node, NULL if this node is the root node.
+     * The parent node, null if this node is the root node.
      *
      * @return The parent node, or null if this is the root.
      */
@@ -64,21 +60,7 @@ public class Node {
      *
      * @return The transformation matrix for this node.
      */
-    private Matrix4f nodeTransformation;
-
-    /**
-     * Create a new node.
-     *
-     * @param name The name of the node.
-     * @param parent This nodes parent.
-     * @param nodeTransformation The transformation matrix for this node.
-     */
-    public Node(@NonNull String name, Node parent, @NonNull Matrix4f nodeTransformation) {
-        this.name = name;
-        this.parent = parent;
-        this.nodeTransformation = nodeTransformation;
-        children = new ArrayList<>();
-    }
+    private final Matrix4f nodeTransformation;
 
     /**
      * Add a child node to this one.

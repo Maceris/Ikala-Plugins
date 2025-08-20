@@ -1,70 +1,78 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics.frontend;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.Setter;
 import org.joml.Vector4f;
 
-import java.util.Objects;
-
-/** A material for rendering that defines color and textures for a mesh. */
+/**
+ * A material for rendering that defines color and textures for a mesh. Based on the Disney
+ * Principled BRDF.
+ */
 @Getter
 @Setter
+@EqualsAndHashCode
 public class Material {
     /** The default color to use when unspecified. */
-    public static final Vector4f DEFAULT_COLOR = new Vector4f(0.0f, 0.0f, 0.0f, 1.0f);
+    public static final Vector4f DEFAULT_COLOR = new Vector4f(1.0f, 1.0f, 1.0f, 1.0f);
 
-    /** The ambient color of the material. */
-    @NonNull private Vector4f ambientColor;
+    /** The surface color of the material, usually this would be a texture. */
+    private final Vector4f baseColor;
 
-    /** The diffuse color of the material. */
-    @NonNull private Vector4f diffuseColor;
+    /**
+     * A special-purpose secondary specular lobe for representing a clearcoat layer. This represents
+     * a polyurethane coating, and the value controls the strength. When set to 0, the layer is
+     * disabled.
+     */
+    private float clearcoat;
+
+    /** Controls gossiness of the clearcoat, where 0 is a satin appearance and 1 is a glossy one. */
+    private float clearcoatGloss;
+
+    /**
+     * How metallic the substance is. 0 is dielectric, 1 is metallic, values in between linearly
+     * blend between the two. Metallic substances have no diffuse component and have tinted specular
+     * (the base color).
+     */
+    private float metallic;
+
+    /** Surface roughness, for both diffuse and specular. */
+    private float roughness;
+
+    /** Grazing component, generally for cloth. */
+    private float sheen;
+
+    /** Amount to tint sheen towards the base color. */
+    private float sheenTint;
+
+    /**
+     * Incident specular amount. Corresponds to index of refraction values in the range [1.0, 1.8].
+     */
+    private float specular;
+
+    /** Tints incident specular towards the base color. Grazing specular is still un-tinted. */
+    private float specularTint;
+
+    /** Simulates local subsurface scattering with an approximation. */
+    private float subsurface;
 
     /** The handle for the normal map texture, which might be null. */
     private Texture normalMap;
 
-    /** The reflectance value of the material. */
-    private float reflectance;
-
-    /** The specular color of the material. */
-    @NonNull private Vector4f specularColor;
-
     /** The handle for the texture, which might be null. */
     private Texture texture;
 
-    /** Create a default, non-reflective material with no texture. */
+    /** Create a default material with no texture. */
     public Material() {
-        diffuseColor = Material.DEFAULT_COLOR;
-        ambientColor = Material.DEFAULT_COLOR;
-        specularColor = Material.DEFAULT_COLOR;
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (!(obj instanceof Material other)) {
-            return false;
-        }
-
-        final float delta = 0.001f;
-        if (!ambientColor.equals(other.ambientColor, delta)
-                || !diffuseColor.equals(other.diffuseColor, delta)
-                || !specularColor.equals(other.specularColor, delta)
-                || !Objects.equals(texture, other.texture)) {
-            return false;
-        }
-        return Objects.equals(normalMap, other.normalMap)
-                && (Math.abs(reflectance - other.reflectance) <= delta);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(
-                ambientColor, diffuseColor, specularColor, texture, normalMap, reflectance);
+        baseColor = new Vector4f(Material.DEFAULT_COLOR);
+        subsurface = 0;
+        specular = 0;
+        metallic = 0;
+        specularTint = 0;
+        roughness = 0;
+        sheenTint = 0;
+        sheen = 0;
+        clearcoatGloss = 0;
+        clearcoat = 0;
     }
 }

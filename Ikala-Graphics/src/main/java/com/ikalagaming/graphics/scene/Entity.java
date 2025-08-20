@@ -1,9 +1,3 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics.scene;
 
 import lombok.Getter;
@@ -36,12 +30,12 @@ public class Entity {
     private final String modelID;
 
     /**
-     * Animation data associated with the entity.
+     * Animation state associated with the entity.
      *
-     * @param animationData The new animation data.
-     * @return The animation data.
+     * @param animationData The new animation state.
+     * @return The animation state.
      */
-    @Setter private AnimationData animationData;
+    private AnimationState animationState;
 
     /**
      * The combined translation, rotation, and scale transformations.
@@ -115,9 +109,7 @@ public class Entity {
      * @param z The new z position.
      */
     public final void setPosition(float x, float y, float z) {
-        position.x = x;
-        position.y = y;
-        position.z = z;
+        position.set(x, y, z);
     }
 
     /**

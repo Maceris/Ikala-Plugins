@@ -1,9 +1,3 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics.scene;
 
 import com.ikalagaming.graphics.GraphicsManager;
@@ -14,7 +8,6 @@ import com.ikalagaming.graphics.scene.lights.SceneLights;
 
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.Setter;
 import org.joml.Vector4f;
 
 import java.util.Collections;
@@ -40,7 +33,7 @@ public class Scene {
      * @param fog The new fog settings to use.
      * @return The current fog settings.
      */
-    @Setter @NonNull private Fog fog;
+    private final Fog fog;
 
     /**
      * The material cache to use for this scene.
@@ -65,7 +58,7 @@ public class Scene {
      * @param sceneLights The lights to render with.
      * @return The lights used in the scene.
      */
-    @NonNull private final SceneLights sceneLights;
+    private final SceneLights sceneLights;
 
     /** A list of entities that we tried to add, but did not yet have models loaded. */
     private final List<Entity> entityQueue;

@@ -1,9 +1,3 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics.scene;
 
 import com.ikalagaming.graphics.graph.Model;
@@ -12,7 +6,7 @@ import lombok.Getter;
 
 /** Tracks an animation and what frame we are on within it. */
 @Getter
-public class AnimationData {
+public class AnimationState {
     /**
      * The current ongoing animation.
      *
@@ -32,18 +26,9 @@ public class AnimationData {
      *
      * @param currentAnimation The animation we are tracking.
      */
-    public AnimationData(Model.Animation currentAnimation) {
+    public AnimationState(Model.Animation currentAnimation) {
         currentFrameIndex = 0;
         this.currentAnimation = currentAnimation;
-    }
-
-    /**
-     * Fetch the data associated with the current animation frame.
-     *
-     * @return The data for the current frame.
-     */
-    public Model.AnimatedFrame getCurrentFrame() {
-        return currentAnimation.frames().get(currentFrameIndex);
     }
 
     /**
@@ -52,7 +37,7 @@ public class AnimationData {
      */
     public void nextFrame() {
         int nextFrame = currentFrameIndex + 1;
-        if (nextFrame > currentAnimation.frames().size() - 1) {
+        if (nextFrame > currentAnimation.frameCount() - 1) {
             currentFrameIndex = 0;
         } else {
             currentFrameIndex = nextFrame;

@@ -532,8 +532,8 @@ public class PipelineManager {
         int totalEntities = 0;
         int drawElementCount = 0;
         for (Model model : modelList) {
-            numMeshes += model.getMeshDrawDataList().size();
-            drawElementCount += model.getEntitiesList().size() * model.getMeshDrawDataList().size();
+            numMeshes += model.getMeshDataList().size();
+            drawElementCount += model.getEntitiesList().size() * model.getMeshDataList().size();
             totalEntities += model.getEntitiesList().size();
         }
 
@@ -557,30 +557,9 @@ public class PipelineManager {
         glBufferData(GL_SHADER_STORAGE_BUFFER, modelMatrices, GL_STATIC_DRAW);
         MemoryUtil.memFree(modelMatrices);
 
-        int firstIndex = 0;
-        int baseInstance = 0;
         ByteBuffer commandBuffer = MemoryUtil.memAlloc(numMeshes * COMMAND_SIZE);
         ByteBuffer drawElements = MemoryUtil.memAlloc(drawElementCount * DRAW_ELEMENT_SIZE);
-        for (Model model : modelList) {
-            for (RenderBuffers.MeshDrawData meshDrawData : model.getMeshDrawDataList()) {
-                // count
-                commandBuffer.putInt(meshDrawData.vertices());
-                // instanceCount
-                commandBuffer.putInt(1);
-                commandBuffer.putInt(firstIndex);
-                // baseVertex
-                commandBuffer.putInt(meshDrawData.offset());
-                commandBuffer.putInt(baseInstance);
-
-                firstIndex += meshDrawData.vertices();
-                baseInstance++;
-
-                Entity entity = meshDrawData.animMeshDrawData().entity();
-                // model matrix index
-                drawElements.putInt(entitiesIndexMap.get(entity.getEntityID()));
-                drawElements.putInt(meshDrawData.materialIndex());
-            }
-        }
+        // TODO(ches) fill out command buffers
         commandBuffer.flip();
         drawElements.flip();
 
@@ -606,6 +585,7 @@ public class PipelineManager {
      */
     @Deprecated
     public void setupData(@NonNull Scene scene) {
+        // TODO(ches) remove this
         if (buffersPopulated.getAndSet(false)) {
             renderBuffers.cleanup();
             commandBuffers.cleanup();
@@ -630,8 +610,8 @@ public class PipelineManager {
         int totalEntities = 0;
         int drawElementCount = 0;
         for (Model model : modelList) {
-            numMeshes += model.getMeshDrawDataList().size();
-            drawElementCount += model.getEntitiesList().size() * model.getMeshDrawDataList().size();
+            numMeshes += model.getMeshDataList().size();
+            drawElementCount += model.getEntitiesList().size() * model.getMeshDataList().size();
             totalEntities += model.getEntitiesList().size();
         }
 
@@ -655,35 +635,10 @@ public class PipelineManager {
         glBufferData(GL_SHADER_STORAGE_BUFFER, modelMatrices, GL_STATIC_DRAW);
         MemoryUtil.memFree(modelMatrices);
 
-        int firstIndex = 0;
-        int baseInstance = 0;
         ByteBuffer commandBuffer = MemoryUtil.memAlloc(numMeshes * COMMAND_SIZE);
         ByteBuffer drawElements = MemoryUtil.memAlloc(drawElementCount * DRAW_ELEMENT_SIZE);
 
-        for (Model model : modelList) {
-            List<Entity> entities = model.getEntitiesList();
-            int numEntities = entities.size();
-            for (RenderBuffers.MeshDrawData meshDrawData : model.getMeshDrawDataList()) {
-                // count
-                commandBuffer.putInt(meshDrawData.vertices());
-                // instanceCount
-                commandBuffer.putInt(numEntities);
-                commandBuffer.putInt(firstIndex);
-                // baseVertex
-                commandBuffer.putInt(meshDrawData.offset());
-                commandBuffer.putInt(baseInstance);
-
-                firstIndex += meshDrawData.vertices();
-                baseInstance += numEntities;
-
-                int materialIndex = meshDrawData.materialIndex();
-                for (Entity entity : entities) {
-                    // model matrix index
-                    drawElements.putInt(entitiesIndexMap.get(entity.getEntityID()));
-                    drawElements.putInt(materialIndex);
-                }
-            }
-        }
+        // TODO(ches) fill out command buffers
 
         commandBuffer.flip();
         drawElements.flip();

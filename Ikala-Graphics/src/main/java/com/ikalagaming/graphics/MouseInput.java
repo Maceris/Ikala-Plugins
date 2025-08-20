@@ -1,9 +1,3 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics;
 
 import static org.lwjgl.glfw.GLFW.GLFW_CURSOR;
@@ -29,14 +23,14 @@ public class MouseInput {
      *
      * @return The current position.
      */
-    @Getter private Vector2f currentPos;
+    @Getter private final Vector2f currentPos;
 
     /**
      * The displacement vector for how a mouse has moved.
      *
      * @return the displacement vector.
      */
-    @Getter private Vector2f displVec;
+    @Getter private final Vector2f displVec;
 
     /**
      * Whether the mouse is currently in the window.
@@ -53,7 +47,7 @@ public class MouseInput {
     @Getter private boolean leftButtonPressed;
 
     /** The position the mouse was in last time we checked. */
-    private Vector2f previousPos;
+    private final Vector2f previousPos;
 
     /**
      * If the right button is currently pressed.
@@ -68,6 +62,7 @@ public class MouseInput {
      * @param windowHandle The handle of the window we are interacting with.
      */
     public MouseInput(long windowHandle) {
+        // TODO(ches) maybe we should use our new GUI system for this?
         previousPos = new Vector2f(-1, -1);
         currentPos = new Vector2f();
         displVec = new Vector2f();

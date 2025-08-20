@@ -9,8 +9,10 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
+/** Used for asset conversion for the graphics plugin. */
 @Slf4j
 public class ConverterPlugin extends Plugin {
+    /** The name of this plugin. */
     public static final String PLUGIN_NAME = "Asset-Converter";
 
     private Set<Listener> listeners;
@@ -27,5 +29,4 @@ public class ConverterPlugin extends Plugin {
     public String getName() {
         return ConverterPlugin.PLUGIN_NAME;
     }
-
 }

@@ -1,9 +1,3 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics;
 
 import static org.lwjgl.glfw.GLFW.*;
@@ -51,9 +45,6 @@ public class Window {
 
         /** The height of the window in pixels. */
         public int height;
-
-        /** The target updates per second. */
-        public int ups = GraphicsManager.TARGET_FPS;
 
         /** The width of the window in pixels. */
         public int width;
@@ -110,10 +101,10 @@ public class Window {
     private int height;
 
     /** Mouse input handler. */
-    private MouseInput mouseInput;
+    private final MouseInput mouseInput;
 
     /** The resize function to call. */
-    private Callable<Void> resizeFunc;
+    private final Callable<Void> resizeFunc;
 
     /** The title that was provided for the window. */
     @Getter private final String title;
@@ -228,6 +219,7 @@ public class Window {
      * @return True if the key is pressed, false if not.
      */
     public boolean isKeyPressed(int keyCode) {
+        // TODO(ches) use our new input system
         if (ImGui.getIO().getWantCaptureKeyboard()) {
             return false;
         }
@@ -269,6 +261,7 @@ public class Window {
         glfwSetKeyCallback(
                 windowHandle,
                 (window, key, scancode, action, mods) -> {
+                    // TODO(ches) use our new input system
                     ImGuiIO io = ImGui.getIO();
                     if (action == GLFW_PRESS) {
                         io.setKeysDown(key, true);
@@ -292,6 +285,7 @@ public class Window {
         glfwSetScrollCallback(
                 windowHandle,
                 (window, xOffset, yOffset) -> {
+                    // TODO(ches) use our new input system
                     ImGuiIO io = ImGui.getIO();
                     io.setMouseWheelH((float) (io.getMouseWheelH() + xOffset));
                     io.setMouseWheel((float) (io.getMouseWheel() + yOffset));
@@ -299,6 +293,7 @@ public class Window {
         glfwSetCharCallback(
                 windowHandle,
                 (window, codepoint) -> {
+                    // TODO(ches) use our new input system
                     ImGuiIO io = ImGui.getIO();
                     io.addInputCharacter(codepoint);
                 });

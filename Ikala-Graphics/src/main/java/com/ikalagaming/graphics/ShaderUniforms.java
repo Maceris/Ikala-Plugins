@@ -93,7 +93,7 @@ public class ShaderUniforms {
             /** The color of the light. */
             public static final String COLOR = "color";
 
-            /** The intensity, a number between 0 and 1. */
+            /** The intensity, measured in candela per square meter (cd/m^2). */
             public static final String INTENSITY = "intensity";
 
             /** Private constructor so this class is not instantiated. */
@@ -128,7 +128,7 @@ public class ShaderUniforms {
             /** The direction that the light is coming from. */
             public static final String DIRECTION = "direction";
 
-            /** The intensity, a number between 0 and 1. */
+            /** The intensity, measured in candela per square meter (cd/m^2). */
             public static final String INTENSITY = "intensity";
 
             /** Private constructor so this class is not instantiated. */

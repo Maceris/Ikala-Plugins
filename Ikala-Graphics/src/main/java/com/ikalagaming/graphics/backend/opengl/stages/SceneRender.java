@@ -176,11 +176,7 @@ public class SceneRender implements RenderStage {
             Material material = materialCache.getMaterial(i);
             String name = ShaderUniforms.Scene.MATERIALS + "[" + i + "].";
             uniformsMap.setUniform(
-                    name + ShaderUniforms.Scene.Material.DIFFUSE, material.getDiffuseColor());
-            uniformsMap.setUniform(
-                    name + ShaderUniforms.Scene.Material.SPECULAR, material.getSpecularColor());
-            uniformsMap.setUniform(
-                    name + ShaderUniforms.Scene.Material.REFLECTANCE, material.getReflectance());
+                    name + ShaderUniforms.Scene.Material.DIFFUSE, material.getBaseColor());
 
             // We bind the default texture to 0
             int index = 0;

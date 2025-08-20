@@ -1,12 +1,4 @@
-/*
- * NOTICE: This file is a modified version of contents from
- * https://github.com/lwjglgamedev/lwjglbook, which was licensed under Apache
- * v2.0. Changes have been made related to formatting, functionality, and
- * naming.
- */
 package com.ikalagaming.graphics.scene;
-
-import com.ikalagaming.graphics.Utils;
 
 import lombok.Getter;
 import org.joml.Matrix4f;
@@ -18,36 +10,52 @@ public class Camera {
     /** A constant value used to clamp rotation, pre-calculated for convenience. */
     private static final float TWO_PI = (float) Math.PI * 2;
 
+    private static final float X_MIN = (float) Math.toRadians(-90);
+    private static final float X_MAX = (float) Math.toRadians(90);
+
+    /**
+     * Clamps the float between -90 and 90 degrees. NaN is considered less than the minimum.
+     *
+     * @param value The value we are clamping.
+     * @return The value clamped between -90 and 90 degrees.
+     */
+    private static float clampRotationX(final float value) {
+        if (Float.isNaN(value) || (value < X_MIN)) {
+            return X_MIN;
+        }
+        return Math.min(value, X_MAX);
+    }
+
     /** Used to calculate movements. */
-    private Vector3f temp;
+    private final Vector3f temp;
 
     /**
      * The inverse of the view matrix.
      *
      * @return The inverse view matrix.
      */
-    @Getter private Matrix4f invViewMatrix;
+    @Getter private final Matrix4f invViewMatrix;
 
     /**
      * The position of the camera.
      *
      * @return The position vector.
      */
-    @Getter private Vector3f position;
+    @Getter private final Vector3f position;
 
     /**
      * The rotation of the camera.
      *
      * @return The rotation vector.
      */
-    @Getter private Vector2f rotation;
+    @Getter private final Vector2f rotation;
 
     /**
      * The view matrix.
      *
      * @return The current view matrix.
      */
-    @Getter private Matrix4f viewMatrix;
+    @Getter private final Matrix4f viewMatrix;
 
     /** Creates a new camera with default values. */
     public Camera() {
@@ -137,10 +145,7 @@ public class Camera {
 
     /** Recalculate the view and inverse view matrices. */
     private void recalculate() {
-        rotation.x =
-                Utils.clampFloat(
-                        rotation.x, (float) Math.toRadians(-90), (float) Math.toRadians(90));
-
+        rotation.x = clampRotationX(rotation.x);
         rotation.y %= Camera.TWO_PI;
         rotation.y = (rotation.y + Camera.TWO_PI) % Camera.TWO_PI;
 
