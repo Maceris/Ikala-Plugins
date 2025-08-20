@@ -60,21 +60,18 @@ dependencies {
 	implementation "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
 	implementation "org.lwjgl:lwjgl-vulkan:${lwjglVersion}"
 	implementation "org.lwjgl:lwjgl-stb:${lwjglVersion}"
-	implementation "org.lwjgl:lwjgl-assimp:${lwjglVersion}"
 	implementation "io.github.spair:imgui-java-binding:${imguiJavaVersion}"
 
 	runtimeOnly "org.lwjgl:lwjgl:${lwjglVersion}:natives-windows"
 	runtimeOnly "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-windows"
 	runtimeOnly "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-windows"
 	runtimeOnly "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-windows"
-	runtimeOnly "org.lwjgl:lwjgl-assimp:${lwjglVersion}:natives-windows"
 	runtimeOnly "io.github.spair:imgui-java-natives-windows:${imguiJavaVersion}"
 	
 	runtimeOnly "org.lwjgl:lwjgl:${lwjglVersion}:natives-macos"
 	runtimeOnly "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-macos"
 	runtimeOnly "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-macos"
 	runtimeOnly "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-macos"
-	runtimeOnly "org.lwjgl:lwjgl-assimp:${lwjglVersion}:natives-macos"
 	runtimeOnly "io.github.spair:imgui-java-natives-macos:${imguiJavaVersion}"
 	
 	jarInclude "org.joml:joml:${jomlVersion}"
@@ -83,21 +80,18 @@ dependencies {
 	jarInclude "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
 	jarInclude "org.lwjgl:lwjgl-vulkan:${lwjglVersion}"
 	jarInclude "org.lwjgl:lwjgl-stb:${lwjglVersion}"
-	jarInclude "org.lwjgl:lwjgl-assimp:${lwjglVersion}"
 	jarInclude "io.github.spair:imgui-java-binding:${imguiJavaVersion}"
 
 	jarInclude "org.lwjgl:lwjgl:${lwjglVersion}:natives-windows"
 	jarInclude "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-windows"
 	jarInclude "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-windows"
 	jarInclude "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-windows"
-	jarInclude "org.lwjgl:lwjgl-assimp:${lwjglVersion}:natives-windows"
 	jarInclude "io.github.spair:imgui-java-natives-windows:${imguiJavaVersion}"
 
 	jarInclude "org.lwjgl:lwjgl:${lwjglVersion}:natives-macos-arm64"
 	jarInclude "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-macos-arm64"
 	jarInclude "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-macos-arm64"
 	jarInclude "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-macos-arm64"
-	jarInclude "org.lwjgl:lwjgl-assimp:${lwjglVersion}:natives-macos-arm64"
 	jarInclude "io.github.spair:imgui-java-natives-macos:${imguiJavaVersion}"
 
 	// Testing

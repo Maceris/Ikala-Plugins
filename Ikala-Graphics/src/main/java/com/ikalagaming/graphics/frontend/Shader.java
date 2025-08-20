@@ -11,14 +11,24 @@ public interface Shader {
      *
      * @param shaderFile The path to the shader file including name.
      * @param shaderType The type of shader to be created.
+     * @param location The general location of the shader file.
      */
-    record ShaderModuleData(@NonNull String shaderFile, Type shaderType) {}
+    record ShaderModuleData(
+            @NonNull String shaderFile, Type shaderType, @NonNull Location location) {}
 
     /** The type of shader module. */
     enum Type {
         VERTEX,
         FRAGMENT,
         COMPUTE
+    }
+
+    /** Where the shader can be found. */
+    enum Location {
+        /** In the jar resources. */
+        BUNDLED,
+        /** In the plugin data folder. */
+        DATA_FOLDER,
     }
 
     /** Install this program as part of the current rendering state. */

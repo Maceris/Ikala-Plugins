@@ -60,6 +60,13 @@ dependencies {
 	implementation "org.lwjgl:lwjgl-stb:${lwjglVersion}"
 	implementation "org.lwjgl:lwjgl-assimp:${lwjglVersion}"
 
+	runtimeOnly "org.lwjgl:lwjgl-assimp:${lwjglVersion}:natives-windows"
+	runtimeOnly "org.lwjgl:lwjgl-assimp:${lwjglVersion}:natives-macos"
+
+	provided "org.lwjgl:lwjgl-assimp:${lwjglVersion}"
+	provided "org.lwjgl:lwjgl-assimp:${lwjglVersion}:natives-windows"
+	provided "org.lwjgl:lwjgl-assimp:${lwjglVersion}:natives-macos-arm64"
+
 	// Testing
 	testImplementation project(':Ikala-Core')
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"

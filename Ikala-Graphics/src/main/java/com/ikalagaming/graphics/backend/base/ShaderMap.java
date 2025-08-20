@@ -15,7 +15,7 @@ import java.util.*;
 @Slf4j
 public class ShaderMap {
 
-    private final Map<RenderStage.Type, Shader> shaders = new HashMap<>();
+    private final Map<RenderStage.Type, Shader> shaders = new EnumMap<>(RenderStage.Type.class);
 
     /**
      * Add a shader to the cache. If there is already a shader for that stage, the old one will be

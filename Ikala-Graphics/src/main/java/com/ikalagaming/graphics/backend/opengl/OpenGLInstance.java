@@ -9,7 +9,6 @@ import static org.lwjgl.opengl.GL20.glUseProgram;
 import static org.lwjgl.opengl.GL30.glDeleteFramebuffers;
 
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
@@ -19,10 +18,6 @@ import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.launcher.PluginFolder;
-import com.ikalagaming.plugins.config.ConfigManager;
-import com.ikalagaming.plugins.config.PluginConfig;
-import com.ikalagaming.util.SafeResourceLoader;
 
 import imgui.ImGui;
 import imgui.ImGuiIO;
@@ -31,7 +26,6 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.opengl.GL;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -90,7 +84,8 @@ public class OpenGLInstance implements Instance {
     private void initializeAnimationShader() {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/anim.comp", Shader.Type.COMPUTE));
+                new Shader.ShaderModuleData(
+                        "shaders/anim.comp", Shader.Type.COMPUTE, Shader.Location.BUNDLED));
         var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
         var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
@@ -123,7 +118,8 @@ public class OpenGLInstance implements Instance {
     private void initializeShadowShader() {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/shadow.vert", Shader.Type.VERTEX));
+                new Shader.ShaderModuleData(
+                        "shaders/shadow.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
         var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
         var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
@@ -137,9 +133,11 @@ public class OpenGLInstance implements Instance {
     private void initializeSceneShader() {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/scene.vert", Shader.Type.VERTEX));
+                new Shader.ShaderModuleData(
+                        "shaders/scene.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/scene.frag", Shader.Type.FRAGMENT));
+                new Shader.ShaderModuleData(
+                        "shaders/scene.frag", Shader.Type.FRAGMENT, Shader.Location.BUNDLED));
         var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
         var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
@@ -167,9 +165,11 @@ public class OpenGLInstance implements Instance {
     private void initializeLightShader() {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/lights.vert", Shader.Type.VERTEX));
+                new Shader.ShaderModuleData(
+                        "shaders/lights.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/lights.frag", Shader.Type.FRAGMENT));
+                new Shader.ShaderModuleData(
+                        "shaders/lights.frag", Shader.Type.FRAGMENT, Shader.Location.BUNDLED));
         var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
         var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
@@ -232,9 +232,11 @@ public class OpenGLInstance implements Instance {
     private void initializeSkyboxShader() {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/skybox.vert", Shader.Type.VERTEX));
+                new Shader.ShaderModuleData(
+                        "shaders/skybox.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/skybox.frag", Shader.Type.FRAGMENT));
+                new Shader.ShaderModuleData(
+                        "shaders/skybox.frag", Shader.Type.FRAGMENT, Shader.Location.BUNDLED));
         var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
         var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
@@ -254,57 +256,17 @@ public class OpenGLInstance implements Instance {
      * @throws ShaderException If the default filter could not be found or loaded properly.
      */
     private void initializeFilterShader() {
-        PluginConfig config = ConfigManager.loadConfig(GraphicsPlugin.PLUGIN_NAME);
-
-        String folderPath = config.getString("filters-folder");
-        File filtersFolder =
-                PluginFolder.getResource(
-                        GraphicsPlugin.PLUGIN_NAME, PluginFolder.ResourceType.DATA, folderPath);
-
-        if (!filtersFolder.exists()) {
-            var message =
-                    SafeResourceLoader.getStringFormatted(
-                            "FILTERS_FOLDER_MISSING",
-                            GraphicsPlugin.getResourceBundle(),
-                            folderPath);
-            log.error(message);
-            throw new ShaderException(message);
-        }
-        if (!folderPath.endsWith(File.separator)) {
-            folderPath = folderPath.concat(File.separator);
-        }
-
-        final String defaultFilter = config.getString("default-filter");
-
-        File vertex = new File(filtersFolder, defaultFilter.concat(".vert"));
-        if (!vertex.exists()) {
-            var message =
-                    SafeResourceLoader.getStringFormatted(
-                            "FILTER_MISSING_VERTEX",
-                            GraphicsPlugin.getResourceBundle(),
-                            vertex.getAbsolutePath());
-            log.error(message);
-            throw new ShaderException(message);
-        }
-
-        File fragment = new File(filtersFolder, defaultFilter.concat(".frag"));
-        if (!fragment.exists()) {
-            var message =
-                    SafeResourceLoader.getStringFormatted(
-                            "FILTER_MISSING_FRAGMENT",
-                            GraphicsPlugin.getResourceBundle(),
-                            fragment.getAbsolutePath());
-            log.error(message);
-            throw new ShaderException(message);
-        }
-
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData(
-                        folderPath.concat(vertex.getName()), Shader.Type.VERTEX));
+                        "shaders/filters/default.vert",
+                        Shader.Type.VERTEX,
+                        Shader.Location.BUNDLED));
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData(
-                        folderPath.concat(fragment.getName()), Shader.Type.FRAGMENT));
+                        "shaders/filters/default.frag",
+                        Shader.Type.FRAGMENT,
+                        Shader.Location.BUNDLED));
         var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
         var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
@@ -318,9 +280,11 @@ public class OpenGLInstance implements Instance {
     private void initializeGuiShader() {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/gui.vert", Shader.Type.VERTEX));
+                new Shader.ShaderModuleData(
+                        "shaders/gui.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
         shaderModuleDataList.add(
-                new Shader.ShaderModuleData("shaders/gui.frag", Shader.Type.FRAGMENT));
+                new Shader.ShaderModuleData(
+                        "shaders/gui.frag", Shader.Type.FRAGMENT, Shader.Location.BUNDLED));
         var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
         var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
