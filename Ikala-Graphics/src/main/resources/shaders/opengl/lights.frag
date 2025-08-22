@@ -1,6 +1,7 @@
 #version 460
 
 const int NUM_CASCADES = 3;
+const float MAX_LIGHT_DISTANCE = 5;
 const float BIAS = 0.0005;
 const float SHADOW_FACTOR = 0.25;
 const float PI = 3.1415926535897932384626433832795;
@@ -188,14 +189,20 @@ vec3 disneyBRDF(vec3 baseColor, Material material, vec3 toViewDirection, vec3 to
         + 0.25 * material.clearcoat * clearcoatDistribution * clearcoatFresnel * clearcoatShadowing;
 }
 
+float scaleIntensity(float distance) {
+    float ratio = distance / MAX_LIGHT_DISTANCE;
+    float r2 = ratio * ratio;
+    float clamped = clamp(1 - r2 * r2);
+    return clamped * clamped;
+}
+
 vec4 calcLightColor(vec4 baseColor, Material material, vec3 lightColor, float lightIntensity, vec3 viewPosition,
     vec3 toLightDirection, vec3 normal, vec3 tangent, vec3 bitangent)
 {
     vec3 toViewDirection = normalize(-viewPosition);
-
     vec3 brdf = disneyBRDF(baseColor, material, toViewDirection, toLightDirection, normal, tangent, bitangent);
-
-    return ;
+    float lightScaling = dot(normal, toLightDirection);
+    return brdf * lightColor * lightScaling;
 }
 
 vec4 calcPointLight(vec3 baseColor, Material material, PointLight light, vec3 viewPosition, vec3 normal, vec3 tangent,
@@ -203,13 +210,10 @@ vec4 calcPointLight(vec3 baseColor, Material material, PointLight light, vec3 vi
 {
     vec3 directionToLight = light.position - viewPosition;
     vec3 toLightDirection  = normalize(directionToLight);
+    float intensity = scaleIntensity(light.intensity);
 
-    vec4 lightColor = calcLightColor(baseColor, material, light.color, light.intensity, viewPosition, toLightDirection,
-        normal, tangent, bitangent);
-
-
-
-    return lightColor;
+    return calcLightColor(baseColor, material, light.color, intensity, viewPosition, toLightDirection,
+                   normal, tangent, bitangent);
 }
 
 vec4 calcSpotLight(vec3 baseColor, Material material, SpotLight light, vec3 viewPosition, vec3 normal, vec3 tangent,
@@ -220,7 +224,7 @@ vec4 calcSpotLight(vec3 baseColor, Material material, SpotLight light, vec3 view
     vec3 fromLightDirection  = -toLightDirection;
     float spotAlpha = dot(fromLightDirection, normalize(light.coneDirection));
 
-    float intensity = light.intensity;
+    float intensity = scaleIntensity(light.intensity);
     if (spotAlpha > light.cutoff) {
         intensity *= (1.0 - (1.0 - spotAlpha)/(1.0 - light.cutoff));
     }
@@ -228,13 +232,8 @@ vec4 calcSpotLight(vec3 baseColor, Material material, SpotLight light, vec3 view
         return vec4(0);
     }
 
-    vec4 lightColor = calcLightColor(baseColor, material, light.color, intensity, viewPosition, toLightDirection,
-        normal, tangent, bitangent);
-
-    float distance = length(directionToLight);
-    float attenuationInv = light.attenuation.constant + light.attenuation.linear * distance +
-    light.attenuation.exponent * distance * distance;
-    return lightColor / attenuationInv;
+    return calcLightColor(baseColor, material, light.color, intensity, viewPosition, toLightDirection,
+                   normal, tangent, bitangent);
 }
 
 vec4 calcDirLight(vec3 baseColor, Material material, DirectionalLight light, vec3 viewPosition, vec3 normal,
@@ -283,7 +282,6 @@ float calcShadow(vec4 worldPosition, int idx) {
 
 void main()
 {
-    //TODO(ches) remove diffuse, reflectance, specular
     vec4 baseColor = texture(baseColorSampler, outTextCoord);
     vec3 normal = texture(normalSampler, outTextCoord).rgb;
     vec3 tangent = texture(tangentSampler, outTextCoord).rgb;
