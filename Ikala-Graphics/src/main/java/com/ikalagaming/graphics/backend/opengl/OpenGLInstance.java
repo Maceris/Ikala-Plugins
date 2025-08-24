@@ -42,7 +42,7 @@ import java.util.List;
 
 @Slf4j
 public class OpenGLInstance implements Instance {
-
+    private static final BufferUtil BUFFER_UTIL = new BufferUtilOpenGL();
     private Pipeline pipeline;
     private TextureLoader textureLoader;
     private ShaderMap shaderMap;
@@ -311,6 +311,11 @@ public class OpenGLInstance implements Instance {
         shaderProgram.setUniforms(uniformsMap);
 
         shaderMap.addShader(RenderStage.Type.GUI, shaderProgram);
+    }
+
+    @Override
+    public BufferUtil getBufferUtil() {
+        return BUFFER_UTIL;
     }
 
     @Override

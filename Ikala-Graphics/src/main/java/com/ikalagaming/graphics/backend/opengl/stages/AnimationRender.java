@@ -4,9 +4,10 @@ import static org.lwjgl.opengl.GL15.glBufferData;
 import static org.lwjgl.opengl.GL42.glMemoryBarrier;
 import static org.lwjgl.opengl.GL43.*;
 
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.backend.base.RenderStage;
-import com.ikalagaming.graphics.backend.opengl.BufferUtil;
 import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
+import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
@@ -40,6 +41,8 @@ public class AnimationRender implements RenderStage {
 
             animationOffsets.put(baseOffset + frameIndex * frameSize);
         }
+        animationOffsets.flip();
+
         glBufferData(GL_SHADER_STORAGE_BUFFER, animationOffsets, GL_STATIC_DRAW);
         MemoryUtil.memFree(animationOffsets);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
@@ -110,13 +113,15 @@ public class AnimationRender implements RenderStage {
 
             updateAnimationOffsets(model, entityCount);
 
-            BufferUtil.bind(model.getAnimationBuffer(), 0);
-            BufferUtil.bind(model.getEntityAnimationOffsetsBuffer(), 1);
+            final BufferUtil bufferUtil = GraphicsManager.getRenderInstance().getBufferUtil();
+
+            bufferUtil.bindBuffer(model.getAnimationBuffer(), 0);
+            bufferUtil.bindBuffer(model.getEntityAnimationOffsetsBuffer(), 1);
 
             for (MeshData meshData : model.getMeshDataList()) {
-                BufferUtil.bind(meshData.getVertexBuffer(), 2);
-                BufferUtil.bind(meshData.getBoneWeightBuffer(), 3);
-                BufferUtil.bind(meshData.getAnimationTargetBuffer(), 4);
+                bufferUtil.bindBuffer(meshData.getVertexBuffer(), 2);
+                bufferUtil.bindBuffer(meshData.getBoneWeightBuffer(), 3);
+                bufferUtil.bindBuffer(meshData.getAnimationTargetBuffer(), 4);
 
                 final int vertexCount = meshData.getVertexCount();
                 glDispatchCompute(vertexCount, entityCount, 1);

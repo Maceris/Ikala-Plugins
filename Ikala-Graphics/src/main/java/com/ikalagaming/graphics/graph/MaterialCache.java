@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.graph;
 
+import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.frontend.Buffer;
 import com.ikalagaming.graphics.frontend.Material;
 
 import lombok.Getter;
@@ -19,11 +21,14 @@ public class MaterialCache {
     /**
      * The actual cache of materials.
      *
-     * @return The list of materials in the cache.
+     * @return The list of materials in the cache. This should not be modified directly.
+     * @see #addMaterial(Material)
      */
     private final List<Material> materialsList;
 
     @Setter private boolean dirty;
+
+    @Setter private Buffer materialBuffer;
 
     /** Set up a new cache with a default material. */
     public MaterialCache() {
@@ -31,23 +36,21 @@ public class MaterialCache {
         Material defaultMaterial = new Material();
         materialsList.add(defaultMaterial);
         dirty = true;
+        materialBuffer =
+                GraphicsManager.getRenderInstance()
+                        .getBufferUtil()
+                        .createBuffer(Buffer.Type.SHADER_STORAGE);
     }
 
     /**
-     * Add a new material to the cache and give an index to the material. If we can find a valid
-     * material that matches the provided one, we reuse that one instead of adding a duplicate one.
+     * Add a new material to the cache and give an index to the material. Will allow duplicates.
      *
      * @param material The material to add to the cache.
      * @return The index of the newly added material, which is only valid within this cache
      *     instance.
+     * @see #getMaterialIndex(Material)
      */
     public int addMaterial(@NonNull Material material) {
-        // TODO(ches) it feels like there's got to be a much better way of doing this
-        for (int i = 0; i < materialsList.size(); ++i) {
-            if (material.equals(materialsList.get(i))) {
-                return i;
-            }
-        }
         final int assignedIndex = materialsList.size();
         materialsList.add(material);
         dirty = true;
@@ -66,5 +69,20 @@ public class MaterialCache {
             return materialsList.get(MaterialCache.DEFAULT_MATERIAL_INDEX);
         }
         return materialsList.get(index);
+    }
+
+    /**
+     * Fetch the index of a material. Returns -1 if the material is not found.
+     *
+     * @param material The material to look for.
+     * @return The index of the material, or -1 if not found.
+     */
+    public int getMaterialIndex(@NonNull Material material) {
+        for (int i = 0; i < materialsList.size(); ++i) {
+            if (material.equals(materialsList.get(i))) {
+                return i;
+            }
+        }
+        return -1;
     }
 }

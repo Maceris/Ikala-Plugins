@@ -12,6 +12,7 @@ import static org.lwjgl.vulkan.VK10.*;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.exceptions.RenderException;
+import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.frontend.Instance;
 import com.ikalagaming.graphics.frontend.TextureLoader;
 import com.ikalagaming.graphics.graph.Model;
@@ -403,6 +404,12 @@ public class VulkanInstance implements Instance {
         }
 
         return new SwapChainSupport(capabilities, formats, presentModes);
+    }
+
+    @Override
+    public BufferUtil getBufferUtil() {
+        // TODO(ches) buffer utility
+        return null;
     }
 
     @Override

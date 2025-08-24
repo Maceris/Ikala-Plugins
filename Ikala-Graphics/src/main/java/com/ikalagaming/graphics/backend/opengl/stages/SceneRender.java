@@ -12,6 +12,11 @@ import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
 import lombok.Setter;
+import org.lwjgl.system.MemoryUtil;
+
+import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.Optional;
 
 /** Handles rendering of scene geometry to the g-buffer. */
 public class SceneRender implements RenderStage {
@@ -76,14 +81,61 @@ public class SceneRender implements RenderStage {
             Framebuffer gBuffer,
             CommandBuffer commandBuffers,
             Texture defaultTexture) {
-        // TODO(ches) fill out materials uniform buffer if dirty
-
         var uniformsMap = shader.getUniformMap();
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, (int) gBuffer.id());
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glViewport(0, 0, gBuffer.width(), gBuffer.height());
         glDisable(GL_BLEND);
         shader.bind();
+
+        if (scene.getMaterialCache().isDirty()) {
+            Buffer materialBuffer = scene.getMaterialCache().getMaterialBuffer();
+
+            final int MATERIAL_SIZE = 16 /* floats/ints */ * 4 /* bytes per float/int */;
+            final List<Material> materials = scene.getMaterialCache().getMaterialsList();
+
+            ByteBuffer materialData = ByteBuffer.allocate(materials.size() * MATERIAL_SIZE);
+
+            for (Material material : materials) {
+                final int normalMapID =
+                        Optional.ofNullable(material.getNormalMap())
+                                .map(Texture::id)
+                                .map(Math::toIntExact)
+                                .orElse(0);
+                final int textureID =
+                        Optional.ofNullable(material.getTexture())
+                                .map(Texture::id)
+                                .map(Math::toIntExact)
+                                .orElse(0);
+
+                materialData.putFloat(material.getBaseColor().x);
+                materialData.putFloat(material.getBaseColor().y);
+                materialData.putFloat(material.getBaseColor().z);
+                materialData.putFloat(material.getBaseColor().w);
+
+                materialData.putFloat(material.getAnisotropic());
+                materialData.putFloat(material.getClearcoat());
+                materialData.putFloat(material.getClearcoatGloss());
+                materialData.putFloat(material.getMetallic());
+
+                materialData.putFloat(material.getRoughness());
+                materialData.putFloat(material.getSheen());
+                materialData.putFloat(material.getSheenTint());
+                materialData.putFloat(material.getSpecular());
+
+                materialData.putFloat(material.getSpecularTint());
+                materialData.putFloat(material.getSubsurface());
+                materialData.putInt(normalMapID);
+                materialData.putInt(textureID);
+            }
+
+            materialData.flip();
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) materialBuffer.id());
+            glBufferData((int) materialBuffer.id(), materialData, GL_STATIC_DRAW);
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+            MemoryUtil.memFree(materialData);
+        }
 
         uniformsMap.setUniform(
                 ShaderUniforms.Scene.PROJECTION_MATRIX,

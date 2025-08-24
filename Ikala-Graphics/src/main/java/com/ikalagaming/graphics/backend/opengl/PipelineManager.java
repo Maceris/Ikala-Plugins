@@ -27,6 +27,7 @@ import imgui.ImFontAtlas;
 import imgui.ImGui;
 import imgui.type.ImInt;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
@@ -36,6 +37,7 @@ import java.nio.IntBuffer;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+@Slf4j
 public class PipelineManager {
 
     /** The size of a draw command. */
@@ -46,6 +48,9 @@ public class PipelineManager {
 
     /** The size of a 4x4 model matrix ({@value}). */
     public static final int MODEL_MATRIX_SIZE = 4 * 4;
+
+    /** Fallback pipeline that does nothing. */
+    private static final Pipeline ERROR_PIPELINE = new PipelineOpenGL(new RenderStage[0]);
 
     /**
      * Whether we have set up the buffers for the scene. If we have, but need to set data up for the
@@ -76,6 +81,9 @@ public class PipelineManager {
 
     /** The mesh to render. */
     private GuiMesh guiMesh;
+
+    /** Storage for material data */
+    private Buffer materialBuffer;
 
     /** The buffer to use for storing point light info. */
     private Buffer pointLights;
@@ -199,7 +207,10 @@ public class PipelineManager {
         boolean renderingScene = false;
         List<RenderStage> stages = new ArrayList<>();
         if (RenderConfig.hasError(configuration)) {
-            // TODO(ches) handle this
+            log.error(
+                    SafeResourceLoader.getStringFormatted(
+                            "PIPELINE_ERROR", GraphicsPlugin.getResourceBundle()));
+            return ERROR_PIPELINE;
         }
 
         if (RenderConfig.hasAnimationStage(configuration)) {

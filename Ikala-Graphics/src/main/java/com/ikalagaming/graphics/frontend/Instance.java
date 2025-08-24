@@ -16,6 +16,13 @@ public interface Instance {
      */
     boolean initialize(@NonNull Window window);
 
+    /**
+     * Provides an interface for dealing with creating/deleting/binding buffers.
+     *
+     * @return The backend-specific buffer utility.
+     */
+    BufferUtil getBufferUtil();
+
     /** Clean up all the rendering resources. */
     void cleanup();
 
