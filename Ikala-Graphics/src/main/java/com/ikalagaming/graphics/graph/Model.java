@@ -36,7 +36,6 @@ public class Model {
             int frameCount,
             byte[] frameData,
             int offset) {
-        // TODO(ches) re-evaluate which of these we really need
         @Override
         public boolean equals(Object obj) {
             if (!(obj instanceof Animation anim)) {
