@@ -135,6 +135,7 @@ public class SceneRender implements RenderStage {
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
             MemoryUtil.memFree(materialData);
+            scene.getMaterialCache().setDirty(false);
         }
 
         uniformsMap.setUniform(
