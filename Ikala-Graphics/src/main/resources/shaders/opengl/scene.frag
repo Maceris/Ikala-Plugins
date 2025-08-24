@@ -40,9 +40,9 @@ layout(location = 1) out vec4 buffNormal;
 layout(location = 2) out vec4 buffTangent;
 layout(location = 3) out uint buffMaterial;
 
-vec3 calcNormal(int idx, vec3 normal, vec3 tangent, vec3 bitangent, vec2 textCoords) {
+vec3 calcNormal(vec3 normal, vec3 tangent, vec3 bitangent) {
     mat3 TBN = mat3(tangent, bitangent, normal);
-    vec3 newNormal = texture(textureSampler[idx], textCoords).rgb;
+    vec3 newNormal = texture(normalSampler, outTextCoord).rgb;
     newNormal = newNormal * 2.0 - 1.0;
     newNormal = normalize(TBN * newNormal);
     return newNormal;
@@ -53,7 +53,7 @@ void main() {
 
     vec4 diffuse = material.diffuse;
     if (material.textureIndex > 0) {
-        diffuse = texture(textureSampler[material.textureIndex], outTextCoord);
+        diffuse = texture(diffuseSampler, outTextCoord);
     }
     if (diffuse.a < 0.5) {
         discard;
@@ -61,7 +61,7 @@ void main() {
 
     vec3 normal = outNormal;
     if (material.normalMapIndex > 0) {
-        normal = calcNormal(material.normalMapIndex, outNormal, outTangent, outBitangent, outTextCoord);
+        normal = calcNormal(outNormal, outTangent, outBitangent);
     }
 
     buffBaseColor = diffuse;
