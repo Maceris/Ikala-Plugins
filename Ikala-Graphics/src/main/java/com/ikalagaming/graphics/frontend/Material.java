@@ -20,13 +20,19 @@ public class Material {
     private final Vector4f baseColor;
 
     /**
+     * The degree of anisotropy, controls the aspect ratio of the specular highlight. 0 is isotropic, 1 is maximally
+     * anisotropic.
+     */
+    private float anisotropic;
+
+    /**
      * A special-purpose secondary specular lobe for representing a clearcoat layer. This represents
      * a polyurethane coating, and the value controls the strength. When set to 0, the layer is
      * disabled.
      */
     private float clearcoat;
 
-    /** Controls gossiness of the clearcoat, where 0 is a satin appearance and 1 is a glossy one. */
+    /** Controls glossiness of the clearcoat, where 0 is a satin appearance and 1 is a glossy one. */
     private float clearcoatGloss;
 
     /**
@@ -65,14 +71,15 @@ public class Material {
     /** Create a default material with no texture. */
     public Material() {
         baseColor = new Vector4f(Material.DEFAULT_COLOR);
-        subsurface = 0;
-        specular = 0;
-        metallic = 0;
-        specularTint = 0;
-        roughness = 0;
-        sheenTint = 0;
-        sheen = 0;
-        clearcoatGloss = 0;
+        anisotropic = 0;
         clearcoat = 0;
+        clearcoatGloss = 0;
+        metallic = 0;
+        roughness = 0;
+        sheen = 0;
+        sheenTint = 0;
+        specular = 0;
+        specularTint = 0;
+        subsurface = 0;
     }
 }

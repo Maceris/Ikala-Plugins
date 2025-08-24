@@ -19,12 +19,6 @@ import java.util.List;
 /** Handles rendering of scene geometry to the g-buffer. */
 public class SceneRender implements RenderStage {
 
-    /** The maximum number of materials we can have. */
-    @Deprecated public static final int MAX_MATERIALS = 30;
-
-    /** The maximum number of textures we can have. */
-    @Deprecated public static final int MAX_TEXTURES = 16;
-
     /** The shader to use for rendering. */
     @NonNull @Setter private Shader shader;
 
@@ -85,7 +79,7 @@ public class SceneRender implements RenderStage {
             Framebuffer gBuffer,
             CommandBuffer commandBuffers,
             Texture defaultTexture) {
-        setupMaterialsUniform(scene.getMaterialCache(), shader); // TODO(ches) don't
+        // TODO(ches) fill out materials uniform buffer if dirty
 
         var uniformsMap = shader.getUniformMap();
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, (int) gBuffer.id());
@@ -159,39 +153,4 @@ public class SceneRender implements RenderStage {
         shader.unbind();
     }
 
-    /**
-     * Set the uniforms from cached textures and materials.
-     *
-     * @param materialCache The material cache.
-     */
-    @Deprecated
-    private static void setupMaterialsUniform(MaterialCache materialCache, Shader shader) {
-        var uniformsMap = shader.getUniformMap();
-        shader.bind();
-        List<Material> materialList = materialCache.getMaterialsList();
-        int numMaterials = materialList.size();
-
-        int nextTexture = 1;
-        for (int i = 0; i < numMaterials; ++i) {
-            Material material = materialCache.getMaterial(i);
-            String name = ShaderUniforms.Scene.MATERIALS + "[" + i + "].";
-            uniformsMap.setUniform(
-                    name + ShaderUniforms.Scene.Material.DIFFUSE, material.getBaseColor());
-
-            // We bind the default texture to 0
-            int index = 0;
-            if (material.getNormalMap() != null) {
-                index = nextTexture;
-                ++nextTexture;
-            }
-            uniformsMap.setUniform(name + ShaderUniforms.Scene.Material.NORMAL_MAP_INDEX, index);
-            index = 0;
-            if (material.getTexture() != null) {
-                index = nextTexture;
-                ++nextTexture;
-            }
-            uniformsMap.setUniform(name + ShaderUniforms.Scene.Material.TEXTURE_INDEX, index);
-        }
-        shader.unbind();
-    }
 }

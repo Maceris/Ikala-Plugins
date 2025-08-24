@@ -4,6 +4,7 @@ import com.ikalagaming.graphics.frontend.Material;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -22,11 +23,15 @@ public class MaterialCache {
      */
     private final List<Material> materialsList;
 
+    @Setter
+    private boolean dirty;
+
     /** Set up a new cache with a default material. */
     public MaterialCache() {
         materialsList = Collections.synchronizedList(new ArrayList<>());
         Material defaultMaterial = new Material();
         materialsList.add(defaultMaterial);
+        dirty = true;
     }
 
     /**
@@ -46,6 +51,7 @@ public class MaterialCache {
         }
         final int assignedIndex = materialsList.size();
         materialsList.add(material);
+        dirty = true;
         return assignedIndex;
     }
 
