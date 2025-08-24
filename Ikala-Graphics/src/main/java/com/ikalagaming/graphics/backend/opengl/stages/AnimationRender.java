@@ -73,6 +73,11 @@ public class AnimationRender implements RenderStage {
                 glBufferData(GL_SHADER_STORAGE_BUFFER, entityCap, GL_STATIC_DRAW);
                 glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
+                for (MeshData meshData : model.getMeshDataList()) {
+                    glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) meshData.getAnimationTargetBuffer().id());
+                    glBufferData(GL_SHADER_STORAGE_BUFFER, (long) entityCap * meshData.getVertexCount() * 14 * 4, GL_DYNAMIC_COPY);
+                }
+                glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
             }
 
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) model.getEntityAnimationOffsetsBuffer().id());
@@ -98,7 +103,7 @@ public class AnimationRender implements RenderStage {
             BufferUtil.bind(model.getAnimationBuffer(), 0);
             BufferUtil.bind(model.getEntityAnimationOffsetsBuffer(), 1);
 
-            for (MeshData meshData :  model.getMeshDataList()) {
+            for (MeshData meshData : model.getMeshDataList()) {
                 BufferUtil.bind(meshData.getVertexBuffer(), 2);
                 BufferUtil.bind(meshData.getBoneWeightBuffer(), 3);
                 BufferUtil.bind(meshData.getAnimationTargetBuffer(), 4);
