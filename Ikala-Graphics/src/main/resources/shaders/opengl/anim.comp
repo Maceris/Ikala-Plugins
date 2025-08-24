@@ -43,6 +43,7 @@ void main()
     const int baseIdxWeights = int(gl_GlobalInvocationID.x) * 8;
     const int baseIdxAnimation = int(gl_GlobalInvocationID.y);
     const float animationOffset = animationOffsets[baseIdxAnimation];
+    const float targetOffset = baseIdxAnimation * modelData.length() * 14;
 
     int currentIndex = baseIdxVertex;
     mat4 animationTransforms[MAX_WEIGHTS];
@@ -60,21 +61,21 @@ void main()
 
     vec4 position = vec4(modelData[currentIndex], modelData[currentIndex + 1], modelData[currentIndex + 2], 1);
     position = applyTransforms(position, animationTransforms);
-    animationTarget[currentIndex] = position.x / position.w;
-    animationTarget[currentIndex + 1] = position.y / position.w;
-    animationTarget[currentIndex + 2] = position.z / position.w;
+    animationTarget[targetOffset + currentIndex] = position.x / position.w;
+    animationTarget[targetOffset + currentIndex + 1] = position.y / position.w;
+    animationTarget[targetOffset + currentIndex + 2] = position.z / position.w;
 
     for (int i = 0; i < 3; ++i) {
         // Normal, tangent, and bitangent respectively
         currentIndex += 3;
         vec4 value = vec4(modelData[currentIndex], modelData[currentIndex + 1], modelData[currentIndex + 2], 0);
         value = applyTransforms(value, animationTransforms);
-        animationTarget[currentIndex] = value.x;
-        animationTarget[currentIndex + 1] = value.y;
-        animationTarget[currentIndex + 2] = value.z;
+        animationTarget[targetOffset + currentIndex] = value.x;
+        animationTarget[targetOffset + currentIndex + 1] = value.y;
+        animationTarget[targetOffset + currentIndex + 2] = value.z;
     }
 
     currentIndex += 3;
-    animationTarget[currentIndex] = modelData[currentIndex];
-    animationTarget[currentIndex + 1] = modelData[currentIndex + 1];
+    animationTarget[targetOffset + currentIndex] = modelData[currentIndex];
+    animationTarget[targetOffset + currentIndex + 1] = modelData[currentIndex + 1];
 }
