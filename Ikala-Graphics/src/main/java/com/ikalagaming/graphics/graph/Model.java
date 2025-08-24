@@ -1,9 +1,11 @@
 package com.ikalagaming.graphics.graph;
 
+import com.ikalagaming.graphics.frontend.Buffer;
 import com.ikalagaming.graphics.scene.Entity;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,6 +16,11 @@ import java.util.Objects;
 public class Model {
 
     /**
+     * The maximum number of entities that a model can have.
+     */
+    public static final int MAX_ENTITIES = 1024;
+
+    /**
      * A named animation.
      *
      * @param name The name of the animation.
@@ -22,13 +29,16 @@ public class Model {
      * @param frameCount The number of frames.
      * @param frameData The frame data. Stored as a list of frames, each of which is an array of
      *     boneCount mat4's.
+     * @param offset Offset into the animation buffer.
      */
     public record Animation(
             @NonNull String name,
             double duration,
             int boneCount,
             int frameCount,
-            byte[] frameData) {
+            byte[] frameData,
+            int offset) {
+        //TODO(ches) re-evaluate which of these we really need
         @Override
         public boolean equals(Object obj) {
             if (!(obj instanceof Animation anim)) {
@@ -75,7 +85,6 @@ public class Model {
      */
     private final List<Animation> animationList;
 
-    // TODO(ches) this should probably be elsewhere
     /**
      * A list of entities that use this model.
      *
@@ -91,6 +100,22 @@ public class Model {
     private final List<MeshData> meshDataList;
 
     /**
+     * Stores all the animations.
+     */
+    @Setter private Buffer animationBuffer;
+
+    /**
+     * Used to store animation states, for animated models.
+     */
+    @Setter private Buffer entityAnimationOffsetsBuffer;
+
+    /**
+     * The highest buffer size (measured in entity count), for animation state
+     * and destination buffers. This will be doubled if we need more, but not all of it needs to be used.
+     */
+    @Setter private int maxAnimatedBufferCapacity;
+
+    /**
      * Create a new model.
      *
      * @param id The model ID.
@@ -100,6 +125,8 @@ public class Model {
         this.id = id;
         this.meshDataList = new ArrayList<>();
         this.animationList = new ArrayList<>();
+        this.entityAnimationOffsetsBuffer = null;
+        this.maxAnimatedBufferCapacity = 0;
     }
 
     /**

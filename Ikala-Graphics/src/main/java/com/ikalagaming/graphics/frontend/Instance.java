@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.frontend;
 
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
@@ -11,8 +12,9 @@ public interface Instance {
      * Initialize the instance to prepare for rendering for the first time.
      *
      * @param window The window we will be rendering to.
+     * @return Whether we were successful. False if there were (unrecoverable) errors.
      */
-    void initialize(@NonNull Window window);
+    boolean initialize(@NonNull Window window);
 
     /** Clean up all the rendering resources. */
     void cleanup();
@@ -52,6 +54,14 @@ public interface Instance {
      */
     @Deprecated
     void setupData(@NonNull Scene scene);
+
+    /**
+     * Set up a model before rendering for the first time. For example, creating buffers. This must only be called
+     * once for a model, and only after it's fully loaded (e.g. animations set up).
+     *
+     * @param model The model to set up.
+     */
+    void initialize(@NonNull Model model);
 
     /**
      * Change over to another rendering pipeline.

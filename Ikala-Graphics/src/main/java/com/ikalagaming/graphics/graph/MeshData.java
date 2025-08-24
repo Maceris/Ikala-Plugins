@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.graph;
 
+import com.ikalagaming.graphics.frontend.Buffer;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
@@ -76,6 +77,21 @@ public class MeshData {
     private float[][] textureData;
 
     /**
+     * The buffer (UBO) we use to store the bone weight data.
+     */
+    @Setter private Buffer boneWeightBuffer;
+
+    /**
+     * The buffer (UBO) we store vertex data in.
+     */
+    @Setter private Buffer vertexBuffer;
+
+    /**
+     * The buffer (SSBO) we store post-animation values in.
+     */
+    @Setter private Buffer animationTargetBuffer;
+
+    /**
      * @param aabbMin The minimum value (corner) of the axis-aligned bounding box.
      * @param aabbMax The maximum value (corner) of the axis-aligned bounding box.
      * @param vertexCount The number of vertices.
@@ -106,5 +122,8 @@ public class MeshData {
         this.boneCount = boneCount;
         this.boneWeightData = boneWeightData;
         this.textureData = textureData;
+        this.boneWeightBuffer = null;
+        this.vertexBuffer = null;
+        this.animationTargetBuffer = null;
     }
 }

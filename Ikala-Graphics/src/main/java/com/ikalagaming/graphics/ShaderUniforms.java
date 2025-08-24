@@ -10,49 +10,6 @@ package com.ikalagaming.graphics;
 public class ShaderUniforms {
 
     /**
-     * Animation compute shader variables.
-     *
-     * @author Ches Burks
-     */
-    public static class Animation {
-
-        /**
-         * The members of the draw parameters object.
-         *
-         * @author Ches Burks
-         */
-        public static class DrawParameters {
-            /** The offset in the list of bone transformation matrices. */
-            public static final String BONES_MATRICES_OFFSET = "bonesMatricesOffset";
-
-            /** The offset in destination data to store output after processing. */
-            public static final String DESTINATION_OFFSET = "dstOffset";
-
-            /** The binding pose offset. */
-            public static final String SOURCE_OFFSET = "srcOffset";
-
-            /** The size of the source, in bytes. */
-            public static final String SOURCE_SIZE = "srcSize";
-
-            /** The offset to the weight within the data. */
-            public static final String WEIGHTS_OFFSET = "weightsOffset";
-
-            /** Private constructor so this class is not instantiated. */
-            private DrawParameters() {}
-        }
-
-        /**
-         * Draw parameters for the animation.
-         *
-         * @see DrawParameters
-         */
-        public static final String DRAW_PARAMETERS = "drawParameters";
-
-        /** Private constructor so this class is not instantiated. */
-        private Animation() {}
-    }
-
-    /**
      * Post-processing filter variables.
      *
      * @author Ches Burks
@@ -225,34 +182,7 @@ public class ShaderUniforms {
      */
     public static class Scene {
         /**
-         * Information about a material.
-         *
-         * @author Ches Burks
-         */
-        public static class Material {
-            /** The color used for the diffuse component. */
-            public static final String DIFFUSE = "diffuse";
-
-            /** The index of the normal map texture. */
-            public static final String NORMAL_MAP_INDEX = "normalMapIndex";
-
-            /** A reflectance index. */
-            public static final String REFLECTANCE = "reflectance";
-
-            /** The color used for the specular component. */
-            public static final String SPECULAR = "specular";
-
-            /** The index of the texture. */
-            public static final String TEXTURE_INDEX = "textureIndex";
-
-            /** Private constructor so this class is not instantiated. */
-            private Material() {}
-        }
-
-        /**
-         * Material characteristics.
-         *
-         * @see Material
+         * Materials buffer.
          */
         public static final String MATERIALS = "materials";
 

@@ -80,6 +80,7 @@ public class Entity {
      */
     public Entity(@NonNull String id, @NonNull String modelId) {
         entityID = id;
+        //TODO(ches) store model reference instead of ID
         modelID = modelId;
         modelMatrix = new Matrix4f();
         position = new Vector3f();

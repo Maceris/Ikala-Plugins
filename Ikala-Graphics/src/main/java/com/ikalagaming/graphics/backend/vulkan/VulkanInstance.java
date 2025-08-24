@@ -14,6 +14,7 @@ import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.frontend.Instance;
 import com.ikalagaming.graphics.frontend.TextureLoader;
+import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -128,9 +129,15 @@ public class VulkanInstance implements Instance {
     private final VulkanState state = new VulkanState();
 
     @Override
-    public void initialize(@NonNull Window window) {
+    public boolean initialize(@NonNull Window window) {
         createVulkanInstance(window);
         createSwapchain(window);
+        return true;
+    }
+
+    @Override
+    public void initialize(@NonNull Model model) {
+        //TODO(ches) initialize model
     }
 
     /**

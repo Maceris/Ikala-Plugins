@@ -3,12 +3,18 @@ package com.ikalagaming.graphics.backend.opengl;
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER;
 import static org.lwjgl.opengl.GL11.glDeleteTextures;
-import static org.lwjgl.opengl.GL15.glDeleteBuffers;
+import static org.lwjgl.opengl.GL15.*;
 import static org.lwjgl.opengl.GL20.glDeleteProgram;
 import static org.lwjgl.opengl.GL20.glUseProgram;
+import static org.lwjgl.opengl.GL30.GL_MAP_READ_BIT;
 import static org.lwjgl.opengl.GL30.glDeleteFramebuffers;
+import static org.lwjgl.opengl.GL31.GL_UNIFORM_BUFFER;
+import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
+import static org.lwjgl.opengl.GL44.GL_MAP_PERSISTENT_BIT;
+import static org.lwjgl.opengl.GL44.glBufferStorage;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
@@ -17,15 +23,23 @@ import com.ikalagaming.graphics.backend.opengl.stages.SceneRender;
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.CascadeShadow;
+import com.ikalagaming.graphics.graph.MeshData;
+import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
 
+import com.ikalagaming.util.SafeResourceLoader;
 import imgui.ImGui;
 import imgui.ImGuiIO;
 import imgui.flag.ImGuiKey;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.logging.log4j.util.Strings;
 import org.lwjgl.opengl.GL;
+import org.lwjgl.opengl.GL44;
+import org.lwjgl.opengl.GLCapabilities;
+import org.lwjgl.system.MemoryUtil;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -39,8 +53,12 @@ public class OpenGLInstance implements Instance {
     private PipelineManager pipelineManager;
 
     @Override
-    public void initialize(@NonNull Window window) {
+    public boolean initialize(@NonNull Window window) {
         GL.createCapabilities();
+
+        if (!checkCapabilities()) {
+            return false;
+        }
 
         textureLoader = new TextureLoaderOpenGL();
         shaderMap = new ShaderMap();
@@ -49,6 +67,41 @@ public class OpenGLInstance implements Instance {
         pipelineManager = new PipelineManager(window, shaderMap);
         pipeline = pipelineManager.getPipeline(RenderConfig.builder().withGui().build());
         pipeline.initialize(window, shaderMap);
+        return true;
+    }
+
+    private boolean checkCapabilities() {
+        GLCapabilities capabilities = GL.getCapabilities();
+        boolean result = true;
+        List<String> missing = new ArrayList<>();
+
+        if (!capabilities.GL_ARB_bindless_texture && !capabilities.GL_NV_bindless_texture) {
+            missing.add("ARB_bindless_texture");
+            result = false;
+        }
+        if (!capabilities.GL_ARB_buffer_storage) {
+            missing.add("ARB_buffer_storage");
+            result = false;
+        }
+        if (!capabilities.GL_ARB_uniform_buffer_object) {
+            missing.add("ARB_uniform_buffer_object");
+            result = false;
+        }
+        if (!capabilities.GL_ARB_shader_storage_buffer_object) {
+            missing.add("ARB_shader_storage_buffer_object");
+            result = false;
+        }
+        if (!capabilities.GL_ARB_explicit_uniform_location) {
+            missing.add("ARB_explicit_uniform_location");
+            result = false;
+        }
+
+        if (!result) {
+            String message = SafeResourceLoader.getString("EXTENSION_MISSING", GraphicsPlugin.getResourceBundle());
+            log.error(message, Strings.join(missing, ','));
+        }
+
+        return result;
     }
 
     /**
@@ -89,26 +142,6 @@ public class OpenGLInstance implements Instance {
         var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
         var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
-        uniformsMap.createUniform(
-                ShaderUniforms.Animation.DRAW_PARAMETERS
-                        + "."
-                        + ShaderUniforms.Animation.DrawParameters.SOURCE_OFFSET);
-        uniformsMap.createUniform(
-                ShaderUniforms.Animation.DRAW_PARAMETERS
-                        + "."
-                        + ShaderUniforms.Animation.DrawParameters.SOURCE_SIZE);
-        uniformsMap.createUniform(
-                ShaderUniforms.Animation.DRAW_PARAMETERS
-                        + "."
-                        + ShaderUniforms.Animation.DrawParameters.WEIGHTS_OFFSET);
-        uniformsMap.createUniform(
-                ShaderUniforms.Animation.DRAW_PARAMETERS
-                        + "."
-                        + ShaderUniforms.Animation.DrawParameters.BONES_MATRICES_OFFSET);
-        uniformsMap.createUniform(
-                ShaderUniforms.Animation.DRAW_PARAMETERS
-                        + "."
-                        + ShaderUniforms.Animation.DrawParameters.DESTINATION_OFFSET);
         shaderProgram.setUniforms(uniformsMap);
 
         shaderMap.addShader(RenderStage.Type.ANIMATION, shaderProgram);
@@ -144,18 +177,6 @@ public class OpenGLInstance implements Instance {
         uniformsMap.createUniform(ShaderUniforms.Scene.PROJECTION_MATRIX);
         uniformsMap.createUniform(ShaderUniforms.Scene.VIEW_MATRIX);
 
-        for (int i = 0; i < SceneRender.MAX_TEXTURES; ++i) {
-            uniformsMap.createUniform(ShaderUniforms.Scene.TEXTURE_SAMPLER + "[" + i + "]");
-        }
-
-        for (int i = 0; i < SceneRender.MAX_MATERIALS; ++i) {
-            String name = ShaderUniforms.Scene.MATERIALS + "[" + i + "].";
-            uniformsMap.createUniform(name + ShaderUniforms.Scene.Material.DIFFUSE);
-            uniformsMap.createUniform(name + ShaderUniforms.Scene.Material.SPECULAR);
-            uniformsMap.createUniform(name + ShaderUniforms.Scene.Material.REFLECTANCE);
-            uniformsMap.createUniform(name + ShaderUniforms.Scene.Material.NORMAL_MAP_INDEX);
-            uniformsMap.createUniform(name + ShaderUniforms.Scene.Material.TEXTURE_INDEX);
-        }
         shaderProgram.setUniforms(uniformsMap);
 
         shaderMap.addShader(RenderStage.Type.SCENE, shaderProgram);
@@ -335,6 +356,48 @@ public class OpenGLInstance implements Instance {
     @Override
     public void setupData(@NonNull Scene scene) {
         pipelineManager.setupData(scene);
+    }
+
+    @Override
+    public void initialize(@NonNull Model model) {
+        if (model.isAnimated()) {
+            // Filled out later
+            model.setEntityAnimationOffsetsBuffer(new Buffer(glGenBuffers(), Buffer.Type.SHADER_STORAGE));
+
+            int animationBuffer = glGenBuffers();
+            model.setAnimationBuffer(new Buffer(animationBuffer, Buffer.Type.UNIFORM));
+            int totalSize = 0;
+            for (Model.Animation animation : model.getAnimationList()) {
+                totalSize += animation.frameData().length;
+            }
+            ByteBuffer animations = ByteBuffer.allocate(totalSize);
+            for (Model.Animation animation : model.getAnimationList()) {
+                animations.put(animation.frameData());
+            }
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, animationBuffer);
+            glBufferStorage(GL_SHADER_STORAGE_BUFFER, animations , 0);
+            MemoryUtil.memFree(animations);
+
+            for (MeshData meshData :  model.getMeshDataList()) {
+                // Filled out later
+                meshData.setAnimationTargetBuffer(new Buffer(glGenBuffers(), Buffer.Type.SHADER_STORAGE));
+
+                int vertexBuffer = glGenBuffers();
+                meshData.setVertexBuffer(new Buffer(vertexBuffer, Buffer.Type.UNIFORM));
+                glBindBuffer(GL_UNIFORM_BUFFER, vertexBuffer);
+                glBufferStorage(GL_UNIFORM_BUFFER, meshData.getVertexData(), 0);
+
+                int boneWeightBuffer = glGenBuffers();
+                meshData.setBoneWeightBuffer(new Buffer(boneWeightBuffer, Buffer.Type.UNIFORM));
+                glBindBuffer(GL_UNIFORM_BUFFER, boneWeightBuffer);
+                glBufferStorage(GL_UNIFORM_BUFFER, ByteBuffer.wrap(meshData.getBoneWeightData()), 0);
+            }
+
+            // Unbind buffers
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+            glBindBuffer(GL_UNIFORM_BUFFER, 0);
+        }
+
     }
 
     @Override
