@@ -1,14 +1,12 @@
 package com.ikalagaming.graphics.backend.opengl.stages;
 
 import static org.lwjgl.opengl.GL15.glBufferData;
-import static org.lwjgl.opengl.GL30.glBindBufferBase;
 import static org.lwjgl.opengl.GL42.glMemoryBarrier;
 import static org.lwjgl.opengl.GL43.*;
 
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.opengl.BufferUtil;
 import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
-import com.ikalagaming.graphics.frontend.Buffer;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
@@ -26,8 +24,7 @@ import java.nio.IntBuffer;
 public class AnimationRender implements RenderStage {
 
     /** The shader to use for rendering. */
-    @NonNull
-    private Shader shader;
+    @NonNull private Shader shader;
 
     /**
      * Set up the animation render stage.
@@ -55,7 +52,7 @@ public class AnimationRender implements RenderStage {
 
             int entityCount = model.getEntitiesList().size();
             if (entityCount > Model.MAX_ENTITIES) {
-                //TODO(ches) log error.
+                // TODO(ches) log error.
                 entityCount = Model.MAX_ENTITIES;
             }
             int entityCap = model.getMaxAnimatedBufferCapacity();
@@ -69,18 +66,26 @@ public class AnimationRender implements RenderStage {
                 }
                 model.setMaxAnimatedBufferCapacity(entityCap);
 
-                glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) model.getEntityAnimationOffsetsBuffer().id());
+                glBindBuffer(
+                        GL_SHADER_STORAGE_BUFFER,
+                        (int) model.getEntityAnimationOffsetsBuffer().id());
                 glBufferData(GL_SHADER_STORAGE_BUFFER, entityCap, GL_STATIC_DRAW);
                 glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
                 for (MeshData meshData : model.getMeshDataList()) {
-                    glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) meshData.getAnimationTargetBuffer().id());
-                    glBufferData(GL_SHADER_STORAGE_BUFFER, (long) entityCap * meshData.getVertexCount() * 14 * 4, GL_DYNAMIC_COPY);
+                    glBindBuffer(
+                            GL_SHADER_STORAGE_BUFFER,
+                            (int) meshData.getAnimationTargetBuffer().id());
+                    glBufferData(
+                            GL_SHADER_STORAGE_BUFFER,
+                            (long) entityCap * meshData.getVertexCount() * 14 * 4,
+                            GL_DYNAMIC_COPY);
                 }
                 glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
             }
 
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) model.getEntityAnimationOffsetsBuffer().id());
+            glBindBuffer(
+                    GL_SHADER_STORAGE_BUFFER, (int) model.getEntityAnimationOffsetsBuffer().id());
             IntBuffer animationOffsets = IntBuffer.allocate(entityCount);
             for (int i = 0; i < entityCount; ++i) {
                 Entity entity = model.getEntitiesList().get(i);
@@ -92,7 +97,8 @@ public class AnimationRender implements RenderStage {
                 }
                 int baseOffset = animation.offset();
                 int frameIndex = entity.getAnimationState().getCurrentFrameIndex();
-                int frameSize = animation.boneCount() * 4 * 4 /* mat4 */ * 4 /* 4 bytes per float */;
+                int frameSize =
+                        animation.boneCount() * 4 * 4 /* mat4 */ * 4 /* 4 bytes per float */;
 
                 animationOffsets.put(baseOffset + frameIndex * frameSize);
             }

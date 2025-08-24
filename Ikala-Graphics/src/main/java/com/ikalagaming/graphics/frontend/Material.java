@@ -20,8 +20,8 @@ public class Material {
     private final Vector4f baseColor;
 
     /**
-     * The degree of anisotropy, controls the aspect ratio of the specular highlight. 0 is isotropic, 1 is maximally
-     * anisotropic.
+     * The degree of anisotropy, controls the aspect ratio of the specular highlight. 0 is
+     * isotropic, 1 is maximally anisotropic.
      */
     private float anisotropic;
 
@@ -32,7 +32,9 @@ public class Material {
      */
     private float clearcoat;
 
-    /** Controls glossiness of the clearcoat, where 0 is a satin appearance and 1 is a glossy one. */
+    /**
+     * Controls glossiness of the clearcoat, where 0 is a satin appearance and 1 is a glossy one.
+     */
     private float clearcoatGloss;
 
     /**

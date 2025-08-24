@@ -137,7 +137,7 @@ public class VulkanInstance implements Instance {
 
     @Override
     public void initialize(@NonNull Model model) {
-        //TODO(ches) initialize model
+        // TODO(ches) initialize model
     }
 
     /**

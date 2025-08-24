@@ -1,14 +1,13 @@
 package com.ikalagaming.graphics.graph;
 
 import com.ikalagaming.graphics.frontend.Buffer;
-import lombok.AllArgsConstructor;
+
 import lombok.Getter;
 import lombok.Setter;
 import org.joml.Vector3f;
 
 /** Raw mesh data that is loaded from a file, after some processing. */
 @Getter
-@AllArgsConstructor
 public class MeshData {
 
     /**
@@ -76,19 +75,13 @@ public class MeshData {
      */
     private float[][] textureData;
 
-    /**
-     * The buffer (UBO) we use to store the bone weight data.
-     */
+    /** The buffer (UBO) we use to store the bone weight data. */
     @Setter private Buffer boneWeightBuffer;
 
-    /**
-     * The buffer (UBO) we store vertex data in.
-     */
+    /** The buffer (UBO) we store vertex data in. */
     @Setter private Buffer vertexBuffer;
 
-    /**
-     * The buffer (SSBO) we store post-animation values in.
-     */
+    /** The buffer (SSBO) we store post-animation values in. */
     @Setter private Buffer animationTargetBuffer;
 
     /**

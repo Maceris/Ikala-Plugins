@@ -8,13 +8,10 @@ import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.opengl.CommandBuffer;
 import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
 import com.ikalagaming.graphics.frontend.*;
-import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
 import lombok.Setter;
-
-import java.util.List;
 
 /** Handles rendering of scene geometry to the g-buffer. */
 public class SceneRender implements RenderStage {
@@ -152,5 +149,4 @@ public class SceneRender implements RenderStage {
         glEnable(GL_BLEND);
         shader.unbind();
     }
-
 }

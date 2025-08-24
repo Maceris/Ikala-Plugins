@@ -15,9 +15,7 @@ import java.util.Objects;
 @Getter
 public class Model {
 
-    /**
-     * The maximum number of entities that a model can have.
-     */
+    /** The maximum number of entities that a model can have. */
     public static final int MAX_ENTITIES = 1024;
 
     /**
@@ -38,7 +36,7 @@ public class Model {
             int frameCount,
             byte[] frameData,
             int offset) {
-        //TODO(ches) re-evaluate which of these we really need
+        // TODO(ches) re-evaluate which of these we really need
         @Override
         public boolean equals(Object obj) {
             if (!(obj instanceof Animation anim)) {
@@ -99,19 +97,15 @@ public class Model {
      */
     private final List<MeshData> meshDataList;
 
-    /**
-     * Stores all the animations.
-     */
+    /** Stores all the animations. */
     @Setter private Buffer animationBuffer;
 
-    /**
-     * Used to store animation states, for animated models.
-     */
+    /** Used to store animation states, for animated models. */
     @Setter private Buffer entityAnimationOffsetsBuffer;
 
     /**
-     * The highest buffer size (measured in entity count), for animation state
-     * and destination buffers. This will be doubled if we need more, but not all of it needs to be used.
+     * The highest buffer size (measured in entity count), for animation state and destination
+     * buffers. This will be doubled if we need more, but not all of it needs to be used.
      */
     @Setter private int maxAnimatedBufferCapacity;
 

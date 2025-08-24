@@ -410,6 +410,7 @@ public class ModelConverter {
             return;
         }
 
+        int runningTotalOffset = 0;
         for (int i = 0; i < numAnimations; ++i) {
             AIAnimation aiAnimation = AIAnimation.create(aiAnimations.get(i));
             final int maxFrames = ModelConverter.calcAnimationMaxFrames(aiAnimation);
@@ -443,7 +444,9 @@ public class ModelConverter {
                             aiAnimation.mDuration(),
                             boneCount,
                             maxFrames,
-                            frameData.array());
+                            frameData.array(),
+                            runningTotalOffset);
+            runningTotalOffset += frameData.array().length;
 
             results.add(animation);
         }
@@ -628,12 +631,11 @@ public class ModelConverter {
             return new MeshData(
                     new Vector3f(),
                     new Vector3f(),
-                    new byte[0],
-                    0,
-                    new int[0],
                     0,
                     new float[0],
+                    new int[0],
                     0,
+                    new byte[0],
                     new float[0][0]);
         }
 

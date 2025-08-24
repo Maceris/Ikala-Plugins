@@ -23,8 +23,7 @@ public class MaterialCache {
      */
     private final List<Material> materialsList;
 
-    @Setter
-    private boolean dirty;
+    @Setter private boolean dirty;
 
     /** Set up a new cache with a default material. */
     public MaterialCache() {

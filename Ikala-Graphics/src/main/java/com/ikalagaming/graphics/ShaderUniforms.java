@@ -181,9 +181,7 @@ public class ShaderUniforms {
      * @author Ches Burks
      */
     public static class Scene {
-        /**
-         * Materials buffer.
-         */
+        /** Materials buffer. */
         public static final String MATERIALS = "materials";
 
         /** Used to calculate the position when projected onto the screen space. */

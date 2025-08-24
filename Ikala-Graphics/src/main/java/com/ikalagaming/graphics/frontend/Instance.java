@@ -56,8 +56,8 @@ public interface Instance {
     void setupData(@NonNull Scene scene);
 
     /**
-     * Set up a model before rendering for the first time. For example, creating buffers. This must only be called
-     * once for a model, and only after it's fully loaded (e.g. animations set up).
+     * Set up a model before rendering for the first time. For example, creating buffers. This must
+     * only be called once for a model, and only after it's fully loaded (e.g. animations set up).
      *
      * @param model The model to set up.
      */

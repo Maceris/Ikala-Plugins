@@ -1,17 +1,19 @@
 package com.ikalagaming.graphics.backend.opengl;
 
-import com.ikalagaming.graphics.frontend.Buffer;
-import lombok.NonNull;
-
 import static org.lwjgl.opengl.GL15.glBindBuffer;
 import static org.lwjgl.opengl.GL30.glBindBufferBase;
 import static org.lwjgl.opengl.GL31.GL_UNIFORM_BUFFER;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
+import com.ikalagaming.graphics.frontend.Buffer;
+
+import lombok.NonNull;
+
 public class BufferUtil {
 
     /**
      * Convert the buffer type to the underlying OpenGL constant.
+     *
      * @param type The buffer type.
      * @return The OpenGL constant that is equivalent to the buffer type.
      */

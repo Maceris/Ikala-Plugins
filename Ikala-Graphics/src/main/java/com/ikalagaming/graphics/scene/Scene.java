@@ -101,7 +101,7 @@ public class Scene {
         if (model == null) {
             entityQueue.add(entity);
         } else {
-            //TODO(ches) have a max number of unique entities
+            // TODO(ches) have a max number of unique entities
             model.getEntitiesList().add(entity);
         }
     }
