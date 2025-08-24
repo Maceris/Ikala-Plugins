@@ -127,15 +127,15 @@ public class GraphicsManager {
     /** A queue used to delete resources. */
     @Getter private static final DeletionQueue deletionQueue = new DeletionQueue();
 
-    @Getter private static BackendType backendType = BackendType.OPENGL;
+    @Getter private static final BackendType backendType = BackendType.OPENGL;
 
     /**
      * Creates a graphics window, fires off a {@link WindowCreated} event. Won't do anything if a
      * window already exists.
      */
-    public static void createWindow() {
+    public static boolean createWindow() {
         if ((null != window) || !initialized.compareAndSet(false, true)) {
-            return;
+            return false;
         }
         shutdownFlag.set(false);
 
@@ -161,7 +161,9 @@ public class GraphicsManager {
                     case VULKAN -> new VulkanInstance();
                 };
 
-        renderInstance.initialize(window);
+        if (!renderInstance.initialize(window)) {
+            return false;
+        }
 
         log.debug(
                 SafeResourceLoader.getString(
@@ -182,6 +184,7 @@ public class GraphicsManager {
         nextUpdateTime = renderTimer.getLastLoopTime() + UPDATE_TIME;
 
         lastTime = glfwGetTime();
+        return true;
     }
 
     /**

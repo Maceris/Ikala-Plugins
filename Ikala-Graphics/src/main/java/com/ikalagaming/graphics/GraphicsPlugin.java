@@ -60,7 +60,9 @@ public class GraphicsPlugin extends Plugin {
 
     @Override
     public boolean onEnable() {
-        GraphicsManager.createWindow();
+        if (!GraphicsManager.createWindow()) {
+            return false;
+        }
         UUID stageID = Launcher.addMainThreadStage(GraphicsManager::tick);
         GraphicsManager.setTickStageID(stageID);
         return true;
