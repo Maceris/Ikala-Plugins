@@ -249,54 +249,35 @@ public class FormatMapperOpenGL {
         return switch (format) {
             case D16_UNORM -> GL_DEPTH_COMPONENT;
             case D24_UNORM_S8_UINT, D32_SFLOAT_S8_UINT, D32_SFLOAT -> GL_DEPTH_STENCIL;
-            case R16_SFLOAT,
-                            R8_UINT,
-                            R8_SNORM,
-                            R8_SINT,
-                            R32_UINT,
-                            R32_SINT,
-                            R32_SFLOAT,
-                            R16_UINT,
-                            R16_SNORM,
-                            R16_SINT ->
-                    GL_RED;
-            case R16G16_SFLOAT,
-                            R8G8_UINT,
-                            R8G8_SNORM,
-                            R8G8_SINT,
-                            R32G32_UINT,
-                            R32G32_SINT,
-                            R32G32_SFLOAT,
-                            R16G16_UINT,
-                            R16G16_SNORM,
-                            R16G16_SINT ->
-                    GL_RG;
-            case R16G16B16_SFLOAT,
-                            R8G8B8_UINT,
-                            R8G8B8_SRGB,
-                            R8G8B8_SNORM,
+            case R16_SFLOAT, R8_SNORM, R32_SFLOAT, R16_SNORM -> GL_RED;
+            case R8_UINT, R8_SINT, R32_UINT, R32_SINT, R16_UINT, R16_SINT -> GL_RED_INTEGER;
+            case R16G16_SFLOAT, R8G8_SNORM, R32G32_SFLOAT, R16G16_SNORM -> GL_RG;
+            case R8G8_UINT, R8G8_SINT, R32G32_UINT, R32G32_SINT, R16G16_UINT, R16G16_SINT ->
+                    GL_RG_INTEGER;
+            case R16G16B16_SFLOAT, R8G8B8_SRGB, R8G8B8_SNORM, R32G32B32_SFLOAT, R16G16B16_SNORM ->
+                    GL_RGB;
+            case R8G8B8_UINT,
                             R8G8B8_SINT,
                             R32G32B32_UINT,
                             R32G32B32_SINT,
-                            R32G32B32_SFLOAT,
                             R16G16B16_UINT,
-                            R16G16B16_SNORM,
                             R16G16B16_SINT ->
-                    GL_RGB;
+                    GL_RGB_INTEGER;
             case R16G16B16A16_SFLOAT,
-                            R8G8B8A8_UINT,
                             R8G8B8A8_SRGB,
                             R8G8B8A8_SNORM,
-                            R8G8B8A8_SINT,
                             R5G5B5A1_UNORM_PACK16,
                             R4G4B4A4_UNORM_PACK16,
+                            R32G32B32A32_SFLOAT,
+                            R16G16B16A16_SNORM ->
+                    GL_RGBA;
+            case R8G8B8A8_UINT,
+                            R8G8B8A8_SINT,
                             R32G32B32A32_UINT,
                             R32G32B32A32_SINT,
-                            R32G32B32A32_SFLOAT,
                             R16G16B16A16_UINT,
-                            R16G16B16A16_SNORM,
                             R16G16B16A16_SINT ->
-                    GL_RGBA;
+                    GL_RGBA_INTEGER;
             case UNDEFINED,
                             X8_D24_UNORM_PACK32,
                             S8_UINT,
