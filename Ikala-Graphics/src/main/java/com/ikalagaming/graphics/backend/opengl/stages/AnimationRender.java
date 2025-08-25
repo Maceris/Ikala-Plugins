@@ -100,11 +100,11 @@ public class AnimationRender implements RenderStage {
         shader.bind();
 
         for (Model model : scene.getModelMap().values()) {
-            if (!model.isAnimated()) {
+            int entityCount = model.getEntitiesList().size();
+            if (!model.isAnimated() || entityCount == 0) {
                 continue;
             }
 
-            int entityCount = model.getEntitiesList().size();
             if (entityCount > Model.MAX_ENTITIES) {
                 // TODO(ches) log error.
                 entityCount = Model.MAX_ENTITIES;
