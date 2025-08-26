@@ -76,69 +76,12 @@ public class SceneRender implements RenderStage {
         glDisable(GL_BLEND);
         shader.bind();
 
-        if (scene.getMaterialCache().isDirty()) {
-            Buffer materialBuffer = scene.getMaterialCache().getMaterialBuffer();
-
-            final int MATERIAL_SIZE = 16 /* floats/ints */ * 4 /* bytes per float/int */;
-            final List<Material> materials = scene.getMaterialCache().getMaterialsList();
-
-            ByteBuffer materialData = ByteBuffer.allocate(materials.size() * MATERIAL_SIZE);
-
-            for (Material material : materials) {
-                final int normalMapID =
-                        Optional.ofNullable(material.getNormalMap())
-                                .map(Texture::id)
-                                .map(Math::toIntExact)
-                                .orElse(0);
-                final int textureID =
-                        Optional.ofNullable(material.getTexture())
-                                .map(Texture::id)
-                                .map(Math::toIntExact)
-                                .orElse(0);
-
-                materialData.putFloat(material.getBaseColor().x);
-                materialData.putFloat(material.getBaseColor().y);
-                materialData.putFloat(material.getBaseColor().z);
-                materialData.putFloat(material.getBaseColor().w);
-
-                materialData.putFloat(material.getAnisotropic());
-                materialData.putFloat(material.getClearcoat());
-                materialData.putFloat(material.getClearcoatGloss());
-                materialData.putFloat(material.getMetallic());
-
-                materialData.putFloat(material.getRoughness());
-                materialData.putFloat(material.getSheen());
-                materialData.putFloat(material.getSheenTint());
-                materialData.putFloat(material.getSpecular());
-
-                materialData.putFloat(material.getSpecularTint());
-                materialData.putFloat(material.getSubsurface());
-                materialData.putInt(normalMapID);
-                materialData.putInt(textureID);
-            }
-
-            materialData.flip();
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) materialBuffer.id());
-            glBufferData((int) materialBuffer.id(), materialData, GL_STATIC_DRAW);
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-
-            MemoryUtil.memFree(materialData);
-            scene.getMaterialCache().setDirty(false);
-        }
+        updateMaterialBuffers(scene);
 
         uniformsMap.setUniform(
                 ShaderUniforms.Scene.PROJECTION_MATRIX,
                 scene.getProjection().getProjectionMatrix());
         uniformsMap.setUniform(ShaderUniforms.Scene.VIEW_MATRIX, scene.getCamera().getViewMatrix());
-
-        for (Material material : scene.getMaterialCache().getMaterialsList()) {
-            if (material.getNormalMap() != null) {
-                glMakeImageHandleResidentARB(material.getNormalMap().handle(), GL_READ_ONLY);
-            }
-            if (material.getTexture() != null) {
-                glMakeImageHandleResidentARB(material.getTexture().handle(), GL_READ_ONLY);
-            }
-        }
 
         final BufferUtil bufferUtil = BufferUtil.getInstance();
         for (Model model : scene.getModelMap().values()) {
@@ -160,9 +103,11 @@ public class SceneRender implements RenderStage {
                 uniformsMap.setUniform(MATERIAL_INDEX, materialIndex);
                 Material material = scene.getMaterialCache().getMaterial(materialIndex);
                 if (material.getTexture() != null) {
+                    glMakeImageHandleResidentARB(material.getTexture().handle(), GL_READ_ONLY);
                     uniformsMap.setUniform(BASE_COLOR_SAMPLER, material.getTexture());
                 }
                 if (material.getNormalMap() != null) {
+                    glMakeImageHandleResidentARB(material.getNormalMap().handle(), GL_READ_ONLY);
                     uniformsMap.setUniform(NORMAL_SAMPLER, material.getNormalMap());
                 }
                 bufferUtil.bindBuffer(mesh.getVertexBuffer());
@@ -175,5 +120,59 @@ public class SceneRender implements RenderStage {
         glBindVertexArray(0);
         glEnable(GL_BLEND);
         shader.unbind();
+    }
+
+    private static void updateMaterialBuffers(Scene scene) {
+        if (!scene.getMaterialCache().isDirty()) {
+            return;
+        }
+
+        Buffer materialBuffer = scene.getMaterialCache().getMaterialBuffer();
+
+        final int MATERIAL_SIZE = 16 /* floats/ints */ * 4 /* bytes per float/int */;
+        final List<Material> materials = scene.getMaterialCache().getMaterialsList();
+
+        ByteBuffer materialData = ByteBuffer.allocate(materials.size() * MATERIAL_SIZE);
+
+        for (Material material : materials) {
+            final int normalMapID =
+                    Optional.ofNullable(material.getNormalMap())
+                            .map(Texture::id)
+                            .map(Math::toIntExact)
+                            .orElse(0);
+            final int textureID =
+                    Optional.ofNullable(material.getTexture())
+                            .map(Texture::id)
+                            .map(Math::toIntExact)
+                            .orElse(0);
+
+            materialData.putFloat(material.getBaseColor().x);
+            materialData.putFloat(material.getBaseColor().y);
+            materialData.putFloat(material.getBaseColor().z);
+            materialData.putFloat(material.getBaseColor().w);
+
+            materialData.putFloat(material.getAnisotropic());
+            materialData.putFloat(material.getClearcoat());
+            materialData.putFloat(material.getClearcoatGloss());
+            materialData.putFloat(material.getMetallic());
+
+            materialData.putFloat(material.getRoughness());
+            materialData.putFloat(material.getSheen());
+            materialData.putFloat(material.getSheenTint());
+            materialData.putFloat(material.getSpecular());
+
+            materialData.putFloat(material.getSpecularTint());
+            materialData.putFloat(material.getSubsurface());
+            materialData.putInt(normalMapID);
+            materialData.putInt(textureID);
+        }
+
+        materialData.flip();
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) materialBuffer.id());
+        glBufferData((int) materialBuffer.id(), materialData, GL_STATIC_DRAW);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+        MemoryUtil.memFree(materialData);
+        scene.getMaterialCache().setDirty(false);
     }
 }
