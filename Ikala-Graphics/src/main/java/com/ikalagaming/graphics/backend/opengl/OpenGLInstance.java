@@ -171,8 +171,11 @@ public class OpenGLInstance implements Instance {
         var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
         var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
+        uniformsMap.createUniform(ShaderUniforms.Scene.MATERIAL_INDEX);
         uniformsMap.createUniform(ShaderUniforms.Scene.PROJECTION_MATRIX);
         uniformsMap.createUniform(ShaderUniforms.Scene.VIEW_MATRIX);
+        uniformsMap.createUniform(ShaderUniforms.Scene.BASE_COLOR_SAMPLER);
+        uniformsMap.createUniform(ShaderUniforms.Scene.NORMAL_SAMPLER);
 
         shaderProgram.setUniforms(uniformsMap);
 
@@ -191,9 +194,10 @@ public class OpenGLInstance implements Instance {
         var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
         var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
-        uniformsMap.createUniform(ShaderUniforms.Light.ALBEDO_SAMPLER);
+        uniformsMap.createUniform(ShaderUniforms.Light.BASE_COLOR_SAMPLER);
         uniformsMap.createUniform(ShaderUniforms.Light.NORMAL_SAMPLER);
-        uniformsMap.createUniform(ShaderUniforms.Light.SPECULAR_SAMPLER);
+        uniformsMap.createUniform(ShaderUniforms.Light.TANGENT_SAMPLER);
+        uniformsMap.createUniform(ShaderUniforms.Light.MATERIAL_SAMPLER);
         uniformsMap.createUniform(ShaderUniforms.Light.DEPTH_SAMPLER);
         uniformsMap.createUniform(ShaderUniforms.Light.INVERSE_PROJECTION_MATRIX);
         uniformsMap.createUniform(ShaderUniforms.Light.INVERSE_VIEW_MATRIX);

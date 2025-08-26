@@ -112,20 +112,17 @@ public class ShaderUniforms {
         }
 
         /**
-         * A sampler that measures the proportion of incident light that is reflected away from a
-         * surface at a given point.
-         */
-        public static final String ALBEDO_SAMPLER = "albedoSampler";
-
-        /**
          * The ambient light that affects every fragment the same way.
          *
          * @see AmbientLight
          */
         public static final String AMBIENT_LIGHT = "ambientLight";
 
+        /** Sampler for the base color of a material. */
+        public static final String BASE_COLOR_SAMPLER = "baseColorSampler";
+
         /** The cascade shadows. */
-        public static final String CASCADE_SHADOWS = "cascadeshadows";
+        public static final String CASCADE_SHADOWS = "cascadeShadows";
 
         /**
          * Used to reconstruct the world position using the inverse projection matrix to help
@@ -153,6 +150,9 @@ public class ShaderUniforms {
         /** The inverse of the view matrix. */
         public static final String INVERSE_VIEW_MATRIX = "invViewMatrix";
 
+        /** Sampler for material IDs. */
+        public static final String MATERIAL_SAMPLER = "materialSampler";
+
         /** A sampler for the normal values. */
         public static final String NORMAL_SAMPLER = "normalSampler";
 
@@ -165,11 +165,11 @@ public class ShaderUniforms {
          */
         public static final String SHADOW_MAP_PREFIX = "shadowMap_";
 
-        /** A sampler for the specular values. */
-        public static final String SPECULAR_SAMPLER = "specularSampler";
-
         /** How many spotlights we have in the spotlight SSBO. */
         public static final String SPOT_LIGHT_COUNT = "spotLightCount";
+
+        /** Sampler for the tangent values. */
+        public static final String TANGENT_SAMPLER = "tangentSampler";
 
         /** Private constructor so this class is not instantiated. */
         private Light() {}

@@ -262,7 +262,7 @@ public class PipelineManager {
                 .flip();
 
         glBindBufferBase(
-                GL_SHADER_STORAGE_BUFFER, PipelineOpenGL.POINT_LIGHT_BINDING, pointLightBuffer);
+                GL_SHADER_STORAGE_BUFFER, LightRender.POINT_LIGHT_BINDING, pointLightBuffer);
         glBufferData(GL_SHADER_STORAGE_BUFFER, pointLightFloatBuffer, GL_STATIC_DRAW);
 
         MemoryUtil.memFree(pointLightFloatBuffer);
@@ -281,8 +281,7 @@ public class PipelineManager {
                 .put(new float[PipelineOpenGL.MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE])
                 .flip();
 
-        glBindBufferBase(
-                GL_SHADER_STORAGE_BUFFER, PipelineOpenGL.SPOT_LIGHT_BINDING, spotLightBuffer);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, LightRender.SPOT_LIGHT_BINDING, spotLightBuffer);
         glBufferData(GL_SHADER_STORAGE_BUFFER, spotLightFloatBuffer, GL_STATIC_DRAW);
 
         MemoryUtil.memFree(spotLightFloatBuffer);

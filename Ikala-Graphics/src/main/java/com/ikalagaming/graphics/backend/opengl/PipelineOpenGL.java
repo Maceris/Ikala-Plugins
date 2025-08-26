@@ -16,12 +16,6 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class PipelineOpenGL implements Pipeline {
 
-    /** The binding for the point light SSBO. */
-    public static final int POINT_LIGHT_BINDING = 0;
-
-    /** The binding for the spotlight SSBO. */
-    public static final int SPOT_LIGHT_BINDING = 1;
-
     /** How many lights of each type (spot, point) that are currently supported. */
     public static final int MAX_LIGHTS_SUPPORTED = 1000;
 

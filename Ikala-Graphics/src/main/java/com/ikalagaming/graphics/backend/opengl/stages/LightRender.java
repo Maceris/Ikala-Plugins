@@ -41,6 +41,15 @@ import java.util.List;
 @AllArgsConstructor
 public class LightRender implements RenderStage {
 
+    /** The binding for the point light SSBO. */
+    public static final int POINT_LIGHT_BINDING = 0;
+
+    /** The binding for the spotlight SSBO. */
+    public static final int SPOT_LIGHT_BINDING = 1;
+
+    /** The binding for the materials SSBO. */
+    public static final int MATERIALS_BINDING = 2;
+
     /** The shader to use for rendering. */
     @NonNull private Shader shader;
 
@@ -79,10 +88,11 @@ public class LightRender implements RenderStage {
             }
         }
 
-        uniformsMap.setUniform(ShaderUniforms.Light.ALBEDO_SAMPLER, 0);
+        uniformsMap.setUniform(ShaderUniforms.Light.BASE_COLOR_SAMPLER, 0);
         uniformsMap.setUniform(ShaderUniforms.Light.NORMAL_SAMPLER, 1);
-        uniformsMap.setUniform(ShaderUniforms.Light.SPECULAR_SAMPLER, 2);
-        uniformsMap.setUniform(ShaderUniforms.Light.DEPTH_SAMPLER, 3);
+        uniformsMap.setUniform(ShaderUniforms.Light.TANGENT_SAMPLER, 2);
+        uniformsMap.setUniform(ShaderUniforms.Light.MATERIAL_SAMPLER, 3);
+        uniformsMap.setUniform(ShaderUniforms.Light.DEPTH_SAMPLER, 4);
         Fog fog = scene.getFog();
         uniformsMap.setUniform(
                 ShaderUniforms.Light.FOG + "." + ShaderUniforms.Light.Fog.ENABLED,
@@ -122,6 +132,11 @@ public class LightRender implements RenderStage {
                 scene.getProjection().getInverseProjectionMatrix());
         uniformsMap.setUniform(
                 ShaderUniforms.Light.INVERSE_VIEW_MATRIX, scene.getCamera().getInvViewMatrix());
+
+        glBindBufferBase(
+                GL_SHADER_STORAGE_BUFFER,
+                MATERIALS_BINDING,
+                (int) scene.getMaterialCache().getMaterialBuffer().id());
 
         glBindVertexArray(quadMesh.vao());
         glDrawElements(GL_TRIANGLES, QuadMesh.VERTEX_COUNT, GL_UNSIGNED_INT, 0);
@@ -176,8 +191,7 @@ public class LightRender implements RenderStage {
 
         lightBuffer.flip();
 
-        glBindBufferBase(
-                GL_SHADER_STORAGE_BUFFER, PipelineOpenGL.POINT_LIGHT_BINDING, pointLightBuffer);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, POINT_LIGHT_BINDING, pointLightBuffer);
         glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, lightBuffer);
 
         MemoryUtil.memFree(lightBuffer);
@@ -238,8 +252,7 @@ public class LightRender implements RenderStage {
         }
         lightBuffer.flip();
 
-        glBindBufferBase(
-                GL_SHADER_STORAGE_BUFFER, PipelineOpenGL.SPOT_LIGHT_BINDING, spotLightBuffer);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, SPOT_LIGHT_BINDING, spotLightBuffer);
         glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, lightBuffer);
 
         MemoryUtil.memFree(lightBuffer);

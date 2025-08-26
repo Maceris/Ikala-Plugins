@@ -94,7 +94,7 @@ uniform DirectionalLight directionalLight;
 uniform int pointLightCount;
 uniform int spotLightCount;
 uniform Fog fog;
-uniform CascadeShadow cascadeshadows[NUM_CASCADES];
+uniform CascadeShadow cascadeShadows[NUM_CASCADES];
 uniform sampler2D shadowMap_0;
 uniform sampler2D shadowMap_1;
 uniform sampler2D shadowMap_2;
@@ -273,7 +273,7 @@ float textureProj(vec4 shadowCoord, vec2 offset, int idx) {
 }
 
 float calcShadow(vec4 worldPosition, int idx) {
-    vec4 shadowMapPosition = cascadeshadows[idx].projViewMatrix * worldPosition;
+    vec4 shadowMapPosition = cascadeShadows[idx].projViewMatrix * worldPosition;
     float shadow = 1.0;
     vec4 shadowCoord = (shadowMapPosition / shadowMapPosition.w) * 0.5 + 0.5;
     shadow = textureProj(shadowCoord, vec2(0, 0), idx);
@@ -304,7 +304,7 @@ void main()
 
     int cascadeIndex;
     for (int i=0; i < NUM_CASCADES - 1; i++) {
-        if (viewPosition.z < cascadeshadows[i].splitDistance) {
+        if (viewPosition.z < cascadeShadows[i].splitDistance) {
             cascadeIndex = i + 1;
             break;
         }
