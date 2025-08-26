@@ -1,12 +1,10 @@
 package com.ikalagaming.factory.gui.window;
 
 import com.ikalagaming.factory.gui.DefaultWindows;
-import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.frontend.gui.component.Checkbox;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
-import com.ikalagaming.graphics.scene.Fog;
 import com.ikalagaming.graphics.scene.Scene;
 
 import imgui.flag.ImGuiWindowFlags;
@@ -22,10 +20,8 @@ public class GraphicsDebug extends GuiWindow {
         setDisplacement(0.01f, 0.05f);
         setAlignment(Alignment.NORTH_EAST);
 
-        Scene scene = GraphicsManager.getScene();
-        Fog fog = scene.getFog();
-
-        fogEnabled = new Checkbox("Fog enabled", fog.isActive());
+        // (TODO) ches update this when a scene is loaded, preferably fix backend to allow real time
+        fogEnabled = new Checkbox("Fog enabled", false);
 
         addChild(fogEnabled);
     }
