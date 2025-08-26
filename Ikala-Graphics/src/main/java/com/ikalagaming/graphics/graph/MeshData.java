@@ -88,6 +88,9 @@ public class MeshData {
     /** The buffer to store index data in. */
     private final Buffer indexBuffer;
 
+    /** Used to store indirect draw commands. */
+    private final Buffer drawIndirectBuffer;
+
     /**
      * @param aabbMin The minimum value (corner) of the axis-aligned bounding box.
      * @param aabbMax The maximum value (corner) of the axis-aligned bounding box.
@@ -123,5 +126,6 @@ public class MeshData {
         this.vertexBuffer = BufferUtil.getInstance().createBuffer(Buffer.Type.UNIFORM);
         this.animationTargetBuffer = null;
         this.indexBuffer = BufferUtil.getInstance().createBuffer(Buffer.Type.INDEXES);
+        this.drawIndirectBuffer = BufferUtil.getInstance().createBuffer(Buffer.Type.DRAW_INDIRECT);
     }
 }

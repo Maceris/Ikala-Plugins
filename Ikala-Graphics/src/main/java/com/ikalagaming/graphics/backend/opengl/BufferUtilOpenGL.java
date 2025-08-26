@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.backend.opengl;
 import static org.lwjgl.opengl.GL15.*;
 import static org.lwjgl.opengl.GL30.glBindBufferBase;
 import static org.lwjgl.opengl.GL31.GL_UNIFORM_BUFFER;
+import static org.lwjgl.opengl.GL40.GL_DRAW_INDIRECT_BUFFER;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 import com.ikalagaming.graphics.frontend.Buffer;
@@ -19,6 +20,7 @@ public class BufferUtilOpenGL implements BufferUtil {
      */
     public static int mapBufferType(@NonNull Buffer.Type type) {
         return switch (type) {
+            case DRAW_INDIRECT -> GL_DRAW_INDIRECT_BUFFER;
             case INDEXES -> GL_ELEMENT_ARRAY_BUFFER;
             case SHADER_STORAGE -> GL_SHADER_STORAGE_BUFFER;
             case UNIFORM -> GL_UNIFORM_BUFFER;

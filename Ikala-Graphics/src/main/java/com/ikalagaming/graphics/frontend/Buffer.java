@@ -9,6 +9,7 @@ package com.ikalagaming.graphics.frontend;
 public record Buffer(long id, Type type) {
     /** The different kinds of buffer that are supported. */
     public enum Type {
+        DRAW_INDIRECT,
         INDEXES,
         SHADER_STORAGE,
         UNIFORM,

@@ -30,7 +30,7 @@ void main()
     vec4 initBitangent = vec4(bitangent, 0.0);
 
     outMaterialIdx = materialIndex;
-    mat4 modelMatrix =  modelMatrices[gl_InstanceID];
+    mat4 modelMatrix =  modelMatrices[gl_BaseInstance + gl_InstanceID];
     mat4 modelViewMatrix = viewMatrix * modelMatrix;
     outWorldPosition = modelMatrix * initPos;
     outViewPosition  = viewMatrix * outWorldPosition;

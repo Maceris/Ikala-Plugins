@@ -32,7 +32,7 @@ layout(std430, binding = 0) readonly buffer Materials {
     Material materials[];
 }
 
-layout(bindless_sampler) uniform sampler2D diffuseSampler;
+layout(bindless_sampler) uniform sampler2D baseColorSampler;
 layout(bindless_sampler) uniform sampler2D normalSampler;
 
 layout(location = 0) out vec4 buffBaseColor;
@@ -45,7 +45,7 @@ void main() {
 
     vec4 diffuse = material.diffuse;
     if (material.textureIndex > 0) {
-        diffuse = texture(diffuseSampler, outTextCoord);
+        diffuse = texture(baseColorSampler, outTextCoord);
     }
     if (diffuse.a < 0.5) {
         discard;

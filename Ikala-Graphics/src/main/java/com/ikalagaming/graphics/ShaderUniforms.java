@@ -181,14 +181,18 @@ public class ShaderUniforms {
      * @author Ches Burks
      */
     public static class Scene {
-        /** Materials buffer. */
-        public static final String MATERIALS = "materials";
+
+        /** The index of the current material, for the vertex shader. */
+        public static final String MATERIAL_INDEX = "materialIndex";
 
         /** Used to calculate the position when projected onto the screen space. */
         public static final String PROJECTION_MATRIX = "projectionMatrix";
 
-        /** Used to sample a 2d texture. */
-        public static final String TEXTURE_SAMPLER = "textureSampler";
+        /** Used to sample a the base color of a material. */
+        public static final String BASE_COLOR_SAMPLER = "baseColorSampler";
+
+        /** Used to sample the per-texel normals of a material. */
+        public static final String NORMAL_SAMPLER = "normalSampler";
 
         /** The cameras view matrix. */
         public static final String VIEW_MATRIX = "viewMatrix";

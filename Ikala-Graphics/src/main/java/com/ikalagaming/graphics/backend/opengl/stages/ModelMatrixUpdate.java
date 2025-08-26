@@ -5,6 +5,7 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.opengl.PipelineManager;
+import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
@@ -14,6 +15,7 @@ import lombok.NonNull;
 import lombok.Setter;
 import org.lwjgl.system.MemoryUtil;
 
+import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.util.List;
 
@@ -49,5 +51,48 @@ public class ModelMatrixUpdate implements RenderStage {
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) model.getModelMatricesBuffer().id());
         glBufferData(GL_SHADER_STORAGE_BUFFER, modelMatrices, GL_STATIC_DRAW);
         MemoryUtil.memFree(modelMatrices);
+
+        final int COMMAND_SIZE = 5 * 4;
+        final int NUMBER_OF_COMMANDS = model.isAnimated() ? entities.size() : 1;
+        ByteBuffer commandBuffer = ByteBuffer.allocate(NUMBER_OF_COMMANDS * COMMAND_SIZE);
+
+        for (MeshData mesh : model.getMeshDataList()) {
+            commandBuffer.clear();
+
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) mesh.getDrawIndirectBuffer().id());
+
+            final int count = mesh.getIndices().length;
+            final int instanceCount = model.isAnimated() ? 1 : entities.size();
+            final int firstIndex = 0;
+
+            if (model.isAnimated()) {
+                int baseVertex = 0;
+                int baseInstance = 0;
+
+                for (int i = 0; i < entities.size(); ++i) {
+                    commandBuffer.putInt(count);
+                    commandBuffer.putInt(instanceCount);
+                    commandBuffer.putInt(firstIndex);
+                    commandBuffer.putInt(baseVertex);
+                    commandBuffer.putInt(baseInstance);
+
+                    baseVertex += mesh.getVertexCount();
+                    baseInstance += 1;
+                }
+            } else {
+                int baseVertex = 0;
+                int baseInstance = 0;
+                commandBuffer.putInt(count);
+                commandBuffer.putInt(instanceCount);
+                commandBuffer.putInt(firstIndex);
+                commandBuffer.putInt(baseVertex);
+                commandBuffer.putInt(baseInstance);
+            }
+
+            commandBuffer.flip();
+            glBufferData(GL_SHADER_STORAGE_BUFFER, commandBuffer, GL_STATIC_DRAW);
+        }
+
+        MemoryUtil.memFree(commandBuffer);
     }
 }

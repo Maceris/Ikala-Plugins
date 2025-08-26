@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.backend.opengl.stages;
 
+import static com.ikalagaming.graphics.ShaderUniforms.Scene.*;
 import static org.lwjgl.opengl.ARBBindlessTexture.glMakeImageHandleResidentARB;
 import static org.lwjgl.opengl.GL30.glBindBufferBase;
 import static org.lwjgl.opengl.GL43.*;
@@ -138,13 +139,15 @@ public class SceneRender implements RenderStage {
                 glMakeImageHandleResidentARB(material.getTexture().handle(), GL_READ_ONLY);
             }
         }
+
         final BufferUtil bufferUtil = BufferUtil.getInstance();
         for (Model model : scene.getModelMap().values()) {
             final int entityCount = model.getEntitiesList().size();
             if (entityCount == 0) {
                 continue;
             }
-            // TODO(ches) bind the base and normal textures if applicable
+
+            final int commandCount = model.isAnimated() ? entityCount : 1;
 
             glBindBufferBase(
                     GL_SHADER_STORAGE_BUFFER,
@@ -152,23 +155,22 @@ public class SceneRender implements RenderStage {
                     (int) model.getModelMatricesBuffer().id());
             glBindVertexArray(renderBuffers.getVao());
 
-            if (model.isAnimated()) {
-                // TODO(ches) animated models.
-            } else {
-                for (MeshData mesh : model.getMeshDataList()) {
-                    bufferUtil.bindBuffer(mesh.getVertexBuffer());
-                    bufferUtil.bindBuffer(mesh.getIndexBuffer());
-                    glDrawElementsInstanced(
-                            GL_TRIANGLES,
-                            mesh.getIndices().length,
-                            GL_UNSIGNED_INT,
-                            0,
-                            entityCount);
+            for (MeshData mesh : model.getMeshDataList()) {
+                final int materialIndex = mesh.getMaterialIndex();
+                uniformsMap.setUniform(MATERIAL_INDEX, materialIndex);
+                Material material = scene.getMaterialCache().getMaterial(materialIndex);
+                if (material.getTexture() != null) {
+                    uniformsMap.setUniform(BASE_COLOR_SAMPLER, material.getTexture());
                 }
+                if (material.getNormalMap() != null) {
+                    uniformsMap.setUniform(NORMAL_SAMPLER, material.getNormalMap());
+                }
+                bufferUtil.bindBuffer(mesh.getVertexBuffer());
+                bufferUtil.bindBuffer(mesh.getIndexBuffer());
+                bufferUtil.bindBuffer(mesh.getDrawIndirectBuffer());
+                glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0, commandCount, 0);
             }
         }
-
-        // TODO(ches) glDrawElementsInstanced
 
         glBindVertexArray(0);
         glEnable(GL_BLEND);
