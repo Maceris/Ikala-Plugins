@@ -4,7 +4,6 @@ import static org.lwjgl.opengl.GL15.glBufferData;
 import static org.lwjgl.opengl.GL42.glMemoryBarrier;
 import static org.lwjgl.opengl.GL43.*;
 
-import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
 import com.ikalagaming.graphics.frontend.BufferUtil;
@@ -113,7 +112,7 @@ public class AnimationRender implements RenderStage {
 
             updateAnimationOffsets(model, entityCount);
 
-            final BufferUtil bufferUtil = GraphicsManager.getRenderInstance().getBufferUtil();
+            final BufferUtil bufferUtil = BufferUtil.getInstance();
 
             bufferUtil.bindBuffer(model.getAnimationBuffer(), 0);
             bufferUtil.bindBuffer(model.getEntityAnimationOffsetsBuffer(), 1);

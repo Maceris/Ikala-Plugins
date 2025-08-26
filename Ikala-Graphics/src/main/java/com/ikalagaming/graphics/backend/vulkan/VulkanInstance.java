@@ -12,7 +12,6 @@ import static org.lwjgl.vulkan.VK10.*;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.exceptions.RenderException;
-import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.frontend.Instance;
 import com.ikalagaming.graphics.frontend.TextureLoader;
 import com.ikalagaming.graphics.graph.Model;
@@ -137,7 +136,7 @@ public class VulkanInstance implements Instance {
     }
 
     @Override
-    public void initialize(@NonNull Model model) {
+    public void initializeModel(@NonNull Model model) {
         // TODO(ches) initialize model
     }
 
@@ -407,12 +406,6 @@ public class VulkanInstance implements Instance {
     }
 
     @Override
-    public BufferUtil getBufferUtil() {
-        // TODO(ches) buffer utility
-        return null;
-    }
-
-    @Override
     public void cleanup() {}
 
     /**
@@ -567,9 +560,6 @@ public class VulkanInstance implements Instance {
         properties.free();
         return missingExtensions.isEmpty();
     }
-
-    @Override
-    public void setupData(@NonNull Scene scene) {}
 
     @Override
     public void swapPipeline(final int config) {}

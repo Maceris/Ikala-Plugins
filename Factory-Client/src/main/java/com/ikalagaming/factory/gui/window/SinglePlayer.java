@@ -141,7 +141,6 @@ public class SinglePlayer extends GuiWindow {
                                 new Vector3f(1.0f, 0.0f, 0.0f),
                                 new Vector3f(2.0f, 1.1f, 0.0f),
                                 1.0f));
-        GraphicsManager.refreshRenderData();
         var pipeline =
                 RenderConfig.builder()
                         .withAnimation()

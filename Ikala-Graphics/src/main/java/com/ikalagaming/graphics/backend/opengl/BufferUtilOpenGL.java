@@ -19,8 +19,9 @@ public class BufferUtilOpenGL implements BufferUtil {
      */
     public static int mapBufferType(@NonNull Buffer.Type type) {
         return switch (type) {
-            case UNIFORM -> GL_UNIFORM_BUFFER;
+            case INDEXES -> GL_ELEMENT_ARRAY_BUFFER;
             case SHADER_STORAGE -> GL_SHADER_STORAGE_BUFFER;
+            case UNIFORM -> GL_UNIFORM_BUFFER;
         };
     }
 

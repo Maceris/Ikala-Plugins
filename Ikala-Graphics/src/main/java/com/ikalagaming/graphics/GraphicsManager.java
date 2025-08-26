@@ -35,9 +35,6 @@ public class GraphicsManager {
     /** Whether we are currently initialized. */
     static final AtomicBoolean initialized = new AtomicBoolean(false);
 
-    /** Whether we want to refresh the scene information. */
-    private static final AtomicBoolean refreshRequested = new AtomicBoolean(false);
-
     /**
      * The scene we are rendering.
      *
@@ -173,8 +170,6 @@ public class GraphicsManager {
 
         cameraManager = new CameraManager(scene.getCamera(), window);
 
-        renderInstance.setupData(scene);
-
         renderTimer = new Timer();
         renderTimer.init();
         nextRenderTime = renderTimer.getLastLoopTime() + FRAME_TIME;
@@ -194,11 +189,6 @@ public class GraphicsManager {
      */
     public static boolean isInitialized() {
         return initialized.get();
-    }
-
-    /** Set up the render data after adding/removing renderables. */
-    public static void refreshRenderData() {
-        refreshRequested.set(true);
     }
 
     /** Render to the screen. */
@@ -283,10 +273,6 @@ public class GraphicsManager {
             cameraManager.updateCamera(elapsedTime);
 
             windowManager.handleGuiInput(scene, window);
-
-            if (refreshRequested.compareAndSet(true, false)) {
-                renderInstance.setupData(scene);
-            }
 
             // Update the next time we should update models
             nextUpdateTime = updateTimer.getLastLoopTime() + UPDATE_TIME;

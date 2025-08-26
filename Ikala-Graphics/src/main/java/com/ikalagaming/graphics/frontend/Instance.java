@@ -16,13 +16,6 @@ public interface Instance {
      */
     boolean initialize(@NonNull Window window);
 
-    /**
-     * Provides an interface for dealing with creating/deleting/binding buffers.
-     *
-     * @return The backend-specific buffer utility.
-     */
-    BufferUtil getBufferUtil();
-
     /** Clean up all the rendering resources. */
     void cleanup();
 
@@ -55,20 +48,12 @@ public interface Instance {
     void resize(int width, int height);
 
     /**
-     * Set up model data before rendering.
-     *
-     * @param scene The scene to read models from.
-     */
-    @Deprecated
-    void setupData(@NonNull Scene scene);
-
-    /**
      * Set up a model before rendering for the first time. For example, creating buffers. This must
      * only be called once for a model, and only after it's fully loaded (e.g. animations set up).
      *
      * @param model The model to set up.
      */
-    void initialize(@NonNull Model model);
+    void initializeModel(@NonNull Model model);
 
     /**
      * Change over to another rendering pipeline.

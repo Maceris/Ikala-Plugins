@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.backend.opengl;
 
+import static org.lwjgl.opengl.ARBBindlessTexture.glGetTextureHandleARB;
 import static org.lwjgl.opengl.GL46.*;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
@@ -42,7 +43,9 @@ public class TextureLoaderOpenGL implements TextureLoader {
                 buffer);
         glGenerateMipmap(GL_TEXTURE_2D);
 
-        return new Texture(textureID, width, height);
+        long bindlessHandle = glGetTextureHandleARB(textureID);
+
+        return new Texture(textureID, bindlessHandle, width, height);
     }
 
     @Override

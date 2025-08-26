@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.graph;
 
 import com.ikalagaming.graphics.frontend.Buffer;
+import com.ikalagaming.graphics.frontend.BufferUtil;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -79,10 +80,13 @@ public class MeshData {
     @Setter private Buffer boneWeightBuffer;
 
     /** The buffer (UBO) we store vertex data in. */
-    @Setter private Buffer vertexBuffer;
+    private final Buffer vertexBuffer;
 
     /** The buffer (SSBO) we store post-animation values in. */
     @Setter private Buffer animationTargetBuffer;
+
+    /** The buffer to store index data in. */
+    private final Buffer indexBuffer;
 
     /**
      * @param aabbMin The minimum value (corner) of the axis-aligned bounding box.
@@ -116,7 +120,8 @@ public class MeshData {
         this.boneWeightData = boneWeightData;
         this.textureData = textureData;
         this.boneWeightBuffer = null;
-        this.vertexBuffer = null;
+        this.vertexBuffer = BufferUtil.getInstance().createBuffer(Buffer.Type.UNIFORM);
         this.animationTargetBuffer = null;
+        this.indexBuffer = BufferUtil.getInstance().createBuffer(Buffer.Type.INDEXES);
     }
 }

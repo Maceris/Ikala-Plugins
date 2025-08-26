@@ -4,7 +4,6 @@ import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL20.glDrawBuffers;
 import static org.lwjgl.opengl.GL30.*;
 import static org.lwjgl.opengl.GL30.GL_FRAMEBUFFER;
-import static org.lwjgl.opengl.GL40.GL_DRAW_INDIRECT_BUFFER;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 import com.ikalagaming.graphics.GraphicsManager;
@@ -16,11 +15,6 @@ import com.ikalagaming.graphics.backend.opengl.stages.*;
 import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.CascadeShadow;
-import com.ikalagaming.graphics.graph.Model;
-import com.ikalagaming.graphics.scene.Entity;
-import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.launcher.PluginFolder;
-import com.ikalagaming.plugins.config.ConfigManager;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import imgui.ImFontAtlas;
@@ -35,28 +29,15 @@ import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public class PipelineManager {
-
-    /** The size of a draw command. */
-    private static final int COMMAND_SIZE = 5 * 4;
-
-    /** The size of a draw element. */
-    private static final int DRAW_ELEMENT_SIZE = 2 * 4;
 
     /** The size of a 4x4 model matrix ({@value}). */
     public static final int MODEL_MATRIX_SIZE = 4 * 4;
 
     /** Fallback pipeline that does nothing. */
     private static final Pipeline ERROR_PIPELINE = new PipelineOpenGL(new RenderStage[0]);
-
-    /**
-     * Whether we have set up the buffers for the scene. If we have, but need to set data up for the
-     * scene again, we will need to clear them out and start over.
-     */
-    private final AtomicBoolean buffersPopulated;
 
     /** The width of the drawable area in pixels. */
     private int cachedHeight;
@@ -67,12 +48,6 @@ public class PipelineManager {
     /** The cascade shadow map. */
     private final ArrayList<CascadeShadow> cascadeShadows;
 
-    /** The buffers for the batches. */
-    private final CommandBuffer commandBuffers;
-
-    /** The texture to use by default if nothing is provided for a model. */
-    private Texture defaultTexture;
-
     /** The texture we store font atlas on. */
     private Texture font;
 
@@ -81,9 +56,6 @@ public class PipelineManager {
 
     /** The mesh to render. */
     private GuiMesh guiMesh;
-
-    /** Storage for material data */
-    private Buffer materialBuffer;
 
     /** The buffer to use for storing point light info. */
     private Buffer pointLights;
@@ -123,7 +95,6 @@ public class PipelineManager {
     private final SkyboxRender stageSkyboxRender;
 
     public PipelineManager(@NonNull Window window, @NonNull ShaderMap shaders) {
-        buffersPopulated = new AtomicBoolean();
         cascadeShadows = new ArrayList<>();
         for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
             cascadeShadows.add(new CascadeShadow());
@@ -135,8 +106,8 @@ public class PipelineManager {
         renderers = new HashMap<>();
         gBuffer = generateGBuffer();
         renderBuffers = new RenderBuffers();
+        renderBuffers.initialize();
         generateRenderBuffers();
-        commandBuffers = new CommandBuffer();
         createImGuiFont();
         shadowBuffers = createShadowBuffers();
         skybox = SkyboxModel.create();
@@ -144,32 +115,12 @@ public class PipelineManager {
         createLightBuffers();
         guiMesh = GuiMesh.create();
 
-        final String defaultTexturePath =
-                PluginFolder.getResource(
-                                GraphicsPlugin.PLUGIN_NAME,
-                                PluginFolder.ResourceType.DATA,
-                                ConfigManager.loadConfig(GraphicsPlugin.PLUGIN_NAME)
-                                        .getString("default-texture"))
-                        .getAbsolutePath();
-
-        defaultTexture =
-                GraphicsManager.getRenderInstance().getTextureLoader().load(defaultTexturePath);
-
-        stageModelMatrixUpdate = new ModelMatrixUpdate(commandBuffers);
+        stageModelMatrixUpdate = new ModelMatrixUpdate();
         stageSceneRender =
-                new SceneRender(
-                        shaders.getShader(RenderStage.Type.SCENE),
-                        renderBuffers,
-                        gBuffer,
-                        commandBuffers,
-                        defaultTexture);
+                new SceneRender(shaders.getShader(RenderStage.Type.SCENE), renderBuffers, gBuffer);
         stageSceneRenderWireframe =
                 new SceneRenderWireframe(
-                        shaders.getShader(RenderStage.Type.SCENE),
-                        renderBuffers,
-                        gBuffer,
-                        commandBuffers,
-                        defaultTexture);
+                        shaders.getShader(RenderStage.Type.SCENE), renderBuffers, gBuffer);
         stageGuiRenderStandalone =
                 new GuiRenderStandalone(shaders.getShader(RenderStage.Type.GUI), guiMesh);
         stageGuiRender = new GuiRender(shaders.getShader(RenderStage.Type.GUI), guiMesh);
@@ -179,8 +130,7 @@ public class PipelineManager {
                         shaders.getShader(RenderStage.Type.SHADOW),
                         renderBuffers,
                         cascadeShadows,
-                        shadowBuffers,
-                        commandBuffers);
+                        shadowBuffers);
         stageLightRender =
                 new LightRender(
                         shaders.getShader(RenderStage.Type.LIGHT),
@@ -267,8 +217,6 @@ public class PipelineManager {
     public void cleanup() {
         GraphicsManager.getDeletionQueue().add(font);
         font = null;
-        GraphicsManager.getDeletionQueue().add(defaultTexture);
-        defaultTexture = null;
         guiMesh.cleanup();
         skybox.cleanup();
         skybox = null;
@@ -283,7 +231,6 @@ public class PipelineManager {
         GraphicsManager.getDeletionQueue().add(shadowBuffers);
         shadowBuffers = null;
         renderBuffers.cleanup();
-        commandBuffers.cleanup();
         deleteRenderBuffers();
     }
 
@@ -409,42 +356,59 @@ public class PipelineManager {
 
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, gBufferId);
 
-        int[] textures = new int[4];
+        int[] textures = new int[5];
         glGenTextures(textures);
 
-        for (int i = 0; i < textures.length; ++i) {
-            glBindTexture(GL_TEXTURE_2D, textures[i]);
-            int attachmentType;
-            if (i == textures.length - 1) {
-                glTexImage2D(
-                        GL_TEXTURE_2D,
-                        0,
-                        GL_DEPTH_COMPONENT32F,
-                        cachedWidth,
-                        cachedHeight,
-                        0,
-                        GL_DEPTH_COMPONENT,
-                        GL_FLOAT,
-                        (ByteBuffer) null);
-                attachmentType = GL_DEPTH_ATTACHMENT;
-            } else {
-                glTexImage2D(
-                        GL_TEXTURE_2D,
-                        0,
-                        GL_RGBA32F,
-                        cachedWidth,
-                        cachedHeight,
-                        0,
-                        GL_RGBA,
-                        GL_FLOAT,
-                        (ByteBuffer) null);
-                attachmentType = GL_COLOR_ATTACHMENT0 + i;
-            }
+        // Base Color
+        // Normal
+        // Tangent
+        for (int i = 0; i <= 2; ++i) {
+            glTexImage2D(
+                    GL_TEXTURE_2D,
+                    0,
+                    GL_RGBA32F,
+                    cachedWidth,
+                    cachedHeight,
+                    0,
+                    GL_RGBA,
+                    GL_FLOAT,
+                    (ByteBuffer) null);
             glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
             glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-            glFramebufferTexture2D(GL_FRAMEBUFFER, attachmentType, GL_TEXTURE_2D, textures[i], 0);
+            glFramebufferTexture2D(
+                    GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, textures[i], 0);
         }
+
+        // Material
+        glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RED,
+                cachedWidth,
+                cachedHeight,
+                0,
+                GL_RED_INTEGER,
+                GL_UNSIGNED_INT,
+                (ByteBuffer) null);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, textures[3], 0);
+
+        // Depth
+        glBindTexture(GL_TEXTURE_2D, textures[4]);
+        glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_DEPTH_COMPONENT32F,
+                cachedWidth,
+                cachedHeight,
+                0,
+                GL_DEPTH_COMPONENT,
+                GL_FLOAT,
+                (ByteBuffer) null);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, textures[4], 0);
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             IntBuffer intBuff = stack.mallocInt(textures.length - 1);
@@ -528,144 +492,5 @@ public class PipelineManager {
         cachedHeight = height;
         deleteRenderBuffers();
         generateRenderBuffers();
-    }
-
-    /**
-     * Set up the command buffer for animated models.
-     *
-     * @param scene The scene to render.
-     */
-    private void setupAnimCommandBuffer(@NonNull Scene scene) {
-        List<Model> modelList =
-                scene.getModelMap().values().stream().filter(Model::isAnimated).toList();
-
-        int numMeshes = 0;
-        int totalEntities = 0;
-        int drawElementCount = 0;
-        for (Model model : modelList) {
-            numMeshes += model.getMeshDataList().size();
-            drawElementCount += model.getEntitiesList().size() * model.getMeshDataList().size();
-            totalEntities += model.getEntitiesList().size();
-        }
-
-        Map<String, Integer> entitiesIndexMap = new HashMap<>();
-
-        // currently contains the size of the list of entities
-        FloatBuffer modelMatrices = MemoryUtil.memAllocFloat(totalEntities * MODEL_MATRIX_SIZE);
-
-        int entityIndex = 0;
-        for (Model model : modelList) {
-            List<Entity> entities = model.getEntitiesList();
-            for (Entity entity : entities) {
-                entity.getModelMatrix().get(entityIndex * MODEL_MATRIX_SIZE, modelMatrices);
-                entitiesIndexMap.put(entity.getEntityID(), entityIndex);
-                entityIndex++;
-            }
-        }
-        int modelMatrixBuffer = glGenBuffers();
-        commandBuffers.setAnimatedModelMatricesBuffer(modelMatrixBuffer);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, modelMatrixBuffer);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, modelMatrices, GL_STATIC_DRAW);
-        MemoryUtil.memFree(modelMatrices);
-
-        ByteBuffer commandBuffer = MemoryUtil.memAlloc(numMeshes * COMMAND_SIZE);
-        ByteBuffer drawElements = MemoryUtil.memAlloc(drawElementCount * DRAW_ELEMENT_SIZE);
-        // TODO(ches) fill out command buffers
-        commandBuffer.flip();
-        drawElements.flip();
-
-        commandBuffers.setAnimatedDrawCount(commandBuffer.remaining() / COMMAND_SIZE);
-
-        int animRenderBufferHandle = glGenBuffers();
-        commandBuffers.setAnimatedCommandBuffer(animRenderBufferHandle);
-        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, animRenderBufferHandle);
-        glBufferData(GL_DRAW_INDIRECT_BUFFER, commandBuffer, GL_DYNAMIC_DRAW);
-        MemoryUtil.memFree(commandBuffer);
-
-        int drawElementBuffer = glGenBuffers();
-        commandBuffers.setAnimatedDrawElementBuffer(drawElementBuffer);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, drawElementBuffer);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, drawElements, GL_STATIC_DRAW);
-        MemoryUtil.memFree(drawElements);
-    }
-
-    /**
-     * Set up model data before rendering.
-     *
-     * @param scene The scene to read models from.
-     */
-    @Deprecated
-    public void setupData(@NonNull Scene scene) {
-        // TODO(ches) remove this
-        if (buffersPopulated.getAndSet(false)) {
-            renderBuffers.cleanup();
-            commandBuffers.cleanup();
-        }
-        renderBuffers.loadStaticModels(scene);
-        renderBuffers.loadAnimatedModels(scene);
-        setupAnimCommandBuffer(scene);
-        setupStaticCommandBuffer(scene);
-        buffersPopulated.set(true);
-    }
-
-    /**
-     * Set up the command buffer for static models.
-     *
-     * @param scene The scene to render.
-     */
-    private void setupStaticCommandBuffer(@NonNull Scene scene) {
-        List<Model> modelList =
-                scene.getModelMap().values().stream().filter(m -> !m.isAnimated()).toList();
-
-        int numMeshes = 0;
-        int totalEntities = 0;
-        int drawElementCount = 0;
-        for (Model model : modelList) {
-            numMeshes += model.getMeshDataList().size();
-            drawElementCount += model.getEntitiesList().size() * model.getMeshDataList().size();
-            totalEntities += model.getEntitiesList().size();
-        }
-
-        Map<String, Integer> entitiesIndexMap = new HashMap<>();
-
-        // currently contains the size of the list of entities
-        FloatBuffer modelMatrices = MemoryUtil.memAllocFloat(totalEntities * MODEL_MATRIX_SIZE);
-
-        int entityIndex = 0;
-        for (Model model : modelList) {
-            List<Entity> entities = model.getEntitiesList();
-            for (Entity entity : entities) {
-                entity.getModelMatrix().get(entityIndex * MODEL_MATRIX_SIZE, modelMatrices);
-                entitiesIndexMap.put(entity.getEntityID(), entityIndex);
-                entityIndex++;
-            }
-        }
-        int modelMatrixBuffer = glGenBuffers();
-        commandBuffers.setStaticModelMatricesBuffer(modelMatrixBuffer);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, modelMatrixBuffer);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, modelMatrices, GL_STATIC_DRAW);
-        MemoryUtil.memFree(modelMatrices);
-
-        ByteBuffer commandBuffer = MemoryUtil.memAlloc(numMeshes * COMMAND_SIZE);
-        ByteBuffer drawElements = MemoryUtil.memAlloc(drawElementCount * DRAW_ELEMENT_SIZE);
-
-        // TODO(ches) fill out command buffers
-
-        commandBuffer.flip();
-        drawElements.flip();
-
-        commandBuffers.setStaticDrawCount(commandBuffer.remaining() / COMMAND_SIZE);
-
-        int staticRenderBufferHandle = glGenBuffers();
-        commandBuffers.setStaticCommandBuffer(staticRenderBufferHandle);
-        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, staticRenderBufferHandle);
-        glBufferData(GL_DRAW_INDIRECT_BUFFER, commandBuffer, GL_DYNAMIC_DRAW);
-        MemoryUtil.memFree(commandBuffer);
-
-        int drawElementBuffer = glGenBuffers();
-        commandBuffers.setStaticDrawElementBuffer(drawElementBuffer);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, drawElementBuffer);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, drawElements, GL_STATIC_DRAW);
-        MemoryUtil.memFree(drawElements);
     }
 }

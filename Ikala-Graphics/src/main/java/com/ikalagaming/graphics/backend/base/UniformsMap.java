@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.backend.base;
 
 import com.ikalagaming.graphics.exceptions.ShaderException;
+import com.ikalagaming.graphics.frontend.Texture;
 
 import lombok.NonNull;
 import org.joml.Matrix4f;
@@ -73,4 +74,12 @@ public interface UniformsMap {
      * @param value The value to set.
      */
     void setUniform(@NonNull String uniformName, @NonNull Vector4f value);
+
+    /**
+     * Sets the bindless handle for a texture sampler.
+     *
+     * @param uniformName The name of the uniform.
+     * @param texture The texture set a bindless sampler handle from.
+     */
+    void setUniform(@NonNull String uniformName, @NonNull Texture texture);
 }

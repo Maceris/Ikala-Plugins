@@ -1,4 +1,3 @@
 ---
 icon-path: 'textures/game_icon.png'
 filters-folder: 'shaders/filters'
-default-texture: 'textures/default_texture.png'

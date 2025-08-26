@@ -103,7 +103,7 @@ public class ModelLoader {
         }
         Model loaded = ModelLoader.loadModel(request);
         // TODO(ches) set up animations
-        GraphicsManager.getRenderInstance().initialize(loaded);
+        GraphicsManager.getRenderInstance().initializeModel(loaded);
         GraphicsManager.getScene().addModel(loaded);
     }
 

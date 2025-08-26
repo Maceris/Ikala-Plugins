@@ -14,20 +14,11 @@ out vec4 outViewPosition;
 out vec4 outWorldPosition;
 out uint outMaterialIdx;
 
-struct DrawElement
-{
-    int modelMatrixIndex;
-    int materialIndex;
-};
-
-layout(std430, binding = 1) buffer DrawElements {
-    DrawElement drawElements[];
-};
-
-layout(std430, binding = 2) buffer Matrices {
+layout(std430, binding = 1) buffer Matrices {
 	mat4 modelMatrices[];
 };
 
+uniform uint materialIndex;
 uniform mat4 projectionMatrix;
 uniform mat4 viewMatrix;
 
@@ -38,10 +29,8 @@ void main()
     vec4 initTangent = vec4(tangent, 0.0);
     vec4 initBitangent = vec4(bitangent, 0.0);
 
-    uint idx = gl_BaseInstance + gl_InstanceID;
-    DrawElement drawElement = drawElements[idx];
-    outMaterialIdx = drawElement.materialIndex;
-    mat4 modelMatrix =  modelMatrices[drawElement.modelMatrixIndex];
+    outMaterialIdx = materialIndex;
+    mat4 modelMatrix =  modelMatrices[gl_InstanceID];
     mat4 modelViewMatrix = viewMatrix * modelMatrix;
     outWorldPosition = modelMatrix * initPos;
     outViewPosition  = viewMatrix * outWorldPosition;

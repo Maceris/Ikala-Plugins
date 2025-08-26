@@ -3,7 +3,6 @@ package com.ikalagaming.graphics.backend.opengl.stages;
 import static org.lwjgl.opengl.GL43.*;
 
 import com.ikalagaming.graphics.backend.base.RenderStage;
-import com.ikalagaming.graphics.backend.opengl.CommandBuffer;
 import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.scene.Scene;
@@ -23,30 +22,20 @@ public class SceneRenderWireframe implements RenderStage {
     /** The g-buffer for rendering geometry to. */
     @Setter @NonNull private Framebuffer gBuffer;
 
-    /** The scene object rendering command buffers. */
-    @Setter @NonNull private CommandBuffer commandBuffers;
-
-    @Setter @NonNull private Texture defaultTexture;
-
     /**
      * Set up the shadow render stage.
      *
      * @param shader The shader to use for rendering.
      * @param renderBuffers The buffers for indirect drawing of models.
      * @param gBuffer The depth map buffers.
-     * @param commandBuffers The rendering command buffers.
      */
     public SceneRenderWireframe(
             final @NonNull Shader shader,
             final @NonNull RenderBuffers renderBuffers,
-            final @NonNull Framebuffer gBuffer,
-            final @NonNull CommandBuffer commandBuffers,
-            final @NonNull Texture defaultTexture) {
+            final @NonNull Framebuffer gBuffer) {
         this.shader = shader;
         this.renderBuffers = renderBuffers;
         this.gBuffer = gBuffer;
-        this.commandBuffers = commandBuffers;
-        this.defaultTexture = defaultTexture;
     }
 
     /**
@@ -58,8 +47,7 @@ public class SceneRenderWireframe implements RenderStage {
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         glDisable(GL_TEXTURE_2D);
 
-        SceneRender.commonSceneRender(
-                scene, shader, renderBuffers, gBuffer, commandBuffers, defaultTexture);
+        SceneRender.commonSceneRender(scene, shader, renderBuffers, gBuffer);
 
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         glEnable(GL_TEXTURE_2D);

@@ -42,7 +42,6 @@ import java.util.List;
 
 @Slf4j
 public class OpenGLInstance implements Instance {
-    private static final BufferUtil BUFFER_UTIL = new BufferUtilOpenGL();
     private Pipeline pipeline;
     private TextureLoader textureLoader;
     private ShaderMap shaderMap;
@@ -314,11 +313,6 @@ public class OpenGLInstance implements Instance {
     }
 
     @Override
-    public BufferUtil getBufferUtil() {
-        return BUFFER_UTIL;
-    }
-
-    @Override
     public void cleanup() {
         pipelineManager.cleanup();
         shaderMap.clearAll();
@@ -357,12 +351,7 @@ public class OpenGLInstance implements Instance {
     }
 
     @Override
-    public void setupData(@NonNull Scene scene) {
-        pipelineManager.setupData(scene);
-    }
-
-    @Override
-    public void initialize(@NonNull Model model) {
+    public void initializeModel(@NonNull Model model) {
         if (model.isAnimated()) {
             // Filled out later
             model.setEntityAnimationOffsetsBuffer(
@@ -387,10 +376,13 @@ public class OpenGLInstance implements Instance {
                 meshData.setAnimationTargetBuffer(
                         new Buffer(glGenBuffers(), Buffer.Type.SHADER_STORAGE));
 
-                int vertexBuffer = glGenBuffers();
-                meshData.setVertexBuffer(new Buffer(vertexBuffer, Buffer.Type.UNIFORM));
-                glBindBuffer(GL_UNIFORM_BUFFER, vertexBuffer);
+                final BufferUtil bufferUtil = BufferUtil.getInstance();
+
+                bufferUtil.bindBuffer(meshData.getVertexBuffer());
                 glBufferStorage(GL_UNIFORM_BUFFER, meshData.getVertexData(), 0);
+
+                bufferUtil.bindBuffer(meshData.getIndexBuffer());
+                glBufferStorage(GL_ELEMENT_ARRAY_BUFFER, meshData.getIndices(), 0);
 
                 int boneWeightBuffer = glGenBuffers();
                 meshData.setBoneWeightBuffer(new Buffer(boneWeightBuffer, Buffer.Type.UNIFORM));

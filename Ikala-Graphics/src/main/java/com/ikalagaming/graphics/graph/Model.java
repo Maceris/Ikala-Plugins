@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.graph;
 
 import com.ikalagaming.graphics.frontend.Buffer;
+import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.scene.Entity;
 
 import lombok.Getter;
@@ -102,6 +103,9 @@ public class Model {
     /** Used to store animation states, for animated models. */
     @Setter private Buffer entityAnimationOffsetsBuffer;
 
+    /** Used to store model matrices for rendering entities. */
+    private final Buffer modelMatricesBuffer;
+
     /**
      * The highest buffer size (measured in entity count), for animation state and destination
      * buffers. This will be doubled if we need more, but not all of it needs to be used.
@@ -120,6 +124,8 @@ public class Model {
         this.animationList = new ArrayList<>();
         this.entityAnimationOffsetsBuffer = null;
         this.maxAnimatedBufferCapacity = 0;
+        this.modelMatricesBuffer =
+                BufferUtil.getInstance().createBuffer(Buffer.Type.SHADER_STORAGE);
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.backend.opengl;
 
+import static org.lwjgl.opengl.ARBBindlessTexture.glUniformHandleui64ARB;
 import static org.lwjgl.opengl.GL20.glGetUniformLocation;
 import static org.lwjgl.opengl.GL20.glUniform1f;
 import static org.lwjgl.opengl.GL20.glUniform1i;
@@ -11,6 +12,7 @@ import static org.lwjgl.opengl.GL20.glUniformMatrix4fv;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.exceptions.ShaderException;
+import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
@@ -121,5 +123,10 @@ public class UniformsMapOpenGL implements UniformsMap {
     @Override
     public void setUniform(@NonNull String uniformName, @NonNull Vector4f value) {
         glUniform4f(getUniformLocation(uniformName), value.x, value.y, value.z, value.w);
+    }
+
+    @Override
+    public void setUniform(@NonNull String uniformName, @NonNull Texture texture) {
+        glUniformHandleui64ARB(getUniformLocation(uniformName), texture.handle());
     }
 }

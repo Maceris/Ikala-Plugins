@@ -1,7 +1,7 @@
 package com.ikalagaming.graphics.graph;
 
-import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.frontend.Buffer;
+import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.frontend.Material;
 
 import lombok.Getter;
@@ -36,10 +36,7 @@ public class MaterialCache {
         Material defaultMaterial = new Material();
         materialsList.add(defaultMaterial);
         dirty = true;
-        materialBuffer =
-                GraphicsManager.getRenderInstance()
-                        .getBufferUtil()
-                        .createBuffer(Buffer.Type.SHADER_STORAGE);
+        materialBuffer = BufferUtil.getInstance().createBuffer(Buffer.Type.SHADER_STORAGE);
     }
 
     /**
