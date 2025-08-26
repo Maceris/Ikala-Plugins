@@ -110,7 +110,7 @@ public class PipelineManager {
         generateRenderBuffers();
         createImGuiFont();
         shadowBuffers = createShadowBuffers();
-        skybox = SkyboxModel.create();
+        skybox = new SkyboxModel();
         quadMesh = QuadMesh.getInstance();
         createLightBuffers();
         guiMesh = GuiMesh.create();

@@ -25,7 +25,7 @@ public class SkyboxRender implements RenderStage {
     @NonNull @Setter private Shader shader;
 
     /** The model to use for the skybox. */
-    @NonNull @Setter private SkyboxModel skybox;
+    private final SkyboxModel skybox;
 
     /**
      * Set up the skybox render stage.
@@ -65,7 +65,7 @@ public class SkyboxRender implements RenderStage {
 
         uniformsMap.setUniform(ShaderUniforms.Skybox.HAS_TEXTURE, hasTexture ? 1 : 0);
 
-        glBindVertexArray(skybox.vao());
+        glBindVertexArray(skybox.getVao());
 
         glDrawElements(GL_TRIANGLES, SkyboxModel.VERTEX_COUNT, GL_UNSIGNED_INT, 0);
 

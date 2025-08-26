@@ -6,21 +6,15 @@ import static org.lwjgl.opengl.GL20.glEnableVertexAttribArray;
 import static org.lwjgl.opengl.GL20.glVertexAttribPointer;
 import static org.lwjgl.opengl.GL30.*;
 
+import lombok.Getter;
 import org.lwjgl.system.MemoryStack;
 
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 
-/**
- * A skybox model. Should be constructed with the {@link #create()} method instead of a constructor,
- * as buffers get set up there. Will be replaced with a more generic setup.
- *
- * @param vao The VAO index.
- * @param vbos The {@value #VBO_COUNT} VBOs, which represent position, texture coordinates, and
- *     indices respectively.
- */
-@Deprecated
-public record SkyboxModel(int vao, int[] vbos) {
+/** A skybox model. */
+@Getter
+public class SkyboxModel {
 
     private static final float[] POSITIONS =
             new float[] {
@@ -100,6 +94,9 @@ public record SkyboxModel(int vao, int[] vbos) {
                 5, 12, 13 // Bottom Lower
             };
 
+    private final int vao;
+    private final int[] vbos;
+
     /**
      * The number of vertices to draw (i.e. number of indices), since we reuse a couple of the
      * vertices.
@@ -111,25 +108,19 @@ public record SkyboxModel(int vao, int[] vbos) {
      */
     public static final int VBO_COUNT = 3;
 
-    /**
-     * Create a new skybox model. This should be called instead of the constructor.
-     *
-     * @return The newly set up skybox model.
-     */
-    public static SkyboxModel create() {
-        int vaoID;
-        int[] vboIDList = new int[VBO_COUNT];
+    public SkyboxModel() {
+        vbos = new int[VBO_COUNT];
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            vaoID = glGenVertexArrays();
-            glBindVertexArray(vaoID);
+            vao = glGenVertexArrays();
+            glBindVertexArray(vao);
 
             // Positions VBO
-            glGenBuffers(vboIDList);
+            glGenBuffers(vbos);
 
-            final int vboPositions = vboIDList[0];
-            final int vboTextureCoordinates = vboIDList[1];
-            final int vboIndices = vboIDList[2];
+            final int vboPositions = vbos[0];
+            final int vboTextureCoordinates = vbos[1];
+            final int vboIndices = vbos[2];
 
             FloatBuffer positionsBuffer = stack.callocFloat(POSITIONS.length);
             positionsBuffer.put(0, POSITIONS);
@@ -153,7 +144,6 @@ public record SkyboxModel(int vao, int[] vbos) {
             glBindBuffer(GL_ARRAY_BUFFER, 0);
             glBindVertexArray(0);
         }
-        return new SkyboxModel(vaoID, vboIDList);
     }
 
     /** Clean up the model buffers. */

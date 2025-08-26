@@ -48,10 +48,10 @@ public class LightRender implements RenderStage {
     @NonNull private List<CascadeShadow> cascadeShadows;
 
     /** The buffer to use for storing point light info. */
-    @NonNull private Buffer pointLights;
+    @NonNull private Buffer pointLightsBuffer;
 
     /** The buffer to use for storing spotlight info. */
-    @NonNull private Buffer spotLights;
+    @NonNull private Buffer spotLightsBuffer;
 
     /** The buffer for reading shadow info from. */
     @NonNull private Framebuffer shadowBuffers;
@@ -67,15 +67,15 @@ public class LightRender implements RenderStage {
         shader.bind();
         var uniformsMap = shader.getUniformMap();
 
-        updateLights(scene, pointLights, spotLights, uniformsMap);
+        updateLights(scene, pointLightsBuffer, spotLightsBuffer, uniformsMap);
 
         int nextTexture = 0;
-        // Bind the G-Buffer textures
         long[] textureIds = gBuffer.textures();
         if (textureIds != null) {
             for (long textureId : textureIds) {
-                glActiveTexture(GL_TEXTURE0 + nextTexture++);
+                glActiveTexture(GL_TEXTURE0 + nextTexture);
                 glBindTexture(GL_TEXTURE_2D, (int) textureId);
+                nextTexture += 1;
             }
         }
 
