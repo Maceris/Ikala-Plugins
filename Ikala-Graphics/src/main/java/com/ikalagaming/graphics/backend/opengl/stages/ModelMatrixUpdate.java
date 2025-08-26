@@ -52,6 +52,7 @@ public class ModelMatrixUpdate implements RenderStage {
         glBufferData(GL_SHADER_STORAGE_BUFFER, modelMatrices, GL_STATIC_DRAW);
         MemoryUtil.memFree(modelMatrices);
 
+        //TODO(ches) cache these until the number of entities changes
         final int COMMAND_SIZE = 5 * 4;
         final int NUMBER_OF_COMMANDS = model.isAnimated() ? entities.size() : 1;
         ByteBuffer commandBuffer = ByteBuffer.allocate(NUMBER_OF_COMMANDS * COMMAND_SIZE);
