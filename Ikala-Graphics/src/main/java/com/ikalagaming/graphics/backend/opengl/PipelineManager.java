@@ -140,8 +140,7 @@ public class PipelineManager {
                         shadowBuffers,
                         gBuffer,
                         quadMesh);
-        stageAnimationRender =
-                new AnimationRender(shaders.getShader(RenderStage.Type.GUI), renderBuffers);
+        stageAnimationRender = new AnimationRender(shaders.getShader(RenderStage.Type.GUI));
         stageFilterRender =
                 new FilterRender(
                         shaders.getShader(RenderStage.Type.FILTER), screenTexture, quadMesh);

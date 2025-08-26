@@ -5,7 +5,6 @@ import static org.lwjgl.opengl.GL42.glMemoryBarrier;
 import static org.lwjgl.opengl.GL43.*;
 
 import com.ikalagaming.graphics.backend.base.RenderStage;
-import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
 import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -83,10 +82,8 @@ public class AnimationRender implements RenderStage {
      * Set up the animation render stage.
      *
      * @param shader The shader to use for rendering.
-     * @param renderBuffers The buffers for indirect drawing of models.
      */
-    public AnimationRender(
-            final @NonNull Shader shader, final @NonNull RenderBuffers renderBuffers) {
+    public AnimationRender(final @NonNull Shader shader) {
         this.shader = shader;
     }
 
@@ -104,10 +101,6 @@ public class AnimationRender implements RenderStage {
                 continue;
             }
 
-            if (entityCount > Model.MAX_ENTITIES) {
-                // TODO(ches) log error.
-                entityCount = Model.MAX_ENTITIES;
-            }
             updateInstancedStorage(model, entityCount);
 
             updateAnimationOffsets(model, entityCount);

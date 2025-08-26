@@ -1,13 +1,16 @@
 package com.ikalagaming.graphics.scene;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
+import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector4f;
 
 import java.util.Collections;
@@ -19,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** A scene to be rendered, containing the items and lighting. */
 @Getter
+@Slf4j
 public class Scene {
     /**
      * The camera for the scene.
@@ -101,8 +105,7 @@ public class Scene {
         if (model == null) {
             entityQueue.add(entity);
         } else {
-            // TODO(ches) have a max number of unique entities
-            model.getEntitiesList().add(entity);
+            addEntity(entity, model);
         }
     }
 
@@ -116,10 +119,30 @@ public class Scene {
         for (Iterator<Entity> iter = entityQueue.iterator(); iter.hasNext(); ) {
             Entity current = iter.next();
             if (model.getId().equals(current.getModelID())) {
-                model.getEntitiesList().add(current);
+                addEntity(current, model);
                 iter.remove();
             }
         }
+    }
+
+    /**
+     * Add entity to the model, unless we have reached the limit.
+     *
+     * @param entity The entity to add.
+     * @param model The model to add the entity to.
+     */
+    private void addEntity(@NonNull Entity entity, @NonNull Model model) {
+        List<Entity> entityList = model.getEntitiesList();
+        if (entityList.size() >= Model.MAX_ENTITIES) {
+            log.error(
+                    SafeResourceLoader.getStringFormatted(
+                            "TOO_MANY_ENTITIES",
+                            GraphicsPlugin.getResourceBundle(),
+                            String.valueOf(Model.MAX_ENTITIES),
+                            model.getId()));
+            return;
+        }
+        model.getEntitiesList().add(entity);
     }
 
     /**
