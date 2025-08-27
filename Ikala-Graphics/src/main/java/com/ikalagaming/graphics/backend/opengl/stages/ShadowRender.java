@@ -22,7 +22,7 @@ import java.util.List;
 public class ShadowRender implements RenderStage {
 
     /** The binding for the model matrices buffer SSBO. */
-    static final int MODEL_MATRICES_BINDING = 1;
+    static final int MODEL_MATRICES_BINDING = 0;
 
     /** The shader to use for rendering. */
     @NonNull @Setter private Shader shader;
@@ -112,10 +112,7 @@ public class ShadowRender implements RenderStage {
 
             final int commandCount = model.isAnimated() ? entityCount : 1;
 
-            glBindBufferBase(
-                    GL_SHADER_STORAGE_BUFFER,
-                    MODEL_MATRICES_BINDING,
-                    (int) model.getModelMatricesBuffer().id());
+            bufferUtil.bindBuffer(model.getModelMatricesBuffer(), 0);
 
             for (MeshData mesh : model.getMeshDataList()) {
                 bufferUtil.bindBuffer(mesh.getVertexBuffer());
@@ -123,6 +120,8 @@ public class ShadowRender implements RenderStage {
                 bufferUtil.bindBuffer(mesh.getDrawIndirectBuffer());
                 glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0, commandCount, 0);
             }
+
+            bufferUtil.unbindBuffer(model.getModelMatricesBuffer(), 0);
         }
     }
 }

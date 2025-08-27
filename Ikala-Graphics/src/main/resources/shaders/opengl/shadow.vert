@@ -8,7 +8,7 @@ layout(location = 4) in vec2 texCoord;
 
 uniform mat4 projViewMatrix;
 
-layout(std430, binding = 1) buffer Matrices {
+layout(std430, binding = 0) buffer Matrices {
 	mat4 modelMatrices[];
 };
 
