@@ -373,7 +373,7 @@ public class OpenGLInstance implements Instance {
             for (Model.Animation animation : model.getAnimationList()) {
                 totalSize += animation.frameData().length;
             }
-            ByteBuffer animations = ByteBuffer.allocate(totalSize);
+            ByteBuffer animations = MemoryUtil.memAlloc(totalSize);
             for (Model.Animation animation : model.getAnimationList()) {
                 animations.put(animation.frameData());
             }

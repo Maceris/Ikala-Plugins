@@ -24,7 +24,7 @@ public class AnimationRender implements RenderStage {
 
     private static void updateAnimationOffsets(Model model, int entityCount) {
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) model.getEntityAnimationOffsetsBuffer().id());
-        IntBuffer animationOffsets = IntBuffer.allocate(entityCount);
+        IntBuffer animationOffsets = MemoryUtil.memAllocInt(entityCount);
         for (int i = 0; i < entityCount; ++i) {
             Entity entity = model.getEntitiesList().get(i);
 

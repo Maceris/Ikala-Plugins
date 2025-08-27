@@ -120,7 +120,7 @@ public class BiomeDebug extends GuiWindow {
                 image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
         byte[] rgba = intARGBtoByteRGBA(rgbValues);
 
-        ByteBuffer buffer = ByteBuffer.allocateDirect(rgba.length);
+        ByteBuffer buffer = ByteBuffer.allocate(rgba.length);
         buffer.put(rgba);
         buffer.rewind();
 

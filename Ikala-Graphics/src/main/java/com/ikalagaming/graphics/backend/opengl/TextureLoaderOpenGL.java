@@ -20,9 +20,25 @@ import java.nio.IntBuffer;
 
 @Slf4j
 public class TextureLoaderOpenGL implements TextureLoader {
+
+    @Override
+    public Texture loadBindless(
+            @NonNull ByteBuffer buffer, @NonNull Format format, final int width, final int height) {
+        return loadTexture(buffer, format, width, height, true);
+    }
+
     @Override
     public Texture load(
             @NonNull ByteBuffer buffer, @NonNull Format format, final int width, final int height) {
+        return loadTexture(buffer, format, width, height, false);
+    }
+
+    private Texture loadTexture(
+            @NonNull ByteBuffer buffer,
+            @NonNull Format format,
+            final int width,
+            final int height,
+            boolean bindless) {
         int textureID = glGenTextures();
 
         glBindTexture(GL_TEXTURE_2D, textureID);
@@ -43,13 +59,25 @@ public class TextureLoaderOpenGL implements TextureLoader {
                 buffer);
         glGenerateMipmap(GL_TEXTURE_2D);
 
-        long bindlessHandle = glGetTextureHandleARB(textureID);
+        long bindlessHandle = 0;
+        if (bindless) {
+            bindlessHandle = glGetTextureHandleARB(textureID);
+        }
 
         return new Texture(textureID, bindlessHandle, width, height);
     }
 
     @Override
+    public Texture loadBindless(@NonNull String texturePath) {
+        return loadFromPath(texturePath, true);
+    }
+
+    @Override
     public Texture load(@NonNull String texturePath) {
+        return loadFromPath(texturePath, false);
+    }
+
+    private Texture loadFromPath(String texturePath, boolean bindless) {
         Texture result;
         try (MemoryStack stack = MemoryStack.stackPush()) {
             IntBuffer width = stack.mallocInt(1);
@@ -68,7 +96,7 @@ public class TextureLoaderOpenGL implements TextureLoader {
                 throw new TextureException(error);
             }
 
-            result = load(buffer, Format.R8G8B8A8_UINT, width.get(), height.get());
+            result = loadTexture(buffer, Format.R8G8B8A8_UINT, width.get(), height.get(), bindless);
 
             STBImage.stbi_image_free(buffer);
         }

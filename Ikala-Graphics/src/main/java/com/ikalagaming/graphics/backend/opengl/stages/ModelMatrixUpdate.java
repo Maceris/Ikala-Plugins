@@ -55,7 +55,7 @@ public class ModelMatrixUpdate implements RenderStage {
         // TODO(ches) cache these until the number of entities changes
         final int COMMAND_SIZE = 5 * 4;
         final int NUMBER_OF_COMMANDS = model.isAnimated() ? entities.size() : 1;
-        ByteBuffer commandBuffer = ByteBuffer.allocate(NUMBER_OF_COMMANDS * COMMAND_SIZE);
+        ByteBuffer commandBuffer = MemoryUtil.memAlloc(NUMBER_OF_COMMANDS * COMMAND_SIZE);
 
         for (MeshData mesh : model.getMeshDataList()) {
             commandBuffer.clear();

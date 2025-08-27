@@ -132,7 +132,7 @@ public class SceneRender implements RenderStage {
         final int MATERIAL_SIZE = 16 /* floats/ints */ * 4 /* bytes per float/int */;
         final List<Material> materials = scene.getMaterialCache().getMaterialsList();
 
-        ByteBuffer materialData = ByteBuffer.allocate(materials.size() * MATERIAL_SIZE);
+        ByteBuffer materialData = MemoryUtil.memAlloc(materials.size() * MATERIAL_SIZE);
 
         for (Material material : materials) {
             final int normalMapID =

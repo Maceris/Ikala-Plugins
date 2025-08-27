@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 public class ModelLoader {
 
     /**
-     * Information needed to load a model.
+     * Information needed to loadBindless a model.
      *
      * @param modelId The ID to supply the model.
      * @param pluginName The plugin that contains the model.
@@ -89,7 +89,7 @@ public class ModelLoader {
      */
     private record VertexWeight(int boneID, int vertexID, float weight) {}
 
-    /** The list of models we have queued up to load. */
+    /** The list of models we have queued up to loadBindless. */
     private static final Deque<ModelLoadRequest> loadQueue = new ConcurrentLinkedDeque<>();
 
     /** The maximum number of bones that are allowed in a model. */
@@ -110,7 +110,7 @@ public class ModelLoader {
     /**
      * Load a model right now and return it.
      *
-     * @param request Data required to load the model.
+     * @param request Data required to loadBindless the model.
      * @return The newly loaded model.
      */
     public static Model loadModel(@NonNull ModelLoadRequest request) {
@@ -130,14 +130,14 @@ public class ModelLoader {
             throw new ModelException(error);
         }
         String modelDir = file.getParent();
-        // TODO(ches) actually load the mesh data
+        // TODO(ches) actually loadBindless the mesh data
         return new Model(request.modelId());
     }
 
     /**
-     * Put in a request to load a model later, on the main thread.
+     * Put in a request to loadBindless a model later, on the main thread.
      *
-     * @param request The details about what model to load.
+     * @param request The details about what model to loadBindless.
      */
     public static void loadModelLater(ModelLoadRequest request) {
         ModelLoader.loadQueue.add(request);
