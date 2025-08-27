@@ -23,26 +23,21 @@ public class RenderBuffers {
         glBindVertexArray(vao);
 
         final int stride = (3 * 4) * 4 + 2 * 4;
-        int pointer = 0;
         // Positions
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, false, stride, pointer);
-        pointer += 3 * 4;
+        glVertexAttribPointer(0, 3, GL_FLOAT, false, stride, 0);
         // Normals
         glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 3, GL_FLOAT, false, stride, pointer);
-        pointer += 3 * 4;
+        glVertexAttribPointer(1, 3, GL_FLOAT, false, stride, 0);
         // Tangents
         glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 3, GL_FLOAT, false, stride, pointer);
-        pointer += 3 * 4;
+        glVertexAttribPointer(2, 3, GL_FLOAT, false, stride, 0);
         // Bitangents
         glEnableVertexAttribArray(3);
-        glVertexAttribPointer(3, 3, GL_FLOAT, false, stride, pointer);
-        pointer += 3 * 4;
+        glVertexAttribPointer(3, 3, GL_FLOAT, false, stride, 0);
         // Texture coordinates
         glEnableVertexAttribArray(4);
-        glVertexAttribPointer(4, 2, GL_FLOAT, false, stride, pointer);
+        glVertexAttribPointer(4, 2, GL_FLOAT, false, stride, 0);
 
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindVertexArray(0);
