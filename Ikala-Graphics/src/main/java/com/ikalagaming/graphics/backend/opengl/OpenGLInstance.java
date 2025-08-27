@@ -42,6 +42,7 @@ import java.util.List;
 
 @Slf4j
 public class OpenGLInstance implements Instance {
+    private int renderConfig;
     private Pipeline pipeline;
     private TextureLoader textureLoader;
     private ShaderMap shaderMap;
@@ -60,7 +61,8 @@ public class OpenGLInstance implements Instance {
         initializeShaders();
         initializeImGui(window);
         pipelineManager = new PipelineManager(window, shaderMap);
-        pipeline = pipelineManager.getPipeline(RenderConfig.builder().withGui().build());
+        renderConfig = RenderConfig.builder().withGui().build();
+        pipeline = pipelineManager.getPipeline(renderConfig);
         pipeline.initialize(window, shaderMap);
         return true;
     }
@@ -408,7 +410,13 @@ public class OpenGLInstance implements Instance {
     }
 
     @Override
+    public int getPipelineConfig() {
+        return renderConfig;
+    }
+
+    @Override
     public void swapPipeline(final int config) {
+        renderConfig = config;
         pipeline = pipelineManager.getPipeline(config);
     }
 

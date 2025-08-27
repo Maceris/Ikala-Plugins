@@ -127,8 +127,6 @@ public class SceneRender implements RenderStage {
             return;
         }
 
-        Buffer materialBuffer = scene.getMaterialCache().getMaterialBuffer();
-
         final int MATERIAL_SIZE = 16 /* floats/ints */ * 4 /* bytes per float/int */;
         final List<Material> materials = scene.getMaterialCache().getMaterialsList();
 
@@ -168,6 +166,8 @@ public class SceneRender implements RenderStage {
         }
 
         materialData.flip();
+
+        Buffer materialBuffer = scene.getMaterialCache().getMaterialBuffer();
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) materialBuffer.id());
         glBufferData((int) materialBuffer.id(), materialData, GL_STATIC_DRAW);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);

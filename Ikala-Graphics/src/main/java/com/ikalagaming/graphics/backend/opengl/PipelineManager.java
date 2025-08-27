@@ -154,7 +154,7 @@ public class PipelineManager {
     }
 
     private Pipeline buildPipeline(final int configuration) {
-        boolean renderingScene = false;
+        final boolean renderingScene = RenderConfig.hasSceneStage(configuration);
         List<RenderStage> stages = new ArrayList<>();
         if (RenderConfig.hasError(configuration)) {
             log.error(
@@ -163,13 +163,14 @@ public class PipelineManager {
             return ERROR_PIPELINE;
         }
 
+        if (renderingScene) {
+            stages.add(0, stageModelMatrixUpdate);
+        }
         if (RenderConfig.hasAnimationStage(configuration)) {
             stages.add(stageAnimationRender);
-            renderingScene = true;
         }
         if (RenderConfig.hasShadowStage(configuration)) {
             stages.add(stageShadowRender);
-            renderingScene = true;
         }
         if (RenderConfig.hasSceneStage(configuration)) {
             if (RenderConfig.sceneIsWireframe(configuration)) {
@@ -177,7 +178,6 @@ public class PipelineManager {
             } else {
                 stages.add(stageSceneRender);
             }
-            renderingScene = true;
         }
         if (RenderConfig.hasFilterStage(configuration)) {
             // NOTE(ches) for post-processing we will need to render to a texture instead of the
@@ -186,21 +186,15 @@ public class PipelineManager {
         } else {
             stages.add(stageBackBufferBinding);
         }
-        if (RenderConfig.hasLightingStage(configuration)) {
+        if (RenderConfig.hasSceneStage(configuration)) {
             stages.add(stageLightRender);
-            renderingScene = true;
         }
         if (RenderConfig.hasSkyboxStage(configuration)) {
             stages.add(stageSkyboxRender);
-            renderingScene = true;
         }
         if (RenderConfig.hasFilterStage(configuration)) {
             stages.add(stageBackBufferBinding);
             stages.add(stageFilterRender);
-            renderingScene = true;
-        }
-        if (renderingScene) {
-            stages.add(0, stageModelMatrixUpdate);
         }
         if (RenderConfig.hasGuiStage(configuration)) {
             if (renderingScene) {

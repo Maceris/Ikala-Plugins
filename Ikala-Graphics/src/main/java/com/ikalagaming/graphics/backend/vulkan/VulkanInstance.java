@@ -562,5 +562,11 @@ public class VulkanInstance implements Instance {
     }
 
     @Override
+    public int getPipelineConfig() {
+        // TODO(ches) return config
+        return 0;
+    }
+
+    @Override
     public void swapPipeline(final int config) {}
 }

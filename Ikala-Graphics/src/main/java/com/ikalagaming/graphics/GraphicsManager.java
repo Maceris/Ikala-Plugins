@@ -214,10 +214,20 @@ public class GraphicsManager {
     }
 
     /**
+     * Fetch the current rendering configuration.
+     *
+     * @return The current pipeline config.
+     * @see RenderConfig
+     */
+    public static int getPipelineConfig() {
+        return renderInstance.getPipelineConfig();
+    }
+
+    /**
      * Change over to another rendering pipeline.
      *
      * @param config The configuration specifying the pipeline to switch to.
-     * @see RenderConfig For details on obtaining the values to pass here.
+     * @see RenderConfig
      */
     public static void swapPipeline(final int config) {
         renderInstance.swapPipeline(config);

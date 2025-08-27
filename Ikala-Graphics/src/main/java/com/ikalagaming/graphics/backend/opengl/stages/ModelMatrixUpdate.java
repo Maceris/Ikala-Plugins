@@ -1,10 +1,12 @@
 package com.ikalagaming.graphics.backend.opengl.stages;
 
 import static org.lwjgl.opengl.GL15.*;
+import static org.lwjgl.opengl.GL40.GL_DRAW_INDIRECT_BUFFER;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.opengl.PipelineManager;
+import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
@@ -60,7 +62,7 @@ public class ModelMatrixUpdate implements RenderStage {
         for (MeshData mesh : model.getMeshDataList()) {
             commandBuffer.clear();
 
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) mesh.getDrawIndirectBuffer().id());
+            BufferUtil.getInstance().bindBuffer(mesh.getDrawIndirectBuffer());
 
             final int count = mesh.getIndices().length;
             final int instanceCount = model.isAnimated() ? 1 : entities.size();
@@ -91,7 +93,8 @@ public class ModelMatrixUpdate implements RenderStage {
             }
 
             commandBuffer.flip();
-            glBufferData(GL_SHADER_STORAGE_BUFFER, commandBuffer, GL_STATIC_DRAW);
+            glBufferData(GL_DRAW_INDIRECT_BUFFER, commandBuffer, GL_STATIC_DRAW);
+            BufferUtil.getInstance().unbindBuffer(mesh.getDrawIndirectBuffer());
         }
 
         MemoryUtil.memFree(commandBuffer);

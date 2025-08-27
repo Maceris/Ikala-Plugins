@@ -56,10 +56,18 @@ public interface Instance {
     void initializeModel(@NonNull Model model);
 
     /**
+     * Fetch the current pipeline config.
+     *
+     * @return The current pipeline configuration.
+     * @see RenderConfig
+     */
+    int getPipelineConfig();
+
+    /**
      * Change over to another rendering pipeline.
      *
      * @param config The configuration specifying the pipeline to switch to.
-     * @see RenderConfig For details on obtaining the values to pass here.
+     * @see RenderConfig
      */
     void swapPipeline(final int config);
 }
