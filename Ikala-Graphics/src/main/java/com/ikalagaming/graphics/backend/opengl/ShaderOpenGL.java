@@ -19,8 +19,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.opengl.GL20;
 
 import java.io.File;
-import java.net.URISyntaxException;
-import java.net.URL;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -66,16 +67,22 @@ public class ShaderOpenGL implements Shader {
 
         List<Integer> shaderModules = new ArrayList<>();
 
-        shaderModuleDataList.stream()
-                .map(
-                        data ->
-                                createShader(
-                                        FileUtils.readAsString(moduleLocation(data)),
-                                        mapShaderType(data.shaderType())))
-                .forEach(shaderModules::add);
+        shaderModuleDataList.stream().map(this::createShader).forEach(shaderModules::add);
 
         link(shaderModules);
         validate();
+    }
+
+    private static void reportMissingModule(ShaderModuleData module) {
+        String error =
+                SafeResourceLoader.getStringFormatted(
+                        "SHADER_NOT_FOUND",
+                        GraphicsPlugin.getResourceBundle(),
+                        module.shaderType().toString(),
+                        module.location().toString(),
+                        module.shaderFile());
+        log.warn(error);
+        throw new ShaderException(error);
     }
 
     /**
@@ -85,39 +92,28 @@ public class ShaderOpenGL implements Shader {
      * @return The file that the module points to.
      * @throws ShaderException If the shader can not be found.
      */
-    private static File moduleLocation(ShaderModuleData module) {
-        return switch (module.location()) {
-            case BUNDLED -> {
-                URL shaderURL =
-                        ShaderOpenGL.class.getClassLoader().getResource(module.shaderFile());
-                File shaderFile = null;
-
-                try {
-                    if (shaderURL != null) {
-                        shaderFile = new File(shaderURL.toURI());
-                    }
-                } catch (URISyntaxException ignored) {
+    private static String readModule(@NonNull ShaderModuleData module) {
+        if (module.location() == Location.BUNDLED) {
+            try (InputStream stream =
+                    ShaderOpenGL.class.getClassLoader().getResourceAsStream(module.shaderFile())) {
+                if (stream == null) {
+                    reportMissingModule(module);
+                } else {
+                    return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
                 }
-
-                if (shaderFile == null) {
-                    String error =
-                            SafeResourceLoader.getStringFormatted(
-                                    "SHADER_NOT_FOUND",
-                                    GraphicsPlugin.getResourceBundle(),
-                                    module.shaderType().toString(),
-                                    module.location().toString(),
-                                    module.shaderFile());
-                    log.warn(error);
-                    throw new ShaderException(error);
-                }
-                yield shaderFile;
+            } catch (IOException e) {
+                reportMissingModule(module);
             }
-            case DATA_FOLDER ->
+        } else if (module.location() == Location.DATA_FOLDER) {
+            File file =
                     PluginFolder.getResource(
                             GraphicsPlugin.PLUGIN_NAME,
                             PluginFolder.ResourceType.DATA,
                             module.shaderFile());
-        };
+            return FileUtils.readAsString(file);
+        }
+        // Won't happen (tm)
+        return "";
     }
 
     @Override
@@ -128,12 +124,14 @@ public class ShaderOpenGL implements Shader {
     /**
      * Create a shader from code.
      *
-     * @param shaderCode The code to compile.
-     * @param shaderType The type of shader we are compiling.
+     * @param module Module data we want to create a shader from.
      * @return The newly created shader ID.
      * @throws ShaderException If there was an error creating or compiling the shader.
      */
-    protected int createShader(@NonNull String shaderCode, int shaderType) {
+    private int createShader(@NonNull ShaderModuleData module) {
+        final String shaderCode = readModule(module);
+        final int shaderType = mapShaderType(module.shaderType());
+
         int shaderId = glCreateShader(shaderType);
         if (shaderId == 0) {
             String error =
@@ -148,11 +146,13 @@ public class ShaderOpenGL implements Shader {
 
         if (glGetShaderi(shaderId, GL_COMPILE_STATUS) == 0) {
             String error =
-                    SafeResourceLoader.getString(
-                            "SHADER_ERROR_COMPILING", GraphicsPlugin.getResourceBundle());
-            log.warn(error, glGetShaderInfoLog(shaderId, 1024));
-            throw new ShaderException(
-                    SafeResourceLoader.format(error, glGetShaderInfoLog(shaderId, 1024)));
+                    SafeResourceLoader.getStringFormatted(
+                            "SHADER_ERROR_COMPILING",
+                            GraphicsPlugin.getResourceBundle(),
+                            module.shaderFile(),
+                            glGetShaderInfoLog(shaderId, 1024));
+            log.warn(error);
+            throw new ShaderException(error);
         }
 
         glAttachShader(programID, shaderId);

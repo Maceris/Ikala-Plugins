@@ -17,9 +17,13 @@ layout(std430, binding = 2) readonly buffer ModelData {
     float modelData[];
 };
 
+struct BoneWeight {
+    int boneIndex;
+    float weight;
+};
 // Bone weight data for the mesh
 layout(std430, binding = 3) readonly buffer WeightData {
-    float boneWeightData[];
+    BoneWeight boneWeightData[];
 };
 
 // Output of the animation for the mesh
@@ -31,7 +35,7 @@ layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 vec4 applyTransforms(vec4 value, mat4 transforms[MAX_WEIGHTS]) {
     vec4 result = vec4(0);
-    for (i = 0; i < MAX_WEIGHTS; ++i) {
+    for (int i = 0; i < MAX_WEIGHTS; ++i) {
         result += transforms[i] * value;
     }
     return result;
@@ -42,18 +46,17 @@ void main()
     const int baseIdxVertex = int(gl_GlobalInvocationID.x) * 14;
     const int baseIdxWeights = int(gl_GlobalInvocationID.x) * 8;
     const int baseIdxAnimation = int(gl_GlobalInvocationID.y);
-    const float animationOffset = animationOffsets[baseIdxAnimation];
-    const float targetOffset = baseIdxAnimation * modelData.length() * 14;
+    const int animationOffset = animationOffsets[baseIdxAnimation];
+    const int targetOffset = baseIdxAnimation * modelData.length() * 14;
 
     int currentIndex = baseIdxVertex;
     mat4 animationTransforms[MAX_WEIGHTS];
 
-    for (i = 0; i < MAX_WEIGHTS; ++i) {
-        float boneIndex = boneWeightData[baseIdxWeights + (i * 2)];
-        float weight = boneWeightData[baseIdxWeights + (i * 2) + 1];
+    for (int i = 0; i < MAX_WEIGHTS; ++i) {
+        BoneWeight boneWeight = boneWeightData[baseIdxWeights + i];
 
         if (animationOffset != -1) {
-            animationTransforms[i] = weight * animationData[animationOffset + boneIndex];
+            animationTransforms[i] = boneWeight.weight * animationData[animationOffset + boneWeight.boneIndex];
         } else {
             animationTransforms[i] = mat4(1.0);
         }

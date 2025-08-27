@@ -1,4 +1,5 @@
 #version 460
+#extension GL_ARB_bindless_texture : enable
 
 struct Material
 {
@@ -30,7 +31,7 @@ flat in uint outMaterialIdx;
 
 layout(std430, binding = 0) readonly buffer Materials {
     Material materials[];
-}
+};
 
 layout(bindless_sampler) uniform sampler2D baseColorSampler;
 layout(bindless_sampler) uniform sampler2D normalSampler;
@@ -43,11 +44,11 @@ layout(location = 3) out uint buffMaterial;
 void main() {
     Material material = materials[outMaterialIdx];
 
-    vec4 diffuse = material.diffuse;
+    vec4 baseColor = material.baseColor;
     if (material.textureIndex > 0) {
-        diffuse = texture(baseColorSampler, outTextCoord);
+        baseColor = texture(baseColorSampler, outTextCoord);
     }
-    if (diffuse.a < 0.5) {
+    if (baseColor.a < 0.5) {
         discard;
     }
 
@@ -59,7 +60,7 @@ void main() {
         normal = normalize(TBN * newNormal);
     }
 
-    buffBaseColor = diffuse;
+    buffBaseColor = baseColor;
     buffNormal = vec4(normal, 1.0);
     buffTangent = vec4(normalize(outTangent), 1.0);
     buffMaterial = outMaterialIdx;

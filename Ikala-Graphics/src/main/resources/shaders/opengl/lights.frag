@@ -87,7 +87,7 @@ layout(std430, binding = 1) readonly buffer SpotLights {
 
 layout(std430, binding = 2) readonly buffer Materials {
     Material materials[];
-}
+};
 
 uniform AmbientLight ambientLight;
 uniform DirectionalLight directionalLight;
@@ -99,22 +99,26 @@ uniform sampler2D shadowMap_0;
 uniform sampler2D shadowMap_1;
 uniform sampler2D shadowMap_2;
 
+float sqr(float x) {
+    return x * x;
+}
+
 float generalizedThrowbridgeReitz1(float angleHalf, float a) {
     if (a >= 1) {
         return 1 / PI;
     }
     float a2 = a * a;
-    float t = 1 + (a2 - 1) * angleHalf * angleHalf;
+    float t = 1 + (a2 - 1) * sqr(angleHalf);
     return (a2 - 1) / (PI * log(a2) * t);
 }
 
 float generalizedThrowbridgeReitzAnisotropic(float angleHalf, float HdotX, float HdotY, float ax, float ay) {
-    return 1 / (PI * ax * ay * sqr(sqr(HdotX / ax) + sqr(HdotY / ay) + angleHalf * angleHalf));
+    return 1 / (PI * ax * ay * sqr(sqr(HdotX / ax) + sqr(HdotY / ay) + sqr(angleHalf)));
 }
 
 float smithGGX(float angle, float a) {
-    float a2 = a * a;
-    float angle2 = angle * angle;
+    float a2 = sqr(a);
+    float angle2 = sqr(angle);
     return 1 / (angle + sqrt(a2 + angle2 - a2 * angle2));
 }
 
@@ -128,7 +132,7 @@ vec3 sRGBToLinear(vec3 color) {
 
 float schlickFresnel(float angle) {
     float m = clamp(1 - angle, 0 , 1);
-    float m2 = m * m;
+    float m2 = sqr(m);
     return m2 * m2 * m;// pow(m, 5)
 }
 
@@ -147,7 +151,7 @@ vec3 disneyBRDF(vec3 baseColor, Material material, vec3 toViewDirection, vec3 to
     float angleDifference = dot(toLightDirection, halfVector);
 
     vec3 baseLinear = sRGBToLinear(baseColor);
-    vec3 baseLuminance = 0.3 * baseLinear.x + 0.6 * baseLinear.y + 0.1 * baseLinear.z;
+    float baseLuminance = 0.3 * baseLinear.x + 0.6 * baseLinear.y + 0.1 * baseLinear.z;
     vec3 baseTint = baseLuminance > 0 ? baseLinear / baseLuminance : vec3(1);
     vec3 colorSpecular0 = mix(
         material.specular * 0.08 * mix(vec3(1), baseTint, material.specularTint),
@@ -157,7 +161,7 @@ vec3 disneyBRDF(vec3 baseColor, Material material, vec3 toViewDirection, vec3 to
 
     float fresnelLight = schlickFresnel(angleLight);
     float fresnelView = schlickFresnel(angleView);
-    float FD90 = 0.5f + 2 * roughness * angleDifference * angleDifference;
+    float FD90 = 0.5f + 2 * material.roughness * angleDifference * angleDifference;
     float diffuseFresnel = mix(1.0, FD90, fresnelLight) * mix(1.0, FD90, fresnelView);
 
     // Flattens retro-reflection based on roughness
@@ -167,15 +171,15 @@ vec3 disneyBRDF(vec3 baseColor, Material material, vec3 toViewDirection, vec3 to
     float subsurfaceScaled = 1.25 * (subsurfaceFresnel * (1 / (angleLight + angleView) - 0.5) + 0.5);
 
     float aspect = sqrt(1 - material.anisotropic * 0.9);
-    float aspectX = max(0.001, sqr(material.roughness)/aspect);
-    float aspectY = max(0.001, sqr(material.roughness)*aspect);
+    float aspectX = max(0.001, sqr(material.roughness) / aspect);
+    float aspectY = max(0.001, sqr(material.roughness) * aspect);
     float specularDistribution = generalizedThrowbridgeReitzAnisotropic(
         angleHalf, dot(halfVector, x), dot(halfVector, y), aspectX, aspectY
     );
     float fresnelHalf = schlickFresnel(angleHalf);
     vec3 specularFresnel = mix(colorSpecular0, vec3(1), fresnelHalf);
-    float specularShadowing = smithGGXAnisotropic(angleView, dot(toLightDirection, x), dot(toLightDirection, y), ax, ay);
-    specularShadowing *= smithGGXAnisotropic(angleView, dot(toViewDirection, x), dot(toViewDirection, y), ax, ay);
+    float specularShadowing = smithGGXAnisotropic(angleView, dot(toLightDirection, x), dot(toLightDirection, y), aspectX, aspectY);
+    specularShadowing *= smithGGXAnisotropic(angleView, dot(toViewDirection, x), dot(toViewDirection, y), aspectX, aspectY);
 
     vec3 sheen = fresnelHalf * material.sheen * colorSheen;
 
@@ -191,12 +195,12 @@ vec3 disneyBRDF(vec3 baseColor, Material material, vec3 toViewDirection, vec3 to
 
 float scaleIntensity(float distance) {
     float ratio = distance / MAX_LIGHT_DISTANCE;
-    float r2 = ratio * ratio;
-    float clamped = clamp(1 - r2 * r2);
-    return clamped * clamped;
+    float r2 = sqr(ratio);
+    float clamped = max(1 - sqr(r2), 0);
+    return sqr(clamped);
 }
 
-vec4 calcLightColor(vec4 baseColor, Material material, vec3 lightColor, float lightIntensity, vec3 viewPosition,
+vec3 calcLightColor(vec3 baseColor, Material material, vec3 lightColor, float lightIntensity, vec3 viewPosition,
     vec3 toLightDirection, vec3 normal, vec3 tangent, vec3 bitangent)
 {
     vec3 toViewDirection = normalize(-viewPosition);
@@ -205,7 +209,7 @@ vec4 calcLightColor(vec4 baseColor, Material material, vec3 lightColor, float li
     return brdf * lightColor * lightScaling;
 }
 
-vec4 calcPointLight(vec3 baseColor, Material material, PointLight light, vec3 viewPosition, vec3 normal, vec3 tangent,
+vec3 calcPointLight(vec3 baseColor, Material material, PointLight light, vec3 viewPosition, vec3 normal, vec3 tangent,
     vec3 bitangent)
 {
     vec3 directionToLight = light.position - viewPosition;
@@ -216,7 +220,7 @@ vec4 calcPointLight(vec3 baseColor, Material material, PointLight light, vec3 vi
                    normal, tangent, bitangent);
 }
 
-vec4 calcSpotLight(vec3 baseColor, Material material, SpotLight light, vec3 viewPosition, vec3 normal, vec3 tangent,
+vec3 calcSpotLight(vec3 baseColor, Material material, SpotLight light, vec3 viewPosition, vec3 normal, vec3 tangent,
     vec3 bitangent)
 {
     vec3 directionToLight = light.pointLight.position - viewPosition;
@@ -224,33 +228,33 @@ vec4 calcSpotLight(vec3 baseColor, Material material, SpotLight light, vec3 view
     vec3 fromLightDirection  = -toLightDirection;
     float spotAlpha = dot(fromLightDirection, normalize(light.coneDirection));
 
-    float intensity = scaleIntensity(light.intensity);
+    float intensity = scaleIntensity(light.pointLight.intensity);
     if (spotAlpha > light.cutoff) {
         intensity *= (1.0 - (1.0 - spotAlpha)/(1.0 - light.cutoff));
     }
     else {
-        return vec4(0);
+        return vec3(0);
     }
 
-    return calcLightColor(baseColor, material, light.color, intensity, viewPosition, toLightDirection,
+    return calcLightColor(baseColor, material, light.pointLight.color, intensity, viewPosition, toLightDirection,
                    normal, tangent, bitangent);
 }
 
-vec4 calcDirLight(vec3 baseColor, Material material, DirectionalLight light, vec3 viewPosition, vec3 normal,
+vec3 calcDirLight(vec3 baseColor, Material material, DirectionalLight light, vec3 viewPosition, vec3 normal,
     vec3 tangent, vec3 bitangent)
 {
     return calcLightColor(baseColor, material, light.color, light.intensity, viewPosition, normalize(light.direction),
         normal, tangent, bitangent);
 }
 
-vec4 calcFog(vec3 pos, vec4 color, Fog fog, vec3 ambientLight, DirectionalLight directionalLight) {
+vec3 calcFog(vec3 pos, vec3 color, Fog fog, vec3 ambientLight, DirectionalLight directionalLight) {
     vec3 fogColor = fog.color * (ambientLight + directionalLight.color * directionalLight.intensity);
     float distance = length(pos);
     float fogFactor = 1.0 / exp((distance * fog.density) * (distance * fog.density));
     fogFactor = clamp(fogFactor, 0.0, 1.0);
 
-    vec3 resultColor = mix(fogColor, color.xyz, fogFactor);
-    return vec4(resultColor.xyz, color.w);
+    vec3 resultColor = mix(fogColor, color, fogFactor);
+    return resultColor;
 }
 
 float textureProj(vec4 shadowCoord, vec2 offset, int idx) {
@@ -286,7 +290,7 @@ void main()
     vec3 normal = texture(normalSampler, outTextCoord).rgb;
     vec3 tangent = texture(tangentSampler, outTextCoord).rgb;
     vec3 bitangent = cross(normal, tangent);// Hopefully close enough, normal isn't the "real" normal
-    uint materialIndex = texture(materialSampler, outTextCoord);
+    uint materialIndex = texture(materialSampler, outTextCoord).r;
     Material material = materials[materialIndex];
 
     // Retrieve position from depth
@@ -299,8 +303,7 @@ void main()
     vec3 viewPosition = viewW.xyz / viewW.w;
     vec4 worldPosition = invViewMatrix * vec4(viewPosition, 1);
 
-    vec4 color = calcDirLight(baseColor.xyz, material, directionalLight, viewPosition, normal,
-        tangent, bitangent);
+    vec3 color = calcDirLight(baseColor.xyz, material, directionalLight, viewPosition, normal, tangent, bitangent);
 
     int cascadeIndex;
     for (int i=0; i < NUM_CASCADES - 1; i++) {
@@ -324,11 +327,12 @@ void main()
                 tangent, bitangent);
         }
     }
-    vec4 ambient = vec4(ambientLight.intensity * ambientLight.color, 1);
-    fragColor = ambient + color;
-    fragColor.rgb = fragColor.rgb * shadowFactor;
+    vec3 ambient = ambientLight.intensity * ambientLight.color;
+    vec3 finalColor = ambient + color;
 
     if (fog.enabled == 1) {
-        fragColor = calcFog(viewPosition, fragColor, fog, ambientLight.color, directionalLight);
+        finalColor = calcFog(viewPosition, finalColor, fog, ambientLight.color, directionalLight);
     }
+
+    fragColor.rgb = finalColor * shadowFactor;
 }

@@ -135,7 +135,7 @@ public class OpenGLInstance implements Instance {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData(
-                        "shaders/anim.comp", Shader.Type.COMPUTE, Shader.Location.BUNDLED));
+                        "shaders/opengl/anim.comp", Shader.Type.COMPUTE, Shader.Location.BUNDLED));
         var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
         var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
@@ -149,7 +149,7 @@ public class OpenGLInstance implements Instance {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData(
-                        "shaders/shadow.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
+                        "shaders/opengl/shadow.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
         var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
         var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
@@ -164,10 +164,12 @@ public class OpenGLInstance implements Instance {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData(
-                        "shaders/scene.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
+                        "shaders/opengl/scene.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData(
-                        "shaders/scene.frag", Shader.Type.FRAGMENT, Shader.Location.BUNDLED));
+                        "shaders/opengl/scene.frag",
+                        Shader.Type.FRAGMENT,
+                        Shader.Location.BUNDLED));
         var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
         var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
@@ -187,10 +189,12 @@ public class OpenGLInstance implements Instance {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData(
-                        "shaders/lights.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
+                        "shaders/opengl/lights.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData(
-                        "shaders/lights.frag", Shader.Type.FRAGMENT, Shader.Location.BUNDLED));
+                        "shaders/opengl/lights.frag",
+                        Shader.Type.FRAGMENT,
+                        Shader.Location.BUNDLED));
         var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
         var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
@@ -255,10 +259,12 @@ public class OpenGLInstance implements Instance {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData(
-                        "shaders/skybox.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
+                        "shaders/opengl/skybox.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData(
-                        "shaders/skybox.frag", Shader.Type.FRAGMENT, Shader.Location.BUNDLED));
+                        "shaders/opengl/skybox.frag",
+                        Shader.Type.FRAGMENT,
+                        Shader.Location.BUNDLED));
         var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
         var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
@@ -281,12 +287,12 @@ public class OpenGLInstance implements Instance {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData(
-                        "shaders/filters/default.vert",
+                        "shaders/opengl/filters/default.vert",
                         Shader.Type.VERTEX,
                         Shader.Location.BUNDLED));
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData(
-                        "shaders/filters/default.frag",
+                        "shaders/opengl/filters/default.frag",
                         Shader.Type.FRAGMENT,
                         Shader.Location.BUNDLED));
         var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
@@ -303,10 +309,10 @@ public class OpenGLInstance implements Instance {
         List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData(
-                        "shaders/gui.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
+                        "shaders/opengl/gui.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
         shaderModuleDataList.add(
                 new Shader.ShaderModuleData(
-                        "shaders/gui.frag", Shader.Type.FRAGMENT, Shader.Location.BUNDLED));
+                        "shaders/opengl/gui.frag", Shader.Type.FRAGMENT, Shader.Location.BUNDLED));
         var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
         var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
