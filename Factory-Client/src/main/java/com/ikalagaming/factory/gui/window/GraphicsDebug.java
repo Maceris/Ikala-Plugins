@@ -9,6 +9,8 @@ import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
 import com.ikalagaming.graphics.scene.Scene;
 
+import imgui.ImGui;
+import imgui.flag.ImGuiCond;
 import imgui.flag.ImGuiWindowFlags;
 import lombok.NonNull;
 
@@ -32,6 +34,38 @@ public class GraphicsDebug extends GuiWindow {
     }
 
     @Override
+    public void draw(int width, int height) {
+        ImGui.setNextWindowViewport(ImGui.getMainViewport().getID());
+        ImGui.setNextWindowPos(
+                getActualDisplaceX() * width, getActualDisplaceY() * height, ImGuiCond.Always);
+        ImGui.setNextWindowSize(
+                getActualWidth() * width, getActualHeight() * height, ImGuiCond.Always);
+        ImGui.begin(title, windowOpen, windowFlags);
+
+        if (isVisible()) {
+            recalculate();
+            children.forEach(child -> child.draw(width, height));
+
+            ImGui.text("Render Config:");
+            int config = GraphicsManager.getPipelineConfig();
+            ImGui.text(String.format("Error Flag - %s", RenderConfig.hasError(config)));
+            ImGui.text(
+                    String.format("Animation Flag - %s", RenderConfig.hasAnimationStage(config)));
+            ImGui.text(String.format("Shadow Flag - %s", RenderConfig.hasShadowStage(config)));
+            ImGui.text(String.format("Scene Flag - %s", RenderConfig.hasSceneStage(config)));
+            ImGui.text(String.format("Skybox Flag - %s", RenderConfig.hasSkyboxStage(config)));
+            ImGui.text(String.format("Filter Flag - %s", RenderConfig.hasFilterStage(config)));
+            ImGui.text(String.format("Gui Flag - %s", RenderConfig.hasGuiStage(config)));
+            ImGui.text(
+                    String.format(
+                            "Transparency Flag - %s", RenderConfig.hasTransparencyPass(config)));
+            ImGui.text(String.format("Wireframe Flag - %s", RenderConfig.sceneIsWireframe(config)));
+        }
+
+        ImGui.end();
+    }
+
+    @Override
     public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
         if (fogEnabled.checkResult()) {
             scene.getFog().setActive(fogEnabled.getState());
@@ -47,6 +81,7 @@ public class GraphicsDebug extends GuiWindow {
             }
             GraphicsManager.swapPipeline(builder.build());
         }
+
         return false;
     }
 }
