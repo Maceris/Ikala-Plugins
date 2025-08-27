@@ -34,7 +34,7 @@ public class TextureLoaderOpenGL implements TextureLoader {
         glTexImage2D(
                 GL_TEXTURE_2D,
                 0,
-                FormatMapperOpenGL.mapFormat(format),
+                FormatMapperOpenGL.mapInternalFormat(format),
                 width,
                 height,
                 0,

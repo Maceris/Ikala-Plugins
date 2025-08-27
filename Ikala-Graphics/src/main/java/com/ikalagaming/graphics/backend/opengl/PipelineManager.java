@@ -384,7 +384,7 @@ public class PipelineManager {
         glTexImage2D(
                 GL_TEXTURE_2D,
                 0,
-                GL_RED,
+                GL_R32UI,
                 cachedWidth,
                 cachedHeight,
                 0,
