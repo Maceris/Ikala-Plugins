@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.opengl.GL11.*;
+import static org.lwjgl.opengl.GL11.glBindTexture;
 import static org.lwjgl.opengl.GL20.glDrawBuffers;
 import static org.lwjgl.opengl.GL30.*;
 import static org.lwjgl.opengl.GL30.GL_FRAMEBUFFER;
@@ -361,6 +362,7 @@ public class PipelineManager {
         // Normal
         // Tangent
         for (int i = 0; i <= 2; ++i) {
+            glBindTexture(GL_TEXTURE_2D, textures[i]);
             glTexImage2D(
                     GL_TEXTURE_2D,
                     0,
@@ -378,6 +380,7 @@ public class PipelineManager {
         }
 
         // Material
+        glBindTexture(GL_TEXTURE_2D, textures[3]);
         glTexImage2D(
                 GL_TEXTURE_2D,
                 0,
@@ -415,7 +418,7 @@ public class PipelineManager {
             }
             glDrawBuffers(intBuff);
         }
-
+        glBindTexture(GL_TEXTURE_2D, 0);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         long[] textureIds = Arrays.stream(textures).mapToLong(i -> (long) i).toArray();
