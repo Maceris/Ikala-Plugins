@@ -142,13 +142,7 @@ public class SinglePlayer extends GuiWindow {
                                 new Vector3f(2.0f, 1.1f, 0.0f),
                                 1.0f));
         var pipeline =
-                RenderConfig.builder()
-                        .withAnimation()
-                        .withScene()
-                        .withSkybox()
-                        .withGui()
-                        .withFilter()
-                        .build();
+                RenderConfig.builder().withAnimation().withScene().withSkybox().withGui().build();
         GraphicsManager.swapPipeline(pipeline);
         GraphicsManager.getScene().getCamera().setPosition(1.86f, 2.43f, 2.33f);
         GraphicsManager.getScene().getCamera().setRotation(0.64f, 5.62f);
