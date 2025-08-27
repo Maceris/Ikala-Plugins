@@ -98,7 +98,7 @@ public class TextureLoaderOpenGL implements TextureLoader {
                 throw new TextureException(error);
             }
 
-            result = loadTexture(buffer, Format.R8G8B8A8_SRGB, width.get(), height.get(), bindless);
+            result = loadTexture(buffer, Format.R8G8B8A8_UINT, width.get(), height.get(), bindless);
 
             STBImage.stbi_image_free(buffer);
         }
