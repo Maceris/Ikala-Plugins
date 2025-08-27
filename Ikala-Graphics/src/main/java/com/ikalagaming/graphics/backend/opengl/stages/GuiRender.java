@@ -48,20 +48,6 @@ public class GuiRender implements RenderStage {
         final int width = (int) io.getDisplaySizeX();
         final int height = (int) io.getDisplaySizeY();
 
-        renderGui(shader, width, height, scale, guiMesh);
-    }
-
-    /**
-     * Shared GUI rendering code.
-     *
-     * @param shader The shader to use for rendering.
-     * @param width The width of the screen, in pixels.
-     * @param height The height of the screen, in pixels.
-     * @param scale A vector to store scale info in, for use in passing to uniforms. This will be
-     *     modified.
-     * @param guiMesh The mesh information ImGui uses.
-     */
-    static void renderGui(Shader shader, int width, int height, Vector2f scale, GuiMesh guiMesh) {
         var uniformsMap = shader.getUniformMap();
         WindowManager windowManager = GraphicsManager.getWindowManager();
         if (windowManager == null) {

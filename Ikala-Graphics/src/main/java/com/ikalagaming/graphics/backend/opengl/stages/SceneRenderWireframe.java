@@ -45,11 +45,9 @@ public class SceneRenderWireframe implements RenderStage {
      */
     public void render(Scene scene) {
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        glDisable(GL_TEXTURE_2D);
 
         SceneRender.commonSceneRender(scene, shader, renderBuffers, gBuffer);
 
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-        glEnable(GL_TEXTURE_2D);
     }
 }

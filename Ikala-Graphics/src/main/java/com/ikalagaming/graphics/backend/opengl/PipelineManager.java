@@ -86,7 +86,6 @@ public class PipelineManager {
     private final FramebufferTransition stageBackBufferBinding;
     private final FilterRender stageFilterRender;
     private final GuiRender stageGuiRender;
-    private final GuiRenderStandalone stageGuiRenderStandalone;
     private final LightRender stageLightRender;
     private final ModelMatrixUpdate stageModelMatrixUpdate;
     private final SceneRender stageSceneRender;
@@ -122,8 +121,6 @@ public class PipelineManager {
         stageSceneRenderWireframe =
                 new SceneRenderWireframe(
                         shaders.getShader(RenderStage.Type.SCENE), renderBuffers, gBuffer);
-        stageGuiRenderStandalone =
-                new GuiRenderStandalone(shaders.getShader(RenderStage.Type.GUI), guiMesh);
         stageGuiRender = new GuiRender(shaders.getShader(RenderStage.Type.GUI), guiMesh);
         stageSkyboxRender = new SkyboxRender(shaders.getShader(RenderStage.Type.SKYBOX), skybox);
         stageShadowRender =
@@ -154,7 +151,6 @@ public class PipelineManager {
     }
 
     private Pipeline buildPipeline(final int configuration) {
-        final boolean renderingScene = RenderConfig.hasSceneStage(configuration);
         List<RenderStage> stages = new ArrayList<>();
         if (RenderConfig.hasError(configuration)) {
             log.error(
@@ -163,7 +159,7 @@ public class PipelineManager {
             return ERROR_PIPELINE;
         }
 
-        if (renderingScene) {
+        if (RenderConfig.hasSceneStage(configuration)) {
             stages.add(0, stageModelMatrixUpdate);
         }
         if (RenderConfig.hasAnimationStage(configuration)) {
@@ -197,11 +193,7 @@ public class PipelineManager {
             stages.add(stageFilterRender);
         }
         if (RenderConfig.hasGuiStage(configuration)) {
-            if (renderingScene) {
-                stages.add(stageGuiRender);
-            } else {
-                stages.add(stageGuiRenderStandalone);
-            }
+            stages.add(stageGuiRender);
         }
 
         return new PipelineOpenGL(stages.toArray(new RenderStage[0]));
