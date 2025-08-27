@@ -14,7 +14,7 @@ out vec4 outViewPosition;
 out vec4 outWorldPosition;
 out uint outMaterialIdx;
 
-layout(std430, binding = 1) buffer Matrices {
+layout(std430, binding = 0) buffer Matrices {
 	mat4 modelMatrices[];
 };
 

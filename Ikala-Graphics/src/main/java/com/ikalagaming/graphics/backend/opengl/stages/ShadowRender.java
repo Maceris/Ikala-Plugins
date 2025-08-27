@@ -103,7 +103,6 @@ public class ShadowRender implements RenderStage {
     }
 
     private void renderScene(Scene scene) {
-        final BufferUtil bufferUtil = BufferUtil.getInstance();
         for (Model model : scene.getModelMap().values()) {
             final int entityCount = model.getEntitiesList().size();
             if (entityCount == 0) {
@@ -112,16 +111,16 @@ public class ShadowRender implements RenderStage {
 
             final int commandCount = model.isAnimated() ? entityCount : 1;
 
-            bufferUtil.bindBuffer(model.getModelMatricesBuffer(), 0);
+            BufferUtil.INSTANCE.bindBuffer(model.getModelMatricesBuffer(), 0);
 
             for (MeshData mesh : model.getMeshDataList()) {
-                bufferUtil.bindBuffer(mesh.getVertexBuffer());
-                bufferUtil.bindBuffer(mesh.getIndexBuffer());
-                bufferUtil.bindBuffer(mesh.getDrawIndirectBuffer());
+                BufferUtil.INSTANCE.bindBuffer(mesh.getVertexBuffer());
+                BufferUtil.INSTANCE.bindBuffer(mesh.getIndexBuffer());
+                BufferUtil.INSTANCE.bindBuffer(mesh.getDrawIndirectBuffer());
                 glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0, commandCount, 0);
             }
 
-            bufferUtil.unbindBuffer(model.getModelMatricesBuffer(), 0);
+            BufferUtil.INSTANCE.unbindBuffer(model.getModelMatricesBuffer(), 0);
         }
     }
 }

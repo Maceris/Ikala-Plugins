@@ -8,7 +8,7 @@ import static org.lwjgl.opengl.GL20.glDeleteProgram;
 import static org.lwjgl.opengl.GL20.glUseProgram;
 import static org.lwjgl.opengl.GL30.glDeleteFramebuffers;
 import static org.lwjgl.opengl.GL31.GL_UNIFORM_BUFFER;
-import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
+import static org.lwjgl.opengl.GL43.*;
 import static org.lwjgl.opengl.GL44.glBufferStorage;
 
 import com.ikalagaming.graphics.GraphicsManager;
@@ -33,9 +33,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.logging.log4j.util.Strings;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GLCapabilities;
+import org.lwjgl.opengl.GLUtil;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -55,6 +57,14 @@ public class OpenGLInstance implements Instance {
         if (!checkCapabilities()) {
             return false;
         }
+
+        GLUtil.setupDebugMessageCallback(System.out);
+        glDebugMessageControl(
+                GL_DEBUG_SOURCE_API,
+                GL_DEBUG_TYPE_OTHER,
+                GL_DEBUG_SEVERITY_NOTIFICATION,
+                (IntBuffer) null,
+                false);
 
         textureLoader = new TextureLoaderOpenGL();
         shaderMap = new ShaderMap();
@@ -388,12 +398,10 @@ public class OpenGLInstance implements Instance {
                 meshData.setAnimationTargetBuffer(
                         new Buffer(glGenBuffers(), Buffer.Type.SHADER_STORAGE));
 
-                final BufferUtil bufferUtil = BufferUtil.getInstance();
-
-                bufferUtil.bindBuffer(meshData.getVertexBuffer());
+                BufferUtil.INSTANCE.bindBuffer(meshData.getVertexBuffer());
                 glBufferStorage(GL_UNIFORM_BUFFER, meshData.getVertexData(), 0);
 
-                bufferUtil.bindBuffer(meshData.getIndexBuffer());
+                BufferUtil.INSTANCE.bindBuffer(meshData.getIndexBuffer());
                 glBufferStorage(GL_ELEMENT_ARRAY_BUFFER, meshData.getIndices(), 0);
 
                 int boneWeightBuffer = glGenBuffers();

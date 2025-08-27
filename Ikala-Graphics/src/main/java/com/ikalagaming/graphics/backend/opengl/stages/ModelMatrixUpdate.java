@@ -15,6 +15,7 @@ import com.ikalagaming.graphics.scene.Scene;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
@@ -22,6 +23,7 @@ import java.nio.FloatBuffer;
 import java.util.List;
 
 /** Used to update the model matrices buffers for the scene. */
+@Slf4j
 @Setter
 @AllArgsConstructor
 public class ModelMatrixUpdate implements RenderStage {
@@ -50,9 +52,10 @@ public class ModelMatrixUpdate implements RenderStage {
         }
         modelMatrices.flip();
 
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) model.getModelMatricesBuffer().id());
+        BufferUtil.INSTANCE.bindBuffer(model.getModelMatricesBuffer());
         glBufferData(GL_SHADER_STORAGE_BUFFER, modelMatrices, GL_STATIC_DRAW);
         MemoryUtil.memFree(modelMatrices);
+        BufferUtil.INSTANCE.unbindBuffer(model.getModelMatricesBuffer());
 
         // TODO(ches) cache these until the number of entities changes
         final int COMMAND_SIZE = 5 * 4;
@@ -62,7 +65,7 @@ public class ModelMatrixUpdate implements RenderStage {
         for (MeshData mesh : model.getMeshDataList()) {
             commandBuffer.clear();
 
-            BufferUtil.getInstance().bindBuffer(mesh.getDrawIndirectBuffer());
+            BufferUtil.INSTANCE.bindBuffer(mesh.getDrawIndirectBuffer());
 
             final int count = mesh.getIndices().length;
             final int instanceCount = model.isAnimated() ? 1 : entities.size();
@@ -94,7 +97,7 @@ public class ModelMatrixUpdate implements RenderStage {
 
             commandBuffer.flip();
             glBufferData(GL_DRAW_INDIRECT_BUFFER, commandBuffer, GL_STATIC_DRAW);
-            BufferUtil.getInstance().unbindBuffer(mesh.getDrawIndirectBuffer());
+            BufferUtil.INSTANCE.unbindBuffer(mesh.getDrawIndirectBuffer());
         }
 
         MemoryUtil.memFree(commandBuffer);

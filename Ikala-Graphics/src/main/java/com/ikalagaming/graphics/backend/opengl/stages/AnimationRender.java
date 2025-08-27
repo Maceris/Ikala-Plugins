@@ -105,15 +105,13 @@ public class AnimationRender implements RenderStage {
 
             updateAnimationOffsets(model, entityCount);
 
-            final BufferUtil bufferUtil = BufferUtil.getInstance();
-
-            bufferUtil.bindBuffer(model.getAnimationBuffer(), 0);
-            bufferUtil.bindBuffer(model.getEntityAnimationOffsetsBuffer(), 1);
+            BufferUtil.INSTANCE.bindBuffer(model.getAnimationBuffer(), 0);
+            BufferUtil.INSTANCE.bindBuffer(model.getEntityAnimationOffsetsBuffer(), 1);
 
             for (MeshData meshData : model.getMeshDataList()) {
-                bufferUtil.bindBuffer(meshData.getVertexBuffer(), 2);
-                bufferUtil.bindBuffer(meshData.getBoneWeightBuffer(), 3);
-                bufferUtil.bindBuffer(meshData.getAnimationTargetBuffer(), 4);
+                BufferUtil.INSTANCE.bindBuffer(meshData.getVertexBuffer(), 2);
+                BufferUtil.INSTANCE.bindBuffer(meshData.getBoneWeightBuffer(), 3);
+                BufferUtil.INSTANCE.bindBuffer(meshData.getAnimationTargetBuffer(), 4);
 
                 final int vertexCount = meshData.getVertexCount();
                 glDispatchCompute(vertexCount, entityCount, 1);

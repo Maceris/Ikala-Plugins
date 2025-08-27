@@ -83,7 +83,6 @@ public class SceneRender implements RenderStage {
                 scene.getProjection().getProjectionMatrix());
         uniformsMap.setUniform(ShaderUniforms.Scene.VIEW_MATRIX, scene.getCamera().getViewMatrix());
 
-        final BufferUtil bufferUtil = BufferUtil.getInstance();
         for (Model model : scene.getModelMap().values()) {
             final int entityCount = model.getEntitiesList().size();
             if (entityCount == 0) {
@@ -110,9 +109,9 @@ public class SceneRender implements RenderStage {
                     glMakeImageHandleResidentARB(material.getNormalMap().handle(), GL_READ_ONLY);
                     uniformsMap.setUniform(NORMAL_SAMPLER, material.getNormalMap());
                 }
-                bufferUtil.bindBuffer(mesh.getVertexBuffer());
-                bufferUtil.bindBuffer(mesh.getIndexBuffer());
-                bufferUtil.bindBuffer(mesh.getDrawIndirectBuffer());
+                BufferUtil.INSTANCE.bindBuffer(mesh.getVertexBuffer());
+                BufferUtil.INSTANCE.bindBuffer(mesh.getIndexBuffer());
+                BufferUtil.INSTANCE.bindBuffer(mesh.getDrawIndirectBuffer());
                 glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0, commandCount, 0);
             }
         }
@@ -168,9 +167,9 @@ public class SceneRender implements RenderStage {
         materialData.flip();
 
         Buffer materialBuffer = scene.getMaterialCache().getMaterialBuffer();
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) materialBuffer.id());
-        glBufferData((int) materialBuffer.id(), materialData, GL_STATIC_DRAW);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+        BufferUtil.INSTANCE.bindBuffer(materialBuffer);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, materialData, GL_STATIC_DRAW);
+        BufferUtil.INSTANCE.unbindBuffer(materialBuffer);
 
         MemoryUtil.memFree(materialData);
         scene.getMaterialCache().setDirty(false);

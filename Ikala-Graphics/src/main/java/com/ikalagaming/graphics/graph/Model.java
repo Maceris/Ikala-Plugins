@@ -124,8 +124,7 @@ public class Model {
         this.animationList = new ArrayList<>();
         this.entityAnimationOffsetsBuffer = null;
         this.maxAnimatedBufferCapacity = 0;
-        this.modelMatricesBuffer =
-                BufferUtil.getInstance().createBuffer(Buffer.Type.SHADER_STORAGE);
+        this.modelMatricesBuffer = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
     }
 
     /**

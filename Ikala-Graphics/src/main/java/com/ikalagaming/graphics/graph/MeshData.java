@@ -123,9 +123,9 @@ public class MeshData {
         this.boneWeightData = boneWeightData;
         this.textureData = textureData;
         this.boneWeightBuffer = null;
-        this.vertexBuffer = BufferUtil.getInstance().createBuffer(Buffer.Type.UNIFORM);
+        this.vertexBuffer = BufferUtil.INSTANCE.createBuffer(Buffer.Type.UNIFORM);
         this.animationTargetBuffer = null;
-        this.indexBuffer = BufferUtil.getInstance().createBuffer(Buffer.Type.INDEXES);
-        this.drawIndirectBuffer = BufferUtil.getInstance().createBuffer(Buffer.Type.DRAW_INDIRECT);
+        this.indexBuffer = BufferUtil.INSTANCE.createBuffer(Buffer.Type.INDEXES);
+        this.drawIndirectBuffer = BufferUtil.INSTANCE.createBuffer(Buffer.Type.DRAW_INDIRECT);
     }
 }

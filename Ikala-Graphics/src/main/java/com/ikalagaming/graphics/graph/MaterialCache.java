@@ -36,7 +36,7 @@ public class MaterialCache {
         Material defaultMaterial = new Material();
         materialsList.add(defaultMaterial);
         dirty = true;
-        materialBuffer = BufferUtil.getInstance().createBuffer(Buffer.Type.SHADER_STORAGE);
+        materialBuffer = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
     }
 
     /**

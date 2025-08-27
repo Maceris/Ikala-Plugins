@@ -8,20 +8,11 @@ import lombok.NonNull;
 
 public interface BufferUtil {
     /** A static instance based on the backend type. */
-    BufferUtil _INSTANCE =
+    BufferUtil INSTANCE =
             switch (GraphicsManager.getBackendType()) {
                 case OPENGL -> new BufferUtilOpenGL();
                 case VULKAN -> new BufferUtilVulkan();
             };
-
-    /**
-     * Fetch the appropriate instance based on the backend type.
-     *
-     * @return The buffer util instance that works on the current backend.
-     */
-    static BufferUtil getInstance() {
-        return _INSTANCE;
-    }
 
     /**
      * Bind a buffer based on the type.
