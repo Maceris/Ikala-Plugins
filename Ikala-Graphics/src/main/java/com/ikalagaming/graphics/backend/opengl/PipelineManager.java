@@ -160,7 +160,7 @@ public class PipelineManager {
         }
 
         if (RenderConfig.hasSceneStage(configuration)) {
-            stages.add(0, stageModelMatrixUpdate);
+            stages.add(stageModelMatrixUpdate);
         }
         if (RenderConfig.hasAnimationStage(configuration)) {
             stages.add(stageAnimationRender);

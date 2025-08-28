@@ -36,6 +36,14 @@ public interface UniformsMap {
     void setUniform(@NonNull String uniformName, int value);
 
     /**
+     * Set an unsigned int uniform.
+     *
+     * @param uniformName The name of the uniform.
+     * @param value The value to set.
+     */
+    void setUniformUnsigned(@NonNull String uniformName, int value);
+
+    /**
      * Set a Matrix4f uniform.
      *
      * @param uniformName The name of the uniform.

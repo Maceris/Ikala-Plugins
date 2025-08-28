@@ -3,6 +3,7 @@ package com.ikalagaming.converter.gui.window;
 import static com.ikalagaming.converter.gui.DefaultWindows.MAIN_MENU;
 
 import com.ikalagaming.converter.ConverterPlugin;
+import com.ikalagaming.converter.ModelConverter;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.frontend.RenderConfig;
@@ -12,9 +13,8 @@ import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
-import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.graphics.scene.lights.AmbientLight;
+import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.scene.lights.PointLight;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -74,20 +74,27 @@ public class MainMenu extends GuiWindow {
     }
 
     private void loadSphereDemo() {
-        Model cubeModel =
-                ModelLoader.loadModel(
-                        new ModelLoader.ModelLoadRequest(
+        Model ballModel =
+                ModelConverter.loadModel(
+                        new ModelConverter.ModelLoadRequest(
                                 "shader_ball",
                                 ConverterPlugin.PLUGIN_NAME,
                                 "models/shader_ball.obj",
                                 GraphicsManager.getScene().getMaterialCache(),
                                 false));
-        GraphicsManager.getScene().addModel(cubeModel);
-        Entity ball = new Entity("ball", cubeModel.getId());
+
+        GraphicsManager.getRenderInstance().initializeModel(ballModel);
+        GraphicsManager.getScene().addModel(ballModel);
+        Entity ball = new Entity("ball", ballModel.getId());
         GraphicsManager.getScene().addEntity(ball);
+
         GraphicsManager.getScene()
                 .getSceneLights()
-                .setAmbientLight(new AmbientLight(new Vector3f(1.0f, 1.0f, 1.0f), 0.6f));
+                .setDirLight(
+                        new DirectionalLight(
+                                new Vector3f(1.0f, 1.0f, 1.0f),
+                                new Vector3f(1.0f, 1.0f, 1.0f),
+                                1f));
         GraphicsManager.getScene()
                 .getSceneLights()
                 .getPointLights()

@@ -8,6 +8,7 @@ import static org.lwjgl.opengl.GL20.glUniform2f;
 import static org.lwjgl.opengl.GL20.glUniform3f;
 import static org.lwjgl.opengl.GL20.glUniform4f;
 import static org.lwjgl.opengl.GL20.glUniformMatrix4fv;
+import static org.lwjgl.opengl.GL30.glUniform1ui;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
@@ -88,6 +89,11 @@ public class UniformsMapOpenGL implements UniformsMap {
     @Override
     public void setUniform(@NonNull String uniformName, int value) {
         glUniform1i(getUniformLocation(uniformName), value);
+    }
+
+    @Override
+    public void setUniformUnsigned(@NonNull String uniformName, int value) {
+        glUniform1ui(getUniformLocation(uniformName), value);
     }
 
     @Override

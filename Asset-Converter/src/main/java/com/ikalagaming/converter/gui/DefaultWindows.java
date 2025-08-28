@@ -7,10 +7,10 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 @Getter
 public enum DefaultWindows {
-    DEBUG("Debug"),
-    GRAPHICS_DEBUG("Graphics Debug"),
-    IMGUI_DEMO("ImGui Demo"),
-    MAIN_MENU("Main Menu"),
-    ROOT_WINDOW("Root Window");
+    DEBUG("Converter Debug"),
+    GRAPHICS_DEBUG("Converter Graphics Debug"),
+    IMGUI_DEMO("Converter ImGui Demo"),
+    MAIN_MENU("Converter Main Menu"),
+    ROOT_WINDOW("Converter Root Window");
     private final String name;
 }

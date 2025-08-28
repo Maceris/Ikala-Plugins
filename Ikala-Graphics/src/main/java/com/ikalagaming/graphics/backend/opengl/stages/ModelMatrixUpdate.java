@@ -1,8 +1,8 @@
 package com.ikalagaming.graphics.backend.opengl.stages;
 
 import static org.lwjgl.opengl.GL15.*;
-import static org.lwjgl.opengl.GL40.GL_DRAW_INDIRECT_BUFFER;
-import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
+import static org.lwjgl.opengl.GL42.GL_COMMAND_BARRIER_BIT;
+import static org.lwjgl.opengl.GL42.glMemoryBarrier;
 
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.opengl.PipelineManager;
@@ -31,6 +31,7 @@ public class ModelMatrixUpdate implements RenderStage {
     @Override
     public void render(Scene scene) {
         scene.getModelMap().values().forEach(this::updateModelBuffer);
+        glMemoryBarrier(GL_COMMAND_BARRIER_BIT);
     }
 
     /** Update the model matrices for a model. */
@@ -38,6 +39,7 @@ public class ModelMatrixUpdate implements RenderStage {
         List<Entity> entities = model.getEntitiesList();
 
         if (entities.isEmpty()) {
+            model.setEntitiesLastFrame(0);
             return;
         }
 
@@ -50,22 +52,28 @@ public class ModelMatrixUpdate implements RenderStage {
                     .get(entityIndex * PipelineManager.MODEL_MATRIX_SIZE, modelMatrices);
             entityIndex++;
         }
-        modelMatrices.flip();
 
         BufferUtil.INSTANCE.bindBuffer(model.getModelMatricesBuffer());
-        glBufferData(GL_SHADER_STORAGE_BUFFER, modelMatrices, GL_STATIC_DRAW);
+        BufferUtil.INSTANCE.bufferData(
+                model.getModelMatricesBuffer(), modelMatrices, GL_DYNAMIC_DRAW);
         MemoryUtil.memFree(modelMatrices);
         BufferUtil.INSTANCE.unbindBuffer(model.getModelMatricesBuffer());
 
-        // TODO(ches) cache these until the number of entities changes
+        if (model.getEntitiesLastFrame() != entities.size()) {
+            updateCommandBuffers(model);
+            model.setEntitiesLastFrame(entities.size());
+        }
+    }
+
+    private static void updateCommandBuffers(Model model) {
+        List<Entity> entities = model.getEntitiesList();
+
         final int COMMAND_SIZE = 5 * 4;
         final int NUMBER_OF_COMMANDS = model.isAnimated() ? entities.size() : 1;
         ByteBuffer commandBuffer = MemoryUtil.memAlloc(NUMBER_OF_COMMANDS * COMMAND_SIZE);
 
         for (MeshData mesh : model.getMeshDataList()) {
             commandBuffer.clear();
-
-            BufferUtil.INSTANCE.bindBuffer(mesh.getDrawIndirectBuffer());
 
             final int count = mesh.getIndices().length;
             final int instanceCount = model.isAnimated() ? 1 : entities.size();
@@ -96,7 +104,10 @@ public class ModelMatrixUpdate implements RenderStage {
             }
 
             commandBuffer.flip();
-            glBufferData(GL_DRAW_INDIRECT_BUFFER, commandBuffer, GL_STATIC_DRAW);
+
+            BufferUtil.INSTANCE.bindBuffer(mesh.getDrawIndirectBuffer());
+            BufferUtil.INSTANCE.bufferData(
+                    mesh.getDrawIndirectBuffer(), commandBuffer, GL_DYNAMIC_DRAW);
             BufferUtil.INSTANCE.unbindBuffer(mesh.getDrawIndirectBuffer());
         }
 

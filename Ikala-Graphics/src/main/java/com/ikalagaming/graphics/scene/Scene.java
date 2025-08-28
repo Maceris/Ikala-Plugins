@@ -110,6 +110,27 @@ public class Scene {
     }
 
     /**
+     * Remove an entity from the scene.
+     *
+     * @param entity The entity to add.
+     * @see #addModel(Model)
+     */
+    public void removeEntity(@NonNull Entity entity) {
+        String modelId = entity.getModelID();
+        Model model = modelMap.get(modelId);
+        if (model == null) {
+            log.warn(
+                    SafeResourceLoader.getStringFormatted(
+                            "REMOVING_UNKNOWN_ENTITY",
+                            GraphicsPlugin.getResourceBundle(),
+                            entity.getEntityID(),
+                            entity.getModelID()));
+        } else {
+            model.getEntitiesList().remove(entity);
+        }
+    }
+
+    /**
      * Add a model to the model map.
      *
      * @param model The model to add.

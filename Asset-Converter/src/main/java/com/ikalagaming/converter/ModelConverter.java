@@ -17,7 +17,6 @@ import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.assimp.*;
-import org.lwjgl.system.MemoryStack;
 
 import java.io.File;
 import java.nio.ByteBuffer;
@@ -319,10 +318,10 @@ public class ModelConverter {
         String modelDir = file.getParent();
 
         int flags = DEFAULT_FLAGS;
-
         if (!request.animation) {
             flags |= Assimp.aiProcess_PreTransformVertices;
         }
+
         AIScene aiScene = Assimp.aiImportFile(fixedPath, flags);
         if (aiScene == null) {
             String error =
@@ -559,48 +558,49 @@ public class ModelConverter {
             @NonNull AIMaterial aiMaterial, @NonNull String modelDir) {
         // TODO(ches) load these through converter or loader utils for this plugin
         Material material = new Material();
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            AIString aiTexturePath = AIString.calloc(stack);
-            Assimp.aiGetMaterialTexture(
-                    aiMaterial,
-                    Assimp.aiTextureType_DIFFUSE,
-                    0,
-                    aiTexturePath,
-                    (IntBuffer) null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null);
-            String texturePath = aiTexturePath.dataString();
-            if (!texturePath.isEmpty()) {
-                texturePath = modelDir + File.separator + new File(texturePath).getName();
-                material.setTexture(
-                        GraphicsManager.getRenderInstance().getTextureLoader().load(texturePath));
-                material.getBaseColor().set(Material.DEFAULT_COLOR);
-            }
 
-            AIString aiNormalMapPath = AIString.calloc(stack);
-            Assimp.aiGetMaterialTexture(
-                    aiMaterial,
-                    Assimp.aiTextureType_NORMALS,
-                    0,
-                    aiNormalMapPath,
-                    (IntBuffer) null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null);
-            String normalMapPath = aiNormalMapPath.dataString();
-            if (!normalMapPath.isEmpty()) {
-                normalMapPath = modelDir + File.separator + new File(normalMapPath).getName();
-                material.setNormalMap(
-                        GraphicsManager.getRenderInstance().getTextureLoader().load(normalMapPath));
-            }
+        // TODO(ches) process material properties
 
-            return material;
+        AIString aiTexturePath = AIString.create();
+        Assimp.aiGetMaterialTexture(
+                aiMaterial,
+                Assimp.aiTextureType_DIFFUSE,
+                0,
+                aiTexturePath,
+                (IntBuffer) null,
+                null,
+                null,
+                null,
+                null,
+                null);
+        String texturePath = aiTexturePath.dataString();
+        if (!texturePath.isEmpty()) {
+            texturePath = modelDir + File.separator + new File(texturePath).getName();
+            material.setTexture(
+                    GraphicsManager.getRenderInstance().getTextureLoader().load(texturePath));
+            material.getBaseColor().set(Material.DEFAULT_COLOR);
         }
+
+        AIString aiNormalMapPath = AIString.create();
+        Assimp.aiGetMaterialTexture(
+                aiMaterial,
+                Assimp.aiTextureType_NORMALS,
+                0,
+                aiNormalMapPath,
+                (IntBuffer) null,
+                null,
+                null,
+                null,
+                null,
+                null);
+        String normalMapPath = aiNormalMapPath.dataString();
+        if (!normalMapPath.isEmpty()) {
+            normalMapPath = modelDir + File.separator + new File(normalMapPath).getName();
+            material.setNormalMap(
+                    GraphicsManager.getRenderInstance().getTextureLoader().load(normalMapPath));
+        }
+
+        return material;
     }
 
     /**
@@ -618,25 +618,14 @@ public class ModelConverter {
         AIVector3D.Buffer normals = aiMesh.mNormals();
         AIVector3D.Buffer tangents = aiMesh.mTangents();
         AIVector3D.Buffer bitangents = aiMesh.mBitangents();
+        AIVector3D.Buffer textureCoordinates = aiMesh.mTextureCoords(0);
 
-        final int vertexCount = positions.remaining();
+        final int vertexCount = aiMesh.mNumVertices();
 
-        if (normals == null
-                || tangents == null
-                || bitangents == null
-                || vertexCount != normals.remaining()
-                || vertexCount != tangents.remaining()
-                || vertexCount != bitangents.remaining()) {
+        if (normals == null || tangents == null || bitangents == null) {
             log.error("Error processing mesh data");
             return new MeshData(
-                    new Vector3f(),
-                    new Vector3f(),
-                    0,
-                    new float[0],
-                    new int[0],
-                    0,
-                    new byte[0],
-                    new float[0][0]);
+                    new Vector3f(), new Vector3f(), 0, new float[0], new int[0], 0, new byte[0]);
         }
 
         AIAABB aabb = aiMesh.mAABB();
@@ -646,8 +635,7 @@ public class ModelConverter {
         final int numBones = aiMesh.mNumBones();
         byte[] boneWeightData = ModelConverter.processBones(aiMesh, boneList);
 
-        final int totalVertexDataSize =
-                vertexCount * 4 /* position + normal + tangent + bitangent */ * 3 /* Vec3 */;
+        final int totalVertexDataSize = vertexCount * MeshData.VERTEX_SIZE_IN_FLOATS;
         FloatBuffer vertexData = FloatBuffer.allocate(totalVertexDataSize);
 
         for (int i = 0; i < vertexCount; ++i) {
@@ -655,6 +643,10 @@ public class ModelConverter {
             AIVector3D normal = normals.get();
             AIVector3D tangent = tangents.get();
             AIVector3D bitangent = bitangents.get();
+            AIVector3D uv = null;
+            if (textureCoordinates != null) {
+                uv = textureCoordinates.get();
+            }
 
             vertexData.put(position.x());
             vertexData.put(position.y());
@@ -668,26 +660,12 @@ public class ModelConverter {
             vertexData.put(bitangent.x());
             vertexData.put(bitangent.y());
             vertexData.put(bitangent.z());
-        }
-
-        final int textureLayers = aiMesh.mNumUVComponents().get();
-        float[][] textureData = new float[textureLayers][];
-
-        for (int layerIndex = 0; layerIndex < textureLayers; ++layerIndex) {
-            float[] layer = new float[vertexCount * 2];
-            textureData[layerIndex] = layer;
-
-            AIVector3D.Buffer texCoords = aiMesh.mTextureCoords(layerIndex);
-            if (texCoords == null || texCoords.remaining() != vertexCount) {
-                continue;
-            }
-
-            int pos = 0;
-            while (texCoords.remaining() > 0) {
-                AIVector3D textureCoordinate = texCoords.get();
-
-                layer[pos++] = textureCoordinate.x();
-                layer[pos++] = 1 - textureCoordinate.y();
+            if (uv != null) {
+                vertexData.put(uv.x());
+                vertexData.put(uv.y());
+            } else {
+                vertexData.put(0.0f);
+                vertexData.put(0.0f);
             }
         }
 
@@ -698,8 +676,7 @@ public class ModelConverter {
                 vertexData.array(),
                 indices,
                 numBones,
-                boneWeightData,
-                textureData);
+                boneWeightData);
     }
 
     /**

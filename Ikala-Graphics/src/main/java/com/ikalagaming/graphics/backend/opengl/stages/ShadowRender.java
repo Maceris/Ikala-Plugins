@@ -15,10 +15,12 @@ import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 
 /** Handles rendering of cascade shadows. */
+@Slf4j
 public class ShadowRender implements RenderStage {
 
     /** The binding for the model matrices buffer SSBO. */
@@ -69,16 +71,6 @@ public class ShadowRender implements RenderStage {
 
         shader.bind();
 
-        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
-            glFramebufferTexture2D(
-                    GL_FRAMEBUFFER,
-                    GL_DEPTH_ATTACHMENT,
-                    GL_TEXTURE_2D,
-                    (int) depthMap.textures()[i],
-                    0);
-            glClear(GL_DEPTH_BUFFER_BIT);
-        }
-
         glBindVertexArray(renderBuffers.getVao());
 
         for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
@@ -88,6 +80,7 @@ public class ShadowRender implements RenderStage {
                     GL_TEXTURE_2D,
                     (int) depthMap.textures()[i],
                     0);
+            glClear(GL_DEPTH_BUFFER_BIT);
 
             CascadeShadow shadowCascade = cascadeShadows.get(i);
             uniformsMap.setUniform(
@@ -111,16 +104,26 @@ public class ShadowRender implements RenderStage {
 
             final int commandCount = model.isAnimated() ? entityCount : 1;
 
-            BufferUtil.INSTANCE.bindBuffer(model.getModelMatricesBuffer(), 0);
+            BufferUtil.INSTANCE.bindBuffer(model.getModelMatricesBuffer(), MODEL_MATRICES_BINDING);
 
             for (MeshData mesh : model.getMeshDataList()) {
-                BufferUtil.INSTANCE.bindBuffer(mesh.getVertexBuffer());
+                if (model.isAnimated()) {
+                    glBindVertexBuffer(
+                            0,
+                            (int) mesh.getAnimationTargetBuffer().id(),
+                            0,
+                            MeshData.VERTEX_SIZE_IN_BYTES);
+                } else {
+                    glBindVertexBuffer(
+                            0, (int) mesh.getVertexBuffer().id(), 0, MeshData.VERTEX_SIZE_IN_BYTES);
+                }
                 BufferUtil.INSTANCE.bindBuffer(mesh.getIndexBuffer());
                 BufferUtil.INSTANCE.bindBuffer(mesh.getDrawIndirectBuffer());
                 glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0, commandCount, 0);
             }
 
-            BufferUtil.INSTANCE.unbindBuffer(model.getModelMatricesBuffer(), 0);
+            BufferUtil.INSTANCE.unbindBuffer(
+                    model.getModelMatricesBuffer(), MODEL_MATRICES_BINDING);
         }
     }
 }

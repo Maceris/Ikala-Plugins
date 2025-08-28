@@ -66,6 +66,12 @@ public class ConverterPlugin extends Plugin {
     }
 
     @Override
+    public boolean onUnload() {
+        setResourceBundle(null);
+        return true;
+    }
+
+    @Override
     public boolean onEnable() {
         guiManager = GraphicsManager.getWindowManager();
         guiManager.addWindow(MAIN_MENU.getName(), new MainMenu(guiManager));

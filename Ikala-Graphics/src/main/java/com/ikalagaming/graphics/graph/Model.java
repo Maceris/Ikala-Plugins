@@ -113,6 +113,12 @@ public class Model {
     @Setter private int maxAnimatedBufferCapacity;
 
     /**
+     * How many entities the model had last frame, used to determine how long we can cache draw
+     * command buffers.
+     */
+    @Setter private int entitiesLastFrame;
+
+    /**
      * Create a new model.
      *
      * @param id The model ID.
@@ -125,6 +131,7 @@ public class Model {
         this.entityAnimationOffsetsBuffer = null;
         this.maxAnimatedBufferCapacity = 0;
         this.modelMatricesBuffer = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
+        this.entitiesLastFrame = 0;
     }
 
     /**

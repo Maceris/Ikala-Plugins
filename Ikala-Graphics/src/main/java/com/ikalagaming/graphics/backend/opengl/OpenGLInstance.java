@@ -102,6 +102,10 @@ public class OpenGLInstance implements Instance {
             missing.add("ARB_explicit_uniform_location");
             result = false;
         }
+        if (!capabilities.GL_ARB_vertex_attrib_binding) {
+            missing.add("ARB_vertex_attrib_binding");
+            result = false;
+        }
 
         if (!result) {
             String message =
@@ -380,7 +384,7 @@ public class OpenGLInstance implements Instance {
                     new Buffer(glGenBuffers(), Buffer.Type.SHADER_STORAGE));
 
             int animationBuffer = glGenBuffers();
-            model.setAnimationBuffer(new Buffer(animationBuffer, Buffer.Type.UNIFORM));
+            model.setAnimationBuffer(new Buffer(animationBuffer, Buffer.Type.SHADER_STORAGE));
             int totalSize = 0;
             for (Model.Animation animation : model.getAnimationList()) {
                 totalSize += animation.frameData().length;
@@ -398,23 +402,24 @@ public class OpenGLInstance implements Instance {
                 meshData.setAnimationTargetBuffer(
                         new Buffer(glGenBuffers(), Buffer.Type.SHADER_STORAGE));
 
-                BufferUtil.INSTANCE.bindBuffer(meshData.getVertexBuffer());
-                glBufferStorage(GL_UNIFORM_BUFFER, meshData.getVertexData(), 0);
-
-                BufferUtil.INSTANCE.bindBuffer(meshData.getIndexBuffer());
-                glBufferStorage(GL_ELEMENT_ARRAY_BUFFER, meshData.getIndices(), 0);
-
                 int boneWeightBuffer = glGenBuffers();
                 meshData.setBoneWeightBuffer(new Buffer(boneWeightBuffer, Buffer.Type.UNIFORM));
                 glBindBuffer(GL_UNIFORM_BUFFER, boneWeightBuffer);
                 glBufferStorage(
                         GL_UNIFORM_BUFFER, ByteBuffer.wrap(meshData.getBoneWeightData()), 0);
             }
-
-            // Unbind buffers
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-            glBindBuffer(GL_UNIFORM_BUFFER, 0);
         }
+        for (MeshData meshData : model.getMeshDataList()) {
+            BufferUtil.INSTANCE.bindBuffer(meshData.getVertexBuffer());
+            glBufferStorage(GL_UNIFORM_BUFFER, meshData.getVertexData(), 0);
+
+            BufferUtil.INSTANCE.bindBuffer(meshData.getIndexBuffer());
+            glBufferStorage(GL_ELEMENT_ARRAY_BUFFER, meshData.getIndices(), 0);
+        }
+        // Unbind buffers
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
     }
 
     @Override

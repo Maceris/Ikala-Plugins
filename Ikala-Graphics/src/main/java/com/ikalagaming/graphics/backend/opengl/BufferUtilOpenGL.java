@@ -11,6 +11,8 @@ import com.ikalagaming.graphics.frontend.BufferUtil;
 
 import lombok.NonNull;
 
+import java.nio.*;
+
 public class BufferUtilOpenGL implements BufferUtil {
     /**
      * Convert the buffer type to the underlying OpenGL constant.
@@ -37,6 +39,66 @@ public class BufferUtilOpenGL implements BufferUtil {
     public void bindBuffer(@NonNull Buffer buffer, int index) {
         final int type = mapBufferType(buffer.type());
         glBindBufferBase(type, index, (int) buffer.id());
+    }
+
+    public void bufferData(@NonNull Buffer buffer, long data, int usage) {
+        final int type = mapBufferType(buffer.type());
+        glBufferData(type, data, usage);
+    }
+
+    public void bufferData(@NonNull Buffer buffer, @NonNull ByteBuffer data, int usage) {
+        final int type = mapBufferType(buffer.type());
+        glBufferData(type, data, usage);
+    }
+
+    public void bufferData(@NonNull Buffer buffer, @NonNull ShortBuffer data, int usage) {
+        final int type = mapBufferType(buffer.type());
+        glBufferData(type, data, usage);
+    }
+
+    public void bufferData(@NonNull Buffer buffer, @NonNull IntBuffer data, int usage) {
+        final int type = mapBufferType(buffer.type());
+        glBufferData(type, data, usage);
+    }
+
+    public void bufferData(@NonNull Buffer buffer, @NonNull FloatBuffer data, int usage) {
+        final int type = mapBufferType(buffer.type());
+        glBufferData(type, data, usage);
+    }
+
+    public void bufferData(@NonNull Buffer buffer, @NonNull LongBuffer data, int usage) {
+        final int type = mapBufferType(buffer.type());
+        glBufferData(type, data, usage);
+    }
+
+    public void bufferData(@NonNull Buffer buffer, @NonNull DoubleBuffer data, int usage) {
+        final int type = mapBufferType(buffer.type());
+        glBufferData(type, data, usage);
+    }
+
+    public void bufferData(@NonNull Buffer buffer, short[] data, int usage) {
+        final int type = mapBufferType(buffer.type());
+        glBufferData(type, data, usage);
+    }
+
+    public void bufferData(@NonNull Buffer buffer, int[] data, int usage) {
+        final int type = mapBufferType(buffer.type());
+        glBufferData(type, data, usage);
+    }
+
+    public void bufferData(@NonNull Buffer buffer, float[] data, int usage) {
+        final int type = mapBufferType(buffer.type());
+        glBufferData(type, data, usage);
+    }
+
+    public void bufferData(@NonNull Buffer buffer, long[] data, int usage) {
+        final int type = mapBufferType(buffer.type());
+        glBufferData(type, data, usage);
+    }
+
+    public void bufferData(@NonNull Buffer buffer, double[] data, int usage) {
+        final int type = mapBufferType(buffer.type());
+        glBufferData(type, data, usage);
     }
 
     @Override
