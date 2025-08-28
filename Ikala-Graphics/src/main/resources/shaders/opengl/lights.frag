@@ -334,5 +334,6 @@ void main()
         finalColor = calcFog(viewPosition, finalColor, fog, ambientLight.color, directionalLight);
     }
 
+    fragColor.a = baseColor.a;
     fragColor.rgb = finalColor * shadowFactor;
 }

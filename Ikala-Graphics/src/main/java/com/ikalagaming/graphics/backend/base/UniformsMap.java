@@ -87,7 +87,7 @@ public interface UniformsMap {
      * Sets the bindless handle for a texture sampler.
      *
      * @param uniformName The name of the uniform.
-     * @param texture The texture set a bindless sampler handle from.
+     * @param texture The texture set a bindless sampler handle from. Null to set a value of 0.
      */
-    void setUniform(@NonNull String uniformName, @NonNull Texture texture);
+    void setUniform(@NonNull String uniformName, Texture texture);
 }

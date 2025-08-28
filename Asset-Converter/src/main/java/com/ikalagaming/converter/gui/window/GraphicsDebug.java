@@ -21,7 +21,7 @@ public class GraphicsDebug extends GuiWindow {
 
     public GraphicsDebug() {
         super(DefaultWindows.GRAPHICS_DEBUG.getName(), ImGuiWindowFlags.None);
-        setScale(0.24f, 0.25f);
+        setScale(0.24f, 0.45f);
         setDisplacement(0.01f, 0.05f);
         setAlignment(Alignment.NORTH_EAST);
 
@@ -60,6 +60,14 @@ public class GraphicsDebug extends GuiWindow {
                     String.format(
                             "Transparency Flag - %s", RenderConfig.hasTransparencyPass(config)));
             ImGui.text(String.format("Wireframe Flag - %s", RenderConfig.sceneIsWireframe(config)));
+
+            ImGui.text(
+                    String.format(
+                            "Materials loaded - %s",
+                            GraphicsManager.getScene()
+                                    .getMaterialCache()
+                                    .getMaterialsList()
+                                    .size()));
         }
 
         ImGui.end();

@@ -6,11 +6,13 @@ import com.ikalagaming.converter.ConverterPlugin;
 import com.ikalagaming.converter.ModelConverter;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.frontend.Material;
 import com.ikalagaming.graphics.frontend.RenderConfig;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.frontend.gui.component.Button;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
+import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
@@ -22,6 +24,8 @@ import com.ikalagaming.util.SafeResourceLoader;
 import imgui.flag.ImGuiWindowFlags;
 import lombok.NonNull;
 import org.joml.Vector3f;
+
+import java.util.List;
 
 /** The main menu we start up the game showing. */
 public class MainMenu extends GuiWindow {
@@ -83,9 +87,22 @@ public class MainMenu extends GuiWindow {
                                 GraphicsManager.getScene().getMaterialCache(),
                                 false));
 
+        List<Material> materialList =
+                GraphicsManager.getScene().getMaterialCache().getMaterialsList();
+
+        for (MeshData mesh : ballModel.getMeshDataList()) {
+            Material material = materialList.get(mesh.getMaterialIndex());
+            material.setTexture(null);
+            material.setNormalMap(null);
+            material.getBaseColor().set(0.75f, 0.0f, 0.0f, 1.0f);
+        }
+        GraphicsManager.getScene().getMaterialCache().setDirty(true);
+
         GraphicsManager.getRenderInstance().initializeModel(ballModel);
         GraphicsManager.getScene().addModel(ballModel);
         Entity ball = new Entity("ball", ballModel.getId());
+        ball.setScale(0.001f);
+        ball.updateModelMatrix();
         GraphicsManager.getScene().addEntity(ball);
 
         GraphicsManager.getScene()
@@ -94,7 +111,7 @@ public class MainMenu extends GuiWindow {
                         new DirectionalLight(
                                 new Vector3f(1.0f, 1.0f, 1.0f),
                                 new Vector3f(1.0f, 1.0f, 1.0f),
-                                1f));
+                                1.6e9f));
         GraphicsManager.getScene()
                 .getSceneLights()
                 .getPointLights()
@@ -103,6 +120,7 @@ public class MainMenu extends GuiWindow {
                                 new Vector3f(1.0f, 0.0f, 0.0f),
                                 new Vector3f(2.0f, 1.1f, 0.0f),
                                 1.0f));
+
         var pipeline =
                 RenderConfig.builder().withAnimation().withScene().withSkybox().withGui().build();
         GraphicsManager.swapPipeline(pipeline);

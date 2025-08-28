@@ -1,9 +1,8 @@
 package com.ikalagaming.graphics.backend.opengl.stages;
 
 import static com.ikalagaming.graphics.ShaderUniforms.Scene.*;
-import static org.lwjgl.opengl.ARBBindlessTexture.glMakeImageHandleNonResidentARB;
+import static com.ikalagaming.graphics.backend.opengl.stages.ShadowRender.MODEL_MATRICES_BINDING;
 import static org.lwjgl.opengl.ARBBindlessTexture.glMakeImageHandleResidentARB;
-import static org.lwjgl.opengl.GL30.glBindBufferBase;
 import static org.lwjgl.opengl.GL43.*;
 
 import com.ikalagaming.graphics.ShaderUniforms;
@@ -16,15 +15,19 @@ import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+import org.joml.Vector4f;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /** Handles rendering of scene geometry to the g-buffer. */
+@Slf4j
 public class SceneRender implements RenderStage {
+
+    /** The binding for the materials SSBO. */
+    static final int MATERIALS_BINDING = 1;
 
     /** The shader to use for rendering. */
     @NonNull @Setter private Shader shader;
@@ -84,8 +87,6 @@ public class SceneRender implements RenderStage {
                 scene.getProjection().getProjectionMatrix());
         uniformsMap.setUniform(ShaderUniforms.Scene.VIEW_MATRIX, scene.getCamera().getViewMatrix());
 
-        List<Texture> activeTextures = new ArrayList<>();
-
         for (Model model : scene.getModelMap().values()) {
             final int entityCount = model.getEntitiesList().size();
             if (entityCount == 0) {
@@ -94,26 +95,26 @@ public class SceneRender implements RenderStage {
 
             final int commandCount = model.isAnimated() ? entityCount : 1;
 
-            glBindBufferBase(
-                    GL_SHADER_STORAGE_BUFFER,
-                    ShadowRender.MODEL_MATRICES_BINDING,
-                    (int) model.getModelMatricesBuffer().id());
             glBindVertexArray(renderBuffers.getVao());
+
+            BufferUtil.INSTANCE.bindBuffer(model.getModelMatricesBuffer(), MODEL_MATRICES_BINDING);
+            BufferUtil.INSTANCE.bindBuffer(
+                    scene.getMaterialCache().getMaterialBuffer(), MATERIALS_BINDING);
 
             for (MeshData mesh : model.getMeshDataList()) {
                 final int materialIndex = mesh.getMaterialIndex();
                 uniformsMap.setUniformUnsigned(MATERIAL_INDEX, materialIndex);
+
                 Material material = scene.getMaterialCache().getMaterial(materialIndex);
                 if (material.getTexture() != null) {
                     glMakeImageHandleResidentARB(material.getTexture().handle(), GL_READ_ONLY);
-                    activeTextures.add(material.getTexture());
-                    uniformsMap.setUniform(BASE_COLOR_SAMPLER, material.getTexture());
                 }
                 if (material.getNormalMap() != null) {
                     glMakeImageHandleResidentARB(material.getNormalMap().handle(), GL_READ_ONLY);
-                    activeTextures.add(material.getNormalMap());
-                    uniformsMap.setUniform(NORMAL_SAMPLER, material.getNormalMap());
                 }
+                uniformsMap.setUniform(BASE_COLOR_SAMPLER, material.getTexture());
+                uniformsMap.setUniform(NORMAL_SAMPLER, material.getNormalMap());
+
                 if (model.isAnimated()) {
                     glBindVertexBuffer(
                             0,
@@ -128,10 +129,9 @@ public class SceneRender implements RenderStage {
                 BufferUtil.INSTANCE.bindBuffer(mesh.getDrawIndirectBuffer());
                 glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0, commandCount, 0);
             }
-            for (Texture texture : activeTextures) {
-                glMakeImageHandleNonResidentARB(texture.handle());
-            }
-            activeTextures.clear();
+
+            BufferUtil.INSTANCE.unbindBuffer(
+                    model.getModelMatricesBuffer(), MODEL_MATRICES_BINDING);
         }
 
         glBindVertexArray(0);
@@ -153,21 +153,21 @@ public class SceneRender implements RenderStage {
         ByteBuffer materialData = MemoryUtil.memAlloc(materials.size() * MATERIAL_SIZE);
 
         for (Material material : materials) {
-            final int normalMapID =
-                    Optional.ofNullable(material.getNormalMap())
-                            .map(Texture::id)
-                            .map(Math::toIntExact)
-                            .orElse(0);
-            final int textureID =
-                    Optional.ofNullable(material.getTexture())
-                            .map(Texture::id)
-                            .map(Math::toIntExact)
-                            .orElse(0);
+            int normalMapID = 0;
+            int textureID = 0;
 
-            materialData.putFloat(material.getBaseColor().x);
-            materialData.putFloat(material.getBaseColor().y);
-            materialData.putFloat(material.getBaseColor().z);
-            materialData.putFloat(material.getBaseColor().w);
+            if (material.getNormalMap() != null) {
+                normalMapID = (int) material.getNormalMap().id();
+            }
+            if (material.getTexture() != null) {
+                textureID = (int) material.getTexture().id();
+            }
+
+            Vector4f baseColor = material.getBaseColor();
+            materialData.putFloat(baseColor.x);
+            materialData.putFloat(baseColor.y);
+            materialData.putFloat(baseColor.z);
+            materialData.putFloat(baseColor.w);
 
             materialData.putFloat(material.getAnisotropic());
             materialData.putFloat(material.getClearcoat());

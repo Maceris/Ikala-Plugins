@@ -12,7 +12,7 @@ out vec3 outBitangent;
 out vec2 outTextCoord;
 out vec4 outViewPosition;
 out vec4 outWorldPosition;
-out uint outMaterialIdx;
+flat out uint outMaterialIdx;
 
 layout(std430, binding = 0) buffer Matrices {
 	mat4 modelMatrices[];

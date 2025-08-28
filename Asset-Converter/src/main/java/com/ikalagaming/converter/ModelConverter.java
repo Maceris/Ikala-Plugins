@@ -337,6 +337,7 @@ public class ModelConverter {
         for (int i = 0; aiMaterials != null && i < numMaterials; ++i) {
             AIMaterial aiMaterial = AIMaterial.create(aiMaterials.get(i));
             Material material = ModelConverter.processMaterial(aiMaterial, modelDir);
+            // TODO(ches) don't populate the material cache yet, return these as results and prompt
             int index = request.materialCache().addMaterial(material);
             materialList.add(index);
         }

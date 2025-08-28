@@ -93,6 +93,7 @@ public class LightRender implements RenderStage {
         uniformsMap.setUniform(ShaderUniforms.Light.TANGENT_SAMPLER, 2);
         uniformsMap.setUniform(ShaderUniforms.Light.MATERIAL_SAMPLER, 3);
         uniformsMap.setUniform(ShaderUniforms.Light.DEPTH_SAMPLER, 4);
+
         Fog fog = scene.getFog();
         uniformsMap.setUniform(
                 ShaderUniforms.Light.FOG + "." + ShaderUniforms.Light.Fog.ENABLED,
@@ -133,10 +134,8 @@ public class LightRender implements RenderStage {
         uniformsMap.setUniform(
                 ShaderUniforms.Light.INVERSE_VIEW_MATRIX, scene.getCamera().getInvViewMatrix());
 
-        glBindBufferBase(
-                GL_SHADER_STORAGE_BUFFER,
-                MATERIALS_BINDING,
-                (int) scene.getMaterialCache().getMaterialBuffer().id());
+        BufferUtil.INSTANCE.bindBuffer(
+                scene.getMaterialCache().getMaterialBuffer(), MATERIALS_BINDING);
 
         glBindVertexArray(quadMesh.vao());
         glDrawElements(GL_TRIANGLES, QuadMesh.VERTEX_COUNT, GL_UNSIGNED_INT, 0);

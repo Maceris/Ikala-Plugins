@@ -132,7 +132,8 @@ public class UniformsMapOpenGL implements UniformsMap {
     }
 
     @Override
-    public void setUniform(@NonNull String uniformName, @NonNull Texture texture) {
-        glUniformHandleui64ARB(getUniformLocation(uniformName), texture.handle());
+    public void setUniform(@NonNull String uniformName, Texture texture) {
+        long handle = texture != null ? texture.handle() : 0;
+        glUniformHandleui64ARB(getUniformLocation(uniformName), handle);
     }
 }

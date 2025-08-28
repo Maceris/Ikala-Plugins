@@ -28,7 +28,7 @@ public class MaterialCache {
 
     @Setter private boolean dirty;
 
-    @Setter private Buffer materialBuffer;
+    private final Buffer materialBuffer;
 
     /** Set up a new cache with a default material. */
     public MaterialCache() {
