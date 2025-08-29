@@ -1,9 +1,9 @@
 #version 460
 
 const int NUM_CASCADES = 3;
-const float MAX_LIGHT_DISTANCE = 5;
+const float MAX_LIGHT_DISTANCE = 10;
 const float BIAS = 0.0005;
-const float SHADOW_FACTOR = 0.25;
+const float SHADOW_FACTOR = 0.35;
 const float PI = 3.1415926535897932384626433832795;
 
 in vec2 outTextCoord;
@@ -206,7 +206,7 @@ vec3 calcLightColor(vec3 baseColor, Material material, vec3 lightColor, float li
     vec3 toViewDirection = normalize(-viewPosition);
     vec3 brdf = disneyBRDF(baseColor, material, toViewDirection, toLightDirection, normal, tangent, bitangent);
     float lightScaling = dot(normal, toLightDirection);
-    return brdf * lightColor * lightScaling;
+    return brdf * lightColor * lightScaling * lightIntensity;
 }
 
 vec3 calcPointLight(vec3 baseColor, Material material, PointLight light, vec3 viewPosition, vec3 normal, vec3 tangent,
@@ -248,9 +248,9 @@ vec3 calcDirLight(vec3 baseColor, Material material, DirectionalLight light, vec
 }
 
 vec3 calcFog(vec3 pos, vec3 color, Fog fog, vec3 ambientLight, DirectionalLight directionalLight) {
-    vec3 fogColor = fog.color * (ambientLight + directionalLight.color * directionalLight.intensity);
+    vec3 fogColor = fog.color;
     float distance = length(pos);
-    float fogFactor = 1.0 / exp((distance * fog.density) * (distance * fog.density));
+    float fogFactor = 1.0 / exp(sqr(distance * fog.density));
     fogFactor = clamp(fogFactor, 0.0, 1.0);
 
     vec3 resultColor = mix(fogColor, color, fogFactor);
@@ -330,10 +330,10 @@ void main()
     vec3 ambient = ambientLight.intensity * ambientLight.color;
     vec3 finalColor = ambient + color;
 
-    if (fog.enabled == 1) {
+    if (fog.enabled == 1 && fog.density > 0) {
         finalColor = calcFog(viewPosition, finalColor, fog, ambientLight.color, directionalLight);
     }
 
     fragColor.a = baseColor.a;
-    fragColor.rgb = finalColor * (1 + 0.000001 * shadowFactor);
+    fragColor.rgb = finalColor * (1 + 0.00001 * shadowFactor);
 }

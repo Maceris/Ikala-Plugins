@@ -289,6 +289,9 @@ public class Component implements Drawable {
     @Override
     public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
         for (Component child : children) {
+            if (!child.isVisible()) {
+                continue;
+            }
             if (child.handleGuiInput(scene, window)) {
                 return true;
             }
@@ -477,5 +480,14 @@ public class Component implements Drawable {
             this.height = parent.getHeight() + 1;
         }
         children.forEach(Component::updateHeights);
+    }
+
+    @Override
+    public void updateValues(@NonNull Scene scene, @NonNull Window window) {
+        for (Component child : children) {
+            if (child.isVisible()) {
+                child.updateValues(scene, window);
+            }
+        }
     }
 }

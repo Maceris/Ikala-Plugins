@@ -315,7 +315,6 @@ public class PipelineManager {
                             "FRAME_BUFFER_CREATION_FAIL", GraphicsPlugin.getResourceBundle()));
         }
 
-        // Unbind
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         long[] textureIds = Arrays.stream(shadowTextures).mapToLong(i -> (long) i).toArray();

@@ -16,7 +16,6 @@ import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
-import com.ikalagaming.graphics.scene.lights.PointLight;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -100,9 +99,10 @@ public class MainMenu extends GuiWindow {
         scene.getMaterialCache().setDirty(true);
         scene.addModel(ballModel);
 
+        final String ballNameFormatString = "ball_%s_%d";
         int zPos = 0;
-        for (int i = 0; i < 10; ++i) {
-            String name = String.format("ball_%s_%d", "anisotropic", i);
+        for (int i = 0; i <= 10; ++i) {
+            String name = String.format(ballNameFormatString, "anisotropic", i);
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.002f);
             ball.setPosition(i, 0, zPos);
@@ -119,8 +119,8 @@ public class MainMenu extends GuiWindow {
         }
         zPos += 1;
 
-        for (int i = 0; i < 10; ++i) {
-            String name = String.format("ball_%s_%d", "clearcoat", i);
+        for (int i = 0; i <= 10; ++i) {
+            String name = String.format(ballNameFormatString, "clearcoat", i);
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.002f);
             ball.setPosition(i, 0, zPos);
@@ -137,8 +137,8 @@ public class MainMenu extends GuiWindow {
         }
         zPos += 1;
 
-        for (int i = 0; i < 10; ++i) {
-            String name = String.format("ball_%s_%d", "clearcoatGloss", i);
+        for (int i = 0; i <= 10; ++i) {
+            String name = String.format(ballNameFormatString, "clearcoatGloss", i);
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.002f);
             ball.setPosition(i, 0, zPos);
@@ -155,8 +155,8 @@ public class MainMenu extends GuiWindow {
         }
         zPos += 1;
 
-        for (int i = 0; i < 10; ++i) {
-            String name = String.format("ball_%s_%d", "metallic", i);
+        for (int i = 0; i <= 10; ++i) {
+            String name = String.format(ballNameFormatString, "metallic", i);
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.002f);
             ball.setPosition(i, 0, zPos);
@@ -172,8 +172,8 @@ public class MainMenu extends GuiWindow {
         }
         zPos += 1;
 
-        for (int i = 0; i < 10; ++i) {
-            String name = String.format("ball_%s_%d", "roughness", i);
+        for (int i = 0; i <= 10; ++i) {
+            String name = String.format(ballNameFormatString, "roughness", i);
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.002f);
             ball.setPosition(i, 0, zPos);
@@ -189,8 +189,8 @@ public class MainMenu extends GuiWindow {
         }
         zPos += 1;
 
-        for (int i = 0; i < 10; ++i) {
-            String name = String.format("ball_%s_%d", "sheen", i);
+        for (int i = 0; i <= 10; ++i) {
+            String name = String.format(ballNameFormatString, "sheen", i);
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.002f);
             ball.setPosition(i, 0, zPos);
@@ -207,8 +207,8 @@ public class MainMenu extends GuiWindow {
         }
         zPos += 1;
 
-        for (int i = 0; i < 10; ++i) {
-            String name = String.format("ball_%s_%d", "sheenTint", i);
+        for (int i = 0; i <= 10; ++i) {
+            String name = String.format(ballNameFormatString, "sheenTint", i);
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.002f);
             ball.setPosition(i, 0, zPos);
@@ -225,8 +225,8 @@ public class MainMenu extends GuiWindow {
         }
         zPos += 1;
 
-        for (int i = 0; i < 10; ++i) {
-            String name = String.format("ball_%s_%d", "specular", i);
+        for (int i = 0; i <= 10; ++i) {
+            String name = String.format(ballNameFormatString, "specular", i);
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.002f);
             ball.setPosition(i, 0, zPos);
@@ -243,8 +243,8 @@ public class MainMenu extends GuiWindow {
         }
         zPos += 1;
 
-        for (int i = 0; i < 10; ++i) {
-            String name = String.format("ball_%s_%d", "specularTint", i);
+        for (int i = 0; i <= 10; ++i) {
+            String name = String.format(ballNameFormatString, "specularTint", i);
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.002f);
             ball.setPosition(i, 0, zPos);
@@ -261,8 +261,8 @@ public class MainMenu extends GuiWindow {
         }
         zPos += 1;
 
-        for (int i = 0; i < 10; ++i) {
-            String name = String.format("ball_%s_%d", "subsurface", i);
+        for (int i = 0; i <= 10; ++i) {
+            String name = String.format(ballNameFormatString, "subsurface", i);
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.002f);
             ball.setPosition(i, 0, zPos);
@@ -282,22 +282,14 @@ public class MainMenu extends GuiWindow {
                 .setDirLight(
                         new DirectionalLight(
                                 new Vector3f(1.0f, 1.0f, 1.0f),
-                                new Vector3f(0.1f, -1.0f, 1.0f),
-                                1.6e9f));
-
-        scene.getSceneLights()
-                .getPointLights()
-                .add(
-                        new PointLight(
-                                new Vector3f(1.0f, 1.0f, 1.0f),
-                                new Vector3f(0.5f, 4.0f, 0.5f),
-                                10f));
+                                new Vector3f(0.247f, -0.848f, 0.785f),
+                                4f));
 
         var pipeline =
                 RenderConfig.builder().withAnimation().withScene().withSkybox().withGui().build();
         GraphicsManager.swapPipeline(pipeline);
-        scene.getCamera().setPosition(1.86f, 2.43f, 2.33f);
-        scene.getCamera().setRotation(0.64f, 5.62f);
+        scene.getCamera().setPosition(5.12f, 6.75f, 10.42f);
+        scene.getCamera().setRotation(0.94f, 6.28f);
 
         var texturePath =
                 PluginFolder.getResource(

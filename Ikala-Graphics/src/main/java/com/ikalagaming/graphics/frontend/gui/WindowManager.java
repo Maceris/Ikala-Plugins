@@ -105,6 +105,18 @@ public class WindowManager {
     }
 
     /**
+     * Update any internal values as required.
+     *
+     * @param scene The scene we are rendering.
+     * @param window The window we are using.
+     */
+    public void updateValues(@NonNull Scene scene, @NonNull Window window) {
+        windows.values().stream()
+                .filter(Component::isVisible)
+                .forEach(component -> component.updateValues(scene, window));
+    }
+
+    /**
      * Returns whether a component is enabled. Components that are not found are considered
      * disabled.
      *

@@ -283,6 +283,7 @@ public class GraphicsManager {
             cameraManager.updateCamera(elapsedTime);
 
             windowManager.handleGuiInput(scene, window);
+            windowManager.updateValues(scene, window);
 
             // Update the next time we should update models
             nextUpdateTime = updateTimer.getLastLoopTime() + UPDATE_TIME;

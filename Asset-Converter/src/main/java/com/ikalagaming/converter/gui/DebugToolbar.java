@@ -78,4 +78,9 @@ public class DebugToolbar extends MainToolbar {
         }
         return false;
     }
+
+    @Override
+    public void updateValues(@NonNull Scene scene, @NonNull Window window) {
+        // Not required
+    }
 }

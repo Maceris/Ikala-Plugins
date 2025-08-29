@@ -51,4 +51,13 @@ public class Checkbox extends Component implements Interactive {
     public boolean getState() {
         return state.get();
     }
+
+    /**
+     * Update the current state.
+     *
+     * @param newState The new state.
+     */
+    public void setState(boolean newState) {
+        state.set(newState);
+    }
 }
