@@ -161,10 +161,9 @@ public class LightRender implements RenderStage {
                     pointLights.size());
         }
         /*
-         * Position (vec3 + ignored), color (vec3), intensity (1), Attenuation
-         * (3 + ignored), in that order.
+         * Position (vec3 + ignored), color (vec3), intensity (1),
          */
-        final int STRUCT_SIZE = 4 + 3 + 1 + 4;
+        final int STRUCT_SIZE = 3 + 1 + 3 + 1;
 
         final int lightsToRender =
                 Math.min(PipelineOpenGL.MAX_LIGHTS_SUPPORTED, pointLights.size());
@@ -185,7 +184,6 @@ public class LightRender implements RenderStage {
             lightBuffer.put(light.getColor().y);
             lightBuffer.put(light.getColor().z);
             lightBuffer.put(light.getIntensity());
-            lightBuffer.put(padding);
         }
 
         lightBuffer.flip();
@@ -217,10 +215,9 @@ public class LightRender implements RenderStage {
         }
 
         /*
-         * Position (vec3 + ignored), color (vec3), intensity (1), Attenuation
-         * (3 + ignored), cone direction (vec3), cutoff (1) in that order.
+         * Position (vec3), padding (1), color (vec3), intensity (1), cone direction (vec3), cutoff (1) in that order.
          */
-        final int STRUCT_SIZE = 4 + 3 + 1 + 4 + 3 + 1;
+        final int STRUCT_SIZE = 3 + 1 + 3 + 1 + 3 + 1;
 
         final int lightsToRender = Math.min(PipelineOpenGL.MAX_LIGHTS_SUPPORTED, spotLights.size());
 
@@ -241,7 +238,6 @@ public class LightRender implements RenderStage {
             lightBuffer.put(light.getPointLight().getColor().y);
             lightBuffer.put(light.getPointLight().getColor().z);
             lightBuffer.put(light.getPointLight().getIntensity());
-            lightBuffer.put(padding);
             lightDirection.set(light.getConeDirection(), 1);
             lightDirection.mul(viewMatrix);
             lightBuffer.put(lightDirection.x);
