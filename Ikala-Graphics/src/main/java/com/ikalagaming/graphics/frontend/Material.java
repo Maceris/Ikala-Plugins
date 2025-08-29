@@ -81,5 +81,7 @@ public class Material {
         specular = 0;
         specularTint = 0;
         subsurface = 0;
+        normalMap = null;
+        texture = null;
     }
 }

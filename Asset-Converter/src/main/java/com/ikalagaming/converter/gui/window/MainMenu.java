@@ -89,6 +89,7 @@ public class MainMenu extends GuiWindow {
                                 "models/shader_ball.obj",
                                 scene.getMaterialCache(),
                                 false));
+        GraphicsManager.getRenderInstance().initializeModel(ballModel);
 
         Material material = ballModel.getMeshDataList().get(0).getMaterial();
 
@@ -96,47 +97,201 @@ public class MainMenu extends GuiWindow {
         material.setTexture(null);
         material.setNormalMap(null);
         material.getBaseColor().set(0.75f, 0.0f, 0.0f, 1.0f);
-
         scene.getMaterialCache().setDirty(true);
+        scene.addModel(ballModel);
 
-        GraphicsManager.getRenderInstance().initializeModel(ballModel);
-
-        {
-            scene.addModel(ballModel);
-            Entity ball = new Entity("ball", ballModel);
+        int zPos = 0;
+        for (int i = 0; i < 10; ++i) {
+            String name = String.format("ball_%s_%d", "anisotropic", i);
+            Entity ball = new Entity(name, ballModel);
             ball.setScale(0.002f);
+            ball.setPosition(i, 0, zPos);
             ball.updateModelMatrix();
+
+            Material customMaterial = new Material();
+            customMaterial.getBaseColor().set(0.0f, 0.90f, 0.60f, 1.0f);
+            customMaterial.setAnisotropic(0.1f * i);
+            customMaterial.setRoughness(0.40f);
+            scene.getMaterialCache().addMaterial(customMaterial);
+
             scene.addEntity(ball);
+            ball.setMaterialOverride(customMaterial, 0);
         }
+        zPos += 1;
 
-        {
-            Entity ball2 = new Entity("ball2", ballModel);
-            ball2.setScale(0.002f);
-            ball2.setPosition(1, 0, 0);
-            ball2.updateModelMatrix();
+        for (int i = 0; i < 10; ++i) {
+            String name = String.format("ball_%s_%d", "clearcoat", i);
+            Entity ball = new Entity(name, ballModel);
+            ball.setScale(0.002f);
+            ball.setPosition(i, 0, zPos);
+            ball.updateModelMatrix();
 
-            Material secondMaterial = new Material();
-            secondMaterial.getBaseColor().set(0.0f, 0.75f, 0.0f, 1.0f);
-            scene.getMaterialCache().addMaterial(secondMaterial);
-            for (int i = 0; i < ballModel.getMeshDataList().size(); ++i) {
-                ball2.setMaterialOverride(secondMaterial, i);
-            }
-            scene.addEntity(ball2);
+            Material customMaterial = new Material();
+            customMaterial.getBaseColor().set(0.35f, 0.75f, 0.95f, 1.0f);
+            customMaterial.setClearcoat(0.1f * i);
+            customMaterial.setRoughness(0.40f);
+            scene.getMaterialCache().addMaterial(customMaterial);
+
+            scene.addEntity(ball);
+            ball.setMaterialOverride(customMaterial, 0);
+        }
+        zPos += 1;
+
+        for (int i = 0; i < 10; ++i) {
+            String name = String.format("ball_%s_%d", "clearcoatGloss", i);
+            Entity ball = new Entity(name, ballModel);
+            ball.setScale(0.002f);
+            ball.setPosition(i, 0, zPos);
+            ball.updateModelMatrix();
+
+            Material customMaterial = new Material();
+            customMaterial.getBaseColor().set(0.35f, 0.75f, 0.95f, 1.0f);
+            customMaterial.setClearcoatGloss(0.1f * i);
+            customMaterial.setRoughness(0.40f);
+            scene.getMaterialCache().addMaterial(customMaterial);
+
+            scene.addEntity(ball);
+            ball.setMaterialOverride(customMaterial, 0);
+        }
+        zPos += 1;
+
+        for (int i = 0; i < 10; ++i) {
+            String name = String.format("ball_%s_%d", "metallic", i);
+            Entity ball = new Entity(name, ballModel);
+            ball.setScale(0.002f);
+            ball.setPosition(i, 0, zPos);
+            ball.updateModelMatrix();
+
+            Material customMaterial = new Material();
+            customMaterial.getBaseColor().set(1.0f, 0.95f, 0.f, 1.0f);
+            customMaterial.setMetallic(0.1f * i);
+            scene.getMaterialCache().addMaterial(customMaterial);
+
+            scene.addEntity(ball);
+            ball.setMaterialOverride(customMaterial, 0);
+        }
+        zPos += 1;
+
+        for (int i = 0; i < 10; ++i) {
+            String name = String.format("ball_%s_%d", "roughness", i);
+            Entity ball = new Entity(name, ballModel);
+            ball.setScale(0.002f);
+            ball.setPosition(i, 0, zPos);
+            ball.updateModelMatrix();
+
+            Material customMaterial = new Material();
+            customMaterial.getBaseColor().set(0.10f, 0.10f, 0.95f, 1.0f);
+            customMaterial.setRoughness(0.1f * i);
+            scene.getMaterialCache().addMaterial(customMaterial);
+
+            scene.addEntity(ball);
+            ball.setMaterialOverride(customMaterial, 0);
+        }
+        zPos += 1;
+
+        for (int i = 0; i < 10; ++i) {
+            String name = String.format("ball_%s_%d", "sheen", i);
+            Entity ball = new Entity(name, ballModel);
+            ball.setScale(0.002f);
+            ball.setPosition(i, 0, zPos);
+            ball.updateModelMatrix();
+
+            Material customMaterial = new Material();
+            customMaterial.getBaseColor().set(0.75f, 0.65f, 0.50f, 1.0f);
+            customMaterial.setSheen(0.1f * i);
+            customMaterial.setRoughness(0.40f);
+            scene.getMaterialCache().addMaterial(customMaterial);
+
+            scene.addEntity(ball);
+            ball.setMaterialOverride(customMaterial, 0);
+        }
+        zPos += 1;
+
+        for (int i = 0; i < 10; ++i) {
+            String name = String.format("ball_%s_%d", "sheenTint", i);
+            Entity ball = new Entity(name, ballModel);
+            ball.setScale(0.002f);
+            ball.setPosition(i, 0, zPos);
+            ball.updateModelMatrix();
+
+            Material customMaterial = new Material();
+            customMaterial.getBaseColor().set(0.75f, 0.65f, 0.50f, 1.0f);
+            customMaterial.setSheenTint(0.1f * i);
+            customMaterial.setRoughness(0.40f);
+            scene.getMaterialCache().addMaterial(customMaterial);
+
+            scene.addEntity(ball);
+            ball.setMaterialOverride(customMaterial, 0);
+        }
+        zPos += 1;
+
+        for (int i = 0; i < 10; ++i) {
+            String name = String.format("ball_%s_%d", "specular", i);
+            Entity ball = new Entity(name, ballModel);
+            ball.setScale(0.002f);
+            ball.setPosition(i, 0, zPos);
+            ball.updateModelMatrix();
+
+            Material customMaterial = new Material();
+            customMaterial.getBaseColor().set(0.95f, 0.20f, 0.20f, 1.0f);
+            customMaterial.setSpecular(0.1f * i);
+            customMaterial.setRoughness(0.40f);
+            scene.getMaterialCache().addMaterial(customMaterial);
+
+            scene.addEntity(ball);
+            ball.setMaterialOverride(customMaterial, 0);
+        }
+        zPos += 1;
+
+        for (int i = 0; i < 10; ++i) {
+            String name = String.format("ball_%s_%d", "specularTint", i);
+            Entity ball = new Entity(name, ballModel);
+            ball.setScale(0.002f);
+            ball.setPosition(i, 0, zPos);
+            ball.updateModelMatrix();
+
+            Material customMaterial = new Material();
+            customMaterial.getBaseColor().set(0.95f, 0.20f, 0.20f, 1.0f);
+            customMaterial.setSpecularTint(0.1f * i);
+            customMaterial.setRoughness(0.40f);
+            scene.getMaterialCache().addMaterial(customMaterial);
+
+            scene.addEntity(ball);
+            ball.setMaterialOverride(customMaterial, 0);
+        }
+        zPos += 1;
+
+        for (int i = 0; i < 10; ++i) {
+            String name = String.format("ball_%s_%d", "subsurface", i);
+            Entity ball = new Entity(name, ballModel);
+            ball.setScale(0.002f);
+            ball.setPosition(i, 0, zPos);
+            ball.updateModelMatrix();
+
+            Material customMaterial = new Material();
+            customMaterial.getBaseColor().set(1.0f, 1.0f, 1.0f, 1.0f);
+            customMaterial.setSubsurface(0.1f * i);
+            customMaterial.setRoughness(0.40f);
+            scene.getMaterialCache().addMaterial(customMaterial);
+
+            scene.addEntity(ball);
+            ball.setMaterialOverride(customMaterial, 0);
         }
 
         scene.getSceneLights()
                 .setDirLight(
                         new DirectionalLight(
                                 new Vector3f(1.0f, 1.0f, 1.0f),
-                                new Vector3f(1.0f, 1.0f, 1.0f),
+                                new Vector3f(0.1f, -1.0f, 1.0f),
                                 1.6e9f));
+
         scene.getSceneLights()
                 .getPointLights()
                 .add(
                         new PointLight(
-                                new Vector3f(1.0f, 0.0f, 0.0f),
-                                new Vector3f(2.0f, 1.1f, 0.0f),
-                                1.0f));
+                                new Vector3f(1.0f, 1.0f, 1.0f),
+                                new Vector3f(0.5f, 4.0f, 0.5f),
+                                10f));
 
         var pipeline =
                 RenderConfig.builder().withAnimation().withScene().withSkybox().withGui().build();

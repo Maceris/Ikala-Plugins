@@ -243,7 +243,7 @@ vec3 calcSpotLight(vec3 baseColor, Material material, SpotLight light, vec3 view
 vec3 calcDirLight(vec3 baseColor, Material material, DirectionalLight light, vec3 viewPosition, vec3 normal,
     vec3 tangent, vec3 bitangent)
 {
-    return calcLightColor(baseColor, material, light.color, light.intensity, viewPosition, normalize(light.direction),
+    return calcLightColor(baseColor, material, light.color, light.intensity, viewPosition, normalize(-light.direction),
         normal, tangent, bitangent);
 }
 
@@ -335,5 +335,5 @@ void main()
     }
 
     fragColor.a = baseColor.a;
-    fragColor.rgb = finalColor * shadowFactor;
+    fragColor.rgb = finalColor * (1 + 0.000001 * shadowFactor);
 }
