@@ -9,8 +9,10 @@ import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
 import com.ikalagaming.graphics.frontend.*;
+import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
+import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
@@ -20,7 +22,7 @@ import org.joml.Vector4f;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
-import java.util.List;
+import java.nio.IntBuffer;
 
 /** Handles rendering of scene geometry to the g-buffer. */
 @Slf4j
@@ -28,6 +30,9 @@ public class SceneRender implements RenderStage {
 
     /** The binding for the materials SSBO. */
     static final int MATERIALS_BINDING = 1;
+
+    /** The binding for the material override SSBO. */
+    static final int MATERIAL_OVERRIDES_BINDING = 2;
 
     /** The shader to use for rendering. */
     @NonNull @Setter private Shader shader;
@@ -81,6 +86,7 @@ public class SceneRender implements RenderStage {
         shader.bind();
 
         updateMaterialBuffers(scene);
+        updateMaterialOverrides(scene);
 
         uniformsMap.setUniform(
                 ShaderUniforms.Scene.PROJECTION_MATRIX,
@@ -100,20 +106,28 @@ public class SceneRender implements RenderStage {
             BufferUtil.INSTANCE.bindBuffer(model.getModelMatricesBuffer(), MODEL_MATRICES_BINDING);
             BufferUtil.INSTANCE.bindBuffer(
                     scene.getMaterialCache().getMaterialBuffer(), MATERIALS_BINDING);
+            BufferUtil.INSTANCE.bindBuffer(
+                    model.getMaterialOverridesBuffer(), MATERIAL_OVERRIDES_BINDING);
 
+            int meshIndex = 0;
             for (MeshData mesh : model.getMeshDataList()) {
-                final int materialIndex = mesh.getMaterialIndex();
-                uniformsMap.setUniformUnsigned(MATERIAL_INDEX, materialIndex);
+                int indexOrFallback = scene.getMaterialCache().getMaterialIndex(mesh.getMaterial());
+                Material assignedOrDefaultMaterial =
+                        scene.getMaterialCache().getMaterial(indexOrFallback);
 
-                Material material = scene.getMaterialCache().getMaterial(materialIndex);
-                if (material.getTexture() != null) {
-                    glMakeImageHandleResidentARB(material.getTexture().handle(), GL_READ_ONLY);
+                uniformsMap.setUniformUnsigned(MATERIAL_INDEX, indexOrFallback);
+                uniformsMap.setUniformUnsigned(MESH_INDEX, meshIndex);
+
+                if (assignedOrDefaultMaterial.getTexture() != null) {
+                    glMakeImageHandleResidentARB(
+                            assignedOrDefaultMaterial.getTexture().handle(), GL_READ_ONLY);
                 }
-                if (material.getNormalMap() != null) {
-                    glMakeImageHandleResidentARB(material.getNormalMap().handle(), GL_READ_ONLY);
+                if (assignedOrDefaultMaterial.getNormalMap() != null) {
+                    glMakeImageHandleResidentARB(
+                            assignedOrDefaultMaterial.getNormalMap().handle(), GL_READ_ONLY);
                 }
-                uniformsMap.setUniform(BASE_COLOR_SAMPLER, material.getTexture());
-                uniformsMap.setUniform(NORMAL_SAMPLER, material.getNormalMap());
+                uniformsMap.setUniform(BASE_COLOR_SAMPLER, assignedOrDefaultMaterial.getTexture());
+                uniformsMap.setUniform(NORMAL_SAMPLER, assignedOrDefaultMaterial.getNormalMap());
 
                 if (model.isAnimated()) {
                     glBindVertexBuffer(
@@ -128,6 +142,7 @@ public class SceneRender implements RenderStage {
                 BufferUtil.INSTANCE.bindBuffer(mesh.getIndexBuffer());
                 BufferUtil.INSTANCE.bindBuffer(mesh.getDrawIndirectBuffer());
                 glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0, commandCount, 0);
+                meshIndex += 1;
             }
 
             BufferUtil.INSTANCE.unbindBuffer(
@@ -139,20 +154,54 @@ public class SceneRender implements RenderStage {
         shader.unbind();
     }
 
+    private static void updateMaterialOverrides(Scene scene) {
+        MaterialCache cache = scene.getMaterialCache();
+
+        for (Model model : scene.getModelMap().values()) {
+            if (model.getEntitiesList().isEmpty() || !model.isMaterialOverridesDirty()) {
+                continue;
+            }
+
+            final int MESH_COUNT = model.getMeshDataList().size();
+            final int ENTITY_COUNT = model.getEntitiesList().size();
+
+            IntBuffer buffer = MemoryUtil.memAllocInt(ENTITY_COUNT * MESH_COUNT);
+
+            for (Entity entity : model.getEntitiesList()) {
+                for (Material material : entity.getMaterialOverrides()) {
+                    int override = cache.getMaterialIndex(material);
+                    buffer.put(override);
+                }
+            }
+
+            buffer.flip();
+
+            BufferUtil.INSTANCE.bindBuffer(model.getMaterialOverridesBuffer());
+            BufferUtil.INSTANCE.bufferData(
+                    model.getMaterialOverridesBuffer(), buffer, GL_STATIC_DRAW);
+            BufferUtil.INSTANCE.unbindBuffer(model.getMaterialOverridesBuffer());
+
+            MemoryUtil.memFree(buffer);
+            model.setMaterialOverridesDirty(false);
+        }
+    }
+
     private static void updateMaterialBuffers(Scene scene) {
         if (!scene.getMaterialCache().isDirty()) {
             return;
         }
 
         final int MATERIAL_SIZE = 16 /* floats/ints */ * 4 /* bytes per float/int */;
-        final List<Material> materials = scene.getMaterialCache().getMaterialsList();
-        if (materials.isEmpty()) {
+        final int materialCount = scene.getMaterialCache().getMaterialCount();
+        if (materialCount <= 0) {
             return;
         }
 
-        ByteBuffer materialData = MemoryUtil.memAlloc(materials.size() * MATERIAL_SIZE);
+        ByteBuffer materialData = MemoryUtil.memAlloc(materialCount * MATERIAL_SIZE);
 
-        for (Material material : materials) {
+        for (int i = 0; i < materialCount; ++i) {
+            Material material = scene.getMaterialCache().getMaterial(i);
+
             int normalMapID = 0;
             int textureID = 0;
 

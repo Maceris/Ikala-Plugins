@@ -62,6 +62,7 @@ public class ModelMatrixUpdate implements RenderStage {
         if (model.getEntitiesLastFrame() != entities.size()) {
             updateCommandBuffers(model);
             model.setEntitiesLastFrame(entities.size());
+            model.setMaterialOverridesDirty(true);
         }
     }
 

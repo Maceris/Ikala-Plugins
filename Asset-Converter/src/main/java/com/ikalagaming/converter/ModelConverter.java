@@ -333,13 +333,13 @@ public class ModelConverter {
 
         int numMaterials = aiScene.mNumMaterials();
         PointerBuffer aiMaterials = aiScene.mMaterials();
-        List<Integer> materialList = new ArrayList<>();
+        List<Material> materialList = new ArrayList<>();
         for (int i = 0; aiMaterials != null && i < numMaterials; ++i) {
             AIMaterial aiMaterial = AIMaterial.create(aiMaterials.get(i));
             Material material = ModelConverter.processMaterial(aiMaterial, modelDir);
             // TODO(ches) don't populate the material cache yet, return these as results and prompt
-            int index = request.materialCache().addMaterial(material);
-            materialList.add(index);
+            request.materialCache().addMaterial(material);
+            materialList.add(material);
         }
 
         Model result = new Model(request.modelId());
@@ -351,12 +351,7 @@ public class ModelConverter {
             AIMesh aiMesh = AIMesh.create(aiMeshes.get(i));
             MeshData meshData = ModelConverter.processMesh(aiMesh, boneList);
             int materialIdx = aiMesh.mMaterialIndex();
-            if (materialIdx >= 0 && materialIdx < materialList.size()) {
-                meshData.setMaterialIndex(materialList.get(materialIdx));
-            } else {
-                meshData.setMaterialIndex(MaterialCache.DEFAULT_MATERIAL_INDEX);
-            }
-
+            meshData.setMaterial(materialList.get(materialIdx));
             result.getMeshDataList().add(meshData);
         }
 

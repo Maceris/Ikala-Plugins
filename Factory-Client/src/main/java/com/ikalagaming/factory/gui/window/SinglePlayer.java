@@ -128,7 +128,7 @@ public class SinglePlayer extends GuiWindow {
                                 GraphicsManager.getScene().getMaterialCache(),
                                 false));
         GraphicsManager.getScene().addModel(cubeModel);
-        Entity cube = new Entity("TheCube", cubeModel.getId());
+        Entity cube = new Entity("TheCube", cubeModel);
         GraphicsManager.getScene().addEntity(cube);
         GraphicsManager.getScene()
                 .getSceneLights()

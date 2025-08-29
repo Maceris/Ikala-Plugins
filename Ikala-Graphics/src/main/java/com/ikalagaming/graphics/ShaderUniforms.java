@@ -185,6 +185,12 @@ public class ShaderUniforms {
         /** The index of the current material, for the vertex shader. */
         public static final String MATERIAL_INDEX = "materialIndex";
 
+        /**
+         * The index of the current mesh, for the vertex shader, used to pick out a material
+         * override.
+         */
+        public static final String MESH_INDEX = "meshIndex";
+
         /** Used to calculate the position when projected onto the screen space. */
         public static final String PROJECTION_MATRIX = "projectionMatrix";
 

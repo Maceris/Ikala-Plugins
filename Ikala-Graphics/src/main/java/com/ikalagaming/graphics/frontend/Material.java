@@ -1,6 +1,5 @@
 package com.ikalagaming.graphics.frontend;
 
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 import org.joml.Vector4f;
@@ -11,7 +10,6 @@ import org.joml.Vector4f;
  */
 @Getter
 @Setter
-@EqualsAndHashCode
 public class Material {
     /** The default color to use when unspecified. */
     public static final Vector4f DEFAULT_COLOR = new Vector4f(1.0f, 1.0f, 1.0f, 1.0f);

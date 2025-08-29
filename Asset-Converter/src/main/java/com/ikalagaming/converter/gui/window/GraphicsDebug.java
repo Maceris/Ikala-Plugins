@@ -64,10 +64,7 @@ public class GraphicsDebug extends GuiWindow {
             ImGui.text(
                     String.format(
                             "Materials loaded - %s",
-                            GraphicsManager.getScene()
-                                    .getMaterialCache()
-                                    .getMaterialsList()
-                                    .size()));
+                            GraphicsManager.getScene().getMaterialCache().getMaterialCount()));
         }
 
         ImGui.end();

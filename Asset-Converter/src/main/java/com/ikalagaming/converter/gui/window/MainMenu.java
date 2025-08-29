@@ -12,7 +12,6 @@ import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.frontend.gui.component.Button;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
-import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
@@ -23,11 +22,13 @@ import com.ikalagaming.util.SafeResourceLoader;
 
 import imgui.flag.ImGuiWindowFlags;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector3f;
 
-import java.util.List;
+import java.util.Objects;
 
 /** The main menu we start up the game showing. */
+@Slf4j
 public class MainMenu extends GuiWindow {
     private final WindowManager windowManager;
     private final Button sphereDemoButton;
@@ -78,42 +79,58 @@ public class MainMenu extends GuiWindow {
     }
 
     private void loadSphereDemo() {
+        Scene scene = GraphicsManager.getScene();
+
         Model ballModel =
                 ModelConverter.loadModel(
                         new ModelConverter.ModelLoadRequest(
                                 "shader_ball",
                                 ConverterPlugin.PLUGIN_NAME,
                                 "models/shader_ball.obj",
-                                GraphicsManager.getScene().getMaterialCache(),
+                                scene.getMaterialCache(),
                                 false));
 
-        List<Material> materialList =
-                GraphicsManager.getScene().getMaterialCache().getMaterialsList();
+        Material material = ballModel.getMeshDataList().get(0).getMaterial();
 
-        for (MeshData mesh : ballModel.getMeshDataList()) {
-            Material material = materialList.get(mesh.getMaterialIndex());
-            material.setTexture(null);
-            material.setNormalMap(null);
-            material.getBaseColor().set(0.75f, 0.0f, 0.0f, 1.0f);
-        }
-        GraphicsManager.getScene().getMaterialCache().setDirty(true);
+        Objects.requireNonNull(material);
+        material.setTexture(null);
+        material.setNormalMap(null);
+        material.getBaseColor().set(0.75f, 0.0f, 0.0f, 1.0f);
+
+        scene.getMaterialCache().setDirty(true);
 
         GraphicsManager.getRenderInstance().initializeModel(ballModel);
-        GraphicsManager.getScene().addModel(ballModel);
-        Entity ball = new Entity("ball", ballModel.getId());
-        ball.setScale(0.001f);
-        ball.updateModelMatrix();
-        GraphicsManager.getScene().addEntity(ball);
 
-        GraphicsManager.getScene()
-                .getSceneLights()
+        {
+            scene.addModel(ballModel);
+            Entity ball = new Entity("ball", ballModel);
+            ball.setScale(0.002f);
+            ball.updateModelMatrix();
+            scene.addEntity(ball);
+        }
+
+        {
+            Entity ball2 = new Entity("ball2", ballModel);
+            ball2.setScale(0.002f);
+            ball2.setPosition(1, 0, 0);
+            ball2.updateModelMatrix();
+
+            Material secondMaterial = new Material();
+            secondMaterial.getBaseColor().set(0.0f, 0.75f, 0.0f, 1.0f);
+            scene.getMaterialCache().addMaterial(secondMaterial);
+            for (int i = 0; i < ballModel.getMeshDataList().size(); ++i) {
+                ball2.setMaterialOverride(secondMaterial, i);
+            }
+            scene.addEntity(ball2);
+        }
+
+        scene.getSceneLights()
                 .setDirLight(
                         new DirectionalLight(
                                 new Vector3f(1.0f, 1.0f, 1.0f),
                                 new Vector3f(1.0f, 1.0f, 1.0f),
                                 1.6e9f));
-        GraphicsManager.getScene()
-                .getSceneLights()
+        scene.getSceneLights()
                 .getPointLights()
                 .add(
                         new PointLight(
@@ -124,8 +141,8 @@ public class MainMenu extends GuiWindow {
         var pipeline =
                 RenderConfig.builder().withAnimation().withScene().withSkybox().withGui().build();
         GraphicsManager.swapPipeline(pipeline);
-        GraphicsManager.getScene().getCamera().setPosition(1.86f, 2.43f, 2.33f);
-        GraphicsManager.getScene().getCamera().setRotation(0.64f, 5.62f);
+        scene.getCamera().setPosition(1.86f, 2.43f, 2.33f);
+        scene.getCamera().setRotation(0.64f, 5.62f);
 
         var texturePath =
                 PluginFolder.getResource(
@@ -133,8 +150,7 @@ public class MainMenu extends GuiWindow {
                                 PluginFolder.ResourceType.DATA,
                                 "textures/skybox.png")
                         .getAbsolutePath();
-        GraphicsManager.getScene()
-                .setSkyboxTexture(
-                        GraphicsManager.getRenderInstance().getTextureLoader().load(texturePath));
+        scene.setSkyboxTexture(
+                GraphicsManager.getRenderInstance().getTextureLoader().load(texturePath));
     }
 }

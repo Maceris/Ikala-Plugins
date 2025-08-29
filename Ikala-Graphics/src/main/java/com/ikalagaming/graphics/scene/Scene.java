@@ -13,9 +13,6 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector4f;
 
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -64,9 +61,6 @@ public class Scene {
      */
     private final SceneLights sceneLights;
 
-    /** A list of entities that we tried to add, but did not yet have models loaded. */
-    private final List<Entity> entityQueue;
-
     /**
      * The texture of the skybox, which may be null if we want the sky to be just a single diffuse
      * color.
@@ -89,71 +83,21 @@ public class Scene {
         sceneLights = new SceneLights();
         camera = new Camera();
         fog = new Fog();
-        entityQueue = Collections.synchronizedList(new LinkedList<>());
         skyboxDiffuse = new Vector4f(0.65f, 0.65f, 0.65f, 1f);
     }
 
     /**
-     * Add an entity to the scene.
+     * Add an entity to the scene. The model must have a valid model that is in the scene, but this
+     * will handle adding the entity to the model's entity list.
      *
      * @param entity The entity to add.
      * @see #addModel(Model)
      */
     public void addEntity(@NonNull Entity entity) {
-        String modelId = entity.getModelID();
-        Model model = modelMap.get(modelId);
-        if (model == null) {
-            entityQueue.add(entity);
-        } else {
-            addEntity(entity, model);
-        }
-    }
-
-    /**
-     * Remove an entity from the scene.
-     *
-     * @param entity The entity to add.
-     * @see #addModel(Model)
-     */
-    public void removeEntity(@NonNull Entity entity) {
-        String modelId = entity.getModelID();
-        Model model = modelMap.get(modelId);
-        if (model == null) {
-            log.warn(
-                    SafeResourceLoader.getStringFormatted(
-                            "REMOVING_UNKNOWN_ENTITY",
-                            GraphicsPlugin.getResourceBundle(),
-                            entity.getEntityID(),
-                            entity.getModelID()));
-        } else {
-            model.getEntitiesList().remove(entity);
-        }
-    }
-
-    /**
-     * Add a model to the model map.
-     *
-     * @param model The model to add.
-     */
-    public void addModel(@NonNull Model model) {
-        modelMap.put(model.getId(), model);
-        for (Iterator<Entity> iter = entityQueue.iterator(); iter.hasNext(); ) {
-            Entity current = iter.next();
-            if (model.getId().equals(current.getModelID())) {
-                addEntity(current, model);
-                iter.remove();
-            }
-        }
-    }
-
-    /**
-     * Add entity to the model, unless we have reached the limit.
-     *
-     * @param entity The entity to add.
-     * @param model The model to add the entity to.
-     */
-    private void addEntity(@NonNull Entity entity, @NonNull Model model) {
+        Model model = entity.getModel();
         List<Entity> entityList = model.getEntitiesList();
+        // TODO(ches) handle duplicate entities
+
         if (entityList.size() >= Model.MAX_ENTITIES) {
             log.error(
                     SafeResourceLoader.getStringFormatted(
@@ -164,6 +108,26 @@ public class Scene {
             return;
         }
         model.getEntitiesList().add(entity);
+    }
+
+    /**
+     * Remove an entity from the scene.
+     *
+     * @param entity The entity to add.
+     * @see #addModel(Model)
+     */
+    public void removeEntity(@NonNull Entity entity) {
+        Model model = entity.getModel();
+        model.getEntitiesList().remove(entity);
+    }
+
+    /**
+     * Add a model to the model map.
+     *
+     * @param model The model to add.
+     */
+    public void addModel(@NonNull Model model) {
+        modelMap.put(model.getId(), model);
     }
 
     /**

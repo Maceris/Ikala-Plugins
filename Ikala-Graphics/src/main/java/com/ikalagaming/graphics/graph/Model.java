@@ -114,9 +114,21 @@ public class Model {
 
     /**
      * How many entities the model had last frame, used to determine how long we can cache draw
-     * command buffers.
+     * command buffers and material overrides.
      */
     @Setter private int entitiesLastFrame;
+
+    /**
+     * Used to store material overrides. Organized by entity, where each entity will have N integer
+     * values, where N is the number of meshes that the model has.
+     */
+    private final Buffer materialOverridesBuffer;
+
+    /**
+     * Used to signal that material overrides have changed and need to be computed and uploaded
+     * again.
+     */
+    @Setter private boolean materialOverridesDirty;
 
     /**
      * Create a new model.
@@ -132,6 +144,8 @@ public class Model {
         this.maxAnimatedBufferCapacity = 0;
         this.modelMatricesBuffer = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
         this.entitiesLastFrame = 0;
+        this.materialOverridesBuffer = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
+        this.materialOverridesDirty = true;
     }
 
     /**

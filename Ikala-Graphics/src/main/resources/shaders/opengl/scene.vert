@@ -1,5 +1,26 @@
 #version 460
 
+struct Material
+{
+    vec4 baseColor;
+
+    float anisotropic;
+    float clearcoat;
+    float clearcoatGloss;
+    float metallic;
+
+    float roughness;
+    float sheen;
+    float sheenTint;
+    float specular;
+
+    float specularTint;
+    float subsurface;
+    int normalMapIndex;
+    int textureIndex;
+};
+
+
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec3 tangent;
@@ -18,9 +39,18 @@ layout(std430, binding = 0) buffer Matrices {
 	mat4 modelMatrices[];
 };
 
+layout(std430, binding = 1) readonly buffer Materials {
+    Material materials[];
+};
+
+layout(std430, binding = 2) readonly buffer MaterialOverrides {
+    uint materialOverrides[];
+};
+
 uniform uint materialIndex;
 uniform mat4 projectionMatrix;
 uniform mat4 viewMatrix;
+uniform uint meshIndex;
 
 void main()
 {
@@ -29,7 +59,10 @@ void main()
     vec4 initTangent = vec4(tangent, 0.0);
     vec4 initBitangent = vec4(bitangent, 0.0);
 
-    outMaterialIdx = materialIndex;
+    uint overrideIndex = gl_BaseInstance + gl_InstanceID + meshIndex;
+    uint override = materialOverrides[overrideIndex];
+    outMaterialIdx = override != 0 ? override : materialIndex;
+
     mat4 modelMatrix =  modelMatrices[gl_BaseInstance + gl_InstanceID];
     mat4 modelViewMatrix = viewMatrix * modelMatrix;
     outWorldPosition = modelMatrix * initPos;

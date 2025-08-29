@@ -190,6 +190,7 @@ public class OpenGLInstance implements Instance {
 
         var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
         uniformsMap.createUniform(ShaderUniforms.Scene.MATERIAL_INDEX);
+        uniformsMap.createUniform(ShaderUniforms.Scene.MESH_INDEX);
         uniformsMap.createUniform(ShaderUniforms.Scene.PROJECTION_MATRIX);
         uniformsMap.createUniform(ShaderUniforms.Scene.VIEW_MATRIX);
         uniformsMap.createUniform(ShaderUniforms.Scene.BASE_COLOR_SAMPLER);

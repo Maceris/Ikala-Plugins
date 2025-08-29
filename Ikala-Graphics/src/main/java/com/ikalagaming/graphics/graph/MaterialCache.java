@@ -7,51 +7,73 @@ import com.ikalagaming.graphics.frontend.Material;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
+import lombok.Synchronized;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 /** A cache of materials so that we can reuse them. */
-@Getter
 public class MaterialCache {
-    /** The default index to use for materials. */
-    public static final int DEFAULT_MATERIAL_INDEX = 0;
+
+    /** The default material. */
+    public static final Material DEFAULT_MATERIAL = new Material();
 
     /**
      * The actual cache of materials.
      *
-     * @return The list of materials in the cache. This should not be modified directly.
+     * @return The list of materials in the cache. This should not be modified directly, it will
+     *     break a lot of things.
      * @see #addMaterial(Material)
+     * @see #removeMaterial(Material)
      */
     private final List<Material> materialsList;
 
-    @Setter private boolean dirty;
+    private final Map<Material, Integer> materialLookup;
 
-    private final Buffer materialBuffer;
+    @Getter @Setter private boolean dirty;
+
+    @Getter private final Buffer materialBuffer;
 
     /** Set up a new cache with a default material. */
     public MaterialCache() {
         materialsList = Collections.synchronizedList(new ArrayList<>());
-        Material defaultMaterial = new Material();
-        materialsList.add(defaultMaterial);
+        materialLookup = Collections.synchronizedMap(new HashMap<>());
+        addMaterial(DEFAULT_MATERIAL);
         dirty = true;
         materialBuffer = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
     }
 
     /**
-     * Add a new material to the cache and give an index to the material. Will allow duplicates.
+     * Add a new material to the cache and give an index to the material.
      *
      * @param material The material to add to the cache.
-     * @return The index of the newly added material, which is only valid within this cache
-     *     instance.
      * @see #getMaterialIndex(Material)
      */
-    public int addMaterial(@NonNull Material material) {
+    @Synchronized
+    public void addMaterial(@NonNull Material material) {
         final int assignedIndex = materialsList.size();
         materialsList.add(material);
+        materialLookup.put(material, assignedIndex);
         dirty = true;
-        return assignedIndex;
+    }
+
+    /**
+     * Remove a material from the cache. This will require any material indexes and buffers to need
+     * regenerating, and is expensive, should generally be avoided. The default material cannot be
+     * removed.
+     *
+     * @param material The material to remove.
+     */
+    @Synchronized
+    public void removeMaterial(@NonNull Material material) {
+        if (material == MaterialCache.DEFAULT_MATERIAL) {
+            return;
+        }
+        materialsList.remove(material);
+        materialLookup.clear();
+        for (int i = 0; i < materialsList.size(); ++i) {
+            materialLookup.put(materialsList.get(i), i);
+        }
+        dirty = true;
     }
 
     /**
@@ -61,25 +83,32 @@ public class MaterialCache {
      * @param index The index to look up.
      * @return The material at that index.
      */
+    @Synchronized
     public Material getMaterial(int index) {
         if (index < 0 || index > materialsList.size()) {
-            return materialsList.get(MaterialCache.DEFAULT_MATERIAL_INDEX);
+            return MaterialCache.DEFAULT_MATERIAL;
         }
         return materialsList.get(index);
     }
 
     /**
-     * Fetch the index of a material. Returns -1 if the material is not found.
+     * Fetch the number of materials in the cache.
+     *
+     * @return The total number of materials.
+     */
+    @Synchronized
+    public int getMaterialCount() {
+        return materialsList.size();
+    }
+
+    /**
+     * Fetch the index of a material. Returns 0 if the material is not found.
      *
      * @param material The material to look for.
-     * @return The index of the material, or -1 if not found.
+     * @return The index of the material, or 0 if not found.
      */
-    public int getMaterialIndex(@NonNull Material material) {
-        for (int i = 0; i < materialsList.size(); ++i) {
-            if (material.equals(materialsList.get(i))) {
-                return i;
-            }
-        }
-        return -1;
+    @Synchronized
+    public int getMaterialIndex(Material material) {
+        return Optional.ofNullable(material).map(materialLookup::get).orElse(0);
     }
 }
