@@ -63,6 +63,7 @@ public class GraphicsDebug extends GuiWindow {
             recalculate();
             children.forEach(child -> child.draw(width, height));
 
+            ImGui.text(String.format("FPS: %d", GraphicsManager.getLastFPS()));
             ImGui.text("Render Config:");
             int config = GraphicsManager.getPipelineConfig();
             ImGui.text(String.format("Error Flag - %s", RenderConfig.hasError(config)));

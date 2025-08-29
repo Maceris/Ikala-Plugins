@@ -100,11 +100,12 @@ public class MainMenu extends GuiWindow {
         scene.addModel(ballModel);
 
         final String ballNameFormatString = "ball_%s_%d";
-        int zPos = 0;
+        float zPos = 0;
+
         for (int i = 0; i <= 10; ++i) {
             String name = String.format(ballNameFormatString, "anisotropic", i);
             Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.002f);
+            ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
             ball.updateModelMatrix();
 
@@ -122,14 +123,13 @@ public class MainMenu extends GuiWindow {
         for (int i = 0; i <= 10; ++i) {
             String name = String.format(ballNameFormatString, "clearcoat", i);
             Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.002f);
+            ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
             ball.updateModelMatrix();
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.35f, 0.75f, 0.95f, 1.0f);
             customMaterial.setClearcoat(0.1f * i);
-            customMaterial.setRoughness(0.40f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
             scene.addEntity(ball);
@@ -140,7 +140,7 @@ public class MainMenu extends GuiWindow {
         for (int i = 0; i <= 10; ++i) {
             String name = String.format(ballNameFormatString, "clearcoatGloss", i);
             Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.002f);
+            ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
             ball.updateModelMatrix();
 
@@ -158,7 +158,7 @@ public class MainMenu extends GuiWindow {
         for (int i = 0; i <= 10; ++i) {
             String name = String.format(ballNameFormatString, "metallic", i);
             Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.002f);
+            ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
             ball.updateModelMatrix();
 
@@ -175,7 +175,7 @@ public class MainMenu extends GuiWindow {
         for (int i = 0; i <= 10; ++i) {
             String name = String.format(ballNameFormatString, "roughness", i);
             Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.002f);
+            ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
             ball.updateModelMatrix();
 
@@ -192,14 +192,14 @@ public class MainMenu extends GuiWindow {
         for (int i = 0; i <= 10; ++i) {
             String name = String.format(ballNameFormatString, "sheen", i);
             Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.002f);
+            ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
             ball.updateModelMatrix();
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.75f, 0.65f, 0.50f, 1.0f);
             customMaterial.setSheen(0.1f * i);
-            customMaterial.setRoughness(0.40f);
+            customMaterial.setRoughness(1.0f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
             scene.addEntity(ball);
@@ -210,14 +210,14 @@ public class MainMenu extends GuiWindow {
         for (int i = 0; i <= 10; ++i) {
             String name = String.format(ballNameFormatString, "sheenTint", i);
             Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.002f);
+            ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
             ball.updateModelMatrix();
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.75f, 0.65f, 0.50f, 1.0f);
             customMaterial.setSheenTint(0.1f * i);
-            customMaterial.setRoughness(0.40f);
+            customMaterial.setRoughness(1.0f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
             scene.addEntity(ball);
@@ -228,7 +228,7 @@ public class MainMenu extends GuiWindow {
         for (int i = 0; i <= 10; ++i) {
             String name = String.format(ballNameFormatString, "specular", i);
             Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.002f);
+            ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
             ball.updateModelMatrix();
 
@@ -246,7 +246,7 @@ public class MainMenu extends GuiWindow {
         for (int i = 0; i <= 10; ++i) {
             String name = String.format(ballNameFormatString, "specularTint", i);
             Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.002f);
+            ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
             ball.updateModelMatrix();
 
@@ -264,7 +264,7 @@ public class MainMenu extends GuiWindow {
         for (int i = 0; i <= 10; ++i) {
             String name = String.format(ballNameFormatString, "subsurface", i);
             Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.002f);
+            ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
             ball.updateModelMatrix();
 

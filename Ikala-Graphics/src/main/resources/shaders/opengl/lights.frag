@@ -103,16 +103,12 @@ float sqr(float x) {
     return x * x;
 }
 
-float generalizedThrowbridgeReitz1(float angleHalf, float a) {
-    if (a >= 1) {
-        return 1 / PI;
-    }
+float generalizedTrowbridgeReitz1(float angleHalf, float a) {
     float a2 = a * a;
-    float t = 1 + (a2 - 1) * sqr(angleHalf);
-    return (a2 - 1) / (PI * log(a2) * t);
+    return (a2 - 1) / (PI * log2(a2) * (1 + (a2 - 1) * sqr(angleHalf)));
 }
 
-float generalizedThrowbridgeReitzAnisotropic(float angleHalf, float HdotX, float HdotY, float ax, float ay) {
+float generalizedTrowbridgeReitzAnisotropic(float angleHalf, float HdotX, float HdotY, float ax, float ay) {
     return 1 / (PI * ax * ay * sqr(sqr(HdotX / ax) + sqr(HdotY / ay) + sqr(angleHalf)));
 }
 
@@ -173,7 +169,7 @@ vec3 disneyBRDF(vec3 baseColor, Material material, vec3 toViewDirection, vec3 to
     float aspect = sqrt(1 - material.anisotropic * 0.9);
     float aspectX = max(0.001, sqr(material.roughness) / aspect);
     float aspectY = max(0.001, sqr(material.roughness) * aspect);
-    float specularDistribution = generalizedThrowbridgeReitzAnisotropic(
+    float specularDistribution = generalizedTrowbridgeReitzAnisotropic(
         angleHalf, dot(halfVector, x), dot(halfVector, y), aspectX, aspectY
     );
     float fresnelHalf = schlickFresnel(angleHalf);
@@ -183,14 +179,18 @@ vec3 disneyBRDF(vec3 baseColor, Material material, vec3 toViewDirection, vec3 to
 
     vec3 sheen = fresnelHalf * material.sheen * colorSheen;
 
-    float clearcoatDistribution = generalizedThrowbridgeReitz1(angleHalf, mix(0.1, 0.001, material.clearcoatGloss));
-    float clearcoatFresnel = mix(0.04, 1.0, fresnelHalf);
-    float clearcoatShadowing = smithGGX(angleLight, 0.25) * smithGGX(angleView, 0.25);
+    float clearcoat = 0.0f;
+    if (material.clearcoat > 0) {
+        float clearcoatDistribution = generalizedTrowbridgeReitz1(angleHalf, mix(0.1, 0.001, material.clearcoatGloss));
+        float clearcoatFresnel = schlickFresnel(mix(0.04, 1.0, fresnelHalf));
+        float clearcoatShadowing = smithGGX(angleLight, 0.25) * smithGGX(angleView, 0.25);
+        clearcoat = 0.25 * material.clearcoat * clearcoatDistribution * clearcoatFresnel * clearcoatShadowing;
+    }
 
     return ((1/PI) * mix(diffuseFresnel, subsurfaceScaled, material.subsurface) * baseLinear + sheen)
         * (1 - material.metallic)
         + specularDistribution * specularFresnel * specularShadowing
-        + 0.25 * material.clearcoat * clearcoatDistribution * clearcoatFresnel * clearcoatShadowing;
+        + clearcoat;
 }
 
 float scaleIntensity(float distance) {

@@ -56,11 +56,8 @@ public class GraphicsManager {
      */
     @Getter private static CameraManager cameraManager;
 
-    /** Used to track when we should render another frame. */
-    private static Timer renderTimer;
-
-    /** Used to track when we should make updates. */
-    private static Timer updateTimer;
+    private static double lastRenderTime;
+    private static double lastUpdateTime;
 
     /** The target frames per second that we want to hit. */
     public static final int TARGET_FPS = 144;
@@ -81,7 +78,7 @@ public class GraphicsManager {
     private static double nextUpdateTime;
 
     /** The last time we rendered a frame, for calculating FPS. */
-    private static double lastTime;
+    private static double lastFPSTime;
 
     /** How many frames we rendered since we calculated FPS. */
     private static int framesSinceLastCalculation;
@@ -138,7 +135,7 @@ public class GraphicsManager {
 
         Window.WindowOptions opts = new Window.WindowOptions();
         opts.antiAliasing = true;
-        opts.fps = 144;
+        opts.fps = TARGET_FPS;
         window =
                 new Window(
                         "Ikala Gaming",
@@ -170,15 +167,13 @@ public class GraphicsManager {
 
         cameraManager = new CameraManager(scene.getCamera(), window);
 
-        renderTimer = new Timer();
-        renderTimer.init();
-        nextRenderTime = renderTimer.getLastLoopTime() + FRAME_TIME;
+        lastRenderTime = getTime();
+        nextRenderTime = lastRenderTime + FRAME_TIME;
 
-        updateTimer = new Timer();
-        updateTimer.init();
-        nextUpdateTime = renderTimer.getLastLoopTime() + UPDATE_TIME;
+        lastUpdateTime = getTime();
+        nextUpdateTime = lastUpdateTime + UPDATE_TIME;
 
-        lastTime = glfwGetTime();
+        lastFPSTime = glfwGetTime();
         return true;
     }
 
@@ -199,10 +194,10 @@ public class GraphicsManager {
         ++framesSinceLastCalculation;
 
         final double currentTime = glfwGetTime();
-        if (currentTime - lastTime >= 1d) {
+        if (currentTime - lastFPSTime >= 1d) {
             lastFPS = framesSinceLastCalculation;
             framesSinceLastCalculation = 0;
-            lastTime = currentTime;
+            lastFPSTime = currentTime;
         }
     }
 
@@ -221,6 +216,15 @@ public class GraphicsManager {
      */
     public static int getPipelineConfig() {
         return renderInstance.getPipelineConfig();
+    }
+
+    /**
+     * Get the current system time in seconds.
+     *
+     * @return The current time.
+     */
+    private static double getTime() {
+        return System.nanoTime() / 1_000_000_000.0;
     }
 
     /**
@@ -276,8 +280,10 @@ public class GraphicsManager {
 
         renderInstance.processResources();
 
-        if (updateTimer.getTime() >= nextUpdateTime) {
-            final float elapsedTime = updateTimer.getElapsedTime();
+        final double currentTime = getTime();
+
+        if (currentTime >= nextUpdateTime) {
+            final float elapsedTime = (float) (currentTime - lastUpdateTime);
 
             window.getMouseInput().input();
             cameraManager.updateCamera(elapsedTime);
@@ -286,13 +292,15 @@ public class GraphicsManager {
             windowManager.updateValues(scene, window);
 
             // Update the next time we should update models
-            nextUpdateTime = updateTimer.getLastLoopTime() + UPDATE_TIME;
+            lastUpdateTime = currentTime;
+            nextUpdateTime = currentTime + UPDATE_TIME;
         }
 
-        if (renderTimer.getTime() >= nextRenderTime) {
+        if (currentTime >= nextRenderTime) {
             render();
             // Update the next time we should render a frame
-            nextRenderTime = renderTimer.getLastLoopTime() + FRAME_TIME;
+            lastRenderTime = currentTime;
+            nextRenderTime = currentTime + FRAME_TIME;
         }
 
         return Launcher.STATUS_OK;
