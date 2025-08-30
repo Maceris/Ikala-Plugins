@@ -7,7 +7,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class Text extends Component {
 
-    /** The text to show on the button. */
+    /** The text to show. */
     private final String contents;
 
     @Override
@@ -17,4 +17,6 @@ public class Text extends Component {
 
         ImGui.text(contents);
     }
+
+    public void drawFormatted(final int width, final int height, Object... args) {}
 }

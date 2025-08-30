@@ -8,6 +8,8 @@ import com.ikalagaming.factory.gui.window.*;
 import com.ikalagaming.factory.saves.UserDataUtil;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
+import com.ikalagaming.graphics.frontend.gui.windows.GraphicsDebug;
+import com.ikalagaming.graphics.frontend.gui.windows.GuiDemo;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 
@@ -61,8 +63,8 @@ public class FactoryClientPlugin extends Plugin {
         guiManager.addWindow(MAIN_MENU.getName(), new MainMenu(guiManager));
         guiManager.addWindow(SINGLE_PLAYER.getName(), new SinglePlayer(guiManager));
         guiManager.addWindow(DEBUG.getName(), new Debug());
-        guiManager.addWindow(IMGUI_DEMO.getName(), new ImGuiDemo());
-        guiManager.addWindow(GRAPHICS_DEBUG.getName(), new GraphicsDebug());
+        guiManager.addWindow(GuiDemo.WINDOW_NAME, new GuiDemo());
+        guiManager.addWindow(GraphicsDebug.WINDOW_NAME, new GraphicsDebug());
         Stream.of(MAIN_MENU).map(DefaultWindows::getName).forEach(guiManager::show);
 
         guiManager.setToolbar(new DebugToolbar(guiManager));

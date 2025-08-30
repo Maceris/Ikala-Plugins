@@ -36,7 +36,7 @@ public class Slider extends Component implements Interactive {
     }
 
     /**
-     * Create a a slider with no flags.
+     * Create a nslider with no flags.
      *
      * @param label Label to use. A null value will result in an empty string.
      * @param initialState Initial value of the slider.

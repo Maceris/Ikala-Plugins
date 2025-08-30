@@ -2,7 +2,6 @@ package com.ikalagaming.converter.gui.window;
 
 import static com.ikalagaming.converter.gui.DefaultWindows.DEBUG;
 
-import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
@@ -51,19 +50,6 @@ public class Debug extends GuiWindow {
                 String.format(
                         "This window's actual position: %.2f, %.2f",
                         getActualDisplaceX() * width, getActualDisplaceY() * height));
-
-        var camera = GraphicsManager.getCameraManager().getCamera();
-        ImGui.text(
-                String.format(
-                        "Camera position: x:%.2f, y:%.2f, z:%.2f",
-                        camera.getPosition().x(),
-                        camera.getPosition().y(),
-                        camera.getPosition().z()));
-
-        ImGui.text(
-                String.format(
-                        "Camera rotation: x:%.2f, y:%.2f",
-                        camera.getRotation().x(), camera.getRotation().y()));
 
         ImGui.end();
     }

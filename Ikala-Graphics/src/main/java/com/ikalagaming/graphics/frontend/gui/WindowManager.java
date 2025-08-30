@@ -1,17 +1,20 @@
 package com.ikalagaming.graphics.frontend.gui;
 
+import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.MouseInput;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.frontend.gui.component.Component;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
 import com.ikalagaming.graphics.frontend.gui.component.MainToolbar;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.util.SafeResourceLoader;
 
 import imgui.ImGui;
 import imgui.ImGuiIO;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 
 import java.util.HashMap;
@@ -19,6 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /** Tracks and engages all the things we want to render. */
+@Slf4j
 public class WindowManager {
 
     /** A table for looking up specific window by name. */
@@ -37,6 +41,11 @@ public class WindowManager {
      * @param component The component.
      */
     public void addWindow(@NonNull String name, @NonNull GuiWindow component) {
+        if (this.windows.containsKey(name)) {
+            log.error(
+                    SafeResourceLoader.getStringFormatted(
+                            "WINDOW_ALREADY_EXISTS", GraphicsPlugin.getResourceBundle(), name));
+        }
         this.windows.put(name, component);
     }
 

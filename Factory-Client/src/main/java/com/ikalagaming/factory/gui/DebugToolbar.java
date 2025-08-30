@@ -7,6 +7,8 @@ import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.frontend.gui.component.Checkbox;
 import com.ikalagaming.graphics.frontend.gui.component.MainToolbar;
+import com.ikalagaming.graphics.frontend.gui.windows.GraphicsDebug;
+import com.ikalagaming.graphics.frontend.gui.windows.GuiDemo;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.events.Shutdown;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -39,13 +41,13 @@ public class DebugToolbar extends MainToolbar {
         var textDemo =
                 SafeResourceLoader.getString(
                         "TOOLBAR_DEBUG_DEMO", FactoryClientPlugin.getResourceBundle());
-        demoWindow = new Checkbox(textDemo, windowManager.isVisible(IMGUI_DEMO.getName()));
+        demoWindow = new Checkbox(textDemo, windowManager.isVisible(GuiDemo.WINDOW_NAME));
 
         var textGraphics =
                 SafeResourceLoader.getString(
                         "TOOLBAR_DEBUG_GRAPHICS_DEBUG", FactoryClientPlugin.getResourceBundle());
         graphicsWindow =
-                new Checkbox(textGraphics, windowManager.isVisible(GRAPHICS_DEBUG.getName()));
+                new Checkbox(textGraphics, windowManager.isVisible(GraphicsDebug.WINDOW_NAME));
     }
 
     @Override
@@ -79,13 +81,18 @@ public class DebugToolbar extends MainToolbar {
             return true;
         }
         if (demoWindow.checkResult()) {
-            windowManager.setVisible(IMGUI_DEMO.getName(), demoWindow.getState());
+            windowManager.setVisible(GuiDemo.WINDOW_NAME, demoWindow.getState());
             return true;
         }
         if (graphicsWindow.checkResult()) {
-            windowManager.setVisible(GRAPHICS_DEBUG.getName(), graphicsWindow.getState());
+            windowManager.setVisible(GraphicsDebug.WINDOW_NAME, graphicsWindow.getState());
             return true;
         }
         return false;
+    }
+
+    @Override
+    public void updateValues(@NonNull Scene scene, @NonNull Window window) {
+        // Not required
     }
 }
