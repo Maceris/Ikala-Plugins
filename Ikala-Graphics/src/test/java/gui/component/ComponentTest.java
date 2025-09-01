@@ -69,23 +69,4 @@ class ComponentTest {
         assertEquals(0.50f, child.getActualWidth(), DELTA);
         assertEquals(0.50f, child.getActualHeight(), DELTA);
     }
-
-    @Test
-    void testChildDisplacement() {
-        var parent = new Component();
-        parent.setScale(0.50f, 0.50f);
-        parent.setDisplacement(0.10f, 0.10f);
-
-        var child = new Component();
-        child.setDisplacement(0.50f, 0.50f);
-        parent.addChild(child);
-
-        assertEquals(0.35f, child.getActualDisplaceX(), DELTA);
-        assertEquals(0.35f, child.getActualDisplaceY(), DELTA);
-
-        child.orphanSelf();
-
-        assertEquals(0.35f, child.getActualDisplaceX(), DELTA);
-        assertEquals(0.35f, child.getActualDisplaceY(), DELTA);
-    }
 }

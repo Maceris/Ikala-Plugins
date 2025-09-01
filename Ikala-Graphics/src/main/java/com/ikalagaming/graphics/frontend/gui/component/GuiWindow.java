@@ -25,6 +25,7 @@ public class GuiWindow extends Component {
 
     @Override
     public void draw(final int width, final int height) {
+        // TODO(ches) FACT-22 don't extend Component, windows are a separate thing
         ImGui.setNextWindowViewport(ImGui.getMainViewport().getID());
         ImGui.setNextWindowPos(
                 getActualDisplaceX() * width, getActualDisplaceY() * height, ImGuiCond.Always);

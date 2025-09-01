@@ -2,45 +2,137 @@ package com.ikalagaming.graphics.frontend.gui.data;
 
 import com.ikalagaming.graphics.frontend.gui.flags.DrawFlags;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
+import com.ikalagaming.graphics.frontend.gui.util.Rect;
 
 import lombok.Getter;
 import lombok.Setter;
+import lombok.Synchronized;
 import org.joml.Vector2f;
 
-import java.util.ArrayList;
+import java.nio.ByteBuffer;
+import java.util.ArrayDeque;
+import java.util.Deque;
 
 public class DrawList {
 
-    private final ArrayList<Vertex> vertexBuffer;
-    private final ArrayList<Integer> indexBuffer;
-    private final ArrayList<DrawCommand> commandBuffer;
+    /** float posX, float posY, float u, float v, int color. */
+    private ByteBuffer vertexBuffer;
+
+    /** short index. */
+    private ByteBuffer indexBuffer;
+
+    /**
+     * float clipMinX, float clipMinY, float clipMaxX, float clipMaxY, int textureID, int
+     * vertexOffset, int indexOffset, int elementCount.
+     */
+    private ByteBuffer commandBuffer;
+
+    private final Deque<Rect> clipRects;
+
+    /**
+     * The current flags for the draw list.
+     *
+     * @see com.ikalagaming.graphics.frontend.gui.flags.DrawListFlags
+     */
     @Getter @Setter private int drawListFlags;
 
     public DrawList() {
-        vertexBuffer = new ArrayList<>();
-        indexBuffer = new ArrayList<>();
-        commandBuffer = new ArrayList<>();
+        vertexBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_VERTEX);
+        indexBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_INDEX);
+        commandBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_COMMAND);
+        clipRects = new ArrayDeque<>();
     }
 
+    @Synchronized
+    private void addCommand(
+            float clipMinX,
+            float clipMinY,
+            float clipMaxX,
+            float clipMaxY,
+            int textureID,
+            int vertexOffset,
+            int indexOffset,
+            int elementCount) {
+        if (commandBuffer.limit() == commandBuffer.position()) {
+            ByteBuffer newBuffer = ByteBuffer.allocateDirect(commandBuffer.limit() * 2);
+            commandBuffer.flip();
+            newBuffer.put(commandBuffer);
+            commandBuffer = newBuffer;
+        }
+
+        commandBuffer.putFloat(clipMinX);
+        commandBuffer.putFloat(clipMinY);
+        commandBuffer.putFloat(clipMaxX);
+        commandBuffer.putFloat(clipMaxY);
+        commandBuffer.putInt(textureID);
+        commandBuffer.putInt(vertexOffset);
+        commandBuffer.putInt(indexOffset);
+        commandBuffer.putInt(elementCount);
+    }
+
+    /**
+     * Add a draw list flag to the current flags.
+     *
+     * @param flags The flag to add.
+     * @see com.ikalagaming.graphics.frontend.gui.flags.DrawListFlags
+     */
     public void addDrawListFlags(int flags) {
         this.setDrawListFlags(this.getDrawListFlags() | flags);
     }
 
+    /**
+     * Remove a draw list flag from the current flags.
+     *
+     * @param flags The flag to remove.
+     * @see com.ikalagaming.graphics.frontend.gui.flags.DrawListFlags
+     */
     public void removeDrawListFlags(int flags) {
         this.setDrawListFlags(this.getDrawListFlags() & ~flags);
     }
 
+    /**
+     * Check if a particular flag is set.
+     *
+     * @param flags The flag to check.
+     * @see com.ikalagaming.graphics.frontend.gui.flags.DrawListFlags
+     */
     public boolean hasDrawListFlags(int flags) {
         return (this.getDrawListFlags() & flags) != 0;
     }
 
     public void pushClipRect(float minX, float minY, float maxX, float maxY) {
-        // TODO(ches) implement this
+        pushClipRect(minX, minY, maxX, maxY, false);
     }
 
     public void pushClipRect(
             float minX, float minY, float maxX, float maxY, boolean intersectWithCurrentClipRect) {
-        // TODO(ches) implement this
+        Rect newClipRect = new Rect(minX, minY, maxX, maxY);
+
+        if (!intersectWithCurrentClipRect) {
+            clipRects.addFirst(newClipRect);
+            return;
+        }
+
+        Rect oldRect = clipRects.peekFirst();
+        if (oldRect == null) {
+            // No existing rect
+            clipRects.addFirst(newClipRect);
+            return;
+        }
+
+        float left = Math.max(newClipRect.getLeft(), oldRect.getLeft());
+        float top = Math.min(newClipRect.getTop(), oldRect.getTop());
+        float right = Math.min(newClipRect.getRight(), oldRect.getRight());
+        float bottom = Math.max(newClipRect.getBottom(), oldRect.getBottom());
+
+        if (left > right || bottom > top) {
+            // No intersection
+            clipRects.addFirst(newClipRect);
+            return;
+        }
+
+        newClipRect.set(left, top, right, bottom);
+        clipRects.addFirst(newClipRect);
     }
 
     public void pushClipRectFullScreen() {
@@ -49,6 +141,7 @@ public class DrawList {
 
     public void popClipRect() {
         // TODO(ches) implement this
+        clipRects.pop();
     }
 
     public void pushTextureId(int id) {

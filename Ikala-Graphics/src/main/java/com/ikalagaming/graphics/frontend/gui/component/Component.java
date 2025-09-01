@@ -312,24 +312,6 @@ public class Component implements Drawable {
     }
 
     /**
-     * Removes the parent and if there is a parent, removes this from the parent. Sets the local
-     * dimensions to the actual dimensions so that it will render in the same place it was before.
-     */
-    public void orphanSelf() {
-        // TODO(ches) Do we want to allow this??
-        recalculate();
-        localDisplace.set(globalDisplacement);
-        scale.set(globalScale);
-
-        var win = parent;
-        parent = null; // so this does not recurse until crashing
-        if (win != null) {
-            win.removeChild(this);
-        }
-        children.forEach(Component::updateHeights);
-    }
-
-    /**
      * Recalculates all real displacements and scale, first recursing to the top dirty component and
      * then trickling down until it has recalculated this and everything above it.
      */
@@ -368,17 +350,12 @@ public class Component implements Drawable {
     }
 
     /**
-     * Removes the given child from this component. If the child recognizes this as its parent, it
-     * will orphan itself. If this is overridden be sure {@link #orphanSelf()} and this do not
-     * recursively call each other infinitely.
+     * Removes the given child from this component.
      *
      * @param item The item to remove.
      */
     public void removeChild(@NonNull Component item) {
         children.remove(item);
-        if (item.parent != null) {
-            item.orphanSelf();
-        }
     }
 
     /**
