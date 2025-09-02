@@ -1,20 +1,24 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
+import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.flags.DrawFlags;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
 import com.ikalagaming.graphics.frontend.gui.util.Rect;
 import com.ikalagaming.util.IntArrayList;
+import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.Getter;
 import lombok.Setter;
 import lombok.Synchronized;
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
+@Slf4j
 public class DrawList {
 
     /** float posX, float posY, float u, float v, int color. */
@@ -71,6 +75,38 @@ public class DrawList {
         commandBuffer.putInt(vertexOffset);
         commandBuffer.putInt(indexOffset);
         commandBuffer.putInt(elementCount);
+    }
+
+    @Synchronized
+    private int addVertex(float x, float y, float u, float v, int color) {
+        if (vertexBuffer.limit() == vertexBuffer.position()) {
+            ByteBuffer newBuffer = ByteBuffer.allocateDirect(vertexBuffer.limit() * 2);
+            vertexBuffer.flip();
+            newBuffer.put(vertexBuffer);
+            vertexBuffer = newBuffer;
+        }
+
+        final int newIndex = vertexBuffer.position() / DrawData.SIZE_OF_DRAW_VERTEX;
+
+        vertexBuffer.putFloat(x);
+        vertexBuffer.putFloat(y);
+        vertexBuffer.putFloat(u);
+        vertexBuffer.putFloat(v);
+        vertexBuffer.putInt(color);
+
+        return newIndex;
+    }
+
+    @Synchronized
+    private void addIndex(short index) {
+        if (indexBuffer.limit() == indexBuffer.position()) {
+            ByteBuffer newBuffer = ByteBuffer.allocateDirect(indexBuffer.limit() * 2);
+            indexBuffer.flip();
+            newBuffer.put(indexBuffer);
+            indexBuffer = newBuffer;
+        }
+
+        indexBuffer.putShort(index);
     }
 
     /**
@@ -225,7 +261,51 @@ public class DrawList {
     }
 
     public void addLine(float p1X, float p1Y, float p2X, float p2Y, int color, float thickness) {
-        // TODO(ches) implement this
+        if (!Float.isFinite(thickness) || thickness <= 0) {
+            log.warn(
+                    SafeResourceLoader.getString(
+                            "INVALID_THICKNESS", GraphicsPlugin.getResourceBundle()),
+                    thickness);
+            return;
+        }
+
+        final float dx = p2X - p1X;
+        final float dy = p2Y - p1Y;
+
+        float tangentOffsetX = 0;
+        float tangentOffsetY = 0;
+
+        if (0 == dx && 0 == dy) {
+            // point
+            tangentOffsetX = thickness / 2;
+            tangentOffsetY = thickness / 2;
+        } else if (0 == dx) {
+            // vertical
+            tangentOffsetY = thickness / 2;
+        } else if (0 == dy) {
+            // horizontal
+            tangentOffsetX = thickness / 2;
+        } else {
+            // sloped
+            double angle = Math.atan((double) dx / dy);
+            tangentOffsetX = (float) Math.cos(angle) * (thickness / 2);
+            tangentOffsetY = (float) Math.sin(angle) * (thickness / 2);
+        }
+
+        int p1 = addVertex(p1X + tangentOffsetX, p1Y + tangentOffsetY, 0, 0, color);
+        int p2 = addVertex(p1X - tangentOffsetX, p1Y - tangentOffsetY, 0, 0, color);
+        int p3 = addVertex(p2X + tangentOffsetX, p2Y + tangentOffsetY, 0, 0, color);
+        int p4 = addVertex(p2X - tangentOffsetX, p2Y - tangentOffsetY, 0, 0, color);
+
+        addIndex((short) p1);
+        addIndex((short) p2);
+        addIndex((short) p3);
+
+        addIndex((short) p3);
+        addIndex((short) p2);
+        addIndex((short) p4);
+
+        //TODO(ches) check this works
     }
 
     public void addRect(float minX, float minY, float maxX, float maxY, int color) {
