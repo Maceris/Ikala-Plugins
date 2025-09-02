@@ -4,6 +4,7 @@ import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.flags.DrawFlags;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
 import com.ikalagaming.graphics.frontend.gui.util.Rect;
+import com.ikalagaming.util.IntArrayList;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -29,6 +30,7 @@ public class DrawList {
     private ByteBuffer commandBuffer;
 
     private final Deque<Rect> clipRects;
+    private final IntArrayList textures;
 
     /**
      * The current flags for the draw list.
@@ -42,6 +44,7 @@ public class DrawList {
         indexBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_INDEX);
         commandBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_COMMAND);
         clipRects = new ArrayDeque<>();
+        textures = new IntArrayList();
     }
 
     @Synchronized
@@ -50,7 +53,6 @@ public class DrawList {
             float clipMinY,
             float clipMaxX,
             float clipMaxY,
-            int textureID,
             int vertexOffset,
             int indexOffset,
             int elementCount) {
@@ -65,7 +67,7 @@ public class DrawList {
         commandBuffer.putFloat(clipMinY);
         commandBuffer.putFloat(clipMaxX);
         commandBuffer.putFloat(clipMaxY);
-        commandBuffer.putInt(textureID);
+        commandBuffer.putInt(textures.peek());
         commandBuffer.putInt(vertexOffset);
         commandBuffer.putInt(indexOffset);
         commandBuffer.putInt(elementCount);
@@ -147,11 +149,11 @@ public class DrawList {
     }
 
     public void pushTextureId(int id) {
-        // TODO(ches) implement this
+        textures.push(id);
     }
 
     public void popTextureId() {
-        // TODO(ches) implement this
+        textures.pop();
     }
 
     public Vector2f getClipRectMin() {
