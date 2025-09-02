@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
+import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.flags.DrawFlags;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
 import com.ikalagaming.graphics.frontend.gui.util.Rect;
@@ -136,11 +137,12 @@ public class DrawList {
     }
 
     public void pushClipRectFullScreen() {
-        // TODO(ches) implement this
+        IkIO io = IkGui.getIO();
+        Rect newRect = new Rect(0, 0, io.getDisplaySizeX(), io.getDisplaySizeY());
+        clipRects.addFirst(newRect);
     }
 
     public void popClipRect() {
-        // TODO(ches) implement this
         clipRects.pop();
     }
 
@@ -159,17 +161,28 @@ public class DrawList {
     }
 
     public void getClipRectMin(Vector2f output) {
-        // TODO(ches) implement this
+        Rect clipRect = clipRects.peekFirst();
+        if (clipRect == null) {
+            output.set(0, 0);
+            return;
+        }
+        output.set(clipRect.getLeft(), clipRect.getTop());
     }
 
     public float getClipRectMinX() {
-        // TODO(ches) implement this
-        return 0;
+        Rect clipRect = clipRects.peekFirst();
+        if (clipRect == null) {
+            return 0;
+        }
+        return clipRect.getLeft();
     }
 
     public float getClipRectMinY() {
-        // TODO(ches) implement this
-        return 0;
+        Rect clipRect = clipRects.peekFirst();
+        if (clipRect == null) {
+            return 0;
+        }
+        return clipRect.getTop();
     }
 
     public Vector2f getClipRectMax() {
@@ -179,17 +192,30 @@ public class DrawList {
     }
 
     public void getClipRectMax(Vector2f output) {
-        // TODO(ches) implement this
+        Rect clipRect = clipRects.peekFirst();
+        if (clipRect == null) {
+            output.set(0, 0);
+            return;
+        }
+        output.set(clipRect.getRight(), clipRect.getBottom());
     }
 
     public float getClipRectMaxX() {
-        // TODO(ches) implement this
-        return 0;
+        Rect clipRect = clipRects.peekFirst();
+        if (clipRect == null) {
+            IkIO io = IkGui.getIO();
+            return io.getDisplaySizeX();
+        }
+        return clipRect.getRight();
     }
 
     public float getClipRectMaxY() {
-        // TODO(ches) implement this
-        return 0;
+        Rect clipRect = clipRects.peekFirst();
+        if (clipRect == null) {
+            IkIO io = IkGui.getIO();
+            return io.getDisplaySizeY();
+        }
+        return clipRect.getBottom();
     }
 
     public void addLine(float p1X, float p1Y, float p2X, float p2Y, int color) {
