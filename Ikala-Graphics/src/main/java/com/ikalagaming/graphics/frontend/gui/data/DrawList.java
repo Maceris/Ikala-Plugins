@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
+import static com.ikalagaming.graphics.frontend.gui.flags.DrawFlags.*;
+
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.flags.DrawFlags;
@@ -98,7 +100,7 @@ public class DrawList {
     }
 
     @Synchronized
-    private void addIndex(short index) {
+    private int addIndex(short index) {
         if (indexBuffer.limit() == indexBuffer.position()) {
             ByteBuffer newBuffer = ByteBuffer.allocateDirect(indexBuffer.limit() * 2);
             indexBuffer.flip();
@@ -106,7 +108,11 @@ public class DrawList {
             indexBuffer = newBuffer;
         }
 
+        final int newIndex = indexBuffer.position() / DrawData.SIZE_OF_DRAW_INDEX;
+
         indexBuffer.putShort(index);
+
+        return newIndex;
     }
 
     /**
@@ -297,7 +303,7 @@ public class DrawList {
         int p3 = addVertex(p2X + tangentOffsetX, p2Y + tangentOffsetY, 0, 0, color);
         int p4 = addVertex(p2X - tangentOffsetX, p2Y - tangentOffsetY, 0, 0, color);
 
-        addIndex((short) p1);
+        int startIndex = addIndex((short) p1);
         addIndex((short) p2);
         addIndex((short) p3);
 
@@ -305,7 +311,21 @@ public class DrawList {
         addIndex((short) p2);
         addIndex((short) p4);
 
-        //TODO(ches) check this works
+        Vector2f clipRectMin = getClipRectMin();
+        Vector2f clipRectMax = getClipRectMax();
+
+        final int vertexOffset = 0;
+        final int elementCount = 6;
+        addCommand(
+                clipRectMin.x,
+                clipRectMin.y,
+                clipRectMax.x,
+                clipRectMax.y,
+                vertexOffset,
+                startIndex,
+                elementCount);
+
+        // TODO(ches) check this works
     }
 
     public void addRect(float minX, float minY, float maxX, float maxY, int color) {
@@ -327,6 +347,19 @@ public class DrawList {
         addRect(minX, minY, maxX, maxY, color, rounding, drawFlagsRoundingCorners, 1.0f);
     }
 
+    /**
+     * Add a (empty) rectangle.
+     *
+     * @param minX Minimum X coordinate.
+     * @param minY Minimum Y coordinate.
+     * @param maxX Maximum X coordinate.
+     * @param maxY Maximum Y coordinate.
+     * @param color Color of the line.
+     * @param rounding Radius of the rounded corners, 0 indicates no rounding.
+     * @param drawFlagsRoundingCorners Draw flags indicating which corner(s) to round.
+     * @param thickness The thickness of the lines.
+     * @see DrawFlags
+     */
     public void addRect(
             float minX,
             float minY,
@@ -337,6 +370,40 @@ public class DrawList {
             int drawFlagsRoundingCorners,
             float thickness) {
         // TODO(ches) implement this
+
+        if (rounding < 0) {
+            log.warn(
+                    SafeResourceLoader.getString(
+                            "INVALID_ROUNDING", GraphicsPlugin.getResourceBundle()),
+                    rounding);
+            return;
+        }
+
+        final float topLeftRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_LEFT) != 0 ? rounding : 0;
+        final float topRightRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_RIGHT) != 0 ? rounding : 0;
+        final float bottomLeftRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_LEFT) != 0 ? rounding : 0;
+        final float bottomRightRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? rounding : 0;
+
+        // Top
+        addLine(minX + topLeftRadius, minY, maxX - topRightRadius, minY, color, thickness);
+        // Right
+        addLine(maxX, minY + topRightRadius, maxX, maxY - bottomRightRadius, color, thickness);
+        // Bottom
+        addLine(minX + bottomLeftRadius, maxY, maxX - bottomRightRadius, maxY, color, thickness);
+        // Left
+        addLine(minX, minY + topLeftRadius, minX, maxY - bottomLeftRadius, color, thickness);
+
+        if (topLeftRadius > 0) {}
+
+        if (topRightRadius > 0) {}
+
+        if (bottomLeftRadius > 0) {}
+
+        if (bottomRightRadius > 0) {}
     }
 
     public void addRectFilled(float minX, float minY, float maxX, float maxY, int color) {
