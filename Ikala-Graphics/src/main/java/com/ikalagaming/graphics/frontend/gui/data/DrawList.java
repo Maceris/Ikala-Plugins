@@ -462,7 +462,10 @@ public class DrawList {
             float p4Y,
             int color,
             float thickness) {
-        // TODO(ches) implement this
+        addLine(p1X, p1Y, p2X, p2Y, color, thickness);
+        addLine(p2X, p2Y, p3X, p3Y, color, thickness);
+        addLine(p3X, p3Y, p4X, p4Y, color, thickness);
+        addLine(p4X, p4Y, p1X, p1Y, color, thickness);
     }
 
     public void addQuadFilled(
