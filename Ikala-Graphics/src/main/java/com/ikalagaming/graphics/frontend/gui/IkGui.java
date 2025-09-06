@@ -35,16 +35,19 @@ public class IkGui {
         font = new Font();
     }
 
+    /**
+     * Create a context and update the current context to it. Must be called before doing anything
+     * that would require the context, which is most things.
+     *
+     * @return The newly created context.
+     */
     public static Context createContext() {
-        return new Context();
+        context = new Context();
+        return context;
     }
 
     public static void destroyContext() {
-        // TODO(ches) destroy current context
-    }
-
-    public static void destroyContext(@NonNull Context context) {
-        // TODO(ches) destroy context
+        context = null;
     }
 
     public static Context getCurrentContext() {

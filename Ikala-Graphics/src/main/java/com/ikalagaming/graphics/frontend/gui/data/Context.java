@@ -244,4 +244,9 @@ public class Context {
     private ArrayList<TableTempData> tablesTempData;
     private ArrayList<Table> tables;
     private FloatArrayList tablesLastTimeActive;
+
+    private TabBar currentTabBar;
+    private ArrayList<TabBar> tabBars;
+    private IntArrayList currentTabBarStack;
+    private ArrayList<ShrinkWidthItem> shrinkWidthBuffer;
 }
