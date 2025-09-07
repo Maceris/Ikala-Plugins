@@ -249,4 +249,10 @@ public class Context {
     private ArrayList<TabBar> tabBars;
     private IntArrayList currentTabBarStack;
     private ArrayList<ShrinkWidthItem> shrinkWidthBuffer;
+
+    private BoxSelectState boxSelectState;
+    private MultiSelectTempData currentMultiSelect;
+    private int multiSelectTempDataStackSize;
+    private ArrayList<MultiSelectTempData> multiSelectTempData;
+    private ArrayList<MultiSelectTempData> multiSelectStorage;
 }
