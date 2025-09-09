@@ -478,7 +478,32 @@ public class DrawList {
             float p4X,
             float p4Y,
             int color) {
-        // TODO(ches) implement this
+        int p1 = addVertex(p1X, p1Y, 0, 0, color);
+        int p2 = addVertex(p2X, p2Y, 0, 0, color);
+        int p3 = addVertex(p3X, p3Y, 0, 0, color);
+        int p4 = addVertex(p4X, p4Y, 0, 0, color);
+
+        int startIndex = addIndex((short) p1);
+        addIndex((short) p2);
+        addIndex((short) p3);
+
+        addIndex((short) p3);
+        addIndex((short) p2);
+        addIndex((short) p4);
+
+        Vector2f clipRectMin = getClipRectMin();
+        Vector2f clipRectMax = getClipRectMax();
+
+        final int vertexOffset = 0;
+        final int elementCount = 6;
+        addCommand(
+                clipRectMin.x,
+                clipRectMin.y,
+                clipRectMax.x,
+                clipRectMax.y,
+                vertexOffset,
+                startIndex,
+                elementCount);
     }
 
     public void addTriangle(
@@ -500,7 +525,27 @@ public class DrawList {
 
     public void addTriangleFilled(
             float p1X, float p1Y, float p2X, float p2Y, float p3X, float p3Y, int color) {
-        // TODO(ches) implement this
+        int p1 = addVertex(p1X, p1Y, 0, 0, color);
+        int p2 = addVertex(p2X, p2Y, 0, 0, color);
+        int p3 = addVertex(p3X, p3Y, 0, 0, color);
+
+        int startIndex = addIndex((short) p1);
+        addIndex((short) p2);
+        addIndex((short) p3);
+
+        Vector2f clipRectMin = getClipRectMin();
+        Vector2f clipRectMax = getClipRectMax();
+
+        final int vertexOffset = 0;
+        final int elementCount = 3;
+        addCommand(
+                clipRectMin.x,
+                clipRectMin.y,
+                clipRectMax.x,
+                clipRectMax.y,
+                vertexOffset,
+                startIndex,
+                elementCount);
     }
 
     public void addCircle(float centerX, float centerY, float radius, int color) {
