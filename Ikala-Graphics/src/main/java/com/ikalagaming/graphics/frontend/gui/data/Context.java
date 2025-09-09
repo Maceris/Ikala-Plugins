@@ -255,4 +255,19 @@ public class Context {
     private int multiSelectTempDataStackSize;
     private ArrayList<MultiSelectTempData> multiSelectTempData;
     private ArrayList<MultiSelectTempData> multiSelectStorage;
+
+    private int hoverItemDelayID;
+    private int hoverItemDelayIDPreviousFrame;
+
+    /** Used by isItemHovered(). */
+    private float hoverItemDelayTimer;
+
+    /** Used by isItemHovered(), time before tooltip hover time gets cleared. */
+    private float hoverItemDelayClearTimer;
+
+    /** ID of the item that a mouse is stationary over, reset when it leaves the item. */
+    private int hoverItemUnlockedStationaryID;
+
+    /** ID of the window that a mouse is stationary over, reset when it leaves the window. */
+    private int hoverWindowUnlockedStationaryID;
 }
