@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.frontend.gui.data;
 import com.ikalagaming.graphics.frontend.gui.enums.Direction;
 import com.ikalagaming.graphics.frontend.gui.enums.GuiInputSource;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
+import com.ikalagaming.graphics.frontend.gui.enums.MouseCursor;
 import com.ikalagaming.graphics.frontend.gui.event.GuiInputEvent;
 import com.ikalagaming.graphics.frontend.gui.util.Rect;
 import com.ikalagaming.util.FloatArrayList;
@@ -52,7 +53,7 @@ public class Context {
     private Window windowHoveredUnderMovingWindow;
     private Window windowMoving;
     private Window windowWheeling;
-    private Vector2f windowWheelingRefMousePos;
+    private Vector2f windowWheelingRefMousePosition;
     private int windowWheelingStartFrame;
     private int windowWheelingScrolledFrame;
     private float windowWheelingReleaseTimer;
@@ -110,7 +111,7 @@ public class Context {
 
     private boolean navCursorVisible;
     private boolean navHighlightIgnoreMouse;
-    private boolean navMousePosDirty;
+    private boolean navMousePositionDirty;
     private boolean navIDAlive;
     private int navID;
     private Window navFocusedWindow;
@@ -270,4 +271,8 @@ public class Context {
 
     /** ID of the window that a mouse is stationary over, reset when it leaves the window. */
     private int hoverWindowUnlockedStationaryID;
+    
+    private MouseCursor mouseCursor;
+    private float mouseStationaryTimer;
+    private Vector2f mouseLastValidPosition;
 }
