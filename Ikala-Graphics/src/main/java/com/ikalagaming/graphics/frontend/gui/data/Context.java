@@ -271,8 +271,11 @@ public class Context {
 
     /** ID of the window that a mouse is stationary over, reset when it leaves the window. */
     private int hoverWindowUnlockedStationaryID;
-    
+
     private MouseCursor mouseCursor;
     private float mouseStationaryTimer;
     private Vector2f mouseLastValidPosition;
+
+    private InputTextState inputTextState;
+    private InputTextDeactivatedState inputTextDeactivatedState;
 }
