@@ -10,6 +10,7 @@ import com.ikalagaming.util.FloatArrayList;
 import com.ikalagaming.util.IntArrayList;
 
 import org.joml.Vector2f;
+import org.joml.Vector4f;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -278,4 +279,17 @@ public class Context {
 
     private InputTextState inputTextState;
     private InputTextDeactivatedState inputTextDeactivatedState;
+    private int beginMenuDepth;
+    private int beginComboDepth;
+    /**
+     * @see com.ikalagaming.graphics.frontend.gui.flags.ColorEditFlags
+     */
+    private int colorEditOptions;
+    private int colorEditCurrentID;
+    private int colorEditSavedID;
+    private int colorEditSavedHue;
+    private int colorEditSavedSaturation;
+    private int colorEditSavedColor;
+    private Vector4f colorPickerReference;
+
 }
