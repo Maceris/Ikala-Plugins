@@ -281,10 +281,12 @@ public class Context {
     private InputTextDeactivatedState inputTextDeactivatedState;
     private int beginMenuDepth;
     private int beginComboDepth;
+
     /**
      * @see com.ikalagaming.graphics.frontend.gui.flags.ColorEditFlags
      */
     private int colorEditOptions;
+
     private int colorEditCurrentID;
     private int colorEditSavedID;
     private int colorEditSavedHue;
@@ -292,4 +294,5 @@ public class Context {
     private int colorEditSavedColor;
     private Vector4f colorPickerReference;
 
+    private ComboPreviewData comboPreviewData;
 }
