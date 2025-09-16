@@ -295,4 +295,27 @@ public class Context {
     private Vector4f colorPickerReference;
 
     private ComboPreviewData comboPreviewData;
+
+    private Rect windowResizeBorderExpectedRect;
+    private boolean windowResizeRelativeMode;
+
+    /** 0 is scrolling to clicked location, +/- 1 is next/previous page. */
+    private byte scrollbarSeekMode;
+
+    private float scrollbarClickDistanceToCenter;
+
+    private float sliderGrabClickOffset;
+    private float sliderCurrentAccumulatedDelta;
+    private boolean sliderCurrentAccumulatedDeltaDirty;
+
+    private float dragCurrentAccumulatedDelta;
+    private boolean dragCurrentAccumulatedDeltaDirty;
+    private float dragSpeedDefaultRatio;
+
+    private float disabledAlphaBackup;
+    private short disabledStackSize;
+    private short tooltipOverrideCount;
+    private Window tooltipPreviousWindow;
+    private StringBuilder clipboardHandlerData;
+    private IntArrayList menuIDsSubmittedThisFrame;
 }
