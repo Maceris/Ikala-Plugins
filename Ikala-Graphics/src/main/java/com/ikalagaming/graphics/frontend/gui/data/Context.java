@@ -318,4 +318,23 @@ public class Context {
     private Window tooltipPreviousWindow;
     private StringBuilder clipboardHandlerData;
     private IntArrayList menuIDsSubmittedThisFrame;
+
+    private boolean settingsLoaded;
+    private float settingsDirtyTimer;
+
+    private boolean logEnabled;
+
+    /**
+     * @see com.ikalagaming.graphics.frontend.gui.flags.LogFlags
+     */
+    private int logFlags;
+
+    private Window logWindow;
+    private int logDepthToExpand;
+    private int logDepthToExpandDefault;
+
+    private Object errorCallbackUserData;
+    private Vector2f errorTooltipLockedPosition;
+    private boolean errorFirst;
+    private int errorCountCurrentFrame;
 }

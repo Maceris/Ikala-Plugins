@@ -12,5 +12,6 @@ public class DragDropFlags {
     public static final int ACCEPT_NO_DRAW_DEFAULT_RECT = 1 << 7;
     public static final int ACCEPT_NO_PREVIEW_TOOLTIP = 1 << 8;
 
+    // Combined flags
     public static final int ACCEPT_PEEK_ONLY = ACCEPT_BEFORE_DELIVERY | ACCEPT_NO_DRAW_DEFAULT_RECT;
 }
