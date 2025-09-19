@@ -337,4 +337,27 @@ public class Context {
     private Vector2f errorTooltipLockedPosition;
     private boolean errorFirst;
     private int errorCountCurrentFrame;
+
+    private int debugDrawIDConflictCount;
+
+    /**
+     * @see com.ikalagaming.graphics.frontend.gui.flags.DebugLogFlags
+     */
+    private int debugLogFlags;
+
+    private StringBuilder debugLogBuffer;
+    private int debugLogIndex;
+    private int debugLogSkippedErrors;
+    private int debugBreakKeyChord;
+    private IkByte debugBeginReturnValueCullDepth;
+    private boolean debugItemPickerActive;
+
+    private float[] framerateSecondPerFrame;
+    private int framerateSecondPerFrameIndex;
+    private int framerateSecondPerFrameCount;
+    private float framerateSecondPerFrameAccumulator;
+    private int captureMouseNextFrameOverride;
+    private int captureKeyboardNextFrameOverride;
+    private int textInputNextFrameOverride;
+    private StringBuilder tempBuffer;
 }
