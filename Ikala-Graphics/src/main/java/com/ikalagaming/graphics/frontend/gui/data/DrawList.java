@@ -53,6 +53,15 @@ public class DrawList {
         textures = new IntArrayList();
     }
 
+    /** Clear out everything in the draw list. */
+    public void clear() {
+        vertexBuffer.clear();
+        indexBuffer.clear();
+        commandBuffer.clear();
+        clipRects.clear();
+        textures.clear();
+    }
+
     @Synchronized
     private void addCommand(
             float clipMinX,

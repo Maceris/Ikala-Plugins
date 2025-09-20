@@ -3,6 +3,8 @@ package com.ikalagaming.graphics.frontend.gui;
 import com.ikalagaming.graphics.frontend.gui.callback.GuiInputTextCallback;
 import com.ikalagaming.graphics.frontend.gui.data.*;
 import com.ikalagaming.graphics.frontend.gui.enums.*;
+import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
+import com.ikalagaming.graphics.frontend.gui.util.Hash;
 
 import lombok.NonNull;
 import org.joml.Vector2f;
@@ -67,24 +69,45 @@ public class IkGui {
     }
 
     public static Viewport getWindowViewport() {
-        // TODO(ches) complete this
         return windowViewport;
     }
 
     public static void begin(@NonNull String title) {
-        // TODO(ches) complete this
+        begin(title, null, WindowFlags.NONE);
     }
 
-    public static void begin(@NonNull String title, @NonNull IkBoolean open) {
-        // TODO(ches) complete this
+    public static void begin(@NonNull String title, IkBoolean open) {
+        begin(title, open, WindowFlags.NONE);
     }
 
     public static void begin(@NonNull String title, int windowFlags) {
-        // TODO(ches) complete this
+        begin(title, null, windowFlags);
     }
 
-    public static void begin(@NonNull String title, @NonNull IkBoolean open, int windowFlags) {
+    public static void begin(@NonNull String title, IkBoolean open, int windowFlags) {
         // TODO(ches) complete this
+
+        final int ID = Hash.getID(title);
+        Window window = context.windowByID.computeIfAbsent(ID, ignored -> new Window());
+        window.id = ID;
+        window.name = title;
+        if (WindowFlags.NONE == windowFlags) {
+            window.flags = context.nextWindowData.windowFlags;
+        } else {
+            window.flags = windowFlags;
+        }
+        window.viewport = windowViewport;
+        // TODO(ches) position condition
+        window.position = context.nextWindowData.positionValue;
+        // TODO(ches) size condition
+        window.sizeRequested.set(context.nextWindowData.sizeValue);
+        // TODO(ches) collapsed condition
+        window.collapsed = context.nextWindowData.collapsedValue;
+
+        window.open = open;
+        window.active = true;
+
+        activeWindow = window;
     }
 
     public static void beginChild(@NonNull String name) {
