@@ -20,7 +20,6 @@ public class IkGui {
     private static DrawList foregroundDrawList;
     private static Storage storage;
     private static Viewport windowViewport;
-    private static DrawData drawData;
     private static Style style;
     private static Font font;
 
@@ -32,7 +31,6 @@ public class IkGui {
         foregroundDrawList = new DrawList();
         storage = new Storage();
         windowViewport = new Viewport();
-        drawData = new DrawData();
         style = new Style();
         font = new Font();
     }
@@ -88,7 +86,7 @@ public class IkGui {
         // TODO(ches) complete this
 
         final int ID = Hash.getID(title);
-        Window window = context.windowByID.computeIfAbsent(ID, ignored -> new Window());
+        Window window = context.windowByID.computeIfAbsent(ID, ignored -> new Window(context));
         window.id = ID;
         window.name = title;
         if (WindowFlags.NONE == windowFlags) {

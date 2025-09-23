@@ -20,7 +20,7 @@ public class DrawData {
 
     private static Viewport OWNER_VIEWPORT = null;
 
-    private final ArrayList<DrawList> drawLists;
+    final ArrayList<DrawList> drawLists;
 
     public DrawData() {
         drawLists = new ArrayList<>();

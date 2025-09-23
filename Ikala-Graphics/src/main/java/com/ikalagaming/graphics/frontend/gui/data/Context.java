@@ -23,6 +23,7 @@ public class Context {
     public PlatformIO platformIO = null;
     public Style style = new Style();
 
+    public DrawData drawData = new DrawData();
     public ArrayList<FontAtlas> fontAtlases = new ArrayList<>();
     public Font font = null;
     public FontBaked fontBaked = null;
