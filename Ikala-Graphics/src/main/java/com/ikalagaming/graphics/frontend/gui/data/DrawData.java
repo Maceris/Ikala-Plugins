@@ -1,11 +1,11 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
+import com.ikalagaming.graphics.frontend.gui.util.Rect;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
-import org.joml.Vector4f;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -13,10 +13,11 @@ import java.util.ArrayList;
 
 @Slf4j
 public class DrawData {
+    private static final int SIZE_OF_RECT = 4 * Float.BYTES;
 
     public static final int SIZE_OF_DRAW_INDEX = Short.BYTES;
     public static final int SIZE_OF_DRAW_VERTEX = 4 * Float.BYTES + Integer.BYTES;
-    public static final int SIZE_OF_DRAW_COMMAND = 4 * Float.BYTES + 4 * Integer.BYTES;
+    public static final int SIZE_OF_DRAW_COMMAND = SIZE_OF_RECT + 4 * Integer.BYTES;
 
     private static final int RESIZE_FACTOR = 5000;
 
@@ -29,56 +30,85 @@ public class DrawData {
         drawLists = new ArrayList<>();
     }
 
-    public int getCommandListCommandBufferSize(int commandListIndex) {
+    private ByteBuffer getCommandBuffer(int commandListIndex) {
         if (commandListIndex < 0 || commandListIndex > drawLists.size()) {
             log.error(
                     SafeResourceLoader.getString(
                             "INDEX_OUT_OF_BOUNDS",
                             GraphicsPlugin.getResourceBundle(),
                             Integer.toString(commandListIndex)));
+            return null;
+        }
+
+        return drawLists.get(commandListIndex).commandBuffer;
+    }
+
+    private boolean offsetValid(ByteBuffer buffer, int position, int bytes) {
+        boolean result = (buffer != null) && (position + bytes < buffer.position());
+
+        if (!result) {
+            log.error(
+                    SafeResourceLoader.getString(
+                            "INDEX_OUT_OF_BOUNDS",
+                            GraphicsPlugin.getResourceBundle(),
+                            Integer.toString(position)));
+        }
+
+        return result;
+    }
+
+    public int getCommandListCommandBufferSize(int commandListIndex) {
+        ByteBuffer commandBuffer = getCommandBuffer(commandListIndex);
+        if (commandBuffer == null) {
             return 0;
         }
 
-        return drawLists.get(commandListIndex).commandBuffer.position();
+        return commandBuffer.position();
     }
 
     public int getCommandListCommandBufferElementCount(
             int commandListIndex, int commandBufferIndex) {
-        if (commandListIndex < 0 || commandListIndex > drawLists.size()) {
-            log.error(
-                    SafeResourceLoader.getString(
-                            "INDEX_OUT_OF_BOUNDS",
-                            GraphicsPlugin.getResourceBundle(),
-                            Integer.toString(commandListIndex)));
+        ByteBuffer commandBuffer = getCommandBuffer(commandListIndex);
+        if (commandBuffer == null) {
             return 0;
         }
 
-        ByteBuffer commandBuffer = drawLists.get(commandListIndex).commandBuffer;
-
         final int countLocation = (commandBufferIndex + 1) * SIZE_OF_DRAW_COMMAND - Integer.BYTES;
 
-        if (countLocation > commandBuffer.position()) {
-            log.error(
-                    SafeResourceLoader.getString(
-                            "INDEX_OUT_OF_BOUNDS",
-                            GraphicsPlugin.getResourceBundle(),
-                            Integer.toString(commandListIndex)));
+        if (!offsetValid(commandBuffer, countLocation, Integer.BYTES)) {
             return 0;
         }
 
         return commandBuffer.getInt(countLocation);
     }
 
-    public Vector4f getCommandListCommandBufferClipRect(
+    public Rect getCommandListCommandBufferClipRect(
             final int commandListIndex, final int commandBufferIndex) {
-        final Vector4f value = new Vector4f();
+        final Rect value = new Rect();
         getCommandListCommandBufferClipRect(commandListIndex, commandBufferIndex, value);
         return value;
     }
 
     public void getCommandListCommandBufferClipRect(
-            int commandListIndex, int commandBufferIndex, Vector4f output) {
-        // TODO(ches) implement this
+            int commandListIndex, int commandBufferIndex, Rect output) {
+
+        ByteBuffer commandBuffer = getCommandBuffer(commandListIndex);
+        if (commandBuffer == null) {
+            return;
+        }
+
+        final int countLocation = commandBufferIndex * SIZE_OF_DRAW_COMMAND;
+
+        if (!offsetValid(commandBuffer, countLocation, SIZE_OF_RECT)) {
+            return;
+        }
+
+        float clipMinX = commandBuffer.getFloat(countLocation);
+        float clipMinY = commandBuffer.getFloat(countLocation + Float.BYTES);
+        float clipMaxX = commandBuffer.getFloat(countLocation + 2 * Float.BYTES);
+        float clipMaxY = commandBuffer.getFloat(countLocation + 3 * Float.BYTES);
+
+        output.set(clipMinX, clipMinY, clipMaxX, clipMaxY);
     }
 
     public int getCommandListCommandBufferTextureId(int commandListIndex, int commandBufferIndex) {
