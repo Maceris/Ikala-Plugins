@@ -1,5 +1,9 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
+import com.ikalagaming.graphics.GraphicsPlugin;
+import com.ikalagaming.util.SafeResourceLoader;
+
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 import org.joml.Vector4f;
 
@@ -7,6 +11,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 
+@Slf4j
 public class DrawData {
 
     public static final int SIZE_OF_DRAW_INDEX = Short.BYTES;
@@ -15,10 +20,8 @@ public class DrawData {
 
     private static final int RESIZE_FACTOR = 5000;
 
-    private static ByteBuffer dataBuffer =
+    private ByteBuffer dataBuffer =
             ByteBuffer.allocateDirect(25_000).order(ByteOrder.nativeOrder());
-
-    private static Viewport OWNER_VIEWPORT = null;
 
     final ArrayList<DrawList> drawLists;
 
@@ -27,14 +30,43 @@ public class DrawData {
     }
 
     public int getCommandListCommandBufferSize(int commandListIndex) {
-        // TODO(ches) implement this
-        return 0;
+        if (commandListIndex < 0 || commandListIndex > drawLists.size()) {
+            log.error(
+                    SafeResourceLoader.getString(
+                            "INDEX_OUT_OF_BOUNDS",
+                            GraphicsPlugin.getResourceBundle(),
+                            Integer.toString(commandListIndex)));
+            return 0;
+        }
+
+        return drawLists.get(commandListIndex).commandBuffer.position();
     }
 
     public int getCommandListCommandBufferElementCount(
             int commandListIndex, int commandBufferIndex) {
-        // TODO(ches) implement this
-        return 0;
+        if (commandListIndex < 0 || commandListIndex > drawLists.size()) {
+            log.error(
+                    SafeResourceLoader.getString(
+                            "INDEX_OUT_OF_BOUNDS",
+                            GraphicsPlugin.getResourceBundle(),
+                            Integer.toString(commandListIndex)));
+            return 0;
+        }
+
+        ByteBuffer commandBuffer = drawLists.get(commandListIndex).commandBuffer;
+
+        final int countLocation = (commandBufferIndex + 1) * SIZE_OF_DRAW_COMMAND - Integer.BYTES;
+
+        if (countLocation > commandBuffer.position()) {
+            log.error(
+                    SafeResourceLoader.getString(
+                            "INDEX_OUT_OF_BOUNDS",
+                            GraphicsPlugin.getResourceBundle(),
+                            Integer.toString(commandListIndex)));
+            return 0;
+        }
+
+        return commandBuffer.getInt(countLocation);
     }
 
     public Vector4f getCommandListCommandBufferClipRect(

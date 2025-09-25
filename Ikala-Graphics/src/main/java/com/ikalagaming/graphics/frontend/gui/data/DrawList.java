@@ -24,16 +24,16 @@ import java.util.Deque;
 public class DrawList {
 
     /** float posX, float posY, float u, float v, int color. */
-    private ByteBuffer vertexBuffer;
+    ByteBuffer vertexBuffer;
 
     /** short index. */
-    private ByteBuffer indexBuffer;
+    ByteBuffer indexBuffer;
 
     /**
      * float clipMinX, float clipMinY, float clipMaxX, float clipMaxY, int textureID, int
      * vertexOffset, int indexOffset, int elementCount.
      */
-    private ByteBuffer commandBuffer;
+    ByteBuffer commandBuffer;
 
     private final Deque<Rect> clipRects;
     private final IntArrayList textures;
