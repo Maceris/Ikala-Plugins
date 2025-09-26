@@ -73,7 +73,8 @@ public class DrawData {
             return 0;
         }
 
-        final int countLocation = (commandBufferIndex + 1) * SIZE_OF_DRAW_COMMAND - Integer.BYTES;
+        final int countLocation =
+                commandBufferIndex * SIZE_OF_DRAW_COMMAND + SIZE_OF_RECT + 3 * Integer.BYTES;
 
         if (!offsetValid(commandBuffer, countLocation, Integer.BYTES)) {
             return 0;
@@ -97,35 +98,67 @@ public class DrawData {
             return;
         }
 
-        final int countLocation = commandBufferIndex * SIZE_OF_DRAW_COMMAND;
+        final int rectLocation = commandBufferIndex * SIZE_OF_DRAW_COMMAND;
 
-        if (!offsetValid(commandBuffer, countLocation, SIZE_OF_RECT)) {
+        if (!offsetValid(commandBuffer, rectLocation, SIZE_OF_RECT)) {
             return;
         }
 
-        float clipMinX = commandBuffer.getFloat(countLocation);
-        float clipMinY = commandBuffer.getFloat(countLocation + Float.BYTES);
-        float clipMaxX = commandBuffer.getFloat(countLocation + 2 * Float.BYTES);
-        float clipMaxY = commandBuffer.getFloat(countLocation + 3 * Float.BYTES);
+        float clipMinX = commandBuffer.getFloat(rectLocation);
+        float clipMinY = commandBuffer.getFloat(rectLocation + Float.BYTES);
+        float clipMaxX = commandBuffer.getFloat(rectLocation + 2 * Float.BYTES);
+        float clipMaxY = commandBuffer.getFloat(rectLocation + 3 * Float.BYTES);
 
         output.set(clipMinX, clipMinY, clipMaxX, clipMaxY);
     }
 
     public int getCommandListCommandBufferTextureId(int commandListIndex, int commandBufferIndex) {
-        // TODO(ches) implement this
-        return 0;
+        ByteBuffer commandBuffer = getCommandBuffer(commandListIndex);
+        if (commandBuffer == null) {
+            return 0;
+        }
+
+        final int textureLocation = commandBufferIndex * SIZE_OF_DRAW_COMMAND + SIZE_OF_RECT;
+
+        if (!offsetValid(commandBuffer, textureLocation, Integer.BYTES)) {
+            return 0;
+        }
+
+        return commandBuffer.getInt(textureLocation);
     }
 
     public int getCommandListCommandBufferVertexOffset(
             int commandListIndex, int commandBufferIndex) {
-        // TODO(ches) implement this
-        return 0;
+        ByteBuffer commandBuffer = getCommandBuffer(commandListIndex);
+        if (commandBuffer == null) {
+            return 0;
+        }
+
+        final int vertexOffsetLocation =
+                commandBufferIndex * SIZE_OF_DRAW_COMMAND + SIZE_OF_RECT + Integer.BYTES;
+
+        if (!offsetValid(commandBuffer, vertexOffsetLocation, Integer.BYTES)) {
+            return 0;
+        }
+
+        return commandBuffer.getInt(vertexOffsetLocation);
     }
 
     public int getCommandListCommandBufferIndexOffset(
             int commandListIndex, int commandBufferIndex) {
-        // TODO(ches) implement this
-        return 0;
+        ByteBuffer commandBuffer = getCommandBuffer(commandListIndex);
+        if (commandBuffer == null) {
+            return 0;
+        }
+
+        final int indexOffsetLocation =
+                commandBufferIndex * SIZE_OF_DRAW_COMMAND + SIZE_OF_RECT + 2 * Integer.BYTES;
+
+        if (!offsetValid(commandBuffer, indexOffsetLocation, Integer.BYTES)) {
+            return 0;
+        }
+
+        return commandBuffer.getInt(indexOffsetLocation);
     }
 
     public int getCommandListIndexBufferSize(int commandListIndex) {
