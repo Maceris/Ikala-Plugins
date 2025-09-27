@@ -30,23 +30,28 @@ public class DrawData {
         drawLists = new ArrayList<>();
     }
 
-    private ByteBuffer getCommandBuffer(int commandListIndex) {
-        if (commandListIndex < 0 || commandListIndex > drawLists.size()) {
+    private DrawList getDrawList(int drawListIndex) {
+        if (drawListIndex < 0 || drawListIndex > drawLists.size()) {
             log.error(
                     SafeResourceLoader.getString(
                             "INDEX_OUT_OF_BOUNDS",
                             GraphicsPlugin.getResourceBundle(),
-                            Integer.toString(commandListIndex)));
+                            Integer.toString(drawListIndex)));
             return null;
         }
 
-        return drawLists.get(commandListIndex).commandBuffer;
+        return drawLists.get(drawListIndex);
     }
 
-    private boolean offsetValid(ByteBuffer buffer, int position, int bytes) {
-        boolean result = (buffer != null) && (position + bytes < buffer.position());
+    private ByteBuffer getCommandBuffer(int commandListIndex) {
+        DrawList list = getDrawList(commandListIndex);
+        return list == null ? null : list.commandBuffer;
+    }
 
-        if (!result) {
+    private boolean offsetInvalid(ByteBuffer buffer, int position, int bytes) {
+        boolean valid = (buffer != null) && (position + bytes < buffer.position());
+
+        if (!valid) {
             log.error(
                     SafeResourceLoader.getString(
                             "INDEX_OUT_OF_BOUNDS",
@@ -54,7 +59,7 @@ public class DrawData {
                             Integer.toString(position)));
         }
 
-        return result;
+        return !valid;
     }
 
     public int getCommandListCommandBufferSize(int commandListIndex) {
@@ -76,7 +81,7 @@ public class DrawData {
         final int countLocation =
                 commandBufferIndex * SIZE_OF_DRAW_COMMAND + SIZE_OF_RECT + 3 * Integer.BYTES;
 
-        if (!offsetValid(commandBuffer, countLocation, Integer.BYTES)) {
+        if (offsetInvalid(commandBuffer, countLocation, Integer.BYTES)) {
             return 0;
         }
 
@@ -100,7 +105,7 @@ public class DrawData {
 
         final int rectLocation = commandBufferIndex * SIZE_OF_DRAW_COMMAND;
 
-        if (!offsetValid(commandBuffer, rectLocation, SIZE_OF_RECT)) {
+        if (offsetInvalid(commandBuffer, rectLocation, SIZE_OF_RECT)) {
             return;
         }
 
@@ -120,7 +125,7 @@ public class DrawData {
 
         final int textureLocation = commandBufferIndex * SIZE_OF_DRAW_COMMAND + SIZE_OF_RECT;
 
-        if (!offsetValid(commandBuffer, textureLocation, Integer.BYTES)) {
+        if (offsetInvalid(commandBuffer, textureLocation, Integer.BYTES)) {
             return 0;
         }
 
@@ -137,7 +142,7 @@ public class DrawData {
         final int vertexOffsetLocation =
                 commandBufferIndex * SIZE_OF_DRAW_COMMAND + SIZE_OF_RECT + Integer.BYTES;
 
-        if (!offsetValid(commandBuffer, vertexOffsetLocation, Integer.BYTES)) {
+        if (offsetInvalid(commandBuffer, vertexOffsetLocation, Integer.BYTES)) {
             return 0;
         }
 
@@ -154,7 +159,7 @@ public class DrawData {
         final int indexOffsetLocation =
                 commandBufferIndex * SIZE_OF_DRAW_COMMAND + SIZE_OF_RECT + 2 * Integer.BYTES;
 
-        if (!offsetValid(commandBuffer, indexOffsetLocation, Integer.BYTES)) {
+        if (offsetInvalid(commandBuffer, indexOffsetLocation, Integer.BYTES)) {
             return 0;
         }
 
@@ -162,8 +167,9 @@ public class DrawData {
     }
 
     public int getCommandListIndexBufferSize(int commandListIndex) {
-        // TODO(ches) implement this
-        return 0;
+        DrawList list = getDrawList(commandListIndex);
+        ByteBuffer buffer = list == null ? null : list.indexBuffer;
+        return buffer == null ? 0 : buffer.position() / Short.BYTES;
     }
 
     public ByteBuffer getCommandListIndexBufferData(final int commandListIndex) {
