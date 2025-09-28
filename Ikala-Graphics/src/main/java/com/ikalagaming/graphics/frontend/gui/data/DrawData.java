@@ -166,10 +166,16 @@ public class DrawData {
         return commandBuffer.getInt(indexOffsetLocation);
     }
 
+    /**
+     * Fetch the size of the index buffer, in terms of indexes.
+     *
+     * @param commandListIndex The index of the command list to check.
+     * @return The index buffer count, or 0 if an invalid index is provided.
+     */
     public int getCommandListIndexBufferSize(int commandListIndex) {
         DrawList list = getDrawList(commandListIndex);
         ByteBuffer buffer = list == null ? null : list.indexBuffer;
-        return buffer == null ? 0 : buffer.position() / Short.BYTES;
+        return buffer == null ? 0 : buffer.position() / SIZE_OF_DRAW_INDEX;
     }
 
     public ByteBuffer getCommandListIndexBufferData(final int commandListIndex) {
@@ -190,9 +196,16 @@ public class DrawData {
         return dataBuffer;
     }
 
+    /**
+     * Fetch the size of the index buffer, in terms of vertices.
+     *
+     * @param commandListIndex The index of the command list to check.
+     * @return The vertex buffer count, or 0 if an invalid index is provided.
+     */
     public int getCommandListVertexBufferSize(int commandListIndex) {
-        // TODO(ches) implement this
-        return 0;
+        DrawList list = getDrawList(commandListIndex);
+        ByteBuffer buffer = list == null ? null : list.vertexBuffer;
+        return buffer == null ? 0 : buffer.position() / SIZE_OF_DRAW_VERTEX;
     }
 
     public ByteBuffer getCommandListVertexBufferData(final int commandListIndex) {
