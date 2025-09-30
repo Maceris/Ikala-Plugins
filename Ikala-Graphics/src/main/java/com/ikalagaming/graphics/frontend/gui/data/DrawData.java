@@ -25,9 +25,11 @@ public class DrawData {
             ByteBuffer.allocateDirect(25_000).order(ByteOrder.nativeOrder());
 
     final ArrayList<DrawList> drawLists;
+    public boolean valid;
 
     public DrawData() {
         drawLists = new ArrayList<>();
+        valid = false;
     }
 
     private DrawList getDrawList(int drawListIndex) {
@@ -179,21 +181,8 @@ public class DrawData {
     }
 
     public ByteBuffer getCommandListIndexBufferData(final int commandListIndex) {
-        final int indexBufferCapacity =
-                getCommandListIndexBufferSize(commandListIndex) * SIZE_OF_DRAW_INDEX;
-        if (dataBuffer.capacity() < indexBufferCapacity) {
-            dataBuffer.clear();
-            dataBuffer =
-                    ByteBuffer.allocateDirect(indexBufferCapacity + RESIZE_FACTOR)
-                            .order(ByteOrder.nativeOrder());
-        }
-
-        // TODO(ches) implement this
-
-        dataBuffer.position(0);
-        dataBuffer.limit(indexBufferCapacity);
-
-        return dataBuffer;
+        DrawList list = getDrawList(commandListIndex);
+        return list == null ? null : list.indexBuffer;
     }
 
     /**
@@ -209,41 +198,28 @@ public class DrawData {
     }
 
     public ByteBuffer getCommandListVertexBufferData(final int commandListIndex) {
-        final int vertexBufferCapacity =
-                getCommandListVertexBufferSize(commandListIndex) * SIZE_OF_DRAW_VERTEX;
-        if (dataBuffer.capacity() < vertexBufferCapacity) {
-            dataBuffer.clear();
-            dataBuffer =
-                    ByteBuffer.allocateDirect(vertexBufferCapacity + RESIZE_FACTOR)
-                            .order(ByteOrder.nativeOrder());
-        }
-
-        // TODO(ches) get buffer data
-
-        dataBuffer.position(0);
-        dataBuffer.limit(vertexBufferCapacity);
-
-        return dataBuffer;
-    }
-
-    public boolean getValid() {
-        // TODO(ches) implement this
-        return false;
+        DrawList list = getDrawList(commandListIndex);
+        return list == null ? null : list.vertexBuffer;
     }
 
     public int getCommandListsCount() {
-        // TODO(ches) implement this
-        return 0;
+        return drawLists.size();
     }
 
     public int getTotalIndexCount() {
-        // TODO(ches) implement this
-        return 0;
+        int total = 0;
+        for (DrawList list : drawLists) {
+            total += list.indexBuffer.position() / SIZE_OF_DRAW_INDEX;
+        }
+        return total;
     }
 
     public int getTotalVertexCount() {
-        // TODO(ches) implement this
-        return 0;
+        int total = 0;
+        for (DrawList list : drawLists) {
+            total += list.vertexBuffer.position() / SIZE_OF_DRAW_VERTEX;
+        }
+        return total;
     }
 
     public Vector2f getDisplayPosition() {
@@ -254,6 +230,7 @@ public class DrawData {
 
     public void getDisplayPosition(Vector2f output) {
         // TODO(ches) implement this
+
     }
 
     public float getDisplayPositionX() {
@@ -308,10 +285,6 @@ public class DrawData {
 
     public Viewport getOwnerViewport() {
         return null;
-    }
-
-    public void deIndexAllBuffers() {
-        // TODO(ches) implement this
     }
 
     public void scaleClipRects(float framebufferScaleX, float framebufferScaleY) {
