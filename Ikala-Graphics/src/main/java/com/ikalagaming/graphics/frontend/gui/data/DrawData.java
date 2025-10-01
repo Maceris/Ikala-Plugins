@@ -26,10 +26,17 @@ public class DrawData {
 
     final ArrayList<DrawList> drawLists;
     public boolean valid;
+    final Vector2f displayPosition;
+    final Vector2f displaySize;
+    final Vector2f framebufferScale;
 
     public DrawData() {
         drawLists = new ArrayList<>();
         valid = false;
+        //TODO(ches) set up reasonable values
+        displayPosition = new Vector2f();
+        displaySize = new Vector2f();
+        framebufferScale = new Vector2f();
     }
 
     private DrawList getDrawList(int drawListIndex) {
@@ -222,73 +229,4 @@ public class DrawData {
         return total;
     }
 
-    public Vector2f getDisplayPosition() {
-        final Vector2f value = new Vector2f();
-        getDisplayPosition(value);
-        return value;
-    }
-
-    public void getDisplayPosition(Vector2f output) {
-        // TODO(ches) implement this
-
-    }
-
-    public float getDisplayPositionX() {
-        // TODO(ches) implement this
-        return 0;
-    }
-
-    public float getDisplayPositionY() {
-        // TODO(ches) implement this
-        return 0;
-    }
-
-    public Vector2f getDisplaySize() {
-        final Vector2f value = new Vector2f();
-        getDisplaySize(value);
-        return value;
-    }
-
-    public void getDisplaySize(Vector2f output) {
-        // TODO(ches) implement this
-    }
-
-    public float getDisplaySizeX() {
-        // TODO(ches) implement this
-        return 0;
-    }
-
-    public float getDisplaySizeY() {
-        // TODO(ches) implement this
-        return 0;
-    }
-
-    public Vector2f getFramebufferScale() {
-        final Vector2f value = new Vector2f();
-        getFramebufferScale(value);
-        return value;
-    }
-
-    public void getFramebufferScale(Vector2f output) {
-        // TODO(ches) implement this
-    }
-
-    public float getFramebufferScaleX() {
-        // TODO(ches) implement this
-        return 0;
-    }
-
-    public float getFramebufferScaleY() {
-        // TODO(ches) implement this
-        return 0;
-    }
-
-    public Viewport getOwnerViewport() {
-        return null;
-    }
-
-    public void scaleClipRects(float framebufferScaleX, float framebufferScaleY) {
-        // TODO(ches) implement this
-
-    }
 }
