@@ -15,7 +15,6 @@ public class IkGui {
     private static Context context;
     private static IkIO io;
     private static PlatformIO platformIO;
-    private static Window activeWindow;
     private static DrawList backgroundDrawList;
     private static DrawList foregroundDrawList;
     private static Storage storage;
@@ -105,7 +104,7 @@ public class IkGui {
         window.open = open;
         window.active = true;
 
-        activeWindow = window;
+        context.windowCurrent = window;
     }
 
     public static void beginChild(@NonNull String name) {
@@ -199,17 +198,22 @@ public class IkGui {
     }
 
     public static void getWindowPos(@NonNull Vector2f pos) {
-        // TODO(ches) complete this
+        Window window = context.windowCurrent;
+        if (window == null) {
+            pos.set(0, 0);
+        } else {
+            pos.set(window.position);
+        }
     }
 
     public static float getWindowPosX() {
-        // TODO(ches) complete this
-        return 0;
+        Window window = context.windowCurrent;
+        return window == null ? 0 : window.position.x;
     }
 
     public static float getWindowPosY() {
-        // TODO(ches) complete this
-        return 0;
+        Window window = context.windowCurrent;
+        return window == null ? 0 : window.position.y;
     }
 
     public static Vector2f getWindowSize() {
@@ -219,17 +223,22 @@ public class IkGui {
     }
 
     public static void getWindowSize(@NonNull Vector2f size) {
-        // TODO(ches) complete this
+        Window window = context.windowCurrent;
+        if (window == null) {
+            size.set(0, 0);
+        } else {
+            size.set(window.sizeCurrent);
+        }
     }
 
-    public static float getWindowwidth() {
-        // TODO(ches) complete this
-        return 0;
+    public static float getWindowWidth() {
+        Window window = context.windowCurrent;
+        return window == null ? 0 : window.sizeCurrent.x;
     }
 
-    public static float getWindowheight() {
-        // TODO(ches) complete this
-        return 0;
+    public static float getWindowHeight() {
+        Window window = context.windowCurrent;
+        return window == null ? 0 : window.sizeCurrent.y;
     }
 
     public static void setNextWindowPos(float x, float y) {

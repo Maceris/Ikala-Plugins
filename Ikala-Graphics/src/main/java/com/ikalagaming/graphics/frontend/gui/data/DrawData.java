@@ -33,7 +33,7 @@ public class DrawData {
     public DrawData() {
         drawLists = new ArrayList<>();
         valid = false;
-        //TODO(ches) set up reasonable values
+        // TODO(ches) set up reasonable values
         displayPosition = new Vector2f();
         displaySize = new Vector2f();
         framebufferScale = new Vector2f();
@@ -228,5 +228,4 @@ public class DrawData {
         }
         return total;
     }
-
 }
