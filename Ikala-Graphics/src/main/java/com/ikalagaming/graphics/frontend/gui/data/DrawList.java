@@ -68,6 +68,7 @@ public class DrawList {
             float clipMinY,
             float clipMaxX,
             float clipMaxY,
+            int texture,
             int vertexOffset,
             int indexOffset,
             int elementCount) {
@@ -82,7 +83,7 @@ public class DrawList {
         commandBuffer.putFloat(clipMinY);
         commandBuffer.putFloat(clipMaxX);
         commandBuffer.putFloat(clipMaxY);
-        commandBuffer.putInt(textures.peek());
+        commandBuffer.putInt(texture);
         commandBuffer.putInt(vertexOffset);
         commandBuffer.putInt(indexOffset);
         commandBuffer.putInt(elementCount);
@@ -330,6 +331,7 @@ public class DrawList {
                 clipRectMin.y,
                 clipRectMax.x,
                 clipRectMax.y,
+                textures.peek(),
                 vertexOffset,
                 startIndex,
                 elementCount);
@@ -510,6 +512,7 @@ public class DrawList {
                 clipRectMin.y,
                 clipRectMax.x,
                 clipRectMax.y,
+                textures.peek(),
                 vertexOffset,
                 startIndex,
                 elementCount);
@@ -552,6 +555,7 @@ public class DrawList {
                 clipRectMin.y,
                 clipRectMax.x,
                 clipRectMax.y,
+                textures.peek(),
                 vertexOffset,
                 startIndex,
                 elementCount);
@@ -930,9 +934,35 @@ public class DrawList {
             float u4,
             float v4,
             int color) {
-        // TODO(ches) implement this
-        // TODO(ches) wow this function signature sucks, can we do this using static cached default
-        // vecs?
+        // TODO(ches) wow this function signature sucks, can we do this cheaply with vecs?
+
+        int p1 = addVertex(p1X, p1Y, u1, v1, color);
+        int p2 = addVertex(p2X, p2Y, u2, v2, color);
+        int p3 = addVertex(p3X, p3Y, u3, v3, color);
+        int p4 = addVertex(p4X, p4Y, u4, v4, color);
+
+        int startIndex = addIndex((short) p1);
+        addIndex((short) p2);
+        addIndex((short) p3);
+
+        addIndex((short) p3);
+        addIndex((short) p2);
+        addIndex((short) p4);
+
+        Vector2f clipRectMin = getClipRectMin();
+        Vector2f clipRectMax = getClipRectMax();
+
+        final int vertexOffset = 0;
+        final int elementCount = 6;
+        addCommand(
+                clipRectMin.x,
+                clipRectMin.y,
+                clipRectMax.x,
+                clipRectMax.y,
+                textureID,
+                vertexOffset,
+                startIndex,
+                elementCount);
     }
 
     public void addImageRounded(
