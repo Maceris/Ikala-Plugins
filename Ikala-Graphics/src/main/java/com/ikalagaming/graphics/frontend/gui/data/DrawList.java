@@ -23,6 +23,17 @@ import java.util.Deque;
 @Slf4j
 public class DrawList {
 
+    public enum ElementType {
+        CIRCLE,
+        LINE_ARC,
+        LINE_BEZIER,
+        LINE_STRAIGHT,
+        NGON,
+        QUAD,
+        TEXT,
+        TRIANGLE,
+    }
+
     /** float posX, float posY, float u, float v, int color. */
     ByteBuffer vertexBuffer;
 
@@ -308,10 +319,12 @@ public class DrawList {
             tangentOffsetY = (float) Math.sin(angle) * (thickness / 2);
         }
 
-        int p1 = addVertex(p1X + tangentOffsetX, p1Y + tangentOffsetY, 0, 0, color);
-        int p2 = addVertex(p1X - tangentOffsetX, p1Y - tangentOffsetY, 0, 0, color);
-        int p3 = addVertex(p2X + tangentOffsetX, p2Y + tangentOffsetY, 0, 0, color);
-        int p4 = addVertex(p2X - tangentOffsetX, p2Y - tangentOffsetY, 0, 0, color);
+        final int vertexOffset = vertexBuffer.position();
+
+        final int p1 = addVertex(p1X + tangentOffsetX, p1Y + tangentOffsetY, 0, 0, color);
+        final int p2 = addVertex(p1X - tangentOffsetX, p1Y - tangentOffsetY, 0, 0, color);
+        final int p3 = addVertex(p2X + tangentOffsetX, p2Y + tangentOffsetY, 0, 0, color);
+        final int p4 = addVertex(p2X - tangentOffsetX, p2Y - tangentOffsetY, 0, 0, color);
 
         int startIndex = addIndex((short) p1);
         addIndex((short) p2);
@@ -324,7 +337,6 @@ public class DrawList {
         Vector2f clipRectMin = getClipRectMin();
         Vector2f clipRectMax = getClipRectMax();
 
-        final int vertexOffset = 0;
         final int elementCount = 6;
         addCommand(
                 clipRectMin.x,
@@ -489,10 +501,13 @@ public class DrawList {
             float p4X,
             float p4Y,
             int color) {
-        int p1 = addVertex(p1X, p1Y, 0, 0, color);
-        int p2 = addVertex(p2X, p2Y, 0, 0, color);
-        int p3 = addVertex(p3X, p3Y, 0, 0, color);
-        int p4 = addVertex(p4X, p4Y, 0, 0, color);
+
+        final int vertexOffset = vertexBuffer.position();
+
+        final int p1 = addVertex(p1X, p1Y, 0, 0, color);
+        final int p2 = addVertex(p2X, p2Y, 0, 0, color);
+        final int p3 = addVertex(p3X, p3Y, 0, 0, color);
+        final int p4 = addVertex(p4X, p4Y, 0, 0, color);
 
         int startIndex = addIndex((short) p1);
         addIndex((short) p2);
@@ -505,7 +520,6 @@ public class DrawList {
         Vector2f clipRectMin = getClipRectMin();
         Vector2f clipRectMax = getClipRectMax();
 
-        final int vertexOffset = 0;
         final int elementCount = 6;
         addCommand(
                 clipRectMin.x,
@@ -537,6 +551,9 @@ public class DrawList {
 
     public void addTriangleFilled(
             float p1X, float p1Y, float p2X, float p2Y, float p3X, float p3Y, int color) {
+
+        final int vertexOffset = vertexBuffer.position();
+
         int p1 = addVertex(p1X, p1Y, 0, 0, color);
         int p2 = addVertex(p2X, p2Y, 0, 0, color);
         int p3 = addVertex(p3X, p3Y, 0, 0, color);
@@ -548,7 +565,6 @@ public class DrawList {
         Vector2f clipRectMin = getClipRectMin();
         Vector2f clipRectMax = getClipRectMax();
 
-        final int vertexOffset = 0;
         final int elementCount = 3;
         addCommand(
                 clipRectMin.x,
@@ -936,6 +952,8 @@ public class DrawList {
             int color) {
         // TODO(ches) wow this function signature sucks, can we do this cheaply with vecs?
 
+        final int vertexOffset = vertexBuffer.position();
+
         int p1 = addVertex(p1X, p1Y, u1, v1, color);
         int p2 = addVertex(p2X, p2Y, u2, v2, color);
         int p3 = addVertex(p3X, p3Y, u3, v3, color);
@@ -952,7 +970,6 @@ public class DrawList {
         Vector2f clipRectMin = getClipRectMin();
         Vector2f clipRectMax = getClipRectMax();
 
-        final int vertexOffset = 0;
         final int elementCount = 6;
         addCommand(
                 clipRectMin.x,
