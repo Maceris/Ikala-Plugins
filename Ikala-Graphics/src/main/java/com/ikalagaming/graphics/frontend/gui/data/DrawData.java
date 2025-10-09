@@ -17,7 +17,7 @@ public class DrawData {
 
     public static final int SIZE_OF_DRAW_INDEX = Short.BYTES;
     public static final int SIZE_OF_DRAW_VERTEX = 4 * Float.BYTES + Integer.BYTES;
-    public static final int SIZE_OF_DRAW_COMMAND = SIZE_OF_RECT + 4 * Integer.BYTES;
+    public static final int SIZE_OF_DRAW_COMMAND = SIZE_OF_RECT + 5 * Integer.BYTES;
 
     private static final int RESIZE_FACTOR = 5000;
 

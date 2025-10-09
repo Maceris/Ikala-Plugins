@@ -10,6 +10,7 @@ import com.ikalagaming.graphics.frontend.gui.util.Rect;
 import com.ikalagaming.util.IntArrayList;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.Synchronized;
@@ -23,15 +24,19 @@ import java.util.Deque;
 @Slf4j
 public class DrawList {
 
+    @AllArgsConstructor
     public enum ElementType {
-        CIRCLE,
-        LINE_ARC,
-        LINE_BEZIER,
-        LINE_STRAIGHT,
-        NGON,
-        QUAD,
-        TEXT,
-        TRIANGLE,
+        CIRCLE(0),
+        LINE_ARC(1),
+        LINE_BEZIER(2),
+        LINE_STRAIGHT(3),
+        NGON(4),
+        QUAD(5),
+        TEXT(6),
+        TRIANGLE(7);
+
+        /** Unique ID used in the command buffer. Must line up with the shader. */
+        final int elementID;
     }
 
     /** float posX, float posY, float u, float v, int color. */
@@ -42,7 +47,7 @@ public class DrawList {
 
     /**
      * float clipMinX, float clipMinY, float clipMaxX, float clipMaxY, int textureID, int
-     * vertexOffset, int indexOffset, int elementCount.
+     * vertexOffset, int indexOffset, int elementCount, int elementType.
      */
     ByteBuffer commandBuffer;
 
@@ -82,7 +87,8 @@ public class DrawList {
             int texture,
             int vertexOffset,
             int indexOffset,
-            int elementCount) {
+            int elementCount,
+            ElementType type) {
         if (commandBuffer.limit() == commandBuffer.position()) {
             ByteBuffer newBuffer = ByteBuffer.allocateDirect(commandBuffer.limit() * 2);
             commandBuffer.flip();
@@ -98,6 +104,7 @@ public class DrawList {
         commandBuffer.putInt(vertexOffset);
         commandBuffer.putInt(indexOffset);
         commandBuffer.putInt(elementCount);
+        commandBuffer.putInt(type.elementID);
     }
 
     @Synchronized
@@ -346,7 +353,8 @@ public class DrawList {
                 textures.peek(),
                 vertexOffset,
                 startIndex,
-                elementCount);
+                elementCount,
+                ElementType.LINE_STRAIGHT);
 
         // TODO(ches) check this works
     }
@@ -529,7 +537,8 @@ public class DrawList {
                 textures.peek(),
                 vertexOffset,
                 startIndex,
-                elementCount);
+                elementCount,
+                ElementType.QUAD);
     }
 
     public void addTriangle(
@@ -574,7 +583,8 @@ public class DrawList {
                 textures.peek(),
                 vertexOffset,
                 startIndex,
-                elementCount);
+                elementCount,
+                ElementType.TRIANGLE);
     }
 
     public void addCircle(float centerX, float centerY, float radius, int color) {
@@ -979,7 +989,8 @@ public class DrawList {
                 textureID,
                 vertexOffset,
                 startIndex,
-                elementCount);
+                elementCount,
+                ElementType.QUAD);
     }
 
     public void addImageRounded(
