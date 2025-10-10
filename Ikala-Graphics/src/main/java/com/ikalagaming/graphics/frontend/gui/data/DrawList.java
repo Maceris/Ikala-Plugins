@@ -10,10 +10,7 @@ import com.ikalagaming.graphics.frontend.gui.util.Rect;
 import com.ikalagaming.util.IntArrayList;
 import com.ikalagaming.util.SafeResourceLoader;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.Synchronized;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 
@@ -39,8 +36,25 @@ public class DrawList {
         final int elementID;
     }
 
+    @AllArgsConstructor
+    public enum ElementStyle {
+        FILL_AND_BORDER(0),
+        ONLY_BORDER(1),
+        TEXTURE(2);
+
+        /** Unique ID used in the command buffer. Must line up with the shader. */
+        final int styleID;
+    }
+
     /** float posX, float posY, float u, float v, int color. */
     ByteBuffer vertexBuffer;
+
+    /**
+     * SDF points. float posX, float posY, float widthHalf, float heightHalf, float radiusTopLeft,
+     * float radiusTopRight, float radiusBottomLeft, float radiusBottomRight, float borderStroke,
+     * int color, int elementStyle.
+     */
+    ByteBuffer sdfPointBuffer;
 
     /** short index. */
     ByteBuffer indexBuffer;
@@ -65,6 +79,7 @@ public class DrawList {
         vertexBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_VERTEX);
         indexBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_INDEX);
         commandBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_COMMAND);
+        commandBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_SDF_POINT);
         clipRects = new ArrayDeque<>();
         textures = new IntArrayList();
     }
@@ -88,7 +103,7 @@ public class DrawList {
             int vertexOffset,
             int indexOffset,
             int elementCount,
-            ElementType type) {
+            @NonNull ElementType type) {
         if (commandBuffer.limit() == commandBuffer.position()) {
             ByteBuffer newBuffer = ByteBuffer.allocateDirect(commandBuffer.limit() * 2);
             commandBuffer.flip();
@@ -141,6 +156,39 @@ public class DrawList {
         indexBuffer.putShort(index);
 
         return newIndex;
+    }
+
+    @Synchronized
+    private void addSDFPoint(
+            float posX,
+            float posY,
+            float width,
+            float height,
+            float radiusTopLeft,
+            float radiusTopRight,
+            float radiusBottomLeft,
+            float radiusBottomRight,
+            float borderStroke,
+            int color,
+            @NonNull ElementStyle style) {
+        if (sdfPointBuffer.limit() == sdfPointBuffer.position()) {
+            ByteBuffer newBuffer = ByteBuffer.allocateDirect(sdfPointBuffer.limit() * 2);
+            sdfPointBuffer.flip();
+            newBuffer.put(sdfPointBuffer);
+            sdfPointBuffer = newBuffer;
+        }
+
+        sdfPointBuffer.putFloat(posX);
+        sdfPointBuffer.putFloat(posY);
+        sdfPointBuffer.putFloat(width / 2);
+        sdfPointBuffer.putFloat(height / 2);
+        sdfPointBuffer.putFloat(radiusTopLeft);
+        sdfPointBuffer.putFloat(radiusTopRight);
+        sdfPointBuffer.putFloat(radiusBottomLeft);
+        sdfPointBuffer.putFloat(radiusBottomRight);
+        sdfPointBuffer.putFloat(borderStroke);
+        sdfPointBuffer.putInt(color);
+        sdfPointBuffer.putInt(style.styleID);
     }
 
     /**
@@ -419,22 +467,23 @@ public class DrawList {
         final float bottomRightRadius =
                 (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? rounding : 0;
 
-        // Top
-        addLine(minX + topLeftRadius, minY, maxX - topRightRadius, minY, color, thickness);
-        // Right
-        addLine(maxX, minY + topRightRadius, maxX, maxY - bottomRightRadius, color, thickness);
-        // Bottom
-        addLine(minX + bottomLeftRadius, maxY, maxX - bottomRightRadius, maxY, color, thickness);
-        // Left
-        addLine(minX, minY + topLeftRadius, minX, maxY - bottomLeftRadius, color, thickness);
+        final float centerX = (minX + maxX) / 2;
+        final float centerY = (minY + maxY) / 2;
+        final float width = maxX - minX;
+        final float height = maxY - minY;
 
-        if (topLeftRadius > 0) {}
-
-        if (topRightRadius > 0) {}
-
-        if (bottomLeftRadius > 0) {}
-
-        if (bottomRightRadius > 0) {}
+        addSDFPoint(
+                centerX,
+                centerY,
+                width,
+                height,
+                topLeftRadius,
+                topRightRadius,
+                bottomLeftRadius,
+                bottomRightRadius,
+                thickness,
+                color,
+                ElementStyle.ONLY_BORDER);
     }
 
     public void addRectFilled(float minX, float minY, float maxX, float maxY, int color) {
