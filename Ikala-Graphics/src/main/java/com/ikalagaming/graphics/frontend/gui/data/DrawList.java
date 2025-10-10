@@ -38,9 +38,10 @@ public class DrawList {
 
     @AllArgsConstructor
     public enum ElementStyle {
-        FILL_AND_BORDER(0),
+        ONLY_FILL(0),
         ONLY_BORDER(1),
-        TEXTURE(2);
+        FILL_AND_BORDER(2),
+        TEXTURE(3);
 
         /** Unique ID used in the command buffer. Must line up with the shader. */
         final int styleID;
@@ -171,6 +172,7 @@ public class DrawList {
             float borderStroke,
             int color,
             @NonNull ElementStyle style) {
+        // TODO(ches) need different colors and/or textures per corner
         if (sdfPointBuffer.limit() == sdfPointBuffer.position()) {
             ByteBuffer newBuffer = ByteBuffer.allocateDirect(sdfPointBuffer.limit() * 2);
             sdfPointBuffer.flip();
@@ -448,7 +450,6 @@ public class DrawList {
             float rounding,
             int drawFlagsRoundingCorners,
             float thickness) {
-        // TODO(ches) implement this
 
         if (rounding < 0) {
             log.warn(
@@ -484,6 +485,7 @@ public class DrawList {
                 thickness,
                 color,
                 ElementStyle.ONLY_BORDER);
+        //TODO(ches) check this works
     }
 
     public void addRectFilled(float minX, float minY, float maxX, float maxY, int color) {
@@ -503,7 +505,43 @@ public class DrawList {
             int color,
             float rounding,
             int drawFlagsRoundingCorners) {
-        // TODO(ches) implement this
+
+        if (rounding < 0) {
+            log.warn(
+                    SafeResourceLoader.getString(
+                            "INVALID_ROUNDING", GraphicsPlugin.getResourceBundle()),
+                    rounding);
+            return;
+        }
+
+        final float topLeftRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_LEFT) != 0 ? rounding : 0;
+        final float topRightRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_RIGHT) != 0 ? rounding : 0;
+        final float bottomLeftRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_LEFT) != 0 ? rounding : 0;
+        final float bottomRightRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? rounding : 0;
+
+        final float centerX = (minX + maxX) / 2;
+        final float centerY = (minY + maxY) / 2;
+        final float width = maxX - minX;
+        final float height = maxY - minY;
+        final int borderStroke = 0;
+
+        addSDFPoint(
+                centerX,
+                centerY,
+                width,
+                height,
+                topLeftRadius,
+                topRightRadius,
+                bottomLeftRadius,
+                bottomRightRadius,
+                borderStroke,
+                color,
+                ElementStyle.FILL_AND_BORDER);
+        // TODO(ches) check this works
     }
 
     public void addRectFilledMultiColor(
