@@ -38,24 +38,34 @@ public class DrawList {
 
     @AllArgsConstructor
     public enum ElementStyle {
-        ONLY_FILL(0),
-        ONLY_BORDER(1),
-        FILL_AND_BORDER(2),
-        TEXTURE(3);
+        ONLY_FILL((short) 0),
+        ONLY_BORDER((short) 1),
+        FILL_AND_BORDER((short) 2),
+        TEXTURE((short) 3);
 
         /** Unique ID used in the command buffer. Must line up with the shader. */
-        final int styleID;
+        final short styleID;
+    }
+
+    private record SDFPointDetail(float radius, int colorOrTextureID) {
+        public static final int SIZE = Float.BYTES + Integer.BYTES;
     }
 
     /** float posX, float posY, float u, float v, int color. */
     ByteBuffer vertexBuffer;
 
     /**
-     * SDF points. float posX, float posY, float widthHalf, float heightHalf, float radiusTopLeft,
-     * float radiusTopRight, float radiusBottomLeft, float radiusBottomRight, float borderStroke,
-     * int color, int elementStyle.
+     * SDF points. float posX, float posY, float widthHalf, float heightHalf, float borderStroke,
+     * int detailsIndex (-1 if no index).
      */
     ByteBuffer sdfPointBuffer;
+
+    /**
+     * short pointCount, short style, (float radius, int colorOrTextureID)... details. Stored
+     * generally starting on the top-left, and always ordered clockwise for polygons and in-order
+     * for paths.
+     */
+    ByteBuffer sdfPointDetailsBuffer;
 
     /** short index. */
     ByteBuffer indexBuffer;
@@ -165,14 +175,10 @@ public class DrawList {
             float posY,
             float width,
             float height,
-            float radiusTopLeft,
-            float radiusTopRight,
-            float radiusBottomLeft,
-            float radiusBottomRight,
             float borderStroke,
-            int color,
-            @NonNull ElementStyle style) {
-        // TODO(ches) need different colors and/or textures per corner
+            @NonNull ElementStyle style,
+            SDFPointDetail... details) {
+
         if (sdfPointBuffer.limit() == sdfPointBuffer.position()) {
             ByteBuffer newBuffer = ByteBuffer.allocateDirect(sdfPointBuffer.limit() * 2);
             sdfPointBuffer.flip();
@@ -180,17 +186,30 @@ public class DrawList {
             sdfPointBuffer = newBuffer;
         }
 
+        final int newDetailsSize = 2 * Short.BYTES + details.length * SDFPointDetail.SIZE;
+
+        if (sdfPointDetailsBuffer.position() + newDetailsSize >= sdfPointDetailsBuffer.limit()) {
+            ByteBuffer newBuffer = ByteBuffer.allocateDirect(sdfPointDetailsBuffer.limit() * 2);
+            sdfPointDetailsBuffer.flip();
+            newBuffer.put(sdfPointDetailsBuffer);
+            sdfPointDetailsBuffer = newBuffer;
+        }
+
+        final int newDetailIndex = sdfPointDetailsBuffer.position();
+
+        sdfPointDetailsBuffer.putShort((short) details.length);
+        sdfPointDetailsBuffer.putShort(style.styleID);
+        for (SDFPointDetail detail : details) {
+            sdfPointDetailsBuffer.putFloat(detail.radius());
+            sdfPointDetailsBuffer.putInt(detail.colorOrTextureID());
+        }
+
         sdfPointBuffer.putFloat(posX);
         sdfPointBuffer.putFloat(posY);
         sdfPointBuffer.putFloat(width / 2);
         sdfPointBuffer.putFloat(height / 2);
-        sdfPointBuffer.putFloat(radiusTopLeft);
-        sdfPointBuffer.putFloat(radiusTopRight);
-        sdfPointBuffer.putFloat(radiusBottomLeft);
-        sdfPointBuffer.putFloat(radiusBottomRight);
         sdfPointBuffer.putFloat(borderStroke);
-        sdfPointBuffer.putInt(color);
-        sdfPointBuffer.putInt(style.styleID);
+        sdfPointBuffer.putInt(newDetailIndex);
     }
 
     /**
@@ -473,19 +492,15 @@ public class DrawList {
         final float width = maxX - minX;
         final float height = maxY - minY;
 
-        addSDFPoint(
-                centerX,
-                centerY,
-                width,
-                height,
-                topLeftRadius,
-                topRightRadius,
-                bottomLeftRadius,
-                bottomRightRadius,
-                thickness,
-                color,
-                ElementStyle.ONLY_BORDER);
-        //TODO(ches) check this works
+        SDFPointDetail[] details = {
+            new SDFPointDetail(topLeftRadius, color),
+            new SDFPointDetail(topRightRadius, color),
+            new SDFPointDetail(bottomRightRadius, color),
+            new SDFPointDetail(bottomLeftRadius, color),
+        };
+
+        addSDFPoint(centerX, centerY, width, height, thickness, ElementStyle.ONLY_BORDER, details);
+        // TODO(ches) check this works
     }
 
     public void addRectFilled(float minX, float minY, float maxX, float maxY, int color) {
@@ -529,18 +544,21 @@ public class DrawList {
         final float height = maxY - minY;
         final int borderStroke = 0;
 
+        SDFPointDetail[] details = {
+            new SDFPointDetail(topLeftRadius, color),
+            new SDFPointDetail(topRightRadius, color),
+            new SDFPointDetail(bottomRightRadius, color),
+            new SDFPointDetail(bottomLeftRadius, color),
+        };
+
         addSDFPoint(
                 centerX,
                 centerY,
                 width,
                 height,
-                topLeftRadius,
-                topRightRadius,
-                bottomLeftRadius,
-                bottomRightRadius,
                 borderStroke,
-                color,
-                ElementStyle.FILL_AND_BORDER);
+                ElementStyle.FILL_AND_BORDER,
+                details);
         // TODO(ches) check this works
     }
 
@@ -549,11 +567,97 @@ public class DrawList {
             float minY,
             float maxX,
             float maxY,
-            long colorUpperLeft,
-            long colorUpperRight,
-            long colorBottomRight,
-            long colorBottomLeft) {
-        // TODO(ches) implement this
+            int colorUpperLeft,
+            int colorUpperRight,
+            int colorBottomRight,
+            int colorBottomLeft) {
+        addRectFilledMultiColor(
+                minX,
+                minY,
+                maxX,
+                maxY,
+                0,
+                DrawFlags.ROUND_CORNERS_ALL,
+                colorUpperLeft,
+                colorUpperRight,
+                colorBottomRight,
+                colorBottomLeft);
+    }
+
+    public void addRectFilledMultiColor(
+            float minX,
+            float minY,
+            float maxX,
+            float maxY,
+            float rounding,
+            int colorUpperLeft,
+            int colorUpperRight,
+            int colorBottomRight,
+            int colorBottomLeft) {
+        addRectFilledMultiColor(
+                minX,
+                minY,
+                maxX,
+                maxY,
+                rounding,
+                DrawFlags.ROUND_CORNERS_ALL,
+                colorUpperLeft,
+                colorUpperRight,
+                colorBottomRight,
+                colorBottomLeft);
+    }
+
+    public void addRectFilledMultiColor(
+            float minX,
+            float minY,
+            float maxX,
+            float maxY,
+            float rounding,
+            int drawFlagsRoundingCorners,
+            int colorUpperLeft,
+            int colorUpperRight,
+            int colorBottomRight,
+            int colorBottomLeft) {
+
+        if (rounding < 0) {
+            log.warn(
+                    SafeResourceLoader.getString(
+                            "INVALID_ROUNDING", GraphicsPlugin.getResourceBundle()),
+                    rounding);
+            return;
+        }
+
+        final float topLeftRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_LEFT) != 0 ? rounding : 0;
+        final float topRightRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_RIGHT) != 0 ? rounding : 0;
+        final float bottomLeftRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_LEFT) != 0 ? rounding : 0;
+        final float bottomRightRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? rounding : 0;
+
+        final float centerX = (minX + maxX) / 2;
+        final float centerY = (minY + maxY) / 2;
+        final float width = maxX - minX;
+        final float height = maxY - minY;
+        final int borderStroke = 0;
+
+        SDFPointDetail[] details = {
+            new SDFPointDetail(topLeftRadius, colorUpperLeft),
+            new SDFPointDetail(topRightRadius, colorUpperRight),
+            new SDFPointDetail(bottomRightRadius, colorBottomRight),
+            new SDFPointDetail(bottomLeftRadius, colorBottomLeft),
+        };
+
+        addSDFPoint(
+                centerX,
+                centerY,
+                width,
+                height,
+                borderStroke,
+                ElementStyle.FILL_AND_BORDER,
+                details);
+        // TODO(ches) check this works
     }
 
     public void addQuad(
