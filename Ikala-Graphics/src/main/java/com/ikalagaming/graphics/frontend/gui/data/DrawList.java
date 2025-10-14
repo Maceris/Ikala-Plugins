@@ -38,34 +38,52 @@ public class DrawList {
 
     @AllArgsConstructor
     public enum ElementStyle {
-        ONLY_FILL((short) 0),
-        ONLY_BORDER((short) 1),
-        FILL_AND_BORDER((short) 2),
-        TEXTURE((short) 3);
+        ONLY_FILL(0),
+        ONLY_BORDER(1),
+        FILL_AND_BORDER(2),
+        TEXTURE(3);
 
         /** Unique ID used in the command buffer. Must line up with the shader. */
-        final short styleID;
+        final int styleID;
     }
 
-    private record SDFPointDetail(float radius, int colorOrTextureID) {
-        public static final int SIZE = Float.BYTES + Integer.BYTES;
-    }
+    private record SDFPointDetail(float radius, int colorOrTextureID) {}
 
     /** float posX, float posY, float u, float v, int color. */
     ByteBuffer vertexBuffer;
 
+    // TODO(ches) figure out line arcs
+    // TODO(ches) figure out line bezier
+    // TODO(ches) figure out text
+    // TODO(ches) figure out triangles
     /**
-     * SDF points. float posX, float posY, float widthHalf, float heightHalf, float borderStroke,
-     * int detailsIndex (-1 if no index).
+     * float posX, float posY, float a, float b. A and B are additional values that depend on the
+     * type of point.
+     *
+     * <ul>
+     *   <li>Circle - a = width, b = height
+     *   <li>Line (arc) - ???
+     *   <li>Line (bezier) - ???
+     *   <li>Line (straight) - a = point 2 x, b = point 2 y
+     *   <li>N-gon - a and b ignored
+     *   <li>Quad - a = width, b = height
+     *   <li>Text - ???
+     *   <li>Triangle - ???
+     * </ul>
      */
     ByteBuffer sdfPointBuffer;
 
     /**
-     * short pointCount, short style, (float radius, int colorOrTextureID)... details. Stored
-     * generally starting on the top-left, and always ordered clockwise for polygons and in-order
-     * for paths.
+     * float radius, int colorOrTextureID. Stored generally starting on the top-left, and always
+     * ordered clockwise for polygons and in-order for paths.
      */
     ByteBuffer sdfPointDetailsBuffer;
+
+    /**
+     * int pointIndex, int detailIndex, short pointCount, short detailCount, int style, float stroke
+     * (borders, line thickness).
+     */
+    ByteBuffer sdfCommandBuffer;
 
     /** short index. */
     ByteBuffer indexBuffer;
@@ -90,7 +108,9 @@ public class DrawList {
         vertexBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_VERTEX);
         indexBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_INDEX);
         commandBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_COMMAND);
-        commandBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_SDF_POINT);
+        sdfPointBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_SDF_POINT);
+        sdfPointDetailsBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_SDF_POINT_DETAIL);
+        sdfCommandBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_SDF_COMMAND);
         clipRects = new ArrayDeque<>();
         textures = new IntArrayList();
     }
@@ -170,23 +190,28 @@ public class DrawList {
     }
 
     @Synchronized
-    private void addSDFPoint(
-            float posX,
-            float posY,
-            float width,
-            float height,
-            float borderStroke,
-            @NonNull ElementStyle style,
-            SDFPointDetail... details) {
+    private int addSDFPoint(float posX, float posY, float a, float b) {
 
-        if (sdfPointBuffer.limit() == sdfPointBuffer.position()) {
+        if (sdfPointBuffer.limit() + DrawData.SIZE_OF_SDF_POINT >= sdfPointBuffer.position()) {
             ByteBuffer newBuffer = ByteBuffer.allocateDirect(sdfPointBuffer.limit() * 2);
             sdfPointBuffer.flip();
             newBuffer.put(sdfPointBuffer);
             sdfPointBuffer = newBuffer;
         }
 
-        final int newDetailsSize = 2 * Short.BYTES + details.length * SDFPointDetail.SIZE;
+        final int newIndex = sdfPointBuffer.position();
+
+        sdfPointBuffer.putFloat(posX);
+        sdfPointBuffer.putFloat(posY);
+        sdfPointBuffer.putFloat(a);
+        sdfPointBuffer.putFloat(b);
+
+        return newIndex;
+    }
+
+    @Synchronized
+    private int addSDFDetails(@NonNull SDFPointDetail... details) {
+        final int newDetailsSize = details.length * DrawData.SIZE_OF_SDF_POINT_DETAIL;
 
         if (sdfPointDetailsBuffer.position() + newDetailsSize >= sdfPointDetailsBuffer.limit()) {
             ByteBuffer newBuffer = ByteBuffer.allocateDirect(sdfPointDetailsBuffer.limit() * 2);
@@ -197,19 +222,37 @@ public class DrawList {
 
         final int newDetailIndex = sdfPointDetailsBuffer.position();
 
-        sdfPointDetailsBuffer.putShort((short) details.length);
-        sdfPointDetailsBuffer.putShort(style.styleID);
         for (SDFPointDetail detail : details) {
             sdfPointDetailsBuffer.putFloat(detail.radius());
             sdfPointDetailsBuffer.putInt(detail.colorOrTextureID());
         }
 
-        sdfPointBuffer.putFloat(posX);
-        sdfPointBuffer.putFloat(posY);
-        sdfPointBuffer.putFloat(width / 2);
-        sdfPointBuffer.putFloat(height / 2);
-        sdfPointBuffer.putFloat(borderStroke);
-        sdfPointBuffer.putInt(newDetailIndex);
+        return newDetailIndex;
+    }
+
+    @Synchronized
+    private void addSDFCommand(
+            int pointIndex,
+            int detailIndex,
+            short pointCount,
+            short detailCount,
+            @NonNull ElementStyle style,
+            float stroke) {
+
+        if (sdfCommandBuffer.position() + DrawData.SIZE_OF_SDF_COMMAND
+                >= sdfCommandBuffer.limit()) {
+            ByteBuffer newBuffer = ByteBuffer.allocateDirect(sdfCommandBuffer.limit() * 2);
+            sdfCommandBuffer.flip();
+            newBuffer.put(sdfCommandBuffer);
+            sdfCommandBuffer = newBuffer;
+        }
+
+        sdfCommandBuffer.putInt(pointIndex);
+        sdfCommandBuffer.putInt(detailIndex);
+        sdfCommandBuffer.putShort(pointCount);
+        sdfCommandBuffer.putShort(detailCount);
+        sdfCommandBuffer.putInt(style.styleID);
+        sdfCommandBuffer.putFloat(stroke);
     }
 
     /**
@@ -372,59 +415,21 @@ public class DrawList {
             return;
         }
 
-        final float dx = p2X - p1X;
-        final float dy = p2Y - p1Y;
+        SDFPointDetail[] details = {
+            new SDFPointDetail(thickness, color), new SDFPointDetail(thickness, color),
+        };
 
-        float tangentOffsetX = 0;
-        float tangentOffsetY = 0;
-
-        if (0 == dx && 0 == dy) {
-            // point
-            tangentOffsetX = thickness / 2;
-            tangentOffsetY = thickness / 2;
-        } else if (0 == dx) {
-            // vertical
-            tangentOffsetY = thickness / 2;
-        } else if (0 == dy) {
-            // horizontal
-            tangentOffsetX = thickness / 2;
-        } else {
-            // sloped
-            double angle = Math.atan((double) dx / dy);
-            tangentOffsetX = (float) Math.cos(angle) * (thickness / 2);
-            tangentOffsetY = (float) Math.sin(angle) * (thickness / 2);
-        }
-
-        final int vertexOffset = vertexBuffer.position();
-
-        final int p1 = addVertex(p1X + tangentOffsetX, p1Y + tangentOffsetY, 0, 0, color);
-        final int p2 = addVertex(p1X - tangentOffsetX, p1Y - tangentOffsetY, 0, 0, color);
-        final int p3 = addVertex(p2X + tangentOffsetX, p2Y + tangentOffsetY, 0, 0, color);
-        final int p4 = addVertex(p2X - tangentOffsetX, p2Y - tangentOffsetY, 0, 0, color);
-
-        int startIndex = addIndex((short) p1);
-        addIndex((short) p2);
-        addIndex((short) p3);
-
-        addIndex((short) p3);
-        addIndex((short) p2);
-        addIndex((short) p4);
-
-        Vector2f clipRectMin = getClipRectMin();
-        Vector2f clipRectMax = getClipRectMax();
-
-        final int elementCount = 6;
-        addCommand(
-                clipRectMin.x,
-                clipRectMin.y,
-                clipRectMax.x,
-                clipRectMax.y,
-                textures.peek(),
-                vertexOffset,
-                startIndex,
-                elementCount,
-                ElementType.LINE_STRAIGHT);
-
+        int pointIndex = addSDFPoint(p1X, p1Y, p2X, p2Y);
+        int detailIndex = addSDFDetails(details);
+        final short pointCount = 1;
+        final short detailCount = 2;
+        addSDFCommand(
+                pointIndex,
+                detailIndex,
+                pointCount,
+                detailCount,
+                ElementStyle.ONLY_FILL,
+                thickness);
         // TODO(ches) check this works
     }
 
@@ -499,7 +504,18 @@ public class DrawList {
             new SDFPointDetail(bottomLeftRadius, color),
         };
 
-        addSDFPoint(centerX, centerY, width, height, thickness, ElementStyle.ONLY_BORDER, details);
+        int pointIndex = addSDFPoint(centerX, centerY, width, height);
+        int detailIndex = addSDFDetails(details);
+        final short pointCount = 1;
+        final short detailCount = (short) details.length;
+
+        addSDFCommand(
+                pointIndex,
+                detailIndex,
+                pointCount,
+                detailCount,
+                ElementStyle.ONLY_BORDER,
+                thickness);
         // TODO(ches) check this works
     }
 
@@ -551,14 +567,18 @@ public class DrawList {
             new SDFPointDetail(bottomLeftRadius, color),
         };
 
-        addSDFPoint(
-                centerX,
-                centerY,
-                width,
-                height,
-                borderStroke,
-                ElementStyle.FILL_AND_BORDER,
-                details);
+        int pointIndex = addSDFPoint(centerX, centerY, width, height);
+        int detailIndex = addSDFDetails(details);
+        final short pointCount = 1;
+        final short detailCount = (short) details.length;
+
+        addSDFCommand(
+                pointIndex,
+                detailIndex,
+                pointCount,
+                detailCount,
+                ElementStyle.ONLY_FILL,
+                borderStroke);
         // TODO(ches) check this works
     }
 
@@ -649,14 +669,18 @@ public class DrawList {
             new SDFPointDetail(bottomLeftRadius, colorBottomLeft),
         };
 
-        addSDFPoint(
-                centerX,
-                centerY,
-                width,
-                height,
-                borderStroke,
-                ElementStyle.FILL_AND_BORDER,
-                details);
+        int pointIndex = addSDFPoint(centerX, centerY, width, height);
+        int detailIndex = addSDFDetails(details);
+        final short pointCount = 1;
+        final short detailCount = (short) details.length;
+
+        addSDFCommand(
+                pointIndex,
+                detailIndex,
+                pointCount,
+                detailCount,
+                ElementStyle.ONLY_FILL,
+                borderStroke);
         // TODO(ches) check this works
     }
 

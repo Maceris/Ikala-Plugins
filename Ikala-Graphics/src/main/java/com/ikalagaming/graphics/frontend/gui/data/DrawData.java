@@ -18,7 +18,9 @@ public class DrawData {
     public static final int SIZE_OF_DRAW_INDEX = Short.BYTES;
     public static final int SIZE_OF_DRAW_VERTEX = 4 * Float.BYTES + Integer.BYTES;
     public static final int SIZE_OF_DRAW_COMMAND = SIZE_OF_RECT + 5 * Integer.BYTES;
-    public static final int SIZE_OF_SDF_POINT = 9 * Float.BYTES + 2 * Integer.BYTES;
+    public static final int SIZE_OF_SDF_POINT = 4 * Float.BYTES;
+    public static final int SIZE_OF_SDF_POINT_DETAIL = Float.BYTES + Integer.BYTES;
+    public static final int SIZE_OF_SDF_COMMAND = 2 * Short.BYTES + 3 * Integer.BYTES + Float.BYTES;
 
     private static final int RESIZE_FACTOR = 5000;
 
