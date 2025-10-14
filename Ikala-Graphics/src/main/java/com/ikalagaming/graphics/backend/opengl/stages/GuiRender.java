@@ -89,9 +89,9 @@ public class GuiRender implements RenderStage {
             for (int j = 0; j < commandCount; j++) {
                 final int elementCount = drawData.getCmdListCmdBufferElemCount(i, j);
                 final int indexBufferOffset = drawData.getCmdListCmdBufferIdxOffset(i, j);
-                final int indices = indexBufferOffset * ImDrawData.SIZEOF_IM_DRAW_IDX;
+                final int indices = indexBufferOffset * ImDrawData.sizeOfImDrawIdx();
 
-                int id = drawData.getCmdListCmdBufferTextureId(i, j);
+                long id = drawData.getCmdListCmdBufferTextureId(i, j);
 
                 ImVec4 clipRect = drawData.getCmdListCmdBufferClipRect(i, j);
 
@@ -101,7 +101,7 @@ public class GuiRender implements RenderStage {
                         (int) (clipRect.z - clipRect.x),
                         (int) (clipRect.w - clipRect.y));
 
-                glBindTexture(GL_TEXTURE_2D, id);
+                glBindTexture(GL_TEXTURE_2D, (int) id);
 
                 glDrawElements(GL_TRIANGLES, elementCount, GL_UNSIGNED_SHORT, indices);
             }

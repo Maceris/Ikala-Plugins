@@ -9,7 +9,7 @@ plugins {
     id 'eclipse'
     id 'idea'
     id 'io.franzbecker.gradle-lombok' version '5.0.0'
-    id 'com.diffplug.spotless' version '6.25.0'
+    id 'com.diffplug.spotless' version '8.0.0'
 }
 
 configurations {
@@ -20,8 +20,8 @@ import io.franzbecker.gradle.lombok.task.DelombokTask
 import org.yaml.snakeyaml.Yaml
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
     withSourcesJar()
     withJavadocJar()
 }

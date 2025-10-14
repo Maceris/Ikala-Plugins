@@ -14,17 +14,17 @@ import java.util.UUID;
  *
  * @author Ches Burks
  */
-public class TestECSManager {
+class TestECSManager {
 
     /** Setup before each test. */
     @BeforeEach
-    public void beforeTest() {
+    void beforeTest() {
         ECSManager.clear();
     }
 
     /** Test that the clear method really clears everything. */
     @Test
-    public void testClear() {
+    void testClear() {
         UUID entity1 = ECSManager.createEntity();
         UUID entity2 = ECSManager.createEntity();
         ECSManager.createEntity();
@@ -67,7 +67,7 @@ public class TestECSManager {
 
     /** Test that components can be stored and retrieved. */
     @Test
-    public void testComponentRecovery() {
+    void testComponentRecovery() {
         UUID entity1 = ECSManager.createEntity();
         UUID entity2 = ECSManager.createEntity();
 
@@ -97,7 +97,7 @@ public class TestECSManager {
 
     /** Tests the {@link ECSManager#containsComponent(UUID, Class)} method. */
     @Test
-    public void testContainsComponent() {
+    void testContainsComponent() {
         UUID hasA = ECSManager.createEntity();
         UUID hasBoth = ECSManager.createEntity();
         UUID hasB = ECSManager.createEntity();
@@ -126,7 +126,7 @@ public class TestECSManager {
 
     /** Test that deleting entities works. */
     @Test
-    public void testEntityDeletion() {
+    void testEntityDeletion() {
         UUID entity1 = ECSManager.createEntity();
         UUID entity2 = ECSManager.createEntity();
 
@@ -157,7 +157,7 @@ public class TestECSManager {
 
     /** Test various edge cases for entity deletion. */
     @Test
-    public void testEntityDeletionEdgeCases() {
+    void testEntityDeletionEdgeCases() {
         // nothing there
         ECSManager.destroyEntity(UUID.randomUUID());
 
@@ -187,7 +187,7 @@ public class TestECSManager {
 
     /** Tests the {@link ECSManager#getAllComponents(Class)} method. */
     @Test
-    public void testGetAllComponents() {
+    void testGetAllComponents() {
         // Empty case
         List<TestA> aComponents = ECSManager.getAllComponents(TestA.class);
         Assertions.assertNotNull(aComponents);
@@ -233,7 +233,7 @@ public class TestECSManager {
 
     /** Tests the {@link ECSManager#getAllEntities()} method. */
     @Test
-    public void testGetAllEntities() {
+    void testGetAllEntities() {
         List<UUID> entities = ECSManager.getAllEntities();
         Assertions.assertNotNull(entities);
         Assertions.assertTrue(entities.isEmpty());
@@ -260,7 +260,7 @@ public class TestECSManager {
 
     /** Tests the {@link ECSManager#getAllEntitiesWithComponent(Class...)} method. */
     @Test
-    public void testGetAllEntitiesWithComponent() {
+    void testGetAllEntitiesWithComponent() {
         List<UUID> blank = ECSManager.getAllEntitiesWithComponent(TestA.class);
         Assertions.assertNotNull(blank);
         Assertions.assertTrue(blank.isEmpty());
@@ -307,7 +307,7 @@ public class TestECSManager {
 
     /** Test the removal of components. */
     @Test
-    public void testRemoveComponent() {
+    void testRemoveComponent() {
         UUID entity1 = ECSManager.createEntity();
         UUID entity2 = ECSManager.createEntity();
 
@@ -344,7 +344,7 @@ public class TestECSManager {
 
     /** Handle edge cases for removing components. */
     @Test
-    public void testRemoveComponentEdgeCases() {
+    void testRemoveComponentEdgeCases() {
         // No exceptions should occur
         ECSManager.removeComponent(UUID.randomUUID(), TestA.class);
 

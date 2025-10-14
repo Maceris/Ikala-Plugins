@@ -263,24 +263,25 @@ public class Window {
                 (window, key, scancode, action, mods) -> {
                     // TODO(ches) use our new input system
                     ImGuiIO io = ImGui.getIO();
-                    if (action == GLFW_PRESS) {
-                        io.setKeysDown(key, true);
-                    }
-                    if (action == GLFW_RELEASE) {
-                        io.setKeysDown(key, false);
-                    }
-                    io.setKeyCtrl(
-                            io.getKeysDown(GLFW_KEY_LEFT_CONTROL)
-                                    || io.getKeysDown(GLFW_KEY_RIGHT_CONTROL));
-                    io.setKeyShift(
-                            io.getKeysDown(GLFW_KEY_LEFT_SHIFT)
-                                    || io.getKeysDown(GLFW_KEY_RIGHT_SHIFT));
-                    io.setKeyAlt(
-                            io.getKeysDown(GLFW_KEY_LEFT_ALT)
-                                    || io.getKeysDown(GLFW_KEY_RIGHT_ALT));
-                    io.setKeySuper(
-                            io.getKeysDown(GLFW_KEY_LEFT_SUPER)
-                                    || io.getKeysDown(GLFW_KEY_RIGHT_SUPER));
+                    //TODO(ches) fix key bindings
+//                    if (action == GLFW_PRESS) {
+//                        io.setKeysDown(key, true);
+//                    }
+//                    if (action == GLFW_RELEASE) {
+//                        io.setKeysDown(key, false);
+//                    }
+//                    io.setKeyCtrl(
+//                            io.getKeysDown(GLFW_KEY_LEFT_CONTROL)
+//                                    || io.getKeysDown(GLFW_KEY_RIGHT_CONTROL));
+//                    io.setKeyShift(
+//                            io.getKeysDown(GLFW_KEY_LEFT_SHIFT)
+//                                    || io.getKeysDown(GLFW_KEY_RIGHT_SHIFT));
+//                    io.setKeyAlt(
+//                            io.getKeysDown(GLFW_KEY_LEFT_ALT)
+//                                    || io.getKeysDown(GLFW_KEY_RIGHT_ALT));
+//                    io.setKeySuper(
+//                            io.getKeysDown(GLFW_KEY_LEFT_SUPER)
+//                                    || io.getKeysDown(GLFW_KEY_RIGHT_SUPER));
                 });
         glfwSetScrollCallback(
                 windowHandle,
