@@ -57,6 +57,7 @@ dependencies {
 	// Testing
 	testImplementation project(':Ikala-Core')
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 	testImplementation project(':Ikala-Attributes')
 	testImplementation project(':Random')
 	testImplementation project(':Ikala-Database')
