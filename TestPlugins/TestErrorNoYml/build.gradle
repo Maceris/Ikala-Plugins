@@ -49,7 +49,7 @@ dependencies {
 }
 
 tasks.register('delombok', DelombokTask) {
-	description 'Delomboks the source code'
+	description = 'Delomboks the source code'
     ext.outputDir = file('build/src-delomboked')
     outputs.dir(outputDir)
     sourceSets.main.java.srcDirs.each { 
@@ -64,16 +64,20 @@ tasks.register('delombok', DelombokTask) {
 tasks.named('test') {
 	useJUnitPlatform()
 	testLogging {
-		exceptionFormat 'full'
-		events 'passed', 'skipped', 'failed'
-		showStandardStreams true
+		exceptionFormat = 'full'
+		events = ['passed', 'skipped', 'failed']
+		showStandardStreams = true
 	}
 }
 
 tasks.named('javadoc') {
-	dependsOn delombok
+	dependsOn = delombok as Iterable<?>
 	source = delombok.outputDir
 	failOnError = false
+}
+
+tasks.withType(Javadoc).configureEach {
+	options.addStringOption('Xdoclint:-missing', '-quiet')
 }
 
 tasks.named('clean') {
