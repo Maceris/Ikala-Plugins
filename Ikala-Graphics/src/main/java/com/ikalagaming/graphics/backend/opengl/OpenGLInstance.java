@@ -126,7 +126,6 @@ public class OpenGLInstance implements Instance {
         ImGuiIO imGuiIO = ImGui.getIO();
         imGuiIO.setIniFilename(null);
         imGuiIO.setDisplaySize(window.getWidth(), window.getHeight());
-        setUpImGuiKeys();
     }
 
     /**
@@ -461,27 +460,5 @@ public class OpenGLInstance implements Instance {
                 }
             }
         }
-    }
-
-    /** Set up nonstandard key codes to make sure they work. */
-    private void setUpImGuiKeys() {
-        ImGuiIO io = ImGui.getIO();
-        // TODO(ches) set key bindings
-        //        io.setKeyMap(ImGuiKey.Tab, GLFW_KEY_TAB);
-        //        io.setKeyMap(ImGuiKey.LeftArrow, GLFW_KEY_LEFT);
-        //        io.setKeyMap(ImGuiKey.RightArrow, GLFW_KEY_RIGHT);
-        //        io.setKeyMap(ImGuiKey.UpArrow, GLFW_KEY_UP);
-        //        io.setKeyMap(ImGuiKey.DownArrow, GLFW_KEY_DOWN);
-        //        io.setKeyMap(ImGuiKey.PageUp, GLFW_KEY_PAGE_UP);
-        //        io.setKeyMap(ImGuiKey.PageDown, GLFW_KEY_PAGE_DOWN);
-        //        io.setKeyMap(ImGuiKey.Home, GLFW_KEY_HOME);
-        //        io.setKeyMap(ImGuiKey.End, GLFW_KEY_END);
-        //        io.setKeyMap(ImGuiKey.Insert, GLFW_KEY_INSERT);
-        //        io.setKeyMap(ImGuiKey.Delete, GLFW_KEY_DELETE);
-        //        io.setKeyMap(ImGuiKey.Backspace, GLFW_KEY_BACKSPACE);
-        //        io.setKeyMap(ImGuiKey.Space, GLFW_KEY_SPACE);
-        //        io.setKeyMap(ImGuiKey.Enter, GLFW_KEY_ENTER);
-        //        io.setKeyMap(ImGuiKey.Escape, GLFW_KEY_ESCAPE);
-        //        io.setKeyMap(ImGuiKey.KeyPadEnter, GLFW_KEY_KP_ENTER);
     }
 }

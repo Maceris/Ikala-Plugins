@@ -14,6 +14,7 @@ import com.ikalagaming.util.SafeResourceLoader;
 
 import imgui.ImGui;
 import imgui.ImGuiIO;
+import imgui.flag.ImGuiKey;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -252,6 +253,7 @@ public class Window {
 
     /** Set up the window callbacks. */
     private void setCallbacks() {
+
         glfwSetFramebufferSizeCallback(windowHandle, (window, w, h) -> resized(w, h));
 
         glfwSetErrorCallback(
@@ -263,26 +265,50 @@ public class Window {
                 (window, key, scancode, action, mods) -> {
                     // TODO(ches) use our new input system
                     ImGuiIO io = ImGui.getIO();
-                    // TODO(ches) fix key bindings
-                    //                    if (action == GLFW_PRESS) {
-                    //                        io.setKeysDown(key, true);
-                    //                    }
-                    //                    if (action == GLFW_RELEASE) {
-                    //                        io.setKeysDown(key, false);
-                    //                    }
-                    //                    io.setKeyCtrl(
-                    //                            io.getKeysDown(GLFW_KEY_LEFT_CONTROL)
-                    //                                    ||
-                    // io.getKeysDown(GLFW_KEY_RIGHT_CONTROL));
-                    //                    io.setKeyShift(
-                    //                            io.getKeysDown(GLFW_KEY_LEFT_SHIFT)
-                    //                                    || io.getKeysDown(GLFW_KEY_RIGHT_SHIFT));
-                    //                    io.setKeyAlt(
-                    //                            io.getKeysDown(GLFW_KEY_LEFT_ALT)
-                    //                                    || io.getKeysDown(GLFW_KEY_RIGHT_ALT));
-                    //                    io.setKeySuper(
-                    //                            io.getKeysDown(GLFW_KEY_LEFT_SUPER)
-                    //                                    || io.getKeysDown(GLFW_KEY_RIGHT_SUPER));
+
+                    final int mappedKey =
+                            switch (key) {
+                                case GLFW_KEY_TAB -> ImGuiKey.Tab;
+                                case GLFW_KEY_LEFT -> ImGuiKey.LeftArrow;
+                                case GLFW_KEY_RIGHT -> ImGuiKey.RightArrow;
+                                case GLFW_KEY_UP -> ImGuiKey.UpArrow;
+                                case GLFW_KEY_DOWN -> ImGuiKey.DownArrow;
+                                case GLFW_KEY_PAGE_UP -> ImGuiKey.PageUp;
+                                case GLFW_KEY_PAGE_DOWN -> ImGuiKey.PageDown;
+                                case GLFW_KEY_HOME -> ImGuiKey.Home;
+                                case GLFW_KEY_END -> ImGuiKey.End;
+                                case GLFW_KEY_INSERT -> ImGuiKey.Insert;
+                                case GLFW_KEY_DELETE -> ImGuiKey.Delete;
+                                case GLFW_KEY_BACKSPACE -> ImGuiKey.Backspace;
+                                case GLFW_KEY_SPACE -> ImGuiKey.Space;
+                                case GLFW_KEY_ENTER -> ImGuiKey.Enter;
+                                case GLFW_KEY_ESCAPE -> ImGuiKey.Escape;
+                                case GLFW_KEY_KP_ENTER -> ImGuiKey.KeypadEnter;
+                                default -> key;
+                            };
+
+                    boolean state;
+
+                    switch (action) {
+                        case GLFW_PRESS -> state = true;
+                        case GLFW_RELEASE -> state = false;
+                        default -> {
+                            // Repeat, etc. We don't care about it right now.
+                            return;
+                        }
+                    }
+
+                    io.addKeyEvent(mappedKey, state);
+
+                    if (mappedKey == GLFW_KEY_LEFT_CONTROL || key == GLFW_KEY_RIGHT_CONTROL) {
+                        io.setKeyCtrl(state);
+                    } else if (mappedKey == GLFW_KEY_LEFT_SHIFT || key == GLFW_KEY_RIGHT_SHIFT) {
+                        io.setKeyShift(state);
+                    } else if (mappedKey == GLFW_KEY_LEFT_ALT || key == GLFW_KEY_RIGHT_ALT) {
+                        io.setKeyAlt(state);
+                    } else if (mappedKey == GLFW_KEY_LEFT_SUPER || key == GLFW_KEY_RIGHT_SUPER) {
+                        io.setKeySuper(state);
+                    }
                 });
         glfwSetScrollCallback(
                 windowHandle,
