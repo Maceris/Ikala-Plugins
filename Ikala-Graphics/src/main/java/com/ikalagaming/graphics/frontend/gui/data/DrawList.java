@@ -23,28 +23,27 @@ public class DrawList {
 
     @AllArgsConstructor
     public enum ElementType {
-        CIRCLE(0),
-        LINE_ARC(1),
-        LINE_BEZIER(2),
-        LINE_STRAIGHT(3),
-        NGON(4),
-        QUAD(5),
-        TEXT(6),
-        TRIANGLE(7);
+        CIRCLE((short) 0),
+        LINE_ARC((short) 1),
+        LINE_BEZIER((short) 2),
+        LINE_STRAIGHT((short) 3),
+        RECTANGLE((short) 4),
+        POLYGON((short) 5),
+        TEXT((short) 6);
 
         /** Unique ID used in the command buffer. Must line up with the shader. */
-        final int elementID;
+        final short typeID;
     }
 
     @AllArgsConstructor
     public enum ElementStyle {
-        ONLY_FILL(0),
-        ONLY_BORDER(1),
-        FILL_AND_BORDER(2),
-        TEXTURE(3);
+        ONLY_FILL((short) 0),
+        ONLY_BORDER((short) 1),
+        FILL_AND_BORDER((short) 2),
+        TEXTURE((short) 3);
 
         /** Unique ID used in the command buffer. Must line up with the shader. */
-        final int styleID;
+        final short styleID;
     }
 
     private record SDFPointDetail(float radius, int colorOrTextureID) {}
@@ -55,7 +54,6 @@ public class DrawList {
     // TODO(ches) figure out line arcs
     // TODO(ches) figure out line bezier
     // TODO(ches) figure out text
-    // TODO(ches) figure out triangles
     /**
      * float posX, float posY, float a, float b. A and B are additional values that depend on the
      * type of point.
@@ -65,23 +63,22 @@ public class DrawList {
      *   <li>Line (arc) - ???
      *   <li>Line (bezier) - ???
      *   <li>Line (straight) - a = point 2 x, b = point 2 y
-     *   <li>N-gon - a and b ignored
-     *   <li>Quad - a = width, b = height
+     *   <li>Rectangle - a = width, b = height
+     *   <li>Polygon - a and b ignored
      *   <li>Text - ???
-     *   <li>Triangle - ???
      * </ul>
      */
     ByteBuffer sdfPointBuffer;
 
     /**
-     * float radius, int colorOrTextureID. Stored generally starting on the top-left, and always
-     * ordered clockwise for polygons and in-order for paths.
+     * float radius (for rounding), int colorOrTextureID. Stored generally starting on the top-left,
+     * and always ordered clockwise for polygons and in-order for paths.
      */
     ByteBuffer sdfPointDetailsBuffer;
 
     /**
-     * int pointIndex, int detailIndex, short pointCount, short detailCount, int style, float stroke
-     * (borders, line thickness).
+     * int pointIndex, int detailIndex, short pointCount, short detailCount, short type, short
+     * style, float stroke (borders, line thickness).
      */
     ByteBuffer sdfCommandBuffer;
 
@@ -124,6 +121,7 @@ public class DrawList {
         textures.clear();
     }
 
+    @Deprecated(forRemoval = true)
     @Synchronized
     private void addCommand(
             float clipMinX,
@@ -150,9 +148,10 @@ public class DrawList {
         commandBuffer.putInt(vertexOffset);
         commandBuffer.putInt(indexOffset);
         commandBuffer.putInt(elementCount);
-        commandBuffer.putInt(type.elementID);
+        commandBuffer.putInt(type.typeID);
     }
 
+    @Deprecated(forRemoval = true)
     @Synchronized
     private int addVertex(float x, float y, float u, float v, int color) {
         if (vertexBuffer.limit() == vertexBuffer.position()) {
@@ -173,6 +172,7 @@ public class DrawList {
         return newIndex;
     }
 
+    @Deprecated(forRemoval = true)
     @Synchronized
     private int addIndex(short index) {
         if (indexBuffer.limit() == indexBuffer.position()) {
@@ -236,6 +236,7 @@ public class DrawList {
             int detailIndex,
             short pointCount,
             short detailCount,
+            @NonNull ElementType type,
             @NonNull ElementStyle style,
             float stroke) {
 
@@ -251,7 +252,8 @@ public class DrawList {
         sdfCommandBuffer.putInt(detailIndex);
         sdfCommandBuffer.putShort(pointCount);
         sdfCommandBuffer.putShort(detailCount);
-        sdfCommandBuffer.putInt(style.styleID);
+        sdfCommandBuffer.putShort(type.typeID);
+        sdfCommandBuffer.putShort(style.styleID);
         sdfCommandBuffer.putFloat(stroke);
     }
 
@@ -428,9 +430,9 @@ public class DrawList {
                 detailIndex,
                 pointCount,
                 detailCount,
+                ElementType.LINE_STRAIGHT,
                 ElementStyle.ONLY_FILL,
                 thickness);
-        // TODO(ches) check this works
     }
 
     public void addRect(float minX, float minY, float maxX, float maxY, int color) {
@@ -514,9 +516,9 @@ public class DrawList {
                 detailIndex,
                 pointCount,
                 detailCount,
+                ElementType.RECTANGLE,
                 ElementStyle.ONLY_BORDER,
                 thickness);
-        // TODO(ches) check this works
     }
 
     public void addRectFilled(float minX, float minY, float maxX, float maxY, int color) {
@@ -577,9 +579,9 @@ public class DrawList {
                 detailIndex,
                 pointCount,
                 detailCount,
+                ElementType.RECTANGLE,
                 ElementStyle.ONLY_FILL,
                 borderStroke);
-        // TODO(ches) check this works
     }
 
     public void addRectFilledMultiColor(
@@ -679,9 +681,9 @@ public class DrawList {
                 detailIndex,
                 pointCount,
                 detailCount,
+                ElementType.RECTANGLE,
                 ElementStyle.ONLY_FILL,
                 borderStroke);
-        // TODO(ches) check this works
     }
 
     public void addQuad(
@@ -753,7 +755,7 @@ public class DrawList {
                 vertexOffset,
                 startIndex,
                 elementCount,
-                ElementType.QUAD);
+                ElementType.RECTANGLE);
     }
 
     public void addTriangle(
@@ -770,63 +772,105 @@ public class DrawList {
             float p3Y,
             int color,
             float thickness) {
-        // TODO(ches) implement this
+
+        SDFPointDetail[] details = {
+            new SDFPointDetail(0, color),
+        };
+
+        int pointIndex = addSDFPoint(p1X, p1Y, 0, 0);
+        addSDFPoint(p2X, p2Y, 0, 0);
+        addSDFPoint(p3X, p3Y, 0, 0);
+
+        int detailIndex = addSDFDetails(details);
+
+        final short pointCount = 3;
+        final short detailCount = (short) details.length;
+
+        addSDFCommand(
+                pointIndex,
+                detailIndex,
+                pointCount,
+                detailCount,
+                ElementType.POLYGON,
+                ElementStyle.FILL_AND_BORDER,
+                thickness);
     }
 
     public void addTriangleFilled(
             float p1X, float p1Y, float p2X, float p2Y, float p3X, float p3Y, int color) {
 
-        final int vertexOffset = vertexBuffer.position();
+        final int borderStroke = 0;
 
-        int p1 = addVertex(p1X, p1Y, 0, 0, color);
-        int p2 = addVertex(p2X, p2Y, 0, 0, color);
-        int p3 = addVertex(p3X, p3Y, 0, 0, color);
+        SDFPointDetail[] details = {
+            new SDFPointDetail(0, color),
+        };
 
-        int startIndex = addIndex((short) p1);
-        addIndex((short) p2);
-        addIndex((short) p3);
+        int pointIndex = addSDFPoint(p1X, p1Y, 0, 0);
+        addSDFPoint(p2X, p2Y, 0, 0);
+        addSDFPoint(p3X, p3Y, 0, 0);
 
-        Vector2f clipRectMin = getClipRectMin();
-        Vector2f clipRectMax = getClipRectMax();
+        int detailIndex = addSDFDetails(details);
 
-        final int elementCount = 3;
-        addCommand(
-                clipRectMin.x,
-                clipRectMin.y,
-                clipRectMax.x,
-                clipRectMax.y,
-                textures.peek(),
-                vertexOffset,
-                startIndex,
-                elementCount,
-                ElementType.TRIANGLE);
+        final short pointCount = 3;
+        final short detailCount = (short) details.length;
+
+        addSDFCommand(
+                pointIndex,
+                detailIndex,
+                pointCount,
+                detailCount,
+                ElementType.POLYGON,
+                ElementStyle.ONLY_FILL,
+                borderStroke);
     }
 
     public void addCircle(float centerX, float centerY, float radius, int color) {
-        addCircle(centerX, centerY, radius, color, 0, 1.0f);
+        addCircle(centerX, centerY, radius, color, 1.0f);
     }
 
-    public void addCircle(float centerX, float centerY, float radius, int color, int segmentCount) {
-        addCircle(centerX, centerY, radius, color, segmentCount, 1.0f);
-    }
+    public void addCircle(float centerX, float centerY, float radius, int color, float thickness) {
 
-    public void addCircle(
-            float centerX,
-            float centerY,
-            float radius,
-            int color,
-            int segmentCount,
-            float thickness) {
-        // TODO(ches) implement this
+        SDFPointDetail[] details = {
+            new SDFPointDetail(0, color),
+        };
+
+        int pointIndex = addSDFPoint(centerX, centerY, radius, radius);
+        int detailIndex = addSDFDetails(details);
+
+        final short pointCount = 1;
+        final short detailCount = (short) details.length;
+
+        addSDFCommand(
+                pointIndex,
+                detailIndex,
+                pointCount,
+                detailCount,
+                ElementType.CIRCLE,
+                ElementStyle.ONLY_BORDER,
+                thickness);
     }
 
     public void addCircleFilled(float centerX, float centerY, float radius, int color) {
-        addCircleFilled(centerX, centerY, radius, color, 0);
-    }
+        SDFPointDetail[] details = {
+            new SDFPointDetail(0, color),
+        };
 
-    public void addCircleFilled(
-            float centerX, float centerY, float radius, int color, int segmentCount) {
-        // TODO(ches) implement this
+        final int borderStroke = 0;
+
+        int pointIndex = addSDFPoint(centerX, centerY, radius, radius);
+        int detailIndex = addSDFDetails(details);
+
+        final short pointCount = 1;
+        final short detailCount = (short) details.length;
+
+        addSDFCommand(
+                pointIndex,
+                detailIndex,
+                pointCount,
+                detailCount,
+                ElementType.CIRCLE,
+                ElementStyle.ONLY_FILL,
+                borderStroke);
     }
 
     public void addNgon(float centerX, float centerY, float radius, int color, int segmentCount) {
@@ -1205,7 +1249,7 @@ public class DrawList {
                 vertexOffset,
                 startIndex,
                 elementCount,
-                ElementType.QUAD);
+                ElementType.RECTANGLE);
     }
 
     public void addImageRounded(
