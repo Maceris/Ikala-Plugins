@@ -48,9 +48,6 @@ public class DrawList {
 
     private record SDFPointDetail(float radius, int colorOrTextureID) {}
 
-    /** float posX, float posY, float u, float v, int color. */
-    ByteBuffer vertexBuffer;
-
     // TODO(ches) figure out line arcs
     // TODO(ches) figure out line bezier
     // TODO(ches) figure out text
@@ -64,30 +61,21 @@ public class DrawList {
      *   <li>Line (bezier) - ???
      *   <li>Line (straight) - a = point 2 x, b = point 2 y
      *   <li>Rectangle - a = width, b = height
-     *   <li>Polygon - a and b ignored
+     *   <li>Polygon - a = u, b = v, for textures. Otherwise ignored.
      *   <li>Text - ???
      * </ul>
      */
-    ByteBuffer sdfPointBuffer;
+    ByteBuffer pointBuffer;
 
     /**
      * float radius (for rounding), int colorOrTextureID. Stored generally starting on the top-left,
      * and always ordered clockwise for polygons and in-order for paths.
      */
-    ByteBuffer sdfPointDetailsBuffer;
+    ByteBuffer pointDetailBuffer;
 
     /**
      * int pointIndex, int detailIndex, short pointCount, short detailCount, short type, short
      * style, float stroke (borders, line thickness).
-     */
-    ByteBuffer sdfCommandBuffer;
-
-    /** short index. */
-    ByteBuffer indexBuffer;
-
-    /**
-     * float clipMinX, float clipMinY, float clipMaxX, float clipMaxY, int textureID, int
-     * vertexOffset, int indexOffset, int elementCount, int elementType.
      */
     ByteBuffer commandBuffer;
 
@@ -102,129 +90,57 @@ public class DrawList {
     @Getter @Setter private int drawListFlags;
 
     public DrawList() {
-        vertexBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_VERTEX);
-        indexBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_INDEX);
+        pointBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_POINT);
+        pointDetailBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_POINT_DETAIL);
         commandBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_COMMAND);
-        sdfPointBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_SDF_POINT);
-        sdfPointDetailsBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_SDF_POINT_DETAIL);
-        sdfCommandBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_SDF_COMMAND);
         clipRects = new ArrayDeque<>();
         textures = new IntArrayList();
     }
 
     /** Clear out everything in the draw list. */
     public void clear() {
-        vertexBuffer.clear();
-        indexBuffer.clear();
+        pointBuffer.clear();
+        pointDetailBuffer.clear();
         commandBuffer.clear();
         clipRects.clear();
         textures.clear();
     }
 
-    @Deprecated(forRemoval = true)
-    @Synchronized
-    private void addCommand(
-            float clipMinX,
-            float clipMinY,
-            float clipMaxX,
-            float clipMaxY,
-            int texture,
-            int vertexOffset,
-            int indexOffset,
-            int elementCount,
-            @NonNull ElementType type) {
-        if (commandBuffer.limit() == commandBuffer.position()) {
-            ByteBuffer newBuffer = ByteBuffer.allocateDirect(commandBuffer.limit() * 2);
-            commandBuffer.flip();
-            newBuffer.put(commandBuffer);
-            commandBuffer = newBuffer;
-        }
-
-        commandBuffer.putFloat(clipMinX);
-        commandBuffer.putFloat(clipMinY);
-        commandBuffer.putFloat(clipMaxX);
-        commandBuffer.putFloat(clipMaxY);
-        commandBuffer.putInt(texture);
-        commandBuffer.putInt(vertexOffset);
-        commandBuffer.putInt(indexOffset);
-        commandBuffer.putInt(elementCount);
-        commandBuffer.putInt(type.typeID);
-    }
-
-    @Deprecated(forRemoval = true)
-    @Synchronized
-    private int addVertex(float x, float y, float u, float v, int color) {
-        if (vertexBuffer.limit() == vertexBuffer.position()) {
-            ByteBuffer newBuffer = ByteBuffer.allocateDirect(vertexBuffer.limit() * 2);
-            vertexBuffer.flip();
-            newBuffer.put(vertexBuffer);
-            vertexBuffer = newBuffer;
-        }
-
-        final int newIndex = vertexBuffer.position() / DrawData.SIZE_OF_DRAW_VERTEX;
-
-        vertexBuffer.putFloat(x);
-        vertexBuffer.putFloat(y);
-        vertexBuffer.putFloat(u);
-        vertexBuffer.putFloat(v);
-        vertexBuffer.putInt(color);
-
-        return newIndex;
-    }
-
-    @Deprecated(forRemoval = true)
-    @Synchronized
-    private int addIndex(short index) {
-        if (indexBuffer.limit() == indexBuffer.position()) {
-            ByteBuffer newBuffer = ByteBuffer.allocateDirect(indexBuffer.limit() * 2);
-            indexBuffer.flip();
-            newBuffer.put(indexBuffer);
-            indexBuffer = newBuffer;
-        }
-
-        final int newIndex = indexBuffer.position() / DrawData.SIZE_OF_DRAW_INDEX;
-
-        indexBuffer.putShort(index);
-
-        return newIndex;
-    }
-
     @Synchronized
     private int addSDFPoint(float posX, float posY, float a, float b) {
-
-        if (sdfPointBuffer.limit() + DrawData.SIZE_OF_SDF_POINT >= sdfPointBuffer.position()) {
-            ByteBuffer newBuffer = ByteBuffer.allocateDirect(sdfPointBuffer.limit() * 2);
-            sdfPointBuffer.flip();
-            newBuffer.put(sdfPointBuffer);
-            sdfPointBuffer = newBuffer;
+        if (pointBuffer.limit() + DrawData.SIZE_OF_POINT >= pointBuffer.position()) {
+            ByteBuffer newBuffer = ByteBuffer.allocateDirect(pointBuffer.limit() * 2);
+            pointBuffer.flip();
+            newBuffer.put(pointBuffer);
+            pointBuffer = newBuffer;
         }
 
-        final int newIndex = sdfPointBuffer.position();
+        final int newIndex = pointBuffer.position();
 
-        sdfPointBuffer.putFloat(posX);
-        sdfPointBuffer.putFloat(posY);
-        sdfPointBuffer.putFloat(a);
-        sdfPointBuffer.putFloat(b);
+        pointBuffer.putFloat(posX);
+        pointBuffer.putFloat(posY);
+        pointBuffer.putFloat(a);
+        pointBuffer.putFloat(b);
 
         return newIndex;
     }
 
     @Synchronized
     private int addSDFDetails(@NonNull SDFPointDetail... details) {
-        final int newDetailsSize = details.length * DrawData.SIZE_OF_SDF_POINT_DETAIL;
+        final int newDetailsSize = details.length * DrawData.SIZE_OF_POINT_DETAIL;
 
-        if (sdfPointDetailsBuffer.position() + newDetailsSize >= sdfPointDetailsBuffer.limit()) {
-            ByteBuffer newBuffer = ByteBuffer.allocateDirect(sdfPointDetailsBuffer.limit() * 2);
-            sdfPointDetailsBuffer.flip();
-            newBuffer.put(sdfPointDetailsBuffer);
-            sdfPointDetailsBuffer = newBuffer;
+        if (pointDetailBuffer.position() + newDetailsSize >= pointDetailBuffer.limit()) {
+            ByteBuffer newBuffer = ByteBuffer.allocateDirect(pointDetailBuffer.limit() * 2);
+            pointDetailBuffer.flip();
+            newBuffer.put(pointDetailBuffer);
+            pointDetailBuffer = newBuffer;
         }
 
-        final int newDetailIndex = sdfPointDetailsBuffer.position();
+        final int newDetailIndex = pointDetailBuffer.position();
 
         for (SDFPointDetail detail : details) {
-            sdfPointDetailsBuffer.putFloat(detail.radius());
-            sdfPointDetailsBuffer.putInt(detail.colorOrTextureID());
+            pointDetailBuffer.putFloat(detail.radius());
+            pointDetailBuffer.putInt(detail.colorOrTextureID());
         }
 
         return newDetailIndex;
@@ -240,21 +156,20 @@ public class DrawList {
             @NonNull ElementStyle style,
             float stroke) {
 
-        if (sdfCommandBuffer.position() + DrawData.SIZE_OF_SDF_COMMAND
-                >= sdfCommandBuffer.limit()) {
-            ByteBuffer newBuffer = ByteBuffer.allocateDirect(sdfCommandBuffer.limit() * 2);
-            sdfCommandBuffer.flip();
-            newBuffer.put(sdfCommandBuffer);
-            sdfCommandBuffer = newBuffer;
+        if (commandBuffer.position() + DrawData.SIZE_OF_DRAW_COMMAND >= commandBuffer.limit()) {
+            ByteBuffer newBuffer = ByteBuffer.allocateDirect(commandBuffer.limit() * 2);
+            commandBuffer.flip();
+            newBuffer.put(commandBuffer);
+            commandBuffer = newBuffer;
         }
 
-        sdfCommandBuffer.putInt(pointIndex);
-        sdfCommandBuffer.putInt(detailIndex);
-        sdfCommandBuffer.putShort(pointCount);
-        sdfCommandBuffer.putShort(detailCount);
-        sdfCommandBuffer.putShort(type.typeID);
-        sdfCommandBuffer.putShort(style.styleID);
-        sdfCommandBuffer.putFloat(stroke);
+        commandBuffer.putInt(pointIndex);
+        commandBuffer.putInt(detailIndex);
+        commandBuffer.putShort(pointCount);
+        commandBuffer.putShort(detailCount);
+        commandBuffer.putShort(type.typeID);
+        commandBuffer.putShort(style.styleID);
+        commandBuffer.putFloat(stroke);
     }
 
     /**
@@ -710,10 +625,32 @@ public class DrawList {
             float p4Y,
             int color,
             float thickness) {
-        addLine(p1X, p1Y, p2X, p2Y, color, thickness);
-        addLine(p2X, p2Y, p3X, p3Y, color, thickness);
-        addLine(p3X, p3Y, p4X, p4Y, color, thickness);
-        addLine(p4X, p4Y, p1X, p1Y, color, thickness);
+
+        SDFPointDetail[] details = {
+            new SDFPointDetail(0, color),
+            new SDFPointDetail(0, color),
+            new SDFPointDetail(0, color),
+            new SDFPointDetail(0, color),
+        };
+
+        int pointIndex = addSDFPoint(p1X, p1Y, 0, 0);
+        addSDFPoint(p2X, p2Y, 0, 0);
+        addSDFPoint(p3X, p3Y, 0, 0);
+        addSDFPoint(p4X, p4Y, 0, 0);
+
+        int detailIndex = addSDFDetails(details);
+
+        final short pointCount = 4;
+        final short detailCount = (short) details.length;
+
+        addSDFCommand(
+                pointIndex,
+                detailIndex,
+                pointCount,
+                detailCount,
+                ElementType.POLYGON,
+                ElementStyle.ONLY_BORDER,
+                thickness);
     }
 
     public void addQuadFilled(
@@ -727,35 +664,33 @@ public class DrawList {
             float p4Y,
             int color) {
 
-        final int vertexOffset = vertexBuffer.position();
+        final int borderStroke = 0;
 
-        final int p1 = addVertex(p1X, p1Y, 0, 0, color);
-        final int p2 = addVertex(p2X, p2Y, 0, 0, color);
-        final int p3 = addVertex(p3X, p3Y, 0, 0, color);
-        final int p4 = addVertex(p4X, p4Y, 0, 0, color);
+        SDFPointDetail[] details = {
+            new SDFPointDetail(0, color),
+            new SDFPointDetail(0, color),
+            new SDFPointDetail(0, color),
+            new SDFPointDetail(0, color),
+        };
 
-        int startIndex = addIndex((short) p1);
-        addIndex((short) p2);
-        addIndex((short) p3);
+        int pointIndex = addSDFPoint(p1X, p1Y, 0, 0);
+        addSDFPoint(p2X, p2Y, 0, 0);
+        addSDFPoint(p3X, p3Y, 0, 0);
+        addSDFPoint(p4X, p4Y, 0, 0);
 
-        addIndex((short) p3);
-        addIndex((short) p2);
-        addIndex((short) p4);
+        int detailIndex = addSDFDetails(details);
 
-        Vector2f clipRectMin = getClipRectMin();
-        Vector2f clipRectMax = getClipRectMax();
+        final short pointCount = 4;
+        final short detailCount = (short) details.length;
 
-        final int elementCount = 6;
-        addCommand(
-                clipRectMin.x,
-                clipRectMin.y,
-                clipRectMax.x,
-                clipRectMax.y,
-                textures.peek(),
-                vertexOffset,
-                startIndex,
-                elementCount,
-                ElementType.RECTANGLE);
+        addSDFCommand(
+                pointIndex,
+                detailIndex,
+                pointCount,
+                detailCount,
+                ElementType.POLYGON,
+                ElementStyle.ONLY_FILL,
+                borderStroke);
     }
 
     public void addTriangle(
@@ -1219,37 +1154,36 @@ public class DrawList {
             float u4,
             float v4,
             int color) {
-        // TODO(ches) wow this function signature sucks, can we do this cheaply with vecs?
 
-        final int vertexOffset = vertexBuffer.position();
+        // TODO(ches) handle the color tint
 
-        int p1 = addVertex(p1X, p1Y, u1, v1, color);
-        int p2 = addVertex(p2X, p2Y, u2, v2, color);
-        int p3 = addVertex(p3X, p3Y, u3, v3, color);
-        int p4 = addVertex(p4X, p4Y, u4, v4, color);
+        final int borderStroke = 0;
 
-        int startIndex = addIndex((short) p1);
-        addIndex((short) p2);
-        addIndex((short) p3);
+        SDFPointDetail[] details = {
+            new SDFPointDetail(0, textureID),
+            new SDFPointDetail(0, textureID),
+            new SDFPointDetail(0, textureID),
+            new SDFPointDetail(0, textureID),
+        };
 
-        addIndex((short) p3);
-        addIndex((short) p2);
-        addIndex((short) p4);
+        int pointIndex = addSDFPoint(p1X, p1Y, u1, v1);
+        addSDFPoint(p2X, p2Y, u2, v2);
+        addSDFPoint(p3X, p3Y, u3, v3);
+        addSDFPoint(p4X, p4Y, u4, v4);
 
-        Vector2f clipRectMin = getClipRectMin();
-        Vector2f clipRectMax = getClipRectMax();
+        int detailIndex = addSDFDetails(details);
 
-        final int elementCount = 6;
-        addCommand(
-                clipRectMin.x,
-                clipRectMin.y,
-                clipRectMax.x,
-                clipRectMax.y,
-                textureID,
-                vertexOffset,
-                startIndex,
-                elementCount,
-                ElementType.RECTANGLE);
+        final short pointCount = 4;
+        final short detailCount = (short) details.length;
+
+        addSDFCommand(
+                pointIndex,
+                detailIndex,
+                pointCount,
+                detailCount,
+                ElementType.POLYGON,
+                ElementStyle.TEXTURE,
+                borderStroke);
     }
 
     public void addImageRounded(

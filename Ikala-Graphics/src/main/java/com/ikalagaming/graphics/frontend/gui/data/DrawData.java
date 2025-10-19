@@ -15,12 +15,10 @@ import java.util.ArrayList;
 public class DrawData {
     private static final int SIZE_OF_RECT = 4 * Float.BYTES;
 
-    public static final int SIZE_OF_DRAW_INDEX = Short.BYTES;
-    public static final int SIZE_OF_DRAW_VERTEX = 4 * Float.BYTES + Integer.BYTES;
-    public static final int SIZE_OF_DRAW_COMMAND = SIZE_OF_RECT + 5 * Integer.BYTES;
-    public static final int SIZE_OF_SDF_POINT = 4 * Float.BYTES;
-    public static final int SIZE_OF_SDF_POINT_DETAIL = Float.BYTES + Integer.BYTES;
-    public static final int SIZE_OF_SDF_COMMAND = 2 * Integer.BYTES + 4 * Short.BYTES + Float.BYTES;
+    public static final int SIZE_OF_POINT = 4 * Float.BYTES;
+    public static final int SIZE_OF_POINT_DETAIL = Float.BYTES + Integer.BYTES;
+    public static final int SIZE_OF_DRAW_COMMAND =
+            2 * Integer.BYTES + 4 * Short.BYTES + Float.BYTES;
 
     private static final int RESIZE_FACTOR = 5000;
 
@@ -85,6 +83,9 @@ public class DrawData {
 
     public int getCommandListCommandBufferElementCount(
             int commandListIndex, int commandBufferIndex) {
+
+        // TODO(ches) These fetch methods are all scuffed now, move the offset logic to DrawList and
+        // fix these
         ByteBuffer commandBuffer = getCommandBuffer(commandListIndex);
         if (commandBuffer == null) {
             return 0;
@@ -144,21 +145,21 @@ public class DrawData {
         return commandBuffer.getInt(textureLocation);
     }
 
-    public int getCommandListCommandBufferVertexOffset(
+    public int getCommandListCommandBufferPointOffset(
             int commandListIndex, int commandBufferIndex) {
         ByteBuffer commandBuffer = getCommandBuffer(commandListIndex);
         if (commandBuffer == null) {
             return 0;
         }
 
-        final int vertexOffsetLocation =
+        final int pointOffsetLocation =
                 commandBufferIndex * SIZE_OF_DRAW_COMMAND + SIZE_OF_RECT + Integer.BYTES;
 
-        if (offsetInvalid(commandBuffer, vertexOffsetLocation, Integer.BYTES)) {
+        if (offsetInvalid(commandBuffer, pointOffsetLocation, Integer.BYTES)) {
             return 0;
         }
 
-        return commandBuffer.getInt(vertexOffsetLocation);
+        return commandBuffer.getInt(pointOffsetLocation);
     }
 
     public int getCommandListCommandBufferIndexOffset(
@@ -179,55 +180,55 @@ public class DrawData {
     }
 
     /**
-     * Fetch the size of the index buffer, in terms of indexes.
+     * Fetch the size of the point detail buffer, in terms of entries.
      *
      * @param commandListIndex The index of the command list to check.
      * @return The index buffer count, or 0 if an invalid index is provided.
      */
-    public int getCommandListIndexBufferSize(int commandListIndex) {
+    public int getCommandListPointDetailBufferSize(int commandListIndex) {
         DrawList list = getDrawList(commandListIndex);
-        ByteBuffer buffer = list == null ? null : list.indexBuffer;
-        return buffer == null ? 0 : buffer.position() / SIZE_OF_DRAW_INDEX;
+        ByteBuffer buffer = list == null ? null : list.pointDetailBuffer;
+        return buffer == null ? 0 : buffer.position() / SIZE_OF_POINT_DETAIL;
     }
 
-    public ByteBuffer getCommandListIndexBufferData(final int commandListIndex) {
+    public ByteBuffer getCommandListPointDetailBufferData(final int commandListIndex) {
         DrawList list = getDrawList(commandListIndex);
-        return list == null ? null : list.indexBuffer;
+        return list == null ? null : list.pointDetailBuffer;
     }
 
     /**
-     * Fetch the size of the index buffer, in terms of vertices.
+     * Fetch the size of the point buffer, in terms of points.
      *
      * @param commandListIndex The index of the command list to check.
      * @return The vertex buffer count, or 0 if an invalid index is provided.
      */
-    public int getCommandListVertexBufferSize(int commandListIndex) {
+    public int getCommandListPointBufferSize(int commandListIndex) {
         DrawList list = getDrawList(commandListIndex);
-        ByteBuffer buffer = list == null ? null : list.vertexBuffer;
-        return buffer == null ? 0 : buffer.position() / SIZE_OF_DRAW_VERTEX;
+        ByteBuffer buffer = list == null ? null : list.pointBuffer;
+        return buffer == null ? 0 : buffer.position() / SIZE_OF_POINT;
     }
 
-    public ByteBuffer getCommandListVertexBufferData(final int commandListIndex) {
+    public ByteBuffer getCommandListPointBufferData(final int commandListIndex) {
         DrawList list = getDrawList(commandListIndex);
-        return list == null ? null : list.vertexBuffer;
+        return list == null ? null : list.pointBuffer;
     }
 
     public int getCommandListsCount() {
         return drawLists.size();
     }
 
-    public int getTotalIndexCount() {
+    public int getTotalDetailCount() {
         int total = 0;
         for (DrawList list : drawLists) {
-            total += list.indexBuffer.position() / SIZE_OF_DRAW_INDEX;
+            total += list.pointDetailBuffer.position() / SIZE_OF_POINT_DETAIL;
         }
         return total;
     }
 
-    public int getTotalVertexCount() {
+    public int getTotalPointCount() {
         int total = 0;
         for (DrawList list : drawLists) {
-            total += list.vertexBuffer.position() / SIZE_OF_DRAW_VERTEX;
+            total += list.pointBuffer.position() / SIZE_OF_POINT;
         }
         return total;
     }
