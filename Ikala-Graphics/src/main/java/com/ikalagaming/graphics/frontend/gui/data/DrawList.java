@@ -107,7 +107,7 @@ public class DrawList {
     }
 
     @Synchronized
-    private int addSDFPoint(float posX, float posY, float a, float b) {
+    private int addPoint(float posX, float posY, float a, float b) {
         if (pointBuffer.limit() + DrawData.SIZE_OF_POINT >= pointBuffer.position()) {
             ByteBuffer newBuffer = ByteBuffer.allocateDirect(pointBuffer.limit() * 2);
             pointBuffer.flip();
@@ -126,7 +126,7 @@ public class DrawList {
     }
 
     @Synchronized
-    private int addSDFDetails(@NonNull SDFPointDetail... details) {
+    private int addDetails(@NonNull SDFPointDetail... details) {
         final int newDetailsSize = details.length * DrawData.SIZE_OF_POINT_DETAIL;
 
         if (pointDetailBuffer.position() + newDetailsSize >= pointDetailBuffer.limit()) {
@@ -147,7 +147,7 @@ public class DrawList {
     }
 
     @Synchronized
-    private void addSDFCommand(
+    private void addCommand(
             int pointIndex,
             int detailIndex,
             short pointCount,
@@ -336,11 +336,11 @@ public class DrawList {
             new SDFPointDetail(thickness, color), new SDFPointDetail(thickness, color),
         };
 
-        int pointIndex = addSDFPoint(p1X, p1Y, p2X, p2Y);
-        int detailIndex = addSDFDetails(details);
+        int pointIndex = addPoint(p1X, p1Y, p2X, p2Y);
+        int detailIndex = addDetails(details);
         final short pointCount = 1;
         final short detailCount = 2;
-        addSDFCommand(
+        addCommand(
                 pointIndex,
                 detailIndex,
                 pointCount,
@@ -421,12 +421,12 @@ public class DrawList {
             new SDFPointDetail(bottomLeftRadius, color),
         };
 
-        int pointIndex = addSDFPoint(centerX, centerY, width, height);
-        int detailIndex = addSDFDetails(details);
+        int pointIndex = addPoint(centerX, centerY, width, height);
+        int detailIndex = addDetails(details);
         final short pointCount = 1;
         final short detailCount = (short) details.length;
 
-        addSDFCommand(
+        addCommand(
                 pointIndex,
                 detailIndex,
                 pointCount,
@@ -484,12 +484,12 @@ public class DrawList {
             new SDFPointDetail(bottomLeftRadius, color),
         };
 
-        int pointIndex = addSDFPoint(centerX, centerY, width, height);
-        int detailIndex = addSDFDetails(details);
+        int pointIndex = addPoint(centerX, centerY, width, height);
+        int detailIndex = addDetails(details);
         final short pointCount = 1;
         final short detailCount = (short) details.length;
 
-        addSDFCommand(
+        addCommand(
                 pointIndex,
                 detailIndex,
                 pointCount,
@@ -586,12 +586,12 @@ public class DrawList {
             new SDFPointDetail(bottomLeftRadius, colorBottomLeft),
         };
 
-        int pointIndex = addSDFPoint(centerX, centerY, width, height);
-        int detailIndex = addSDFDetails(details);
+        int pointIndex = addPoint(centerX, centerY, width, height);
+        int detailIndex = addDetails(details);
         final short pointCount = 1;
         final short detailCount = (short) details.length;
 
-        addSDFCommand(
+        addCommand(
                 pointIndex,
                 detailIndex,
                 pointCount,
@@ -633,17 +633,17 @@ public class DrawList {
             new SDFPointDetail(0, color),
         };
 
-        int pointIndex = addSDFPoint(p1X, p1Y, 0, 0);
-        addSDFPoint(p2X, p2Y, 0, 0);
-        addSDFPoint(p3X, p3Y, 0, 0);
-        addSDFPoint(p4X, p4Y, 0, 0);
+        int pointIndex = addPoint(p1X, p1Y, 0, 0);
+        addPoint(p2X, p2Y, 0, 0);
+        addPoint(p3X, p3Y, 0, 0);
+        addPoint(p4X, p4Y, 0, 0);
 
-        int detailIndex = addSDFDetails(details);
+        int detailIndex = addDetails(details);
 
         final short pointCount = 4;
         final short detailCount = (short) details.length;
 
-        addSDFCommand(
+        addCommand(
                 pointIndex,
                 detailIndex,
                 pointCount,
@@ -673,17 +673,17 @@ public class DrawList {
             new SDFPointDetail(0, color),
         };
 
-        int pointIndex = addSDFPoint(p1X, p1Y, 0, 0);
-        addSDFPoint(p2X, p2Y, 0, 0);
-        addSDFPoint(p3X, p3Y, 0, 0);
-        addSDFPoint(p4X, p4Y, 0, 0);
+        int pointIndex = addPoint(p1X, p1Y, 0, 0);
+        addPoint(p2X, p2Y, 0, 0);
+        addPoint(p3X, p3Y, 0, 0);
+        addPoint(p4X, p4Y, 0, 0);
 
-        int detailIndex = addSDFDetails(details);
+        int detailIndex = addDetails(details);
 
         final short pointCount = 4;
         final short detailCount = (short) details.length;
 
-        addSDFCommand(
+        addCommand(
                 pointIndex,
                 detailIndex,
                 pointCount,
@@ -712,16 +712,16 @@ public class DrawList {
             new SDFPointDetail(0, color),
         };
 
-        int pointIndex = addSDFPoint(p1X, p1Y, 0, 0);
-        addSDFPoint(p2X, p2Y, 0, 0);
-        addSDFPoint(p3X, p3Y, 0, 0);
+        int pointIndex = addPoint(p1X, p1Y, 0, 0);
+        addPoint(p2X, p2Y, 0, 0);
+        addPoint(p3X, p3Y, 0, 0);
 
-        int detailIndex = addSDFDetails(details);
+        int detailIndex = addDetails(details);
 
         final short pointCount = 3;
         final short detailCount = (short) details.length;
 
-        addSDFCommand(
+        addCommand(
                 pointIndex,
                 detailIndex,
                 pointCount,
@@ -740,16 +740,16 @@ public class DrawList {
             new SDFPointDetail(0, color),
         };
 
-        int pointIndex = addSDFPoint(p1X, p1Y, 0, 0);
-        addSDFPoint(p2X, p2Y, 0, 0);
-        addSDFPoint(p3X, p3Y, 0, 0);
+        int pointIndex = addPoint(p1X, p1Y, 0, 0);
+        addPoint(p2X, p2Y, 0, 0);
+        addPoint(p3X, p3Y, 0, 0);
 
-        int detailIndex = addSDFDetails(details);
+        int detailIndex = addDetails(details);
 
         final short pointCount = 3;
         final short detailCount = (short) details.length;
 
-        addSDFCommand(
+        addCommand(
                 pointIndex,
                 detailIndex,
                 pointCount,
@@ -769,13 +769,13 @@ public class DrawList {
             new SDFPointDetail(0, color),
         };
 
-        int pointIndex = addSDFPoint(centerX, centerY, radius, radius);
-        int detailIndex = addSDFDetails(details);
+        int pointIndex = addPoint(centerX, centerY, radius, radius);
+        int detailIndex = addDetails(details);
 
         final short pointCount = 1;
         final short detailCount = (short) details.length;
 
-        addSDFCommand(
+        addCommand(
                 pointIndex,
                 detailIndex,
                 pointCount,
@@ -792,13 +792,13 @@ public class DrawList {
 
         final int borderStroke = 0;
 
-        int pointIndex = addSDFPoint(centerX, centerY, radius, radius);
-        int detailIndex = addSDFDetails(details);
+        int pointIndex = addPoint(centerX, centerY, radius, radius);
+        int detailIndex = addDetails(details);
 
         final short pointCount = 1;
         final short detailCount = (short) details.length;
 
-        addSDFCommand(
+        addCommand(
                 pointIndex,
                 detailIndex,
                 pointCount,
@@ -966,17 +966,17 @@ public class DrawList {
                 new SDFPointDetail(0, textureID),
         };
 
-        int pointIndex = addSDFPoint(minX, minY, minU, minV);
-        addSDFPoint(maxX, minY, maxU, minV);
-        addSDFPoint(maxX, maxY, maxU, maxV);
-        addSDFPoint(minX, maxY, minU, maxV);
+        int pointIndex = addPoint(minX, minY, minU, minV);
+        addPoint(maxX, minY, maxU, minV);
+        addPoint(maxX, maxY, maxU, maxV);
+        addPoint(minX, maxY, minU, maxV);
 
-        int detailIndex = addSDFDetails(details);
+        int detailIndex = addDetails(details);
         final short pointCount = 4;
         final short detailCount = (short) details.length;
         final int borderStroke = 0;
 
-        addSDFCommand(
+        addCommand(
                 pointIndex,
                 detailIndex,
                 pointCount,
@@ -1192,17 +1192,17 @@ public class DrawList {
             new SDFPointDetail(0, textureID),
         };
 
-        int pointIndex = addSDFPoint(p1X, p1Y, u1, v1);
-        addSDFPoint(p2X, p2Y, u2, v2);
-        addSDFPoint(p3X, p3Y, u3, v3);
-        addSDFPoint(p4X, p4Y, u4, v4);
+        int pointIndex = addPoint(p1X, p1Y, u1, v1);
+        addPoint(p2X, p2Y, u2, v2);
+        addPoint(p3X, p3Y, u3, v3);
+        addPoint(p4X, p4Y, u4, v4);
 
-        int detailIndex = addSDFDetails(details);
+        int detailIndex = addDetails(details);
 
         final short pointCount = 4;
         final short detailCount = (short) details.length;
 
-        addSDFCommand(
+        addCommand(
                 pointIndex,
                 detailIndex,
                 pointCount,
@@ -1279,16 +1279,16 @@ public class DrawList {
                 new SDFPointDetail(bottomLeftRadius, textureID),
         };
 
-        int pointIndex = addSDFPoint(minX, minY, minU, minV);
-        addSDFPoint(maxX, minY, maxU, minV);
-        addSDFPoint(maxX, maxY, maxU, maxV);
-        addSDFPoint(minX, maxY, minU, maxV);
-        int detailIndex = addSDFDetails(details);
+        int pointIndex = addPoint(minX, minY, minU, minV);
+        addPoint(maxX, minY, maxU, minV);
+        addPoint(maxX, maxY, maxU, maxV);
+        addPoint(minX, maxY, minU, maxV);
+        int detailIndex = addDetails(details);
         final short pointCount = 4;
         final short detailCount = (short) details.length;
         final int borderStroke = 0;
 
-        addSDFCommand(
+        addCommand(
                 pointIndex,
                 detailIndex,
                 pointCount,
