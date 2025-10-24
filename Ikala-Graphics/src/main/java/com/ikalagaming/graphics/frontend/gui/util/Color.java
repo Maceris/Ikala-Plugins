@@ -4,6 +4,8 @@ import org.joml.Vector4f;
 
 public class Color {
 
+    public static final int BLACK = rgba(0, 0, 0, 255);
+    public static final int CLEAR = rgba(0, 0, 0, 0);
     public static final int WHITE = rgba(255, 255, 255, 255);
 
     public static int rgba(int r, int g, int b, int a) {

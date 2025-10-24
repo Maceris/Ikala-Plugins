@@ -89,12 +89,21 @@ public class DrawList {
      */
     @Getter @Setter private int drawListFlags;
 
+    private boolean pathStarted;
+    private int pathColor;
+    private boolean pathClosed;
+    private float pathThickness;
+
     public DrawList() {
         pointBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_POINT);
         pointDetailBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_POINT_DETAIL);
         commandBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_COMMAND);
         clipRects = new ArrayDeque<>();
         textures = new IntArrayList();
+        pathStarted = false;
+        pathColor = Color.CLEAR;
+        pathClosed = false;
+        pathThickness = 0;
     }
 
     /** Clear out everything in the draw list. */
@@ -104,6 +113,10 @@ public class DrawList {
         commandBuffer.clear();
         clipRects.clear();
         textures.clear();
+        pathStarted = false;
+        pathColor = Color.CLEAR;
+        pathClosed = false;
+        pathThickness = 0;
     }
 
     @Synchronized
@@ -1299,7 +1312,15 @@ public class DrawList {
     }
 
     public void pathClear() {
-        // TODO(ches) implement this
+        if (!pathStarted) {
+            //TODO(ches) log
+            return;
+        }
+        //TODO(ches) complete previous line
+        pathStarted = false;
+        pathColor = Color.CLEAR;
+        pathClosed = false;
+        pathThickness = 0;
     }
 
     public void pathLineTo(float posX, float posY) {
@@ -1319,7 +1340,14 @@ public class DrawList {
     }
 
     public void pathStroke(int color, boolean closed, float thickness) {
-        // TODO(ches) implement this
+        if (pathStarted) {
+            //TODO(ches) log
+            return;
+        }
+        pathStarted = true;
+        pathColor = color;
+        pathClosed = closed;
+        pathThickness = thickness;
     }
 
     public void pathArcTo(float centerX, float centerY, float radius, float minA, float maxA) {
@@ -1373,57 +1401,4 @@ public class DrawList {
         // TODO(ches) implement this
     }
 
-    public void primReserve(int indexCount, int vertexCount) {
-        // TODO(ches) implement this
-    }
-
-    public void primUnreserve(int indexCount, int vertexCount) {
-        // TODO(ches) implement this
-    }
-
-    public void primRect(float aX, float aY, float bX, float bY, int color) {
-        // TODO(ches) implement this
-    }
-
-    public void primRectUV(
-            float aX,
-            float aY,
-            float bX,
-            float bY,
-            float uA,
-            float vA,
-            float uB,
-            float vB,
-            int color) {
-        // TODO(ches) implement this
-    }
-
-    public void primQuadUV(
-            float aX,
-            float aY,
-            float bX,
-            float bY,
-            float cX,
-            float cY,
-            float dX,
-            float dY,
-            float uA,
-            float vA,
-            float uB,
-            float vB,
-            float uC,
-            float vC,
-            float uD,
-            float vD,
-            int color) {
-        // TODO(ches) implement this
-    }
-
-    public void primWriteVtx(float posX, float posY, float u, float v, int color) {
-        // TODO(ches) implement this
-    }
-
-    public void primVtx(float posX, float posY, float u, float v, int color) {
-        // TODO(ches) implement this
-    }
 }
