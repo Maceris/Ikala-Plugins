@@ -85,6 +85,7 @@ public class IkGui {
         // TODO(ches) complete this
 
         final int ID = Hash.getID(title);
+        pushID(ID);
         Window window = context.windowByID.computeIfAbsent(ID, ignored -> new Window(context));
         window.id = ID;
         window.name = title;
@@ -713,6 +714,7 @@ public class IkGui {
 
     public static void pushID(String name) {
         // TODO(ches) complete this
+        pushID(Hash.getID(name, context.activeID));
     }
 
     public static void pushID(long id) {
@@ -720,21 +722,41 @@ public class IkGui {
     }
 
     public static void pushID(int id) {
-        // TODO(ches) complete this
+        //TODO(ches) do we need to store the info about the current active ID?
+        context.activeIDStack.push(id);
     }
 
     public static void popID() {
-        // TODO(ches) complete this
+        context.activeIDStack.pop();
+        clearActiveID();
+        //TODO(ches) do we need to restore some info about the last active ID?
+        context.activeID = context.activeIDStack.peek();
     }
 
     public static int getID(String name) {
-        // TODO(ches) complete this
-        return 0;
+        return Hash.getID(name, context.activeID);
     }
 
     public static int getID(long id) {
         // TODO(ches) complete this
         return 0;
+    }
+
+    private static void clearActiveID() {
+        context.activeIDActivatedThisFrame = false;
+        context.activeIDAllowOverlap = false;
+        context.activeIDClickOffset.set(0, 0);
+        context.activeIDFromShortcut = false;
+        context.activeIDHasBeenEditedBefore = false;
+        context.activeIDHasBeenEditedThisFrame = false;
+        context.activeIDHasBeenPressedBefore = false;
+        context.activeIDMouseButton = MouseButton.NONE;
+        context.activeIDPreviousFrame = 0;
+        context.activeIDRetainOnFocusLoss = false;
+        context.activeIDSeenThisFrame = false;
+        context.activeIDSource = GuiInputSource.NONE;
+        context.activeIDTimer = 0;
+        context.activeIDWindow = null;
     }
 
     public static void textUnformatted(String text) {

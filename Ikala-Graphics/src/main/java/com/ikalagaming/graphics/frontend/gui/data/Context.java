@@ -70,8 +70,8 @@ public class Context {
     public boolean hoveredIDAllowOverlap = false;
     public boolean hoveredIDDisabled = false;
     public int activeID = 0;
-    public int activeIDSeenThisFrame = 0;
     public float activeIDTimer = 0.0f;
+    public boolean activeIDSeenThisFrame = false;
     public boolean activeIDActivatedThisFrame = false;
     public boolean activeIDAllowOverlap = false;
     public boolean activeIDRetainOnFocusLoss = false;
@@ -87,6 +87,7 @@ public class Context {
     public DeactivatedItemData deactivatedItemData = new DeactivatedItemData();
     public int lastActiveID = 0;
     public float lastActiveIDTimer = 0.0f;
+    public IntArrayList activeIDStack = new IntArrayList();
 
     public double lastKeyModsChangeTime = 0.0;
     public double lastKeyModsChangeFromNoneTime = 0.0;
