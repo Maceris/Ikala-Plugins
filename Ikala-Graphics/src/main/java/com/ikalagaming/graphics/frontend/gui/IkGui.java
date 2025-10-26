@@ -722,14 +722,14 @@ public class IkGui {
     }
 
     public static void pushID(int id) {
-        //TODO(ches) do we need to store the info about the current active ID?
+        // TODO(ches) do we need to store the info about the current active ID?
         context.activeIDStack.push(id);
     }
 
     public static void popID() {
         context.activeIDStack.pop();
         clearActiveID();
-        //TODO(ches) do we need to restore some info about the last active ID?
+        // TODO(ches) do we need to restore some info about the last active ID?
         context.activeID = context.activeIDStack.peek();
     }
 

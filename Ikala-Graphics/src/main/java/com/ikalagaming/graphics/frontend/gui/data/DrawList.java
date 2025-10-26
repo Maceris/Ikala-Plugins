@@ -973,10 +973,10 @@ public class DrawList {
         // TODO(ches) handle the color tint
 
         SDFPointDetail[] details = {
-                new SDFPointDetail(0, textureID),
-                new SDFPointDetail(0, textureID),
-                new SDFPointDetail(0, textureID),
-                new SDFPointDetail(0, textureID),
+            new SDFPointDetail(0, textureID),
+            new SDFPointDetail(0, textureID),
+            new SDFPointDetail(0, textureID),
+            new SDFPointDetail(0, textureID),
         };
 
         int pointIndex = addPoint(minX, minY, minU, minV);
@@ -1275,7 +1275,7 @@ public class DrawList {
             return;
         }
 
-        //TODO(ches) we repeats this detail logic a bit, pull it out to a method
+        // TODO(ches) we repeats this detail logic a bit, pull it out to a method
         final float topLeftRadius =
                 (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_LEFT) != 0 ? rounding : 0;
         final float topRightRadius =
@@ -1286,10 +1286,10 @@ public class DrawList {
                 (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? rounding : 0;
 
         SDFPointDetail[] details = {
-                new SDFPointDetail(topLeftRadius, textureID),
-                new SDFPointDetail(topRightRadius, textureID),
-                new SDFPointDetail(bottomRightRadius, textureID),
-                new SDFPointDetail(bottomLeftRadius, textureID),
+            new SDFPointDetail(topLeftRadius, textureID),
+            new SDFPointDetail(topRightRadius, textureID),
+            new SDFPointDetail(bottomRightRadius, textureID),
+            new SDFPointDetail(bottomLeftRadius, textureID),
         };
 
         int pointIndex = addPoint(minX, minY, minU, minV);
@@ -1313,10 +1313,10 @@ public class DrawList {
 
     public void pathClear() {
         if (!pathStarted) {
-            //TODO(ches) log
+            // TODO(ches) log
             return;
         }
-        //TODO(ches) complete previous line
+        // TODO(ches) complete previous line
         pathStarted = false;
         pathColor = Color.CLEAR;
         pathClosed = false;
@@ -1341,7 +1341,7 @@ public class DrawList {
 
     public void pathStroke(int color, boolean closed, float thickness) {
         if (pathStarted) {
-            //TODO(ches) log
+            // TODO(ches) log
             return;
         }
         pathStarted = true;
@@ -1400,5 +1400,4 @@ public class DrawList {
             int drawFlagsRoundingCorners) {
         // TODO(ches) implement this
     }
-
 }

@@ -18,348 +18,583 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class Context {
-    public boolean initialized = false;
-    public IkIO io = new IkIO();
-    public PlatformIO platformIO = null;
-    public Style style = new Style();
+    public boolean initialized;
+    public IkIO io;
+    public PlatformIO platformIO;
+    public Style style;
 
-    public DrawData drawData = new DrawData();
-    public ArrayList<FontAtlas> fontAtlases = new ArrayList<>();
-    public Font font = null;
-    public FontBaked fontBaked = null;
-    public float fontSize = 0.0f;
-    public float fontSizeBase = 0.0f;
-    public float fontDensity = 0.0f;
-    public float dpiScale = 0.0f;
-    public DrawListSharedData drawListSharedData = new DrawListSharedData();
-    public double time = 0.0;
-    public int frameCount = 0;
-    public int frameCountEnded = 0;
-    public int frameCountRendered = 0;
-    public boolean insideFrame = false;
-    public ArrayList<GuiInputEvent> inputEventQueue = new ArrayList<>();
+    public DrawData drawData;
+    public ArrayList<FontAtlas> fontAtlases;
+    public Font font;
+    public FontBaked fontBaked;
+    public float fontSize;
+    public float fontSizeBase;
+    public float fontDensity;
+    public float dpiScale;
+    public DrawListSharedData drawListSharedData;
+    public double time;
+    public int frameCount;
+    public int frameCountEnded;
+    public int frameCountRendered;
+    public boolean insideFrame;
+    public ArrayList<GuiInputEvent> inputEventQueue;
 
     /**
      * Past input events that get processed when we start a new frame, mostly for mouse/pen trails.
      */
-    public ArrayList<GuiInputEvent> inputEventTrail = new ArrayList<>();
+    public ArrayList<GuiInputEvent> inputEventTrail;
 
     /** Windows, sorted in display order, back to front. */
-    public ArrayList<Window> windowsDisplayOrder = new ArrayList<>();
+    public ArrayList<Window> windowsDisplayOrder;
 
-    public ArrayList<Window> windowFocusOrder = new ArrayList<>();
-    public Map<Integer, Window> windowByID = new HashMap<>();
-    public int windowActiveCount = 0;
-    public Window windowCurrent = null;
-    public Window windowHovered = null;
-    public Window windowHoveredUnderMovingWindow = null;
-    public Window windowMoving = null;
-    public Window windowWheeling = null;
-    public Vector2f windowWheelingRefMousePosition = new Vector2f(0, 0);
-    public int windowWheelingStartFrame = 0;
-    public int windowWheelingScrolledFrame = 0;
-    public float windowWheelingReleaseTimer = 0.0f;
-    public Vector2f windowWheelingWheelRemainder = new Vector2f(0, 0);
-    public Vector2f windowWheelingAxisAverage = new Vector2f(0, 0);
+    public ArrayList<Window> windowFocusOrder;
+    public Map<Integer, Window> windowByID;
+    public int windowActiveCount;
+    public Window windowCurrent;
+    public Window windowHovered;
+    public Window windowHoveredUnderMovingWindow;
+    public Window windowMoving;
+    public Window windowWheeling;
+    public Vector2f windowWheelingRefMousePosition;
+    public int windowWheelingStartFrame;
+    public int windowWheelingScrolledFrame;
+    public float windowWheelingReleaseTimer;
+    public Vector2f windowWheelingWheelRemainder;
+    public Vector2f windowWheelingAxisAverage;
 
-    public int hoveredID = 0;
-    public int hoveredIDPreviousFrame = 0;
-    public int hoveredIDPreviousFrameItemCount = 0;
-    public float hoveredIDTimer = 0.0f;
-    public float hoveredIDInactiveTimer = 0.0f;
-    public boolean hoveredIDAllowOverlap = false;
-    public boolean hoveredIDDisabled = false;
-    public int activeID = 0;
-    public float activeIDTimer = 0.0f;
-    public boolean activeIDSeenThisFrame = false;
-    public boolean activeIDActivatedThisFrame = false;
-    public boolean activeIDAllowOverlap = false;
-    public boolean activeIDRetainOnFocusLoss = false;
-    public boolean activeIDHasBeenPressedBefore = false;
-    public boolean activeIDHasBeenEditedBefore = false;
-    public boolean activeIDHasBeenEditedThisFrame = false;
-    public boolean activeIDFromShortcut = false;
-    public MouseButton activeIDMouseButton = MouseButton.NONE;
-    public Vector2f activeIDClickOffset = new Vector2f(0, 0);
-    public Window activeIDWindow = null;
-    public GuiInputSource activeIDSource = GuiInputSource.NONE;
-    public int activeIDPreviousFrame = 0;
-    public DeactivatedItemData deactivatedItemData = new DeactivatedItemData();
-    public int lastActiveID = 0;
-    public float lastActiveIDTimer = 0.0f;
-    public IntArrayList activeIDStack = new IntArrayList();
+    public int hoveredID;
+    public int hoveredIDPreviousFrame;
+    public int hoveredIDPreviousFrameItemCount;
+    public float hoveredIDTimer;
+    public float hoveredIDInactiveTimer;
+    public boolean hoveredIDAllowOverlap;
+    public boolean hoveredIDDisabled;
+    public int activeID;
+    public float activeIDTimer;
+    public boolean activeIDSeenThisFrame;
+    public boolean activeIDActivatedThisFrame;
+    public boolean activeIDAllowOverlap;
+    public boolean activeIDRetainOnFocusLoss;
+    public boolean activeIDHasBeenPressedBefore;
+    public boolean activeIDHasBeenEditedBefore;
+    public boolean activeIDHasBeenEditedThisFrame;
+    public boolean activeIDFromShortcut;
+    public MouseButton activeIDMouseButton;
+    public Vector2f activeIDClickOffset;
+    public Window activeIDWindow;
+    public GuiInputSource activeIDSource;
+    public int activeIDPreviousFrame;
+    public DeactivatedItemData deactivatedItemData;
+    public int lastActiveID;
+    public float lastActiveIDTimer;
+    public IntArrayList activeIDStack;
 
-    public double lastKeyModsChangeTime = 0.0;
-    public double lastKeyModsChangeFromNoneTime = 0.0;
-    public double lastKeyboardKeyPressTime = 0.0;
+    public double lastKeyModsChangeTime;
+    public double lastKeyModsChangeFromNoneTime;
+    public double lastKeyboardKeyPressTime;
 
-    public int currentFocusScopeID = 0;
-    public int currentItemFlags = 0;
-    public NextItemData nextItemData = new NextItemData();
-    public LastItemData lastItemData = new LastItemData();
-    public NextWindowData nextWindowData = new NextWindowData();
+    public int currentFocusScopeID;
+    public int currentItemFlags;
+    public NextItemData nextItemData;
+    public LastItemData lastItemData;
+    public NextWindowData nextWindowData;
 
-    public boolean debugShowGroupRects = false;
-    public ArrayList<ColorMod> colorStack = new ArrayList<>();
-    public ArrayList<StyleMod> styleVariableStack = new ArrayList<>();
-    public ArrayList<FontStackInfo> fontStack = new ArrayList<>();
-    public ArrayList<FocusScopeData> focusScopeStack = new ArrayList<>();
-    public IntArrayList itemFlagsStack = new IntArrayList();
-    public ArrayList<GroupData> groupStack = new ArrayList<>();
-    public ArrayList<PopupData> openPopupStack = new ArrayList<>();
-    public ArrayList<PopupData> beginPopupStack = new ArrayList<>();
-    public ArrayList<TreeNodeStackData> treeNodeStack = new ArrayList<>();
+    public boolean debugShowGroupRects;
+    public ArrayList<ColorMod> colorStack;
+    public ArrayList<StyleMod> styleVariableStack;
+    public ArrayList<FontStackInfo> fontStack;
+    public ArrayList<FocusScopeData> focusScopeStack;
+    public IntArrayList itemFlagsStack;
+    public ArrayList<GroupData> groupStack;
+    public ArrayList<PopupData> openPopupStack;
+    public ArrayList<PopupData> beginPopupStack;
+    public ArrayList<TreeNodeStackData> treeNodeStack;
 
-    public ArrayList<Viewport> viewports = new ArrayList<>();
+    public ArrayList<Viewport> viewports;
 
-    public boolean navCursorVisible = false;
-    public boolean navHighlightIgnoreMouse = false;
-    public boolean navMousePositionDirty = false;
-    public boolean navIDAlive = false;
-    public int navID = 0;
-    public Window navFocusedWindow = null;
-    public int navFocusScopeID = 0;
-    public int navActivateID = 0;
-    public int navActivateDownID = 0;
-    public int navActrivatePressedID = 0;
-
-    /**
-     * @see com.ikalagaming.graphics.frontend.gui.flags.ActivateFlags
-     */
-    public int navActivateFlags = 0;
-
-    public ArrayList<FocusScopeData> navFocusRoute = new ArrayList<>();
-    public int navHighlightActivatedID = 0;
-    public float navHighlightActivatedTimer = 0.0f;
-    public int navNextActivateID = 0;
+    public boolean navCursorVisible;
+    public boolean navHighlightIgnoreMouse;
+    public boolean navMousePositionDirty;
+    public boolean navIDAlive;
+    public int navID;
+    public Window navFocusedWindow;
+    public int navFocusScopeID;
+    public int navActivateID;
+    public int navActivateDownID;
+    public int navActrivatePressedID;
 
     /**
      * @see com.ikalagaming.graphics.frontend.gui.flags.ActivateFlags
      */
-    public int navNextActivateFlags = 0;
+    public int navActivateFlags;
 
-    public GuiInputSource navInputSource = GuiInputSource.NONE;
-    public int navLastValidSelectionUserData = 0;
-    public IkByte navCursorHideFrames = new IkByte();
+    public ArrayList<FocusScopeData> navFocusRoute;
+    public int navHighlightActivatedID;
+    public float navHighlightActivatedTimer;
+    public int navNextActivateID;
 
-    public boolean navAnyRequest = false;
-    public boolean navInitRequest = false;
-    public boolean navInitRequestFromMove = false;
-    public NavItemData navInitResult = new NavItemData();
-    public boolean navMoveSubmitted = false;
-    public boolean navMoveScoringItems = false;
-    public boolean navMoveForwardToNextFrame = false;
+    /**
+     * @see com.ikalagaming.graphics.frontend.gui.flags.ActivateFlags
+     */
+    public int navNextActivateFlags;
+
+    public GuiInputSource navInputSource;
+    public int navLastValidSelectionUserData;
+    public IkByte navCursorHideFrames;
+
+    public boolean navAnyRequest;
+    public boolean navInitRequest;
+    public boolean navInitRequestFromMove;
+    public NavItemData navInitResult;
+    public boolean navMoveSubmitted;
+    public boolean navMoveScoringItems;
+    public boolean navMoveForwardToNextFrame;
 
     /**
      * @see com.ikalagaming.graphics.frontend.gui.flags.NavMoveFlags
      */
-    public int navMoveFlags = 0;
+    public int navMoveFlags;
 
     /**
      * @see com.ikalagaming.graphics.frontend.gui.flags.ScrollFlags
      */
-    public int navMoveScrollFlags = 0;
+    public int navMoveScrollFlags;
 
     /**
      * @see com.ikalagaming.graphics.frontend.gui.flags.KeyModFlags
      */
-    public int navMoveKeyMods = 0;
+    public int navMoveKeyMods;
 
-    public Direction navMoveDirection = Direction.NONE;
-    public Direction navMoveDirectionForDebug = Direction.NONE;
-    public Rect navScoringRect = new Rect(0, 0, 0, 0);
-    public Rect navScoringNoClipRect = new Rect(0, 0, 0, 0);
-    public int navScoringDebugCount = 0;
-    public int navTabbingDirection = 0;
-    public int navTabbingCounter = 0;
+    public Direction navMoveDirection;
+    public Direction navMoveDirectionForDebug;
+    public Rect navScoringRect;
+    public Rect navScoringNoClipRect;
+    public int navScoringDebugCount;
+    public int navTabbingDirection;
+    public int navTabbingCounter;
 
     /** Best move request candidate within the nav window. */
-    public NavItemData navMoveResultLocal = new NavItemData();
+    public NavItemData navMoveResultLocal;
 
     /** Best move request candidate within the nav window that are mostly visible. */
-    public NavItemData navMoveResultLocalVisible = new NavItemData();
+    public NavItemData navMoveResultLocalVisible;
 
     /** Best move request candidate within the nav window's flattened hierarchy. */
-    public NavItemData navMoveResultOther = new NavItemData();
+    public NavItemData navMoveResultOther;
 
     /** First tabbing request candidate within the nav window and flattened hierarchy. */
-    public NavItemData navTabbingResultFirst = new NavItemData();
+    public NavItemData navTabbingResultFirst;
 
-    public int navJustMovedFromFocusScopeID = 0;
-    public int navJustMovedToID = 0;
-    public int navJustMovedToFocusScopeID = 0;
+    public int navJustMovedFromFocusScopeID;
+    public int navJustMovedToID;
+    public int navJustMovedToFocusScopeID;
 
     /**
      * @see com.ikalagaming.graphics.frontend.gui.flags.KeyModFlags
      */
-    public int navJustMovedToKeyMods = 0;
+    public int navJustMovedToKeyMods;
 
     /**
      * @see com.ikalagaming.graphics.frontend.gui.flags.NavMoveFlags
      */
-    public int navJustMovedToFlags = 0;
+    public int navJustMovedToFlags;
 
-    public NavItemData navJustMovedToItemData = new NavItemData();
+    public NavItemData navJustMovedToItemData;
 
-    public boolean configNavWindowingWithGamepad = false;
-    public Window navWindowingTarget = null;
-    public Window navWindowingTargetPrev = null;
-    public Window navWindowingListWindow = null;
-    public float navWindowingTimer = 0.0f;
-    public float navWindowingHighlightAlpha = 0.0f;
-    public GuiInputSource navWindowingInputSource = GuiInputSource.NONE;
-    public boolean navWindowingToggleLayer = false;
-    public Vector2f navWindowingAccumulatedDeltaPosition = new Vector2f(0, 0);
-    public Vector2f navWindowingAccumulatedDeltaSize = new Vector2f(0, 0);
+    public boolean configNavWindowingWithGamepad;
+    public Window navWindowingTarget;
+    public Window navWindowingTargetPrev;
+    public Window navWindowingListWindow;
+    public float navWindowingTimer;
+    public float navWindowingHighlightAlpha;
+    public GuiInputSource navWindowingInputSource;
+    public boolean navWindowingToggleLayer;
+    public Vector2f navWindowingAccumulatedDeltaPosition;
+    public Vector2f navWindowingAccumulatedDeltaSize;
 
-    public float dimBackgroundRatio = 0.0f;
+    public float dimBackgroundRatio;
 
-    public boolean dragDropActive = false;
-    public boolean dragDropWithinSource = false;
-    public boolean dragDropWithinTarget = false;
-
-    /**
-     * @see com.ikalagaming.graphics.frontend.gui.flags.DragDropFlags
-     */
-    public int dragDropSourceFlags = 0;
-
-    public int dragDropSourceFrameCount = 0;
-    public MouseButton dragDropMouseButton = MouseButton.NONE;
-    public Object dragDropPayload = null;
-    public Rect dragDropTargetRect = new Rect(0, 0, 0, 0);
-    public Rect dragDropTargetClipRect = new Rect(0, 0, 0, 0);
-    public int dragDropTargetID = 0;
+    public boolean dragDropActive;
+    public boolean dragDropWithinSource;
+    public boolean dragDropWithinTarget;
 
     /**
      * @see com.ikalagaming.graphics.frontend.gui.flags.DragDropFlags
      */
-    public int dragDropAcceptFlags = 0;
+    public int dragDropSourceFlags;
 
-    public float dragDropAcceptIDCurrentRectSurface = 0.0f;
-    public int dragDropAcceptIDCurrent = 0;
-    public int dragDropAcceptIDPrev = 0;
-    public int dragDropAcceptFrameCount = 0;
-    public int dragDropHoldJustPressedID = 0;
-    public ByteBuffer dragDropPayloadBufferLocal = null;
+    public int dragDropSourceFrameCount;
+    public MouseButton dragDropMouseButton;
+    public Object dragDropPayload;
+    public Rect dragDropTargetRect;
+    public Rect dragDropTargetClipRect;
+    public int dragDropTargetID;
 
-    public ArrayList<ListClipperData> clipperTempData = new ArrayList<>();
+    /**
+     * @see com.ikalagaming.graphics.frontend.gui.flags.DragDropFlags
+     */
+    public int dragDropAcceptFlags;
 
-    public Table currentTable = null;
-    public ArrayList<TableTempData> tablesTempData = new ArrayList<>();
-    public ArrayList<Table> tables = new ArrayList<>();
-    public FloatArrayList tablesLastTimeActive = new FloatArrayList();
+    public float dragDropAcceptIDCurrentRectSurface;
+    public int dragDropAcceptIDCurrent;
+    public int dragDropAcceptIDPrev;
+    public int dragDropAcceptFrameCount;
+    public int dragDropHoldJustPressedID;
+    public ByteBuffer dragDropPayloadBufferLocal;
 
-    public TabBar currentTabBar = null;
-    public ArrayList<TabBar> tabBars = new ArrayList<>();
-    public IntArrayList currentTabBarStack = new IntArrayList();
-    public ArrayList<ShrinkWidthItem> shrinkWidthBuffer = new ArrayList<>();
+    public ArrayList<ListClipperData> clipperTempData;
 
-    public BoxSelectState boxSelectState = new BoxSelectState();
-    public MultiSelectTempData currentMultiSelect = new MultiSelectTempData();
-    public int multiSelectTempDataStackSize = 0;
-    public ArrayList<MultiSelectTempData> multiSelectTempData = new ArrayList<>();
-    public ArrayList<MultiSelectTempData> multiSelectStorage = new ArrayList<>();
+    public Table currentTable;
+    public ArrayList<TableTempData> tablesTempData;
+    public ArrayList<Table> tables;
+    public FloatArrayList tablesLastTimeActive;
 
-    public int hoverItemDelayID = 0;
-    public int hoverItemDelayIDPreviousFrame = 0;
+    public TabBar currentTabBar;
+    public ArrayList<TabBar> tabBars;
+    public IntArrayList currentTabBarStack;
+    public ArrayList<ShrinkWidthItem> shrinkWidthBuffer;
+
+    public BoxSelectState boxSelectState;
+    public MultiSelectTempData currentMultiSelect;
+    public int multiSelectTempDataStackSize;
+    public ArrayList<MultiSelectTempData> multiSelectTempData;
+    public ArrayList<MultiSelectTempData> multiSelectStorage;
+
+    public int hoverItemDelayID;
+    public int hoverItemDelayIDPreviousFrame;
 
     /** Used by isItemHovered(). */
-    public float hoverItemDelayTimer = 0.0f;
+    public float hoverItemDelayTimer;
 
     /** Used by isItemHovered(), time before tooltip hover time gets cleared. */
-    public float hoverItemDelayClearTimer = 0.0f;
+    public float hoverItemDelayClearTimer;
 
     /** ID of the item that a mouse is stationary over, reset when it leaves the item. */
-    public int hoverItemUnlockedStationaryID = 0;
+    public int hoverItemUnlockedStationaryID;
 
     /** ID of the window that a mouse is stationary over, reset when it leaves the window. */
-    public int hoverWindowUnlockedStationaryID = 0;
+    public int hoverWindowUnlockedStationaryID;
 
-    public MouseCursor mouseCursor = MouseCursor.ARROW;
-    public float mouseStationaryTimer = 0.0f;
-    public Vector2f mouseLastValidPosition = new Vector2f(0, 0);
+    public MouseCursor mouseCursor;
+    public float mouseStationaryTimer;
+    public Vector2f mouseLastValidPosition;
 
-    public InputTextState inputTextState = new InputTextState();
-    public InputTextDeactivatedState inputTextDeactivatedState = new InputTextDeactivatedState();
-    public int beginMenuDepth = 0;
-    public int beginComboDepth = 0;
+    public InputTextState inputTextState;
+    public InputTextDeactivatedState inputTextDeactivatedState;
+    public int beginMenuDepth;
+    public int beginComboDepth;
 
     /**
      * @see com.ikalagaming.graphics.frontend.gui.flags.ColorEditFlags
      */
-    public int colorEditOptions = 0;
+    public int colorEditOptions;
 
-    public int colorEditCurrentID = 0;
-    public int colorEditSavedID = 0;
-    public int colorEditSavedHue = 0;
-    public int colorEditSavedSaturation = 0;
-    public int colorEditSavedColor = 0;
-    public Vector4f colorPickerReference = new Vector4f(0, 0, 0, 0);
+    public int colorEditCurrentID;
+    public int colorEditSavedID;
+    public int colorEditSavedHue;
+    public int colorEditSavedSaturation;
+    public int colorEditSavedColor;
+    public Vector4f colorPickerReference;
 
-    public ComboPreviewData comboPreviewData = new ComboPreviewData();
+    public ComboPreviewData comboPreviewData;
 
-    public Rect windowResizeBorderExpectedRect = new Rect(0, 0, 0, 0);
-    public boolean windowResizeRelativeMode = false;
+    public Rect windowResizeBorderExpectedRect;
+    public boolean windowResizeRelativeMode;
 
     /** 0 is scrolling to clicked location, +/- 1 is next/previous page. */
-    public byte scrollbarSeekMode = 0;
+    public byte scrollbarSeekMode;
 
-    public float scrollbarClickDistanceToCenter = 0.0f;
+    public float scrollbarClickDistanceToCenter;
 
-    public float sliderGrabClickOffset = 0.0f;
-    public float sliderCurrentAccumulatedDelta = 0.0f;
-    public boolean sliderCurrentAccumulatedDeltaDirty = false;
+    public float sliderGrabClickOffset;
+    public float sliderCurrentAccumulatedDelta;
+    public boolean sliderCurrentAccumulatedDeltaDirty;
 
-    public float dragCurrentAccumulatedDelta = 0.0f;
-    public boolean dragCurrentAccumulatedDeltaDirty = false;
-    public float dragSpeedDefaultRatio = 0.0f;
+    public float dragCurrentAccumulatedDelta;
+    public boolean dragCurrentAccumulatedDeltaDirty;
+    public float dragSpeedDefaultRatio;
 
-    public float disabledAlphaBackup = 0.0f;
-    public short disabledStackSize = 0;
-    public short tooltipOverrideCount = 0;
-    public Window tooltipPreviousWindow = null;
-    public StringBuilder clipboardHandlerData = new StringBuilder();
-    public IntArrayList menuIDsSubmittedThisFrame = new IntArrayList();
+    public float disabledAlphaBackup;
+    public short disabledStackSize;
+    public short tooltipOverrideCount;
+    public Window tooltipPreviousWindow;
+    public StringBuilder clipboardHandlerData;
+    public IntArrayList menuIDsSubmittedThisFrame;
 
-    public boolean settingsLoaded = false;
-    public float settingsDirtyTimer = 0.0f;
+    public boolean settingsLoaded;
+    public float settingsDirtyTimer;
 
-    public boolean logEnabled = false;
+    public boolean logEnabled;
 
     /**
      * @see com.ikalagaming.graphics.frontend.gui.flags.LogFlags
      */
-    public int logFlags = 0;
+    public int logFlags;
 
-    public Window logWindow = null;
-    public int logDepthToExpand = 0;
-    public int logDepthToExpandDefault = 0;
+    public Window logWindow;
+    public int logDepthToExpand;
+    public int logDepthToExpandDefault;
 
-    public Object errorCallbackUserData = null;
-    public Vector2f errorTooltipLockedPosition = new Vector2f(0, 0);
-    public boolean errorFirst = false;
-    public int errorCountCurrentFrame = 0;
+    public Object errorCallbackUserData;
+    public Vector2f errorTooltipLockedPosition;
+    public boolean errorFirst;
+    public int errorCountCurrentFrame;
 
-    public int debugDrawIDConflictCount = 0;
+    public int debugDrawIDConflictCount;
 
     /**
      * @see com.ikalagaming.graphics.frontend.gui.flags.DebugLogFlags
      */
-    public int debugLogFlags = 0;
+    public int debugLogFlags;
 
-    public StringBuilder debugLogBuffer = new StringBuilder();
-    public int debugLogIndex = 0;
-    public int debugLogSkippedErrors = 0;
-    public int debugBreakKeyChord = 0;
-    public IkByte debugBeginReturnValueCullDepth = new IkByte();
-    public boolean debugItemPickerActive = false;
+    public StringBuilder debugLogBuffer;
+    public int debugLogIndex;
+    public int debugLogSkippedErrors;
+    public int debugBreakKeyChord;
+    public IkByte debugBeginReturnValueCullDepth;
+    public boolean debugItemPickerActive;
 
-    public float[] framerateSecondPerFrame = new float[60];
-    public int framerateSecondPerFrameIndex = 0;
-    public int framerateSecondPerFrameCount = 0;
-    public float framerateSecondPerFrameAccumulator = 0.0f;
-    public int captureMouseNextFrameOverride = 0;
-    public int captureKeyboardNextFrameOverride = 0;
-    public int textInputNextFrameOverride = 0;
-    public StringBuilder tempBuffer = new StringBuilder();
+    public float[] framerateSecondPerFrame;
+    public int framerateSecondPerFrameIndex;
+    public int framerateSecondPerFrameCount;
+    public float framerateSecondPerFrameAccumulator;
+    public int captureMouseNextFrameOverride;
+    public int captureKeyboardNextFrameOverride;
+    public int textInputNextFrameOverride;
+    public StringBuilder tempBuffer;
+
+    public Context() {
+        initialized = false;
+        io = new IkIO();
+        platformIO = null;
+        style = new Style();
+        drawData = new DrawData();
+        fontAtlases = new ArrayList<>();
+        font = null;
+        fontBaked = null;
+        fontSize = 0.0f;
+        fontSizeBase = 0.0f;
+        fontDensity = 0.0f;
+        dpiScale = 0.0f;
+        drawListSharedData = new DrawListSharedData();
+        time = 0.0;
+        frameCount = 0;
+        frameCountEnded = 0;
+        frameCountRendered = 0;
+        insideFrame = false;
+        inputEventQueue = new ArrayList<>();
+        inputEventTrail = new ArrayList<>();
+        windowsDisplayOrder = new ArrayList<>();
+        windowFocusOrder = new ArrayList<>();
+        windowByID = new HashMap<>();
+        windowActiveCount = 0;
+        windowCurrent = null;
+        windowHovered = null;
+        windowHoveredUnderMovingWindow = null;
+        windowMoving = null;
+        windowWheeling = null;
+        windowWheelingRefMousePosition = new Vector2f(0, 0);
+        windowWheelingStartFrame = 0;
+        windowWheelingScrolledFrame = 0;
+        windowWheelingReleaseTimer = 0.0f;
+        windowWheelingWheelRemainder = new Vector2f(0, 0);
+        windowWheelingAxisAverage = new Vector2f(0, 0);
+        hoveredID = 0;
+        hoveredIDPreviousFrame = 0;
+        hoveredIDPreviousFrameItemCount = 0;
+        hoveredIDTimer = 0.0f;
+        hoveredIDInactiveTimer = 0.0f;
+        hoveredIDAllowOverlap = false;
+        hoveredIDDisabled = false;
+        activeID = 0;
+        activeIDTimer = 0.0f;
+        activeIDSeenThisFrame = false;
+        activeIDActivatedThisFrame = false;
+        activeIDAllowOverlap = false;
+        activeIDRetainOnFocusLoss = false;
+        activeIDHasBeenPressedBefore = false;
+        activeIDHasBeenEditedBefore = false;
+        activeIDHasBeenEditedThisFrame = false;
+        activeIDFromShortcut = false;
+        activeIDMouseButton = MouseButton.NONE;
+        activeIDClickOffset = new Vector2f(0, 0);
+        activeIDWindow = null;
+        activeIDSource = GuiInputSource.NONE;
+        activeIDPreviousFrame = 0;
+        deactivatedItemData = new DeactivatedItemData();
+        lastActiveID = 0;
+        lastActiveIDTimer = 0.0f;
+        activeIDStack = new IntArrayList();
+        lastKeyModsChangeTime = 0.0;
+        lastKeyModsChangeFromNoneTime = 0.0;
+        lastKeyboardKeyPressTime = 0.0;
+        currentFocusScopeID = 0;
+        currentItemFlags = 0;
+        nextItemData = new NextItemData();
+        lastItemData = new LastItemData();
+        nextWindowData = new NextWindowData();
+        debugShowGroupRects = false;
+        colorStack = new ArrayList<>();
+        styleVariableStack = new ArrayList<>();
+        fontStack = new ArrayList<>();
+        focusScopeStack = new ArrayList<>();
+        itemFlagsStack = new IntArrayList();
+        groupStack = new ArrayList<>();
+        openPopupStack = new ArrayList<>();
+        beginPopupStack = new ArrayList<>();
+        treeNodeStack = new ArrayList<>();
+        viewports = new ArrayList<>();
+        navCursorVisible = false;
+        navHighlightIgnoreMouse = false;
+        navMousePositionDirty = false;
+        navIDAlive = false;
+        navID = 0;
+        navFocusedWindow = null;
+        navFocusScopeID = 0;
+        navActivateID = 0;
+        navActivateDownID = 0;
+        navActrivatePressedID = 0;
+        navActivateFlags = 0;
+        navFocusRoute = new ArrayList<>();
+        navHighlightActivatedID = 0;
+        navHighlightActivatedTimer = 0.0f;
+        navNextActivateID = 0;
+        navNextActivateFlags = 0;
+        navInputSource = GuiInputSource.NONE;
+        navLastValidSelectionUserData = 0;
+        navCursorHideFrames = new IkByte();
+        navAnyRequest = false;
+        navInitRequest = false;
+        navInitRequestFromMove = false;
+        navInitResult = new NavItemData();
+        navMoveSubmitted = false;
+        navMoveScoringItems = false;
+        navMoveForwardToNextFrame = false;
+        navMoveFlags = 0;
+        navMoveScrollFlags = 0;
+        navMoveKeyMods = 0;
+        navMoveDirection = Direction.NONE;
+        navMoveDirectionForDebug = Direction.NONE;
+        navScoringRect = new Rect(0, 0, 0, 0);
+        navScoringNoClipRect = new Rect(0, 0, 0, 0);
+        navScoringDebugCount = 0;
+        navTabbingDirection = 0;
+        navTabbingCounter = 0;
+        navMoveResultLocal = new NavItemData();
+        navMoveResultLocalVisible = new NavItemData();
+        navMoveResultOther = new NavItemData();
+        navTabbingResultFirst = new NavItemData();
+        navJustMovedFromFocusScopeID = 0;
+        navJustMovedToID = 0;
+        navJustMovedToFocusScopeID = 0;
+        navJustMovedToKeyMods = 0;
+        navJustMovedToFlags = 0;
+        navJustMovedToItemData = new NavItemData();
+        configNavWindowingWithGamepad = false;
+        navWindowingTarget = null;
+        navWindowingTargetPrev = null;
+        navWindowingListWindow = null;
+        navWindowingTimer = 0.0f;
+        navWindowingHighlightAlpha = 0.0f;
+        navWindowingInputSource = GuiInputSource.NONE;
+        navWindowingToggleLayer = false;
+        navWindowingAccumulatedDeltaPosition = new Vector2f(0, 0);
+        navWindowingAccumulatedDeltaSize = new Vector2f(0, 0);
+        dimBackgroundRatio = 0.0f;
+        dragDropActive = false;
+        dragDropWithinSource = false;
+        dragDropWithinTarget = false;
+        dragDropSourceFlags = 0;
+        dragDropSourceFrameCount = 0;
+        dragDropMouseButton = MouseButton.NONE;
+        dragDropPayload = null;
+        dragDropTargetRect = new Rect(0, 0, 0, 0);
+        dragDropTargetClipRect = new Rect(0, 0, 0, 0);
+        dragDropTargetID = 0;
+        dragDropAcceptFlags = 0;
+        dragDropAcceptIDCurrentRectSurface = 0.0f;
+        dragDropAcceptIDCurrent = 0;
+        dragDropAcceptIDPrev = 0;
+        dragDropAcceptFrameCount = 0;
+        dragDropHoldJustPressedID = 0;
+        dragDropPayloadBufferLocal = null;
+        clipperTempData = new ArrayList<>();
+        currentTable = null;
+        tablesTempData = new ArrayList<>();
+        tables = new ArrayList<>();
+        tablesLastTimeActive = new FloatArrayList();
+        currentTabBar = null;
+        tabBars = new ArrayList<>();
+        currentTabBarStack = new IntArrayList();
+        shrinkWidthBuffer = new ArrayList<>();
+        boxSelectState = new BoxSelectState();
+        currentMultiSelect = new MultiSelectTempData();
+        multiSelectTempDataStackSize = 0;
+        multiSelectTempData = new ArrayList<>();
+        multiSelectStorage = new ArrayList<>();
+        hoverItemDelayID = 0;
+        hoverItemDelayIDPreviousFrame = 0;
+        hoverItemDelayTimer = 0.0f;
+        hoverItemDelayClearTimer = 0.0f;
+        hoverItemUnlockedStationaryID = 0;
+        hoverWindowUnlockedStationaryID = 0;
+        mouseCursor = MouseCursor.ARROW;
+        mouseStationaryTimer = 0.0f;
+        mouseLastValidPosition = new Vector2f(0, 0);
+        inputTextState = new InputTextState();
+        inputTextDeactivatedState = new InputTextDeactivatedState();
+        beginMenuDepth = 0;
+        beginComboDepth = 0;
+        colorEditOptions = 0;
+        colorEditCurrentID = 0;
+        colorEditSavedID = 0;
+        colorEditSavedHue = 0;
+        colorEditSavedSaturation = 0;
+        colorEditSavedColor = 0;
+        colorPickerReference = new Vector4f(0, 0, 0, 0);
+        comboPreviewData = new ComboPreviewData();
+        windowResizeBorderExpectedRect = new Rect(0, 0, 0, 0);
+        windowResizeRelativeMode = false;
+        scrollbarSeekMode = 0;
+        scrollbarClickDistanceToCenter = 0.0f;
+        sliderGrabClickOffset = 0.0f;
+        sliderCurrentAccumulatedDelta = 0.0f;
+        sliderCurrentAccumulatedDeltaDirty = false;
+        dragCurrentAccumulatedDelta = 0.0f;
+        dragCurrentAccumulatedDeltaDirty = false;
+        dragSpeedDefaultRatio = 0.0f;
+        disabledAlphaBackup = 0.0f;
+        disabledStackSize = 0;
+        tooltipOverrideCount = 0;
+        tooltipPreviousWindow = null;
+        clipboardHandlerData = new StringBuilder();
+        menuIDsSubmittedThisFrame = new IntArrayList();
+        settingsLoaded = false;
+        settingsDirtyTimer = 0.0f;
+        logEnabled = false;
+        logFlags = 0;
+        logWindow = null;
+        logDepthToExpand = 0;
+        logDepthToExpandDefault = 0;
+        errorCallbackUserData = null;
+        errorTooltipLockedPosition = new Vector2f(0, 0);
+        errorFirst = false;
+        errorCountCurrentFrame = 0;
+        debugDrawIDConflictCount = 0;
+        debugLogFlags = 0;
+        debugLogBuffer = new StringBuilder();
+        debugLogIndex = 0;
+        debugLogSkippedErrors = 0;
+        debugBreakKeyChord = 0;
+        debugBeginReturnValueCullDepth = new IkByte();
+        debugItemPickerActive = false;
+        framerateSecondPerFrame = new float[60];
+        framerateSecondPerFrameIndex = 0;
+        framerateSecondPerFrameCount = 0;
+        framerateSecondPerFrameAccumulator = 0.0f;
+        captureMouseNextFrameOverride = 0;
+        captureKeyboardNextFrameOverride = 0;
+        textInputNextFrameOverride = 0;
+        tempBuffer = new StringBuilder();
+    }
 }
