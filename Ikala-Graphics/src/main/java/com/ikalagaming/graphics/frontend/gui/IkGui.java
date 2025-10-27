@@ -4,8 +4,10 @@ import com.ikalagaming.graphics.frontend.gui.callback.GuiInputTextCallback;
 import com.ikalagaming.graphics.frontend.gui.data.*;
 import com.ikalagaming.graphics.frontend.gui.enums.*;
 import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
+import com.ikalagaming.graphics.frontend.gui.util.Color;
 import com.ikalagaming.graphics.frontend.gui.util.Hash;
 
+import lombok.Getter;
 import lombok.NonNull;
 import org.joml.Vector2f;
 import org.joml.Vector4f;
@@ -13,18 +15,24 @@ import org.joml.Vector4f;
 /** Immediate mode GUI library based on ImGui. */
 public class IkGui {
     private static Context context;
-    private static IkIO io;
+    @Getter
+    private static IkIO IO;
+    @Getter
     private static PlatformIO platformIO;
     private static DrawList backgroundDrawList;
     private static DrawList foregroundDrawList;
     private static Storage storage;
+    @Getter
     private static Viewport windowViewport;
+    @Getter
     private static Style style;
+    // TODO(ches) complete this
+    @Getter
     private static Font font;
 
     public static void init() {
         context = new Context();
-        io = new IkIO();
+        IO = new IkIO();
         platformIO = new PlatformIO();
         backgroundDrawList = new DrawList();
         foregroundDrawList = new DrawList();
@@ -55,18 +63,6 @@ public class IkGui {
 
     public static void setCurrentContext(@NonNull Context context) {
         IkGui.context = context;
-    }
-
-    public static IkIO getIO() {
-        return io;
-    }
-
-    public static Style getStyle() {
-        return style;
-    }
-
-    public static Viewport getWindowViewport() {
-        return windowViewport;
     }
 
     public static void begin(@NonNull String title) {
@@ -513,11 +509,6 @@ public class IkGui {
         // TODO(ches) complete this
     }
 
-    public static Font getFont() {
-        // TODO(ches) complete this
-        return font;
-    }
-
     public static int getFontSize() {
         // TODO(ches) complete this
         return 0;
@@ -764,19 +755,24 @@ public class IkGui {
     }
 
     public static void text(String text) {
-        // TODO(ches) complete this
+        //TODO(ches) color from style
+        int color = Color.BLACK;
+        textColored(color, text);
     }
 
     public static void textColored(float r, float g, float b, float a, String text) {
-        // TODO(ches) complete this
+        int color = Color.rgba(r, g, b, a);
+        textColored(color, text);
     }
 
     public static void textColored(int r, int g, int b, int a, String text) {
-        // TODO(ches) complete this
+        int color = Color.rgba(r, g, b, a);
+        textColored(color, text);
     }
 
     public static void textColored(int color, String text) {
-        // TODO(ches) complete this
+        Vector2f cursor = context.windowCurrent.cursorPosition;
+        context.windowCurrent.drawList.addText(cursor.x, cursor.y, color, text);
     }
 
     public static void textDisabled(String text) {
@@ -4357,11 +4353,6 @@ public class IkGui {
     }
 
     public static String saveIniSettingsToMemory(long size) {
-        // TODO(ches) complete this
-        return null;
-    }
-
-    public static PlatformIO getPlatformIO() {
         // TODO(ches) complete this
         return null;
     }
