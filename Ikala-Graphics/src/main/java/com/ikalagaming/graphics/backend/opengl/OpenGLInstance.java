@@ -1,6 +1,5 @@
 package com.ikalagaming.graphics.backend.opengl;
 
-import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL11.glDeleteTextures;
 import static org.lwjgl.opengl.GL15.*;
 import static org.lwjgl.opengl.GL20.glDeleteProgram;
@@ -18,6 +17,8 @@ import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.ShaderMap;
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.frontend.*;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.data.IkIO;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
@@ -372,6 +373,8 @@ public class OpenGLInstance implements Instance {
         pipelineManager.resize(width, height);
         ImGuiIO imGuiIO = ImGui.getIO();
         imGuiIO.setDisplaySize(width, height);
+        IkIO ikIO = IkGui.getIO();
+        ikIO.setDisplaySize(width, height);
     }
 
     @Override

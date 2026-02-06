@@ -15,20 +15,15 @@ import org.joml.Vector4f;
 /** Immediate mode GUI library based on ImGui. */
 public class IkGui {
     private static Context context;
-    @Getter
-    private static IkIO IO;
-    @Getter
-    private static PlatformIO platformIO;
+    @Getter private static IkIO IO;
+    @Getter private static PlatformIO platformIO;
     private static DrawList backgroundDrawList;
     private static DrawList foregroundDrawList;
     private static Storage storage;
-    @Getter
-    private static Viewport windowViewport;
-    @Getter
-    private static Style style;
+    @Getter private static Viewport windowViewport;
+    @Getter private static Style style;
     // TODO(ches) complete this
-    @Getter
-    private static Font font;
+    @Getter private static Font font;
 
     public static void init() {
         context = new Context();
@@ -755,7 +750,7 @@ public class IkGui {
     }
 
     public static void text(String text) {
-        //TODO(ches) color from style
+        // TODO(ches) color from style
         int color = Color.BLACK;
         textColored(color, text);
     }
