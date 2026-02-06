@@ -121,4 +121,9 @@ public class Color {
         }
         return p;
     }
+
+    /** Private constructor so this is not instantiated. */
+    private Color() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }
