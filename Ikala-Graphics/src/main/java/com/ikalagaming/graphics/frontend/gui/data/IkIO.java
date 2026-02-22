@@ -1,17 +1,100 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
+import com.ikalagaming.graphics.frontend.gui.flags.BackendFlags;
+import com.ikalagaming.graphics.frontend.gui.flags.ConfigFlags;
+
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.Setter;
 import org.joml.Vector2f;
 
+@Getter
+@Setter
 public class IkIO {
-    // TODO(ches) IO state
+    /**
+     * @see BackendFlags
+     */
+    private int backendFlags;
 
-    public int getConfigFlags() {
-        // TODO(ches) complete this
-        return 0;
-    }
+    @NonNull private String backendPlatformName;
+    @NonNull private String backendRendererName;
+    private short backendUsingLegacyKeyArrays;
+    private boolean backendUsingLegacyNavInputArray;
 
-    public void setConfigFlags(int value) {
-        // TODO(ches) complete this
+    /**
+     * @see ConfigFlags
+     */
+    private int configFlags;
+
+    private boolean configDebugBeginReturnValueLoop;
+    private boolean configDebugBeginReturnValueOnce;
+    private boolean configDebugIgnoreFocusLoss;
+    private boolean configDebugIniSettings;
+    private boolean configDebugIsDebuggerPresent;
+    private boolean configDockingAlwaysTabBar;
+    private boolean configDockingNoSplit;
+    private boolean configDockingTransparentPayload;
+    private boolean configDockingWithShift;
+    private boolean configDragClickToInputText;
+    private boolean configInputTextCursorBlink;
+    private boolean configInputTextEnterKeepActive;
+    private boolean configInputTrickleEventQueue;
+    private boolean configMacOSXBehaviors;
+    private boolean configMemoryCompactTimer;
+    private boolean configViewportsNoAutoMerge;
+    private boolean configViewportsNoDecoration;
+    private boolean configViewportsNoDefaultParent;
+    private boolean configViewportsNoTaskBarIcon;
+    private boolean configWindowsMoveFromTitleBarOnly;
+    private boolean configWindowsResizeFromEdges;
+    @NonNull private Context context;
+    private float deltaTime;
+    private final Vector2f displayFramebufferScale;
+    private final Vector2f displaySize;
+    @NonNull private FontAtlas fonts;
+    private boolean fontAllowUserScaling;
+    @NonNull private Font fontDefault;
+    private float fontGlobalScale;
+    private float framerate;
+    @NonNull private String iniFilename;
+    private float iniSavingRate;
+    private short inputQueueSurrogate;
+    private boolean keyAlt;
+    private boolean keyCtrl;
+    private int keyMods;
+    private float keyRepeatDelay;
+    private float keyRepeatRate;
+    private boolean keyShift;
+    private boolean keySuper;
+    @NonNull private String logFilename;
+    private int metricsActiveWindows;
+    private int metricsRenderIndices;
+    private int metricsRenderVertices;
+    private int metricsRenderWindows;
+    private boolean mouseCtrlLeftAsRightClick;
+    private float mouseDoubleClickMaxDist;
+    private float mouseDoubleClickTime;
+    private float mouseDragThreshold;
+    private boolean mouseDrawCursor;
+    private int mouseHoveredViewport;
+    private float mouseWheel;
+    private float mouseWheelH;
+    private boolean mouseWheelRequestAxisSwap;
+    private boolean navActive;
+    private boolean navVisible;
+    private float penPressure;
+    private short platformLocaleDecimalPoint;
+    private boolean wantCaptureKeyboard;
+    private boolean wantCaptureMouse;
+    private boolean wantCaptureMouseUnlessPopupClose;
+    private boolean wantSaveIniSettings;
+    private boolean wantSetMousePos;
+    private boolean wantTextInput;
+
+    public IkIO() {
+        displaySize = new Vector2f(0, 0);
+        configFlags = ConfigFlags.NONE;
+        displayFramebufferScale = new Vector2f(0, 0);
     }
 
     public void addConfigFlags(int flags) {
@@ -24,15 +107,6 @@ public class IkIO {
 
     public boolean hasConfigFlags(int flags) {
         return (this.getConfigFlags() & flags) != 0;
-    }
-
-    public int getBackendFlags() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setBackendFlags(int value) {
-        // TODO(ches) complete this
     }
 
     public void addBackendFlags(int flags) {
@@ -48,402 +122,51 @@ public class IkIO {
     }
 
     public Vector2f getDisplaySize() {
-        final Vector2f value = new Vector2f();
-        getDisplaySize(value);
-        return value;
+        return new Vector2f(displaySize);
     }
 
-    public void getDisplaySize(Vector2f output) {
-        // TODO(ches) complete this
+    public void getDisplaySize(@NonNull Vector2f output) {
+        output.set(displaySize);
     }
 
     public float getDisplaySizeX() {
-        // TODO(ches) complete this
-        return 0;
+        return displaySize.x;
     }
 
     public float getDisplaySizeY() {
-        // TODO(ches) complete this
-        return 0;
+        return displaySize.y;
     }
 
-    public void setDisplaySize(Vector2f value) {
-        // TODO(ches) complete this
+    public void setDisplaySize(@NonNull Vector2f value) {
+        displaySize.set(value);
     }
 
     public void setDisplaySize(float valueX, float valueY) {
-        // TODO(ches) complete this
-    }
-
-    public float getDeltaTime() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setDeltaTime(float value) {
-        // TODO(ches) complete this
-    }
-
-    public float getIniSavingRate() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setIniSavingRate(float value) {
-        // TODO(ches) complete this
-    }
-
-    public String getIniFilename() {
-        // TODO(ches) complete this
-        return "";
-    }
-
-    public void setIniFilename(String value) {
-        // TODO(ches) complete this
-    }
-
-    public String getLogFilename() {
-        // TODO(ches) complete this
-        return "";
-    }
-
-    public void setLogFilename(String value) {
-        // TODO(ches) complete this
-    }
-
-    public FontAtlas getFonts() {
-        // TODO(ches) complete this
-        return null;
-    }
-
-    public void setFonts(FontAtlas value) {
-        // TODO(ches) complete this
-    }
-
-    public float getFontGlobalScale() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setFontGlobalScale(float value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getFontAllowUserScaling() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setFontAllowUserScaling(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public Font getFontDefault() {
-        // TODO(ches) complete this
-        return null;
-    }
-
-    public void setFontDefault(Font value) {
-        // TODO(ches) complete this
+        displaySize.set(valueX, valueY);
     }
 
     public Vector2f getDisplayFramebufferScale() {
-        Vector2f dst = new Vector2f();
-
-        // TODO(ches) complete this
-        return dst;
+        return new Vector2f(displayFramebufferScale);
     }
 
     public float getDisplayFramebufferScaleX() {
-        // TODO(ches) complete this
-        return 0;
+        return displayFramebufferScale.x;
     }
 
     public float getDisplayFramebufferScaleY() {
-        // TODO(ches) complete this
-        return 0;
+        return displayFramebufferScale.y;
     }
 
-    public void getDisplayFramebufferScale(Vector2f dst) {
-        // TODO(ches) complete this
+    public void getDisplayFramebufferScale(@NonNull Vector2f dst) {
+        dst.set(displayFramebufferScale);
     }
 
-    public void setDisplayFramebufferScale(Vector2f value) {
-        // TODO(ches) complete this
+    public void setDisplayFramebufferScale(@NonNull Vector2f value) {
+        displayFramebufferScale.set(value);
     }
 
     public void setDisplayFramebufferScale(float valueX, float valueY) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigDockingNoSplit() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigDockingNoSplit(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigDockingWithShift() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigDockingWithShift(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigDockingAlwaysTabBar() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigDockingAlwaysTabBar(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigDockingTransparentPayload() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigDockingTransparentPayload(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigViewportsNoAutoMerge() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigViewportsNoAutoMerge(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigViewportsNoTaskBarIcon() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigViewportsNoTaskBarIcon(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigViewportsNoDecoration() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigViewportsNoDecoration(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigViewportsNoDefaultParent() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigViewportsNoDefaultParent(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getMouseDrawCursor() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setMouseDrawCursor(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigMacOSXBehaviors() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigMacOSXBehaviors(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigInputTrickleEventQueue() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigInputTrickleEventQueue(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigInputTextCursorBlink() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigInputTextCursorBlink(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigInputTextEnterKeepActive() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigInputTextEnterKeepActive(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigDragClickToInputText() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigDragClickToInputText(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigWindowsResizeFromEdges() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigWindowsResizeFromEdges(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigWindowsMoveFromTitleBarOnly() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigWindowsMoveFromTitleBarOnly(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigMemoryCompactTimer() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigMemoryCompactTimer(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public float getMouseDoubleClickTime() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setMouseDoubleClickTime(float value) {
-        // TODO(ches) complete this
-    }
-
-    public float getMouseDoubleClickMaxDist() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setMouseDoubleClickMaxDist(float value) {
-        // TODO(ches) complete this
-    }
-
-    public float getMouseDragThreshold() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setMouseDragThreshold(float value) {
-        // TODO(ches) complete this
-    }
-
-    public float getKeyRepeatDelay() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setKeyRepeatDelay(float value) {
-        // TODO(ches) complete this
-    }
-
-    public float getKeyRepeatRate() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setKeyRepeatRate(float value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigDebugIsDebuggerPresent() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigDebugIsDebuggerPresent(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigDebugBeginReturnValueOnce() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigDebugBeginReturnValueOnce(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigDebugBeginReturnValueLoop() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigDebugBeginReturnValueLoop(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigDebugIgnoreFocusLoss() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigDebugIgnoreFocusLoss(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getConfigDebugIniSettings() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setConfigDebugIniSettings(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public String getBackendPlatformName() {
-        // TODO(ches) complete this
-        return "";
-    }
-
-    public void setBackendPlatformName(String value) {
-        // TODO(ches) complete this
-    }
-
-    public String getBackendRendererName() {
-        // TODO(ches) complete this
-        return "";
-    }
-
-    public void setBackendRendererName(String value) {
-        // TODO(ches) complete this
-    }
-
-    public short getPlatformLocaleDecimalPoint() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setPlatformLocaleDecimalPoint(short value) {
-        // TODO(ches) complete this
+        displayFramebufferScale.set(valueX, valueY);
     }
 
     public void addKeyEvent(int key, boolean down) {
@@ -506,114 +229,6 @@ public class IkIO {
         // TODO(ches) complete this
     }
 
-    public boolean getWantCaptureMouse() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setWantCaptureMouse(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getWantCaptureKeyboard() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setWantCaptureKeyboard(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getWantTextInput() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setWantTextInput(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getWantSetMousePos() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setWantSetMousePos(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getWantSaveIniSettings() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setWantSaveIniSettings(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getNavActive() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setNavActive(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getNavVisible() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setNavVisible(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public float getFramerate() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setFramerate(float value) {
-        // TODO(ches) complete this
-    }
-
-    public int getMetricsRenderVertices() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setMetricsRenderVertices(int value) {
-        // TODO(ches) complete this
-    }
-
-    public int getMetricsRenderIndices() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setMetricsRenderIndices(int value) {
-        // TODO(ches) complete this
-    }
-
-    public int getMetricsRenderWindows() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setMetricsRenderWindows(int value) {
-        // TODO(ches) complete this
-    }
-
-    public int getMetricsActiveWindows() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setMetricsActiveWindows(int value) {
-        // TODO(ches) complete this
-    }
-
     public Vector2f getMouseDelta() {
         Vector2f dst = new Vector2f();
         // TODO(ches) complete this
@@ -640,15 +255,6 @@ public class IkIO {
     }
 
     public void setMouseDelta(float valueX, float valueY) {
-        // TODO(ches) complete this
-    }
-
-    public Context getCtx() {
-        // TODO(ches) complete this
-        return null;
-    }
-
-    public void setCtx(Context value) {
         // TODO(ches) complete this
     }
 
@@ -699,93 +305,12 @@ public class IkIO {
         // TODO(ches) complete this
     }
 
-    public float getMouseWheel() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setMouseWheel(float value) {
-        // TODO(ches) complete this
-    }
-
-    public float getMouseWheelH() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setMouseWheelH(float value) {
-        // TODO(ches) complete this
-    }
-
-    public int getMouseHoveredViewport() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setMouseHoveredViewport(int value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getKeyCtrl() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setKeyCtrl(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getKeyShift() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setKeyShift(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getKeyAlt() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setKeyAlt(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getKeySuper() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setKeySuper(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public int getKeyMods() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setKeyMods(int value) {
-        // TODO(ches) complete this
-    }
-
     public Object[] getKeysData() {
         // TODO(ches) complete this, add some kind of KeyData struct
         return null;
     }
 
     public void setKeysData(Object[] value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getWantCaptureMouseUnlessPopupClose() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setWantCaptureMouseUnlessPopupClose(boolean value) {
         // TODO(ches) complete this
     }
 
@@ -971,24 +496,6 @@ public class IkIO {
         // TODO(ches) complete this
     }
 
-    public boolean getMouseWheelRequestAxisSwap() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setMouseWheelRequestAxisSwap(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getMouseCtrlLeftAsRightClick() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setMouseCtrlLeftAsRightClick(boolean value) {
-        // TODO(ches) complete this
-    }
-
     public float[] getMouseDownDuration() {
         // TODO(ches) complete this
         return null;
@@ -1052,15 +559,6 @@ public class IkIO {
         // TODO(ches) complete this
     }
 
-    public float getPenPressure() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setPenPressure(float value) {
-        // TODO(ches) complete this
-    }
-
     public boolean getAppFocusLost() {
         // TODO(ches) complete this
         return false;
@@ -1069,32 +567,5 @@ public class IkIO {
     public boolean getAppAcceptingEvents() {
         // TODO(ches) complete this
         return false;
-    }
-
-    public short getBackendUsingLegacyKeyArrays() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setBackendUsingLegacyKeyArrays(short value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean getBackendUsingLegacyNavInputArray() {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public void setBackendUsingLegacyNavInputArray(boolean value) {
-        // TODO(ches) complete this
-    }
-
-    public short getInputQueueSurrogate() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setInputQueueSurrogate(short value) {
-        // TODO(ches) complete this
     }
 }
