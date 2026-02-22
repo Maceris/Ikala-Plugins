@@ -23,4 +23,9 @@ public class DrawFlags {
                     | ROUND_CORNERS_BOTTOM_RIGHT;
     public static final int ROUND_CORNERS_DEFAULT = ROUND_CORNERS_ALL;
     public static final int ROUND_CORNERS_MASK = ROUND_CORNERS_ALL | ROUND_CORNERS_NONE;
+
+    /** Private constructor so this is not instantiated. */
+    private DrawFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

@@ -29,4 +29,9 @@ public class DebugLogFlags {
                     | EVENT_INPUT_ROUTING
                     | EVENT_DOCKING
                     | EVENT_VIEWPORT;
+
+    /** Private constructor so this is not instantiated. */
+    private DebugLogFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

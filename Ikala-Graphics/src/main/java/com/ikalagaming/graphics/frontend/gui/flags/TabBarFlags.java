@@ -15,4 +15,9 @@ public class TabBarFlags {
     public static final int FITTING_POLICY_DEFAULT = FITTING_POLICY_RESIZE_DOWN;
     public static final int FITTING_POLICY_MASK =
             FITTING_POLICY_RESIZE_DOWN | FITTING_POLICY_SCROLL;
+
+    /** Private constructor so this is not instantiated. */
+    private TabBarFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

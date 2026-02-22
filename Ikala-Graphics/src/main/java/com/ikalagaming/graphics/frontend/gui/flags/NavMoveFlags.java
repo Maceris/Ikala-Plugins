@@ -47,4 +47,9 @@ public class NavMoveFlags {
 
     // Combined flags
     public static final int WRAP_MASK = LOOP_X | LOOP_Y | WRAP_X | WRAP_Y;
+
+    /** Private constructor so this is not instantiated. */
+    private NavMoveFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

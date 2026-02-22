@@ -20,4 +20,9 @@ public class HoveredFlags {
     public static final int RECT_ONLY =
             ALLOW_WHEN_BLOCKED_BY_POPUP | ALLOW_WHEN_BLOCKED_BY_ACTIVE_ITEM | ALLOW_WHEN_OVERLAPPED;
     public static final int ROOT_AND_CHILD_WINDOWS = ROOT_WINDOW | CHILD_WINDOWS;
+
+    /** Private constructor so this is not instantiated. */
+    private HoveredFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

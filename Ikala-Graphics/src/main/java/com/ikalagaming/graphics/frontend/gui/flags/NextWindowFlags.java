@@ -13,4 +13,9 @@ public class NextWindowFlags {
     public static final int HAS_WINDOW_FLAGS = 1 << 8;
     public static final int HAS_CHILD_FLAGS = 1 << 9;
     public static final int HAS_REFRESH_POLICY = 1 << 10;
+
+    /** Private constructor so this is not instantiated. */
+    private NextWindowFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

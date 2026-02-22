@@ -25,4 +25,9 @@ public class WindowFlags {
     public static final int NO_NAV = NO_NAV_INPUTS | NO_NAV_FOCUS;
     public static final int NO_DECORATION = NO_TITLE_BAR | NO_RESIZE | NO_SCROLLBAR | NO_COLLAPSE;
     public static final int NO_INPUTS = NO_MOUSE_INPUTS | NO_NAV_INPUTS | NO_NAV_FOCUS;
+
+    /** Private constructor so this is not instantiated. */
+    private WindowFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

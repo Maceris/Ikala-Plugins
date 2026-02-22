@@ -10,4 +10,9 @@ public class ChildFlags {
     public static final int AUTO_RESIZE_Y = 1 << 5;
     public static final int ALWAYS_AUTO_RESIZE = 1 << 6;
     public static final int FRAME_STYLE = 1 << 7;
+
+    /** Private constructor so this is not instantiated. */
+    private ChildFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

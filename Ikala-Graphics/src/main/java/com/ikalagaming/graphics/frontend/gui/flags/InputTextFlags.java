@@ -22,4 +22,9 @@ public class InputTextFlags {
     public static final int CHARS_SCIENTIFIC = 1 << 17;
     public static final int CALLBACK_RESIZE = 1 << 18;
     public static final int CALLBACK_EDIT = 1 << 19;
+
+    /** Private constructor so this is not instantiated. */
+    private InputTextFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

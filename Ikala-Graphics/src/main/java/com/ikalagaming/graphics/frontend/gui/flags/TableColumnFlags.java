@@ -24,4 +24,9 @@ public class TableColumnFlags {
     public static final int IS_VISIBLE = 1 << 19;
     public static final int IS_SORTED = 1 << 20;
     public static final int IS_HOVERED = 1 << 21;
+
+    /** Private constructor so this is not instantiated. */
+    private TableColumnFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

@@ -28,4 +28,9 @@ public class ColorEditFlags {
 
     // Combined flags
     public static final int OPTIONS_DEFAULT = INPUT_RGB | PICKER_HUE_BAR | UINT8 | DISPLAY_RGB;
+
+    /** Private constructor so this is not instantiated. */
+    private ColorEditFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

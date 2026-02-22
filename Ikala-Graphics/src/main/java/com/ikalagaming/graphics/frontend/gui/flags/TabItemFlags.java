@@ -10,4 +10,9 @@ public class TabItemFlags {
     public static final int NO_REORDER = 1 << 5;
     public static final int LEADING = 1 << 6;
     public static final int TRAILING = 1 << 7;
+
+    /** Private constructor so this is not instantiated. */
+    private TabItemFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

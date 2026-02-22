@@ -19,4 +19,9 @@ public class TreeNodeFlags {
 
     // Combined flags
     public static final int COLLAPSING_HEADER = FRAMED | NO_TREE_PUSH_ON_OPEN | NO_AUTO_OPEN_ON_LOG;
+
+    /** Private constructor so this is not instantiated. */
+    private TreeNodeFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

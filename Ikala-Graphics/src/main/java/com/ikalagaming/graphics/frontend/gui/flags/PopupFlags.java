@@ -15,4 +15,9 @@ public class PopupFlags {
     public static final int MOUSE_BUTTON_MASK =
             MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT | MOUSE_BUTTON_MIDDLE;
     public static final int ANY_POPUP = ANY_POPUP_ID | ANY_POPUP_LEVEL;
+
+    /** Private constructor so this is not instantiated. */
+    private PopupFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

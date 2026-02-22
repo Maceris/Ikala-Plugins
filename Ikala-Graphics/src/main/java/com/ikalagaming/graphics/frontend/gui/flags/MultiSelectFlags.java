@@ -18,4 +18,9 @@ public class MultiSelectFlags {
     public static final int SELECT_ON_CLICK = 1 << 13;
     public static final int SELECT_ON_CLICK_RELEASE = 1 << 14;
     public static final int NAV_WRAP_X = 1 << 15;
+
+    /** Private constructor so this is not instantiated. */
+    private MultiSelectFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

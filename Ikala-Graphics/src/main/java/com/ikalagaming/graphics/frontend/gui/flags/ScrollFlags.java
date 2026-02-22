@@ -28,4 +28,9 @@ public class ScrollFlags {
     // Combined flags
     public static final int MASK_X = KEEP_VISIBLE_EDGE_X | KEEP_VISIBLE_CENTER_X | ALWAYS_CENTER_X;
     public static final int MASK_Y = KEEP_VISIBLE_EDGE_Y | KEEP_VISIBLE_CENTER_Y | ALWAYS_CENTER_Y;
+
+    /** Private constructor so this is not instantiated. */
+    private ScrollFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

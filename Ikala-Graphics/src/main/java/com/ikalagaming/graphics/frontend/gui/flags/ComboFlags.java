@@ -13,4 +13,9 @@ public class ComboFlags {
     // Combined flags
     public static final int HEIGHT_MASK =
             HEIGHT_SMALL | HEIGHT_REGULAR | HEIGHT_LARGE | HEIGHT_LARGEST;
+
+    /** Private constructor so this is not instantiated. */
+    private ComboFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

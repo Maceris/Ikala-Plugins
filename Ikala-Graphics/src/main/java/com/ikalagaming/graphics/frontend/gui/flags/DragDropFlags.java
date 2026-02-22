@@ -14,4 +14,9 @@ public class DragDropFlags {
 
     // Combined flags
     public static final int ACCEPT_PEEK_ONLY = ACCEPT_BEFORE_DELIVERY | ACCEPT_NO_DRAW_DEFAULT_RECT;
+
+    /** Private constructor so this is not instantiated. */
+    private DragDropFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

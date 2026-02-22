@@ -10,4 +10,9 @@ public class LogFlags {
     // Combined flags
     public static final int OUTPUT_MASK =
             OUTPUT_TERMINAL | OUTPUT_FILE | OUTPUT_BUFFER | OUTPUT_CLIPBOARD;
+
+    /** Private constructor so this is not instantiated. */
+    private LogFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

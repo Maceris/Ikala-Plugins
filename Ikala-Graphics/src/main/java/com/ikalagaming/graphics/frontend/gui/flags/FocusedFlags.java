@@ -10,4 +10,9 @@ public class FocusedFlags {
 
     // Combined flags
     public static final int ROOT_AND_CHILD_WINDOWS = ROOT_WINDOW | CHILD_WINDOWS;
+
+    /** Private constructor so this is not instantiated. */
+    private FocusedFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

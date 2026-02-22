@@ -10,4 +10,9 @@ public class ItemFlags {
     public static final int SELECTABLE_DONT_CLOSE_POPUP = 1 << 5;
     public static final int MIXED_VALUE = 1 << 6;
     public static final int READ_ONLY = 1 << 7;
+
+    /** Private constructor so this is not instantiated. */
+    private ItemFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

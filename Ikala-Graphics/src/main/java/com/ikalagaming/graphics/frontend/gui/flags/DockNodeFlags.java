@@ -9,4 +9,9 @@ public class DockNodeFlags {
     public static final int NO_SPLIT = 1 << 4;
     public static final int NO_RESIZE = 1 << 5;
     public static final int AUTO_HIDE_TAB_BAR = 1 << 6;
+
+    /** Private constructor so this is not instantiated. */
+    private DockNodeFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

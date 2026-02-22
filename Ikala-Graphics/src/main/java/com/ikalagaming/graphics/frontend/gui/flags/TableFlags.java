@@ -38,4 +38,9 @@ public class TableFlags {
     public static final int BORDERS_OUTER = BORDERS_OUTER_H | BORDERS_OUTER_V;
     public static final int BORDERS = BORDERS_INNER | BORDERS_OUTER;
     public static final int SIZING_STRETCH_PROP = SIZING_FIXED_FIT | SIZING_FIXED_SAME;
+
+    /** Private constructor so this is not instantiated. */
+    private TableFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }

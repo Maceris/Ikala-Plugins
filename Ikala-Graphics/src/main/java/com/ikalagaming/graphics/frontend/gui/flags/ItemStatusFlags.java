@@ -13,4 +13,9 @@ public class ItemStatusFlags {
     public static final int VISIBLE = 1 << 8;
     public static final int HAS_CLIP_RECT = 1 << 9;
     public static final int HAS_SHORTCUT = 1 << 10;
+
+    /** Private constructor so this is not instantiated. */
+    private ItemStatusFlags() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
 }
