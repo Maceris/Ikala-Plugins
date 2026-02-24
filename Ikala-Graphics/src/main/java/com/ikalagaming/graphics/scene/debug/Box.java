@@ -36,7 +36,7 @@ public class Box {
     /**
      * The x, y, and z scale of the box.
      *
-     * @param position The new size.
+     * @param size The new size.
      * @return The current size.
      */
     @NonNull private Vector3f size;
@@ -45,7 +45,7 @@ public class Box {
      * Text to show above the box, which will be the same color as the box. May be null if not
      * applicable.
      *
-     * @param The new text to show above the box.
+     * @param text The new text to show above the box.
      * @return The text to show above the box.
      */
     private String text;

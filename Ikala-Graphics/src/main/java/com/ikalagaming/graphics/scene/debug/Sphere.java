@@ -45,7 +45,7 @@ public class Sphere {
      * Text to show above the sphere, which will be the same color as the sphere. May be null if not
      * applicable.
      *
-     * @param The new text to show above the sphere.
+     * @param text The new text to show above the sphere.
      * @return The text to show above the sphere.
      */
     private String text;

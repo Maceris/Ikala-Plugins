@@ -228,7 +228,7 @@ public class Inventory {
      *
      * @param item The item we are looking to insert.
      * @param amount How many of the item we want to add.
-     * @return Whether the inventory has room to fit the given item. False if amount <= 0.
+     * @return Whether the inventory has room to fit the given item. False if amount &lt;= 0.
      */
     public boolean canFitItem(@NonNull Item item, int amount) {
         if (amount <= 0) {

@@ -36,7 +36,7 @@ public class Component implements Drawable {
 
     /**
      * The true screen width of the component. This is a percentage of the canvas this is drawn on.
-     * Should be positive and <= 1.0f, where 1 is the entire canvas. X represents width, and Y
+     * Should be positive and &lt;= 1.0f, where 1 is the entire canvas. X represents width, and Y
      * represents height.
      */
     private final Vector2f globalScale;
@@ -45,8 +45,8 @@ public class Component implements Drawable {
     protected Alignment align;
 
     /**
-     * The percent of the parent component's width to take up. Should be positive and <= 1.0f, where
-     * 1 is the entire component. X represents width, and Y represents height.
+     * The percent of the parent component's width to take up. Should be positive and &lt;= 1.0f,
+     * where 1 is the entire component. X represents width, and Y represents height.
      */
     protected Vector2f scale;
 
@@ -187,7 +187,7 @@ public class Component implements Drawable {
      * Returns the actual displacement value of the component as it would be used on a canvas as a
      * decimal percentage of the whole, from the left side of the component.
      *
-     * @return The width, which should be >=0 and <=1.0 but is not guaranteed to be
+     * @return The width, which should be &gt;=0 and &lt;=1.0 but is not guaranteed to be
      */
     public float getActualDisplaceX() {
         recalculate();
@@ -198,7 +198,7 @@ public class Component implements Drawable {
      * Returns the actual displacement value of the component as it would be used on a canvas as a
      * decimal percentage of the whole, from the top of the component.
      *
-     * @return The width, which should be >=0 and <=1.0 but is not guaranteed to be.
+     * @return The width, which should be &gt;=0 and &lt;=1.0 but is not guaranteed to be.
      */
     public float getActualDisplaceY() {
         recalculate();
@@ -208,7 +208,7 @@ public class Component implements Drawable {
     /**
      * Returns the actual scale value of the component as it would be used on a canvas.
      *
-     * @return The width, which should be >=0 and <=1.0 but is not guaranteed to be.
+     * @return The width, which should be &gt;=0 and &lt;=1.0 but is not guaranteed to be.
      */
     public float getActualHeight() {
         recalculate();
@@ -218,7 +218,7 @@ public class Component implements Drawable {
     /**
      * Returns the actual scale value of the component as it would be used on a canvas.
      *
-     * @return The width, which should be >=0 and <=1.0 but is not guaranteed to be.
+     * @return The width, which should be &gt;=0 and &lt;=1.0 but is not guaranteed to be.
      */
     public float getActualWidth() {
         recalculate();
@@ -394,8 +394,8 @@ public class Component implements Drawable {
     }
 
     /**
-     * Set the percent of the parent component's width to take up. Should be positive and <= 1.0f,
-     * where 1 is the entire component. X represents width, and Y represents height.
+     * Set the percent of the parent component's width to take up. Should be positive and &lt;=
+     * 1.0f, where 1 is the entire component. X represents width, and Y represents height.
      *
      * @param scale The new scale to use.
      */
@@ -404,8 +404,8 @@ public class Component implements Drawable {
     }
 
     /**
-     * Set the percent of the parent component's width to take up. Should be positive and <= 1.0f,
-     * where 1 is the entire component.
+     * Set the percent of the parent component's width to take up. Should be positive and &lt;=
+     * 1.0f, where 1 is the entire component.
      *
      * @param width The decimal percentage of the parent component's width to take up.
      * @param height The decimal percentage of the parent component's height to take up.

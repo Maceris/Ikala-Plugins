@@ -34,7 +34,7 @@ public class Text {
     /**
      * Text to show.
      *
-     * @param The new text to show.
+     * @param value The new text to show.
      * @return The text to show.
      */
     @NonNull private String value;

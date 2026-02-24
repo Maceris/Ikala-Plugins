@@ -28,7 +28,7 @@ public class Line {
     /**
      * The first point on the line.
      *
-     * @param position The first position.
+     * @param position1 The first position.
      * @return The first position.
      */
     @NonNull private Vector3f position1;
@@ -36,7 +36,7 @@ public class Line {
     /**
      * The second point on the line.
      *
-     * @param position The second position.
+     * @param position2 The second position.
      * @return The second position.
      */
     @NonNull private Vector3f position2;
@@ -45,7 +45,7 @@ public class Line {
      * Text to show above the line, which will be the same color as the line. May be null if not
      * applicable.
      *
-     * @param The new text to show above the line.
+     * @param text The new text to show above the line.
      * @return The text to show above the line.
      */
     private String text;

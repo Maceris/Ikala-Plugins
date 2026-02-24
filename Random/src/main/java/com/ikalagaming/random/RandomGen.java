@@ -53,13 +53,13 @@ public class RandomGen {
         /** The scale of the noise. A reasonable example is 0.001, should be in the range (0, 1). */
         @Builder.Default private final double scale = 0.01;
 
-        /** The minimum RGB value to scale to. Must be >= 0 and < maxRGB. */
+        /** The minimum RGB value to scale to. Must be &gt;= 0 and &lt; maxRGB. */
         @Builder.Default private final int minRGB = 0;
 
-        /** The maximum RGB value to scale to. Must be > minRGB and <= 255. */
+        /** The maximum RGB value to scale to. Must be &gt; minRGB and &lt;= 255. */
         @Builder.Default private final int maxRGB = 255;
 
-        /** The number of octaves of noise to use. Must be > 0, should be < 16. */
+        /** The number of octaves of noise to use. Must be &gt; 0, should be &lt; 16. */
         @Builder.Default private final int octaves = 8;
 
         /** The scale factor for each octave iteration. Must be in the range (0, 1]. */
@@ -288,7 +288,7 @@ public class RandomGen {
                                 p2y = 0;
                                 v2 = pointsOfInterest[poiY - 1][poiX];
                             }
-                        } else if (px < TILE_SIZE / 2 && py >= TILE_SIZE / 2) {
+                        } else if (px < TILE_SIZE / 2) {
                             // Bottom left quadrant
                             p1x = 0;
                             p1y = TILE_SIZE;
@@ -304,7 +304,7 @@ public class RandomGen {
                                 p2y = TILE_SIZE / 2;
                                 v2 = pointsOfInterest[poiY][poiX - 1];
                             }
-                        } else if (px >= TILE_SIZE / 2 && py >= TILE_SIZE / 2) {
+                        } else {
                             // Bottom right quadrant
                             p1x = TILE_SIZE;
                             p1y = TILE_SIZE;
@@ -320,8 +320,6 @@ public class RandomGen {
                                 p2y = TILE_SIZE;
                                 v2 = pointsOfInterest[poiY + 1][poiX];
                             }
-                        } else {
-                            continue;
                         }
 
                         final int divisor =
@@ -376,7 +374,7 @@ public class RandomGen {
      * @param y The y coordinate.
      * @param scale The scale of the noise. A reasonable example is 0.001, should be in the range
      *     (0, 1).
-     * @param octaves The number of octaves of noise to use. Must be > 0, should be < 16.
+     * @param octaves The number of octaves of noise to use. Must be &gt; 0, should be &lt; 16.
      * @return The resulting noise value, mapped to the range [0, 1].
      */
     public static double generateSimplexNoise(
@@ -470,7 +468,7 @@ public class RandomGen {
      * @param map The map.
      * @param x The x position.
      * @param y The x position.
-     * @return If x and y are a a tile with the value 1.
+     * @return If x and y are a tile with the value 1.
      */
     private static boolean hasTile(int[][] map, int x, int y) {
         if (map == null || y < 0 || y >= map.length || map[y] == null) {
@@ -534,7 +532,7 @@ public class RandomGen {
      * like NaN or Infinity count as 0.
      *
      * @param weights The weights of each index.
-     * @param count The number of selections to make. If <= 0, an empty list will be returned.
+     * @param count The number of selections to make. If &lt;= 0, an empty list will be returned.
      * @return The list of selections, in the order they were made.
      * @see #selectFromWeightedList(List, int)
      */
@@ -591,7 +589,7 @@ public class RandomGen {
      * like NaN or Infinity count as 0.
      *
      * @param weights The weights of each index.
-     * @param count The number of selections to make. If <= 0, an empty list will be returned.
+     * @param count The number of selections to make. If &lt;= 0, an empty list will be returned.
      * @return The list of selections, in the order they were made.
      * @see #selectFromWeightedList(double[], int)
      */

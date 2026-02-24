@@ -110,7 +110,7 @@ public class Entity {
      *
      * @param material The material to use.
      * @param meshIndex The index of the mesh to set.
-     * @throws IndexOutOfBoundsException If meshIndex is < 0 or >= the number of meshes in the
+     * @throws IndexOutOfBoundsException If meshIndex is &lt; 0 or &gt;= the number of meshes in the
      *     model.
      */
     public void setMaterialOverride(@NonNull Material material, int meshIndex) {
