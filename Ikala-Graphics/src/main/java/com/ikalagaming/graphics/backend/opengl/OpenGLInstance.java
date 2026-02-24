@@ -374,7 +374,7 @@ public class OpenGLInstance implements Instance {
         ImGuiIO imGuiIO = ImGui.getIO();
         imGuiIO.setDisplaySize(width, height);
         IkIO ikIO = IkGui.getIO();
-        ikIO.setDisplaySize(width, height);
+        ikIO.displaySize.set(width, height);
     }
 
     @Override

@@ -252,7 +252,7 @@ public class DrawList {
 
     public void pushClipRectFullScreen() {
         IkIO io = IkGui.getIO();
-        Rect newRect = new Rect(0, 0, io.getDisplaySizeX(), io.getDisplaySizeY());
+        Rect newRect = new Rect(0, 0, io.displaySize.x, io.displaySize.y);
         clipRects.addFirst(newRect);
     }
 
@@ -318,7 +318,7 @@ public class DrawList {
         Rect clipRect = clipRects.peekFirst();
         if (clipRect == null) {
             IkIO io = IkGui.getIO();
-            return io.getDisplaySizeX();
+            return io.displaySize.x;
         }
         return clipRect.getRight();
     }
@@ -327,7 +327,7 @@ public class DrawList {
         Rect clipRect = clipRects.peekFirst();
         if (clipRect == null) {
             IkIO io = IkGui.getIO();
-            return io.getDisplaySizeY();
+            return io.displaySize.y;
         }
         return clipRect.getBottom();
     }

@@ -15,6 +15,7 @@ import org.joml.Vector4f;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class Context {
@@ -24,7 +25,7 @@ public class Context {
     public Style style;
 
     public DrawData drawData;
-    public ArrayList<FontAtlas> fontAtlases;
+    public List<FontAtlas> fontAtlases;
     public Font font;
     public FontBaked fontBaked;
     public float fontSize;
@@ -37,17 +38,17 @@ public class Context {
     public int frameCountEnded;
     public int frameCountRendered;
     public boolean insideFrame;
-    public ArrayList<GuiInputEvent> inputEventQueue;
+    public List<GuiInputEvent> inputEventQueue;
 
     /**
      * Past input events that get processed when we start a new frame, mostly for mouse/pen trails.
      */
-    public ArrayList<GuiInputEvent> inputEventTrail;
+    public List<GuiInputEvent> inputEventTrail;
 
     /** Windows, sorted in display order, back to front. */
-    public ArrayList<Window> windowsDisplayOrder;
+    public List<Window> windowsDisplayOrder;
 
-    public ArrayList<Window> windowFocusOrder;
+    public List<Window> windowFocusOrder;
     public Map<Integer, Window> windowByID;
     public int windowActiveCount;
     public Window windowCurrent;
@@ -100,17 +101,17 @@ public class Context {
     public NextWindowData nextWindowData;
 
     public boolean debugShowGroupRects;
-    public ArrayList<ColorMod> colorStack;
-    public ArrayList<StyleMod> styleVariableStack;
-    public ArrayList<FontStackInfo> fontStack;
-    public ArrayList<FocusScopeData> focusScopeStack;
+    public List<ColorMod> colorStack;
+    public List<StyleMod> styleVariableStack;
+    public List<FontStackInfo> fontStack;
+    public List<FocusScopeData> focusScopeStack;
     public IntArrayList itemFlagsStack;
-    public ArrayList<GroupData> groupStack;
-    public ArrayList<PopupData> openPopupStack;
-    public ArrayList<PopupData> beginPopupStack;
-    public ArrayList<TreeNodeStackData> treeNodeStack;
+    public List<GroupData> groupStack;
+    public List<PopupData> openPopupStack;
+    public List<PopupData> beginPopupStack;
+    public List<TreeNodeStackData> treeNodeStack;
 
-    public ArrayList<Viewport> viewports;
+    public List<Viewport> viewports;
 
     public boolean navCursorVisible;
     public boolean navHighlightIgnoreMouse;
@@ -365,7 +366,7 @@ public class Context {
 
     public Context() {
         initialized = false;
-        io = new IkIO();
+        io = new IkIO(this);
         platformIO = null;
         style = new Style();
         drawData = new DrawData();

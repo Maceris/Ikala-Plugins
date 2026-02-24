@@ -27,7 +27,7 @@ public class IkGui {
 
     public static void init() {
         context = new Context();
-        IO = new IkIO();
+        IO = context.io;
         platformIO = new PlatformIO();
         backgroundDrawList = new DrawList();
         foregroundDrawList = new DrawList();
