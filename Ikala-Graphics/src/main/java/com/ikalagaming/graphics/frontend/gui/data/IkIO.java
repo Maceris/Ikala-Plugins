@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
+import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
 import com.ikalagaming.graphics.frontend.gui.flags.BackendFlags;
 import com.ikalagaming.graphics.frontend.gui.flags.ConfigFlags;
 import com.ikalagaming.graphics.frontend.gui.flags.KeyModFlags;
@@ -9,9 +10,12 @@ import lombok.NonNull;
 import org.joml.Vector2f;
 
 public class IkIO {
+    // TODO(ches) add some kind of KeyData struct
 
+    /** Whether we are accepting events. */
     @Getter private boolean appAcceptingEvents;
 
+    /** Whether the app has lost focus. */
     @Getter private boolean appFocusLost;
 
     /**
@@ -112,6 +116,9 @@ public class IkIO {
     /** The parent context. */
     @NonNull public final Context context;
 
+    /** Time elapsed since last frame, in seconds. */
+    public float deltaTime;
+
     /**
      * Main display density, for retina displays where coordinates are different from framebuffer
      * coordinates.
@@ -170,6 +177,37 @@ public class IkIO {
     public int metricsRenderWindows;
 
     /**
+     * Mouse button went from not down to down. Should probably not be modified directly. Indexes
+     * correspond to {@link MouseButton#index}.
+     */
+    public final boolean[] mouseClicked;
+
+    /**
+     * Position at the time of clicking. Should probably not be modified directly. Indexes
+     * correspond to {@link MouseButton#index}.
+     */
+    public final Vector2f[] mouseClickedPosition;
+
+    /**
+     * 0 is not clicked, 1 is mouse clicked, 2 is double-clicked, etc. When going from not down to
+     * down. Should probably not be modified directly. Indexes correspond to {@link
+     * MouseButton#index}.
+     */
+    public final short[] mouseClickedCount;
+
+    /**
+     * Count successive number of clicks, reset after another click is done. Should probably not be
+     * modified directly. Indexes correspond to {@link MouseButton#index}.
+     */
+    public final short[] mouseClickedLastCount;
+
+    /**
+     * Time of last click, in milliseconds. Should probably not be modified directly. Indexes
+     * correspond to {@link MouseButton#index}.
+     */
+    public final long[] mouseClickedTime;
+
+    /**
      * Used for OS X, set to true when the current click was a ctrl+click that simulated a right
      * click.
      */
@@ -178,14 +216,61 @@ public class IkIO {
     /** Mouse delta, in pixels. Will be zero if either current or previous position are invalid. */
     public final Vector2f mouseDelta;
 
-    /** Distance threshold for validating a double-click, in pixels. */
-    public float mouseDoubleClickMaxDist;
+    /**
+     * If the mouse has been double-clicked. Should probably not be modified directly. Indexes
+     * correspond to {@link MouseButton#index}.
+     */
+    public final boolean[] mouseDoubleClicked;
 
-    /** Time for a double click, in seconds. */
-    public float mouseDoubleClickTime;
+    /** Distance threshold for validating a double click, in pixels. */
+    public float mouseDoubleClickMaxDistance;
 
-    /** Distance threshold before considering a mouse drag, in pixels. */
-    public float mouseDragThreshold;
+    /** Time for a double click, in milliseconds. */
+    public long mouseDoubleClickTime;
+
+    /**
+     * Duration the mouse button has been down for, in milliseconds. Should probably not be modified
+     * directly. 0 is just clicked. Indexes correspond to {@link MouseButton#index}.
+     */
+    public final long[] mouseDownDuration;
+
+    /**
+     * Previous duration the mouse button was down for, in milliseconds. Should probably not be
+     * modified directly. Indexes correspond to {@link MouseButton#index}.
+     */
+    public final long[] mouseDownDurationPrevious;
+
+    /**
+     * If a mouse button is down. Should probably not be modified directly. Indexes correspond to
+     * {@link MouseButton#index}.
+     */
+    public final boolean[] mouseDown;
+
+    /**
+     * If a button was clicked inside a gui window or over empty space while there was a popup.
+     * Should probably not be modified directly. Indexes correspond to {@link MouseButton#index}.
+     */
+    public final boolean[] mouseDownOwned;
+
+    /**
+     * If a button was clicked inside a gui window. Should probably not be modified directly.
+     * Indexes correspond to {@link MouseButton#index}.
+     */
+    public final boolean[] mouseDownOwnedUnlessPopupClose;
+
+    /**
+     * The maximum distance (absolute) on each axis that the mouse has traveled from the clicking
+     * point, while down, in pixels. Should probably not be modified directly. Indexes correspond to
+     * {@link MouseButton#index}.
+     */
+    public final Vector2f[] mouseDragMaxDistanceAbsolute;
+
+    /**
+     * The squared maximum distance on each axis that the mouse has traveled from teh clicking point
+     * while down, in pixels. Should probably not be modified directly. Indexes correspond to {@link
+     * MouseButton#index}.
+     */
+    public final float[] mouseDragMaxDistanceSquare;
 
     /** Viewport that the mouse is hovering over. */
     public Viewport mouseHoveredViewport;
@@ -198,6 +283,22 @@ public class IkIO {
 
     /** Previous mouse position. */
     public final Vector2f mousePositionPrevious;
+
+    /**
+     * Mouse button went from down to not down. Should probably not be modified directly. Indexes
+     * correspond to {@link MouseButton#index}.
+     */
+    public final boolean[] mouseReleased;
+
+    /**
+     * Time since last mouse release, in milliseconds. Mostly for distinguishing two single clicks
+     * from a double click. Should probably not be modified directly. Indexes correspond to {@link
+     * MouseButton#index}.
+     */
+    public final long[] mouseReleasedTime;
+
+    /** Distance threshold before considering a mouse drag, in pixels. */
+    public float mouseDragThreshold;
 
     /**
      * Mouse wheel vertical. 1 unit scrolls about 5 lines of text, positive values scroll up and
@@ -269,6 +370,7 @@ public class IkIO {
         configWindowsMoveFromTitleBarOnly = false;
         configWindowsResizeFromEdges = true;
         this.context = context;
+        deltaTime = 1.0f / 60.0f;
         displayFramebufferScale = new Vector2f(1, 1);
         displaySize = new Vector2f(0, 0);
         fonts = new FontAtlas(); // TODO(ches) update this
@@ -286,11 +388,26 @@ public class IkIO {
         metricsRenderIndices = 0;
         metricsRenderVertices = 0;
         metricsRenderWindows = 0;
+        mouseClicked = new boolean[MouseButton.COUNT];
+        mouseClickedPosition = new Vector2f[MouseButton.COUNT];
+        mouseClickedCount = new short[MouseButton.COUNT];
+        mouseClickedLastCount = new short[MouseButton.COUNT];
+        mouseClickedTime = new long[MouseButton.COUNT];
         mouseCtrlLeftAsRightClick = false;
         mouseDelta = new Vector2f(0, 0);
-        mouseDoubleClickMaxDist = 6.0f;
-        mouseDoubleClickTime = 0.30f;
+        mouseDoubleClicked = new boolean[MouseButton.COUNT];
+        mouseDoubleClickMaxDistance = 6.0f;
+        mouseDoubleClickTime = 300;
+        mouseDownDuration = new long[MouseButton.COUNT];
+        mouseDownDurationPrevious = new long[MouseButton.COUNT];
+        mouseDown = new boolean[MouseButton.COUNT];
+        mouseDownOwned = new boolean[MouseButton.COUNT];
+        mouseDownOwnedUnlessPopupClose = new boolean[MouseButton.COUNT];
+        mouseDragMaxDistanceAbsolute = new Vector2f[MouseButton.COUNT];
+        mouseDragMaxDistanceSquare = new float[MouseButton.COUNT];
         mouseDragThreshold = 6.0f;
+        mouseReleased = new boolean[MouseButton.COUNT];
+        mouseReleasedTime = new long[MouseButton.COUNT];
         mouseHoveredViewport = null;
         mousePosition = new Vector2f(-Float.MAX_VALUE, -Float.MAX_VALUE);
         mousePositionPrevious = new Vector2f(-Float.MAX_VALUE, -Float.MAX_VALUE);
@@ -395,63 +512,48 @@ public class IkIO {
         // TODO(ches) complete this
     }
 
-    public boolean[] getMouseDown() {
-        // TODO(ches) complete this
-        return null;
+    public boolean getMouseDown(int index) {
+        if (index < 0 || index >= MouseButton.COUNT) {
+            return false;
+        }
+        return mouseDown[index];
     }
 
-    public boolean getMouseDown(int idx) {
-        // TODO(ches) complete this
-        return false;
+    public boolean getMouseDown(@NonNull MouseButton button) {
+        return getMouseDown(button.index);
     }
 
-    public void setMouseDown(boolean[] value) {
-        // TODO(ches) complete this
+    public void setMouseDown(int index, boolean value) {
+        if (index < 0 || index >= MouseButton.COUNT) {
+            return;
+        }
+        final boolean oldValue = mouseDown[index];
+        mouseDown[index] = value;
+        if (oldValue != value) {
+            // TODO(ches) handle clicking logic, timers
+        }
     }
 
-    public void setMouseDown(int idx, boolean value) {
-        // TODO(ches) complete this
+    public void setMouseDown(@NonNull MouseButton button, boolean value) {
+        setMouseDown(button.index, value);
     }
 
-    public Object[] getKeysData() {
-        // TODO(ches) complete this, add some kind of KeyData struct
-        return null;
+    public long getMouseClickedTime(int index) {
+        if (index < 0 || index >= MouseButton.COUNT) {
+            return 0;
+        }
+        return mouseClickedTime[index];
     }
 
-    public void setKeysData(Object[] value) {
-        // TODO(ches) complete this
+    public double getMouseClickedTime(@NonNull MouseButton button) {
+        return getMouseClickedTime(button.index);
     }
 
-    public Vector2f[] getMouseClickedPos() {
-        // TODO(ches) complete this
-        return null;
-    }
-
-    public void setMouseClickedPos(Vector2f[] value) {
-        // TODO(ches) complete this
-    }
-
-    public double[] getMouseClickedTime() {
-        // TODO(ches) complete this
-        return null;
-    }
-
-    public double getMouseClickedTime(int idx) {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public void setMouseClickedTime(double[] value) {
-        // TODO(ches) complete this
-    }
-
-    public void setMouseClickedTime(int idx, double value) {
-        // TODO(ches) complete this
-    }
-
-    public boolean[] getMouseClicked() {
-        // TODO(ches) complete this
-        return null;
+    public void setMouseClickedTime(int index, long value) {
+        if (index < 0 || index >= MouseButton.COUNT) {
+            return;
+        }
+        mouseClickedTime[index] = value;
     }
 
     public boolean getMouseClicked(int idx) {
@@ -459,17 +561,8 @@ public class IkIO {
         return false;
     }
 
-    public void setMouseClicked(boolean[] value) {
-        // TODO(ches) complete this
-    }
-
     public void setMouseClicked(int idx, boolean value) {
         // TODO(ches) complete this
-    }
-
-    public boolean[] getMouseDoubleClicked() {
-        // TODO(ches) complete this
-        return null;
     }
 
     public boolean getMouseDoubleClicked(int idx) {
@@ -477,17 +570,8 @@ public class IkIO {
         return false;
     }
 
-    public void setMouseDoubleClicked(boolean[] value) {
-        // TODO(ches) complete this
-    }
-
     public void setMouseDoubleClicked(int idx, boolean value) {
         // TODO(ches) complete this
-    }
-
-    public int[] getMouseClickedCount() {
-        // TODO(ches) complete this
-        return null;
     }
 
     public int getMouseClickedCount(int idx) {
@@ -495,17 +579,8 @@ public class IkIO {
         return 0;
     }
 
-    public void setMouseClickedCount(int[] value) {
-        // TODO(ches) complete this
-    }
-
     public void setMouseClickedCount(int idx, int value) {
         // TODO(ches) complete this
-    }
-
-    public int[] getMouseClickedLastCount() {
-        // TODO(ches) complete this
-        return null;
     }
 
     public int getMouseClickedLastCount(int idx) {
@@ -513,17 +588,8 @@ public class IkIO {
         return 0;
     }
 
-    public void setMouseClickedLastCount(int[] value) {
-        // TODO(ches) complete this
-    }
-
     public void setMouseClickedLastCount(int idx, int value) {
         // TODO(ches) complete this
-    }
-
-    public boolean[] getMouseReleased() {
-        // TODO(ches) complete this
-        return null;
     }
 
     public boolean getMouseReleased(int idx) {
@@ -531,17 +597,8 @@ public class IkIO {
         return false;
     }
 
-    public void setMouseReleased(boolean[] value) {
-        // TODO(ches) complete this
-    }
-
     public void setMouseReleased(int idx, boolean value) {
         // TODO(ches) complete this
-    }
-
-    public boolean[] getMouseDownOwned() {
-        // TODO(ches) complete this
-        return null;
     }
 
     public boolean getMouseDownOwned(int idx) {
@@ -549,17 +606,8 @@ public class IkIO {
         return false;
     }
 
-    public void setMouseDownOwned(boolean[] value) {
-        // TODO(ches) complete this
-    }
-
     public void setMouseDownOwned(int idx, boolean value) {
         // TODO(ches) complete this
-    }
-
-    public boolean[] getMouseDownOwnedUnlessPopupClose() {
-        // TODO(ches) complete this
-        return null;
     }
 
     public boolean getMouseDownOwnedUnlessPopupClose(int idx) {
@@ -567,17 +615,8 @@ public class IkIO {
         return false;
     }
 
-    public void setMouseDownOwnedUnlessPopupClose(boolean[] value) {
-        // TODO(ches) complete this
-    }
-
     public void setMouseDownOwnedUnlessPopupClose(int idx, boolean value) {
         // TODO(ches) complete this
-    }
-
-    public float[] getMouseDownDuration() {
-        // TODO(ches) complete this
-        return null;
     }
 
     public float getMouseDownDuration(int idx) {
@@ -585,17 +624,8 @@ public class IkIO {
         return 0;
     }
 
-    public void setMouseDownDuration(float[] value) {
-        // TODO(ches) complete this
-    }
-
     public void setMouseDownDuration(int idx, float value) {
         // TODO(ches) complete this
-    }
-
-    public float[] getMouseDownDurationPrev() {
-        // TODO(ches) complete this
-        return null;
     }
 
     public float getMouseDownDurationPrev(int idx) {
@@ -603,35 +633,13 @@ public class IkIO {
         return 0;
     }
 
-    public void setMouseDownDurationPrev(float[] value) {
-        // TODO(ches) complete this
-    }
-
     public void setMouseDownDurationPrev(int idx, float value) {
         // TODO(ches) complete this
-    }
-
-    public Vector2f[] getMouseDragMaxDistanceAbs() {
-        // TODO(ches) complete this
-        return null;
-    }
-
-    public void setMouseDragMaxDistanceAbs(Vector2f[] value) {
-        // TODO(ches) complete this
-    }
-
-    public float[] getMouseDragMaxDistanceSqr() {
-        // TODO(ches) complete this
-        return null;
     }
 
     public float getMouseDragMaxDistanceSqr(int idx) {
         // TODO(ches) complete this
         return 0;
-    }
-
-    public void setMouseDragMaxDistanceSqr(float[] value) {
-        // TODO(ches) complete this
     }
 
     public void setMouseDragMaxDistanceSqr(int idx, float value) {
