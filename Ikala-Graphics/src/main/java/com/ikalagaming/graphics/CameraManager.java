@@ -7,12 +7,13 @@ import static org.lwjgl.glfw.GLFW.GLFW_KEY_S;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_SPACE;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_W;
 
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.data.IkIO;
+import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
 import com.ikalagaming.graphics.scene.Camera;
 
-import imgui.ImGui;
 import lombok.Getter;
 import lombok.NonNull;
-import org.joml.Vector2f;
 
 /** Handles the position and movement of the camera. */
 public class CameraManager {
@@ -69,12 +70,12 @@ public class CameraManager {
         }
 
         // Update camera based on mouse
-        if (window.getMouseInput().isRightButtonPressed()
-                && (!ImGui.getIO().getWantCaptureMouse())) {
-            Vector2f rotVec = window.getMouseInput().getDisplVec();
-            camera.addRotation(
-                    rotVec.x * CameraManager.MOUSE_SENSITIVITY,
-                    rotVec.y * CameraManager.MOUSE_SENSITIVITY);
+        IkIO ikIO = IkGui.getIO();
+        if (!ikIO.wantCaptureMouse && ikIO.getMouseDown(MouseButton.RIGHT)) {
+            float rotationX = ikIO.mouseDelta.x * CameraManager.MOUSE_SENSITIVITY;
+            float rotationY = ikIO.mouseDelta.y * CameraManager.MOUSE_SENSITIVITY;
+
+            camera.addRotation(rotationX, rotationY);
         }
     }
 }

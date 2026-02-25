@@ -34,6 +34,7 @@ public class MultiSelectTempData {
     private boolean rangeDestinationPassedBy;
 
     public MultiSelectTempData() {
+        IO = new MultiSelectIO();
         scopeRectMin = new Vector2f();
         backupCursorMaxPos = new Vector2f();
         loopRequestSetAll = new IkByte();

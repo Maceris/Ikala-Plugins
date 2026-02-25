@@ -1,7 +1,6 @@
 package com.ikalagaming.graphics.frontend.gui;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
-import com.ikalagaming.graphics.MouseInput;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.frontend.gui.component.Component;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
@@ -10,12 +9,10 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import imgui.ImGui;
-import imgui.ImGuiIO;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.joml.Vector2f;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -97,13 +94,6 @@ public class WindowManager {
      * @param window The window we are using.
      */
     public void handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
-        ImGuiIO imGuiIO = ImGui.getIO();
-        MouseInput mouseInput = window.getMouseInput();
-        Vector2f mousePos = mouseInput.getCurrentPos();
-        imGuiIO.setMousePos(mousePos.x, mousePos.y);
-        imGuiIO.setMouseDown(0, mouseInput.isLeftButtonPressed());
-        imGuiIO.setMouseDown(1, mouseInput.isRightButtonPressed());
-
         if (toolbar != null) {
             toolbar.handleGuiInput(scene, window);
         }

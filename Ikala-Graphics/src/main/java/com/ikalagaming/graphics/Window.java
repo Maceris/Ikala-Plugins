@@ -6,6 +6,9 @@ import static org.lwjgl.system.MemoryUtil.NULL;
 import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.graphics.exceptions.WindowCreationException;
 import com.ikalagaming.graphics.frontend.BackendType;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.data.IkIO;
+import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.plugins.config.ConfigManager;
@@ -32,6 +35,8 @@ import java.util.concurrent.Callable;
 @Slf4j
 @Getter
 public class Window {
+    // TODO(ches) move this somewhere more specific, like frontend. Possibly tighter integration
+    // with the gui system
 
     /** Options for the window. */
     public static class WindowOptions {
@@ -100,9 +105,6 @@ public class Window {
      * @return The current height of the window.
      */
     private int height;
-
-    /** Mouse input handler. */
-    private final MouseInput mouseInput;
 
     /** The resize function to call. */
     private final Callable<Void> resizeFunc;
@@ -192,7 +194,58 @@ public class Window {
         width = arrWidth[0];
         height = arrHeight[0];
 
-        mouseInput = new MouseInput(windowHandle);
+        // TODO(ches) get rid of ImGui bits
+        glfwSetCursorPosCallback(
+                windowHandle,
+                (handle, posX, posY) -> {
+                    ImGui.getIO().addMousePosEvent((float) posX, (float) posY);
+                    IkGui.getIO().addMousePosEvent((float) posX, (float) posY);
+                });
+
+        glfwSetCursorEnterCallback(
+                windowHandle, (handle, entered) -> IkGui.getIO().mouseInsideWindow = entered);
+        glfwSetMouseButtonCallback(
+                windowHandle,
+                (handle, button, action, mode) -> {
+                    final MouseButton buttonType =
+                            switch (button) {
+                                case GLFW_MOUSE_BUTTON_1:
+                                    yield MouseButton.LEFT;
+                                case GLFW_MOUSE_BUTTON_2:
+                                    yield MouseButton.RIGHT;
+                                case GLFW_MOUSE_BUTTON_3:
+                                    yield MouseButton.MIDDLE;
+                                case GLFW_MOUSE_BUTTON_4:
+                                    yield MouseButton.BACK;
+                                case GLFW_MOUSE_BUTTON_5:
+                                    yield MouseButton.FORWARD;
+                                default:
+                                    yield MouseButton.NONE;
+                            };
+
+                    switch (action) {
+                        case GLFW_PRESS:
+                            IkGui.getIO().addMouseButtonEvent(buttonType, true);
+                            ImGui.getIO().addMouseButtonEvent(buttonType.index, true);
+                            break;
+                        case GLFW_RELEASE:
+                            IkGui.getIO().addMouseButtonEvent(buttonType, false);
+                            ImGui.getIO().addMouseButtonEvent(buttonType.index, false);
+                            break;
+                        case GLFW_REPEAT:
+                        default:
+                            break;
+                    }
+                });
+    }
+
+    /**
+     * Disable the cursor.
+     *
+     * @see #enableCursor()
+     */
+    public void disableCursor() {
+        glfwSetInputMode(windowHandle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     }
 
     /** Destroy the window. */
@@ -214,6 +267,15 @@ public class Window {
     }
 
     /**
+     * Enable the cursor.
+     *
+     * @see #disableCursor()
+     */
+    public void enableCursor() {
+        glfwSetInputMode(windowHandle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    }
+
+    /**
      * Checks if a key is pressed.
      *
      * @param keyCode The keycode to look for.
@@ -230,6 +292,12 @@ public class Window {
     /** Poll for events and process input. */
     public void pollEvents() {
         glfwPollEvents();
+
+        // TODO(ches) remove ImGUI eventually
+        ImGuiIO imGuiIO = ImGui.getIO();
+        IkIO ikIO = IkGui.getIO();
+        imGuiIO.setMousePos(ikIO.mousePosition.x, ikIO.mousePosition.y);
+        imGuiIO.setMouseDown(ikIO.mouseDown);
     }
 
     /**

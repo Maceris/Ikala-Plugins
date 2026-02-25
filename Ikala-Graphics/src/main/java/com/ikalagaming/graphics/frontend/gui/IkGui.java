@@ -20,21 +20,20 @@ public class IkGui {
     private static DrawList backgroundDrawList;
     private static DrawList foregroundDrawList;
     private static Storage storage;
+    // TODO(ches) Update the viewport based on the current viewport
     @Getter private static Viewport windowViewport;
     @Getter private static Style style;
     // TODO(ches) complete this
     @Getter private static Font font;
 
     public static void init() {
-        context = new Context();
-        IO = context.io;
-        platformIO = new PlatformIO();
         backgroundDrawList = new DrawList();
         foregroundDrawList = new DrawList();
         storage = new Storage();
-        windowViewport = new Viewport();
-        style = new Style();
-        font = new Font();
+    }
+
+    static {
+        init();
     }
 
     /**
@@ -45,6 +44,7 @@ public class IkGui {
      */
     public static Context createContext() {
         context = new Context();
+        setCurrentContext(context);
         return context;
     }
 
@@ -58,6 +58,10 @@ public class IkGui {
 
     public static void setCurrentContext(@NonNull Context context) {
         IkGui.context = context;
+        IO = context.io;
+        platformIO = context.platformIO;
+        style = context.style;
+        font = context.font;
     }
 
     public static void begin(@NonNull String title) {

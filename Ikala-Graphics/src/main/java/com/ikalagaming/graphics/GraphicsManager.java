@@ -11,7 +11,10 @@ import com.ikalagaming.graphics.frontend.BackendType;
 import com.ikalagaming.graphics.frontend.DeletionQueue;
 import com.ikalagaming.graphics.frontend.Instance;
 import com.ikalagaming.graphics.frontend.RenderConfig;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
+import com.ikalagaming.graphics.frontend.gui.data.IkIO;
+import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.Launcher;
@@ -285,7 +288,15 @@ public class GraphicsManager {
         if (currentTime >= nextUpdateTime) {
             final float elapsedTime = (float) (currentTime - lastUpdateTime);
 
-            window.getMouseInput().input();
+            //TODO(ches) fix this, it's broken.
+            IkIO ikIO = IkGui.getIO();
+            if (!ikIO.wantCaptureMouse) {
+                if (ikIO.getMouseDown(MouseButton.RIGHT)) {
+                    window.disableCursor();
+                } else {
+                    window.enableCursor();
+                }
+            }
             cameraManager.updateCamera(elapsedTime);
 
             windowManager.handleGuiInput(scene, window);

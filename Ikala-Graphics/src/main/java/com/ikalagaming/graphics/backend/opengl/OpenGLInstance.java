@@ -68,7 +68,7 @@ public class OpenGLInstance implements Instance {
         textureLoader = new TextureLoaderOpenGL();
         shaderMap = new ShaderMap();
         initializeShaders();
-        initializeImGui(window);
+        initializeGui(window);
         pipelineManager = new PipelineManager(window, shaderMap);
         renderConfig = RenderConfig.builder().withGui().build();
         pipeline = pipelineManager.getPipeline(renderConfig);
@@ -117,16 +117,23 @@ public class OpenGLInstance implements Instance {
     }
 
     /**
-     * Create an ImGui context and configure it.
+     * Create an IkGui context and configure it.
      *
      * @param window The window to pull display info from.
      */
-    private void initializeImGui(@NonNull Window window) {
+    private void initializeGui(@NonNull Window window) {
+        // TODO(ches) clear out ImGui
         ImGui.createContext();
 
         ImGuiIO imGuiIO = ImGui.getIO();
         imGuiIO.setIniFilename(null);
         imGuiIO.setDisplaySize(window.getWidth(), window.getHeight());
+
+        IkGui.createContext();
+
+        IkIO ikIO = IkGui.getIO();
+        ikIO.iniFilename = null;
+        ikIO.displaySize.set(window.getWidth(), window.getHeight());
     }
 
     /**
