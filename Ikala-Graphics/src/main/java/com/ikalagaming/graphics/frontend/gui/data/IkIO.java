@@ -1,15 +1,21 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
+import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
 import com.ikalagaming.graphics.frontend.gui.flags.BackendFlags;
 import com.ikalagaming.graphics.frontend.gui.flags.ConfigFlags;
 import com.ikalagaming.graphics.frontend.gui.flags.KeyModFlags;
+import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 
+@Slf4j
 public class IkIO {
+    private static final String INVALID_MOUSE_BUTTON_INDEX = "INVALID_MOUSE_BUTTON_INDEX";
+
     // TODO(ches) add some kind of KeyData struct
 
     /** Whether we are accepting events. */
@@ -492,6 +498,7 @@ public class IkIO {
 
     public void addMouseButtonEvent(int button, boolean down) {
         // TODO(ches) complete this
+        setMouseDown(button, down);
     }
 
     public void addMouseButtonEvent(@NonNull MouseButton button, boolean down) {
@@ -548,6 +555,11 @@ public class IkIO {
 
     public boolean getMouseDown(int index) {
         if (index < 0 || index >= MouseButton.COUNT) {
+            log.warn(
+                    SafeResourceLoader.getStringFormatted(
+                            INVALID_MOUSE_BUTTON_INDEX,
+                            GraphicsPlugin.getResourceBundle(),
+                            Integer.toString(index)));
             return false;
         }
         return mouseDown[index];
@@ -559,6 +571,11 @@ public class IkIO {
 
     public void setMouseDown(int index, boolean value) {
         if (index < 0 || index >= MouseButton.COUNT) {
+            log.warn(
+                    SafeResourceLoader.getStringFormatted(
+                            INVALID_MOUSE_BUTTON_INDEX,
+                            GraphicsPlugin.getResourceBundle(),
+                            Integer.toString(index)));
             return;
         }
         final boolean oldValue = mouseDown[index];
@@ -574,6 +591,11 @@ public class IkIO {
 
     public long getMouseClickedTime(int index) {
         if (index < 0 || index >= MouseButton.COUNT) {
+            log.warn(
+                    SafeResourceLoader.getStringFormatted(
+                            INVALID_MOUSE_BUTTON_INDEX,
+                            GraphicsPlugin.getResourceBundle(),
+                            Integer.toString(index)));
             return 0;
         }
         return mouseClickedTime[index];
@@ -585,6 +607,11 @@ public class IkIO {
 
     public void setMouseClickedTime(int index, long value) {
         if (index < 0 || index >= MouseButton.COUNT) {
+            log.warn(
+                    SafeResourceLoader.getStringFormatted(
+                            INVALID_MOUSE_BUTTON_INDEX,
+                            GraphicsPlugin.getResourceBundle(),
+                            Integer.toString(index)));
             return;
         }
         mouseClickedTime[index] = value;

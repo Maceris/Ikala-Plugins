@@ -288,7 +288,6 @@ public class GraphicsManager {
         if (currentTime >= nextUpdateTime) {
             final float elapsedTime = (float) (currentTime - lastUpdateTime);
 
-            //TODO(ches) fix this, it's broken.
             IkIO ikIO = IkGui.getIO();
             if (!ikIO.wantCaptureMouse) {
                 if (ikIO.getMouseDown(MouseButton.RIGHT)) {

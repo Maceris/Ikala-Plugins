@@ -72,10 +72,9 @@ public class CameraManager {
         // Update camera based on mouse
         IkIO ikIO = IkGui.getIO();
         if (!ikIO.wantCaptureMouse && ikIO.getMouseDown(MouseButton.RIGHT)) {
-            float rotationX = ikIO.mouseDelta.x * CameraManager.MOUSE_SENSITIVITY;
-            float rotationY = ikIO.mouseDelta.y * CameraManager.MOUSE_SENSITIVITY;
-
-            camera.addRotation(rotationX, rotationY);
+            float deltaX = ikIO.mouseDelta.x * CameraManager.MOUSE_SENSITIVITY;
+            float deltaY = ikIO.mouseDelta.y * CameraManager.MOUSE_SENSITIVITY;
+            camera.addRotation(deltaY, deltaX);
         }
     }
 }

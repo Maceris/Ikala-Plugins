@@ -69,11 +69,11 @@ public class Camera {
     /**
      * Add rotation to the current rotation.
      *
-     * @param x The x (pitch) rotation increment.
-     * @param y The y (yaw) rotation increment.
+     * @param pitch The pitch component to add.
+     * @param yaw The yaw component to add.
      */
-    public void addRotation(float x, float y) {
-        rotation.add(x, y);
+    public void addRotation(float pitch, float yaw) {
+        rotation.add(pitch, yaw);
         recalculate();
     }
 
