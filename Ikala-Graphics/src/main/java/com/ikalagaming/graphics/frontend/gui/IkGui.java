@@ -64,19 +64,30 @@ public class IkGui {
         font = context.font;
     }
 
-    public static void begin(@NonNull String title) {
-        begin(title, null, WindowFlags.NONE);
+    public static boolean begin(@NonNull String title) {
+        return begin(title, null, WindowFlags.NONE);
     }
 
-    public static void begin(@NonNull String title, IkBoolean open) {
-        begin(title, open, WindowFlags.NONE);
+    public static boolean begin(@NonNull String title, final IkBoolean open) {
+        return begin(title, open, WindowFlags.NONE);
     }
 
-    public static void begin(@NonNull String title, int windowFlags) {
-        begin(title, null, windowFlags);
+    public static boolean begin(@NonNull String title, int windowFlags) {
+        return begin(title, null, windowFlags);
     }
 
-    public static void begin(@NonNull String title, IkBoolean open, int windowFlags) {
+    /**
+     * Start a new window to add widgets to. The window name is a unique identifier used to preserve
+     * information across frames. Every call to begin should be matched with a call to {@link
+     * #end()} even if false is returned.
+     *
+     * @param title The unique title of the window.
+     * @param open Non-null values display a close button on the window, which will be set to false
+     *     if the close button is pressed.
+     * @param windowFlags Flags for modifying the window.
+     * @return false if the window is collapsed.
+     */
+    public static boolean begin(@NonNull String title, final IkBoolean open, int windowFlags) {
         // TODO(ches) complete this
 
         final int ID = Hash.getID(title);
@@ -101,6 +112,7 @@ public class IkGui {
         window.active = true;
 
         context.windowCurrent = window;
+        return true;
     }
 
     public static void beginChild(@NonNull String name) {
@@ -135,6 +147,14 @@ public class IkGui {
     public static void beginChild(
             int id, float width, float height, boolean border, int windowFlags) {
         // TODO(ches) complete this
+    }
+
+    public static void showDemoWindow() {
+        showDemoWindow(null);
+    }
+
+    public static void showDemoWindow(final IkBoolean open) {
+        IkGuiDemo.showDemoWindow(open);
     }
 
     public static void endChild() {
@@ -3049,7 +3069,7 @@ public class IkGui {
         return 0;
     }
 
-    public static boolean collapsingHeader(String var0) {
+    public static boolean collapsingHeader(String label) {
         // TODO(ches) complete this
         return false;
     }

@@ -8,7 +8,8 @@ import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.frontend.gui.component.Checkbox;
 import com.ikalagaming.graphics.frontend.gui.component.MainToolbar;
 import com.ikalagaming.graphics.frontend.gui.windows.GraphicsDebug;
-import com.ikalagaming.graphics.frontend.gui.windows.GuiDemo;
+import com.ikalagaming.graphics.frontend.gui.windows.IkGuiDemo;
+import com.ikalagaming.graphics.frontend.gui.windows.ImGuiDemo;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.events.Shutdown;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -23,7 +24,8 @@ public class DebugToolbar extends MainToolbar {
     private final WindowManager windowManager;
     private final Checkbox biomeDebug;
     private final Checkbox debug;
-    private final Checkbox demoWindow;
+    private final Checkbox demoIkGuiWindow;
+    private final Checkbox demoImGuiWindow;
     private final Checkbox graphicsWindow;
 
     public DebugToolbar(@NonNull WindowManager windowManager) {
@@ -38,10 +40,17 @@ public class DebugToolbar extends MainToolbar {
                         "TOOLBAR_DEBUG_DEBUG", FactoryClientPlugin.getResourceBundle());
         debug = new Checkbox(textDebug, windowManager.isVisible(DEBUG.getName()));
 
-        var textDemo =
+        var textImGuiDemo =
                 SafeResourceLoader.getString(
-                        "TOOLBAR_DEBUG_DEMO", FactoryClientPlugin.getResourceBundle());
-        demoWindow = new Checkbox(textDemo, windowManager.isVisible(GuiDemo.WINDOW_NAME));
+                        "TOOLBAR_DEBUG_IMGUI_DEMO", FactoryClientPlugin.getResourceBundle());
+        demoImGuiWindow =
+                new Checkbox(textImGuiDemo, windowManager.isVisible(ImGuiDemo.WINDOW_NAME));
+
+        var textIkGuiDemo =
+                SafeResourceLoader.getString(
+                        "TOOLBAR_DEBUG_IKGUI_DEMO", FactoryClientPlugin.getResourceBundle());
+        demoIkGuiWindow =
+                new Checkbox(textIkGuiDemo, windowManager.isVisible(IkGuiDemo.WINDOW_NAME));
 
         var textGraphics =
                 SafeResourceLoader.getString(
@@ -56,7 +65,8 @@ public class DebugToolbar extends MainToolbar {
             if (ImGui.beginMenu("Windows")) {
                 biomeDebug.draw(width, height);
                 debug.draw(width, height);
-                demoWindow.draw(width, height);
+                demoImGuiWindow.draw(width, height);
+                demoIkGuiWindow.draw(width, height);
                 graphicsWindow.draw(width, height);
                 ImGui.endMenu();
             }
@@ -80,8 +90,12 @@ public class DebugToolbar extends MainToolbar {
             windowManager.setVisible(DEBUG.getName(), debug.getState());
             return true;
         }
-        if (demoWindow.checkResult()) {
-            windowManager.setVisible(GuiDemo.WINDOW_NAME, demoWindow.getState());
+        if (demoImGuiWindow.checkResult()) {
+            windowManager.setVisible(ImGuiDemo.WINDOW_NAME, demoImGuiWindow.getState());
+            return true;
+        }
+        if (demoIkGuiWindow.checkResult()) {
+            windowManager.setVisible(IkGuiDemo.WINDOW_NAME, demoIkGuiWindow.getState());
             return true;
         }
         if (graphicsWindow.checkResult()) {
