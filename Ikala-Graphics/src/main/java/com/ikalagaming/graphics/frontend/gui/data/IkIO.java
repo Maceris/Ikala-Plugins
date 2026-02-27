@@ -22,7 +22,7 @@ public class IkIO {
     @Getter private boolean appAcceptingEvents;
 
     /** Whether the app has lost focus. */
-    @Getter private boolean appFocusLost;
+    public boolean appFocusLost;
 
     /**
      * @see BackendFlags
@@ -284,9 +284,6 @@ public class IkIO {
     /** The mouse is currently inside a (any) window. */
     public boolean mouseInsideWindow;
 
-    /** The mouse was inside a (any) window the previous time we checked. */
-    public boolean mouseInsideWindowPrevious;
-
     /**
      * Mouse position, in pixels. Set to (-{@link Float#MAX_VALUE}, -{@link Float#MAX_VALUE}) if
      * mouse is unavailable.
@@ -422,7 +419,6 @@ public class IkIO {
         mouseReleasedTime = new long[MouseButton.COUNT];
         mouseHoveredViewport = null;
         mouseInsideWindow = false;
-        mouseInsideWindowPrevious = false;
         mousePosition = new Vector2f(-Float.MAX_VALUE, -Float.MAX_VALUE);
         mousePositionPrevious = new Vector2f(-Float.MAX_VALUE, -Float.MAX_VALUE);
         mouseWheel = 0.0f;
@@ -475,25 +471,20 @@ public class IkIO {
 
         if (mouseInsideWindow) {
             // It's in a window now
+            mousePosition.set(x, y);
             float displaceX = mousePosition.x - mousePositionPrevious.x;
             float displaceY = mousePosition.y - mousePositionPrevious.y;
-
-            mousePositionPrevious.set(mousePosition);
-            mousePosition.set(x, y);
-            if (mouseInsideWindowPrevious) {
+            if (mousePositionPrevious.x != -Float.MAX_VALUE
+                    && mousePositionPrevious.y != -Float.MAX_VALUE) {
                 mouseDelta.set(displaceX, displaceY);
             } else {
                 mouseDelta.set(0, 0);
             }
         } else {
-            // TODO(ches) Check for being in the window
             // It's not in a window now
-            mousePositionPrevious.set(mousePosition);
             mousePosition.set(-Float.MAX_VALUE, -Float.MAX_VALUE);
             mouseDelta.set(0, 0);
         }
-
-        mouseInsideWindowPrevious = mouseInsideWindow;
     }
 
     public void addMouseButtonEvent(int button, boolean down) {

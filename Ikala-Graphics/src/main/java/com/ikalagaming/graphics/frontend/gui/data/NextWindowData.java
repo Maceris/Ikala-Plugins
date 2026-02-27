@@ -1,6 +1,10 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
 import com.ikalagaming.graphics.frontend.gui.enums.Condition;
+import com.ikalagaming.graphics.frontend.gui.flags.ChildFlags;
+import com.ikalagaming.graphics.frontend.gui.flags.NextWindowFlags;
+import com.ikalagaming.graphics.frontend.gui.flags.RefreshFlags;
+import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.frontend.gui.util.Rect;
 
 import org.joml.Vector2f;
@@ -12,13 +16,13 @@ public class NextWindowData {
     public int fieldFlags;
 
     public Condition positionCondition;
-    public Vector2f positionValue;
+    public final Vector2f positionValue;
     public Condition sizeCondition;
-    public Vector2f sizeValue;
+    public final Vector2f sizeValue;
     public Condition collapsedCondition;
     public boolean collapsedValue;
-    public Vector2f contentSizeValue;
-    public Vector2f scrollValue;
+    public final Vector2f contentSizeValue;
+    public final Vector2f scrollValue;
 
     /**
      * @see com.ikalagaming.graphics.frontend.gui.flags.WindowFlags
@@ -30,12 +34,30 @@ public class NextWindowData {
      */
     public int childFlags;
 
-    public Rect sizeConstraintRect;
+    public final Rect sizeConstraintRect;
     public float backgroundAlpha;
-    public Vector2f menuBarOffsetMinValue;
+    public final Vector2f menuBarOffsetMinValue;
 
     /**
      * @see com.ikalagaming.graphics.frontend.gui.flags.RefreshFlags
      */
     public int windowRefreshFlags;
+
+    public NextWindowData() {
+        fieldFlags = NextWindowFlags.NONE;
+        positionCondition = Condition.NONE;
+        positionValue = new Vector2f(0, 0);
+        sizeCondition = Condition.NONE;
+        sizeValue = new Vector2f(0, 0);
+        collapsedCondition = Condition.NONE;
+        collapsedValue = false;
+        contentSizeValue = new Vector2f(0, 0);
+        scrollValue = new Vector2f(0, 0);
+        windowFlags = WindowFlags.NONE;
+        childFlags = ChildFlags.NONE;
+        sizeConstraintRect = new Rect(0, 0, 0, 0);
+        backgroundAlpha = 1.0f;
+        menuBarOffsetMinValue = new Vector2f(0, 0);
+        windowRefreshFlags = RefreshFlags.NONE;
+    }
 }

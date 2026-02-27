@@ -18,7 +18,24 @@ import lombok.NonNull;
 /** Handles the position and movement of the camera. */
 public class CameraManager {
 
-    private static final float MOUSE_SENSITIVITY = 0.02f;
+    /** Radians per pixel of mouse movement. */
+    private static final float DEFAULT_MOUSE_SENSITIVITY = calculateSensitivity(40, 400);
+
+    /**
+     * Calculate the sensitivity unit to use.
+     *
+     * @param cmPerTurn The number of centimeters a mouse should travel to complete a 360-degree
+     *     turn.
+     * @param dpi The dpi of the mouse moving said distance.
+     * @return The radians per pixel of mouse movement that would result in the provided cmPerTurn
+     *     at the given dpi.
+     */
+    private static float calculateSensitivity(int cmPerTurn, int dpi) {
+        final float pxPerCm = dpi / 2.54f;
+        final double totalRotation = Math.toRadians(360);
+        final double result = totalRotation / (cmPerTurn * pxPerCm);
+        return (float) result;
+    }
 
     /** The speed in world units that the camera moves per second. */
     private static final float MOVE_SPEED_PER_SECOND = 5f;
@@ -33,6 +50,9 @@ public class CameraManager {
     /** The window we are managing the camera for. */
     private final Window window;
 
+    /** The mouse sensitivity. Radians per pixel of mouse movement. */
+    private float sensitivity;
+
     /**
      * Create a new camera manager for the given window.
      *
@@ -42,6 +62,18 @@ public class CameraManager {
     public CameraManager(@NonNull Camera camera, @NonNull Window window) {
         this.camera = camera;
         this.window = window;
+        this.sensitivity = DEFAULT_MOUSE_SENSITIVITY;
+    }
+
+    /**
+     * Set the sensitivity unit to use.
+     *
+     * @param cmPerTurn The number of centimeters a mouse should travel to complete a 360-degree
+     *     turn.
+     * @param dpi The dpi of the mouse moving said distance.
+     */
+    public void setSensitivity(int cmPerTurn, int dpi) {
+        sensitivity = calculateSensitivity(cmPerTurn, dpi);
     }
 
     /**
@@ -72,8 +104,8 @@ public class CameraManager {
         // Update camera based on mouse
         IkIO ikIO = IkGui.getIO();
         if (!ikIO.wantCaptureMouse && ikIO.getMouseDown(MouseButton.RIGHT)) {
-            float deltaX = ikIO.mouseDelta.x * CameraManager.MOUSE_SENSITIVITY;
-            float deltaY = ikIO.mouseDelta.y * CameraManager.MOUSE_SENSITIVITY;
+            float deltaX = ikIO.mouseDelta.x * sensitivity;
+            float deltaY = ikIO.mouseDelta.y * sensitivity;
             camera.addRotation(deltaY, deltaX);
         }
     }

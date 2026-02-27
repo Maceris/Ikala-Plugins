@@ -64,6 +64,7 @@ public class WindowManager {
      */
     public void drawGui(final int width, final int height) {
         ImGui.newFrame();
+        IkGui.newFrame();
 
         windows.values().stream()
                 .filter(Component::isVisible)
@@ -73,8 +74,8 @@ public class WindowManager {
             toolbar.draw(width, height);
         }
 
-        ImGui.endFrame();
         ImGui.render();
+        IkGui.render();
     }
 
     /**

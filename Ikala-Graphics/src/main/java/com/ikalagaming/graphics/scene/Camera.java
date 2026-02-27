@@ -69,8 +69,8 @@ public class Camera {
     /**
      * Add rotation to the current rotation.
      *
-     * @param pitch The pitch component to add.
-     * @param yaw The yaw component to add.
+     * @param pitch The pitch component to add, in radians.
+     * @param yaw The yaw component to add, in radians.
      */
     public void addRotation(float pitch, float yaw) {
         rotation.add(pitch, yaw);
@@ -172,8 +172,8 @@ public class Camera {
     /**
      * Set the rotation of the camera.
      *
-     * @param x The new x (pitch) rotation.
-     * @param y The new y (yaw) rotation.
+     * @param x The new x (pitch) rotation, in radians.
+     * @param y The new y (yaw) rotation, in radians.
      */
     public void setRotation(float x, float y) {
         rotation.set(x, y);

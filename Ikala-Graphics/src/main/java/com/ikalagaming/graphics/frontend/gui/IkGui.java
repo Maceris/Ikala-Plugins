@@ -167,10 +167,31 @@ public class IkGui {
 
     public static void endFrame() {
         // TODO(ches) complete this
+
+        // TODO(ches) check we have started a new frame since ending the last one
+        // TODO(ches) update navigation
+        // TODO(ches) update docking
+        // TODO(ches) update drag and drop
+        // TODO(ches) end the frame
+        // TODO(ches) update viewports list
+        // TODO(ches) sort the window list
+        // TODO(ches) check the window parents/children are sane
+        // TODO(ches) update textures
+        // TODO(ches) unlock the font atlas
+        IO.mousePositionPrevious.set(IO.mousePosition);
+        IO.mouseDelta.set(0, 0);
+        IO.appFocusLost = false;
+        IO.mouseWheel = 0.0f;
+        IO.mouseWheelH = 0.0f;
+        // TODO(ches) clear input queue?
+
+        // TODO(ches) call context hooks
     }
 
     public static void render() {
         // TODO(ches) complete this
+
+        IkGui.endFrame();
     }
 
     public static void end() {

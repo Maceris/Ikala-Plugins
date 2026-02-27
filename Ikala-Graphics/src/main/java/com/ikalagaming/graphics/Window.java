@@ -7,7 +7,6 @@ import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.graphics.exceptions.WindowCreationException;
 import com.ikalagaming.graphics.frontend.BackendType;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
-import com.ikalagaming.graphics.frontend.gui.data.IkIO;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
@@ -292,12 +291,6 @@ public class Window {
     /** Poll for events and process input. */
     public void pollEvents() {
         glfwPollEvents();
-
-        // TODO(ches) remove ImGUI eventually
-        ImGuiIO imGuiIO = ImGui.getIO();
-        IkIO ikIO = IkGui.getIO();
-        imGuiIO.setMousePos(ikIO.mousePosition.x, ikIO.mousePosition.y);
-        imGuiIO.setMouseDown(ikIO.mouseDown);
     }
 
     /**
