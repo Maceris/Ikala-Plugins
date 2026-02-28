@@ -21,6 +21,8 @@ import java.util.Deque;
 @Slf4j
 public class DrawList {
 
+    private static final String INVALID_ROUNDING = "INVALID_ROUNDING";
+
     @AllArgsConstructor
     public enum ElementType {
         CIRCLE((short) 0),
@@ -46,7 +48,7 @@ public class DrawList {
         final short styleID;
     }
 
-    private record SDFPointDetail(float radius, int colorOrTextureID) {}
+    private record SDFPointDetail(float radius, int colorOrTextureID, int tint) {}
 
     // TODO(ches) figure out line arcs
     // TODO(ches) figure out line bezier
@@ -93,6 +95,35 @@ public class DrawList {
     private int pathColor;
     private boolean pathClosed;
     private float pathThickness;
+
+    /**
+     * Set up point details for four corners of a rectangle.
+     *
+     * @param textureID The texture ID or color to use.
+     * @param rounding The rounding radius.
+     * @param drawFlagsRoundingCorners Draw flags for which corners need rounding.
+     * @param tint Tint, for tinting textures.
+     * @return The (four) point details for each of the corners (top left, top right, bottom right,
+     *     then bottom left).
+     */
+    private static SDFPointDetail[] getSdfPointDetails(
+            int textureID, float rounding, int drawFlagsRoundingCorners, int tint) {
+        final float topLeftRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_LEFT) != 0 ? rounding : 0;
+        final float topRightRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_RIGHT) != 0 ? rounding : 0;
+        final float bottomLeftRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_LEFT) != 0 ? rounding : 0;
+        final float bottomRightRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? rounding : 0;
+
+        return new SDFPointDetail[] {
+            new SDFPointDetail(topLeftRadius, textureID, tint),
+            new SDFPointDetail(topRightRadius, textureID, tint),
+            new SDFPointDetail(bottomRightRadius, textureID, tint),
+            new SDFPointDetail(bottomLeftRadius, textureID, tint),
+        };
+    }
 
     public DrawList() {
         pointBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_POINT);
@@ -346,7 +377,8 @@ public class DrawList {
         }
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(thickness, color), new SDFPointDetail(thickness, color),
+            new SDFPointDetail(thickness, color, Color.CLEAR),
+            new SDFPointDetail(thickness, color, Color.CLEAR),
         };
 
         int pointIndex = addPoint(p1X, p1Y, p2X, p2Y);
@@ -408,31 +440,17 @@ public class DrawList {
         if (rounding < 0) {
             log.warn(
                     SafeResourceLoader.getString(
-                            "INVALID_ROUNDING", GraphicsPlugin.getResourceBundle()),
+                            INVALID_ROUNDING, GraphicsPlugin.getResourceBundle()),
                     rounding);
             return;
         }
-
-        final float topLeftRadius =
-                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_LEFT) != 0 ? rounding : 0;
-        final float topRightRadius =
-                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_RIGHT) != 0 ? rounding : 0;
-        final float bottomLeftRadius =
-                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_LEFT) != 0 ? rounding : 0;
-        final float bottomRightRadius =
-                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? rounding : 0;
-
         final float centerX = (minX + maxX) / 2;
         final float centerY = (minY + maxY) / 2;
         final float width = maxX - minX;
         final float height = maxY - minY;
 
-        SDFPointDetail[] details = {
-            new SDFPointDetail(topLeftRadius, color),
-            new SDFPointDetail(topRightRadius, color),
-            new SDFPointDetail(bottomRightRadius, color),
-            new SDFPointDetail(bottomLeftRadius, color),
-        };
+        SDFPointDetail[] details =
+                getSdfPointDetails(color, rounding, drawFlagsRoundingCorners, Color.CLEAR);
 
         int pointIndex = addPoint(centerX, centerY, width, height);
         int detailIndex = addDetails(details);
@@ -470,19 +488,10 @@ public class DrawList {
         if (rounding < 0) {
             log.warn(
                     SafeResourceLoader.getString(
-                            "INVALID_ROUNDING", GraphicsPlugin.getResourceBundle()),
+                            INVALID_ROUNDING, GraphicsPlugin.getResourceBundle()),
                     rounding);
             return;
         }
-
-        final float topLeftRadius =
-                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_LEFT) != 0 ? rounding : 0;
-        final float topRightRadius =
-                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_RIGHT) != 0 ? rounding : 0;
-        final float bottomLeftRadius =
-                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_LEFT) != 0 ? rounding : 0;
-        final float bottomRightRadius =
-                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? rounding : 0;
 
         final float centerX = (minX + maxX) / 2;
         final float centerY = (minY + maxY) / 2;
@@ -490,12 +499,8 @@ public class DrawList {
         final float height = maxY - minY;
         final int borderStroke = 0;
 
-        SDFPointDetail[] details = {
-            new SDFPointDetail(topLeftRadius, color),
-            new SDFPointDetail(topRightRadius, color),
-            new SDFPointDetail(bottomRightRadius, color),
-            new SDFPointDetail(bottomLeftRadius, color),
-        };
+        SDFPointDetail[] details =
+                getSdfPointDetails(color, rounding, drawFlagsRoundingCorners, Color.CLEAR);
 
         int pointIndex = addPoint(centerX, centerY, width, height);
         int detailIndex = addDetails(details);
@@ -572,10 +577,16 @@ public class DrawList {
         if (rounding < 0) {
             log.warn(
                     SafeResourceLoader.getString(
-                            "INVALID_ROUNDING", GraphicsPlugin.getResourceBundle()),
+                            INVALID_ROUNDING, GraphicsPlugin.getResourceBundle()),
                     rounding);
             return;
         }
+
+        final float centerX = (minX + maxX) / 2;
+        final float centerY = (minY + maxY) / 2;
+        final float width = maxX - minX;
+        final float height = maxY - minY;
+        final int borderStroke = 0;
 
         final float topLeftRadius =
                 (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_LEFT) != 0 ? rounding : 0;
@@ -586,17 +597,11 @@ public class DrawList {
         final float bottomRightRadius =
                 (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? rounding : 0;
 
-        final float centerX = (minX + maxX) / 2;
-        final float centerY = (minY + maxY) / 2;
-        final float width = maxX - minX;
-        final float height = maxY - minY;
-        final int borderStroke = 0;
-
         SDFPointDetail[] details = {
-            new SDFPointDetail(topLeftRadius, colorUpperLeft),
-            new SDFPointDetail(topRightRadius, colorUpperRight),
-            new SDFPointDetail(bottomRightRadius, colorBottomRight),
-            new SDFPointDetail(bottomLeftRadius, colorBottomLeft),
+            new SDFPointDetail(topLeftRadius, colorUpperLeft, Color.CLEAR),
+            new SDFPointDetail(topRightRadius, colorUpperRight, Color.CLEAR),
+            new SDFPointDetail(bottomRightRadius, colorBottomRight, Color.CLEAR),
+            new SDFPointDetail(bottomLeftRadius, colorBottomLeft, Color.CLEAR),
         };
 
         int pointIndex = addPoint(centerX, centerY, width, height);
@@ -640,10 +645,10 @@ public class DrawList {
             float thickness) {
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, color),
-            new SDFPointDetail(0, color),
-            new SDFPointDetail(0, color),
-            new SDFPointDetail(0, color),
+            new SDFPointDetail(0, color, Color.CLEAR),
+            new SDFPointDetail(0, color, Color.CLEAR),
+            new SDFPointDetail(0, color, Color.CLEAR),
+            new SDFPointDetail(0, color, Color.CLEAR),
         };
 
         int pointIndex = addPoint(p1X, p1Y, 0, 0);
@@ -680,10 +685,10 @@ public class DrawList {
         final int borderStroke = 0;
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, color),
-            new SDFPointDetail(0, color),
-            new SDFPointDetail(0, color),
-            new SDFPointDetail(0, color),
+            new SDFPointDetail(0, color, Color.CLEAR),
+            new SDFPointDetail(0, color, Color.CLEAR),
+            new SDFPointDetail(0, color, Color.CLEAR),
+            new SDFPointDetail(0, color, Color.CLEAR),
         };
 
         int pointIndex = addPoint(p1X, p1Y, 0, 0);
@@ -722,7 +727,7 @@ public class DrawList {
             float thickness) {
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, color),
+            new SDFPointDetail(0, color, Color.CLEAR),
         };
 
         int pointIndex = addPoint(p1X, p1Y, 0, 0);
@@ -750,7 +755,7 @@ public class DrawList {
         final int borderStroke = 0;
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, color),
+            new SDFPointDetail(0, color, Color.CLEAR),
         };
 
         int pointIndex = addPoint(p1X, p1Y, 0, 0);
@@ -779,7 +784,7 @@ public class DrawList {
     public void addCircle(float centerX, float centerY, float radius, int color, float thickness) {
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, color),
+            new SDFPointDetail(0, color, Color.CLEAR),
         };
 
         int pointIndex = addPoint(centerX, centerY, radius, radius);
@@ -800,7 +805,7 @@ public class DrawList {
 
     public void addCircleFilled(float centerX, float centerY, float radius, int color) {
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, color),
+            new SDFPointDetail(0, color, Color.CLEAR),
         };
 
         final int borderStroke = 0;
@@ -970,13 +975,12 @@ public class DrawList {
             float maxU,
             float maxV,
             int color) {
-        // TODO(ches) handle the color tint
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, textureID),
-            new SDFPointDetail(0, textureID),
-            new SDFPointDetail(0, textureID),
-            new SDFPointDetail(0, textureID),
+            new SDFPointDetail(0, textureID, color),
+            new SDFPointDetail(0, textureID, color),
+            new SDFPointDetail(0, textureID, color),
+            new SDFPointDetail(0, textureID, color),
         };
 
         int pointIndex = addPoint(minX, minY, minU, minV);
@@ -1194,15 +1198,13 @@ public class DrawList {
             float v4,
             int color) {
 
-        // TODO(ches) handle the color tint
-
         final int borderStroke = 0;
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, textureID),
-            new SDFPointDetail(0, textureID),
-            new SDFPointDetail(0, textureID),
-            new SDFPointDetail(0, textureID),
+            new SDFPointDetail(0, textureID, color),
+            new SDFPointDetail(0, textureID, color),
+            new SDFPointDetail(0, textureID, color),
+            new SDFPointDetail(0, textureID, color),
         };
 
         int pointIndex = addPoint(p1X, p1Y, u1, v1);
@@ -1265,32 +1267,17 @@ public class DrawList {
             int color,
             float rounding,
             int drawFlagsRoundingCorners) {
-        // TODO(ches) handle the color tint
 
         if (rounding < 0) {
             log.warn(
                     SafeResourceLoader.getString(
-                            "INVALID_ROUNDING", GraphicsPlugin.getResourceBundle()),
+                            INVALID_ROUNDING, GraphicsPlugin.getResourceBundle()),
                     rounding);
             return;
         }
 
-        // TODO(ches) we repeats this detail logic a bit, pull it out to a method
-        final float topLeftRadius =
-                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_LEFT) != 0 ? rounding : 0;
-        final float topRightRadius =
-                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_RIGHT) != 0 ? rounding : 0;
-        final float bottomLeftRadius =
-                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_LEFT) != 0 ? rounding : 0;
-        final float bottomRightRadius =
-                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? rounding : 0;
-
-        SDFPointDetail[] details = {
-            new SDFPointDetail(topLeftRadius, textureID),
-            new SDFPointDetail(topRightRadius, textureID),
-            new SDFPointDetail(bottomRightRadius, textureID),
-            new SDFPointDetail(bottomLeftRadius, textureID),
-        };
+        SDFPointDetail[] details =
+                getSdfPointDetails(textureID, rounding, drawFlagsRoundingCorners, color);
 
         int pointIndex = addPoint(minX, minY, minU, minV);
         addPoint(maxX, minY, maxU, minV);

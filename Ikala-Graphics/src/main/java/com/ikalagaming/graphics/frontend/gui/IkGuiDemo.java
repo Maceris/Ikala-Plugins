@@ -44,12 +44,6 @@ class IkGuiDemo {
             return;
         }
 
-        showShadowConfigurationSection();
-        showShadowWindowOptionsSection();
-        showShadowWidgetsSection();
-        showShadowLayoutSection();
-        showShadowPopupsSection();
-        showShadowTablesSection();
         showShadowInputsSection();
 
         ImGui.end();
@@ -71,28 +65,12 @@ class IkGuiDemo {
         IkGui.text("Not yet completed");
     }
 
-    private static void showShadowConfigurationSection() {
-        if (!ImGui.collapsingHeader("Configuration")) {
-            return;
-        }
-        // TODO(ches) fill this out
-        ImGui.text("Not yet completed");
-    }
-
     private static void showWindowOptionsSection() {
         if (!IkGui.collapsingHeader("Window options")) {
             return;
         }
         // TODO(ches) fill this out
         IkGui.text("Not yet completed");
-    }
-
-    private static void showShadowWindowOptionsSection() {
-        if (!ImGui.collapsingHeader("Window options")) {
-            return;
-        }
-        // TODO(ches) fill this out
-        ImGui.text("Not yet completed");
     }
 
     private static void showWidgetsSection() {
@@ -103,28 +81,12 @@ class IkGuiDemo {
         IkGui.text("Not yet completed");
     }
 
-    private static void showShadowWidgetsSection() {
-        if (!ImGui.collapsingHeader("Widgets")) {
-            return;
-        }
-        // TODO(ches) fill this out
-        ImGui.text("Not yet completed");
-    }
-
     private static void showLayoutSection() {
         if (!IkGui.collapsingHeader("Layout & Scrolling")) {
             return;
         }
         // TODO(ches) fill this out
         IkGui.text("Not yet completed");
-    }
-
-    private static void showShadowLayoutSection() {
-        if (!ImGui.collapsingHeader("Layout & Scrolling")) {
-            return;
-        }
-        // TODO(ches) fill this out
-        ImGui.text("Not yet completed");
     }
 
     private static void showPopupsSection() {
@@ -135,28 +97,12 @@ class IkGuiDemo {
         IkGui.text("Not yet completed");
     }
 
-    private static void showShadowPopupsSection() {
-        if (!ImGui.collapsingHeader("Popups & Modal Windows")) {
-            return;
-        }
-        // TODO(ches) fill this out
-        ImGui.text("Not yet completed");
-    }
-
     private static void showTablesSection() {
         if (!IkGui.collapsingHeader("Tables & Columns")) {
             return;
         }
         // TODO(ches) fill this out
         IkGui.text("Not yet completed");
-    }
-
-    private static void showShadowTablesSection() {
-        if (!ImGui.collapsingHeader("Tables & Columns")) {
-            return;
-        }
-        // TODO(ches) fill this out
-        ImGui.text("Not yet completed");
     }
 
     private static void showInputsSection() {
