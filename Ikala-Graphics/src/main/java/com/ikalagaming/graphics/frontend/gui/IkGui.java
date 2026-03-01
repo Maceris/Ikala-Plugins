@@ -9,11 +9,21 @@ import com.ikalagaming.graphics.frontend.gui.util.Hash;
 
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 import org.joml.Vector4f;
 
 /** Immediate mode GUI library based on ImGui. */
+@Slf4j
 public class IkGui {
+
+    /**
+     * Used to wrap a large frame count back to 0, which I like more than accidentally wrapping into
+     * the negatives. We just need the numbers to be different each frame anyway, so this shouldn't
+     * matter much.
+     */
+    private static final int FRAME_COUNT_CAP = 2_000_000_000;
+
     private static Context context;
     @Getter private static IkIO IO;
     @Getter private static PlatformIO platformIO;
@@ -163,12 +173,34 @@ public class IkGui {
 
     public static void newFrame() {
         // TODO(ches) complete this
+
+        // TODO(ches) sanity checks for IO and configuration
+        // TODO(ches) update settings
+        // TODO(ches) update time, frames, window counts
+        context.frameCount = (context.frameCount + 1) % FRAME_COUNT_CAP;
+        // TODO(ches) update input events, trickling
+        // TODO(ches) update viewports
+        // TODO(ches) update textures
+        // TODO(ches) update draw list shared data
+        // TODO(ches) mark draw data as invalid
+        // TODO(ches) update active IDs
+        // TODO(ches) update hover delay
+        // TODO(ches) update keyboard inputs
+        // TODO(ches) update drag and drop
+        // TODO(ches) update navigation
+        // TODO(ches) update mouse inputs
+        // TODO(ches) clean up transient buffers
+        // TODO(ches) create fallback window
     }
 
     public static void endFrame() {
         // TODO(ches) complete this
 
-        // TODO(ches) check we have started a new frame since ending the last one
+        if (context.frameCountEnded == context.frameCount) {
+            log.error("newFrame() must be called before endFrame()");
+            return;
+        }
+
         // TODO(ches) update navigation
         // TODO(ches) update docking
         // TODO(ches) update drag and drop
@@ -186,12 +218,18 @@ public class IkGui {
         // TODO(ches) clear input queue?
 
         // TODO(ches) call context hooks
+
+        context.frameCountEnded = (context.frameCountEnded + 1) % FRAME_COUNT_CAP;
     }
 
     public static void render() {
         // TODO(ches) complete this
 
-        IkGui.endFrame();
+        if (context.frameCountEnded != context.frameCount) {
+            IkGui.endFrame();
+        }
+
+        context.frameCountRendered = (context.frameCountRendered + 1) % FRAME_COUNT_CAP;
     }
 
     public static void end() {

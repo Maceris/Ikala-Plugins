@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
+import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.enums.Direction;
 import com.ikalagaming.graphics.frontend.gui.enums.GuiInputSource;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
@@ -34,9 +35,30 @@ public class Context {
     public float dpiScale;
     public DrawListSharedData drawListSharedData;
     public double time;
+
+    /**
+     * The number of frames that have been started ({@link IkGui#newFrame()}). Changes each time we
+     * start a new frame, incrementing but will wrap around to 0 eventually, so only guaranteed to
+     * be useful when compared to equality with {@link #frameCountEnded} and {@link
+     * #frameCountRendered}.
+     */
     public int frameCount;
+
+    /**
+     * The number of frames that have been completed ({@link IkGui#endFrame()}, which is usually
+     * implicitly called by {@link IkGui#render()}). Changes each time we start a new frame,
+     * incrementing but will wrap around to 0 eventually, so only guaranteed to be useful when
+     * compared to equality with {@link #frameCount} and {@link #frameCountRendered}.
+     */
     public int frameCountEnded;
+
+    /**
+     * The number of frames that have been rendered ({@link IkGui#render()}). Changes each time we
+     * start a new frame, incrementing but will wrap around to 0 eventually, so only guaranteed to
+     * be useful when compared to equality with {@link #frameCount} and {@link #frameCountEnded}.
+     */
     public int frameCountRendered;
+
     public boolean insideFrame;
     public List<GuiInputEvent> inputEventQueue;
 
