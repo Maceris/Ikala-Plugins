@@ -10,7 +10,6 @@ import static org.lwjgl.opengl.GL20.glUniform4f;
 import static org.lwjgl.opengl.GL20.glUniformMatrix4fv;
 import static org.lwjgl.opengl.GL30.glUniform1ui;
 
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.frontend.Texture;
@@ -50,11 +49,12 @@ public class UniformsMapOpenGL implements UniformsMap {
     public void createUniform(@NonNull String uniformName) {
         int uniformLocation = glGetUniformLocation(programID, uniformName);
         if (uniformLocation < 0) {
-
             String error =
-                    SafeResourceLoader.getString(
-                            "UNIFORM_MISSING", GraphicsPlugin.getResourceBundle());
-            log.info(error, uniformName, programID);
+                    SafeResourceLoader.format(
+                            "Could not find uniform [{}] in shader program [{}]",
+                            uniformName,
+                            programID);
+            log.info(error);
 
             throw new ShaderException(
                     SafeResourceLoader.format(error, uniformName, programID + ""));
@@ -72,11 +72,10 @@ public class UniformsMapOpenGL implements UniformsMap {
     private int getUniformLocation(@NonNull String uniformName) {
         Integer location = uniforms.get(uniformName);
         if (location == null) {
-            String error =
-                    SafeResourceLoader.getString(
-                            "UNIFORM_LOCATION_MISSING", GraphicsPlugin.getResourceBundle());
-            log.info(error, uniformName, programID);
-            throw new ShaderException(SafeResourceLoader.format(error, uniformName));
+            final String error =
+                    SafeResourceLoader.format("Could not find uniform [{}]", programID);
+            log.info(error);
+            throw new ShaderException(error);
         }
         return location;
     }

@@ -1,12 +1,10 @@
 package com.ikalagaming.graphics.scene;
 
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
-import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -100,11 +98,9 @@ public class Scene {
 
         if (entityList.size() >= Model.MAX_ENTITIES) {
             log.error(
-                    SafeResourceLoader.getStringFormatted(
-                            "TOO_MANY_ENTITIES",
-                            GraphicsPlugin.getResourceBundle(),
-                            String.valueOf(Model.MAX_ENTITIES),
-                            model.getId()));
+                    "Reached limit ({}) of entities for model {}",
+                    Model.MAX_ENTITIES,
+                    model.getId());
             return;
         }
         model.getEntitiesList().add(entity);

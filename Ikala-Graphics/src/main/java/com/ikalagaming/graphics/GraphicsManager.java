@@ -19,7 +19,6 @@ import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.launcher.events.Shutdown;
-import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -148,8 +147,7 @@ public class GraphicsManager {
                             return null;
                         });
 
-        log.debug(
-                SafeResourceLoader.getString("WINDOW_CREATED", GraphicsPlugin.getResourceBundle()));
+        log.debug("Window created");
         new WindowCreated(window.getWindowHandle()).fire();
 
         renderInstance =
@@ -162,9 +160,7 @@ public class GraphicsManager {
             return false;
         }
 
-        log.debug(
-                SafeResourceLoader.getString(
-                        "RENDERER_CREATED", GraphicsPlugin.getResourceBundle()));
+        log.debug("Renderer created");
 
         scene = new Scene(window.getWidth(), window.getHeight());
 

@@ -2,13 +2,11 @@ package com.ikalagaming.graphics.frontend.gui.data;
 
 import static com.ikalagaming.graphics.frontend.gui.flags.DrawFlags.*;
 
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.flags.DrawFlags;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
 import com.ikalagaming.graphics.frontend.gui.util.Rect;
 import com.ikalagaming.util.IntArrayList;
-import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
@@ -20,8 +18,6 @@ import java.util.Deque;
 
 @Slf4j
 public class DrawList {
-
-    private static final String INVALID_ROUNDING = "INVALID_ROUNDING";
 
     @AllArgsConstructor
     public enum ElementType {
@@ -369,10 +365,7 @@ public class DrawList {
 
     public void addLine(float p1X, float p1Y, float p2X, float p2Y, int color, float thickness) {
         if (!Float.isFinite(thickness) || thickness <= 0) {
-            log.warn(
-                    SafeResourceLoader.getString(
-                            "INVALID_THICKNESS", GraphicsPlugin.getResourceBundle()),
-                    thickness);
+            log.warn("Invalid thickness {}", thickness);
             return;
         }
 
@@ -438,10 +431,7 @@ public class DrawList {
             float thickness) {
 
         if (rounding < 0) {
-            log.warn(
-                    SafeResourceLoader.getString(
-                            INVALID_ROUNDING, GraphicsPlugin.getResourceBundle()),
-                    rounding);
+            log.warn("Invalid rounding {} in addRect", rounding);
             return;
         }
         final float centerX = (minX + maxX) / 2;
@@ -486,10 +476,7 @@ public class DrawList {
             int drawFlagsRoundingCorners) {
 
         if (rounding < 0) {
-            log.warn(
-                    SafeResourceLoader.getString(
-                            INVALID_ROUNDING, GraphicsPlugin.getResourceBundle()),
-                    rounding);
+            log.warn("Invalid rounding {} in addRectFilled", rounding);
             return;
         }
 
@@ -575,10 +562,7 @@ public class DrawList {
             int colorBottomLeft) {
 
         if (rounding < 0) {
-            log.warn(
-                    SafeResourceLoader.getString(
-                            INVALID_ROUNDING, GraphicsPlugin.getResourceBundle()),
-                    rounding);
+            log.warn("Invalid rounding {} in addRectFilledMultiColor", rounding);
             return;
         }
 
@@ -1269,10 +1253,7 @@ public class DrawList {
             int drawFlagsRoundingCorners) {
 
         if (rounding < 0) {
-            log.warn(
-                    SafeResourceLoader.getString(
-                            INVALID_ROUNDING, GraphicsPlugin.getResourceBundle()),
-                    rounding);
+            log.warn("Invalid rounding {} in addImageRounded", rounding);
             return;
         }
 

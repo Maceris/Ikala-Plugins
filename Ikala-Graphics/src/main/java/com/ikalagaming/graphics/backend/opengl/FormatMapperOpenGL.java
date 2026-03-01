@@ -2,7 +2,6 @@ package com.ikalagaming.graphics.backend.opengl;
 
 import static org.lwjgl.opengl.GL46.*;
 
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.graphics.frontend.Format;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -13,7 +12,8 @@ import lombok.NonNull;
 public class FormatMapperOpenGL {
 
     /** Used for error messages. */
-    private static final String UNSUPPORTED_TEXTURE_FORMAT = "UNSUPPORTED_TEXTURE_FORMAT";
+    private static final String UNSUPPORTED_TEXTURE_FORMAT =
+            "Texture format {} is not supported by the {} backend";
 
     /** The backend name in error messages. */
     private static final String BACKEND_NAME = "OpenGL";
@@ -232,11 +232,8 @@ public class FormatMapperOpenGL {
                             A2B10G10R10_SINT_PACK32,
                             A1R5G5B5_UNORM_PACK16 ->
                     throw new TextureException(
-                            SafeResourceLoader.getStringFormatted(
-                                    UNSUPPORTED_TEXTURE_FORMAT,
-                                    GraphicsPlugin.getResourceBundle(),
-                                    format.toString(),
-                                    BACKEND_NAME));
+                            SafeResourceLoader.format(
+                                    UNSUPPORTED_TEXTURE_FORMAT, format.toString(), BACKEND_NAME));
         };
     }
 
@@ -454,11 +451,8 @@ public class FormatMapperOpenGL {
                             A2B10G10R10_SINT_PACK32,
                             A1R5G5B5_UNORM_PACK16 ->
                     throw new TextureException(
-                            SafeResourceLoader.getStringFormatted(
-                                    UNSUPPORTED_TEXTURE_FORMAT,
-                                    GraphicsPlugin.getResourceBundle(),
-                                    format.toString(),
-                                    BACKEND_NAME));
+                            SafeResourceLoader.format(
+                                    UNSUPPORTED_TEXTURE_FORMAT, format.toString(), BACKEND_NAME));
         };
     }
 
@@ -668,11 +662,8 @@ public class FormatMapperOpenGL {
                             A2B10G10R10_SINT_PACK32,
                             A1R5G5B5_UNORM_PACK16 ->
                     throw new TextureException(
-                            SafeResourceLoader.getStringFormatted(
-                                    UNSUPPORTED_TEXTURE_FORMAT,
-                                    GraphicsPlugin.getResourceBundle(),
-                                    format.toString(),
-                                    BACKEND_NAME));
+                            SafeResourceLoader.format(
+                                    UNSUPPORTED_TEXTURE_FORMAT, format.toString(), BACKEND_NAME));
         };
     }
 

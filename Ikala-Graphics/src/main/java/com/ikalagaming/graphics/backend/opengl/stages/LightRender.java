@@ -8,7 +8,6 @@ import static org.lwjgl.opengl.GL30.glBindBufferBase;
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
@@ -19,7 +18,6 @@ import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.scene.Fog;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.*;
-import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
@@ -155,8 +153,7 @@ public class LightRender implements RenderStage {
 
         if (pointLights.size() > PipelineOpenGL.MAX_LIGHTS_SUPPORTED) {
             log.warn(
-                    SafeResourceLoader.getString(
-                            "MAX_POINT_LIGHTS", GraphicsPlugin.getResourceBundle()),
+                    "Only {} point lights are supported but there are {} in the scene",
                     PipelineOpenGL.MAX_LIGHTS_SUPPORTED,
                     pointLights.size());
         }
@@ -208,8 +205,7 @@ public class LightRender implements RenderStage {
 
         if (spotLights.size() > PipelineOpenGL.MAX_LIGHTS_SUPPORTED) {
             log.warn(
-                    SafeResourceLoader.getString(
-                            "MAX_SPOT_LIGHTS", GraphicsPlugin.getResourceBundle()),
+                    "Only {} spotlights are supported but there are {} in the scene",
                     PipelineOpenGL.MAX_LIGHTS_SUPPORTED,
                     spotLights.size());
         }

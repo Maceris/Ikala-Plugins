@@ -3,7 +3,6 @@ package com.ikalagaming.graphics.backend.opengl;
 import static org.lwjgl.opengl.ARBBindlessTexture.glGetTextureHandleARB;
 import static org.lwjgl.opengl.GL46.*;
 
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.graphics.frontend.Format;
 import com.ikalagaming.graphics.frontend.Texture;
@@ -88,10 +87,9 @@ public class TextureLoaderOpenGL implements TextureLoader {
 
             ByteBuffer buffer = STBImage.stbi_load(texturePath, width, height, channels, 4);
             if (buffer == null) {
-                String error =
-                        SafeResourceLoader.getStringFormatted(
-                                "TEXTURE_ERROR_LOADING",
-                                GraphicsPlugin.getResourceBundle(),
+                final String error =
+                        SafeResourceLoader.format(
+                                "Image file {} not loaded: {}",
                                 texturePath,
                                 STBImage.stbi_failure_reason());
                 log.info(error);

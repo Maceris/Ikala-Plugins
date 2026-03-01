@@ -306,12 +306,7 @@ public class ModelConverter {
         String fixedPath = file.getAbsolutePath();
 
         if (!file.exists()) {
-
-            String error =
-                    SafeResourceLoader.getStringFormatted(
-                            "MODEL_PATH_MISSING",
-                            GraphicsPlugin.getResourceBundle(),
-                            file.getAbsolutePath());
+            final String error = SafeResourceLoader.format("Model path does not exist [{}]", file.getAbsolutePath());
             log.info(error);
             throw new ModelException(error);
         }
@@ -325,8 +320,8 @@ public class ModelConverter {
         AIScene aiScene = Assimp.aiImportFile(fixedPath, flags);
         if (aiScene == null) {
             String error =
-                    SafeResourceLoader.getStringFormatted(
-                            "MODEL_ERROR_LOADING", GraphicsPlugin.getResourceBundle(), fixedPath);
+                    SafeResourceLoader.format(
+                            "Error loading model [{}]", fixedPath);
             log.info(error);
             throw new ModelException(error);
         }

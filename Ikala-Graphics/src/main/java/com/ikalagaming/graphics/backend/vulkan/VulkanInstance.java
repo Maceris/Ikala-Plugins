@@ -9,7 +9,6 @@ import static org.lwjgl.vulkan.EXTDebugUtils.*;
 import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.VK10.*;
 
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.frontend.Instance;
@@ -116,10 +115,8 @@ public class VulkanInstance implements Instance {
     private static void checkError(int errorCode) {
         if (errorCode != 0) {
             var message =
-                    SafeResourceLoader.getStringFormatted(
-                            "VULKAN_ERROR",
-                            GraphicsPlugin.getResourceBundle(),
-                            String.format("0x%X", errorCode));
+                    SafeResourceLoader.format(
+                            "Vulkan error [{}]", String.format("0x%X", errorCode));
             log.error(message);
             throw new RenderException(message);
         }
@@ -218,25 +215,20 @@ public class VulkanInstance implements Instance {
             int error = vkCreateInstance(instanceInfo, null, pointerOutput);
             requiredExtensionNames.free();
             if (error == VK_ERROR_INCOMPATIBLE_DRIVER) {
-                var message =
-                        SafeResourceLoader.getString(
-                                "VULKAN_INCOMPATIBLE_DRIVER", GraphicsPlugin.getResourceBundle());
+
+                var message = "Could not find a compatible Vulkan driver";
                 log.error(message);
                 throw new RenderException(message);
             }
             if (error == VK_ERROR_EXTENSION_NOT_PRESENT) {
-                var message =
-                        SafeResourceLoader.getString(
-                                "VULKAN_EXTENSION_NOT_PRESENT", GraphicsPlugin.getResourceBundle());
+                var message = "Could not find a required Vulkan extension";
                 log.error(message);
                 throw new RenderException(message);
             }
             if (error != 0) {
                 var message =
-                        SafeResourceLoader.getStringFormatted(
-                                "VULKAN_GENERIC_CREATION_FAILURE",
-                                GraphicsPlugin.getResourceBundle(),
-                                String.valueOf(error));
+                        SafeResourceLoader.format(
+                                "Failed to create a Vulkan instance, error code {}", error);
                 log.error(message);
                 throw new RenderException(message);
             }
@@ -274,9 +266,7 @@ public class VulkanInstance implements Instance {
     private static void populateRequiredExtensions(@NonNull PointerBuffer requiredExtensionNames) {
         PointerBuffer glfwExtensionNames = glfwGetRequiredInstanceExtensions();
         if (glfwExtensionNames == null) {
-            var message =
-                    SafeResourceLoader.getString(
-                            "GLFW_EXTENSIONS_NULL", GraphicsPlugin.getResourceBundle());
+            final var message = "Failed to find required GLFW extension names";
             log.error(message);
             throw new RenderException(message);
         }
@@ -343,26 +333,20 @@ public class VulkanInstance implements Instance {
         }
 
         if (!missingLayers.isEmpty()) {
-            var layerNames = String.join(", ", missingLayers);
-            var message =
-                    SafeResourceLoader.getStringFormatted(
-                            "VULKAN_LAYERS_MISSING",
-                            GraphicsPlugin.getResourceBundle(),
-                            layerNames);
+            final var layerNames = String.join(", ", missingLayers);
+            final var message = SafeResourceLoader.format("Vulkan layers missing: {}", layerNames);
             log.error(message);
 
-            List<String> layers = new ArrayList<>();
-            for (int j = 0; j < availableLayerNames.capacity(); ++j) {
-                var layer = availableLayerNames.get(j);
-                layers.add(
-                        String.format(
-                                "%s (%s)", layer.layerNameString(), layer.descriptionString()));
+            if (log.isDebugEnabled()) {
+                List<String> layers = new ArrayList<>();
+                for (int j = 0; j < availableLayerNames.capacity(); ++j) {
+                    var layer = availableLayerNames.get(j);
+                    layers.add(
+                            String.format(
+                                    "%s (%s)", layer.layerNameString(), layer.descriptionString()));
+                }
+                log.debug("Found Vulkan layers: {}", String.join(", ", layers));
             }
-            log.info(
-                    SafeResourceLoader.getStringFormatted(
-                            "VULKAN_LAYERS_LIST",
-                            GraphicsPlugin.getResourceBundle(),
-                            String.join(", ", layers)));
 
             throw new RenderException(message);
         }
@@ -526,9 +510,7 @@ public class VulkanInstance implements Instance {
         }
 
         if (null == bestChoice) {
-            var message =
-                    SafeResourceLoader.getString(
-                            "VULKAN_NO_PHYSICAL_DEVICE", GraphicsPlugin.getResourceBundle());
+            final var message = "No valid physical device found";
             log.error(message);
             throw new RenderException(message);
         }

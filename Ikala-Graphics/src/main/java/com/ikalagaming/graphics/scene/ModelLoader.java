@@ -1,7 +1,6 @@
 package com.ikalagaming.graphics.scene;
 
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.exceptions.ModelException;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.Model;
@@ -120,12 +119,9 @@ public class ModelLoader {
         String fixedPath = file.getAbsolutePath();
 
         if (!file.exists()) {
-
-            String error =
-                    SafeResourceLoader.getStringFormatted(
-                            "MODEL_PATH_MISSING",
-                            GraphicsPlugin.getResourceBundle(),
-                            file.getAbsolutePath());
+            final String error =
+                    SafeResourceLoader.format(
+                            "Model path does not exist [{}]", file.getAbsolutePath());
             log.info(error);
             throw new ModelException(error);
         }

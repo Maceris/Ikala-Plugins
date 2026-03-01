@@ -10,7 +10,6 @@ import static org.lwjgl.opengl.GL43.*;
 import static org.lwjgl.opengl.GL44.glBufferStorage;
 
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
@@ -23,7 +22,6 @@ import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.util.SafeResourceLoader;
 
 import imgui.ImGui;
 import imgui.ImGuiIO;
@@ -107,10 +105,7 @@ public class OpenGLInstance implements Instance {
         }
 
         if (!result) {
-            String message =
-                    SafeResourceLoader.getString(
-                            "EXTENSION_MISSING", GraphicsPlugin.getResourceBundle());
-            log.error(message, Strings.join(missing, ','));
+            log.error("Missing required extension(s) {}", Strings.join(missing, ','));
         }
 
         return result;

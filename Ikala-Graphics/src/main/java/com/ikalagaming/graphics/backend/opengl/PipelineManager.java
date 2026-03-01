@@ -8,7 +8,6 @@ import static org.lwjgl.opengl.GL30.GL_FRAMEBUFFER;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.ShaderMap;
@@ -16,7 +15,6 @@ import com.ikalagaming.graphics.backend.opengl.stages.*;
 import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.CascadeShadow;
-import com.ikalagaming.util.SafeResourceLoader;
 
 import imgui.ImFontAtlas;
 import imgui.ImGui;
@@ -153,9 +151,7 @@ public class PipelineManager {
     private Pipeline buildPipeline(final int configuration) {
         List<RenderStage> stages = new ArrayList<>();
         if (RenderConfig.hasError(configuration)) {
-            log.error(
-                    SafeResourceLoader.getStringFormatted(
-                            "PIPELINE_ERROR", GraphicsPlugin.getResourceBundle()));
+            log.error("Error in pipeline config");
             return ERROR_PIPELINE;
         }
 
@@ -310,9 +306,7 @@ public class PipelineManager {
         glReadBuffer(GL_NONE);
 
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-            throw new RenderException(
-                    SafeResourceLoader.getString(
-                            "FRAME_BUFFER_CREATION_FAIL", GraphicsPlugin.getResourceBundle()));
+            throw new RenderException("Could not create FrameBuffer");
         }
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);

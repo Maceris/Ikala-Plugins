@@ -126,18 +126,14 @@ public class Window {
 
         glfwInitHint(GLFW_COCOA_CHDIR_RESOURCES, GLFW_TRUE);
         if (!glfwInit()) {
-            String error =
-                    SafeResourceLoader.getString(
-                            "GLFW_INIT_FAIL", GraphicsPlugin.getResourceBundle());
+            final String error = "Unable to initialize GLFW";
             log.warn(error);
             throw new WindowCreationException(error);
         }
 
         if (BackendType.VULKAN == GraphicsManager.getBackendType()
                 && !GLFWVulkan.glfwVulkanSupported()) {
-            String error =
-                    SafeResourceLoader.getString(
-                            "GLFW_VULKAN_UNSUPPORTED", GraphicsPlugin.getResourceBundle());
+            final String error = "GLFW cannot find the Vulkan loader";
             log.warn(error);
             throw new WindowCreationException(error);
         }
@@ -151,9 +147,8 @@ public class Window {
             glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
             GLFWVidMode vidMode = glfwGetVideoMode(glfwGetPrimaryMonitor());
             if (vidMode == null) {
-                String error =
-                        SafeResourceLoader.getString(
-                                "WINDOW_ERROR_CREATION", GraphicsPlugin.getResourceBundle());
+                final String error =
+                        "Failed to create a GLFW window due to an error fetching video mode";
                 log.warn(error);
                 throw new WindowCreationException(error);
             }
@@ -164,9 +159,7 @@ public class Window {
         this.title = title;
         windowHandle = glfwCreateWindow(width, height, title, NULL, NULL);
         if (windowHandle == NULL) {
-            String error =
-                    SafeResourceLoader.getString(
-                            "WINDOW_ERROR_CREATION", GraphicsPlugin.getResourceBundle());
+            final String error = "Failed to create a GLFW window";
             log.warn(error);
             throw new WindowCreationException(error);
         }
@@ -260,9 +253,7 @@ public class Window {
             callback.free();
         }
         windowHandle = NULL;
-        log.debug(
-                SafeResourceLoader.getString(
-                        "WINDOW_DESTROYED", GraphicsPlugin.getResourceBundle()));
+        log.debug("Window destroyed");
     }
 
     /**
@@ -305,10 +296,7 @@ public class Window {
         try {
             resizeFunc.call();
         } catch (Exception e) {
-            log.warn(
-                    SafeResourceLoader.getString(
-                            "RESIZE_ERROR", GraphicsPlugin.getResourceBundle()),
-                    e);
+            log.warn("Error calling resize callback", e);
         }
     }
 
@@ -384,8 +372,7 @@ public class Window {
         String iconPath = icon.getAbsolutePath();
         if (!icon.exists()) {
             log.warn(
-                    SafeResourceLoader.getString(
-                            "ICON_MISSING", GraphicsPlugin.getResourceBundle()),
+                    "Icon {} does not exist! Not setting an icon for the program",
                     icon.getAbsolutePath());
             return;
         }
@@ -397,12 +384,13 @@ public class Window {
 
             ByteBuffer buffer = STBImage.stbi_load(iconPath, w, h, channels, 4);
             if (buffer == null) {
-                String error =
-                        SafeResourceLoader.getString(
-                                "TEXTURE_ERROR_LOADING", GraphicsPlugin.getResourceBundle());
-                log.info(error, iconPath, STBImage.stbi_failure_reason());
-                throw new TextureException(
-                        SafeResourceLoader.format(error, iconPath, STBImage.stbi_failure_reason()));
+                final String error =
+                        SafeResourceLoader.format(
+                                "Image file {} not loaded: {}",
+                                iconPath,
+                                STBImage.stbi_failure_reason());
+                log.info(error);
+                throw new TextureException(error);
             }
             GLFWImage.Buffer iconBuffer = GLFWImage.create(1);
             GLFWImage iconImage = GLFWImage.create().set(w.get(), h.get(), buffer);

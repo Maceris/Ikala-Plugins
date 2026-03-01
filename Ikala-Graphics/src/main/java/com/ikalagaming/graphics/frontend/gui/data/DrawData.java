@@ -1,8 +1,6 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.frontend.gui.util.Rect;
-import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
@@ -42,11 +40,7 @@ public class DrawData {
 
     private DrawList getDrawList(int drawListIndex) {
         if (drawListIndex < 0 || drawListIndex > drawLists.size()) {
-            log.error(
-                    SafeResourceLoader.getString(
-                            "INDEX_OUT_OF_BOUNDS",
-                            GraphicsPlugin.getResourceBundle(),
-                            Integer.toString(drawListIndex)));
+            log.error("Index {} out of bounds in getDrawList", drawListIndex);
             return null;
         }
 
@@ -62,11 +56,7 @@ public class DrawData {
         boolean valid = (buffer != null) && (position + bytes < buffer.position());
 
         if (!valid) {
-            log.error(
-                    SafeResourceLoader.getString(
-                            "INDEX_OUT_OF_BOUNDS",
-                            GraphicsPlugin.getResourceBundle(),
-                            Integer.toString(position)));
+            log.error("Index {} out of bounds in offsetInvalid", position);
         }
 
         return !valid;

@@ -1,7 +1,6 @@
 package com.ikalagaming.graphics.backend.base;
 
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -63,9 +62,8 @@ public class ShaderMap {
         var result = shaders.get(type);
 
         if (result == null) {
-            var message =
-                    SafeResourceLoader.getStringFormatted(
-                            "SHADER_MISSING", GraphicsPlugin.getResourceBundle(), type.toString());
+            final String message =
+                    SafeResourceLoader.format("Missing shader for stage {}", type.toString());
             log.error(message);
             throw new ShaderException(message);
         }

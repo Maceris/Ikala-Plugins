@@ -1,12 +1,10 @@
 package com.ikalagaming.graphics.frontend.gui;
 
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.frontend.gui.component.Component;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
 import com.ikalagaming.graphics.frontend.gui.component.MainToolbar;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.util.SafeResourceLoader;
 
 import imgui.ImGui;
 import lombok.Getter;
@@ -39,9 +37,7 @@ public class WindowManager {
      */
     public void addWindow(@NonNull String name, @NonNull GuiWindow component) {
         if (this.windows.containsKey(name)) {
-            log.error(
-                    SafeResourceLoader.getStringFormatted(
-                            "WINDOW_ALREADY_EXISTS", GraphicsPlugin.getResourceBundle(), name));
+            log.error("Window with name {} already exists", name);
         }
         this.windows.put(name, component);
     }

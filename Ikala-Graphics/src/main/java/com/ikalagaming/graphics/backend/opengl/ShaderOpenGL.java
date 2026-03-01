@@ -58,9 +58,7 @@ public class ShaderOpenGL implements Shader {
     public ShaderOpenGL(@NonNull List<ShaderModuleData> shaderModuleDataList) {
         programID = glCreateProgram();
         if (programID == 0) {
-            String error =
-                    SafeResourceLoader.getString(
-                            "SHADER_ERROR_ZERO_ID", GraphicsPlugin.getResourceBundle());
+            final String error = "Error creating shader, program ID is 0";
             log.info(error);
             throw new ShaderException(error);
         }
@@ -74,10 +72,9 @@ public class ShaderOpenGL implements Shader {
     }
 
     private static void reportMissingModule(ShaderModuleData module) {
-        String error =
-                SafeResourceLoader.getStringFormatted(
-                        "SHADER_NOT_FOUND",
-                        GraphicsPlugin.getResourceBundle(),
+        final String error =
+                SafeResourceLoader.format(
+                        "Shader of type {} not found at ({}) '{}'",
                         module.shaderType().toString(),
                         module.location().toString(),
                         module.shaderFile());
@@ -134,9 +131,7 @@ public class ShaderOpenGL implements Shader {
 
         int shaderId = glCreateShader(shaderType);
         if (shaderId == 0) {
-            String error =
-                    SafeResourceLoader.getString(
-                            "SHADER_ERROR_CREATING", GraphicsPlugin.getResourceBundle());
+            String error = "Error creating shader. Type: {}";
             log.warn(error, shaderType);
             throw new ShaderException(SafeResourceLoader.format(error, "" + shaderType));
         }
@@ -145,10 +140,9 @@ public class ShaderOpenGL implements Shader {
         glCompileShader(shaderId);
 
         if (glGetShaderi(shaderId, GL_COMPILE_STATUS) == 0) {
-            String error =
-                    SafeResourceLoader.getStringFormatted(
-                            "SHADER_ERROR_COMPILING",
-                            GraphicsPlugin.getResourceBundle(),
+            final String error =
+                    SafeResourceLoader.format(
+                            "Error compiling Shader code for {}: {}",
                             module.shaderFile(),
                             glGetShaderInfoLog(shaderId, 1024));
             log.warn(error);
@@ -173,12 +167,11 @@ public class ShaderOpenGL implements Shader {
     private void link(@NonNull List<Integer> shaderModules) {
         glLinkProgram(programID);
         if (glGetProgrami(programID, GL_LINK_STATUS) == 0) {
-            String error =
-                    SafeResourceLoader.getString(
-                            "SHADER_ERROR_LINKING", GraphicsPlugin.getResourceBundle());
-            log.warn(error, glGetProgramInfoLog(programID, 1024));
-            throw new ShaderException(
-                    SafeResourceLoader.format(error, glGetProgramInfoLog(programID, 1024)));
+            final String error =
+                    SafeResourceLoader.format(
+                            "Error linking shader code: {}", glGetProgramInfoLog(programID, 1024));
+            log.warn(error);
+            throw new ShaderException(error);
         }
 
         shaderModules.forEach(s -> glDetachShader(programID, s));
@@ -194,12 +187,12 @@ public class ShaderOpenGL implements Shader {
     private void validate() {
         glValidateProgram(programID);
         if (glGetProgrami(programID, GL_VALIDATE_STATUS) == 0) {
-            String error =
-                    SafeResourceLoader.getString(
-                            "SHADER_ERROR_VALIDATION_WARNING", GraphicsPlugin.getResourceBundle());
-            log.warn(error, glGetProgramInfoLog(programID, 1024));
-            throw new ShaderException(
-                    SafeResourceLoader.format(error, glGetProgramInfoLog(programID, 1024)));
+            final String error =
+                    SafeResourceLoader.format(
+                            "Warning validating shader code: {}",
+                            glGetProgramInfoLog(programID, 1024));
+            log.warn(error);
+            throw new ShaderException(error);
         }
     }
 }
