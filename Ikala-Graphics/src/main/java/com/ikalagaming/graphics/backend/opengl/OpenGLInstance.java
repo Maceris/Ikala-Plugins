@@ -323,20 +323,47 @@ public class OpenGLInstance implements Instance {
 
     /** Set up the GUI shader and uniforms. */
     private void initializeGuiShader() {
-        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
-        shaderModuleDataList.add(
-                new Shader.ShaderModuleData(
-                        "shaders/opengl/gui.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
-        shaderModuleDataList.add(
-                new Shader.ShaderModuleData(
-                        "shaders/opengl/gui.frag", Shader.Type.FRAGMENT, Shader.Location.BUNDLED));
-        var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
+        // TODO(ches) remove this
+        {
+            List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+            shaderModuleDataList.add(
+                    new Shader.ShaderModuleData(
+                            "shaders/opengl/imgui.vert",
+                            Shader.Type.VERTEX,
+                            Shader.Location.BUNDLED));
+            shaderModuleDataList.add(
+                    new Shader.ShaderModuleData(
+                            "shaders/opengl/imgui.frag",
+                            Shader.Type.FRAGMENT,
+                            Shader.Location.BUNDLED));
+            var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
-        var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
-        uniformsMap.createUniform(ShaderUniforms.GUI.SCALE);
-        shaderProgram.setUniforms(uniformsMap);
+            var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
+            uniformsMap.createUniform(ShaderUniforms.GUI.SCALE);
+            shaderProgram.setUniforms(uniformsMap);
 
-        shaderMap.addShader(RenderStage.Type.GUI, shaderProgram);
+            shaderMap.addShader(RenderStage.Type.GUI_LEGACY, shaderProgram);
+        }
+        {
+            List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+            shaderModuleDataList.add(
+                    new Shader.ShaderModuleData(
+                            "shaders/opengl/ikgui.vert",
+                            Shader.Type.VERTEX,
+                            Shader.Location.BUNDLED));
+            shaderModuleDataList.add(
+                    new Shader.ShaderModuleData(
+                            "shaders/opengl/ikgui.frag",
+                            Shader.Type.FRAGMENT,
+                            Shader.Location.BUNDLED));
+            var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
+
+            var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
+            uniformsMap.createUniform(ShaderUniforms.GUI.SCALE);
+            shaderProgram.setUniforms(uniformsMap);
+
+            shaderMap.addShader(RenderStage.Type.GUI, shaderProgram);
+        }
     }
 
     @Override

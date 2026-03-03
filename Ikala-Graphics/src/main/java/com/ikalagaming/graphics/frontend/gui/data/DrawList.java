@@ -46,6 +46,14 @@ public class DrawList {
 
     private record SDFPointDetail(float radius, int colorOrTextureID, int tint) {}
 
+    // TODO(ches) populate the quad buffer
+    /**
+     * The vertices making up the quad that each element (command) will be drawn on, with each quad
+     * being a pair of triangles. This is the region that is needed to draw the element, clipped as
+     * appropriate.
+     */
+    ByteBuffer vertexBuffer;
+
     // TODO(ches) figure out line arcs
     // TODO(ches) figure out line bezier
     // TODO(ches) figure out text
@@ -66,8 +74,8 @@ public class DrawList {
     ByteBuffer pointBuffer;
 
     /**
-     * float radius (for rounding), int colorOrTextureID. Stored generally starting on the top-left,
-     * and always ordered clockwise for polygons and in-order for paths.
+     * float radius (for rounding), int colorOrTextureID, int tint. Stored generally starting on the
+     * top-left, and always ordered clockwise for polygons and in-order for paths.
      */
     ByteBuffer pointDetailBuffer;
 

@@ -1,24 +1,25 @@
 package com.ikalagaming.graphics.backend.opengl;
 
-import static org.lwjgl.opengl.GL11.GL_FLOAT;
-import static org.lwjgl.opengl.GL11.GL_UNSIGNED_BYTE;
 import static org.lwjgl.opengl.GL15.*;
-import static org.lwjgl.opengl.GL15.glDeleteBuffers;
-import static org.lwjgl.opengl.GL20.glEnableVertexAttribArray;
-import static org.lwjgl.opengl.GL20.glVertexAttribPointer;
 import static org.lwjgl.opengl.GL30.*;
 
-import imgui.ImDrawData;
+import com.ikalagaming.graphics.frontend.Buffer;
+import com.ikalagaming.graphics.frontend.BufferUtil;
+
+import lombok.NonNull;
 
 /**
- * Used to provide ImGUI with the VBOs it needs to render. This should be created using the {@link
+ * Used to provide our GUI with the data it needs to render. This should be created using the {@link
  * GuiMesh#create()} method instead of a constructor.
  *
  * @param vaoID The VAO.
- * @param verticesVBO The vertices VBO, set up for ImGui.
- * @param indicesVBO The indices VBO.
+ * @param commands GUI Render commands.
+ * @param points SDF points.
+ * @param pointDetails SDF point extra details.
  */
-public record GuiMesh(int vaoID, int verticesVBO, int indicesVBO) {
+public record GuiMesh(
+        int vaoID, @NonNull Buffer commands, @NonNull Buffer points, @NonNull Buffer pointDetails) {
+
     /**
      * Create a new GUI mesh, and set it up with OpenGL. This should be called instead of a
      * constructor.
@@ -27,29 +28,17 @@ public record GuiMesh(int vaoID, int verticesVBO, int indicesVBO) {
      */
     public static GuiMesh create() {
         int vaoID = glGenVertexArrays();
-        glBindVertexArray(vaoID);
-
-        int verticesVBO = glGenBuffers();
-        glBindBuffer(GL_ARRAY_BUFFER, verticesVBO);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 2, GL_FLOAT, false, ImDrawData.sizeOfImDrawVert(), 0);
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 2, GL_FLOAT, false, ImDrawData.sizeOfImDrawVert(), 8);
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, true, ImDrawData.sizeOfImDrawVert(), 16);
-
-        int indicesVBO = glGenBuffers();
-
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindVertexArray(0);
-
-        return new GuiMesh(vaoID, verticesVBO, indicesVBO);
+        Buffer commands = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
+        Buffer points = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
+        Buffer pointDetails = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
+        return new GuiMesh(vaoID, commands, points, pointDetails);
     }
 
     /** Clean up the resources for this mesh. */
     public void cleanup() {
-        glDeleteBuffers(indicesVBO);
-        glDeleteBuffers(verticesVBO);
+        BufferUtil.INSTANCE.deleteBuffer(commands);
+        BufferUtil.INSTANCE.deleteBuffer(points);
+        BufferUtil.INSTANCE.deleteBuffer(pointDetails);
         glDeleteVertexArrays(vaoID);
     }
 }

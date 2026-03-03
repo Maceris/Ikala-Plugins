@@ -26,25 +26,25 @@ public class RenderBuffers {
         glEnableVertexAttribArray(0);
         glVertexAttribFormat(0, 3, GL_FLOAT, false, offset);
         glVertexAttribBinding(0, 0);
-        offset += 3 * 4;
+        offset += 3 * Float.BYTES;
 
         // Normals
         glEnableVertexAttribArray(1);
         glVertexAttribFormat(1, 3, GL_FLOAT, false, offset);
         glVertexAttribBinding(1, 0);
-        offset += 3 * 4;
+        offset += 3 * Float.BYTES;
 
         // Tangents
         glEnableVertexAttribArray(2);
         glVertexAttribFormat(2, 3, GL_FLOAT, false, offset);
         glVertexAttribBinding(2, 0);
-        offset += 3 * 4;
+        offset += 3 * Float.BYTES;
 
         // Bitangents
         glEnableVertexAttribArray(3);
         glVertexAttribFormat(3, 3, GL_FLOAT, false, offset);
         glVertexAttribBinding(3, 0);
-        offset += 3 * 4;
+        offset += 3 * Float.BYTES;
 
         // Texture coordinates
         glEnableVertexAttribArray(4);

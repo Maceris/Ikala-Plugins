@@ -7,6 +7,8 @@ public interface RenderStage {
         ANIMATION,
         FILTER,
         GUI,
+        @Deprecated
+        GUI_LEGACY,
         LIGHT,
         SCENE,
         SHADOW,

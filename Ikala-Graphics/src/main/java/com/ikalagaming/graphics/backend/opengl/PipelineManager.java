@@ -54,6 +54,9 @@ public class PipelineManager {
     private Framebuffer gBuffer;
 
     /** The mesh to render. */
+    private ImGuiMesh imGuiMesh;
+
+    /** The GUI mesh to render. */
     private GuiMesh guiMesh;
 
     /** The buffer to use for storing point light info. */
@@ -111,6 +114,7 @@ public class PipelineManager {
         skybox = new SkyboxModel();
         quadMesh = QuadMesh.getInstance();
         createLightBuffers();
+        imGuiMesh = ImGuiMesh.create();
         guiMesh = GuiMesh.create();
 
         stageModelMatrixUpdate = new ModelMatrixUpdate();
@@ -119,7 +123,12 @@ public class PipelineManager {
         stageSceneRenderWireframe =
                 new SceneRenderWireframe(
                         shaders.getShader(RenderStage.Type.SCENE), renderBuffers, gBuffer);
-        stageGuiRender = new GuiRender(shaders.getShader(RenderStage.Type.GUI), guiMesh);
+        stageGuiRender =
+                new GuiRender(
+                        shaders.getShader(RenderStage.Type.GUI_LEGACY),
+                        shaders.getShader(RenderStage.Type.GUI),
+                        imGuiMesh,
+                        guiMesh);
         stageSkyboxRender = new SkyboxRender(shaders.getShader(RenderStage.Type.SKYBOX), skybox);
         stageShadowRender =
                 new ShadowRender(
@@ -136,7 +145,7 @@ public class PipelineManager {
                         shadowBuffers,
                         gBuffer,
                         quadMesh);
-        stageAnimationRender = new AnimationRender(shaders.getShader(RenderStage.Type.GUI));
+        stageAnimationRender = new AnimationRender(shaders.getShader(RenderStage.Type.ANIMATION));
         stageFilterRender =
                 new FilterRender(
                         shaders.getShader(RenderStage.Type.FILTER), screenTexture, quadMesh);
@@ -199,6 +208,7 @@ public class PipelineManager {
     public void cleanup() {
         GraphicsManager.getDeletionQueue().add(font);
         font = null;
+        imGuiMesh.cleanup();
         guiMesh.cleanup();
         skybox.cleanup();
         skybox = null;

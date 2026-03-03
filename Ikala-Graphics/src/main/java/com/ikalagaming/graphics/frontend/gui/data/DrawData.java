@@ -14,7 +14,7 @@ public class DrawData {
     private static final int SIZE_OF_RECT = 4 * Float.BYTES;
 
     public static final int SIZE_OF_POINT = 4 * Float.BYTES;
-    public static final int SIZE_OF_POINT_DETAIL = Float.BYTES + Integer.BYTES;
+    public static final int SIZE_OF_POINT_DETAIL = Float.BYTES + 2 * Integer.BYTES;
     public static final int SIZE_OF_DRAW_COMMAND =
             2 * Integer.BYTES + 4 * Short.BYTES + Float.BYTES;
 
@@ -53,13 +53,11 @@ public class DrawData {
     }
 
     private boolean offsetInvalid(ByteBuffer buffer, int position, int bytes) {
-        boolean valid = (buffer != null) && (position + bytes < buffer.position());
-
-        if (!valid) {
+        if (buffer == null || (position + bytes < buffer.position())) {
             log.error("Index {} out of bounds in offsetInvalid", position);
+            return false;
         }
-
-        return !valid;
+        return true;
     }
 
     public int getCommandListCommandBufferSize(int commandListIndex) {
@@ -71,24 +69,25 @@ public class DrawData {
         return commandBuffer.position();
     }
 
-    public int getCommandListCommandBufferElementCount(
-            int commandListIndex, int commandBufferIndex) {
+    public ByteBuffer getCommandListCommandBuffer(final int commandListIndex) {
+        return getCommandBuffer(commandListIndex);
+    }
 
-        // TODO(ches) These fetch methods are all scuffed now, move the offset logic to DrawList and
-        // fix these
-        ByteBuffer commandBuffer = getCommandBuffer(commandListIndex);
-        if (commandBuffer == null) {
+    public int getCommandListVertexBufferSize(int commandListIndex) {
+        DrawList list = getDrawList(commandListIndex);
+        if (list == null) {
             return 0;
         }
-
-        final int countLocation =
-                commandBufferIndex * SIZE_OF_DRAW_COMMAND + SIZE_OF_RECT + 3 * Integer.BYTES;
-
-        if (offsetInvalid(commandBuffer, countLocation, Integer.BYTES)) {
+        ByteBuffer vertexBuffer = list.vertexBuffer;
+        if (vertexBuffer == null) {
             return 0;
         }
+        return vertexBuffer.position();
+    }
 
-        return commandBuffer.getInt(countLocation);
+    public ByteBuffer getCommandListVertexBuffer(final int commandListIndex) {
+        DrawList list = getDrawList(commandListIndex);
+        return list == null ? null : list.vertexBuffer;
     }
 
     public Rect getCommandListCommandBufferClipRect(
@@ -118,55 +117,6 @@ public class DrawData {
         float clipMaxY = commandBuffer.getFloat(rectLocation + 3 * Float.BYTES);
 
         output.set(clipMinX, clipMinY, clipMaxX, clipMaxY);
-    }
-
-    public int getCommandListCommandBufferTextureId(int commandListIndex, int commandBufferIndex) {
-        ByteBuffer commandBuffer = getCommandBuffer(commandListIndex);
-        if (commandBuffer == null) {
-            return 0;
-        }
-
-        final int textureLocation = commandBufferIndex * SIZE_OF_DRAW_COMMAND + SIZE_OF_RECT;
-
-        if (offsetInvalid(commandBuffer, textureLocation, Integer.BYTES)) {
-            return 0;
-        }
-
-        return commandBuffer.getInt(textureLocation);
-    }
-
-    public int getCommandListCommandBufferPointOffset(
-            int commandListIndex, int commandBufferIndex) {
-        ByteBuffer commandBuffer = getCommandBuffer(commandListIndex);
-        if (commandBuffer == null) {
-            return 0;
-        }
-
-        final int pointOffsetLocation =
-                commandBufferIndex * SIZE_OF_DRAW_COMMAND + SIZE_OF_RECT + Integer.BYTES;
-
-        if (offsetInvalid(commandBuffer, pointOffsetLocation, Integer.BYTES)) {
-            return 0;
-        }
-
-        return commandBuffer.getInt(pointOffsetLocation);
-    }
-
-    public int getCommandListCommandBufferIndexOffset(
-            int commandListIndex, int commandBufferIndex) {
-        ByteBuffer commandBuffer = getCommandBuffer(commandListIndex);
-        if (commandBuffer == null) {
-            return 0;
-        }
-
-        final int indexOffsetLocation =
-                commandBufferIndex * SIZE_OF_DRAW_COMMAND + SIZE_OF_RECT + 2 * Integer.BYTES;
-
-        if (offsetInvalid(commandBuffer, indexOffsetLocation, Integer.BYTES)) {
-            return 0;
-        }
-
-        return commandBuffer.getInt(indexOffsetLocation);
     }
 
     /**
