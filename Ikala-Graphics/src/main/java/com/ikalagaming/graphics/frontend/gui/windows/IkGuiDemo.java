@@ -1,6 +1,5 @@
 package com.ikalagaming.graphics.frontend.gui.windows;
 
-import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
 
@@ -20,6 +19,6 @@ public class IkGuiDemo extends GuiWindow {
 
     @Override
     public void draw(int width, int height) {
-        IkGui.showDemoWindow();
+        // don't draw anything here, we just use this for tracking that we want it to show.
     }
 }

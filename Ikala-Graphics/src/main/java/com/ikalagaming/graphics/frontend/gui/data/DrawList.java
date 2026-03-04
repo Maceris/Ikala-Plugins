@@ -52,7 +52,7 @@ public class DrawList {
      * being a pair of triangles. This is the region that is needed to draw the element, clipped as
      * appropriate.
      */
-    ByteBuffer vertexBuffer;
+    public ByteBuffer vertexBuffer;
 
     // TODO(ches) figure out line arcs
     // TODO(ches) figure out line bezier
@@ -71,19 +71,19 @@ public class DrawList {
      *   <li>Text - ???
      * </ul>
      */
-    ByteBuffer pointBuffer;
+    public ByteBuffer pointBuffer;
 
     /**
      * float radius (for rounding), int colorOrTextureID, int tint. Stored generally starting on the
      * top-left, and always ordered clockwise for polygons and in-order for paths.
      */
-    ByteBuffer pointDetailBuffer;
+    public ByteBuffer pointDetailBuffer;
 
     /**
      * int pointIndex, int detailIndex, short pointCount, short detailCount, short type, short
      * style, float stroke (borders, line thickness).
      */
-    ByteBuffer commandBuffer;
+    public ByteBuffer commandBuffer;
 
     private final Deque<Rect> clipRects;
     private final IntArrayList textures;
@@ -257,6 +257,7 @@ public class DrawList {
         for (SDFPointDetail detail : details) {
             pointDetailBuffer.putFloat(detail.radius());
             pointDetailBuffer.putInt(detail.colorOrTextureID());
+            pointDetailBuffer.putInt(detail.tint());
         }
 
         return newDetailIndex;

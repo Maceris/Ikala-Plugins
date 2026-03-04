@@ -4,6 +4,7 @@ import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.frontend.gui.component.Component;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
 import com.ikalagaming.graphics.frontend.gui.component.MainToolbar;
+import com.ikalagaming.graphics.frontend.gui.windows.IkGuiDemo;
 import com.ikalagaming.graphics.scene.Scene;
 
 import imgui.ImGui;
@@ -70,6 +71,10 @@ public class WindowManager {
             toolbar.draw(width, height);
         }
 
+        // Defer this until right at the end
+        if (windows.get(IkGuiDemo.WINDOW_NAME).isVisible()) {
+            IkGui.showDemoWindow();
+        }
         ImGui.render();
         IkGui.render();
     }

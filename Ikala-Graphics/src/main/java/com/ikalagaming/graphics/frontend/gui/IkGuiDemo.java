@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.frontend.gui;
 
+import com.ikalagaming.graphics.frontend.gui.data.DrawData;
 import com.ikalagaming.graphics.frontend.gui.data.IkBoolean;
 import com.ikalagaming.graphics.frontend.gui.data.IkIO;
 import com.ikalagaming.graphics.frontend.gui.enums.Condition;
@@ -14,8 +15,6 @@ class IkGuiDemo {
 
     static void showDemoWindow(final IkBoolean open) {
         int windowFlags = WindowFlags.NONE;
-
-        showDebugWindow();
 
         IkGui.setNextWindowSize(520, 600, Condition.ONCE);
         IkGui.setNextWindowPos(20, 20, Condition.ONCE);
@@ -36,6 +35,8 @@ class IkGuiDemo {
         showInputsSection();
 
         IkGui.end();
+
+        showDebugWindow();
     }
 
     private static void showDebugWindow() {
@@ -45,7 +46,76 @@ class IkGuiDemo {
             return;
         }
 
-        showShadowInputsSection();
+        IkIO ikIO = IkGui.getIO();
+
+        if (ImGui.treeNode("DrawLists")) {
+            DrawData drawData = IkGui.getCurrentContext().drawData;
+            int listCount = drawData.getCommandListsCount();
+            for (int i = 0; i < listCount; ++i) {
+                String name =
+                        String.format(
+                                "DrawList: %s - %d vtx, %d commands, %d points, %d point details",
+                                "???",
+                                drawData.getCommandListVertexCount(i),
+                                drawData.getCommandListCommandCount(i),
+                                drawData.getCommandListPointCount(i),
+                                drawData.getCommandListPointDetailCount(i));
+
+                if (ImGui.treeNode(name)) {
+                    // TODO(ches) details
+                    ImGui.treePop();
+                }
+            }
+
+            ImGui.treePop();
+        }
+
+        if (ImGui.treeNode("Inputs")) {
+            ImGui.text(String.format("Mouse inside window: %b", ikIO.mouseInsideWindow));
+            ImGui.text(
+                    String.format(
+                            "Mouse pos: (%.2f, %.2f)", ikIO.mousePosition.x, ikIO.mousePosition.y));
+            ImGui.text(
+                    String.format(
+                            "Mouse pos prev: (%.2f, %.2f)",
+                            ikIO.mousePositionPrevious.x, ikIO.mousePositionPrevious.y));
+
+            ImVec2 prevImGui = ImGui.getIO().getMousePosPrev();
+            ImGui.text(
+                    String.format(
+                            "Mouse pos prev (imgui): (%.2f, %.2f)", prevImGui.x, prevImGui.y));
+            ImGui.text(
+                    String.format(
+                            "Mouse delta: (%.2f, %.2f)", ikIO.mouseDelta.x, ikIO.mouseDelta.y));
+
+            StringBuilder mouseDownText = new StringBuilder("Mouse down:");
+            for (int i = 0; i < MouseButton.COUNT; ++i) {
+                if (ikIO.mouseDown[i]) {
+                    mouseDownText.append(" b");
+                    mouseDownText.append(i);
+                    mouseDownText.append(" (");
+                    long seconds = ikIO.mouseDownDuration[i] / 1000;
+                    long msRemainder = ikIO.mouseDownDuration[i] % 1000;
+                    mouseDownText.append(seconds);
+                    mouseDownText.append('.');
+                    mouseDownText.append(msRemainder);
+                    mouseDownText.append(" secs)");
+                }
+            }
+            ImGui.text(mouseDownText.toString());
+
+            // TODO(ches) mouse wheel
+            // TODO(ches) keys down
+            // TODO(ches) key mods
+            // TODO(ches) chars queue
+
+            ImGui.treePop();
+        }
+        if (ImGui.treeNode("Outputs")) {
+            // TODO(ches) fill this out
+
+            ImGui.treePop();
+        }
 
         ImGui.end();
     }
@@ -112,59 +182,5 @@ class IkGuiDemo {
         }
         // TODO(ches) fill this out
         IkGui.text("Not yet completed");
-    }
-
-    private static void showShadowInputsSection() {
-        if (!ImGui.collapsingHeader("Inputs & Focus")) {
-            return;
-        }
-        IkIO ikIO = IkGui.getIO();
-
-        if (ImGui.treeNode("Inputs")) {
-            ImGui.text(String.format("Mouse inside window: %b", ikIO.mouseInsideWindow));
-            ImGui.text(
-                    String.format(
-                            "Mouse pos: (%.2f, %.2f)", ikIO.mousePosition.x, ikIO.mousePosition.y));
-            ImGui.text(
-                    String.format(
-                            "Mouse pos prev: (%.2f, %.2f)",
-                            ikIO.mousePositionPrevious.x, ikIO.mousePositionPrevious.y));
-
-            ImVec2 prevImGui = ImGui.getIO().getMousePosPrev();
-            ImGui.text(
-                    String.format(
-                            "Mouse pos prev (imgui): (%.2f, %.2f)", prevImGui.x, prevImGui.y));
-            ImGui.text(
-                    String.format(
-                            "Mouse delta: (%.2f, %.2f)", ikIO.mouseDelta.x, ikIO.mouseDelta.y));
-
-            StringBuilder mouseDownText = new StringBuilder("Mouse down:");
-            for (int i = 0; i < MouseButton.COUNT; ++i) {
-                if (ikIO.mouseDown[i]) {
-                    mouseDownText.append(" b");
-                    mouseDownText.append(i);
-                    mouseDownText.append(" (");
-                    long seconds = ikIO.mouseDownDuration[i] / 1000;
-                    long msRemainder = ikIO.mouseDownDuration[i] % 1000;
-                    mouseDownText.append(seconds);
-                    mouseDownText.append('.');
-                    mouseDownText.append(msRemainder);
-                    mouseDownText.append(" secs)");
-                }
-            }
-            ImGui.text(mouseDownText.toString());
-
-            // TODO(ches) mouse wheel
-            // TODO(ches) keys down
-            // TODO(ches) key mods
-            // TODO(ches) chars queue
-
-            ImGui.treePop();
-        }
-        if (ImGui.treeNode("Outputs")) {
-            // TODO(ches) fill this out
-
-            ImGui.treePop();
-        }
     }
 }

@@ -168,17 +168,17 @@ public class GuiRender implements RenderStage {
 
         int commandListCount = drawData.getCommandListsCount();
         for (int i = 0; i < commandListCount; ++i) {
-            int vertexCount = drawData.getCommandListVertexBufferVertexCount(i);
+            int vertexCount = drawData.getCommandListVertexCount(i);
 
             glBufferData(GL_ARRAY_BUFFER, drawData.getCommandListVertexBuffer(i), GL_STREAM_DRAW);
 
             BufferUtil.INSTANCE.bufferData(
                     guiMesh.commands(), drawData.getCommandListCommandBuffer(i), GL_STREAM_DRAW);
             BufferUtil.INSTANCE.bufferData(
-                    guiMesh.points(), drawData.getCommandListPointBufferData(i), GL_STREAM_DRAW);
+                    guiMesh.points(), drawData.getCommandListPointBuffer(i), GL_STREAM_DRAW);
             BufferUtil.INSTANCE.bufferData(
                     guiMesh.pointDetails(),
-                    drawData.getCommandListPointDetailBufferData(i),
+                    drawData.getCommandListPointDetailBuffer(i),
                     GL_STREAM_DRAW);
 
             glDrawArrays(GL_TRIANGLES, 0, vertexCount);

@@ -254,6 +254,8 @@ public class IkGui {
             return;
         }
 
+        popID();
+
         context.windowCurrent.drawList.prepareForRender();
         context.windowCurrent = null;
     }
