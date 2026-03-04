@@ -17,6 +17,7 @@ public class NextWindowData {
 
     public Condition positionCondition;
     public final Vector2f positionValue;
+    public final Vector2f positionPivot;
     public Condition sizeCondition;
     public final Vector2f sizeValue;
     public Condition collapsedCondition;
@@ -47,6 +48,7 @@ public class NextWindowData {
         fieldFlags = NextWindowFlags.NONE;
         positionCondition = Condition.NONE;
         positionValue = new Vector2f(0, 0);
+        positionPivot = new Vector2f(0, 0);
         sizeCondition = Condition.NONE;
         sizeValue = new Vector2f(0, 0);
         collapsedCondition = Condition.NONE;

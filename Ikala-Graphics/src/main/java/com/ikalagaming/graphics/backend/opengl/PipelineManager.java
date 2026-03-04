@@ -236,6 +236,7 @@ public class PipelineManager {
                         .getTextureLoader()
                         .load(buf, Format.R8G8B8A8_UINT, width.get(), height.get());
         fontAtlas.setTexID((int) font.id());
+        // TODO(ches) update IkGui font also/instead
     }
 
     /** Initialize the lighting SSBOs and fill them with zeroes. */

@@ -39,6 +39,7 @@ struct Command
 
 in vec2 fragTextCoords;
 in vec4 fragColor;
+flat in int quadID;
 
 uniform sampler2D txtSampler;
 
@@ -56,7 +57,22 @@ layout(std430, binding = 2) buffer PointDetails {
 	PointDetail pointDetails[];
 };
 
+float hash11(uint n) {
+    n = (n << 13u) ^ n;
+    n = n * (n * n * 15731u + 789221u) + 1376312589u;
+    return float(n & uvec3(0x7fffffffu)) / float(0x7fffffff);
+}
+
+vec3 hashIntToColor(uint id) {
+    float r = hash11(id);
+    float g = hash11(id + 1u);
+    float b = hash11(id + 2u);
+    return vec3(r, g, b);
+}
+
 void main()
 {
-    outColor = fragColor * texture(txtSampler, fragTextCoords);
+    vec3 color = hashIntToColor(uint(quadID));
+    outColor = vec4(color, 1.0);
+    // outColor = fragColor * texture(txtSampler, fragTextCoords);
 }

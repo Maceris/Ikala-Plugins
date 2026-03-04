@@ -103,6 +103,7 @@ public class IkGui {
         final int ID = Hash.getID(title);
         pushID(ID);
         Window window = context.windowByID.computeIfAbsent(ID, ignored -> new Window(context));
+        window.drawList.clear();
         window.id = ID;
         window.name = title;
         if (WindowFlags.NONE == windowFlags) {
@@ -118,10 +119,23 @@ public class IkGui {
         // TODO(ches) collapsed condition
         window.collapsed = context.nextWindowData.collapsedValue;
 
+        // TODO(ches) calculate actual size properly
+        window.sizeCurrent.set(window.sizeRequested);
+
         window.open = open;
         window.active = true;
 
         context.windowCurrent = window;
+
+        context.drawData.drawLists.add(window.drawList);
+        // TODO(ches) window color
+        window.drawList.addRectFilled(
+                window.position.x,
+                window.position.y,
+                window.position.x + window.sizeCurrent.x,
+                window.position.y + window.sizeCurrent.y,
+                Color.WHITE,
+                window.rounding);
         return true;
     }
 
@@ -182,6 +196,7 @@ public class IkGui {
         // TODO(ches) update viewports
         // TODO(ches) update textures
         // TODO(ches) update draw list shared data
+        context.drawData.clear();
         // TODO(ches) mark draw data as invalid
         // TODO(ches) update active IDs
         // TODO(ches) update hover delay
@@ -234,6 +249,13 @@ public class IkGui {
 
     public static void end() {
         // TODO(ches) complete this
+        if (context.windowCurrent == null) {
+            log.error("Trying to end a window that has not started");
+            return;
+        }
+
+        context.windowCurrent.drawList.prepareForRender();
+        context.windowCurrent = null;
     }
 
     public static boolean isWindowAppearing() {
@@ -317,24 +339,37 @@ public class IkGui {
     }
 
     public static void setNextWindowPos(float x, float y) {
-        // TODO(ches) complete this
+        setNextWindowPos(x, y, Condition.ALWAYS, 0, 0);
     }
 
     public static void setNextWindowPos(float x, float y, @NonNull Condition condition) {
-        // TODO(ches) complete this
+        setNextWindowPos(x, y, condition, 0, 0);
     }
 
     public static void setNextWindowPos(
             float x, float y, @NonNull Condition condition, int pivotX, int pivotY) {
-        // TODO(ches) complete this
+
+        if (pivotX < 0f || pivotX > 1.0f) {
+            log.error("Invalid pivotX in setNextWindowPos, should be in the range [0, 1]");
+            return;
+        }
+        if (pivotY < 0f || pivotY > 1.0f) {
+            log.error("Invalid pivotY in setNextWindowPos, should be in the range [0, 1]");
+            return;
+        }
+
+        context.nextWindowData.positionPivot.set(pivotX, pivotY);
+        context.nextWindowData.positionValue.set(x, y);
+        context.nextWindowData.positionCondition = condition;
     }
 
     public static void setNextWindowSize(float x, float y) {
-        // TODO(ches) complete this
+        setNextWindowSize(x, y, Condition.ALWAYS);
     }
 
     public static void setNextWindowSize(float x, float y, @NonNull Condition condition) {
-        // TODO(ches) complete this
+        context.nextWindowData.sizeCondition = condition;
+        context.nextWindowData.sizeValue.set(x, y);
     }
 
     public static void setNextWindowCollapsed(boolean collapsed) {

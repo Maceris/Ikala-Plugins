@@ -18,6 +18,7 @@ class IkGuiDemo {
         showDebugWindow();
 
         IkGui.setNextWindowSize(520, 600, Condition.ONCE);
+        IkGui.setNextWindowPos(20, 20, Condition.ONCE);
         if (!IkGui.begin("IkGui Demo Window", open, windowFlags)) {
             IkGui.end();
             return;

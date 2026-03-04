@@ -323,7 +323,7 @@ public class OpenGLInstance implements Instance {
 
     /** Set up the GUI shader and uniforms. */
     private void initializeGuiShader() {
-        // TODO(ches) remove this
+        // TODO(ches) remove the imgui part of this
         {
             List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
             shaderModuleDataList.add(

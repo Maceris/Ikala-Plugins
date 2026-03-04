@@ -133,6 +133,7 @@ public class DrawList {
         pointBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_POINT);
         pointDetailBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_POINT_DETAIL);
         commandBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_COMMAND);
+        vertexBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_QUAD_VERTICES);
         clipRects = new ArrayDeque<>();
         textures = new IntArrayList();
         pathStarted = false;
@@ -146,6 +147,7 @@ public class DrawList {
         pointBuffer.clear();
         pointDetailBuffer.clear();
         commandBuffer.clear();
+        vertexBuffer.clear();
         clipRects.clear();
         textures.clear();
         pathStarted = false;
@@ -154,9 +156,75 @@ public class DrawList {
         pathThickness = 0;
     }
 
+    /** Set up all the buffers for reading once we are done with a frame. */
+    public void prepareForRender() {
+        pointBuffer.flip();
+        pointDetailBuffer.flip();
+        commandBuffer.flip();
+        vertexBuffer.flip();
+    }
+
+    /**
+     * Add a quad that fully contains the entire feature, once we know it's done. Every thing that
+     * gets drawn must have a quad, and it should be large enough for any kind of border/blur/etc.
+     * around it. The current clip rect will be accounted for inside this method.
+     *
+     * @param minX The minimum X coordinate.
+     * @param minY The minimum Y coordinate.
+     * @param maxX The maximum X coordinate.
+     * @param maxY The maximum Y coordinate.
+     * @return If we actually added the quad.
+     */
+    @Synchronized
+    private boolean addScreenQuad(float minX, float minY, float maxX, float maxY) {
+        float actualMinX = minX;
+        float actualMinY = minY;
+        float actualMaxX = maxX;
+        float actualMaxY = maxY;
+
+        Rect clipRect = clipRects.peekFirst();
+        if (clipRect != null) {
+            actualMinX = Math.max(minX, clipRect.getLeft());
+            actualMinY = Math.max(minY, clipRect.getTop());
+            actualMaxX = Math.min(maxX, clipRect.getRight());
+            actualMaxY = Math.min(maxY, clipRect.getBottom());
+        }
+        if (actualMinX > actualMaxX || actualMinY > actualMaxY) {
+            return false;
+        }
+
+        if (vertexBuffer.position() + DrawData.SIZE_OF_QUAD_VERTICES >= vertexBuffer.limit()) {
+            ByteBuffer newBuffer = ByteBuffer.allocateDirect(vertexBuffer.limit() * 2);
+            vertexBuffer.flip();
+            newBuffer.put(vertexBuffer);
+            vertexBuffer = newBuffer;
+        }
+
+        // Top left
+        vertexBuffer.putFloat(actualMinX);
+        vertexBuffer.putFloat(actualMinY);
+        // Bottom Left
+        vertexBuffer.putFloat(actualMinX);
+        vertexBuffer.putFloat(actualMaxY);
+        // Bottom Right
+        vertexBuffer.putFloat(actualMaxX);
+        vertexBuffer.putFloat(actualMaxY);
+
+        // Bottom Right
+        vertexBuffer.putFloat(actualMaxX);
+        vertexBuffer.putFloat(actualMaxY);
+        // Top Right
+        vertexBuffer.putFloat(actualMaxX);
+        vertexBuffer.putFloat(actualMinY);
+        // Top left
+        vertexBuffer.putFloat(actualMinX);
+        vertexBuffer.putFloat(actualMinY);
+        return true;
+    }
+
     @Synchronized
     private int addPoint(float posX, float posY, float a, float b) {
-        if (pointBuffer.limit() + DrawData.SIZE_OF_POINT >= pointBuffer.position()) {
+        if (pointBuffer.position() + DrawData.SIZE_OF_POINT >= pointBuffer.limit()) {
             ByteBuffer newBuffer = ByteBuffer.allocateDirect(pointBuffer.limit() * 2);
             pointBuffer.flip();
             newBuffer.put(pointBuffer);
@@ -271,9 +339,9 @@ public class DrawList {
         }
 
         float left = Math.max(newClipRect.getLeft(), oldRect.getLeft());
-        float top = Math.min(newClipRect.getTop(), oldRect.getTop());
+        float top = Math.max(newClipRect.getTop(), oldRect.getTop());
         float right = Math.min(newClipRect.getRight(), oldRect.getRight());
-        float bottom = Math.max(newClipRect.getBottom(), oldRect.getBottom());
+        float bottom = Math.min(newClipRect.getBottom(), oldRect.getBottom());
 
         if (left > right || bottom > top) {
             // No intersection
@@ -382,6 +450,9 @@ public class DrawList {
             new SDFPointDetail(thickness, color, Color.CLEAR),
         };
 
+        // TODO(ches) add quad
+        // TODO(ches) Skip adding any other data if we didn't need to add the quad
+
         int pointIndex = addPoint(p1X, p1Y, p2X, p2Y);
         int detailIndex = addDetails(details);
         final short pointCount = 1;
@@ -442,6 +513,10 @@ public class DrawList {
             log.warn("Invalid rounding {} in addRect", rounding);
             return;
         }
+        if (!addScreenQuad(minX, minY, maxX, maxY)) {
+            return;
+        }
+
         final float centerX = (minX + maxX) / 2;
         final float centerY = (minY + maxY) / 2;
         final float width = maxX - minX;
@@ -485,6 +560,10 @@ public class DrawList {
 
         if (rounding < 0) {
             log.warn("Invalid rounding {} in addRectFilled", rounding);
+            return;
+        }
+
+        if (!addScreenQuad(minX, minY, maxX, maxY)) {
             return;
         }
 
@@ -595,7 +674,8 @@ public class DrawList {
             new SDFPointDetail(bottomRightRadius, colorBottomRight, Color.CLEAR),
             new SDFPointDetail(bottomLeftRadius, colorBottomLeft, Color.CLEAR),
         };
-
+        // TODO(ches) add quad
+        // TODO(ches) Skip adding any other data if we didn't need to add the quad
         int pointIndex = addPoint(centerX, centerY, width, height);
         int detailIndex = addDetails(details);
         final short pointCount = 1;
@@ -643,6 +723,9 @@ public class DrawList {
             new SDFPointDetail(0, color, Color.CLEAR),
         };
 
+        // TODO(ches) add quad
+        // TODO(ches) Skip adding any other data if we didn't need to add the quad
+
         int pointIndex = addPoint(p1X, p1Y, 0, 0);
         addPoint(p2X, p2Y, 0, 0);
         addPoint(p3X, p3Y, 0, 0);
@@ -682,7 +765,8 @@ public class DrawList {
             new SDFPointDetail(0, color, Color.CLEAR),
             new SDFPointDetail(0, color, Color.CLEAR),
         };
-
+        // TODO(ches) add quad
+        // TODO(ches) Skip adding any other data if we didn't need to add the quad
         int pointIndex = addPoint(p1X, p1Y, 0, 0);
         addPoint(p2X, p2Y, 0, 0);
         addPoint(p3X, p3Y, 0, 0);
@@ -722,6 +806,8 @@ public class DrawList {
             new SDFPointDetail(0, color, Color.CLEAR),
         };
 
+        // TODO(ches) add quad
+        // TODO(ches) Skip adding any other data if we didn't need to add the quad
         int pointIndex = addPoint(p1X, p1Y, 0, 0);
         addPoint(p2X, p2Y, 0, 0);
         addPoint(p3X, p3Y, 0, 0);
@@ -749,7 +835,8 @@ public class DrawList {
         SDFPointDetail[] details = {
             new SDFPointDetail(0, color, Color.CLEAR),
         };
-
+        // TODO(ches) add quad
+        // TODO(ches) Skip adding any other data if we didn't need to add the quad
         int pointIndex = addPoint(p1X, p1Y, 0, 0);
         addPoint(p2X, p2Y, 0, 0);
         addPoint(p3X, p3Y, 0, 0);
@@ -779,6 +866,8 @@ public class DrawList {
             new SDFPointDetail(0, color, Color.CLEAR),
         };
 
+        // TODO(ches) add quad
+        // TODO(ches) Skip adding any other data if we didn't need to add the quad
         int pointIndex = addPoint(centerX, centerY, radius, radius);
         int detailIndex = addDetails(details);
 
@@ -802,6 +891,8 @@ public class DrawList {
 
         final int borderStroke = 0;
 
+        // TODO(ches) add quad
+        // TODO(ches) Skip adding any other data if we didn't need to add the quad
         int pointIndex = addPoint(centerX, centerY, radius, radius);
         int detailIndex = addDetails(details);
 
@@ -975,6 +1066,8 @@ public class DrawList {
             new SDFPointDetail(0, textureID, color),
         };
 
+        // TODO(ches) add quad
+        // TODO(ches) Skip adding any other data if we didn't need to add the quad
         int pointIndex = addPoint(minX, minY, minU, minV);
         addPoint(maxX, minY, maxU, minV);
         addPoint(maxX, maxY, maxU, maxV);
@@ -1198,6 +1291,8 @@ public class DrawList {
             new SDFPointDetail(0, textureID, color),
             new SDFPointDetail(0, textureID, color),
         };
+        // TODO(ches) add quad
+        // TODO(ches) Skip adding any other data if we didn't need to add the quad
 
         int pointIndex = addPoint(p1X, p1Y, u1, v1);
         addPoint(p2X, p2Y, u2, v2);
@@ -1268,6 +1363,8 @@ public class DrawList {
         SDFPointDetail[] details =
                 getSdfPointDetails(textureID, rounding, drawFlagsRoundingCorners, color);
 
+        // TODO(ches) add quad
+        // TODO(ches) Skip adding any other data if we didn't need to add the quad
         int pointIndex = addPoint(minX, minY, minU, minV);
         addPoint(maxX, minY, maxU, minV);
         addPoint(maxX, maxY, maxU, maxV);

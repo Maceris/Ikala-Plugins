@@ -80,7 +80,7 @@ public class GuiRender implements RenderStage {
         windowManager.drawGui(width, height);
 
         renderImGui(width, height);
-        if (false) renderIkGui(width, height);
+        renderIkGui(width, height);
     }
 
     private void renderImGui(int width, int height) {
@@ -168,6 +168,8 @@ public class GuiRender implements RenderStage {
 
         int commandListCount = drawData.getCommandListsCount();
         for (int i = 0; i < commandListCount; ++i) {
+            int vertexCount = drawData.getCommandListVertexBufferVertexCount(i);
+
             glBufferData(GL_ARRAY_BUFFER, drawData.getCommandListVertexBuffer(i), GL_STREAM_DRAW);
 
             BufferUtil.INSTANCE.bufferData(
@@ -179,9 +181,7 @@ public class GuiRender implements RenderStage {
                     drawData.getCommandListPointDetailBufferData(i),
                     GL_STREAM_DRAW);
 
-            int commandCount = drawData.getCommandListVertexBufferSize(i);
-
-            glDrawArrays(GL_TRIANGLES, 0, commandCount);
+            glDrawArrays(GL_TRIANGLES, 0, vertexCount);
         }
 
         glEnable(GL_DEPTH_TEST);
