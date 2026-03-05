@@ -57,11 +57,12 @@ class IkGuiDemo {
             for (int drawListIndex = 0; drawListIndex < listCount; ++drawListIndex) {
 
                 final int commandCount = drawData.getDrawListCommandCount(drawListIndex);
+                final int vertexCount = drawData.getDrawListVertexCount(drawListIndex);
                 String name =
                         String.format(
                                 "DrawList: %s - %d vtx, %d commands, %d points, %d point details",
                                 drawData.drawLists.get(drawListIndex).windowName,
-                                drawData.getDrawListVertexCount(drawListIndex),
+                                vertexCount,
                                 commandCount,
                                 drawData.getDrawListPointCount(drawListIndex),
                                 drawData.getDrawListPointDetailCount(drawListIndex));
@@ -105,6 +106,29 @@ class IkGuiDemo {
                                 ImGui.text("Style: ???");
                             }
                             ImGui.text(String.format("Stroke: %f", stroke));
+
+                            if (ImGui.treeNode("Vertices")) {
+                                ByteBuffer vertexBuffer =
+                                        drawData.getDrawListVertexBuffer(drawListIndex);
+
+                                for (int vertex = 0; vertex < vertexCount; ++vertex) {
+                                    int vertexIndex = vertex * 2 * Float.BYTES;
+
+                                    float x = vertexBuffer.getFloat(vertexIndex);
+                                    vertexIndex += Float.BYTES;
+                                    float y = vertexBuffer.getFloat(vertexIndex);
+
+                                    ImGui.text(
+                                            String.format(
+                                                    "Vertex %d - (%f, %f) (0x%08x, 0x%08x)",
+                                                    vertex,
+                                                    x,
+                                                    y,
+                                                    Float.floatToIntBits(x),
+                                                    Float.floatToIntBits(y)));
+                                }
+                                ImGui.treePop();
+                            }
 
                             if (ImGui.treeNode("Points")) {
                                 for (int debugPointIndex = 0;

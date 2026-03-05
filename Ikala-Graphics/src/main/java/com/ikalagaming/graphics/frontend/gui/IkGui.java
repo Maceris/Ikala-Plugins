@@ -194,6 +194,8 @@ public class IkGui {
         // TODO(ches) update textures
         // TODO(ches) update draw list shared data
         context.drawData.clear();
+        context.backgroundDrawList.clear();
+        context.foregroundDrawList.clear();
         context.drawData.drawLists.add(context.backgroundDrawList);
         context.drawData.drawLists.add(context.foregroundDrawList);
         // TODO(ches) mark draw data as invalid
@@ -219,6 +221,8 @@ public class IkGui {
         // TODO(ches) update docking
         // TODO(ches) update drag and drop
         // TODO(ches) end the frame
+        context.backgroundDrawList.prepareForRender();
+        context.foregroundDrawList.prepareForRender();
         // TODO(ches) update viewports list
         // TODO(ches) sort the window list
         // TODO(ches) check the window parents/children are sane

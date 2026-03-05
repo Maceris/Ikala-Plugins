@@ -136,6 +136,10 @@ public class GuiRender implements RenderStage {
             }
         }
 
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
+
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
         glDisable(GL_BLEND);
@@ -153,6 +157,7 @@ public class GuiRender implements RenderStage {
 
         glBindVertexArray(guiMesh.vaoID());
 
+        glBindBuffer(GL_ARRAY_BUFFER, guiMesh.vertices());
         BufferUtil.INSTANCE.bindBuffer(guiMesh.commands(), COMMANDS_BINDING);
         BufferUtil.INSTANCE.bindBuffer(guiMesh.points(), POINTS_BINDING);
         BufferUtil.INSTANCE.bindBuffer(guiMesh.pointDetails(), POINT_DETAILS_BINDING);
@@ -183,6 +188,8 @@ public class GuiRender implements RenderStage {
 
             glDrawArrays(GL_TRIANGLES, 0, vertexCount);
         }
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
 
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);

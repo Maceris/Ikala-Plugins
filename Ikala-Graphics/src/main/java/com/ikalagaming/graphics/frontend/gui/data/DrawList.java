@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
@@ -150,10 +151,18 @@ public class DrawList {
 
     public DrawList(@NonNull String windowName) {
         this.windowName = windowName;
-        pointBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_POINT);
-        pointDetailBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_POINT_DETAIL);
-        commandBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_COMMAND);
-        vertexBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_QUAD_VERTICES);
+        pointBuffer =
+                ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_POINT)
+                        .order(ByteOrder.nativeOrder());
+        pointDetailBuffer =
+                ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_POINT_DETAIL)
+                        .order(ByteOrder.nativeOrder());
+        commandBuffer =
+                ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_COMMAND)
+                        .order(ByteOrder.nativeOrder());
+        vertexBuffer =
+                ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_QUAD_VERTICES)
+                        .order(ByteOrder.nativeOrder());
         clipRects = new ArrayDeque<>();
         textures = new IntArrayList();
         pathStarted = false;
@@ -214,7 +223,9 @@ public class DrawList {
         }
 
         if (vertexBuffer.position() + DrawData.SIZE_OF_QUAD_VERTICES >= vertexBuffer.limit()) {
-            ByteBuffer newBuffer = ByteBuffer.allocateDirect(vertexBuffer.limit() * 2);
+            ByteBuffer newBuffer =
+                    ByteBuffer.allocateDirect(vertexBuffer.limit() * 2)
+                            .order(ByteOrder.nativeOrder());
             vertexBuffer.flip();
             newBuffer.put(vertexBuffer);
             vertexBuffer = newBuffer;
@@ -245,7 +256,9 @@ public class DrawList {
     @Synchronized
     private int addPoint(float posX, float posY, float a, float b) {
         if (pointBuffer.position() + DrawData.SIZE_OF_POINT >= pointBuffer.limit()) {
-            ByteBuffer newBuffer = ByteBuffer.allocateDirect(pointBuffer.limit() * 2);
+            ByteBuffer newBuffer =
+                    ByteBuffer.allocateDirect(pointBuffer.limit() * 2)
+                            .order(ByteOrder.nativeOrder());
             pointBuffer.flip();
             newBuffer.put(pointBuffer);
             pointBuffer = newBuffer;
@@ -266,7 +279,9 @@ public class DrawList {
         final int newDetailsSize = details.length * DrawData.SIZE_OF_POINT_DETAIL;
 
         if (pointDetailBuffer.position() + newDetailsSize >= pointDetailBuffer.limit()) {
-            ByteBuffer newBuffer = ByteBuffer.allocateDirect(pointDetailBuffer.limit() * 2);
+            ByteBuffer newBuffer =
+                    ByteBuffer.allocateDirect(pointDetailBuffer.limit() * 2)
+                            .order(ByteOrder.nativeOrder());
             pointDetailBuffer.flip();
             newBuffer.put(pointDetailBuffer);
             pointDetailBuffer = newBuffer;
@@ -294,7 +309,9 @@ public class DrawList {
             float stroke) {
 
         if (commandBuffer.position() + DrawData.SIZE_OF_DRAW_COMMAND >= commandBuffer.limit()) {
-            ByteBuffer newBuffer = ByteBuffer.allocateDirect(commandBuffer.limit() * 2);
+            ByteBuffer newBuffer =
+                    ByteBuffer.allocateDirect(commandBuffer.limit() * 2)
+                            .order(ByteOrder.nativeOrder());
             commandBuffer.flip();
             newBuffer.put(commandBuffer);
             commandBuffer = newBuffer;
