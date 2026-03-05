@@ -31,6 +31,15 @@ public class DrawList {
 
         /** Unique ID used in the command buffer. Must line up with the shader. */
         final short typeID;
+
+        public static ElementType fromID(short typeID) throws IllegalArgumentException {
+            for (ElementType type : ElementType.values()) {
+                if (type.typeID == typeID) {
+                    return type;
+                }
+            }
+            throw new IllegalArgumentException("Unknown Element Type ID");
+        }
     }
 
     @AllArgsConstructor
@@ -42,6 +51,15 @@ public class DrawList {
 
         /** Unique ID used in the command buffer. Must line up with the shader. */
         final short styleID;
+
+        public static ElementStyle fromID(short styleID) throws IllegalArgumentException {
+            for (ElementStyle type : ElementStyle.values()) {
+                if (type.styleID == styleID) {
+                    return type;
+                }
+            }
+            throw new IllegalArgumentException("Unknown Element Style ID");
+        }
     }
 
     private record SDFPointDetail(float radius, int colorOrTextureID, int tint) {}

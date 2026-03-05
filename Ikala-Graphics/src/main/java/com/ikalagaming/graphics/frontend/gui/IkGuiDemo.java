@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.frontend.gui;
 
 import com.ikalagaming.graphics.frontend.gui.data.DrawData;
+import com.ikalagaming.graphics.frontend.gui.data.DrawList;
 import com.ikalagaming.graphics.frontend.gui.data.IkBoolean;
 import com.ikalagaming.graphics.frontend.gui.data.IkIO;
 import com.ikalagaming.graphics.frontend.gui.enums.Condition;
@@ -10,6 +11,8 @@ import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import imgui.ImGui;
 import imgui.ImVec2;
 import imgui.flag.ImGuiCond;
+
+import java.nio.ByteBuffer;
 
 class IkGuiDemo {
 
@@ -51,18 +54,129 @@ class IkGuiDemo {
         if (ImGui.treeNode("DrawLists")) {
             DrawData drawData = IkGui.getCurrentContext().drawData;
             int listCount = drawData.getCommandListsCount();
-            for (int i = 0; i < listCount; ++i) {
+            for (int commandListIndex = 0; commandListIndex < listCount; ++commandListIndex) {
+
+                final int commandCount = drawData.getCommandListCommandCount(commandListIndex);
                 String name =
                         String.format(
                                 "DrawList: %s - %d vtx, %d commands, %d points, %d point details",
                                 "???",
-                                drawData.getCommandListVertexCount(i),
-                                drawData.getCommandListCommandCount(i),
-                                drawData.getCommandListPointCount(i),
-                                drawData.getCommandListPointDetailCount(i));
+                                drawData.getCommandListVertexCount(commandListIndex),
+                                commandCount,
+                                drawData.getCommandListPointCount(commandListIndex),
+                                drawData.getCommandListPointDetailCount(commandListIndex));
 
                 if (ImGui.treeNode(name)) {
-                    // TODO(ches) details
+                    ByteBuffer commandBuffer =
+                            drawData.getCommandListCommandBuffer(commandListIndex);
+
+                    for (int commandIndex = 0; commandIndex < commandCount; ++commandIndex) {
+                        if (ImGui.treeNode(String.format("Command %d", commandIndex))) {
+
+                            int commandBufferIndex = commandIndex * DrawData.SIZE_OF_DRAW_COMMAND;
+                            final int pointIndex = commandBuffer.getInt(commandBufferIndex);
+                            commandBufferIndex += Integer.BYTES;
+                            final int detailIndex = commandBuffer.getInt(commandBufferIndex);
+                            commandBufferIndex += Integer.BYTES;
+                            final short pointCount = commandBuffer.getShort(commandBufferIndex);
+                            commandBufferIndex += Short.BYTES;
+                            final short detailCount = commandBuffer.getShort(commandBufferIndex);
+                            commandBufferIndex += Short.BYTES;
+                            final short type = commandBuffer.getShort(commandBufferIndex);
+                            commandBufferIndex += Short.BYTES;
+                            final short style = commandBuffer.getShort(commandBufferIndex);
+                            commandBufferIndex += Short.BYTES;
+                            final float stroke = commandBuffer.getFloat(commandBufferIndex);
+
+                            ImGui.text(String.format("Point Index: %d", pointIndex));
+                            ImGui.text(String.format("Detail Index: %d", detailIndex));
+                            ImGui.text(String.format("Point Count: %d", pointCount));
+                            ImGui.text(String.format("Detail Count: %d", detailCount));
+                            try {
+                                DrawList.ElementType namedType = DrawList.ElementType.fromID(type);
+                                ImGui.text(String.format("Type: %s", namedType));
+                            } catch (IllegalArgumentException e) {
+                                ImGui.text("Type: ???");
+                            }
+                            try {
+                                DrawList.ElementStyle namedStyle =
+                                        DrawList.ElementStyle.fromID(style);
+                                ImGui.text(String.format("Style: %s", namedStyle));
+                            } catch (IllegalArgumentException e) {
+                                ImGui.text("Style: ???");
+                            }
+                            ImGui.text(String.format("Stroke: %f", stroke));
+
+                            if (ImGui.treeNode("Points")) {
+                                for (int debugPointIndex = 0;
+                                        debugPointIndex < pointCount;
+                                        ++debugPointIndex) {
+
+                                    if (ImGui.treeNode(
+                                            String.format("Point %d", debugPointIndex))) {
+                                        ByteBuffer pointBuffer =
+                                                drawData.getCommandListPointBuffer(
+                                                        commandListIndex);
+
+                                        int pointBufferIndex =
+                                                (pointIndex + debugPointIndex)
+                                                        * DrawData.SIZE_OF_POINT;
+
+                                        float x = pointBuffer.getFloat(pointBufferIndex);
+                                        pointBufferIndex += Float.BYTES;
+                                        float y = pointBuffer.getFloat(pointBufferIndex);
+                                        pointBufferIndex += Float.BYTES;
+                                        float a = pointBuffer.getFloat(pointBufferIndex);
+                                        pointBufferIndex += Float.BYTES;
+                                        float b = pointBuffer.getFloat(pointBufferIndex);
+
+                                        ImGui.text(String.format("x: %f", x));
+                                        ImGui.text(String.format("y: %f", y));
+                                        ImGui.text(String.format("a: %f", a));
+                                        ImGui.text(String.format("b: %f", b));
+
+                                        ImGui.treePop();
+                                    }
+                                }
+                                ImGui.treePop();
+                            }
+                            if (ImGui.treeNode("Point Details")) {
+                                for (int debugPointDetailIndex = 0;
+                                        debugPointDetailIndex < detailCount;
+                                        ++debugPointDetailIndex) {
+                                    if (ImGui.treeNode(
+                                            String.format(
+                                                    "Point Detail %d", debugPointDetailIndex))) {
+                                        ByteBuffer pointDetailBuffer =
+                                                drawData.getCommandListPointDetailBuffer(
+                                                        commandListIndex);
+                                        int pointDetailBufferIndex =
+                                                (detailIndex + debugPointDetailIndex)
+                                                        * DrawData.SIZE_OF_POINT_DETAIL;
+
+                                        float radius =
+                                                pointDetailBuffer.getFloat(pointDetailBufferIndex);
+                                        pointDetailBufferIndex += Float.BYTES;
+                                        int colorOrTextureID =
+                                                pointDetailBuffer.getInt(pointDetailBufferIndex);
+                                        pointDetailBufferIndex += Integer.BYTES;
+                                        int tint = pointDetailBuffer.getInt(pointDetailBufferIndex);
+
+                                        ImGui.text(String.format("Radius: %f", radius));
+                                        ImGui.text(
+                                                String.format(
+                                                        "Color or texture ID: %d",
+                                                        colorOrTextureID));
+                                        ImGui.text(String.format("Tint: %d", tint));
+
+                                        ImGui.treePop();
+                                    }
+                                }
+                                ImGui.treePop();
+                            }
+                            ImGui.treePop();
+                        }
+                    }
                     ImGui.treePop();
                 }
             }
