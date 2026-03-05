@@ -24,15 +24,10 @@ public class IkGui {
      */
     private static final int FRAME_COUNT_CAP = 2_000_000_000;
 
-    private static Context context;
-    @Getter private static IkIO IO;
-    @Getter private static PlatformIO platformIO;
+    @Getter private static Context context;
     private static Storage storage;
-    // TODO(ches) Update the viewport based on the current viewport
-    @Getter private static Viewport windowViewport;
-    @Getter private static Style style;
+
     // TODO(ches) complete this
-    @Getter private static Font font;
 
     public static void init() {
         storage = new Storage();
@@ -43,31 +38,26 @@ public class IkGui {
     }
 
     /**
-     * Create a context and update the current context to it. Must be called before doing anything
-     * that would require the context, which is most things.
+     * Create a context. Must be called before doing anything that would require the context, which
+     * is most things. Will only create one context, subsequent calls will just return the existing
+     * context.
      *
-     * @return The newly created context.
+     * @return The context.
      */
     public static Context createContext() {
+        if (context != null) {
+            return context;
+        }
         context = new Context();
-        setCurrentContext(context);
         return context;
     }
 
-    public static void destroyContext() {
-        context = null;
+    public static IkIO getIO() {
+        return context.io;
     }
 
-    public static Context getCurrentContext() {
-        return context;
-    }
-
-    public static void setCurrentContext(@NonNull Context context) {
-        IkGui.context = context;
-        IO = context.io;
-        platformIO = context.platformIO;
-        style = context.style;
-        font = context.font;
+    public static PlatformIO getPlatformIO() {
+        return context.platformIO;
     }
 
     public static boolean begin(@NonNull String title) {
@@ -108,7 +98,11 @@ public class IkGui {
         } else {
             window.flags = windowFlags;
         }
-        window.viewport = windowViewport;
+        if (context.nextWindowData.viewport != null) {
+            window.viewport = context.nextWindowData.viewport;
+        } else {
+            window.viewport = context.mainViewport;
+        }
         // TODO(ches) position condition
         window.position = context.nextWindowData.positionValue;
         // TODO(ches) size condition
@@ -228,11 +222,11 @@ public class IkGui {
         // TODO(ches) check the window parents/children are sane
         // TODO(ches) update textures
         // TODO(ches) unlock the font atlas
-        IO.mousePositionPrevious.set(IO.mousePosition);
-        IO.mouseDelta.set(0, 0);
-        IO.appFocusLost = false;
-        IO.mouseWheel = 0.0f;
-        IO.mouseWheelH = 0.0f;
+        context.io.mousePositionPrevious.set(context.io.mousePosition);
+        context.io.mouseDelta.set(0, 0);
+        context.io.appFocusLost = false;
+        context.io.mouseWheel = 0.0f;
+        context.io.mouseWheelH = 0.0f;
         // TODO(ches) clear input queue?
 
         // TODO(ches) call context hooks
@@ -4092,7 +4086,7 @@ public class IkGui {
     }
 
     public static Viewport getMainViewport() {
-        return null;
+        return context.mainViewport;
     }
 
     public static boolean isRectVisible(float width, float height) {

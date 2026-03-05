@@ -22,18 +22,18 @@ public class DrawList {
 
     @AllArgsConstructor
     public enum ElementType {
-        CIRCLE((short) 0),
-        LINE_ARC((short) 1),
-        LINE_BEZIER((short) 2),
-        LINE_STRAIGHT((short) 3),
-        RECTANGLE((short) 4),
-        POLYGON((short) 5),
-        TEXT((short) 6);
+        CIRCLE(0),
+        LINE_ARC(1),
+        LINE_BEZIER(2),
+        LINE_STRAIGHT(3),
+        RECTANGLE(4),
+        POLYGON(5),
+        TEXT(6);
 
         /** Unique ID used in the command buffer. Must line up with the shader. */
-        final short typeID;
+        final int typeID;
 
-        public static ElementType fromID(short typeID) throws IllegalArgumentException {
+        public static ElementType fromID(int typeID) throws IllegalArgumentException {
             for (ElementType type : ElementType.values()) {
                 if (type.typeID == typeID) {
                     return type;
@@ -45,15 +45,15 @@ public class DrawList {
 
     @AllArgsConstructor
     public enum ElementStyle {
-        ONLY_FILL((short) 0),
-        ONLY_BORDER((short) 1),
-        FILL_AND_BORDER((short) 2),
-        TEXTURE((short) 3);
+        ONLY_FILL(0),
+        ONLY_BORDER(1),
+        FILL_AND_BORDER(2),
+        TEXTURE(3);
 
         /** Unique ID used in the command buffer. Must line up with the shader. */
-        final short styleID;
+        final int styleID;
 
-        public static ElementStyle fromID(short styleID) throws IllegalArgumentException {
+        public static ElementStyle fromID(int styleID) throws IllegalArgumentException {
             for (ElementStyle type : ElementStyle.values()) {
                 if (type.styleID == styleID) {
                     return type;
@@ -100,8 +100,8 @@ public class DrawList {
     public ByteBuffer pointDetailBuffer;
 
     /**
-     * int pointIndex, int detailIndex, short pointCount, short detailCount, short type, short
-     * style, float stroke (borders, line thickness).
+     * int pointIndex, int detailIndex, int pointCount, int detailCount, int type, int style, float
+     * stroke (borders, line thickness).
      */
     public ByteBuffer commandBuffer;
 
@@ -302,8 +302,8 @@ public class DrawList {
     private void addCommand(
             int pointIndex,
             int detailIndex,
-            short pointCount,
-            short detailCount,
+            int pointCount,
+            int detailCount,
             @NonNull ElementType type,
             @NonNull ElementStyle style,
             float stroke) {
@@ -319,10 +319,10 @@ public class DrawList {
 
         commandBuffer.putInt(pointIndex);
         commandBuffer.putInt(detailIndex);
-        commandBuffer.putShort(pointCount);
-        commandBuffer.putShort(detailCount);
-        commandBuffer.putShort(type.typeID);
-        commandBuffer.putShort(style.styleID);
+        commandBuffer.putInt(pointCount);
+        commandBuffer.putInt(detailCount);
+        commandBuffer.putInt(type.typeID);
+        commandBuffer.putInt(style.styleID);
         commandBuffer.putFloat(stroke);
     }
 
@@ -493,8 +493,8 @@ public class DrawList {
 
         int pointIndex = addPoint(p1X, p1Y, p2X, p2Y);
         int detailIndex = addDetails(details);
-        final short pointCount = 1;
-        final short detailCount = 2;
+        final int pointCount = 1;
+        final int detailCount = 2;
         addCommand(
                 pointIndex,
                 detailIndex,
@@ -565,8 +565,8 @@ public class DrawList {
 
         int pointIndex = addPoint(centerX, centerY, width, height);
         int detailIndex = addDetails(details);
-        final short pointCount = 1;
-        final short detailCount = (short) details.length;
+        final int pointCount = 1;
+        final int detailCount = details.length;
 
         addCommand(
                 pointIndex,
@@ -616,8 +616,8 @@ public class DrawList {
 
         int pointIndex = addPoint(centerX, centerY, width, height);
         int detailIndex = addDetails(details);
-        final short pointCount = 1;
-        final short detailCount = (short) details.length;
+        final int pointCount = 1;
+        final int detailCount = details.length;
 
         addCommand(
                 pointIndex,
@@ -716,8 +716,8 @@ public class DrawList {
         // TODO(ches) Skip adding any other data if we didn't need to add the quad
         int pointIndex = addPoint(centerX, centerY, width, height);
         int detailIndex = addDetails(details);
-        final short pointCount = 1;
-        final short detailCount = (short) details.length;
+        final int pointCount = 1;
+        final int detailCount = details.length;
 
         addCommand(
                 pointIndex,
@@ -771,8 +771,8 @@ public class DrawList {
 
         int detailIndex = addDetails(details);
 
-        final short pointCount = 4;
-        final short detailCount = (short) details.length;
+        final int pointCount = 4;
+        final int detailCount = details.length;
 
         addCommand(
                 pointIndex,
@@ -812,8 +812,8 @@ public class DrawList {
 
         int detailIndex = addDetails(details);
 
-        final short pointCount = 4;
-        final short detailCount = (short) details.length;
+        final int pointCount = 4;
+        final int detailCount = details.length;
 
         addCommand(
                 pointIndex,
@@ -852,8 +852,8 @@ public class DrawList {
 
         int detailIndex = addDetails(details);
 
-        final short pointCount = 3;
-        final short detailCount = (short) details.length;
+        final int pointCount = 3;
+        final int detailCount = details.length;
 
         addCommand(
                 pointIndex,
@@ -881,8 +881,8 @@ public class DrawList {
 
         int detailIndex = addDetails(details);
 
-        final short pointCount = 3;
-        final short detailCount = (short) details.length;
+        final int pointCount = 3;
+        final int detailCount = details.length;
 
         addCommand(
                 pointIndex,
@@ -909,8 +909,8 @@ public class DrawList {
         int pointIndex = addPoint(centerX, centerY, radius, radius);
         int detailIndex = addDetails(details);
 
-        final short pointCount = 1;
-        final short detailCount = (short) details.length;
+        final int pointCount = 1;
+        final int detailCount = details.length;
 
         addCommand(
                 pointIndex,
@@ -934,8 +934,8 @@ public class DrawList {
         int pointIndex = addPoint(centerX, centerY, radius, radius);
         int detailIndex = addDetails(details);
 
-        final short pointCount = 1;
-        final short detailCount = (short) details.length;
+        final int pointCount = 1;
+        final int detailCount = details.length;
 
         addCommand(
                 pointIndex,
@@ -1113,8 +1113,8 @@ public class DrawList {
         addPoint(minX, maxY, minU, maxV);
 
         int detailIndex = addDetails(details);
-        final short pointCount = 4;
-        final short detailCount = (short) details.length;
+        final int pointCount = 4;
+        final int detailCount = details.length;
         final int borderStroke = 0;
 
         addCommand(
@@ -1340,8 +1340,8 @@ public class DrawList {
 
         int detailIndex = addDetails(details);
 
-        final short pointCount = 4;
-        final short detailCount = (short) details.length;
+        final int pointCount = 4;
+        final int detailCount = details.length;
 
         addCommand(
                 pointIndex,
@@ -1409,8 +1409,8 @@ public class DrawList {
         addPoint(maxX, maxY, maxU, maxV);
         addPoint(minX, maxY, minU, maxV);
         int detailIndex = addDetails(details);
-        final short pointCount = 4;
-        final short detailCount = (short) details.length;
+        final int pointCount = 4;
+        final int detailCount = details.length;
         final int borderStroke = 0;
 
         addCommand(

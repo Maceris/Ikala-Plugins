@@ -44,6 +44,9 @@ public class NextWindowData {
      */
     public int windowRefreshFlags;
 
+    /** Only non-null if we specified the viewport for the next window. */
+    public Viewport viewport;
+
     public NextWindowData() {
         fieldFlags = NextWindowFlags.NONE;
         positionCondition = Condition.NONE;
@@ -61,5 +64,6 @@ public class NextWindowData {
         backgroundAlpha = 1.0f;
         menuBarOffsetMinValue = new Vector2f(0, 0);
         windowRefreshFlags = RefreshFlags.NONE;
+        viewport = null;
     }
 }

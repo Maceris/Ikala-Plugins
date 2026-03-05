@@ -136,6 +136,7 @@ public class Context {
     public List<TreeNodeStackData> treeNodeStack;
 
     public List<Viewport> viewports;
+    public Viewport mainViewport;
 
     public boolean navCursorVisible;
     public boolean navHighlightIgnoreMouse;
@@ -473,6 +474,7 @@ public class Context {
         beginPopupStack = new ArrayList<>();
         treeNodeStack = new ArrayList<>();
         viewports = new ArrayList<>();
+        mainViewport = null;
         navCursorVisible = false;
         navHighlightIgnoreMouse = false;
         navMousePositionDirty = false;

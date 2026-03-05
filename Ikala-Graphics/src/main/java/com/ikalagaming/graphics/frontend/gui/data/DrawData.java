@@ -4,26 +4,20 @@ import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 public class DrawData {
     public static final int SIZE_OF_POINT = 4 * Float.BYTES;
     public static final int SIZE_OF_POINT_DETAIL = Float.BYTES + 2 * Integer.BYTES;
-    public static final int SIZE_OF_DRAW_COMMAND =
-            2 * Integer.BYTES + 4 * Short.BYTES + Float.BYTES;
+    public static final int SIZE_OF_DRAW_COMMAND = 6 * Integer.BYTES + Float.BYTES;
     public static final int SIZE_OF_VERTEX = 2 * Float.BYTES;
 
     /** The number of bytes that it takes to store the vertices of one quad. */
     static final int SIZE_OF_QUAD_VERTICES = 6 * SIZE_OF_VERTEX;
 
-    private static final int RESIZE_FACTOR = 5000;
-
-    private ByteBuffer dataBuffer =
-            ByteBuffer.allocateDirect(25_000).order(ByteOrder.nativeOrder());
-
-    public final ArrayList<DrawList> drawLists;
+    public final List<DrawList> drawLists;
     public boolean valid;
     final Vector2f displayPosition;
     final Vector2f displaySize;

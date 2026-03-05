@@ -52,7 +52,7 @@ class IkGuiDemo {
         IkIO ikIO = IkGui.getIO();
 
         if (ImGui.treeNode("DrawLists")) {
-            DrawData drawData = IkGui.getCurrentContext().drawData;
+            DrawData drawData = IkGui.getContext().drawData;
             int listCount = drawData.getDrawListCount();
             for (int drawListIndex = 0; drawListIndex < listCount; ++drawListIndex) {
 
@@ -78,14 +78,14 @@ class IkGuiDemo {
                             commandBufferIndex += Integer.BYTES;
                             final int detailIndex = commandBuffer.getInt(commandBufferIndex);
                             commandBufferIndex += Integer.BYTES;
-                            final short pointCount = commandBuffer.getShort(commandBufferIndex);
-                            commandBufferIndex += Short.BYTES;
-                            final short detailCount = commandBuffer.getShort(commandBufferIndex);
-                            commandBufferIndex += Short.BYTES;
-                            final short type = commandBuffer.getShort(commandBufferIndex);
-                            commandBufferIndex += Short.BYTES;
-                            final short style = commandBuffer.getShort(commandBufferIndex);
-                            commandBufferIndex += Short.BYTES;
+                            final int pointCount = commandBuffer.getInt(commandBufferIndex);
+                            commandBufferIndex += Integer.BYTES;
+                            final int detailCount = commandBuffer.getInt(commandBufferIndex);
+                            commandBufferIndex += Integer.BYTES;
+                            final int type = commandBuffer.getInt(commandBufferIndex);
+                            commandBufferIndex += Integer.BYTES;
+                            final int style = commandBuffer.getInt(commandBufferIndex);
+                            commandBufferIndex += Integer.BYTES;
                             final float stroke = commandBuffer.getFloat(commandBufferIndex);
 
                             ImGui.text(String.format("Point Index: %d", pointIndex));

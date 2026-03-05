@@ -4,14 +4,15 @@ import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL14.GL_FUNC_ADD;
 import static org.lwjgl.opengl.GL14.glBlendEquation;
 import static org.lwjgl.opengl.GL15.*;
+import static org.lwjgl.opengl.GL30.glBindBufferBase;
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
+import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.opengl.GuiMesh;
 import com.ikalagaming.graphics.backend.opengl.ImGuiMesh;
-import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
@@ -153,16 +154,17 @@ public class GuiRender implements RenderStage {
         glBindVertexArray(guiMesh.vaoID());
 
         glBindBuffer(GL_ARRAY_BUFFER, guiMesh.vertices());
-        BufferUtil.INSTANCE.bindBuffer(guiMesh.commands(), COMMANDS_BINDING);
-        BufferUtil.INSTANCE.bindBuffer(guiMesh.points(), POINTS_BINDING);
-        BufferUtil.INSTANCE.bindBuffer(guiMesh.pointDetails(), POINT_DETAILS_BINDING);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, COMMANDS_BINDING, (int) guiMesh.commands().id());
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, POINTS_BINDING, (int) guiMesh.points().id());
+        glBindBufferBase(
+                GL_SHADER_STORAGE_BUFFER, POINT_DETAILS_BINDING, (int) guiMesh.pointDetails().id());
 
         scale.x = 2.0f / width;
         scale.y = -2.0f / height;
         var uniformsMap = shader.getUniformMap();
         uniformsMap.setUniform(ShaderUniforms.GUI.SCALE, scale);
 
-        DrawData drawData = IkGui.getCurrentContext().drawData;
+        DrawData drawData = IkGui.getContext().drawData;
 
         // TODO(ches) bind font texture
 
@@ -172,14 +174,18 @@ public class GuiRender implements RenderStage {
 
             glBufferData(GL_ARRAY_BUFFER, drawData.getDrawListVertexBuffer(i), GL_STREAM_DRAW);
 
-            BufferUtil.INSTANCE.bufferData(
-                    guiMesh.commands(), drawData.getDrawListCommandBuffer(i), GL_STREAM_DRAW);
-            BufferUtil.INSTANCE.bufferData(
-                    guiMesh.points(), drawData.getDrawListPointBuffer(i), GL_STREAM_DRAW);
-            BufferUtil.INSTANCE.bufferData(
-                    guiMesh.pointDetails(),
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) guiMesh.commands().id());
+            glBufferData(
+                    GL_SHADER_STORAGE_BUFFER, drawData.getDrawListCommandBuffer(i), GL_STREAM_DRAW);
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) guiMesh.points().id());
+            glBufferData(
+                    GL_SHADER_STORAGE_BUFFER, drawData.getDrawListPointBuffer(i), GL_STREAM_DRAW);
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) guiMesh.pointDetails().id());
+            glBufferData(
+                    GL_SHADER_STORAGE_BUFFER,
                     drawData.getDrawListPointDetailBuffer(i),
                     GL_STREAM_DRAW);
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
             glDrawArrays(GL_TRIANGLES, 0, vertexCount);
         }
