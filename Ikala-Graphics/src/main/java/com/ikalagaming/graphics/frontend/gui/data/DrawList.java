@@ -64,7 +64,8 @@ public class DrawList {
 
     private record SDFPointDetail(float radius, int colorOrTextureID, int tint) {}
 
-    // TODO(ches) populate the quad buffer
+    public final String windowName;
+
     /**
      * The vertices making up the quad that each element (command) will be drawn on, with each quad
      * being a pair of triangles. This is the region that is needed to draw the element, clipped as
@@ -147,7 +148,8 @@ public class DrawList {
         };
     }
 
-    public DrawList() {
+    public DrawList(@NonNull String windowName) {
+        this.windowName = windowName;
         pointBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_POINT);
         pointDetailBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_POINT_DETAIL);
         commandBuffer = ByteBuffer.allocateDirect(100 * DrawData.SIZE_OF_DRAW_COMMAND);

@@ -6,17 +6,19 @@ import com.ikalagaming.graphics.frontend.gui.util.Rect;
 import com.ikalagaming.util.FloatArrayList;
 import com.ikalagaming.util.IntArrayList;
 
+import lombok.NonNull;
 import org.joml.Vector2f;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class Window {
-    public Context parentContext;
+    public Context context;
     public String name;
     public int id;
     public int flags;
     public int flagsAsChildWindow;
-    public ArrayList<Window> childWindows;
+    public List<Window> childWindows;
     public Viewport viewport;
     public Vector2f position;
 
@@ -66,7 +68,7 @@ public class Window {
     public Direction borderBeingHovered;
     public Direction borderBeingDragged;
 
-    public IntArrayList IDStack;
+    public IntArrayList idStack;
 
     /** The outer region of the window. */
     public Rect rectFull;
@@ -121,27 +123,54 @@ public class Window {
     public FloatArrayList itemWidthStack;
     public FloatArrayList textWrapPositionStack;
 
-    public Window(Context context) {
-        parentContext = context;
+    public Window(@NonNull Context context, @NonNull String name) {
+        this.context = context;
+        this.name = name;
+        id = 0;
+        flags = WindowFlags.NONE;
+        flagsAsChildWindow = WindowFlags.NONE;
         childWindows = new ArrayList<>();
+        viewport = null;
         position = new Vector2f(0, 0);
+        open = new IkBoolean();
         sizeCurrent = new Vector2f(0, 0);
         sizeFull = new Vector2f(0, 0);
         sizeDesired = new Vector2f(0, 0);
         sizeRequested = new Vector2f(0, 0);
         padding = new Vector2f(0, 0);
+        rounding = 0.0f;
+        borderSize = 0.0f;
+        titleBarHeight = 0.0f;
+        menuBarHeight = 0.0f;
+        idWithinParent = 0;
+        idAsPopupWindow = 0;
         scrollPosition = new Vector2f(0, 0);
         scrollExtent = new Vector2f(0, 0);
         scrollTarget = new Vector2f(0, 0);
         scrollbarSizes = new Vector2f(0, 0);
-        IDStack = new IntArrayList();
+        showScrollbarX = false;
+        showScrollbarY = false;
+        active = false;
+        collapsed = false;
+        collapseToggleRequested = false;
+        hidden = false;
+        skipRenderingContents = false;
+        reuseLastFrameContents = false;
+        appearing = false;
+        borderBeingHovered = Direction.NONE;
+        borderBeingDragged = Direction.NONE;
+        idStack = new IntArrayList();
         rectFull = new Rect(0, 0, 0, 0);
         rectInner = new Rect(0, 0, 0, 0);
         rectInnerClip = new Rect(0, 0, 0, 0);
         rectContent = new Rect(0, 0, 0, 0);
         rectCurrentClip = new Rect(0, 0, 0, 0);
-        drawList = new DrawList();
-        context.drawData.drawLists.add(drawList);
+        drawList = new DrawList(name);
+        parentWindow = null;
+        rootWindow = null;
+        rootWindowIncludingPopups = null;
+        rootWindowForTitleBarHighlight = null;
+        rootWindowForNavigation = null;
         cursorPosition = new Vector2f(0, 0);
         cursorStartPosition = new Vector2f(0, 0);
         cursorPreviousLinePosition = new Vector2f(0, 0);
@@ -149,15 +178,23 @@ public class Window {
         cursorIdealMaxPosition = new Vector2f(0, 0);
         lineSizePrevious = new Vector2f(0, 0);
         lineSizeCurrent = new Vector2f(0, 0);
+        baseOffsetCurrentLine = 0.0f;
+        baseOffsetPreviousLine = 0.0f;
+        sameLine = false;
+        setPos = false;
+        indent = 0.0f;
+        treeDepth = 0;
+        currentTableIndex = 0;
+        currentItemWidth = 0.0f;
+        currentTextWrapPosition = 0.0f;
         itemWidthStack = new FloatArrayList();
         textWrapPositionStack = new FloatArrayList();
-
-        reset();
     }
 
     /** Reset all values to defaults, so that a window can be reused internally. */
-    public void reset() {
-        this.name = null;
+    public void reset(@NonNull Context context, @NonNull String name) {
+        this.context = context;
+        this.name = name;
         this.id = 0;
         this.flags = WindowFlags.NONE;
         this.flagsAsChildWindow = WindowFlags.NONE;
@@ -191,7 +228,7 @@ public class Window {
         this.appearing = false;
         this.borderBeingHovered = Direction.NONE;
         this.borderBeingDragged = Direction.NONE;
-        this.IDStack = new IntArrayList();
+        this.idStack = new IntArrayList();
         this.rectFull.set(0, 0, 0, 0);
         this.rectInner.set(0, 0, 0, 0);
         this.rectInnerClip.set(0, 0, 0, 0);
@@ -221,10 +258,6 @@ public class Window {
         this.currentTextWrapPosition = 0.0f;
         this.itemWidthStack.clear();
         this.textWrapPositionStack.clear();
-    }
-
-    public void destroy() {
-        parentContext.drawData.drawLists.remove(drawList);
     }
 
     public boolean hasCloseButton() {

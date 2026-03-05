@@ -26,6 +26,8 @@ public class Context {
     public Style style;
 
     public DrawData drawData;
+    public DrawList backgroundDrawList;
+    public DrawList foregroundDrawList;
     public List<FontAtlas> fontAtlases;
     public Font font;
     public FontBaked fontBaked;
@@ -392,6 +394,10 @@ public class Context {
         platformIO = null;
         style = new Style();
         drawData = new DrawData();
+        backgroundDrawList = new DrawList("Background");
+        foregroundDrawList = new DrawList("Foreground");
+        drawData.drawLists.add(backgroundDrawList);
+        drawData.drawLists.add(foregroundDrawList);
         fontAtlases = new ArrayList<>();
         font = null;
         fontBaked = null;

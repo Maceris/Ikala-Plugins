@@ -27,8 +27,6 @@ public class IkGui {
     private static Context context;
     @Getter private static IkIO IO;
     @Getter private static PlatformIO platformIO;
-    private static DrawList backgroundDrawList;
-    private static DrawList foregroundDrawList;
     private static Storage storage;
     // TODO(ches) Update the viewport based on the current viewport
     @Getter private static Viewport windowViewport;
@@ -37,8 +35,6 @@ public class IkGui {
     @Getter private static Font font;
 
     public static void init() {
-        backgroundDrawList = new DrawList();
-        foregroundDrawList = new DrawList();
         storage = new Storage();
     }
 
@@ -102,8 +98,9 @@ public class IkGui {
 
         final int ID = Hash.getID(title);
         pushID(ID);
-        Window window = context.windowByID.computeIfAbsent(ID, ignored -> new Window(context));
-        window.drawList.clear();
+        Window window =
+                context.windowByID.computeIfAbsent(ID, ignored -> new Window(context, title));
+        window.reset(context, title);
         window.id = ID;
         window.name = title;
         if (WindowFlags.NONE == windowFlags) {
@@ -197,6 +194,8 @@ public class IkGui {
         // TODO(ches) update textures
         // TODO(ches) update draw list shared data
         context.drawData.clear();
+        context.drawData.drawLists.add(context.backgroundDrawList);
+        context.drawData.drawLists.add(context.foregroundDrawList);
         // TODO(ches) mark draw data as invalid
         // TODO(ches) update active IDs
         // TODO(ches) update hover delay

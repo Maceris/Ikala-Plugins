@@ -46,8 +46,8 @@ public class DrawData {
         return drawLists.get(drawListIndex);
     }
 
-    private ByteBuffer getCommandBuffer(int commandListIndex) {
-        DrawList list = getDrawList(commandListIndex);
+    private ByteBuffer getCommandBuffer(int drawListIndex) {
+        DrawList list = getDrawList(drawListIndex);
         return list == null ? null : list.commandBuffer;
     }
 
@@ -57,8 +57,8 @@ public class DrawData {
         drawLists.clear();
     }
 
-    public int getCommandListCommandCount(int commandListIndex) {
-        ByteBuffer commandBuffer = getCommandBuffer(commandListIndex);
+    public int getDrawListCommandCount(int drawListIndex) {
+        ByteBuffer commandBuffer = getCommandBuffer(drawListIndex);
         if (commandBuffer == null) {
             return 0;
         }
@@ -66,12 +66,12 @@ public class DrawData {
         return commandBuffer.limit() / SIZE_OF_DRAW_COMMAND;
     }
 
-    public ByteBuffer getCommandListCommandBuffer(final int commandListIndex) {
-        return getCommandBuffer(commandListIndex);
+    public ByteBuffer getDrawListCommandBuffer(final int drawListIndex) {
+        return getCommandBuffer(drawListIndex);
     }
 
-    public int getCommandListVertexCount(int commandListIndex) {
-        DrawList list = getDrawList(commandListIndex);
+    public int getDrawListVertexCount(int drawListIndex) {
+        DrawList list = getDrawList(drawListIndex);
         if (list == null) {
             return 0;
         }
@@ -82,46 +82,46 @@ public class DrawData {
         return vertexBuffer.limit() / (2 * Float.BYTES);
     }
 
-    public ByteBuffer getCommandListVertexBuffer(final int commandListIndex) {
-        DrawList list = getDrawList(commandListIndex);
+    public ByteBuffer getDrawListVertexBuffer(final int drawListIndex) {
+        DrawList list = getDrawList(drawListIndex);
         return list == null ? null : list.vertexBuffer;
     }
 
     /**
      * Fetch the size of the point detail buffer, in terms of entries.
      *
-     * @param commandListIndex The index of the command list to check.
+     * @param drawListIndex The index of the command list to check.
      * @return The index buffer count, or 0 if an invalid index is provided.
      */
-    public int getCommandListPointDetailCount(int commandListIndex) {
-        DrawList list = getDrawList(commandListIndex);
+    public int getDrawListPointDetailCount(int drawListIndex) {
+        DrawList list = getDrawList(drawListIndex);
         ByteBuffer buffer = list == null ? null : list.pointDetailBuffer;
         return buffer == null ? 0 : buffer.limit() / SIZE_OF_POINT_DETAIL;
     }
 
-    public ByteBuffer getCommandListPointDetailBuffer(final int commandListIndex) {
-        DrawList list = getDrawList(commandListIndex);
+    public ByteBuffer getDrawListPointDetailBuffer(final int drawListIndex) {
+        DrawList list = getDrawList(drawListIndex);
         return list == null ? null : list.pointDetailBuffer;
     }
 
     /**
      * Fetch the size of the point buffer, in terms of points.
      *
-     * @param commandListIndex The index of the command list to check.
+     * @param drawListIndex The index of the command list to check.
      * @return The vertex buffer count, or 0 if an invalid index is provided.
      */
-    public int getCommandListPointCount(int commandListIndex) {
-        DrawList list = getDrawList(commandListIndex);
+    public int getDrawListPointCount(int drawListIndex) {
+        DrawList list = getDrawList(drawListIndex);
         ByteBuffer buffer = list == null ? null : list.pointBuffer;
         return buffer == null ? 0 : buffer.limit() / SIZE_OF_POINT;
     }
 
-    public ByteBuffer getCommandListPointBuffer(final int commandListIndex) {
-        DrawList list = getDrawList(commandListIndex);
+    public ByteBuffer getDrawListPointBuffer(final int drawListIndex) {
+        DrawList list = getDrawList(drawListIndex);
         return list == null ? null : list.pointBuffer;
     }
 
-    public int getCommandListsCount() {
+    public int getDrawListCount() {
         return drawLists.size();
     }
 

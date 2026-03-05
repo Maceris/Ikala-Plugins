@@ -166,19 +166,19 @@ public class GuiRender implements RenderStage {
 
         // TODO(ches) bind font texture
 
-        int commandListCount = drawData.getCommandListsCount();
-        for (int i = 0; i < commandListCount; ++i) {
-            int vertexCount = drawData.getCommandListVertexCount(i);
+        int drawListCount = drawData.getDrawListCount();
+        for (int i = 0; i < drawListCount; ++i) {
+            int vertexCount = drawData.getDrawListVertexCount(i);
 
-            glBufferData(GL_ARRAY_BUFFER, drawData.getCommandListVertexBuffer(i), GL_STREAM_DRAW);
+            glBufferData(GL_ARRAY_BUFFER, drawData.getDrawListVertexBuffer(i), GL_STREAM_DRAW);
 
             BufferUtil.INSTANCE.bufferData(
-                    guiMesh.commands(), drawData.getCommandListCommandBuffer(i), GL_STREAM_DRAW);
+                    guiMesh.commands(), drawData.getDrawListCommandBuffer(i), GL_STREAM_DRAW);
             BufferUtil.INSTANCE.bufferData(
-                    guiMesh.points(), drawData.getCommandListPointBuffer(i), GL_STREAM_DRAW);
+                    guiMesh.points(), drawData.getDrawListPointBuffer(i), GL_STREAM_DRAW);
             BufferUtil.INSTANCE.bufferData(
                     guiMesh.pointDetails(),
-                    drawData.getCommandListPointDetailBuffer(i),
+                    drawData.getDrawListPointDetailBuffer(i),
                     GL_STREAM_DRAW);
 
             glDrawArrays(GL_TRIANGLES, 0, vertexCount);

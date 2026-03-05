@@ -53,22 +53,21 @@ class IkGuiDemo {
 
         if (ImGui.treeNode("DrawLists")) {
             DrawData drawData = IkGui.getCurrentContext().drawData;
-            int listCount = drawData.getCommandListsCount();
-            for (int commandListIndex = 0; commandListIndex < listCount; ++commandListIndex) {
+            int listCount = drawData.getDrawListCount();
+            for (int drawListIndex = 0; drawListIndex < listCount; ++drawListIndex) {
 
-                final int commandCount = drawData.getCommandListCommandCount(commandListIndex);
+                final int commandCount = drawData.getDrawListCommandCount(drawListIndex);
                 String name =
                         String.format(
                                 "DrawList: %s - %d vtx, %d commands, %d points, %d point details",
-                                "???",
-                                drawData.getCommandListVertexCount(commandListIndex),
+                                drawData.drawLists.get(drawListIndex).windowName,
+                                drawData.getDrawListVertexCount(drawListIndex),
                                 commandCount,
-                                drawData.getCommandListPointCount(commandListIndex),
-                                drawData.getCommandListPointDetailCount(commandListIndex));
+                                drawData.getDrawListPointCount(drawListIndex),
+                                drawData.getDrawListPointDetailCount(drawListIndex));
 
                 if (ImGui.treeNode(name)) {
-                    ByteBuffer commandBuffer =
-                            drawData.getCommandListCommandBuffer(commandListIndex);
+                    ByteBuffer commandBuffer = drawData.getDrawListCommandBuffer(drawListIndex);
 
                     for (int commandIndex = 0; commandIndex < commandCount; ++commandIndex) {
                         if (ImGui.treeNode(String.format("Command %d", commandIndex))) {
@@ -115,8 +114,7 @@ class IkGuiDemo {
                                     if (ImGui.treeNode(
                                             String.format("Point %d", debugPointIndex))) {
                                         ByteBuffer pointBuffer =
-                                                drawData.getCommandListPointBuffer(
-                                                        commandListIndex);
+                                                drawData.getDrawListPointBuffer(drawListIndex);
 
                                         int pointBufferIndex =
                                                 (pointIndex + debugPointIndex)
@@ -148,8 +146,8 @@ class IkGuiDemo {
                                             String.format(
                                                     "Point Detail %d", debugPointDetailIndex))) {
                                         ByteBuffer pointDetailBuffer =
-                                                drawData.getCommandListPointDetailBuffer(
-                                                        commandListIndex);
+                                                drawData.getDrawListPointDetailBuffer(
+                                                        drawListIndex);
                                         int pointDetailBufferIndex =
                                                 (detailIndex + debugPointDetailIndex)
                                                         * DrawData.SIZE_OF_POINT_DETAIL;
