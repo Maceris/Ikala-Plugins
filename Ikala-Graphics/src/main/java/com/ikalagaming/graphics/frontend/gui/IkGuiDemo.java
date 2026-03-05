@@ -112,7 +112,7 @@ class IkGuiDemo {
                                         drawData.getDrawListVertexBuffer(drawListIndex);
 
                                 for (int vertex = 0; vertex < vertexCount; ++vertex) {
-                                    int vertexIndex = vertex * 2 * Float.BYTES;
+                                    int vertexIndex = vertex * DrawData.SIZE_OF_VERTEX;
 
                                     float x = vertexBuffer.getFloat(vertexIndex);
                                     vertexIndex += Float.BYTES;
@@ -120,12 +120,12 @@ class IkGuiDemo {
 
                                     ImGui.text(
                                             String.format(
-                                                    "Vertex %d - (%f, %f) (0x%08x, 0x%08x)",
+                                                    "Vertex %d - (%f, %f) = (%f, %f)",
                                                     vertex,
                                                     x,
                                                     y,
-                                                    Float.floatToIntBits(x),
-                                                    Float.floatToIntBits(y)));
+                                                    x * (2 / ikIO.displaySize.x) - 1,
+                                                    y * (-2 / ikIO.displaySize.x) + 1));
                                 }
                                 ImGui.treePop();
                             }

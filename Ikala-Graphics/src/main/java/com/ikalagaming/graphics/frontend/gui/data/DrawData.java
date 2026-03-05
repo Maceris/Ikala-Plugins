@@ -9,13 +9,14 @@ import java.util.ArrayList;
 
 @Slf4j
 public class DrawData {
-    /** The number of bytes that it takes to store the vertices of one quad. */
-    static final int SIZE_OF_QUAD_VERTICES = 6 * 2 * Float.BYTES;
-
     public static final int SIZE_OF_POINT = 4 * Float.BYTES;
     public static final int SIZE_OF_POINT_DETAIL = Float.BYTES + 2 * Integer.BYTES;
     public static final int SIZE_OF_DRAW_COMMAND =
             2 * Integer.BYTES + 4 * Short.BYTES + Float.BYTES;
+    public static final int SIZE_OF_VERTEX = 2 * Float.BYTES;
+
+    /** The number of bytes that it takes to store the vertices of one quad. */
+    static final int SIZE_OF_QUAD_VERTICES = 6 * SIZE_OF_VERTEX;
 
     private static final int RESIZE_FACTOR = 5000;
 
@@ -79,7 +80,7 @@ public class DrawData {
         if (vertexBuffer == null) {
             return 0;
         }
-        return vertexBuffer.limit() / (2 * Float.BYTES);
+        return vertexBuffer.limit() / SIZE_OF_VERTEX;
     }
 
     public ByteBuffer getDrawListVertexBuffer(final int drawListIndex) {

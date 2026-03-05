@@ -79,18 +79,22 @@ public class GuiRender implements RenderStage {
 
         windowManager.drawGui(width, height);
 
-        renderImGui(width, height);
-        renderIkGui(width, height);
-    }
-
-    private void renderImGui(int width, int height) {
-        imGuiShader.bind();
-
         glEnable(GL_BLEND);
         glBlendEquation(GL_FUNC_ADD);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_CULL_FACE);
+
+        renderIkGui(width, height);
+        renderImGui(width, height);
+
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);
+        glDisable(GL_BLEND);
+    }
+
+    private void renderImGui(int width, int height) {
+        imGuiShader.bind();
 
         glBindVertexArray(imGuiMesh.vaoID());
 
@@ -140,20 +144,11 @@ public class GuiRender implements RenderStage {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
         glBindVertexArray(0);
 
-        glEnable(GL_DEPTH_TEST);
-        glEnable(GL_CULL_FACE);
-        glDisable(GL_BLEND);
         imGuiShader.unbind();
     }
 
     private void renderIkGui(int width, int height) {
         shader.bind();
-
-        glEnable(GL_BLEND);
-        glBlendEquation(GL_FUNC_ADD);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glDisable(GL_DEPTH_TEST);
-        glDisable(GL_CULL_FACE);
 
         glBindVertexArray(guiMesh.vaoID());
 
@@ -191,9 +186,6 @@ public class GuiRender implements RenderStage {
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindVertexArray(0);
 
-        glEnable(GL_DEPTH_TEST);
-        glEnable(GL_CULL_FACE);
-        glDisable(GL_BLEND);
         shader.unbind();
     }
 }

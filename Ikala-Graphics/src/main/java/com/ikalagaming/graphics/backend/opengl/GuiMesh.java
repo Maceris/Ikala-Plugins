@@ -33,7 +33,16 @@ public record GuiMesh(
      */
     public static GuiMesh create() {
         int vaoID = glGenVertexArrays();
+        glBindVertexArray(vaoID);
+
         int vertices = glGenBuffers();
+        glBindBuffer(GL_ARRAY_BUFFER, vertices);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, false, 0, 0);
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
+
         Buffer commands = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
         Buffer points = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
         Buffer pointDetails = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);

@@ -37,8 +37,6 @@ struct Command
     float stroke;
 };
 
-in vec2 fragTextCoords;
-in vec4 fragColor;
 flat in int quadID;
 
 uniform sampler2D txtSampler;
@@ -74,5 +72,4 @@ void main()
 {
     vec3 color = hashIntToColor(uint(quadID));
     outColor = vec4(color, 1.0);
-    // outColor = fragColor * texture(txtSampler, fragTextCoords);
 }
