@@ -5,7 +5,7 @@ import lombok.Getter;
 
 @Getter
 @AllArgsConstructor
-public enum StyleVar {
+public enum StyleVariable {
     ALPHA(1),
     BUTTON_TEXT_ALIGN(2),
     CELL_PADDING(2),

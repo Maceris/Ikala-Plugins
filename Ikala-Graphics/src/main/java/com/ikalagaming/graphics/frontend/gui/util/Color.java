@@ -58,7 +58,10 @@ public class Color {
     }
 
     private static int intToColor(int r, int g, int b, int a) {
-        return a << 24 | b << 16 | g << 8 | r;
+        return Math.clamp(r, 0, 255) << 24
+                | Math.clamp(g, 0, 255) << 16
+                | Math.clamp(b, 0, 255) << 8
+                | Math.clamp(a, 0, 255);
     }
 
     private static int floatToColor(float r, float g, float b, float a) {

@@ -64,11 +64,11 @@ float hash11(uint n) {
     return float(n & uvec3(0x7fffffffu)) / float(0x7fffffff);
 }
 
-vec3 hashIntToColor(uint id) {
+vec4 hashIntToColor(uint id) {
     float r = hash11(id);
     float g = hash11(id + 1u);
     float b = hash11(id + 2u);
-    return vec3(r, g, b);
+    return vec4(r, g, b, 0.3f);
 }
 
 vec4 intToColor(uint color) {
@@ -80,30 +80,31 @@ vec4 intToColor(uint color) {
     return vec4(r/255.0f, g/255.0f, b/255.0f, a/255.0f);
 }
 
+vec4 colorAndTint(int color, int tint) {
+    vec4 result = hashIntToColor(uint(color)) + intToColor(uint(tint));
+    return clamp(result, 0.0f, 1.0f);
+}
+
 void draw_circle(Command command, vec2 fragPos) {
     //TODO(Ches) complete this
-    vec3 color = hashIntToColor(uint(quadID));
     // blue
-    outColor = vec4(0, 0, 1, 1.0);
+    outColor = hashIntToColor(uint(quadID));
 }
 
 void draw_line_arc(Command command, vec2 fragPos) {
     //TODO(Ches) complete this
-    vec3 color = hashIntToColor(uint(quadID));
     // green
     outColor = vec4(0, 1, 0, 1.0);
 }
 
 void draw_line_bezier(Command command, vec2 fragPos) {
     //TODO(Ches) complete this
-    vec3 color = hashIntToColor(uint(quadID));
     // teal
     outColor = vec4(0, 1, 1, 1.0);
 }
 
 void draw_line_straight(Command command, vec2 fragPos) {
     //TODO(Ches) complete this
-    vec3 color = hashIntToColor(uint(quadID));
     // purple
     outColor = vec4(1, 0, 1, 1.0);
 }
@@ -113,11 +114,6 @@ void draw_rectangle(Command command, vec2 fragPos) {
     const bool onlyBorder = command.style == ELEMENT_STYLE_BORDER;
     const bool onlyFill = command.style == ELEMENT_STYLE_FILL;
 
-    if (textured) {
-        //TODO(ches) textures
-        return;
-    }
-    // We know there's one
     if (command.pointCount != 1 || command.detailCount != 4) {
         outColor = ERROR_COLOR;
         return;
@@ -144,10 +140,9 @@ void draw_rectangle(Command command, vec2 fragPos) {
     const vec2 d = abs(posRelative) - halfSize + relevantRadius;
     const float sdf = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - relevantRadius;
 
-    vec4 tint = intToColor(uint(detail0.tint));
     if (onlyBorder) {
         if (sdf >= -(borderStroke / 2) && sdf <= (borderStroke / 2)) {
-            outColor = intToColor(uint(detail0.colorOrTextureID)) + tint;
+            outColor = colorAndTint(detail0.colorOrTextureID, detail0.tint);
         }
         else {
             outColor = vec4(0, 0, 0, 0) ;
@@ -155,7 +150,7 @@ void draw_rectangle(Command command, vec2 fragPos) {
     }
     else if (onlyFill) {
         if (sdf < 0) {
-            outColor = intToColor(uint(detail0.colorOrTextureID)) + tint;
+            outColor = colorAndTint(detail0.colorOrTextureID, detail0.tint);
         }
         else {
             outColor = vec4(0, 0, 0, 0) ;
@@ -172,14 +167,12 @@ void draw_rectangle(Command command, vec2 fragPos) {
 
 void draw_polygon(Command command, vec2 fragPos) {
     //TODO(Ches) complete this
-    vec3 color = hashIntToColor(uint(quadID));
     // yellow
     outColor = vec4(1, 1, 0, 1.0);
 }
 
 void draw_text(Command command, vec2 fragPos) {
     //TODO(Ches) complete this
-    vec3 color = hashIntToColor(uint(quadID));
     // white
     outColor = vec4(1, 1, 1, 1.0);
 }

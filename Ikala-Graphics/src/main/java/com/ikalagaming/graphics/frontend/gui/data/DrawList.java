@@ -507,11 +507,11 @@ public class DrawList {
     }
 
     public void addRect(float minX, float minY, float maxX, float maxY, int color) {
-        addRect(minX, minY, maxX, maxY, color, 0.0f, DrawFlags.ROUND_CORNERS_ALL, 1.0f);
+        addRect(minX, minY, maxX, maxY, color, 0.0f, DrawFlags.ROUND_CORNERS_ALL, 1);
     }
 
     public void addRect(float minX, float minY, float maxX, float maxY, int color, float rounding) {
-        addRect(minX, minY, maxX, maxY, color, rounding, DrawFlags.ROUND_CORNERS_ALL, 1.0f);
+        addRect(minX, minY, maxX, maxY, color, rounding, DrawFlags.ROUND_CORNERS_ALL, 1);
     }
 
     public void addRect(
@@ -522,7 +522,7 @@ public class DrawList {
             int color,
             float rounding,
             int drawFlagsRoundingCorners) {
-        addRect(minX, minY, maxX, maxY, color, rounding, drawFlagsRoundingCorners, 1.0f);
+        addRect(minX, minY, maxX, maxY, color, rounding, drawFlagsRoundingCorners, 1);
     }
 
     /**
@@ -535,7 +535,7 @@ public class DrawList {
      * @param color Color of the line.
      * @param rounding Radius of the rounded corners, 0 indicates no rounding.
      * @param drawFlagsRoundingCorners Draw flags indicating which corner(s) to round.
-     * @param thickness The thickness of the lines.
+     * @param thickness The thickness of the lines, in pixels.
      * @see DrawFlags
      */
     public void addRect(
@@ -546,13 +546,14 @@ public class DrawList {
             int color,
             float rounding,
             int drawFlagsRoundingCorners,
-            float thickness) {
+            int thickness) {
 
         if (rounding < 0) {
             log.warn("Invalid rounding {} in addRect", rounding);
             return;
         }
-        if (!addScreenQuad(minX, minY, maxX, maxY)) {
+        if (!addScreenQuad(
+                minX - thickness, minY - thickness, maxX + thickness, maxY + thickness)) {
             return;
         }
 

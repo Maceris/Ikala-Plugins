@@ -23,7 +23,7 @@ public class Context {
     public boolean initialized;
     public IkIO io;
     public PlatformIO platformIO;
-    public Style style;
+    public final Style style;
 
     public DrawData drawData;
     public DrawList backgroundDrawList;
@@ -147,7 +147,7 @@ public class Context {
     public int navFocusScopeID;
     public int navActivateID;
     public int navActivateDownID;
-    public int navActrivatePressedID;
+    public int navActivatePressedID;
 
     /**
      * @see com.ikalagaming.graphics.frontend.gui.flags.ActivateFlags
@@ -484,7 +484,7 @@ public class Context {
         navFocusScopeID = 0;
         navActivateID = 0;
         navActivateDownID = 0;
-        navActrivatePressedID = 0;
+        navActivatePressedID = 0;
         navActivateFlags = 0;
         navFocusRoute = new ArrayList<>();
         navHighlightActivatedID = 0;

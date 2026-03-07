@@ -1,9 +1,9 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
-import com.ikalagaming.graphics.frontend.gui.enums.StyleVar;
+import com.ikalagaming.graphics.frontend.gui.enums.StyleVariable;
 
 public class StyleMod {
-    private StyleVar type;
+    private StyleVariable type;
     private float[] backupFloats;
     private int[] backupInts;
 }

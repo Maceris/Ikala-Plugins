@@ -68,6 +68,28 @@ class IkGuiDemo {
                                 drawData.getDrawListPointDetailCount(drawListIndex));
 
                 if (ImGui.treeNode(name)) {
+                    if (ImGui.treeNode("Vertices")) {
+                        ByteBuffer vertexBuffer = drawData.getDrawListVertexBuffer(drawListIndex);
+
+                        for (int vertex = 0; vertex < vertexCount; ++vertex) {
+                            int vertexIndex = vertex * DrawData.SIZE_OF_VERTEX;
+
+                            float x = vertexBuffer.getFloat(vertexIndex);
+                            vertexIndex += Float.BYTES;
+                            float y = vertexBuffer.getFloat(vertexIndex);
+
+                            ImGui.text(
+                                    String.format(
+                                            "Vertex %d - (%f, %f) = (%f, %f)",
+                                            vertex,
+                                            x,
+                                            y,
+                                            x * (2 / ikIO.displaySize.x) - 1,
+                                            y * (-2 / ikIO.displaySize.x) + 1));
+                        }
+                        ImGui.treePop();
+                    }
+
                     ByteBuffer commandBuffer = drawData.getDrawListCommandBuffer(drawListIndex);
 
                     for (int commandIndex = 0; commandIndex < commandCount; ++commandIndex) {
@@ -107,29 +129,6 @@ class IkGuiDemo {
                             }
                             ImGui.text(String.format("Stroke: %f", stroke));
 
-                            if (ImGui.treeNode("Vertices")) {
-                                ByteBuffer vertexBuffer =
-                                        drawData.getDrawListVertexBuffer(drawListIndex);
-
-                                for (int vertex = 0; vertex < vertexCount; ++vertex) {
-                                    int vertexIndex = vertex * DrawData.SIZE_OF_VERTEX;
-
-                                    float x = vertexBuffer.getFloat(vertexIndex);
-                                    vertexIndex += Float.BYTES;
-                                    float y = vertexBuffer.getFloat(vertexIndex);
-
-                                    ImGui.text(
-                                            String.format(
-                                                    "Vertex %d - (%f, %f) = (%f, %f)",
-                                                    vertex,
-                                                    x,
-                                                    y,
-                                                    x * (2 / ikIO.displaySize.x) - 1,
-                                                    y * (-2 / ikIO.displaySize.x) + 1));
-                                }
-                                ImGui.treePop();
-                            }
-
                             if (ImGui.treeNode("Points")) {
                                 for (int debugPointIndex = 0;
                                         debugPointIndex < pointCount;
@@ -141,8 +140,8 @@ class IkGuiDemo {
                                                 drawData.getDrawListPointBuffer(drawListIndex);
 
                                         int pointBufferIndex =
-                                                (pointIndex + debugPointIndex)
-                                                        * DrawData.SIZE_OF_POINT;
+                                                pointIndex
+                                                        + debugPointIndex * DrawData.SIZE_OF_POINT;
 
                                         float x = pointBuffer.getFloat(pointBufferIndex);
                                         pointBufferIndex += Float.BYTES;
@@ -190,8 +189,9 @@ class IkGuiDemo {
                                                 drawData.getDrawListPointDetailBuffer(
                                                         drawListIndex);
                                         int pointDetailBufferIndex =
-                                                (detailIndex + debugPointDetailIndex)
-                                                        * DrawData.SIZE_OF_POINT_DETAIL;
+                                                detailIndex
+                                                        + debugPointDetailIndex
+                                                                * DrawData.SIZE_OF_POINT_DETAIL;
 
                                         float radius =
                                                 pointDetailBuffer.getFloat(pointDetailBufferIndex);
@@ -204,7 +204,7 @@ class IkGuiDemo {
                                         ImGui.text(String.format("Radius: %f", radius));
                                         ImGui.text(
                                                 String.format(
-                                                        "Color or texture ID: %d",
+                                                        "Color or texture ID: %#08X",
                                                         colorOrTextureID));
                                         ImGui.text(String.format("Tint: %d", tint));
 

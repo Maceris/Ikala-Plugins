@@ -3,6 +3,8 @@ package com.ikalagaming.graphics.frontend.gui;
 import com.ikalagaming.graphics.frontend.gui.callback.GuiInputTextCallback;
 import com.ikalagaming.graphics.frontend.gui.data.*;
 import com.ikalagaming.graphics.frontend.gui.enums.*;
+import com.ikalagaming.graphics.frontend.gui.enums.StyleVariable;
+import com.ikalagaming.graphics.frontend.gui.flags.DrawFlags;
 import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
 import com.ikalagaming.graphics.frontend.gui.util.Hash;
@@ -119,14 +121,32 @@ public class IkGui {
         context.windowCurrent = window;
 
         context.drawData.drawLists.add(window.drawList);
-        // TODO(ches) window color
+        // TODO(ches) color overrides
         window.drawList.addRectFilled(
                 window.position.x,
                 window.position.y,
                 window.position.x + window.sizeCurrent.x,
                 window.position.y + window.sizeCurrent.y,
-                Color.WHITE,
+                context.style.color.windowBackground,
                 window.rounding);
+        // TODO(ches) calculate header height using padding, font
+        window.drawList.addRectFilled(
+                window.position.x,
+                window.position.y,
+                window.position.x + window.sizeCurrent.x,
+                window.position.y + 30,
+                context.style.color.titleBackgroundActive,
+                window.rounding);
+        window.drawList.addRect(
+                window.position.x,
+                window.position.y,
+                window.position.x + window.sizeCurrent.x,
+                window.position.y + window.sizeCurrent.y,
+                context.style.color.border,
+                window.rounding,
+                DrawFlags.ROUND_CORNERS_ALL,
+                context.style.variable.windowBorderSize);
+
         return true;
     }
 
@@ -554,14 +574,14 @@ public class IkGui {
         // TODO(ches) complete this
     }
 
-    public static void pushStyleVar(@NonNull StyleVar var, float value) {
+    public static void pushStyleVar(@NonNull StyleVariable var, float value) {
         if (var.getDimensions() != 1) {
             // TODO(ches) error
         }
         // TODO(ches) complete this
     }
 
-    public static void pushStyleVar(@NonNull StyleVar var, float x, float y) {
+    public static void pushStyleVar(@NonNull StyleVariable var, float x, float y) {
         if (var.getDimensions() != 2) {
             // TODO(ches) error
         }
@@ -652,13 +672,14 @@ public class IkGui {
         return 0;
     }
 
-    public static Vector4f getStyleColor(@NonNull StyleVar styleVar) {
+    public static Vector4f getStyleColor(@NonNull StyleVariable styleVariable) {
         Vector4f value = new Vector4f();
-        getStyleColor(styleVar, value);
+        getStyleColor(styleVariable, value);
         return value;
     }
 
-    public static void getStyleColor(@NonNull StyleVar styleVar, @NonNull Vector4f value) {
+    public static void getStyleColor(
+            @NonNull StyleVariable styleVariable, @NonNull Vector4f value) {
         // TODO(ches) complete this
     }
 
