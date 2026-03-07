@@ -19,8 +19,8 @@ class IkGuiDemo {
     static void showDemoWindow(final IkBoolean open) {
         int windowFlags = WindowFlags.NONE;
 
-        IkGui.setNextWindowSize(520, 600, Condition.ONCE);
-        IkGui.setNextWindowPos(20, 20, Condition.ONCE);
+        IkGui.setNextWindowSize(520, 700, Condition.ONCE);
+        IkGui.setNextWindowPos(30, 30, Condition.ONCE);
         if (!IkGui.begin("IkGui Demo Window", open, windowFlags)) {
             IkGui.end();
             return;
@@ -152,10 +152,27 @@ class IkGuiDemo {
                                         pointBufferIndex += Float.BYTES;
                                         float b = pointBuffer.getFloat(pointBufferIndex);
 
-                                        ImGui.text(String.format("x: %f", x));
-                                        ImGui.text(String.format("y: %f", y));
-                                        ImGui.text(String.format("a: %f", a));
-                                        ImGui.text(String.format("b: %f", b));
+                                        if (type == DrawList.ElementType.RECTANGLE.getTypeID()) {
+                                            float xScaled = (2 / ikIO.displaySize.x) * x - 1;
+                                            float yScaled = (-2 / ikIO.displaySize.y) * x + 1;
+                                            float width = (1 / ikIO.displaySize.x) * a;
+                                            float height = (1 / ikIO.displaySize.y) * b;
+
+                                            ImGui.text(String.format("x: %f (%f)", x, xScaled));
+                                            ImGui.text(String.format("y: %f (%f)", y, yScaled));
+                                            ImGui.text(String.format("width: %f (%f)", a, width));
+                                            ImGui.text(String.format("height: %f (%f)", b, height));
+                                        } else {
+                                            float xScaled = (2 / ikIO.displaySize.x) * x - 1;
+                                            float yScaled = (-2 / ikIO.displaySize.y) * x + 1;
+                                            float aScaled = (2 / ikIO.displaySize.x) * a - 1;
+                                            float bScaled = (-2 / ikIO.displaySize.y) * b + 1;
+
+                                            ImGui.text(String.format("x: %f (%f)", x, xScaled));
+                                            ImGui.text(String.format("y: %f (%f)", y, yScaled));
+                                            ImGui.text(String.format("a: %f (%f)", a, aScaled));
+                                            ImGui.text(String.format("b: %f (%f)", b, bScaled));
+                                        }
 
                                         ImGui.treePop();
                                     }

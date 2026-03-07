@@ -28,7 +28,7 @@ public class Context {
     public DrawData drawData;
     public DrawList backgroundDrawList;
     public DrawList foregroundDrawList;
-    public List<FontAtlas> fontAtlases;
+    public final List<FontAtlas> fontAtlases;
     public Font font;
     public FontBaked fontBaked;
     public float fontSize;
@@ -62,30 +62,30 @@ public class Context {
     public int frameCountRendered;
 
     public boolean insideFrame;
-    public List<GuiInputEvent> inputEventQueue;
+    public final List<GuiInputEvent> inputEventQueue;
 
     /**
      * Past input events that get processed when we start a new frame, mostly for mouse/pen trails.
      */
-    public List<GuiInputEvent> inputEventTrail;
+    public final List<GuiInputEvent> inputEventTrail;
 
     /** Windows, sorted in display order, back to front. */
-    public List<Window> windowsDisplayOrder;
+    public final List<Window> windowsDisplayOrder;
 
-    public List<Window> windowFocusOrder;
-    public Map<Integer, Window> windowByID;
+    public final List<Window> windowFocusOrder;
+    public final Map<Integer, Window> windowByID;
     public int windowActiveCount;
     public Window windowCurrent;
     public Window windowHovered;
     public Window windowHoveredUnderMovingWindow;
     public Window windowMoving;
     public Window windowWheeling;
-    public Vector2f windowWheelingRefMousePosition;
+    public final Vector2f windowWheelingRefMousePosition;
     public int windowWheelingStartFrame;
     public int windowWheelingScrolledFrame;
     public float windowWheelingReleaseTimer;
-    public Vector2f windowWheelingWheelRemainder;
-    public Vector2f windowWheelingAxisAverage;
+    public final Vector2f windowWheelingWheelRemainder;
+    public final Vector2f windowWheelingAxisAverage;
 
     public int hoveredID;
     public int hoveredIDPreviousFrame;
@@ -105,14 +105,14 @@ public class Context {
     public boolean activeIDHasBeenEditedThisFrame;
     public boolean activeIDFromShortcut;
     public MouseButton activeIDMouseButton;
-    public Vector2f activeIDClickOffset;
+    public final Vector2f activeIDClickOffset;
     public Window activeIDWindow;
     public GuiInputSource activeIDSource;
     public int activeIDPreviousFrame;
     public DeactivatedItemData deactivatedItemData;
     public int lastActiveID;
     public float lastActiveIDTimer;
-    public IntArrayList activeIDStack;
+    public final IntArrayList activeIDStack;
 
     public double lastKeyModsChangeTime;
     public double lastKeyModsChangeFromNoneTime;
@@ -125,17 +125,17 @@ public class Context {
     public NextWindowData nextWindowData;
 
     public boolean debugShowGroupRects;
-    public List<ColorMod> colorStack;
-    public List<StyleMod> styleVariableStack;
-    public List<FontStackInfo> fontStack;
-    public List<FocusScopeData> focusScopeStack;
-    public IntArrayList itemFlagsStack;
-    public List<GroupData> groupStack;
-    public List<PopupData> openPopupStack;
-    public List<PopupData> beginPopupStack;
-    public List<TreeNodeStackData> treeNodeStack;
+    public final List<ColorMod> colorStack;
+    public final List<StyleMod> styleVariableStack;
+    public final List<FontStackInfo> fontStack;
+    public final List<FocusScopeData> focusScopeStack;
+    public final IntArrayList itemFlagsStack;
+    public final List<GroupData> groupStack;
+    public final List<PopupData> openPopupStack;
+    public final List<PopupData> beginPopupStack;
+    public final List<TreeNodeStackData> treeNodeStack;
 
-    public List<Viewport> viewports;
+    public final List<Viewport> viewports;
     public Viewport mainViewport;
 
     public boolean navCursorVisible;
@@ -154,7 +154,7 @@ public class Context {
      */
     public int navActivateFlags;
 
-    public ArrayList<FocusScopeData> navFocusRoute;
+    public final List<FocusScopeData> navFocusRoute;
     public int navHighlightActivatedID;
     public float navHighlightActivatedTimer;
     public int navNextActivateID;
@@ -193,8 +193,8 @@ public class Context {
 
     public Direction navMoveDirection;
     public Direction navMoveDirectionForDebug;
-    public Rect navScoringRect;
-    public Rect navScoringNoClipRect;
+    public final Rect navScoringRect;
+    public final Rect navScoringNoClipRect;
     public int navScoringDebugCount;
     public int navTabbingDirection;
     public int navTabbingCounter;
@@ -235,8 +235,8 @@ public class Context {
     public float navWindowingHighlightAlpha;
     public GuiInputSource navWindowingInputSource;
     public boolean navWindowingToggleLayer;
-    public Vector2f navWindowingAccumulatedDeltaPosition;
-    public Vector2f navWindowingAccumulatedDeltaSize;
+    public final Vector2f navWindowingAccumulatedDeltaPosition;
+    public final Vector2f navWindowingAccumulatedDeltaSize;
 
     public float dimBackgroundRatio;
 
@@ -252,8 +252,8 @@ public class Context {
     public int dragDropSourceFrameCount;
     public MouseButton dragDropMouseButton;
     public Object dragDropPayload;
-    public Rect dragDropTargetRect;
-    public Rect dragDropTargetClipRect;
+    public final Rect dragDropTargetRect;
+    public final Rect dragDropTargetClipRect;
     public int dragDropTargetID;
 
     /**
@@ -268,23 +268,23 @@ public class Context {
     public int dragDropHoldJustPressedID;
     public ByteBuffer dragDropPayloadBufferLocal;
 
-    public ArrayList<ListClipperData> clipperTempData;
+    public final List<ListClipperData> clipperTempData;
 
     public Table currentTable;
-    public ArrayList<TableTempData> tablesTempData;
-    public ArrayList<Table> tables;
+    public final List<TableTempData> tablesTempData;
+    public final List<Table> tables;
     public FloatArrayList tablesLastTimeActive;
 
     public TabBar currentTabBar;
-    public ArrayList<TabBar> tabBars;
-    public IntArrayList currentTabBarStack;
-    public ArrayList<ShrinkWidthItem> shrinkWidthBuffer;
+    public final List<TabBar> tabBars;
+    public final IntArrayList currentTabBarStack;
+    public final List<ShrinkWidthItem> shrinkWidthBuffer;
 
     public BoxSelectState boxSelectState;
     public MultiSelectTempData currentMultiSelect;
     public int multiSelectTempDataStackSize;
-    public ArrayList<MultiSelectTempData> multiSelectTempData;
-    public ArrayList<MultiSelectTempData> multiSelectStorage;
+    public final List<MultiSelectTempData> multiSelectTempData;
+    public final List<MultiSelectTempData> multiSelectStorage;
 
     public int hoverItemDelayID;
     public int hoverItemDelayIDPreviousFrame;
@@ -303,7 +303,7 @@ public class Context {
 
     public MouseCursor mouseCursor;
     public float mouseStationaryTimer;
-    public Vector2f mouseLastValidPosition;
+    public final Vector2f mouseLastValidPosition;
 
     public InputTextState inputTextState;
     public InputTextDeactivatedState inputTextDeactivatedState;
@@ -320,11 +320,11 @@ public class Context {
     public int colorEditSavedHue;
     public int colorEditSavedSaturation;
     public int colorEditSavedColor;
-    public Vector4f colorPickerReference;
+    public final Vector4f colorPickerReference;
 
     public ComboPreviewData comboPreviewData;
 
-    public Rect windowResizeBorderExpectedRect;
+    public final Rect windowResizeBorderExpectedRect;
     public boolean windowResizeRelativeMode;
 
     /** 0 is scrolling to clicked location, +/- 1 is next/previous page. */
@@ -345,7 +345,7 @@ public class Context {
     public short tooltipOverrideCount;
     public Window tooltipPreviousWindow;
     public StringBuilder clipboardHandlerData;
-    public IntArrayList menuIDsSubmittedThisFrame;
+    public final IntArrayList menuIDsSubmittedThisFrame;
 
     public boolean settingsLoaded;
     public float settingsDirtyTimer;
@@ -362,7 +362,7 @@ public class Context {
     public int logDepthToExpandDefault;
 
     public Object errorCallbackUserData;
-    public Vector2f errorTooltipLockedPosition;
+    public final Vector2f errorTooltipLockedPosition;
     public boolean errorFirst;
     public int errorCountCurrentFrame;
 

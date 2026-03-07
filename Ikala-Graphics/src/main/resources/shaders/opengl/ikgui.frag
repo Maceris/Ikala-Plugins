@@ -8,10 +8,9 @@ const int ELEMENT_TYPE_RECTANGLE = 4;
 const int ELEMENT_TYPE_POLYGON = 5;
 const int ELEMENT_TYPE_TEXT = 6;
 
-const int ELEMENT_STYLE_ONLY_FILL = 0;
-const int ELEMENT_STYLE_ONLY_BORDER = 1;
-const int ELEMENT_STYLE_FILL_AND_BORDER = 2;
-const int ELEMENT_STYLE_TEXTURE = 3;
+const int ELEMENT_STYLE_FILL = 0;
+const int ELEMENT_STYLE_BORDER = 1;
+const int ELEMENT_STYLE_TEXTURE = 2;
 
 const vec4 ERROR_COLOR =  vec4(1, 0, 0, 1);
 
@@ -81,10 +80,6 @@ vec4 intToColor(uint color) {
     return vec4(r/255.0f, g/255.0f, b/255.0f, a/255.0f);
 }
 
-vec2 normalizePoint(vec2 pos) {
-    return pos * scale + vec2(-1.0, 1.0);
-}
-
 void draw_circle(Command command, vec2 fragPos) {
     //TODO(Ches) complete this
     vec3 color = hashIntToColor(uint(quadID));
@@ -114,27 +109,65 @@ void draw_line_straight(Command command, vec2 fragPos) {
 }
 
 void draw_rectangle(Command command, vec2 fragPos) {
-    bool textured = command.style == ELEMENT_STYLE_TEXTURE;
-    bool has_border = command.style == ELEMENT_STYLE_ONLY_BORDER || command.style == ELEMENT_STYLE_FILL_AND_BORDER;
-    bool has_fill = command.style == ELEMENT_STYLE_ONLY_FILL || command.style == ELEMENT_STYLE_FILL_AND_BORDER;
+    const bool textured = command.style == ELEMENT_STYLE_TEXTURE;
+    const bool onlyBorder = command.style == ELEMENT_STYLE_BORDER;
+    const bool onlyFill = command.style == ELEMENT_STYLE_FILL;
 
     if (textured) {
         //TODO(ches) textures
         return;
     }
     // We know there's one
-    if (command.pointCount != 1) {
+    if (command.pointCount != 1 || command.detailCount != 4) {
         outColor = ERROR_COLOR;
         return;
     }
     Point point = points[command.pointIndex];
-    vec2 pos = normalizePoint(point.pos);
-    vec2 size = normalizePoint(point.misc);
+    const vec2 pos = point.pos;
+    const vec2 size = point.misc;
+    const float borderStroke = command.stroke;
 
-    float dist = distance(pos, fragPos);
+    // Fragment position relative to the sdf (center) point.
+    const vec2 posRelative = fragPos - pos;
+    const vec2 halfSize = vec2(size.x / 2, size.y / 2);
+    PointDetail detail0 = pointDetails[command.detailIndex];    //top left
+    PointDetail detail1 = pointDetails[command.detailIndex + 1];//top right
+    PointDetail detail2 = pointDetails[command.detailIndex + 2];//bottom right
+    PointDetail detail3 = pointDetails[command.detailIndex + 3];//bottom left
 
-    float clamped = clamp(dist, 0, 1);
-    outColor = vec4(1 - clamped, 1 - clamped, 1 - clamped, 1) ;
+    detail0 = posRelative.y < 0 ? detail0 : detail3;
+    detail1 = posRelative.y < 0 ? detail1 : detail2;
+    detail0 = posRelative.x > 0 ? detail1 : detail0;
+
+    const float relevantRadius = detail0.radius;
+
+    const vec2 d = abs(posRelative) - halfSize + relevantRadius;
+    const float sdf = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - relevantRadius;
+
+    vec4 tint = intToColor(uint(detail0.tint));
+    if (onlyBorder) {
+        if (sdf >= -(borderStroke / 2) && sdf <= (borderStroke / 2)) {
+            outColor = intToColor(uint(detail0.colorOrTextureID)) + tint;
+        }
+        else {
+            outColor = vec4(0, 0, 0, 0) ;
+        }
+    }
+    else if (onlyFill) {
+        if (sdf < 0) {
+            outColor = intToColor(uint(detail0.colorOrTextureID)) + tint;
+        }
+        else {
+            outColor = vec4(0, 0, 0, 0) ;
+        }
+    }
+    else if (textured) {
+        //TODO(ches) textures
+    }
+    else {
+        outColor = ERROR_COLOR;
+    }
+
 }
 
 void draw_polygon(Command command, vec2 fragPos) {
@@ -154,7 +187,9 @@ void draw_text(Command command, vec2 fragPos) {
 void main() {
     Command command = commands[quadID];
 
-    vec2 fragPos = normalizePoint(gl_FragCoord.xy);
+    // Fragment position in pixels but...
+    // with y flipped to be 0 at the top left like our points expect
+    vec2 fragPos = vec2(gl_FragCoord.x, (-2 / scale.y) - gl_FragCoord.y);
 
     switch (command.type) {
         case ELEMENT_TYPE_CIRCLE:

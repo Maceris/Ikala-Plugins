@@ -104,7 +104,7 @@ public class IkGui {
             window.viewport = context.mainViewport;
         }
         // TODO(ches) position condition
-        window.position = context.nextWindowData.positionValue;
+        window.position.set(context.nextWindowData.positionValue);
         // TODO(ches) size condition
         window.sizeRequested.set(context.nextWindowData.sizeValue);
         // TODO(ches) collapsed condition

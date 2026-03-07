@@ -18,9 +18,9 @@ public class Window {
     public int id;
     public int flags;
     public int flagsAsChildWindow;
-    public List<Window> childWindows;
+    public final List<Window> childWindows;
     public Viewport viewport;
-    public Vector2f position;
+    public final Vector2f position;
 
     /**
      * Only non-null if this window has a close button, used to communicate elsewhere that we closed
@@ -29,18 +29,18 @@ public class Window {
     public IkBoolean open;
 
     /** Size, which might be smaller than the full size if minimized. */
-    public Vector2f sizeCurrent;
+    public final Vector2f sizeCurrent;
 
     /** The full size of the window when not collapsed. */
-    public Vector2f sizeFull;
+    public final Vector2f sizeFull;
 
     /** Size the window would like to be, given its contents. */
-    public Vector2f sizeDesired;
+    public final Vector2f sizeDesired;
 
     /** Size that was requested for the window before it was drawn. */
-    public Vector2f sizeRequested;
+    public final Vector2f sizeRequested;
 
-    public Vector2f padding;
+    public final Vector2f padding;
     public float rounding;
     public float borderSize;
     public float titleBarHeight;
@@ -48,12 +48,12 @@ public class Window {
 
     public int idWithinParent;
     public int idAsPopupWindow;
-    public Vector2f scrollPosition;
-    public Vector2f scrollExtent;
-    public Vector2f scrollTarget;
+    public final Vector2f scrollPosition;
+    public final Vector2f scrollExtent;
+    public final Vector2f scrollTarget;
 
     /** X is the width of the vertical scrollbar, y is the height of the horizontal scrollbar. */
-    public Vector2f scrollbarSizes;
+    public final Vector2f scrollbarSizes;
 
     public boolean showScrollbarX;
     public boolean showScrollbarY;
@@ -71,19 +71,19 @@ public class Window {
     public IntArrayList idStack;
 
     /** The outer region of the window. */
-    public Rect rectFull;
+    public final Rect rectFull;
 
     /** The inner part of the window, excluding the title bar, menu, scroll bars. */
-    public Rect rectInner;
+    public final Rect rectInner;
 
     /** Inner rect, but shrunk by 0.5 * padding, and clipped by the viewport or parent clip rect. */
-    public Rect rectInnerClip;
+    public final Rect rectInnerClip;
 
     /** The region that contains the contents, including parts scrolled out of view. */
-    public Rect rectContent;
+    public final Rect rectContent;
 
     /** Current clipping rect, since we can push and pop clip rects. */
-    public Rect rectCurrentClip;
+    public final Rect rectCurrentClip;
 
     public DrawList drawList;
     public Window parentWindow;
@@ -92,24 +92,24 @@ public class Window {
     public Window rootWindowForTitleBarHighlight;
     public Window rootWindowForNavigation;
 
-    public Vector2f cursorPosition;
-    public Vector2f cursorStartPosition;
-    public Vector2f cursorPreviousLinePosition;
+    public final Vector2f cursorPosition;
+    public final Vector2f cursorStartPosition;
+    public final Vector2f cursorPreviousLinePosition;
 
     /**
      * Grows as content is added, and used to determine the content region next frame, for scrolling
      * and auto-resize.
      */
-    public Vector2f cursorMaxPosition;
+    public final Vector2f cursorMaxPosition;
 
     /**
      * Grows as content is added, and used to determine the content region next frame, for
      * auto-resize.
      */
-    public Vector2f cursorIdealMaxPosition;
+    public final Vector2f cursorIdealMaxPosition;
 
-    public Vector2f lineSizePrevious;
-    public Vector2f lineSizeCurrent;
+    public final Vector2f lineSizePrevious;
+    public final Vector2f lineSizeCurrent;
     public float baseOffsetCurrentLine;
     public float baseOffsetPreviousLine;
     public boolean sameLine;
@@ -120,8 +120,8 @@ public class Window {
     public int currentTableIndex;
     public float currentItemWidth;
     public float currentTextWrapPosition;
-    public FloatArrayList itemWidthStack;
-    public FloatArrayList textWrapPositionStack;
+    public final FloatArrayList itemWidthStack;
+    public final FloatArrayList textWrapPositionStack;
 
     public Window(@NonNull Context context, @NonNull String name) {
         this.context = context;

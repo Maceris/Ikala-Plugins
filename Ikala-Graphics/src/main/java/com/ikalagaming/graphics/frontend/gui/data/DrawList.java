@@ -20,6 +20,7 @@ import java.util.Deque;
 @Slf4j
 public class DrawList {
 
+    @Getter
     @AllArgsConstructor
     public enum ElementType {
         CIRCLE(0),
@@ -43,12 +44,12 @@ public class DrawList {
         }
     }
 
+    @Getter
     @AllArgsConstructor
     public enum ElementStyle {
-        ONLY_FILL(0),
-        ONLY_BORDER(1),
-        FILL_AND_BORDER(2),
-        TEXTURE(3);
+        FILL(0),
+        BORDER(1),
+        TEXTURE(2);
 
         /** Unique ID used in the command buffer. Must line up with the shader. */
         final int styleID;
@@ -501,7 +502,7 @@ public class DrawList {
                 pointCount,
                 detailCount,
                 ElementType.LINE_STRAIGHT,
-                ElementStyle.ONLY_FILL,
+                ElementStyle.FILL,
                 thickness);
     }
 
@@ -574,7 +575,7 @@ public class DrawList {
                 pointCount,
                 detailCount,
                 ElementType.RECTANGLE,
-                ElementStyle.ONLY_BORDER,
+                ElementStyle.BORDER,
                 thickness);
     }
 
@@ -625,7 +626,7 @@ public class DrawList {
                 pointCount,
                 detailCount,
                 ElementType.RECTANGLE,
-                ElementStyle.ONLY_FILL,
+                ElementStyle.FILL,
                 borderStroke);
     }
 
@@ -725,7 +726,7 @@ public class DrawList {
                 pointCount,
                 detailCount,
                 ElementType.RECTANGLE,
-                ElementStyle.ONLY_FILL,
+                ElementStyle.FILL,
                 borderStroke);
     }
 
@@ -780,7 +781,7 @@ public class DrawList {
                 pointCount,
                 detailCount,
                 ElementType.POLYGON,
-                ElementStyle.ONLY_BORDER,
+                ElementStyle.BORDER,
                 thickness);
     }
 
@@ -821,7 +822,7 @@ public class DrawList {
                 pointCount,
                 detailCount,
                 ElementType.POLYGON,
-                ElementStyle.ONLY_FILL,
+                ElementStyle.FILL,
                 borderStroke);
     }
 
@@ -861,7 +862,7 @@ public class DrawList {
                 pointCount,
                 detailCount,
                 ElementType.POLYGON,
-                ElementStyle.FILL_AND_BORDER,
+                ElementStyle.FILL,
                 thickness);
     }
 
@@ -890,7 +891,7 @@ public class DrawList {
                 pointCount,
                 detailCount,
                 ElementType.POLYGON,
-                ElementStyle.ONLY_FILL,
+                ElementStyle.FILL,
                 borderStroke);
     }
 
@@ -918,7 +919,7 @@ public class DrawList {
                 pointCount,
                 detailCount,
                 ElementType.CIRCLE,
-                ElementStyle.ONLY_BORDER,
+                ElementStyle.BORDER,
                 thickness);
     }
 
@@ -943,7 +944,7 @@ public class DrawList {
                 pointCount,
                 detailCount,
                 ElementType.CIRCLE,
-                ElementStyle.ONLY_FILL,
+                ElementStyle.FILL,
                 borderStroke);
     }
 
