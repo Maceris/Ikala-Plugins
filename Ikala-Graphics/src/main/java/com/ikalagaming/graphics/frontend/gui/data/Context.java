@@ -14,10 +14,7 @@ import org.joml.Vector2f;
 import org.joml.Vector4f;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class Context {
     public boolean initialized;
@@ -125,15 +122,15 @@ public class Context {
     public NextWindowData nextWindowData;
 
     public boolean debugShowGroupRects;
-    public final List<ColorMod> colorStack;
-    public final List<StyleMod> styleVariableStack;
-    public final List<FontStackInfo> fontStack;
-    public final List<FocusScopeData> focusScopeStack;
+    public final Deque<ColorMod> colorStack;
+    public final Deque<StyleMod> styleVariableStack;
+    public final Deque<FontStackInfo> fontStack;
+    public final Deque<FocusScopeData> focusScopeStack;
     public final IntArrayList itemFlagsStack;
-    public final List<GroupData> groupStack;
-    public final List<PopupData> openPopupStack;
-    public final List<PopupData> beginPopupStack;
-    public final List<TreeNodeStackData> treeNodeStack;
+    public final Deque<GroupData> groupStack;
+    public final Deque<PopupData> openPopupStack;
+    public final Deque<PopupData> beginPopupStack;
+    public final Deque<TreeNodeStackData> treeNodeStack;
 
     public final List<Viewport> viewports;
     public Viewport mainViewport;
@@ -464,15 +461,15 @@ public class Context {
         lastItemData = new LastItemData();
         nextWindowData = new NextWindowData();
         debugShowGroupRects = false;
-        colorStack = new ArrayList<>();
-        styleVariableStack = new ArrayList<>();
-        fontStack = new ArrayList<>();
-        focusScopeStack = new ArrayList<>();
+        colorStack = new ArrayDeque<>();
+        styleVariableStack = new ArrayDeque<>();
+        fontStack = new ArrayDeque<>();
+        focusScopeStack = new ArrayDeque<>();
         itemFlagsStack = new IntArrayList();
-        groupStack = new ArrayList<>();
-        openPopupStack = new ArrayList<>();
-        beginPopupStack = new ArrayList<>();
-        treeNodeStack = new ArrayList<>();
+        groupStack = new ArrayDeque<>();
+        openPopupStack = new ArrayDeque<>();
+        beginPopupStack = new ArrayDeque<>();
+        treeNodeStack = new ArrayDeque<>();
         viewports = new ArrayList<>();
         mainViewport = null;
         navCursorVisible = false;
