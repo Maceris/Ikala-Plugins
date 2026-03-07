@@ -164,10 +164,9 @@ public class GuiRender implements RenderStage {
         var uniformsMap = shader.getUniformMap();
         uniformsMap.setUniform(ShaderUniforms.GUI.SCALE, scale);
 
-        DrawData drawData = IkGui.getContext().drawData;
-
         // TODO(ches) bind font texture
 
+        DrawData drawData = IkGui.getContext().drawData;
         int drawListCount = drawData.getDrawListCount();
         for (int i = 0; i < drawListCount; ++i) {
             int vertexCount = drawData.getDrawListVertexCount(i);
@@ -185,10 +184,10 @@ public class GuiRender implements RenderStage {
                     GL_SHADER_STORAGE_BUFFER,
                     drawData.getDrawListPointDetailBuffer(i),
                     GL_STREAM_DRAW);
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
             glDrawArrays(GL_TRIANGLES, 0, vertexCount);
         }
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindVertexArray(0);
 

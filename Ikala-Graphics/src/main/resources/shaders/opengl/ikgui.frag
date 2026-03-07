@@ -12,7 +12,7 @@ const int ELEMENT_STYLE_FILL = 0;
 const int ELEMENT_STYLE_BORDER = 1;
 const int ELEMENT_STYLE_TEXTURE = 2;
 
-const vec4 ERROR_COLOR =  vec4(1, 0, 0, 1);
+const vec4 ERROR_COLOR =  vec4(1.0f, 0.0f, 0.0f, 1.0f);
 
 struct Point
 {
@@ -81,7 +81,7 @@ vec4 intToColor(uint color) {
 }
 
 vec4 colorAndTint(int color, int tint) {
-    vec4 result = hashIntToColor(uint(color)) + intToColor(uint(tint));
+    vec4 result = intToColor(uint(color)) + intToColor(uint(tint));
     return clamp(result, 0.0f, 1.0f);
 }
 
@@ -110,10 +110,6 @@ void draw_line_straight(Command command, vec2 fragPos) {
 }
 
 void draw_rectangle(Command command, vec2 fragPos) {
-    const bool textured = command.style == ELEMENT_STYLE_TEXTURE;
-    const bool onlyBorder = command.style == ELEMENT_STYLE_BORDER;
-    const bool onlyFill = command.style == ELEMENT_STYLE_FILL;
-
     if (command.pointCount != 1 || command.detailCount != 4) {
         outColor = ERROR_COLOR;
         return;
@@ -133,36 +129,37 @@ void draw_rectangle(Command command, vec2 fragPos) {
 
     detail0 = posRelative.y < 0 ? detail0 : detail3;
     detail1 = posRelative.y < 0 ? detail1 : detail2;
-    detail0 = posRelative.x > 0 ? detail1 : detail0;
-
-    const float relevantRadius = detail0.radius;
+    PointDetail relevantDetail = posRelative.x > 0 ? detail1 : detail0;
+    const float relevantRadius = relevantDetail.radius;
 
     const vec2 d = abs(posRelative) - halfSize + relevantRadius;
     const float sdf = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - relevantRadius;
 
-    if (onlyBorder) {
-        if (sdf >= -(borderStroke / 2) && sdf <= (borderStroke / 2)) {
-            outColor = colorAndTint(detail0.colorOrTextureID, detail0.tint);
-        }
-        else {
-            outColor = vec4(0, 0, 0, 0) ;
-        }
+    switch (command.style) {
+        case ELEMENT_STYLE_FILL:
+            if (sdf < 0) {
+                outColor = colorAndTint(relevantDetail.colorOrTextureID, relevantDetail.tint);
+            }
+            else {
+                outColor = vec4(0, 0, 0, 0);
+            }
+            break;
+        case ELEMENT_STYLE_BORDER:
+            if (sdf >= -(borderStroke / 2) && sdf <= (borderStroke / 2)) {
+                outColor = colorAndTint(relevantDetail.colorOrTextureID, relevantDetail.tint);
+            }
+            else {
+                outColor = vec4(0, 0, 0, 0);
+            }
+            break;
+        case ELEMENT_STYLE_TEXTURE:
+            //TODO(ches) textures
+            outColor = vec4(1, 0, 1, 1.0);
+            break;
+        default:
+            outColor = ERROR_COLOR;
+            break;
     }
-    else if (onlyFill) {
-        if (sdf < 0) {
-            outColor = colorAndTint(detail0.colorOrTextureID, detail0.tint);
-        }
-        else {
-            outColor = vec4(0, 0, 0, 0) ;
-        }
-    }
-    else if (textured) {
-        //TODO(ches) textures
-    }
-    else {
-        outColor = ERROR_COLOR;
-    }
-
 }
 
 void draw_polygon(Command command, vec2 fragPos) {

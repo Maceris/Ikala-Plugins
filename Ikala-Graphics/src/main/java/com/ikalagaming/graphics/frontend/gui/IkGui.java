@@ -134,7 +134,7 @@ public class IkGui {
                 window.position.x,
                 window.position.y,
                 window.position.x + window.sizeCurrent.x,
-                window.position.y + 30,
+                window.position.y + 15 + context.style.variable.framePadding.y,
                 context.style.color.titleBackgroundActive,
                 window.rounding);
         window.drawList.addRect(

@@ -272,7 +272,7 @@ public class DrawList {
         pointBuffer.putFloat(a);
         pointBuffer.putFloat(b);
 
-        return newIndex;
+        return newIndex / DrawData.SIZE_OF_POINT;
     }
 
     @Synchronized
@@ -296,7 +296,7 @@ public class DrawList {
             pointDetailBuffer.putInt(detail.tint());
         }
 
-        return newDetailIndex;
+        return newDetailIndex / DrawData.SIZE_OF_POINT_DETAIL;
     }
 
     @Synchronized
