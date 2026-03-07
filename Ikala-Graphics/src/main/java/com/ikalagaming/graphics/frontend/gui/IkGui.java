@@ -141,7 +141,8 @@ public class IkGui {
                 window.position.x + window.sizeCurrent.x,
                 window.position.y + 15 + context.style.variable.framePadding.y,
                 context.style.color.titleBackgroundActive,
-                window.rounding);
+                window.rounding,
+                DrawFlags.ROUND_CORNERS_TOP);
         window.drawList.addRect(
                 window.position.x,
                 window.position.y,
@@ -234,6 +235,11 @@ public class IkGui {
         if (context.frameCountEnded == context.frameCount) {
             log.error("newFrame() must be called before endFrame()");
             return;
+        }
+
+        if (!context.styleVariableStack.isEmpty()) {
+            log.error("Did not pop off all style variables before ending frame");
+            context.styleVariableStack.clear();
         }
 
         // TODO(ches) update navigation
