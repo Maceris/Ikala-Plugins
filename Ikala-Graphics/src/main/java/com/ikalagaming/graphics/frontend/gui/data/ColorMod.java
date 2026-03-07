@@ -1,8 +1,14 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
-import org.joml.Vector4f;
+import com.ikalagaming.graphics.frontend.gui.enums.ColorType;
 
-public class ColorMod {
-    private int color;
-    private Vector4f backup;
-}
+import lombok.NonNull;
+
+/**
+ * An override of a color.
+ *
+ * @param type The type of color.
+ * @param color The color, as RGBA.
+ * @see com.ikalagaming.graphics.frontend.gui.util.Color
+ */
+public record ColorMod(@NonNull ColorType type, int color) {}

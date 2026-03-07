@@ -8,6 +8,34 @@ public class Color {
     public static final int CLEAR = rgba(0, 0, 0, 0);
     public static final int WHITE = rgba(255, 255, 255, 255);
 
+    /**
+     * Add the new alpha channel to the existing alpha in the provided color and return the result.
+     *
+     * @param color The color we want to modify, in RGBA format.
+     * @param alpha The alpha to add to the existing alpha.
+     * @return
+     */
+    public static int addAlpha(int color, int alpha) {
+        final int originalAlpha = color & 0xFF;
+        final int newAlpha = Math.clamp((long) originalAlpha + alpha, 0, 255);
+        return (color & 0xFFFFFF00) | newAlpha;
+    }
+
+    /**
+     * Multiply the alpha component of a color by a float value.
+     *
+     * @param color The color we want to modify, in RGBA format.
+     * @param alpha The alpha to multiply with the existing alpha.
+     * @return
+     */
+    public static int multiplyAlpha(int color, float alpha) {
+        final float originalAlpha = (color & 0xFF) / 255.0f;
+        final float newAlpha = Math.clamp(originalAlpha * alpha, 0.0f, 1.0f);
+        final int newAlphaInt = (int) (newAlpha * 255);
+
+        return (color & 0xFFFFFF00) | newAlphaInt;
+    }
+
     public static int rgba(int r, int g, int b, int a) {
         return intToColor(r, g, b, a);
     }
