@@ -1,19 +1,19 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
-import java.util.ArrayList;
-import java.util.List;
+import org.joml.Vector2i;
 
 public class FontAtlas {
     // TODO(ches) font
 
     /** Maximum height of a font atlas image, in pixels. */
-    public static final int MAX_FONT_ATLAS_IMAGE_HEIGHT = 1024;
+    public static final int MAX_FONT_ATLAS_IMAGE_HEIGHT = 2048;
 
     /** Maximum width of a font atlas image, in pixels. */
-    public static final int MAX_FONT_ATLAS_IMAGE_WIDTH = 1024;
+    public static final int MAX_FONT_ATLAS_IMAGE_WIDTH = 2048;
 
     public static final int INVALID_INDEX = -1;
-    private final List<FontPage> pages;
+
+    private FontCache fontCache;
 
     public static int charactersPerPage(int size) {
         int squarePixels = MAX_FONT_ATLAS_IMAGE_HEIGHT * MAX_FONT_ATLAS_IMAGE_WIDTH;
@@ -24,31 +24,22 @@ public class FontAtlas {
     }
 
     public FontAtlas() {
-        pages = new ArrayList<>();
+        fontCache = new FontCache();
     }
 
-    public int getFontMapIndex(char c, int size) {
-        return INVALID_INDEX;
+    public void getFontMapPosition(char c, int fontSize, Vector2i output) {
+        // TODO(ches) look up the position
     }
 
-    public void createDefaultPage(int fontSize) {
-        boolean ranOutOfSpace;
-        char nextCharacter = ' ';
+    public void registerCharacter(char c, int fontSize) {
+        fontCache.add(c, fontSize);
+    }
 
-        do {
-            FontPage page = new FontPage(fontSize);
-            pages.add(page);
-            ranOutOfSpace = false;
-
-            // Add all the printable ascii characters
-            for (char c = nextCharacter; c <= '~'; ++c) {
-                if (!page.addCharacter(c)) {
-                    ranOutOfSpace = true;
-                    nextCharacter = c;
-                    break;
-                }
-            }
-        } while (!ranOutOfSpace);
-        // TODO(ches) add extended latin characters, bake
+    public void addDefaultCharacters(int fontSize) {
+        // Add all the printable ascii characters
+        for (char c = ' '; c <= '~'; ++c) {
+            registerCharacter(c, fontSize);
+        }
+        // TODO(ches) add extended latin characters
     }
 }
