@@ -1,5 +1,8 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
+import lombok.NonNull;
+
+/** An LRU cache of font data used for rendering. */
 public class FontCache {
     public static class CacheElement {
         /** Previous element in the doubly-linked list. */
@@ -29,7 +32,7 @@ public class FontCache {
         }
     }
 
-    public static int hashCharacter(char c) {
+    public static int hashCharacter(@NonNull String fontName, char c, int fontSize) {
         // TODO(ches) hash, probably also include multi-characters in hash
         return 0;
     }

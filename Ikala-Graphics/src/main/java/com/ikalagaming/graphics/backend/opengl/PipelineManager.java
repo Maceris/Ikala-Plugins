@@ -14,6 +14,8 @@ import com.ikalagaming.graphics.backend.base.ShaderMap;
 import com.ikalagaming.graphics.backend.opengl.stages.*;
 import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.frontend.*;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.data.FontAtlas;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 
 import imgui.ImFontAtlas;
@@ -109,7 +111,7 @@ public class PipelineManager {
         renderBuffers = new RenderBuffers();
         renderBuffers.initialize();
         generateRenderBuffers();
-        createImGuiFont();
+        createGuiFont();
         shadowBuffers = createShadowBuffers();
         skybox = new SkyboxModel();
         quadMesh = QuadMesh.getInstance();
@@ -226,7 +228,7 @@ public class PipelineManager {
         deleteRenderBuffers();
     }
 
-    private void createImGuiFont() {
+    private void createGuiFont() {
         ImFontAtlas fontAtlas = ImGui.getIO().getFonts();
         ImInt width = new ImInt();
         ImInt height = new ImInt();
@@ -236,6 +238,10 @@ public class PipelineManager {
                         .getTextureLoader()
                         .load(buf, Format.R8G8B8A8_UINT, width.get(), height.get());
         fontAtlas.setTexID((int) font.id());
+
+        FontAtlas fontAtlas1 = IkGui.getIO().fonts;
+        fontAtlas1.loadFont("fonts/NotoSans.ttf");
+
         // TODO(ches) update IkGui font also/instead
     }
 

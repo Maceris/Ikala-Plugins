@@ -134,11 +134,10 @@ public class Context {
     public final Deque<FocusScopeData> focusScopeStack;
     public Font font;
 
-    public final List<FontAtlas> fontAtlases;
     public FontBaked fontBaked;
     public float fontDensity;
-    public float fontSize;
-    public float fontSizeBase;
+    public int fontSize;
+    public int fontSizeBase;
     public final Deque<FontStackInfo> fontStack;
     public DrawList foregroundDrawList;
 
@@ -496,11 +495,10 @@ public class Context {
         errorTooltipLockedPosition = new Vector2f(0, 0);
         focusScopeStack = new ArrayDeque<>();
         font = null;
-        fontAtlases = new ArrayList<>();
         fontBaked = null;
         fontDensity = 0.0f;
-        fontSize = 0.0f;
-        fontSizeBase = 0.0f;
+        fontSize = 0;
+        fontSizeBase = 0;
         fontStack = new ArrayDeque<>();
         foregroundDrawList = new DrawList("Foreground");
         frameCount = 0;
