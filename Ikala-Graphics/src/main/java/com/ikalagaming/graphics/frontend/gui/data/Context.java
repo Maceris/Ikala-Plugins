@@ -136,8 +136,13 @@ public class Context {
 
     public FontBaked fontBaked;
     public float fontDensity;
+
+    /** The current font size to use. */
     public int fontSize;
+
+    /** Used internally to determine the expected default font size. */
     public int fontSizeBase;
+
     public final Deque<FontStackInfo> fontStack;
     public DrawList foregroundDrawList;
 
@@ -497,8 +502,8 @@ public class Context {
         font = null;
         fontBaked = null;
         fontDensity = 0.0f;
-        fontSize = 0;
-        fontSizeBase = 0;
+        fontSize = 12;
+        fontSizeBase = 12;
         fontStack = new ArrayDeque<>();
         foregroundDrawList = new DrawList("Foreground");
         frameCount = 0;

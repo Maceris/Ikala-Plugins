@@ -2,14 +2,15 @@ package com.ikalagaming.graphics.frontend.gui.data;
 
 import static org.lwjgl.util.freetype.FreeType.*;
 
-import lombok.RequiredArgsConstructor;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.PointerBuffer;
+import org.lwjgl.util.freetype.FT_Face;
 
 import java.nio.ByteBuffer;
+import java.util.concurrent.locks.ReentrantLock;
 
 @Slf4j
-@RequiredArgsConstructor
 public class Font {
     // TODO(ches) font
 
@@ -18,6 +19,25 @@ public class Font {
 
     ByteBuffer fontData;
     PointerBuffer freeTypeFont;
+    FT_Face face;
+
+    /**
+     * We don't want to be messing with the face from multiple threads at the same time. So this
+     * must be used to synchronize access to mess around with the font internals, for loading glyphs
+     * and similar.
+     */
+    ReentrantLock lock;
+
+    public Font(
+            @NonNull String name,
+            @NonNull ByteBuffer fontData,
+            @NonNull PointerBuffer freeTypeFont) {
+        this.name = name;
+        this.fontData = fontData;
+        this.freeTypeFont = freeTypeFont;
+        face = FT_Face.create(freeTypeFont.get(0));
+        this.lock = new ReentrantLock();
+    }
 
     /**
      * Free up resources for the font. This must be done when we are done with the font, or it will

@@ -1747,8 +1747,7 @@ public class IkGui {
     }
 
     public static int getFontSize() {
-        // TODO(ches) complete this
-        return 0;
+        return context.fontSize;
     }
 
     public static DrawList getForegroundDrawList() {

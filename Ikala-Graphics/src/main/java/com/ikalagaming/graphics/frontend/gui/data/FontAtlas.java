@@ -20,9 +20,7 @@ import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Handles all the loaded fonts, and the texture used to cache and render characters.
- */
+/** Handles all the loaded fonts, and the texture used to cache and render characters. */
 @Slf4j
 public class FontAtlas {
     // TODO(ches) font
@@ -70,6 +68,18 @@ public class FontAtlas {
         }
     }
 
+    public void addDefaultCharacters(int fontSize) {
+        if (defaultFont == null) {
+            log.error("No fonts have been loaded, can't set up default characters");
+            return;
+        }
+        // Add all the printable ascii characters
+        for (char c = ' '; c <= '~'; ++c) {
+            registerCharacter(defaultFont, c, fontSize);
+        }
+        // TODO(ches) add extended latin characters
+    }
+
     /**
      * Free up any resources owned by the font atlas. This must be done when the atlas is no longer
      * needed, or there will be resource leaks.
@@ -82,27 +92,14 @@ public class FontAtlas {
         defaultFont = null;
         fonts.forEach((k, v) -> v.destroy());
         fonts.clear();
+        fontCache.destroy();
 
         FT_Done_FreeType(freeTypeLibrary.get(0));
         freeTypeLibrary = null;
     }
 
-    /**
-     * Unload a font, cleaning up its resources.
-     *
-     * @param fontPath The path to the font in the plugin data folder.
-     */
-    public void unloadFont(@NonNull String fontPath) {
-        Font font = fonts.get(fontPath);
-        if (font == null) {
-            log.warn("Font {} not found when trying to destroy it in the font atlas", fontPath);
-            return;
-        }
-        if (defaultFont != null && fontPath.equals(defaultFont.name)) {
-            defaultFont = null;
-        }
-        fonts.remove(fontPath);
-        font.destroy();
+    public void getFontMapPosition(char c, int fontSize, Vector2i output) {
+        // TODO(ches) look up the position
     }
 
     /**
@@ -137,20 +134,13 @@ public class FontAtlas {
 
             PointerBuffer fontPointer = PointerBuffer.allocateDirect(1);
 
-            int error =
-                    FT_New_Memory_Face(
-                            freeTypeLibrary.get(0),
-                            fontByteBuffer,
-                            fontByteBuffer.limit(),
-                            fontPointer);
+            int error = FT_New_Memory_Face(freeTypeLibrary.get(0), fontByteBuffer, 0, fontPointer);
             if (error != FT_Err_Ok) {
-                log.error("Failed to create memory face: {}", FT_Error_String(error));
+                log.error("Failed to create memory face: {} ({})", FT_Error_String(error), error);
                 return false;
             }
 
-            Font font = new Font(fontPath);
-            font.fontData = fontByteBuffer;
-            font.freeTypeFont = fontPointer;
+            Font font = new Font(fontPath, fontByteBuffer, fontPointer);
 
             fonts.put(fontPath, font);
             if (defaultFont == null) {
@@ -161,22 +151,28 @@ public class FontAtlas {
             return false;
         }
 
-        return false;
+        return true;
     }
 
-    public void getFontMapPosition(char c, int fontSize, Vector2i output) {
-        // TODO(ches) look up the position
+    public void registerCharacter(@NonNull Font font, char c, int fontSize) {
+        fontCache.add(font, c, fontSize);
     }
 
-    public void registerCharacter(char c, int fontSize) {
-        fontCache.add(c, fontSize);
-    }
-
-    public void addDefaultCharacters(int fontSize) {
-        // Add all the printable ascii characters
-        for (char c = ' '; c <= '~'; ++c) {
-            registerCharacter(c, fontSize);
+    /**
+     * Unload a font, cleaning up its resources.
+     *
+     * @param fontPath The path to the font in the plugin data folder.
+     */
+    public void unloadFont(@NonNull String fontPath) {
+        Font font = fonts.get(fontPath);
+        if (font == null) {
+            log.warn("Font {} not found when trying to destroy it in the font atlas", fontPath);
+            return;
         }
-        // TODO(ches) add extended latin characters
+        if (defaultFont != null && fontPath.equals(defaultFont.name)) {
+            defaultFont = null;
+        }
+        fonts.remove(fontPath);
+        font.destroy();
     }
 }
