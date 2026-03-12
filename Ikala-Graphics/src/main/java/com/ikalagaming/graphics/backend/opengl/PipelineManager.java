@@ -240,10 +240,13 @@ public class PipelineManager {
         fontAtlas.setTexID((int) font.id());
 
         FontAtlas fontAtlas1 = IkGui.getIO().fonts;
-        if (!fontAtlas1.loadFont("fonts/NotoSans.ttf")) {
+        final String notoSans = "fonts/NotoSans.ttf";
+        if (!fontAtlas1.loadFont(notoSans)) {
             log.error("Issue setting up GUI font");
         }
-        fontAtlas1.addDefaultCharacters(IkGui.getFontSize());
+        IkGui.setFont(notoSans, 12);
+        IkGui.setFontFallbacks(notoSans);
+        fontAtlas1.addDefaultCharacters(notoSans, IkGui.getFontSize());
     }
 
     /** Initialize the lighting SSBOs and fill them with zeroes. */

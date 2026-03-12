@@ -4,6 +4,7 @@ import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.util.freetype.FreeType.*;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.launcher.PluginFolder;
 
 import lombok.AllArgsConstructor;
@@ -111,7 +112,6 @@ public class FontAtlas {
 
     private PointerBuffer freeTypeLibrary;
     private final Map<String, Font> fonts;
-    private Font defaultFont;
 
     private CacheElement[] cacheElements;
 
@@ -163,14 +163,15 @@ public class FontAtlas {
         }
     }
 
-    public void addDefaultCharacters(int fontSize) {
-        if (defaultFont == null) {
-            log.error("No fonts have been loaded, can't set up default characters");
+    public void addDefaultCharacters(@NonNull String fontPath, int fontSize) {
+        Font font = fonts.get(fontPath);
+        if (font == null) {
+            log.error("Trying to add default characters for unloaded font {}", fontPath);
             return;
         }
         // Add all the printable ascii characters
         for (char c = ' '; c <= '~'; ++c) {
-            registerCharacter(defaultFont, c, fontSize);
+            cacheAdd(font, c, fontSize);
         }
         // TODO(ches) add extended latin characters
     }
@@ -240,7 +241,6 @@ public class FontAtlas {
             log.error("Trying to destroy Font Atlas twice.");
             return;
         }
-        defaultFont = null;
         fonts.forEach((k, v) -> v.destroy());
         fonts.clear();
         cacheElements = null;
@@ -269,8 +269,28 @@ public class FontAtlas {
         // TODO(ches) allocate a new shelf, then allocate there.
     }
 
+    /**
+     * Fetch a font. Will be null if the font is not loaded.
+     *
+     * @param fontPath The path to the font in the plugin data folder.
+     * @return The font, if loaded. May be null.
+     */
+    public Font getFont(@NonNull String fontPath) {
+        return fonts.get(fontPath);
+    }
+
     public void getFontMapPosition(char c, int fontSize, Vector2i output) {
         // TODO(ches) look up the position
+    }
+
+    /**
+     * Check if a font is loaded.
+     *
+     * @param fontPath The path to the font in the plugin data folder.
+     * @return Whether the font is currently loaded.
+     */
+    public boolean isFontLoaded(@NonNull String fontPath) {
+        return fonts.containsKey(fontPath);
     }
 
     /**
@@ -314,9 +334,6 @@ public class FontAtlas {
             Font font = new Font(fontPath, fontByteBuffer, fontPointer);
 
             fonts.put(fontPath, font);
-            if (defaultFont == null) {
-                defaultFont = font;
-            }
         } catch (IOException e) {
             log.error("Error reading font file: {}", fontPath);
             return false;
@@ -456,12 +473,18 @@ public class FontAtlas {
         // TODO(ches) do this
     }
 
-    public void registerCharacter(@NonNull Font font, char c, int fontSize) {
+    public void registerCharacter(@NonNull String fontPath, char c, int fontSize) {
+        Font font = fonts.get(fontPath);
+        if (font == null) {
+            log.error("Trying to register character for unloaded font {}", fontPath);
+            return;
+        }
         cacheAdd(font, c, fontSize);
     }
 
     /**
-     * Unload a font, cleaning up its resources.
+     * Unload a font, cleaning up its resources. This will pull the font out of the context structs
+     * if it's in use.
      *
      * @param fontPath The path to the font in the plugin data folder.
      */
@@ -471,9 +494,12 @@ public class FontAtlas {
             log.warn("Font {} not found when trying to destroy it in the font atlas", fontPath);
             return;
         }
-        if (defaultFont != null && fontPath.equals(defaultFont.name)) {
-            defaultFont = null;
+        Context context = IkGui.getContext();
+        if (context.font != null && context.font.name.equals(fontPath)) {
+            context.font = null;
         }
+        context.fontFallbacks.removeIf(currentFont -> currentFont.name.equals(fontPath));
+
         fonts.remove(fontPath);
         font.destroy();
     }

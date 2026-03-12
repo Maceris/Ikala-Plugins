@@ -3652,7 +3652,26 @@ public class IkGui {
     }
 
     public static void popFont() {
-        // TODO(ches) complete this
+        if (context.fontStack.isEmpty()) {
+            log.error("Trying to pop a font when none are pushed");
+            return;
+        }
+        FontBackup backupInfo = context.fontStack.pop();
+
+        if (backupInfo.name() == null) {
+            context.font = null;
+            context.fontSize = backupInfo.size();
+            return;
+        }
+
+        if (!context.io.fonts.isFontLoaded(backupInfo.name())) {
+            log.warn(
+                    "The font {} was unloaded while it was on the font stack, ignoring it",
+                    backupInfo.name());
+            return;
+        }
+        context.font = context.io.fonts.getFont(backupInfo.name());
+        context.fontSize = backupInfo.size();
     }
 
     public static void popID() {
@@ -3736,8 +3755,32 @@ public class IkGui {
         // TODO(ches) complete this
     }
 
-    public static void pushFont(@NonNull Font font) {
-        // TODO(ches) complete this
+    /**
+     * Temporarily change the font by pushing values onto a stack. These must be popped before the
+     * end of the frame.
+     *
+     * @param font The name of the font, which is the path to the font from the plugins data folder.
+     * @see #popFont()
+     * @see #setFont(String)
+     */
+    public static void pushFont(@NonNull String font) {
+        pushFont(font, context.fontSize);
+    }
+
+    /**
+     * Temporarily change the font and size by pushing values onto a stack. These must be popped
+     * before the end of the frame.
+     *
+     * @param font The name of the font, which is the path to the font from the plugins data folder.
+     * @param size The size of the font.
+     * @see #popFont()
+     * @see #setFont(String, int)
+     */
+    public static void pushFont(@NonNull String font, int size) {
+        String oldFont = context.font == null ? null : context.font.name;
+        context.fontStack.push(new FontBackup(oldFont, context.fontSize));
+        context.font = context.io.fonts.getFont(font);
+        context.fontSize = size;
     }
 
     public static void pushID(int id) {
@@ -4031,6 +4074,65 @@ public class IkGui {
             String dataType, Object payload, @NonNull Condition condition) {
         // TODO(ches) complete this
         return false;
+    }
+
+    /**
+     * Set the current font to use for the application across frames.
+     *
+     * @param fontPath The path to teh font from the resource folder, which must be loaded.
+     * @see #pushFont(String)
+     * @see #setFontFallbacks(String...)
+     */
+    public static void setFont(@NonNull String fontPath) {
+        setFont(fontPath, context.fontSize);
+    }
+
+    /**
+     * Set the current font to use for the application across frames.
+     *
+     * @param fontPath The path to teh font from the resource folder, which must be loaded.
+     * @param size The font size to use.
+     * @see #pushFont(String, int)
+     * @see #setFontFallbacks(String...)
+     * @see #setFont(String)
+     * @see #setFontSize(int)
+     */
+    public static void setFont(@NonNull String fontPath, int size) {
+        if (!context.io.fonts.isFontLoaded(fontPath)) {
+            log.error(
+                    "Font {} is not loaded, cannot use it as the current font until loaded.",
+                    fontPath);
+            return;
+        }
+        context.font = context.io.fonts.getFont(fontPath);
+        context.fontSize = size;
+    }
+
+    /**
+     * Set (overwrite) the list of font fallbacks. Fonts that are not yet loaded will be loaded.
+     *
+     * @param fontList The list of font names to use, in order from first to last to check for
+     *     glyphs.
+     * @see Context#fontFallbacks
+     */
+    public static void setFontFallbacks(@NonNull String... fontList) {
+        context.fontFallbacks.clear();
+        for (String fontName : fontList) {
+            if (!context.io.fonts.isFontLoaded(fontName) && !context.io.fonts.loadFont(fontName)) {
+                continue;
+            }
+            context.fontFallbacks.add(context.io.fonts.getFont(fontName));
+        }
+    }
+
+    /**
+     * Set the font size to use for the application across frames.
+     *
+     * @param fontSize The size of the font.
+     * @see #pushFont(String, int)
+     */
+    public static void setFontSize(int fontSize) {
+        context.fontSize = fontSize;
     }
 
     public static void setItemAllowOverlap() {

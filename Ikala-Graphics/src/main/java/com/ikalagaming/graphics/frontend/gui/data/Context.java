@@ -132,18 +132,24 @@ public class Context {
     public final Vector2f errorTooltipLockedPosition;
 
     public final Deque<FocusScopeData> focusScopeStack;
+
+    /**
+     * The currently active font. If null, or when we see an unsupported glyph, we will look through
+     * {@link #fontFallbacks} for fonts that support a character.
+     */
     public Font font;
 
-    public FontBaked fontBaked;
-    public float fontDensity;
+    /**
+     * The list of fallback fonts, in order that we want to check them. If there is no {@link #font}
+     * set, or a glyph is not found in the active font, this will be traversed until we find a font
+     * that does support the glyph or run out of fonts.
+     */
+    public final List<Font> fontFallbacks;
 
     /** The current font size to use. */
     public int fontSize;
 
-    /** Used internally to determine the expected default font size. */
-    public int fontSizeBase;
-
-    public final Deque<FontStackInfo> fontStack;
+    public final Deque<FontBackup> fontStack;
     public DrawList foregroundDrawList;
 
     /**
@@ -500,10 +506,8 @@ public class Context {
         errorTooltipLockedPosition = new Vector2f(0, 0);
         focusScopeStack = new ArrayDeque<>();
         font = null;
-        fontBaked = null;
-        fontDensity = 0.0f;
+        fontFallbacks = new LinkedList<>();
         fontSize = 12;
-        fontSizeBase = 12;
         fontStack = new ArrayDeque<>();
         foregroundDrawList = new DrawList("Foreground");
         frameCount = 0;
