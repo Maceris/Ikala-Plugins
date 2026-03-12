@@ -116,9 +116,6 @@ public class IkIO {
     /** Enable resizing of windows from edges and lower-right corner. */
     public boolean configWindowsResizeFromEdges;
 
-    /** The parent context. */
-    @NonNull public final Context context;
-
     /** Time elapsed since last frame, in seconds. */
     public float deltaTime;
 
@@ -132,10 +129,7 @@ public class IkIO {
     public final Vector2f displaySize;
 
     /** One or more fonts loaded into a single texture. */
-    @NonNull public FontAtlas fonts;
-
-    /** Font to use on newFrame(). Using null will result the first font in the atlas. */
-    public Font fontDefault;
+    public final FontAtlas fonts;
 
     /** Path to the .ini file, set to null to disable automatic .ini loading/saving. */
     public String iniFilename;
@@ -352,7 +346,7 @@ public class IkIO {
     /** For mobile/console, we want to display an on-screen keyboard for textual inputs. */
     public boolean wantTextInput;
 
-    public IkIO(@NonNull Context context) {
+    public IkIO() {
         appAcceptingEvents = true;
         appFocusLost = false;
         backendFlags = BackendFlags.NONE;
@@ -375,12 +369,10 @@ public class IkIO {
         configViewportsPlatformFocusSetsWindowFocus = true;
         configWindowsMoveFromTitleBarOnly = false;
         configWindowsResizeFromEdges = true;
-        this.context = context;
         deltaTime = 1.0f / 60.0f;
         displayFramebufferScale = new Vector2f(1, 1);
         displaySize = new Vector2f(0, 0);
-        fonts = new FontAtlas(); // TODO(ches) update this
-        fontDefault = null;
+        fonts = new FontAtlas();
         iniFilename = "ikgui.ini";
         iniSavingRate = 5.0f;
         keyAlt = false;

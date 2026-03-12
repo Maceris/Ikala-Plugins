@@ -537,7 +537,7 @@ public class Context {
         inputTextDeactivatedState = new InputTextDeactivatedState();
         inputTextState = new InputTextState();
         insideFrame = false;
-        io = new IkIO(this);
+        io = new IkIO();
         itemFlagsStack = new IntArrayList();
         lastActiveID = 0;
         lastActiveIDTimer = 0.0f;
