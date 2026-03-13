@@ -22,18 +22,18 @@ public class TextureLoaderOpenGL implements TextureLoader {
 
     @Override
     public Texture loadBindless(
-            @NonNull ByteBuffer buffer, @NonNull Format format, final int width, final int height) {
+            ByteBuffer buffer, @NonNull Format format, final int width, final int height) {
         return loadTexture(buffer, format, width, height, true);
     }
 
     @Override
     public Texture load(
-            @NonNull ByteBuffer buffer, @NonNull Format format, final int width, final int height) {
+            ByteBuffer buffer, @NonNull Format format, final int width, final int height) {
         return loadTexture(buffer, format, width, height, false);
     }
 
     private Texture loadTexture(
-            @NonNull ByteBuffer buffer,
+            ByteBuffer buffer,
             @NonNull Format format,
             final int width,
             final int height,
@@ -56,7 +56,9 @@ public class TextureLoaderOpenGL implements TextureLoader {
                 FormatMapperOpenGL.mapFormat(format),
                 FormatMapperOpenGL.mapType(format),
                 buffer);
-        glGenerateMipmap(GL_TEXTURE_2D);
+        if (buffer != null) {
+            glGenerateMipmap(GL_TEXTURE_2D);
+        }
 
         glBindTexture(GL_TEXTURE_2D, 0);
 

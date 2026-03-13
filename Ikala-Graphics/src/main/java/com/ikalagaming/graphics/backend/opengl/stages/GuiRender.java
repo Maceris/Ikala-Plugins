@@ -14,9 +14,11 @@ import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.opengl.GuiMesh;
 import com.ikalagaming.graphics.backend.opengl.ImGuiMesh;
 import com.ikalagaming.graphics.frontend.Shader;
+import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.frontend.gui.data.DrawData;
+import com.ikalagaming.graphics.frontend.gui.data.FontAtlas;
 import com.ikalagaming.graphics.scene.Scene;
 
 import imgui.*;
@@ -49,6 +51,9 @@ public class GuiRender implements RenderStage {
     /** The shader to use for rendering. */
     @NonNull @Setter private Shader shader;
 
+    /** The font atlas texture. */
+    private final Texture fontAtlas;
+
     /**
      * Set up the GUI render stage.
      *
@@ -58,12 +63,14 @@ public class GuiRender implements RenderStage {
             final @NonNull Shader imGuiShader,
             final @NonNull Shader shader,
             final @NonNull ImGuiMesh imGuiMesh,
-            final @NonNull GuiMesh guiMesh) {
+            final @NonNull GuiMesh guiMesh,
+            final @NonNull Texture fontAtlas) {
         scale = new Vector2f();
         this.imGuiShader = imGuiShader;
         this.shader = shader;
         this.imGuiMesh = imGuiMesh;
         this.guiMesh = guiMesh;
+        this.fontAtlas = fontAtlas;
     }
 
     @Override
@@ -164,7 +171,23 @@ public class GuiRender implements RenderStage {
         var uniformsMap = shader.getUniformMap();
         uniformsMap.setUniform(ShaderUniforms.GUI.SCALE, scale);
 
-        // TODO(ches) bind font texture
+        glBindTexture(GL_TEXTURE_2D, (int) fontAtlas.id());
+
+        if (!IkGui.getIO().fonts.stagedBitmaps.isEmpty()) {
+            for (FontAtlas.StagedBitmap letter : IkGui.getIO().fonts.stagedBitmaps) {
+                glTexSubImage2D(
+                        GL_TEXTURE_2D,
+                        0,
+                        letter.x(),
+                        letter.y(),
+                        letter.width(),
+                        letter.height(),
+                        GL_RGBA,
+                        GL_UNSIGNED_BYTE,
+                        letter.data());
+            }
+            IkGui.getIO().fonts.stagedBitmaps.clear();
+        }
 
         DrawData drawData = IkGui.getContext().drawData;
         int drawListCount = drawData.getDrawListCount();

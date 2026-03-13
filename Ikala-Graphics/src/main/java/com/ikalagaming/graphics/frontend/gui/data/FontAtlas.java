@@ -208,7 +208,9 @@ public class FontAtlas {
         CacheElement newElement = new CacheElement(c);
 
         StagedBitmap newBitmap = loadGlyph(font, c, newElement, index);
+
         if (newBitmap == null) {
+            log.warn("Could not create a glyph for '{}'", c);
             return;
         }
 

@@ -50,7 +50,10 @@ public class PipelineManager {
     private final ArrayList<CascadeShadow> cascadeShadows;
 
     /** The texture we store font atlas on. */
-    private Texture font;
+    @Deprecated private Texture imguiFont;
+
+    /** The texture we store the font atlas on. */
+    private Texture fontAtlas;
 
     /** Geometry buffer. */
     private Framebuffer gBuffer;
@@ -130,7 +133,8 @@ public class PipelineManager {
                         shaders.getShader(RenderStage.Type.GUI_LEGACY),
                         shaders.getShader(RenderStage.Type.GUI),
                         imGuiMesh,
-                        guiMesh);
+                        guiMesh,
+                        fontAtlas);
         stageSkyboxRender = new SkyboxRender(shaders.getShader(RenderStage.Type.SKYBOX), skybox);
         stageShadowRender =
                 new ShadowRender(
@@ -208,8 +212,10 @@ public class PipelineManager {
 
     /** Clean up all the rendering resources. */
     public void cleanup() {
-        GraphicsManager.getDeletionQueue().add(font);
-        font = null;
+        GraphicsManager.getDeletionQueue().add(imguiFont);
+        imguiFont = null;
+        GraphicsManager.getDeletionQueue().add(fontAtlas);
+        fontAtlas = null;
         imGuiMesh.cleanup();
         guiMesh.cleanup();
         skybox.cleanup();
@@ -233,11 +239,11 @@ public class PipelineManager {
         ImInt width = new ImInt();
         ImInt height = new ImInt();
         ByteBuffer buf = fontAtlas.getTexDataAsRGBA32(width, height);
-        font =
+        imguiFont =
                 GraphicsManager.getRenderInstance()
                         .getTextureLoader()
                         .load(buf, Format.R8G8B8A8_UINT, width.get(), height.get());
-        fontAtlas.setTexID((int) font.id());
+        fontAtlas.setTexID((int) imguiFont.id());
 
         FontAtlas fontAtlas1 = IkGui.getIO().fonts;
         final String notoSans = "fonts/NotoSans.ttf";
@@ -247,6 +253,15 @@ public class PipelineManager {
         IkGui.setFont(notoSans, 12);
         IkGui.setFontFallbacks(notoSans);
         fontAtlas1.addDefaultCharacters(notoSans, IkGui.getFontSize());
+
+        this.fontAtlas =
+                GraphicsManager.getRenderInstance()
+                        .getTextureLoader()
+                        .load(
+                                null,
+                                Format.R8G8B8A8_UINT,
+                                FontAtlas.FONT_ATLAS_IMAGE_WIDTH,
+                                FontAtlas.FONT_ATLAS_IMAGE_HEIGHT);
     }
 
     /** Initialize the lighting SSBOs and fill them with zeroes. */
