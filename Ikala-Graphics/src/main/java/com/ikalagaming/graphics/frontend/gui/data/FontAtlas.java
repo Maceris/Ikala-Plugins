@@ -9,8 +9,9 @@ import com.ikalagaming.launcher.PluginFolder;
 
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
+import lombok.Synchronized;
 import lombok.extern.slf4j.Slf4j;
-import org.joml.Vector2i;
+import org.joml.Vector4i;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.util.freetype.FT_Bitmap;
@@ -38,21 +39,16 @@ public class FontAtlas {
         /** The actual character value. */
         public final char value;
 
-        public final int x;
-        public final int y;
-        public final int width;
-        public final int height;
+        public int x;
+        public int y;
+        public int width;
+        public int height;
 
-        public CacheElement(
-                final char value, final int x, final int y, final int width, final int height) {
+        public CacheElement(final char value) {
             this.previous = null;
             this.next = null;
             this.chain = null;
             this.value = value;
-            this.x = x;
-            this.y = y;
-            this.width = width;
-            this.height = height;
         }
     }
 
@@ -64,17 +60,18 @@ public class FontAtlas {
     }
 
     /** Horizontal strips of the texture, each of which acts like a 1-D allocator. */
-    @AllArgsConstructor
     private static class Shelf {
         public final int y;
         public final int width;
         public final int height;
-        private List<FreeBlock> freeList;
+        private final List<FreeBlock> freeList;
 
         public Shelf(int y, int width, int height) {
             this.y = y;
             this.width = width;
             this.height = height;
+            freeList = new LinkedList<>();
+            freeList.add(new FreeBlock(0, width));
         }
     }
 
@@ -132,8 +129,12 @@ public class FontAtlas {
     public List<StagedBitmap> stagedBitmaps;
 
     public FontAtlas() {
-        cacheHead = new CacheElement(' ', -1, -1, 0, 0);
-        cacheTail = new CacheElement(' ', -1, -1, 0, 0);
+        cacheHead = new CacheElement(' ');
+        cacheHead.x = -1;
+        cacheHead.y = -1;
+        cacheTail = new CacheElement(' ');
+        cacheTail.x = -1;
+        cacheTail.y = -1;
 
         cacheHead.next = cacheTail;
         cacheHead.previous = null;
@@ -143,6 +144,7 @@ public class FontAtlas {
         stagedBitmaps = new ArrayList<>();
         shelves = new ArrayList<>();
         shelvesFreeList = new ArrayList<>();
+        shelvesFreeList.add(new FreeBlock(0, FONT_ATLAS_IMAGE_HEIGHT));
 
         fonts = new HashMap<>();
         freeTypeLibrary = PointerBuffer.allocateDirect(1);
@@ -163,6 +165,7 @@ public class FontAtlas {
         }
     }
 
+    @Synchronized
     public void addDefaultCharacters(@NonNull String fontPath, int fontSize) {
         Font font = fonts.get(fontPath);
         if (font == null) {
@@ -182,9 +185,8 @@ public class FontAtlas {
      * @param font The font we are using.
      * @param c The character to add.
      * @param fontSize The size of the font we are adding.
-     * @return True if it is freshly added, false if it was already in the cache.
      */
-    private boolean cacheAdd(@NonNull Font font, char c, int fontSize) {
+    private void cacheAdd(@NonNull Font font, char c, int fontSize) {
         final int hashValue = Objects.hash(font, c, fontSize);
         final int index = hashValue & CACHE_MASK;
 
@@ -200,16 +202,15 @@ public class FontAtlas {
 
         if (exists) {
             moveToFront(element);
-            return true;
+            return;
         }
 
-        StagedBitmap newBitmap = loadGlyph(font, c);
+        CacheElement newElement = new CacheElement(c);
+
+        StagedBitmap newBitmap = loadGlyph(font, c, newElement, index);
         if (newBitmap == null) {
-            return false;
+            return;
         }
-
-        CacheElement newElement =
-                new CacheElement(c, newBitmap.x, newBitmap.y, newBitmap.width, newBitmap.height);
 
         if (cacheElements[index] == null) {
             cacheElements[index] = newElement;
@@ -224,12 +225,38 @@ public class FontAtlas {
         cacheHead.next = newElement;
         newElement.next = next;
         next.previous = newElement;
-
-        return true;
     }
 
-    private void cacheRemove(CacheElement element) {
-        // TODO(ches) do this
+    private void cacheRemove(@NonNull CacheElement element, int cacheIndex) {
+        // Drop it from cache array
+        if (cacheElements[cacheIndex] == element) {
+            if (element.chain != null) {
+                cacheElements[cacheIndex] = element.chain;
+            } else {
+                cacheElements[cacheIndex] = null;
+            }
+        } else {
+            CacheElement previous = cacheElements[cacheIndex];
+            while (previous.chain != null && previous.chain != element) {
+                previous = previous.chain;
+            }
+            if (previous.chain == null) {
+                log.error("Trying to remove an element we can't find in the cache");
+                return;
+            }
+            previous.chain = element.chain;
+        }
+
+        // Now drop it from the LRU list
+        CacheElement previous = element.previous;
+        CacheElement next = element.next;
+        previous.next = next;
+        next.previous = previous;
+
+        // And clean up references in the element
+        element.previous = null;
+        element.next = null;
+        element.chain = null;
     }
 
     /**
@@ -253,20 +280,136 @@ public class FontAtlas {
         freeTypeLibrary = null;
     }
 
-    private void allocAtlasSpace(int width, int height, @NonNull Vector2i output) {
-        for (Shelf shelf : shelves) {
-            if (shelf.height < height) {
-                continue;
+    private void allocAtlasSpace(
+            int width, int height, @NonNull CacheElement element, int cacheIndex) {
+        if (width > FONT_ATLAS_IMAGE_WIDTH || height > FONT_ATLAS_IMAGE_HEIGHT) {
+            log.error("Character too big to fit in the texture");
+            return;
+        }
+
+        while (cacheTail.previous != cacheHead) {
+            for (Shelf shelf : shelves) {
+                if (shelf.height < height) {
+                    continue;
+                }
+                for (FreeBlock block : shelf.freeList) {
+                    if (block.size > width) {
+                        // Found one
+                        element.x = block.position;
+                        element.y = shelf.y;
+                        block.position += width;
+                        block.size -= width;
+                        return;
+                    }
+                }
             }
-            for (FreeBlock block : shelf.freeList) {
-                if (block.size > width) {
-                    // Found one
-                    // TODO(ches) allocate space, return
+            // None of the shelves had space, we need a new one
+
+            // We want a power of 2 height, so we tend to have some extra room to minimize extra
+            // shelves
+            int shelfHeight = 1;
+            while (shelfHeight < height) {
+                shelfHeight <<= 1;
+            }
+
+            for (FreeBlock block : shelvesFreeList) {
+                if (block.size >= shelfHeight) {
+                    shelves.add(new Shelf(block.position, FONT_ATLAS_IMAGE_WIDTH, shelfHeight));
+                    block.position += shelfHeight;
+                    block.size -= shelfHeight;
+                    return;
+                }
+            }
+            // There was no room for a new shelf, we will need to start clearing out old data
+
+            CacheElement oldestElement = cacheTail.previous;
+            Shelf oldShelf = null;
+            for (Shelf shelf : shelves) {
+                if (shelf.y == oldestElement.y) {
+                    oldShelf = shelf;
                     break;
                 }
             }
+            if (oldShelf == null) {
+                log.error(
+                        "Cache is messed up, couldn't find the shelf the cache element belonged to");
+                return;
+            }
+
+            if (oldestElement.width >= width && oldShelf.height >= height) {
+                element.x = oldestElement.x;
+                element.y = oldShelf.y;
+
+                cacheRemove(oldestElement, cacheIndex);
+                if (oldestElement.width > width) {
+                    // It's smaller than the old element, so add in a sliver of empty space
+                    FreeBlock newBlock =
+                            new FreeBlock(element.x + width, oldestElement.width - width);
+                    mergeBlock(oldShelf.freeList, newBlock);
+                }
+                break;
+            }
+
+            // it is not enough
+            FreeBlock newBlock = new FreeBlock(oldestElement.x, oldestElement.width);
+            mergeBlock(oldShelf.freeList, newBlock);
+
+            if (oldShelf.freeList.size() == 1
+                    && oldShelf.freeList.getFirst().size == oldShelf.width) {
+                // We emptied the shelf
+                FreeBlock shelfBlock = new FreeBlock(oldShelf.y, oldShelf.height);
+                mergeBlock(shelvesFreeList, shelfBlock);
+                shelves.remove(oldShelf);
+            }
+            // Back to the top, I guess.
         }
-        // TODO(ches) allocate a new shelf, then allocate there.
+    }
+
+    private void mergeBlock(@NonNull List<FreeBlock> freeList, @NonNull FreeBlock newBlock) {
+        int lastSmallerIndex = 0;
+        for (int i = 0; i < freeList.size(); ++i) {
+            FreeBlock block = freeList.get(i);
+
+            if (block.position == newBlock.position + newBlock.size) {
+                // it's right before an empty block, so just stretch the block a bit left
+                block.position -= newBlock.size;
+                if (i > 0) {
+                    FreeBlock previousBlock = freeList.get(i - 1);
+                    if (previousBlock.position + previousBlock.size == block.position) {
+                        // We just mashed the current block up against the previous one
+                        previousBlock.size += block.size;
+                        // So merge them and drop the current one
+                        freeList.remove(i);
+                    }
+                }
+                return;
+            }
+            if (block.position + block.size == newBlock.position) {
+                // it's right after an empty block, so stretch the current block a bit right
+                block.size += newBlock.size;
+
+                if (i + 1 < freeList.size()) {
+                    FreeBlock nextBlock = freeList.get(i + 1);
+                    if (nextBlock.position == block.position + block.size) {
+                        // We just mashed the current block up against the next one
+                        block.size += nextBlock.size;
+                        // So merge them and drop the next one
+                        freeList.remove(i + 1);
+                    }
+                }
+                return;
+            }
+
+            if (block.position > newBlock.position) {
+                // We passed where this would need to go, so bail out and add after the last block
+                // we saw
+                break;
+            }
+            lastSmallerIndex = i;
+        }
+
+        // It's disconnected, just slap in a new block
+        freeList.add(lastSmallerIndex, newBlock);
     }
 
     /**
@@ -279,8 +422,21 @@ public class FontAtlas {
         return fonts.get(fontPath);
     }
 
-    public void getFontMapPosition(char c, int fontSize, Vector2i output) {
-        // TODO(ches) look up the position
+    @Synchronized
+    public boolean getFontMapPosition(@NonNull Font font, char c, int fontSize, Vector4i output) {
+        final int hashValue = Objects.hash(font, c, fontSize);
+        final int index = hashValue & CACHE_MASK;
+
+        CacheElement element = cacheElements[index];
+        while (element != null && element.value != c) {
+            element = element.chain;
+        }
+        if (element == null) {
+            return false;
+        }
+        moveToFront(element);
+        output.set(element.x, element.y, element.width, element.height);
+        return true;
     }
 
     /**
@@ -301,6 +457,7 @@ public class FontAtlas {
      *     of the font.
      * @return Whether the font is currently loaded successfully.
      */
+    @Synchronized
     public boolean loadFont(@NonNull String fontPath) {
         if (fonts.containsKey(fontPath)) {
             log.warn("Font {} already loaded, trying to load twice.", fontPath);
@@ -342,7 +499,8 @@ public class FontAtlas {
         return true;
     }
 
-    private StagedBitmap loadGlyph(@NonNull Font font, char c) {
+    private StagedBitmap loadGlyph(
+            @NonNull Font font, char c, @NonNull CacheElement element, int cacheIndex) {
         font.lock.lock();
         try {
             int glyphIndex = FT_Get_Char_Index(font.face, c);
@@ -455,11 +613,12 @@ public class FontAtlas {
             }
             newContents.flip();
 
-            // TODO(ches) find a position in the texture
-            int x = 0;
-            int y = 0;
+            allocAtlasSpace(width, height, element, cacheIndex);
+            element.width = width;
+            element.height = height;
 
-            StagedBitmap newBitmap = new StagedBitmap(newContents, x, y, width, height);
+            StagedBitmap newBitmap =
+                    new StagedBitmap(newContents, element.x, element.y, width, height);
             stagedBitmaps.add(newBitmap);
 
             return newBitmap;
@@ -469,10 +628,23 @@ public class FontAtlas {
         }
     }
 
-    private void moveToFront(CacheElement element) {
-        // TODO(ches) do this
+    private void moveToFront(@NonNull CacheElement element) {
+        CacheElement previous = element.previous;
+        if (previous == cacheHead) {
+            // already at the front
+            return;
+        }
+        CacheElement next = element.next;
+        previous.next = next;
+        next.previous = previous;
+
+        element.next = cacheHead.next;
+        element.previous = cacheHead;
+        cacheHead.next.previous = element;
+        cacheHead.next = element;
     }
 
+    @Synchronized
     public void registerCharacter(@NonNull String fontPath, char c, int fontSize) {
         Font font = fonts.get(fontPath);
         if (font == null) {
