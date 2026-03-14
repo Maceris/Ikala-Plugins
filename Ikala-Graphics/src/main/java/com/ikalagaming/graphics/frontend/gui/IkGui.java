@@ -4796,36 +4796,36 @@ public class IkGui {
         // TODO(ches) complete this
     }
 
-    public static void text(String text) {
-        // TODO(ches) color from style
-        int color = Color.BLACK;
+    public static void text(@NonNull String text) {
+        int color = context.style.color.text;
         textColored(color, text);
     }
 
-    public static void textColored(float r, float g, float b, float a, String text) {
+    public static void textColored(float r, float g, float b, float a, @NonNull String text) {
         int color = Color.rgba(r, g, b, a);
         textColored(color, text);
     }
 
-    public static void textColored(int r, int g, int b, int a, String text) {
+    public static void textColored(int r, int g, int b, int a, @NonNull String text) {
         int color = Color.rgba(r, g, b, a);
         textColored(color, text);
     }
 
-    public static void textColored(int color, String text) {
+    public static void textColored(int color, @NonNull String text) {
         Vector2f cursor = context.windowCurrent.cursorPosition;
-        context.windowCurrent.drawList.addText(cursor.x, cursor.y, color, text);
+        context.windowCurrent.drawList.addText(context.fontSize, cursor.x, cursor.y, color, text);
     }
 
-    public static void textDisabled(String text) {
+    public static void textDisabled(@NonNull String text) {
+        int color = context.style.color.textDisabled;
+        textColored(color, text);
+    }
+
+    public static void textUnformatted(@NonNull String text) {
         // TODO(ches) complete this
     }
 
-    public static void textUnformatted(String text) {
-        // TODO(ches) complete this
-    }
-
-    public static void textWrapped(String text) {
+    public static void textWrapped(@NonNull String text) {
         // TODO(ches) complete this
     }
 

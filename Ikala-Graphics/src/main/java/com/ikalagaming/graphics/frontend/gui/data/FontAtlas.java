@@ -424,8 +424,38 @@ public class FontAtlas {
         return fonts.get(fontPath);
     }
 
+    /**
+     * Fetch the position of a character in the font map, deducing the font based on which font
+     * supports it. We start looking at the current font, then font fallbacks in order if not
+     * supported. If a font is not found, we will use the fallback character.
+     *
+     * @param c The character to look up.
+     * @param fontSize The font size.
+     * @param output The x, y, width, and height of the character in pixels on the font atlas.
+     * @return Whether we actually found the character.
+     */
     @Synchronized
-    public boolean getFontMapPosition(@NonNull Font font, char c, int fontSize, Vector4i output) {
+    public boolean getFontMapPosition(char c, int fontSize, Vector4i output) {
+        Font font = null;
+        Font primary = IkGui.getContext().font;
+
+        if (primary != null && primary.supports(c)) {
+            font = primary;
+        }
+        if (font == null) {
+            for (Font potential : IkGui.getContext().fontFallbacks) {
+                if (potential.supports(c)) {
+                    font = potential;
+                    break;
+                }
+            }
+        }
+        if (font == null) {
+            // Nothing supports it
+            font = IkGui.getContext().fontFallbacks.getLast();
+            c = IkGui.getContext().fontFallbackChar;
+        }
+
         final int hashValue = Objects.hash(font, c, fontSize);
         final int index = hashValue & CACHE_MASK;
 
@@ -646,13 +676,35 @@ public class FontAtlas {
         cacheHead.next = element;
     }
 
+    /**
+     * Load a character in the font map, deducing the font based on which font supports it. We start
+     * looking at the current font, then font fallbacks in order if not supported. If a font is not
+     * found, we will use the fallback character.
+     *
+     * @param c The character to load.
+     * @param fontSize The font size.
+     */
     @Synchronized
-    public void registerCharacter(@NonNull String fontPath, char c, int fontSize) {
-        Font font = fonts.get(fontPath);
-        if (font == null) {
-            log.error("Trying to register character for unloaded font {}", fontPath);
-            return;
+    public void registerCharacter(char c, int fontSize) {
+        Font font = null;
+        Font primary = IkGui.getContext().font;
+        if (primary != null && primary.supports(c)) {
+            font = primary;
         }
+        if (font == null) {
+            for (Font potential : IkGui.getContext().fontFallbacks) {
+                if (potential.supports(c)) {
+                    font = potential;
+                    break;
+                }
+            }
+        }
+        if (font == null) {
+            log.error("No loaded font supports the character '{}'", c);
+            font = IkGui.getContext().fontFallbacks.getLast();
+            c = IkGui.getContext().fontFallbackChar;
+        }
+
         cacheAdd(font, c, fontSize);
     }
 

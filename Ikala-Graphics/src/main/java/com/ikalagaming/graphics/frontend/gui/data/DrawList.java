@@ -11,6 +11,7 @@ import com.ikalagaming.util.IntArrayList;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
+import org.joml.Vector4i;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -89,7 +90,7 @@ public class DrawList {
      *   <li>Line (straight) - a = point 2 x, b = point 2 y
      *   <li>Rectangle - a = width, b = height
      *   <li>Polygon - a = u, b = v, for textures. Otherwise ignored.
-     *   <li>Text - ???
+     *   <li>Text - a = width, b = height
      * </ul>
      */
     public ByteBuffer pointBuffer;
@@ -968,38 +969,67 @@ public class DrawList {
         // TODO(ches) implement this
     }
 
-    public void addText(float posX, float posY, int color, String text) {
-        // TODO(ches) implement this
+    public void addText(int fontSize, float posX, float posY, int color, @NonNull String text) {
+        Vector4i charPosition = new Vector4i();
+        FontAtlas atlas = IkGui.getContext().io.fonts;
 
-    }
+        int pointCount = 0;
+        final int pointIndex = pointBuffer.position() / DrawData.SIZE_OF_POINT;
 
-    public void addText(Font Font, int fontSize, float posX, float posY, int color, String text) {
-        // TODO(ches) implement this
+        float minX = posX;
+        float minY = posY;
+        float maxX = posX;
+        float maxY = posY;
+
+        float charX;
+        float charY;
+
+        int currentX = (int) posX;
+        // TODO(ches) RTL, vertical
+        for (int pos = 0; pos < text.length(); ++pos) {
+            char c = text.charAt(pos);
+            atlas.registerCharacter(c, fontSize);
+            if (!atlas.getFontMapPosition(c, fontSize, charPosition)) {
+                log.error("Could not find a font for character '{}'", c);
+                continue;
+            }
+            charX = currentX + (float) charPosition.x;
+            charY = posY + charPosition.y;
+            addPoint(charX, charY, charPosition.z, charPosition.w);
+            pointCount += 1;
+
+            currentX += charPosition.z;
+            // TODO(ches) padding between letters
+            maxX = currentX;
+            if (charY > maxY) {
+                maxY = charY;
+            }
+        }
+
+        addScreenQuad(minX, minY, maxX, maxY);
+
+        SDFPointDetail detail = new SDFPointDetail(0, color, 0);
+        final int detailIndex = addDetails(detail);
+        final int detailCount = 1;
+        final int borderStroke = 0;
+
+        addCommand(
+                pointIndex,
+                detailIndex,
+                pointCount,
+                detailCount,
+                ElementType.TEXT,
+                ElementStyle.TEXTURE,
+                borderStroke);
     }
 
     public void addText(
-            Font Font,
             int fontSize,
             float posX,
             float posY,
             int color,
-            String text,
+            @NonNull String text,
             float wrapWidth) {
-        // TODO(ches) implement this
-    }
-
-    public void addText(
-            Font Font,
-            int fontSize,
-            float posX,
-            float posY,
-            int color,
-            String text,
-            float wrapWidth,
-            float cpuFineClipRectX,
-            float cpuFineClipRectY,
-            float cpuFineClipRectZ,
-            float cpuFineClipRectV) {
         // TODO(ches) implement this
     }
 

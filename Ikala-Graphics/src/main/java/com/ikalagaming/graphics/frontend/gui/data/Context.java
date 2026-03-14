@@ -146,6 +146,9 @@ public class Context {
      */
     public final List<Font> fontFallbacks;
 
+    /** The character to use if no loaded fonts support a character. */
+    public char fontFallbackChar;
+
     /** The current font size to use. */
     public int fontSize;
 
@@ -507,6 +510,7 @@ public class Context {
         focusScopeStack = new ArrayDeque<>();
         font = null;
         fontFallbacks = new LinkedList<>();
+        fontFallbackChar = '?';
         fontSize = 12;
         fontStack = new ArrayDeque<>();
         foregroundDrawList = new DrawList("Foreground");

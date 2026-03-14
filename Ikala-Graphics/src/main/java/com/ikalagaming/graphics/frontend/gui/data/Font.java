@@ -40,6 +40,17 @@ public class Font {
     }
 
     /**
+     * Check if the font supports the specified character.
+     *
+     * @param c The character to look for.
+     * @return If we have a glyph for the given character.
+     */
+    public boolean supports(char c) {
+        int glyphIndex = FT_Get_Char_Index(face, c);
+        return glyphIndex != 0;
+    }
+
+    /**
      * Free up resources for the font. This must be done when we are done with the font, or it will
      * leak resources.
      */
@@ -52,16 +63,5 @@ public class Font {
             freeTypeFont = null;
             fontData = null;
         }
-    }
-
-    /**
-     * Convert the height of a letter from pt (points) to px (pixels).
-     *
-     * @param pt The size in points.
-     * @return The height in pixels.
-     */
-    public static int estimatedHeight(int pt) {
-        float pixels = pt * 1.333f;
-        return (int) pixels;
     }
 }
