@@ -129,6 +129,9 @@ public class IkGui {
         window.reset(context, title);
         window.id = ID;
         window.name = title;
+        window.padding.set(context.style.variable.windowPadding);
+        window.titleBarHeight = 15;
+        window.menuBarHeight = 0;
         if (WindowFlags.NONE == windowFlags) {
             window.flags = context.nextWindowData.windowFlags;
         } else {
@@ -141,6 +144,12 @@ public class IkGui {
         }
         // TODO(ches) position condition
         window.position.set(context.nextWindowData.positionValue);
+        window.cursorPosition.set(
+                window.position.x + window.padding.x,
+                window.position.y
+                        + window.padding.y
+                        + window.titleBarHeight
+                        + window.menuBarHeight);
         // TODO(ches) size condition
         window.sizeRequested.set(context.nextWindowData.sizeValue);
         // TODO(ches) collapsed condition
@@ -176,7 +185,7 @@ public class IkGui {
                 window.position.x,
                 window.position.y,
                 window.position.x + window.sizeCurrent.x,
-                window.position.y + 15 + context.style.variable.framePadding.y,
+                window.position.y + window.titleBarHeight + context.style.variable.framePadding.y,
                 getStyleColorWithGlobalAlpha(titleColor),
                 window.rounding,
                 DrawFlags.ROUND_CORNERS_TOP);

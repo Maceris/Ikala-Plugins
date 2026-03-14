@@ -169,9 +169,35 @@ void draw_polygon(Command command, vec2 fragPos) {
 }
 
 void draw_text(Command command, vec2 fragPos) {
-    //TODO(Ches) complete this
-    // white
-    outColor = vec4(1, 1, 1, 1.0);
+    if (command.pointCount != 2 || command.detailCount != 1) {
+        outColor = ERROR_COLOR;
+        return;
+    }
+
+    Point quadPoint = points[command.pointIndex];
+    Point textPoint = points[command.pointIndex + 1];
+    const vec2 textPos = textPoint.pos;
+    const vec2 textSize = textPoint.misc;
+
+    PointDetail detail = pointDetails[command.detailIndex];
+
+    // Fragment position within the quad, from 0 to 1.
+    const vec2 posInQuad = vec2(
+        (fragPos.x - quadPoint.pos.x) / (textSize.x),
+        (fragPos.y - quadPoint.pos.y) / (textSize.y)
+    );
+
+    const vec2 textureSizeInt = textureSize(txtSampler, 0);
+    const vec2 topLeftPosInTexture = vec2(textPos.x / textureSizeInt.x, textPos.y / textureSizeInt.y);
+    const vec2 bottomRightPosInTexture = vec2(
+        (textPos.x + textSize.x) / textureSizeInt.x,
+        (textPos.y + textSize.y) / textureSizeInt.y
+    );
+
+    const vec2 texturePos = mix(topLeftPosInTexture, bottomRightPosInTexture, posInQuad);
+
+    vec4 color = texture(txtSampler, texturePos) * intToColor(uint(detail.tint));
+    outColor = clamp(color, 0.0f, 1.0f);
 }
 
 void main() {

@@ -8,6 +8,7 @@ import com.ikalagaming.util.IntArrayList;
 
 import lombok.NonNull;
 import org.joml.Vector2f;
+import org.joml.Vector2i;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,11 +41,11 @@ public class Window {
     /** Size that was requested for the window before it was drawn. */
     public final Vector2f sizeRequested;
 
-    public final Vector2f padding;
+    public final Vector2i padding;
     public float rounding;
     public float borderSize;
-    public float titleBarHeight;
-    public float menuBarHeight;
+    public int titleBarHeight;
+    public int menuBarHeight;
 
     public int idWithinParent;
     public int idAsPopupWindow;
@@ -137,11 +138,11 @@ public class Window {
         sizeFull = new Vector2f(0, 0);
         sizeDesired = new Vector2f(0, 0);
         sizeRequested = new Vector2f(0, 0);
-        padding = new Vector2f(0, 0);
+        padding = new Vector2i(0, 0);
         rounding = 0.0f;
         borderSize = 0.0f;
-        titleBarHeight = 0.0f;
-        menuBarHeight = 0.0f;
+        titleBarHeight = 0;
+        menuBarHeight = 0;
         idWithinParent = 0;
         idAsPopupWindow = 0;
         scrollPosition = new Vector2f(0, 0);
@@ -209,8 +210,8 @@ public class Window {
         this.padding.set(0, 0);
         this.rounding = 0.0f;
         this.borderSize = 0.0f;
-        this.titleBarHeight = 0.0f;
-        this.menuBarHeight = 0.0f;
+        this.titleBarHeight = 0;
+        this.menuBarHeight = 0;
         this.idWithinParent = 0;
         this.idAsPopupWindow = 0;
         this.scrollPosition.set(0, 0);

@@ -140,8 +140,8 @@ class IkGuiDemo {
                                                 drawData.getDrawListPointBuffer(drawListIndex);
 
                                         int pointBufferIndex =
-                                                pointIndex
-                                                        + debugPointIndex * DrawData.SIZE_OF_POINT;
+                                                (pointIndex + debugPointIndex)
+                                                        * DrawData.SIZE_OF_POINT;
 
                                         float x = pointBuffer.getFloat(pointBufferIndex);
                                         pointBufferIndex += Float.BYTES;
@@ -151,7 +151,8 @@ class IkGuiDemo {
                                         pointBufferIndex += Float.BYTES;
                                         float b = pointBuffer.getFloat(pointBufferIndex);
 
-                                        if (type == DrawList.ElementType.RECTANGLE.getTypeID()) {
+                                        if (type == DrawList.ElementType.RECTANGLE.getTypeID()
+                                                || type == DrawList.ElementType.TEXT.getTypeID()) {
                                             float xScaled = (2 / ikIO.displaySize.x) * x - 1;
                                             float yScaled = (-2 / ikIO.displaySize.y) * x + 1;
                                             float width = (1 / ikIO.displaySize.x) * a;
@@ -189,9 +190,8 @@ class IkGuiDemo {
                                                 drawData.getDrawListPointDetailBuffer(
                                                         drawListIndex);
                                         int pointDetailBufferIndex =
-                                                detailIndex
-                                                        + debugPointDetailIndex
-                                                                * DrawData.SIZE_OF_POINT_DETAIL;
+                                                (detailIndex + debugPointDetailIndex)
+                                                        * DrawData.SIZE_OF_POINT_DETAIL;
 
                                         float radius =
                                                 pointDetailBuffer.getFloat(pointDetailBufferIndex);
