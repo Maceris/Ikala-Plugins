@@ -15,6 +15,7 @@ import org.joml.Vector4i;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.util.freetype.FT_Bitmap;
+import org.lwjgl.util.freetype.FT_Vector;
 
 import java.io.File;
 import java.io.IOException;
@@ -118,6 +119,9 @@ public class FontAtlas {
     /** The oldest part of the LRU list. Sentinel value, not an actual element. */
     private final CacheElement cacheTail;
 
+    /** Used for calculating kerning. */
+    private FT_Vector kerningSize;
+
     /** Our allocator tracking. */
     private final List<Shelf> shelves;
 
@@ -163,6 +167,7 @@ public class FontAtlas {
             FT_Library_Version(freeTypeLibrary.get(0), major, minor, patch);
             log.debug("Loaded FreeType v{}.{}.{}", major.get(0), minor.get(0), patch.get(0));
         }
+        this.kerningSize = FT_Vector.create();
     }
 
     @Synchronized
@@ -207,6 +212,7 @@ public class FontAtlas {
 
         CacheElement newElement = new CacheElement(c);
 
+        font.setSize(fontSize);
         StagedBitmap newBitmap = loadGlyph(font, c, newElement, index);
 
         if (newBitmap == null) {
@@ -277,6 +283,8 @@ public class FontAtlas {
         cacheTail.previous = null;
         stagedBitmaps.clear();
         shelves.clear();
+        kerningSize.free();
+        kerningSize = null;
 
         FT_Done_FreeType(freeTypeLibrary.get(0));
         freeTypeLibrary = null;
@@ -471,6 +479,42 @@ public class FontAtlas {
         return true;
     }
 
+    @Synchronized
+    public int getKerning(char first, char second, int fontSize) {
+        Font font = null;
+        Font primary = IkGui.getContext().font;
+
+        if (primary != null && primary.supports(first)) {
+            font = primary;
+        }
+        if (font == null) {
+            for (Font potential : IkGui.getContext().fontFallbacks) {
+                if (potential.supports(first)) {
+                    font = potential;
+                    break;
+                }
+            }
+        }
+        if (font == null || !font.supportsKerning || !font.supports(second)) {
+            return (int) (fontSize * 0.1f * 1.333f);
+        }
+
+        font.setSize(fontSize);
+
+        int firstIndex = FT_Get_Char_Index(font.face, first);
+        int secondIndex = FT_Get_Char_Index(font.face, second);
+
+        int error =
+                FT_Get_Kerning(
+                        font.face, firstIndex, secondIndex, FT_KERNING_UNSCALED, kerningSize);
+        if (error != FT_Err_Ok) {
+            log.error("Failed to fetch kerning for font {}: {}", font.name, FT_Error_String(error));
+            return (int) (fontSize * 0.1f * 1.333f);
+        }
+
+        return (int) (1.333f * kerningSize.x());
+    }
+
     /**
      * Check if a font is loaded.
      *
@@ -521,6 +565,7 @@ public class FontAtlas {
             }
 
             Font font = new Font(fontPath, fontByteBuffer, fontPointer);
+            font.setSize(IkGui.getFontSize());
 
             fonts.put(fontPath, font);
         } catch (IOException e) {

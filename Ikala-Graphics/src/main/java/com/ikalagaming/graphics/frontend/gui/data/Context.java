@@ -90,7 +90,7 @@ public class Context {
     public float dimBackgroundRatio;
     public float disabledAlphaBackup;
     public short disabledStackSize;
-    public float dpiScale;
+    public int dpiScale;
     public float dragCurrentAccumulatedDelta;
     public boolean dragCurrentAccumulatedDeltaDirty;
 
@@ -480,7 +480,7 @@ public class Context {
         dimBackgroundRatio = 0.0f;
         disabledAlphaBackup = 0.0f;
         disabledStackSize = 0;
-        dpiScale = 0.0f;
+        dpiScale = 72;
         dragCurrentAccumulatedDelta = 0.0f;
         dragCurrentAccumulatedDeltaDirty = false;
         dragDropAcceptFlags = 0;

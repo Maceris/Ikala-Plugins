@@ -16,7 +16,9 @@ import org.joml.Vector4i;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
+import java.util.List;
 
 @Slf4j
 public class DrawList {
@@ -970,7 +972,6 @@ public class DrawList {
     }
 
     public void addText(int fontSize, float posX, float posY, int color, @NonNull String text) {
-        Vector4i charPosition = new Vector4i();
         FontAtlas atlas = IkGui.getContext().io.fonts;
 
         float charWidth;
@@ -982,24 +983,37 @@ public class DrawList {
         final int detailCount = 1;
         final int borderStroke = 0;
 
-        int currentX = (int) posX;
-        final int kerning = (int) (fontSize * 1.333f * .1f);
-
         // TODO(ches) RTL, vertical
+
+        List<Vector4i> positions = new ArrayList<>();
 
         for (int pos = 0; pos < text.length(); ++pos) {
             final char c = text.charAt(pos);
             atlas.registerCharacter(c, fontSize);
+
+            Vector4i charPosition = new Vector4i();
+            positions.add(charPosition);
+
             if (!atlas.getFontMapPosition(c, fontSize, charPosition)) {
                 log.error("Could not find a font for character '{}'", c);
-                continue;
             }
-            charWidth = charPosition.z;
-            charHeight = charPosition.w;
+        }
 
-            addScreenQuad(currentX, posY, currentX + charWidth, posY + charHeight);
-            final int pointIndex = addPoint(currentX, posY, 0, 0);
-            addPoint(charPosition.x, charPosition.y, charWidth, charHeight);
+        int currentX = (int) posX;
+        int maxHeight = 0;
+        for (Vector4i pos : positions) {
+            if (pos.w > maxHeight) {
+                maxHeight = pos.w;
+            }
+        }
+
+        for (int i = 0; i < positions.size(); ++i) {
+            Vector4i pos = positions.get(i);
+
+            addScreenQuad(
+                    currentX, posY + maxHeight - pos.w, (float) currentX + pos.z, posY + maxHeight);
+            final int pointIndex = addPoint(currentX, posY + maxHeight - pos.w, 0, 0);
+            addPoint(pos.x, pos.y, pos.z, pos.w);
 
             addCommand(
                     pointIndex,
@@ -1010,7 +1024,10 @@ public class DrawList {
                     ElementStyle.TEXTURE,
                     borderStroke);
 
-            currentX += charPosition.z + kerning;
+            if (i + 1 < positions.size()) {
+                int kerning = atlas.getKerning(text.charAt(i), text.charAt(i + 1), fontSize);
+                currentX += pos.z + kerning;
+            }
         }
     }
 

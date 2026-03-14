@@ -2,10 +2,13 @@ package com.ikalagaming.graphics.frontend.gui.data;
 
 import static org.lwjgl.util.freetype.FreeType.*;
 
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.util.freetype.FT_Face;
+import org.lwjgl.util.freetype.FT_Size_Request;
 
 import java.nio.ByteBuffer;
 import java.util.concurrent.locks.ReentrantLock;
@@ -28,6 +31,15 @@ public class Font {
      */
     ReentrantLock lock;
 
+    /** Whether the font face contains kerning information. */
+    final boolean supportsKerning;
+
+    /** The current font size we are dealing with. */
+    int size;
+
+    /** Temporary storage for size info. */
+    FT_Size_Request sizeRequest;
+
     public Font(
             @NonNull String name,
             @NonNull ByteBuffer fontData,
@@ -37,6 +49,50 @@ public class Font {
         this.freeTypeFont = freeTypeFont;
         face = FT_Face.create(freeTypeFont.get(0));
         this.lock = new ReentrantLock();
+        size = 0;
+        sizeRequest = FT_Size_Request.create();
+        supportsKerning = (face.face_flags() & FT_FACE_FLAG_KERNING) != 0;
+    }
+
+    /**
+     * Set the font size, for rendering and kerning purposes. It's expected that we only deal with
+     * one font size at a time for each font.
+     *
+     * @param fontSize The new font size.
+     */
+    public void setSize(int fontSize) {
+        if (size == fontSize || fontSize < 0) {
+            return;
+        }
+
+        this.lock.lock();
+        try {
+            int error = FT_Request_Size(face, sizeRequest);
+
+            if (error != FT_Err_Ok) {
+                log.error(
+                        "Failed to request size {} for font {}: {}",
+                        fontSize,
+                        name,
+                        FT_Error_String(error));
+                return;
+            }
+
+            int dpi = IkGui.getContext().dpiScale;
+
+            error = FT_Set_Char_Size(face, sizeRequest.width(), sizeRequest.height(), dpi, dpi);
+            if (error != FT_Err_Ok) {
+                log.error(
+                        "Failed to set char size {} for font {}: {}",
+                        fontSize,
+                        name,
+                        FT_Error_String(error));
+                return;
+            }
+            size = fontSize;
+        } finally {
+            this.lock.unlock();
+        }
     }
 
     /**
@@ -62,6 +118,8 @@ public class Font {
             }
             freeTypeFont = null;
             fontData = null;
+            sizeRequest.free();
+            sizeRequest = null;
         }
     }
 }
