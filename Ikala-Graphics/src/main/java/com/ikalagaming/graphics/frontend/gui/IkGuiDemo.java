@@ -6,6 +6,7 @@ import com.ikalagaming.graphics.frontend.gui.data.IkBoolean;
 import com.ikalagaming.graphics.frontend.gui.data.IkIO;
 import com.ikalagaming.graphics.frontend.gui.enums.Condition;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
+import com.ikalagaming.graphics.frontend.gui.enums.StyleVariable;
 import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 
 import imgui.ImGui;
@@ -19,7 +20,7 @@ class IkGuiDemo {
     static void showDemoWindow(final IkBoolean open) {
         int windowFlags = WindowFlags.NONE;
 
-        IkGui.setNextWindowSize(520, 700, Condition.ONCE);
+        IkGui.setNextWindowSize(620, 700, Condition.ONCE);
         IkGui.setNextWindowPos(30, 30, Condition.ONCE);
         if (!IkGui.begin("IkGui Demo Window", open, windowFlags)) {
             IkGui.end();
@@ -32,8 +33,8 @@ class IkGuiDemo {
         IkGui.text("This should be on the same line.");
         IkGui.setFontSize(24);
         IkGui.text("Hello world size 24!");
-        IkGui.setFontSize(72);
-        IkGui.text("Hello world size 72!");
+        IkGui.setFontSize(48);
+        IkGui.text("Hello world size 48!");
         IkGui.setFontSize(12);
 
         showHelpSection();
