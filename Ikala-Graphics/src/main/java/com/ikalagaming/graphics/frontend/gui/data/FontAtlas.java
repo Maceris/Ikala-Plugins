@@ -14,8 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector4i;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
-import org.lwjgl.util.freetype.FT_Bitmap;
-import org.lwjgl.util.freetype.FT_Vector;
+import org.lwjgl.util.freetype.*;
 
 import java.io.File;
 import java.io.IOException;
@@ -597,20 +596,19 @@ public class FontAtlas {
                 log.error("Failed to load char {} for font {}", c, font.name);
                 return null;
             }
-            if (Objects.requireNonNull(font.face.glyph()).format() != FT_GLYPH_FORMAT_BITMAP) {
-                error =
-                        FT_Render_Glyph(
-                                Objects.requireNonNull(font.face.glyph()), FT_RENDER_MODE_NORMAL);
+            FT_GlyphSlot slot = Objects.requireNonNull(font.face.glyph());
+            FT_Bitmap bitmap = slot.bitmap();
+
+            if (slot.format() != FT_GLYPH_FORMAT_BITMAP) {
+                error = FT_Render_Glyph(slot, FT_RENDER_MODE_NORMAL);
                 if (error != FT_Err_Ok) {
                     log.error("Failed to render char {} for font {}", c, font.name);
                     return null;
                 }
             }
 
-            FT_Bitmap bitmap = Objects.requireNonNull(font.face.glyph()).bitmap();
             final int width = bitmap.width();
             final int height = bitmap.rows();
-            final int numGrays = bitmap.num_grays();
             final int totalPixels = width * height;
             int originalBufferSize = Math.abs(bitmap.pitch()) * height;
 
@@ -666,9 +664,7 @@ public class FontAtlas {
                 case FT_PIXEL_MODE_GRAY:
                     for (int i = 0; i < originalBufferSize; ++i) {
                         byte currentByte = oldContents.get(i);
-                        int value = (currentByte * 255) / numGrays;
-                        int newPixel = (value << 24) | (value << 16) | (value << 8) | value;
-                        newContents.putInt(newPixel);
+                        newContents.putInt(currentByte);
                     }
                     break;
                 case FT_PIXEL_MODE_LCD, FT_PIXEL_MODE_LCD_V:
