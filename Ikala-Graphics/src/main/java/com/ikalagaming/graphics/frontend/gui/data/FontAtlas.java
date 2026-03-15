@@ -614,6 +614,23 @@ public class FontAtlas {
 
             ByteBuffer oldContents = bitmap.buffer(originalBufferSize);
             if (oldContents == null) {
+                int fontSize = font.size;
+                float fontScale =
+                        (float) IkGui.getContext().dpiScaleScreen / IkGui.getContext().dpiScaleFont;
+
+                int overwrittenWidth;
+                int overwrittenHeight = (int) (fontSize * fontScale);
+
+                if (c == ' ') {
+                    overwrittenWidth = (int) (fontSize * fontScale * 0.25);
+                } else {
+                    return EMPTY_BITMAP;
+                }
+
+                allocAtlasSpace(overwrittenWidth, overwrittenHeight, element, cacheIndex);
+                element.width = overwrittenWidth;
+                element.height = overwrittenHeight;
+
                 return EMPTY_BITMAP;
             }
             ByteBuffer newContents = ByteBuffer.allocateDirect(width * height * Integer.BYTES);
