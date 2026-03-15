@@ -144,12 +144,7 @@ public class IkGui {
         }
         // TODO(ches) position condition
         window.position.set(context.nextWindowData.positionValue);
-        window.cursorPosition.set(
-                window.position.x + window.padding.x,
-                window.position.y
-                        + window.padding.y
-                        + window.titleBarHeight
-                        + window.menuBarHeight);
+
         // TODO(ches) size condition
         window.sizeRequested.set(context.nextWindowData.sizeValue);
         // TODO(ches) collapsed condition
@@ -158,6 +153,19 @@ public class IkGui {
         // TODO(ches) calculate actual size properly
         window.sizeCurrent.set(window.sizeRequested);
         window.rounding = getStyleVarInt(StyleVariable.WINDOW_ROUNDING);
+
+        window.cursorStartPosition.set(
+                window.position.x + window.padding.x,
+                window.position.y
+                        + window.padding.y
+                        + window.titleBarHeight
+                        + window.menuBarHeight);
+        window.cursorPosition.set(window.cursorStartPosition);
+        window.cursorIdealMaxPosition.set(window.cursorPosition);
+        window.cursorIdealMaxPosition.add(window.sizeRequested);
+        window.cursorMaxPosition.set(window.cursorPosition);
+        window.cursorMaxPosition.add(window.sizeCurrent);
+        window.cursorPreviousLinePosition.set(window.cursorStartPosition);
 
         window.open = open;
         window.active = true;
@@ -3976,16 +3984,45 @@ public class IkGui {
         // TODO(ches) complete this
     }
 
+    /** Keep rendering on the same line. */
     public static void sameLine() {
-        // TODO(ches) complete this
+        sameLine(0, -1);
     }
 
-    public static void sameLine(float offsetFromStartX) {
-        // TODO(ches) complete this
+    /**
+     * Keep rendering on the same line.
+     *
+     * @param offsetFromStartX If positive, the window-local x position. If zero, placed at the end
+     *     of the last widget's rectangle.
+     */
+    public static void sameLine(int offsetFromStartX) {
+        sameLine(offsetFromStartX, -1);
     }
 
-    public static void sameLine(float offsetFromStartX, float spacingAfterCurrent) {
-        // TODO(ches) complete this
+    /**
+     * Keep rendering on the same line.
+     *
+     * @param offsetFromStartX If positive, the window-local x position. If zero, placed at the end
+     *     of the last widget's rectangle.
+     * @param spacingAfterCurrent The horizontal spacing between the current and next widget.
+     */
+    public static void sameLine(final int offsetFromStartX, int spacingAfterCurrent) {
+        Window window = context.windowCurrent;
+        Vector2i cursor = window.cursorPosition;
+
+        if (spacingAfterCurrent == -1) {
+            spacingAfterCurrent = context.style.variable.itemSpacing.x;
+        }
+
+        int newX;
+        if (offsetFromStartX == 0) {
+            newX = cursor.x + spacingAfterCurrent;
+        } else {
+            newX = window.cursorStartPosition.x + offsetFromStartX;
+        }
+
+        window.sameLine = true;
+        cursor.set(newX, cursor.y);
     }
 
     public static void saveIniSettingsToDisk(String filename) {
@@ -4196,16 +4233,16 @@ public class IkGui {
         // TODO(ches) complete this
     }
 
-    public static void setNextWindowPos(float x, float y) {
+    public static void setNextWindowPos(int x, int y) {
         setNextWindowPos(x, y, Condition.ALWAYS, 0, 0);
     }
 
-    public static void setNextWindowPos(float x, float y, @NonNull Condition condition) {
+    public static void setNextWindowPos(int x, int y, @NonNull Condition condition) {
         setNextWindowPos(x, y, condition, 0, 0);
     }
 
     public static void setNextWindowPos(
-            float x, float y, @NonNull Condition condition, int pivotX, int pivotY) {
+            int x, int y, @NonNull Condition condition, int pivotX, int pivotY) {
 
         if (pivotX < 0f || pivotX > 1.0f) {
             log.error("Invalid pivotX in setNextWindowPos, should be in the range [0, 1]");
@@ -4221,11 +4258,11 @@ public class IkGui {
         context.nextWindowData.positionCondition = condition;
     }
 
-    public static void setNextWindowSize(float x, float y) {
+    public static void setNextWindowSize(int x, int y) {
         setNextWindowSize(x, y, Condition.ALWAYS);
     }
 
-    public static void setNextWindowSize(float x, float y, @NonNull Condition condition) {
+    public static void setNextWindowSize(int x, int y, @NonNull Condition condition) {
         context.nextWindowData.sizeCondition = condition;
         context.nextWindowData.sizeValue.set(x, y);
     }
@@ -4821,9 +4858,15 @@ public class IkGui {
     }
 
     public static void textColored(int color, @NonNull String text) {
-        Vector2f cursor = context.windowCurrent.cursorPosition;
-        context.windowCurrent.drawList.addText(context.fontSize, cursor.x, cursor.y, color, text);
-        context.windowCurrent.cursorPosition.add(0, getTextLineHeightWithSpacing());
+        Vector2i cursor = context.windowCurrent.cursorPosition;
+
+        Window window = context.windowCurrent;
+        window.updateCursorBeforeDrawing();
+
+        int cursorDelta =
+                context.windowCurrent.drawList.addText(
+                        context.fontSize, cursor.x, cursor.y, color, text);
+        window.updateCursorAfterDrawing(cursorDelta, getTextLineHeightWithSpacing());
     }
 
     public static void textDisabled(@NonNull String text) {

@@ -971,7 +971,17 @@ public class DrawList {
         // TODO(ches) implement this
     }
 
-    public void addText(int fontSize, float posX, float posY, int color, @NonNull String text) {
+    /**
+     * Add text to the draw list.
+     *
+     * @param fontSize Font size.
+     * @param posX X position to start drawing at.
+     * @param posY Y position to start drawing at.
+     * @param color Color of the text.
+     * @param text Text to draw.
+     * @return Total width of the text.
+     */
+    public int addText(int fontSize, float posX, float posY, int color, @NonNull String text) {
         FontAtlas atlas = IkGui.getContext().io.fonts;
 
         SDFPointDetail detail = new SDFPointDetail(0, 0, color);
@@ -1039,6 +1049,8 @@ public class DrawList {
                 currentX += pos.z + kerning;
             }
         }
+
+        return (int) (currentX - posX);
     }
 
     public void addText(

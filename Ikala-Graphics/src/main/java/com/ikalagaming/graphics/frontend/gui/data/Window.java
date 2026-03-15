@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
+import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.enums.Direction;
 import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.frontend.gui.util.Rect;
@@ -7,7 +8,6 @@ import com.ikalagaming.util.FloatArrayList;
 import com.ikalagaming.util.IntArrayList;
 
 import lombok.NonNull;
-import org.joml.Vector2f;
 import org.joml.Vector2i;
 
 import java.util.ArrayList;
@@ -21,7 +21,7 @@ public class Window {
     public int flagsAsChildWindow;
     public final List<Window> childWindows;
     public Viewport viewport;
-    public final Vector2f position;
+    public final Vector2i position;
 
     /**
      * Only non-null if this window has a close button, used to communicate elsewhere that we closed
@@ -30,16 +30,16 @@ public class Window {
     public IkBoolean open;
 
     /** Size, which might be smaller than the full size if minimized. */
-    public final Vector2f sizeCurrent;
+    public final Vector2i sizeCurrent;
 
     /** The full size of the window when not collapsed. */
-    public final Vector2f sizeFull;
+    public final Vector2i sizeFull;
 
     /** Size the window would like to be, given its contents. */
-    public final Vector2f sizeDesired;
+    public final Vector2i sizeDesired;
 
     /** Size that was requested for the window before it was drawn. */
-    public final Vector2f sizeRequested;
+    public final Vector2i sizeRequested;
 
     public final Vector2i padding;
     public float rounding;
@@ -49,12 +49,12 @@ public class Window {
 
     public int idWithinParent;
     public int idAsPopupWindow;
-    public final Vector2f scrollPosition;
-    public final Vector2f scrollExtent;
-    public final Vector2f scrollTarget;
+    public final Vector2i scrollPosition;
+    public final Vector2i scrollExtent;
+    public final Vector2i scrollTarget;
 
     /** X is the width of the vertical scrollbar, y is the height of the horizontal scrollbar. */
-    public final Vector2f scrollbarSizes;
+    public final Vector2i scrollbarSizes;
 
     public boolean showScrollbarX;
     public boolean showScrollbarY;
@@ -93,26 +93,26 @@ public class Window {
     public Window rootWindowForTitleBarHighlight;
     public Window rootWindowForNavigation;
 
-    public final Vector2f cursorPosition;
-    public final Vector2f cursorStartPosition;
-    public final Vector2f cursorPreviousLinePosition;
+    public final Vector2i cursorPosition;
+    public final Vector2i cursorStartPosition;
+    public final Vector2i cursorPreviousLinePosition;
 
     /**
      * Grows as content is added, and used to determine the content region next frame, for scrolling
      * and auto-resize.
      */
-    public final Vector2f cursorMaxPosition;
+    public final Vector2i cursorMaxPosition;
 
     /**
      * Grows as content is added, and used to determine the content region next frame, for
      * auto-resize.
      */
-    public final Vector2f cursorIdealMaxPosition;
+    public final Vector2i cursorIdealMaxPosition;
 
-    public final Vector2f lineSizePrevious;
-    public final Vector2f lineSizeCurrent;
-    public float baseOffsetCurrentLine;
-    public float baseOffsetPreviousLine;
+    public final Vector2i lineSizePrevious;
+    public final Vector2i lineSizeCurrent;
+    public int baseOffsetCurrentLine;
+    public int baseOffsetPreviousLine;
     public boolean sameLine;
     public boolean setPos;
     public float indent;
@@ -132,12 +132,12 @@ public class Window {
         flagsAsChildWindow = WindowFlags.NONE;
         childWindows = new ArrayList<>();
         viewport = null;
-        position = new Vector2f(0, 0);
+        position = new Vector2i(0, 0);
         open = new IkBoolean();
-        sizeCurrent = new Vector2f(0, 0);
-        sizeFull = new Vector2f(0, 0);
-        sizeDesired = new Vector2f(0, 0);
-        sizeRequested = new Vector2f(0, 0);
+        sizeCurrent = new Vector2i(0, 0);
+        sizeFull = new Vector2i(0, 0);
+        sizeDesired = new Vector2i(0, 0);
+        sizeRequested = new Vector2i(0, 0);
         padding = new Vector2i(0, 0);
         rounding = 0.0f;
         borderSize = 0.0f;
@@ -145,10 +145,10 @@ public class Window {
         menuBarHeight = 0;
         idWithinParent = 0;
         idAsPopupWindow = 0;
-        scrollPosition = new Vector2f(0, 0);
-        scrollExtent = new Vector2f(0, 0);
-        scrollTarget = new Vector2f(0, 0);
-        scrollbarSizes = new Vector2f(0, 0);
+        scrollPosition = new Vector2i(0, 0);
+        scrollExtent = new Vector2i(0, 0);
+        scrollTarget = new Vector2i(0, 0);
+        scrollbarSizes = new Vector2i(0, 0);
         showScrollbarX = false;
         showScrollbarY = false;
         active = false;
@@ -172,15 +172,15 @@ public class Window {
         rootWindowIncludingPopups = null;
         rootWindowForTitleBarHighlight = null;
         rootWindowForNavigation = null;
-        cursorPosition = new Vector2f(0, 0);
-        cursorStartPosition = new Vector2f(0, 0);
-        cursorPreviousLinePosition = new Vector2f(0, 0);
-        cursorMaxPosition = new Vector2f(0, 0);
-        cursorIdealMaxPosition = new Vector2f(0, 0);
-        lineSizePrevious = new Vector2f(0, 0);
-        lineSizeCurrent = new Vector2f(0, 0);
-        baseOffsetCurrentLine = 0.0f;
-        baseOffsetPreviousLine = 0.0f;
+        cursorPosition = new Vector2i(0, 0);
+        cursorStartPosition = new Vector2i(0, 0);
+        cursorPreviousLinePosition = new Vector2i(0, 0);
+        cursorMaxPosition = new Vector2i(0, 0);
+        cursorIdealMaxPosition = new Vector2i(0, 0);
+        lineSizePrevious = new Vector2i(0, 0);
+        lineSizeCurrent = new Vector2i(0, 0);
+        baseOffsetCurrentLine = 0;
+        baseOffsetPreviousLine = 0;
         sameLine = false;
         setPos = false;
         indent = 0.0f;
@@ -248,8 +248,8 @@ public class Window {
         this.cursorIdealMaxPosition.set(0, 0);
         this.lineSizePrevious.set(0, 0);
         this.lineSizeCurrent.set(0, 0);
-        this.baseOffsetCurrentLine = 0.0f;
-        this.baseOffsetPreviousLine = 0.0f;
+        this.baseOffsetCurrentLine = 0;
+        this.baseOffsetPreviousLine = 0;
         this.sameLine = false;
         this.setPos = false;
         this.indent = 0.0f;
@@ -263,5 +263,27 @@ public class Window {
 
     public boolean hasCloseButton() {
         return open != null;
+    }
+
+    public void updateCursorBeforeDrawing() {
+        if (!sameLine) {
+            lineSizePrevious.set(lineSizeCurrent);
+            lineSizeCurrent.set(0, 0);
+            cursorPreviousLinePosition.set(cursorPosition);
+            cursorPosition.set(cursorStartPosition.x, cursorPosition.y);
+            cursorPosition.add(
+                    0, lineSizePrevious.y + IkGui.getContext().style.variable.itemSpacing.y);
+        }
+    }
+
+    public void updateCursorAfterDrawing(int lastItemWidth, int lastItemHeight) {
+        if (sameLine) {
+            lineSizeCurrent.set(
+                    lineSizeCurrent.x + lastItemWidth, Math.max(lineSizeCurrent.y, lastItemHeight));
+        } else {
+            lineSizeCurrent.set(lastItemWidth, lastItemHeight);
+        }
+        cursorPosition.add(lastItemWidth, 0);
+        sameLine = false;
     }
 }

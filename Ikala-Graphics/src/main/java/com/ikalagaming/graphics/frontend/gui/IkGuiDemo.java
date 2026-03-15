@@ -28,6 +28,8 @@ class IkGuiDemo {
 
         IkGui.setFontSize(12);
         IkGui.text("Hello world size 12!");
+        IkGui.sameLine();
+        IkGui.text("This should be on the same line.");
         IkGui.setFontSize(24);
         IkGui.text("Hello world size 24!");
         IkGui.setFontSize(72);
