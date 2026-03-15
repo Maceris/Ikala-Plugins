@@ -980,9 +980,12 @@ public class DrawList {
         final int detailCount = 1;
         final int borderStroke = 0;
 
+        float fontScale =
+                (float) IkGui.getContext().dpiScaleScreen / IkGui.getContext().dpiScaleFont;
+
         // TODO(ches) RTL, vertical
 
-        List<Vector4i> positions = new ArrayList<>();
+        List<Vector4i> positions = new ArrayList<>(text.length());
 
         for (int pos = 0; pos < text.length(); ++pos) {
             final char c = text.charAt(pos);
@@ -1006,6 +1009,16 @@ public class DrawList {
 
         for (int i = 0; i < positions.size(); ++i) {
             Vector4i pos = positions.get(i);
+
+            if (pos.z == 0 && pos.y == 0) {
+                char c = text.charAt(i);
+                if (c == ' ') {
+                    int width = (int) (fontSize * fontScale * 0.25);
+                    currentX += width;
+                }
+                // TODO(ches) tab stops
+                continue;
+            }
 
             addScreenQuad(
                     currentX, posY + maxHeight - pos.w, (float) currentX + pos.z, posY + maxHeight);
