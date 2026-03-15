@@ -90,7 +90,13 @@ public class Context {
     public float dimBackgroundRatio;
     public float disabledAlphaBackup;
     public short disabledStackSize;
-    public int dpiScale;
+
+    /** The number of font points in one inch. */
+    public int dpiScaleFont;
+
+    /** The number of pixels in 1 inch. */
+    public int dpiScaleScreen;
+
     public float dragCurrentAccumulatedDelta;
     public boolean dragCurrentAccumulatedDeltaDirty;
 
@@ -480,7 +486,8 @@ public class Context {
         dimBackgroundRatio = 0.0f;
         disabledAlphaBackup = 0.0f;
         disabledStackSize = 0;
-        dpiScale = 72;
+        dpiScaleFont = 72;
+        dpiScaleScreen = 96;
         dragCurrentAccumulatedDelta = 0.0f;
         dragCurrentAccumulatedDeltaDirty = false;
         dragDropAcceptFlags = 0;

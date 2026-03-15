@@ -232,6 +232,7 @@ public class FontAtlas {
         CacheElement next = cacheHead.next;
         cacheHead.next = newElement;
         newElement.next = next;
+        newElement.previous = cacheHead;
         next.previous = newElement;
     }
 
@@ -297,13 +298,13 @@ public class FontAtlas {
             return;
         }
 
-        while (cacheTail.previous != cacheHead) {
+        do {
             for (Shelf shelf : shelves) {
                 if (shelf.height < height) {
                     continue;
                 }
                 for (FreeBlock block : shelf.freeList) {
-                    if (block.size > width) {
+                    if (block.size >= width) {
                         // Found one
                         element.x = block.position;
                         element.y = shelf.y;
@@ -324,9 +325,16 @@ public class FontAtlas {
 
             for (FreeBlock block : shelvesFreeList) {
                 if (block.size >= shelfHeight) {
-                    shelves.add(new Shelf(block.position, FONT_ATLAS_IMAGE_WIDTH, shelfHeight));
+                    Shelf newShelf = new Shelf(block.position, FONT_ATLAS_IMAGE_WIDTH, shelfHeight);
+                    shelves.add(newShelf);
                     block.position += shelfHeight;
                     block.size -= shelfHeight;
+
+                    FreeBlock shelfSpace = newShelf.freeList.getFirst();
+                    element.x = shelfSpace.position;
+                    element.y = newShelf.y;
+                    shelfSpace.position += width;
+                    shelfSpace.size -= width;
                     return;
                 }
             }
@@ -372,7 +380,7 @@ public class FontAtlas {
                 shelves.remove(oldShelf);
             }
             // Back to the top, I guess.
-        }
+        } while (cacheTail.previous != cacheHead);
     }
 
     private void mergeBlock(@NonNull List<FreeBlock> freeList, @NonNull FreeBlock newBlock) {
@@ -495,8 +503,11 @@ public class FontAtlas {
                 }
             }
         }
+        final float dpiRatio =
+                (float) IkGui.getContext().dpiScaleScreen / IkGui.getContext().dpiScaleFont;
+
         if (font == null || !font.supportsKerning || !font.supports(second)) {
-            return (int) (fontSize * 0.1f * 1.333f);
+            return (int) (fontSize * 0.1f * dpiRatio);
         }
 
         font.setSize(fontSize);
@@ -509,10 +520,10 @@ public class FontAtlas {
                         font.face, firstIndex, secondIndex, FT_KERNING_UNSCALED, kerningSize);
         if (error != FT_Err_Ok) {
             log.error("Failed to fetch kerning for font {}: {}", font.name, FT_Error_String(error));
-            return (int) (fontSize * 0.1f * 1.333f);
+            return (int) (fontSize * 0.1f * dpiRatio);
         }
 
-        return (int) (1.333f * kerningSize.x());
+        return (int) (dpiRatio * kerningSize.x());
     }
 
     /**
@@ -607,7 +618,7 @@ public class FontAtlas {
             if (oldContents == null) {
                 return EMPTY_BITMAP;
             }
-            ByteBuffer newContents = ByteBuffer.allocateDirect(width * height * 4);
+            ByteBuffer newContents = ByteBuffer.allocateDirect(width * height * Integer.BYTES);
 
             int pixelsProcessed = 0;
             switch (bitmap.pixel_mode()) {

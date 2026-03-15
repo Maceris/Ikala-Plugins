@@ -974,9 +974,6 @@ public class DrawList {
     public void addText(int fontSize, float posX, float posY, int color, @NonNull String text) {
         FontAtlas atlas = IkGui.getContext().io.fonts;
 
-        float charWidth;
-        float charHeight;
-
         SDFPointDetail detail = new SDFPointDetail(0, 0, color);
         final int detailIndex = addDetails(detail);
         final int pointCount = 2;

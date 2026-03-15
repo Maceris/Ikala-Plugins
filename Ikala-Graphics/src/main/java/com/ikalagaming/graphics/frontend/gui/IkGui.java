@@ -2378,14 +2378,14 @@ public class IkGui {
         }
     }
 
-    public static float getTextLineHeight() {
-        // TODO(ches) complete this
-        return 0;
+    public static int getTextLineHeight() {
+        float fontScale = (float) context.dpiScaleScreen / context.dpiScaleFont;
+        return (int) (fontScale * context.fontSize);
     }
 
-    public static float getTextLineHeightWithSpacing() {
-        // TODO(ches) complete this
-        return 0;
+    public static int getTextLineHeightWithSpacing() {
+        float fontScale = (float) context.dpiScaleScreen / context.dpiScaleFont;
+        return (int) (fontScale * 1.1f * context.fontSize);
     }
 
     public static double getTime() {
@@ -4823,6 +4823,7 @@ public class IkGui {
     public static void textColored(int color, @NonNull String text) {
         Vector2f cursor = context.windowCurrent.cursorPosition;
         context.windowCurrent.drawList.addText(context.fontSize, cursor.x, cursor.y, color, text);
+        context.windowCurrent.cursorPosition.add(0, getTextLineHeightWithSpacing());
     }
 
     public static void textDisabled(@NonNull String text) {

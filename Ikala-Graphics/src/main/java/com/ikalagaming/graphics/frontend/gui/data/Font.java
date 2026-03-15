@@ -15,8 +15,6 @@ import java.util.concurrent.locks.ReentrantLock;
 
 @Slf4j
 public class Font {
-    // TODO(ches) font
-
     /** The name of the font, which is the path to the font from the plugins data directory. */
     public final String name;
 
@@ -67,28 +65,26 @@ public class Font {
 
         this.lock.lock();
         try {
+            int dpiFont = IkGui.getContext().dpiScaleFont;
+            int dpiScreen = IkGui.getContext().dpiScaleScreen;
+
+            sizeRequest.set(
+                    FT_SIZE_REQUEST_TYPE_NOMINAL,
+                    0,
+                    (long) (fontSize * (dpiFont / 72f) * 64),
+                    dpiScreen,
+                    dpiScreen);
             int error = FT_Request_Size(face, sizeRequest);
-
             if (error != FT_Err_Ok) {
                 log.error(
-                        "Failed to request size {} for font {}: {}",
+                        "Failed to request size {} for font {}: {} ({})",
                         fontSize,
                         name,
-                        FT_Error_String(error));
+                        FT_Error_String(error),
+                        error);
                 return;
             }
 
-            int dpi = IkGui.getContext().dpiScale;
-
-            error = FT_Set_Char_Size(face, sizeRequest.width(), sizeRequest.height(), dpi, dpi);
-            if (error != FT_Err_Ok) {
-                log.error(
-                        "Failed to set char size {} for font {}: {}",
-                        fontSize,
-                        name,
-                        FT_Error_String(error));
-                return;
-            }
             size = fontSize;
         } finally {
             this.lock.unlock();
