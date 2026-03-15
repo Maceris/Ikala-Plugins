@@ -129,8 +129,9 @@ public class IkGui {
         window.reset(context, title);
         window.id = ID;
         window.name = title;
-        window.padding.set(context.style.variable.windowPadding);
-        window.titleBarHeight = 15;
+        getStyleVarInt2(StyleVariable.WINDOW_PADDING, window.padding);
+        Vector2i framePadding = getStyleVarInt2(StyleVariable.FRAME_PADDING);
+        window.titleBarHeight = getTextLineHeight() + 2 * framePadding.y;
         window.menuBarHeight = 0;
         if (WindowFlags.NONE == windowFlags) {
             window.flags = context.nextWindowData.windowFlags;
@@ -177,11 +178,10 @@ public class IkGui {
         window.drawList.addRectFilled(
                 window.position.x,
                 window.position.y,
-                window.position.x + window.sizeCurrent.x,
-                window.position.y + window.sizeCurrent.y,
+                (float) window.position.x + window.sizeCurrent.x,
+                (float) window.position.y + window.sizeCurrent.y,
                 getStyleColorWithGlobalAlpha(ColorType.WINDOW_BACKGROUND),
                 window.rounding);
-        // TODO(ches) calculate header height also using font size
 
         ColorType titleColor = ColorType.TITLE_BACKGROUND;
         if (window.collapsed) {
@@ -192,16 +192,26 @@ public class IkGui {
         window.drawList.addRectFilled(
                 window.position.x,
                 window.position.y,
-                window.position.x + window.sizeCurrent.x,
-                window.position.y + window.titleBarHeight + context.style.variable.framePadding.y,
+                (float) window.position.x + window.sizeCurrent.x,
+                (float) window.position.y + window.titleBarHeight,
                 getStyleColorWithGlobalAlpha(titleColor),
                 window.rounding,
                 DrawFlags.ROUND_CORNERS_TOP);
+
+        // TODO(ches) handle special cases of names with # and ##
+        // TODO(ches) handle title alignment
+        window.drawList.addText(
+                context.fontSize,
+                (float) window.position.x + framePadding.x,
+                (float) window.position.y + framePadding.y,
+                getStyleColor(ColorType.TEXT),
+                window.name);
+
         window.drawList.addRect(
                 window.position.x,
                 window.position.y,
-                window.position.x + window.sizeCurrent.x,
-                window.position.y + window.sizeCurrent.y,
+                (float) window.position.x + window.sizeCurrent.x,
+                (float) window.position.y + window.sizeCurrent.y,
                 getStyleColorWithGlobalAlpha(ColorType.BORDER),
                 window.rounding,
                 DrawFlags.ROUND_CORNERS_ALL,
@@ -2195,7 +2205,7 @@ public class IkGui {
      */
     public static void getStyleVarFloat2(
             @NonNull StyleVariable variable, @NonNull Vector2f target) {
-        if (variable.getDimensions() != 1) {
+        if (variable.getDimensions() != 2) {
             log.error(
                     "Style variable {} has {} dimensions, trying to fetch 2 floats",
                     variable,
@@ -2332,7 +2342,7 @@ public class IkGui {
      * @param target Where to store the values.
      */
     public static void getStyleVarInt2(@NonNull StyleVariable variable, @NonNull Vector2i target) {
-        if (variable.getDimensions() != 1) {
+        if (variable.getDimensions() != 2) {
             log.error(
                     "Style variable {} has {} dimensions, trying to fetch 2 integers",
                     variable,
