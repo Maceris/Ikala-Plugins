@@ -493,6 +493,9 @@ public class IkIO {
         metricsRenderWindows = 0;
         mouseClicked = new boolean[MouseButton.COUNT];
         mouseClickedPosition = new Vector2f[MouseButton.COUNT];
+        for (int i = 0; i < MouseButton.COUNT; ++i) {
+            mouseClickedPosition[i] = new Vector2f(0, 0);
+        }
         mouseClickedCount = new short[MouseButton.COUNT];
         mouseClickedLastCount = new short[MouseButton.COUNT];
         mouseClickedTime = new long[MouseButton.COUNT];
@@ -505,6 +508,9 @@ public class IkIO {
         mouseDownOwned = new boolean[MouseButton.COUNT];
         mouseDownOwnedUnlessPopupClose = new boolean[MouseButton.COUNT];
         mouseDragMaxDistanceAbsolute = new Vector2f[MouseButton.COUNT];
+        for (int i = 0; i < MouseButton.COUNT; ++i) {
+            mouseDragMaxDistanceAbsolute[i] = new Vector2f(0, 0);
+        }
         mouseDragMaxDistanceSquare = new float[MouseButton.COUNT];
         mouseDragThreshold = 6.0f;
         mouseHoveredViewport = null;
@@ -764,6 +770,7 @@ public class IkIO {
                 final boolean repeatedClick = thisClick - lastClick > mouseDoubleClickTime;
                 mouseClickedTime[index] = thisClick;
                 mouseClicked[index] = true;
+                mouseClickedPosition[index].set(mousePosition);
 
                 if (repeatedClick) {
                     mouseClickedLastCount[index] += 1;
@@ -783,6 +790,7 @@ public class IkIO {
     private void handleMousePosition(float x, float y) {
         // TODO(ches) complete this
 
+        mouseStationaryTimer = 0;
         if (mouseInsideWindow) {
             // It's in a window now
             mousePosition.set(x, y);
@@ -878,6 +886,9 @@ public class IkIO {
             } else {
                 mouseReleasedTime[index] += deltaTime;
             }
+        }
+        if (mouseDelta.x == 0 && mouseDelta.y == 0) {
+            mouseStationaryTimer += deltaTime;
         }
     }
 }

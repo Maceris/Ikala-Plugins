@@ -11,6 +11,7 @@ import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import imgui.ImGui;
 import imgui.ImVec2;
 import imgui.flag.ImGuiCond;
+import org.joml.Vector2f;
 
 import java.nio.ByteBuffer;
 
@@ -164,6 +165,10 @@ class IkGuiDemo {
                 }
             }
             ImGui.text(mouseDownText.toString());
+            ImGui.text(
+                    String.format(
+                            "Mouse stationary timer: %d.%03d",
+                            ikIO.mouseStationaryTimer / 1000, ikIO.mouseStationaryTimer % 1000));
 
             // TODO(ches) mouse wheel
             // TODO(ches) keys down
