@@ -6,7 +6,6 @@ import com.ikalagaming.graphics.frontend.gui.data.IkBoolean;
 import com.ikalagaming.graphics.frontend.gui.data.IkIO;
 import com.ikalagaming.graphics.frontend.gui.enums.Condition;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
-import com.ikalagaming.graphics.frontend.gui.enums.StyleVariable;
 import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 
 import imgui.ImGui;
@@ -160,7 +159,7 @@ class IkGuiDemo {
                     long msRemainder = ikIO.mouseDownDuration[i] % 1000;
                     mouseDownText.append(seconds);
                     mouseDownText.append('.');
-                    mouseDownText.append(msRemainder);
+                    mouseDownText.append(String.format("%03d", msRemainder));
                     mouseDownText.append(" secs)");
                 }
             }

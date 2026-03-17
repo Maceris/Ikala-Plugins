@@ -184,6 +184,12 @@ public class Context {
      */
     public int frameCountRendered;
 
+    /**
+     * The time, in milliseconds, when the that the last frame started on as far as we are
+     * concerned. Used for calculating delta time.
+     */
+    public long frameStartTime;
+
     public float[] framerateSecondPerFrame;
 
     public float framerateSecondPerFrameAccumulator;
@@ -401,7 +407,10 @@ public class Context {
     public StringBuilder tempBuffer;
 
     public int textInputNextFrameOverride;
-    public double time;
+
+    /** Total time elapsed since the context was initialized, in milliseconds. */
+    public long time;
+
     public short tooltipOverrideCount;
 
     public Window tooltipPreviousWindow;
@@ -524,6 +533,7 @@ public class Context {
         frameCount = 0;
         frameCountEnded = 0;
         frameCountRendered = 0;
+        frameStartTime = 0;
         framerateSecondPerFrame = new float[60];
         framerateSecondPerFrameAccumulator = 0.0f;
         framerateSecondPerFrameCount = 0;
@@ -644,7 +654,7 @@ public class Context {
         tablesTempData = new ArrayList<>();
         tempBuffer = new StringBuilder();
         textInputNextFrameOverride = 0;
-        time = 0.0;
+        time = 0;
         tooltipOverrideCount = 0;
         tooltipPreviousWindow = null;
         treeNodeStack = new ArrayDeque<>();

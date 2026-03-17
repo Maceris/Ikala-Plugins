@@ -2406,9 +2406,13 @@ public class IkGui {
         return (int) (fontScale * 1.1f * context.fontSize);
     }
 
-    public static double getTime() {
-        // TODO(ches) complete this
-        return 0;
+    /**
+     * Return the context time.
+     *
+     * @return Total time elapsed since the context was initialized, in milliseconds.
+     */
+    public static long getTime() {
+        return context.time;
     }
 
     public static float getTreeNodeToLabelSpacing() {
@@ -3515,6 +3519,12 @@ public class IkGui {
         // TODO(ches) sanity checks for IO and configuration
         // TODO(ches) update settings
         // TODO(ches) update time, frames, window counts
+        final long lastFrameStart = context.frameStartTime;
+        context.frameStartTime = System.currentTimeMillis();
+        if (lastFrameStart > 0) {
+            context.io.deltaTime = context.frameStartTime - lastFrameStart;
+        }
+        context.time += context.io.deltaTime;
         context.frameCount = (context.frameCount + 1) % FRAME_COUNT_CAP;
         // TODO(ches) update input events, trickling
         // TODO(ches) update viewports
@@ -3531,7 +3541,7 @@ public class IkGui {
         // TODO(ches) update keyboard inputs
         // TODO(ches) update drag and drop
         // TODO(ches) update navigation
-        // TODO(ches) update mouse inputs
+        context.io.updateMouseInputs();
         // TODO(ches) clean up transient buffers
         // TODO(ches) create fallback window
     }
