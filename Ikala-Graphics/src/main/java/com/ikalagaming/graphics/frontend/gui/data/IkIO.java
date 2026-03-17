@@ -11,10 +11,109 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 
+import java.util.ArrayDeque;
+import java.util.Queue;
+import java.util.concurrent.locks.ReentrantLock;
+
 @Slf4j
 public class IkIO {
 
     // TODO(ches) add some kind of KeyData struct
+
+    private enum IkIOEventType {
+        FOCUS,
+        KEY,
+        KEY_ANALOG,
+        MOUSE_BUTTON,
+        MOUSE_POSITION,
+        MOUSE_VIEWPORT,
+        MOUSE_WHEEL,
+    }
+
+    private abstract static class IkIOEvent {
+        public final IkIOEventType eventType;
+        public boolean canceled;
+
+        public IkIOEvent(@NonNull IkIOEventType eventType) {
+            this.eventType = eventType;
+            this.canceled = false;
+        }
+    }
+
+    private static class IkIOEventFocus extends IkIOEvent {
+        public boolean focused;
+
+        public IkIOEventFocus(boolean focused) {
+            super(IkIOEventType.FOCUS);
+            this.focused = focused;
+        }
+    }
+
+    private static class IkIOEventKey extends IkIOEvent {
+        int key;
+        boolean down;
+
+        public IkIOEventKey(int key, boolean down) {
+            super(IkIOEventType.KEY);
+            this.key = key;
+            this.down = down;
+        }
+    }
+
+    private static class IkIOEventKeyAnalog extends IkIOEvent {
+        int key;
+        boolean down;
+        float analogValue;
+
+        public IkIOEventKeyAnalog(int key, boolean down, float analogValue) {
+            super(IkIOEventType.KEY_ANALOG);
+            this.key = key;
+            this.down = down;
+            this.analogValue = analogValue;
+        }
+    }
+
+    private static class IkIOEventMouseButton extends IkIOEvent {
+        MouseButton button;
+        boolean down;
+
+        public IkIOEventMouseButton(MouseButton button, boolean down) {
+            super(IkIOEventType.MOUSE_BUTTON);
+            this.button = button;
+            this.down = down;
+        }
+    }
+
+    private static class IkIOEventMousePosition extends IkIOEvent {
+        float x;
+        float y;
+
+        public IkIOEventMousePosition(float x, float y) {
+            super(IkIOEventType.MOUSE_POSITION);
+            this.x = x;
+            this.y = y;
+        }
+    }
+
+    private static class IkIOEventMouseViewport extends IkIOEvent {
+        int id;
+
+        public IkIOEventMouseViewport(int id) {
+            super(IkIOEventType.MOUSE_VIEWPORT);
+            this.id = id;
+        }
+    }
+
+    private static class IkIOEventMouseWheel extends IkIOEvent {
+        float wheelX;
+        float wheelY;
+
+        public IkIOEventMouseWheel(float wheelX, float wheelY) {
+            super(IkIOEventType.MOUSE_WHEEL);
+            this.wheelX = wheelX;
+            this.wheelY = wheelY;
+        }
+    }
 
     /** Whether we are accepting events. */
     @Getter private boolean appAcceptingEvents;
@@ -129,6 +228,15 @@ public class IkIO {
     /** Main display size, in pixels. Might change every frame. */
     public final Vector2f displaySize;
 
+    /**
+     * The queue of all events. Each type of event may also be placed into their own queue, so they
+     * can be processed separately and possibly canceled so that they aren't processed. This is
+     * intended for things like combining events, moving events to the next frame, etc.
+     */
+    private final Queue<IkIOEvent> eventQueue;
+
+    private final ReentrantLock eventQueueLock;
+
     /** One or more fonts loaded into a single texture. */
     public final FontAtlas fonts;
 
@@ -211,7 +319,10 @@ public class IkIO {
      */
     public boolean mouseCtrlLeftAsRightClick;
 
-    /** Mouse delta, in pixels. Will be zero if either current or previous position are invalid. */
+    /**
+     * Change in mouse position, in pixels, since the last frame. Will be zero if either current or
+     * previous position are invalid.
+     */
     public final Vector2f mouseDelta;
 
     /** Distance threshold for validating a double click, in pixels. */
@@ -364,6 +475,8 @@ public class IkIO {
         deltaTime = 0;
         displayFramebufferScale = new Vector2f(1, 1);
         displaySize = new Vector2f(0, 0);
+        eventQueue = new ArrayDeque<>();
+        eventQueueLock = new ReentrantLock();
         fonts = new FontAtlas();
         iniFilename = "ikgui.ini";
         iniSavingRate = 5.0f;
@@ -438,32 +551,56 @@ public class IkIO {
         return (backendFlags & flags) != 0;
     }
 
-    public void addKeyEvent(int key, boolean down) {
-        // TODO(ches) complete this
+    public void addFocusEvent(boolean focused) {
+        if (!appAcceptingEvents) {
+            return;
+        }
+        try {
+            eventQueueLock.lock();
+            IkIOEventFocus event = new IkIOEventFocus(focused);
+            eventQueue.add(event);
+        } finally {
+            eventQueueLock.unlock();
+        }
     }
 
-    public void addKeyAnalogEvent(int key, boolean down, float v) {
-        // TODO(ches) complete this
+    public void addKeyEvent(int key, boolean down) {
+        if (!appAcceptingEvents) {
+            return;
+        }
+        try {
+            eventQueueLock.lock();
+            IkIOEventKey event = new IkIOEventKey(key, down);
+            eventQueue.add(event);
+        } finally {
+            eventQueueLock.unlock();
+        }
+    }
+
+    public void addKeyAnalogEvent(int key, boolean down, float analogValue) {
+        if (!appAcceptingEvents) {
+            return;
+        }
+        try {
+            eventQueueLock.lock();
+            IkIOEventKeyAnalog event = new IkIOEventKeyAnalog(key, down, analogValue);
+            eventQueue.add(event);
+        } finally {
+            eventQueueLock.unlock();
+        }
     }
 
     public void addMousePosEvent(float x, float y) {
-        // TODO(ches) complete this
-
-        if (mouseInsideWindow) {
-            // It's in a window now
-            mousePosition.set(x, y);
-            float displaceX = mousePosition.x - mousePositionPrevious.x;
-            float displaceY = mousePosition.y - mousePositionPrevious.y;
-            if (mousePositionPrevious.x != -Float.MAX_VALUE
-                    && mousePositionPrevious.y != -Float.MAX_VALUE) {
-                mouseDelta.set(displaceX, displaceY);
-            } else {
-                mouseDelta.set(0, 0);
-            }
-        } else {
-            // It's not in a window now
-            mousePosition.set(-Float.MAX_VALUE, -Float.MAX_VALUE);
-            mouseDelta.set(0, 0);
+        if (!appAcceptingEvents) {
+            return;
+        }
+        // TODO(ches) we can probably ignore most of these to be honest
+        try {
+            eventQueueLock.lock();
+            IkIOEventMousePosition event = new IkIOEventMousePosition(x, y);
+            eventQueue.add(event);
+        } finally {
+            eventQueueLock.unlock();
         }
     }
 
@@ -474,28 +611,41 @@ public class IkIO {
      * @param down True if the button is now down, false if it's now up.
      */
     public void addMouseButtonEvent(@NonNull MouseButton button, boolean down) {
-        // TODO(ches) actually use an event queue, process at the start of each frame to make
-        // timings more coherent
-        setMouseDown(button, down);
+        if (!appAcceptingEvents) {
+            return;
+        }
+        try {
+            eventQueueLock.lock();
+            IkIOEventMouseButton event = new IkIOEventMouseButton(button, down);
+            eventQueue.add(event);
+        } finally {
+            eventQueueLock.unlock();
+        }
     }
 
-    public void addMouseWheelEvent(float whX, float whY) {
-        // TODO(ches) complete this
-    }
-
-    public void addMouseSourceEvent(int source) {
-        // TODO(ches) complete this
+    public void addMouseWheelEvent(float wheelX, float wheelY) {
+        if (!appAcceptingEvents) {
+            return;
+        }
+        try {
+            eventQueueLock.lock();
+            IkIOEventMouseWheel event = new IkIOEventMouseWheel(wheelX, wheelY);
+            eventQueue.add(event);
+        } finally {
+            eventQueueLock.unlock();
+        }
     }
 
     public void addMouseViewportEvent(int id) {
-        // TODO(ches) complete this
-    }
-
-    public void addFocusEvent(boolean focused) {
-        if (!focused) {
-            appFocusLost = true;
+        if (!appAcceptingEvents) {
+            return;
         }
-        // TODO(ches) complete this
+        try {
+            eventQueueLock.lock();
+            IkIOEventMouseViewport event = new IkIOEventMouseViewport(id);
+        } finally {
+            eventQueueLock.unlock();
+        }
     }
 
     public void addInputCharacter(int c) {
@@ -529,44 +679,6 @@ public class IkIO {
 
     public boolean getMouseDown(@NonNull MouseButton button) {
         return mouseDown[button.index];
-    }
-
-    /**
-     * Set the mouse down value.
-     *
-     * @param button The mouse button.
-     * @param value True if the button is now down, false if it's now up.
-     */
-    public void setMouseDown(@NonNull MouseButton button, boolean value) {
-        final int index = button.index;
-        if (index < 0 || index >= MouseButton.COUNT) {
-            log.warn("Invalid mouse button index {} in setMouseDown", index);
-            return;
-        }
-        final boolean oldValue = mouseDown[index];
-        if (oldValue != value) {
-            mouseDown[index] = value;
-            if (value) {
-                final long lastClick = mouseClickedTime[index];
-                final long thisClick = IkGui.getContext().frameStartTime;
-                // TODO(ches) also check mouseDoubleClickMaxDistance
-                final boolean repeatedClick = thisClick - lastClick > mouseDoubleClickTime;
-                mouseClickedTime[index] = thisClick;
-                mouseClicked[index] = true;
-
-                if (repeatedClick) {
-                    mouseClickedLastCount[index] += 1;
-                } else {
-                    mouseClickedLastCount[index] = 1;
-                }
-                mouseClickedCount[index] = mouseClickedLastCount[index];
-                mouseDownDuration[index] = 0;
-            } else {
-                mouseReleasedTime[index] = IkGui.getContext().frameStartTime;
-                mouseReleased[index] = true;
-            }
-            // TODO(ches) handle clicking logic, timers
-        }
     }
 
     public double getMouseClickedTime(@NonNull MouseButton button) {
@@ -615,11 +727,150 @@ public class IkIO {
         return 0;
     }
 
-    public void setMouseDragMaxDistanceSqr(int index, float value) {
+    private void handleFocus(boolean focused) {
+        // TODO(ches) complete this
+        if (!focused) {
+            appFocusLost = true;
+        }
+    }
+
+    private void handleKey(int key, boolean down) {
         // TODO(ches) complete this
     }
 
-    /** Update the mouse input information at the start of a frame. */
+    private void handleKeyAnalog(int key, boolean down, float analogValue) {
+        // TODO(ches) complete this
+    }
+
+    /**
+     * Handle mouse down event.
+     *
+     * @param button The mouse button.
+     * @param value True if the button is now down, false if it's now up.
+     */
+    private void handleMouseDown(@NonNull MouseButton button, boolean value) {
+        final int index = button.index;
+        if (index < 0 || index >= MouseButton.COUNT) {
+            log.warn("Invalid mouse button index {} in setMouseDown", index);
+            return;
+        }
+        final boolean oldValue = mouseDown[index];
+        if (oldValue != value) {
+            mouseDown[index] = value;
+            if (value) {
+                final long lastClick = mouseClickedTime[index];
+                final long thisClick = IkGui.getContext().frameStartTime;
+                // TODO(ches) also check mouseDoubleClickMaxDistance
+                final boolean repeatedClick = thisClick - lastClick > mouseDoubleClickTime;
+                mouseClickedTime[index] = thisClick;
+                mouseClicked[index] = true;
+
+                if (repeatedClick) {
+                    mouseClickedLastCount[index] += 1;
+                } else {
+                    mouseClickedLastCount[index] = 1;
+                }
+                mouseClickedCount[index] = mouseClickedLastCount[index];
+                mouseDownDuration[index] = 0;
+            } else {
+                mouseReleasedTime[index] = IkGui.getContext().frameStartTime;
+                mouseReleased[index] = true;
+            }
+            // TODO(ches) handle clicking logic, timers
+        }
+    }
+
+    private void handleMousePosition(float x, float y) {
+        // TODO(ches) complete this
+
+        if (mouseInsideWindow) {
+            // It's in a window now
+            mousePosition.set(x, y);
+            float displaceX = mousePosition.x - mousePositionPrevious.x;
+            float displaceY = mousePosition.y - mousePositionPrevious.y;
+            if (mousePositionPrevious.x != -Float.MAX_VALUE
+                    && mousePositionPrevious.y != -Float.MAX_VALUE) {
+                mouseDelta.add(displaceX, displaceY);
+            } else {
+                mouseDelta.set(0, 0);
+            }
+        } else {
+            // It's not in a window now
+            mousePosition.set(-Float.MAX_VALUE, -Float.MAX_VALUE);
+            mouseDelta.set(0, 0);
+        }
+    }
+
+    private void handleMouseViewport(int id) {
+        // TODO(ches) complete this
+    }
+
+    public void handleMouseWheel(float wheelX, float wheelY) {
+        // TODO(ches) complete this
+    }
+
+    /** Process input events, called internally. */
+    public void processInputEvents() {
+        try {
+            eventQueueLock.lock();
+
+            while (!eventQueue.isEmpty()) {
+                IkIOEvent event = eventQueue.poll();
+                if (event.canceled) {
+                    continue;
+                }
+                switch (event.eventType) {
+                    case IkIOEventType.FOCUS:
+                        {
+                            IkIOEventFocus eventCast = (IkIOEventFocus) event;
+                            handleFocus(eventCast.focused);
+                        }
+                        break;
+                    case IkIOEventType.KEY:
+                        {
+                            IkIOEventKey eventCast = (IkIOEventKey) event;
+                            handleKey(eventCast.key, eventCast.down);
+                        }
+                        break;
+                    case IkIOEventType.KEY_ANALOG:
+                        {
+                            IkIOEventKeyAnalog eventCast = (IkIOEventKeyAnalog) event;
+                            handleKeyAnalog(eventCast.key, eventCast.down, eventCast.analogValue);
+                        }
+                        break;
+                    case IkIOEventType.MOUSE_BUTTON:
+                        {
+                            IkIOEventMouseButton eventCast = (IkIOEventMouseButton) event;
+                            handleMouseDown(eventCast.button, eventCast.down);
+                        }
+                        break;
+                    case IkIOEventType.MOUSE_POSITION:
+                        {
+                            IkIOEventMousePosition eventCast = (IkIOEventMousePosition) event;
+                            handleMousePosition(eventCast.x, eventCast.y);
+                        }
+                        break;
+                    case IkIOEventType.MOUSE_VIEWPORT:
+                        {
+                            IkIOEventMouseViewport eventCast = (IkIOEventMouseViewport) event;
+                            handleMouseViewport(eventCast.id);
+                        }
+                        break;
+                    case IkIOEventType.MOUSE_WHEEL:
+                        {
+                            IkIOEventMouseWheel eventCast = (IkIOEventMouseWheel) event;
+                            handleMouseWheel(eventCast.wheelX, eventCast.wheelY);
+                        }
+                        break;
+                }
+            }
+
+        } finally {
+            eventQueueLock.unlock();
+        }
+    }
+
+    /** Update the mouse input information at the start of a frame. Called internally. */
     public void updateMouseInputs() {
         for (int index = 0; index < MouseButton.COUNT; index++) {
             if (mouseDown[index]) {

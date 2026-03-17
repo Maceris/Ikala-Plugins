@@ -1549,7 +1549,6 @@ public class IkGui {
         // TODO(ches) update textures
         // TODO(ches) unlock the font atlas
         context.io.mousePositionPrevious.set(context.io.mousePosition);
-        context.io.mouseDelta.set(0, 0);
         context.io.appFocusLost = false;
         context.io.mouseWheel = 0.0f;
         context.io.mouseWheelH = 0.0f;
@@ -3527,6 +3526,8 @@ public class IkGui {
         context.time += context.io.deltaTime;
         context.frameCount = (context.frameCount + 1) % FRAME_COUNT_CAP;
         // TODO(ches) update input events, trickling
+        context.io.mouseDelta.set(0, 0);
+        context.io.processInputEvents();
         // TODO(ches) update viewports
         // TODO(ches) update textures
         // TODO(ches) update draw list shared data
