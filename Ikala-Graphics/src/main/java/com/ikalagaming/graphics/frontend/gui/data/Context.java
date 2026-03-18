@@ -131,7 +131,6 @@ public class Context {
     public boolean dragDropWithinTarget;
     public float dragSpeedDefaultRatio;
     public DrawData drawData;
-    public DrawListSharedData drawListSharedData;
     public Object errorCallbackUserData;
     public int errorCountCurrentFrame;
     public boolean errorFirst;
@@ -518,7 +517,6 @@ public class Context {
         dragDropWithinTarget = false;
         dragSpeedDefaultRatio = 0.0f;
         drawData = new DrawData();
-        drawListSharedData = new DrawListSharedData();
         errorCallbackUserData = null;
         errorCountCurrentFrame = 0;
         errorFirst = false;

@@ -11,7 +11,6 @@ import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import imgui.ImGui;
 import imgui.ImVec2;
 import imgui.flag.ImGuiCond;
-import org.joml.Vector2f;
 
 import java.nio.ByteBuffer;
 

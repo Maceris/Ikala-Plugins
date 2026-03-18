@@ -3517,7 +3517,7 @@ public class IkGui {
 
         // TODO(ches) sanity checks for IO and configuration
         // TODO(ches) update settings
-        // TODO(ches) update time, frames, window counts
+        // Updating frame time and count
         final long lastFrameStart = context.frameStartTime;
         context.frameStartTime = System.currentTimeMillis();
         if (lastFrameStart > 0) {
@@ -3525,18 +3525,20 @@ public class IkGui {
         }
         context.time += context.io.deltaTime;
         context.frameCount = (context.frameCount + 1) % FRAME_COUNT_CAP;
-        // TODO(ches) update input events, trickling
+        // TODO(ches) update window counts
+
+        // Updating input events
         context.io.mouseDelta.set(0, 0);
         context.io.processInputEvents();
+
         // TODO(ches) update viewports
-        // TODO(ches) update textures
-        // TODO(ches) update draw list shared data
+
+        // Update draw lists
         context.drawData.clear();
         context.backgroundDrawList.clear();
         context.foregroundDrawList.clear();
         context.drawData.drawLists.add(context.backgroundDrawList);
         context.drawData.drawLists.add(context.foregroundDrawList);
-        // TODO(ches) mark draw data as invalid
         // TODO(ches) update active IDs
         // TODO(ches) update hover delay
         // TODO(ches) update keyboard inputs

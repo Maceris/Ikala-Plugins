@@ -735,7 +735,7 @@ public class IkIO {
 
     private void handleFocus(boolean focused) {
         // TODO(ches) complete this
-        if (!focused) {
+        if (!focused && !configDebugIgnoreFocusLoss) {
             appFocusLost = true;
         }
     }
@@ -766,8 +766,10 @@ public class IkIO {
             if (value) {
                 final long lastClick = mouseClickedTime[index];
                 final long thisClick = IkGui.getContext().frameStartTime;
-                // TODO(ches) also check mouseDoubleClickMaxDistance
-                final boolean repeatedClick = thisClick - lastClick > mouseDoubleClickTime;
+                final boolean repeatedClick =
+                        (thisClick - lastClick > mouseDoubleClickTime)
+                                && (mouseClickedPosition[index].distance(mousePosition)
+                                        <= mouseDoubleClickMaxDistance);
                 mouseClickedTime[index] = thisClick;
                 mouseClicked[index] = true;
                 mouseClickedPosition[index].set(mousePosition);
@@ -783,13 +785,11 @@ public class IkIO {
                 mouseReleasedTime[index] = IkGui.getContext().frameStartTime;
                 mouseReleased[index] = true;
             }
-            // TODO(ches) handle clicking logic, timers
+            // TODO(ches) handle owned / popup logic
         }
     }
 
     private void handleMousePosition(float x, float y) {
-        // TODO(ches) complete this
-
         mouseStationaryTimer = 0;
         if (mouseInsideWindow) {
             // It's in a window now

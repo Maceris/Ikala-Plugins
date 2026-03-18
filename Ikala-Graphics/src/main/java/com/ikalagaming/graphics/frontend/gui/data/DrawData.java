@@ -18,14 +18,12 @@ public class DrawData {
     static final int SIZE_OF_QUAD_VERTICES = 6 * SIZE_OF_VERTEX;
 
     public final List<DrawList> drawLists;
-    public boolean valid;
     final Vector2f displayPosition;
     final Vector2f displaySize;
     final Vector2f framebufferScale;
 
     public DrawData() {
         drawLists = new ArrayList<>();
-        valid = false;
         // TODO(ches) set up reasonable values
         displayPosition = new Vector2f();
         displaySize = new Vector2f();
