@@ -814,7 +814,14 @@ public class IkIO {
     }
 
     public void handleMouseWheel(float wheelX, float wheelY) {
-        // TODO(ches) complete this
+        if (mouseWheelRequestAxisSwap) {
+            mouseWheel += wheelY;
+            mouseWheelH += wheelX;
+        }
+        else {
+            mouseWheel += wheelX;
+            mouseWheelH += wheelY;
+        }
     }
 
     /** Process input events, called internally. */
