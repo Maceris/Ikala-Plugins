@@ -14,8 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Window {
-    public Context context;
-    public String name;
+    public final String name;
     public int id;
     public int flags;
     public int flagsAsChildWindow;
@@ -43,7 +42,7 @@ public class Window {
 
     public final Vector2i padding;
     public float rounding;
-    public float borderSize;
+    public int borderSize;
     public int titleBarHeight;
     public int menuBarHeight;
 
@@ -64,6 +63,11 @@ public class Window {
     public boolean hidden;
     public boolean skipRenderingContents;
     public boolean reuseLastFrameContents;
+
+    /**
+     * Whether the window is in the process of appearing after being hidden or inactive, or the
+     * first frame it's displayed.
+     */
     public boolean appearing;
 
     public Direction borderBeingHovered;
@@ -124,8 +128,7 @@ public class Window {
     public final FloatArrayList itemWidthStack;
     public final FloatArrayList textWrapPositionStack;
 
-    public Window(@NonNull Context context, @NonNull String name) {
-        this.context = context;
+    public Window(@NonNull String name) {
         this.name = name;
         id = 0;
         flags = WindowFlags.NONE;
@@ -140,7 +143,7 @@ public class Window {
         sizeRequested = new Vector2i(0, 0);
         padding = new Vector2i(0, 0);
         rounding = 0.0f;
-        borderSize = 0.0f;
+        borderSize = 0;
         titleBarHeight = 0;
         menuBarHeight = 0;
         idWithinParent = 0;
@@ -190,75 +193,6 @@ public class Window {
         currentTextWrapPosition = 0.0f;
         itemWidthStack = new FloatArrayList();
         textWrapPositionStack = new FloatArrayList();
-    }
-
-    /** Reset all values to defaults, so that a window can be reused internally. */
-    public void reset(@NonNull Context context, @NonNull String name) {
-        this.context = context;
-        this.name = name;
-        this.id = 0;
-        this.flags = WindowFlags.NONE;
-        this.flagsAsChildWindow = WindowFlags.NONE;
-        this.childWindows.clear();
-        this.viewport = null;
-        this.position.set(0, 0);
-        this.open = null;
-        this.sizeCurrent.set(0, 0);
-        this.sizeFull.set(0, 0);
-        this.sizeDesired.set(0, 0);
-        this.sizeRequested.set(0, 0);
-        this.padding.set(0, 0);
-        this.rounding = 0.0f;
-        this.borderSize = 0.0f;
-        this.titleBarHeight = 0;
-        this.menuBarHeight = 0;
-        this.idWithinParent = 0;
-        this.idAsPopupWindow = 0;
-        this.scrollPosition.set(0, 0);
-        this.scrollExtent.set(0, 0);
-        this.scrollTarget.set(0, 0);
-        this.scrollbarSizes.set(0, 0);
-        this.showScrollbarX = false;
-        this.showScrollbarY = false;
-        this.active = false;
-        this.collapsed = false;
-        this.collapseToggleRequested = false;
-        this.hidden = false;
-        this.skipRenderingContents = false;
-        this.reuseLastFrameContents = false;
-        this.appearing = false;
-        this.borderBeingHovered = Direction.NONE;
-        this.borderBeingDragged = Direction.NONE;
-        this.idStack = new IntArrayList();
-        this.rectFull.set(0, 0, 0, 0);
-        this.rectInner.set(0, 0, 0, 0);
-        this.rectInnerClip.set(0, 0, 0, 0);
-        this.rectContent.set(0, 0, 0, 0);
-        this.rectCurrentClip.set(0, 0, 0, 0);
-        this.drawList.clear();
-        this.parentWindow = null;
-        this.rootWindow = null;
-        this.rootWindowIncludingPopups = null;
-        this.rootWindowForTitleBarHighlight = null;
-        this.rootWindowForNavigation = null;
-        this.cursorPosition.set(0, 0);
-        this.cursorStartPosition.set(0, 0);
-        this.cursorPreviousLinePosition.set(0, 0);
-        this.cursorMaxPosition.set(0, 0);
-        this.cursorIdealMaxPosition.set(0, 0);
-        this.lineSizePrevious.set(0, 0);
-        this.lineSizeCurrent.set(0, 0);
-        this.baseOffsetCurrentLine = 0;
-        this.baseOffsetPreviousLine = 0;
-        this.sameLine = false;
-        this.setPos = false;
-        this.indent = 0.0f;
-        this.treeDepth = 0;
-        this.currentTableIndex = 0;
-        this.currentItemWidth = 0.0f;
-        this.currentTextWrapPosition = 0.0f;
-        this.itemWidthStack.clear();
-        this.textWrapPositionStack.clear();
     }
 
     public boolean hasCloseButton() {

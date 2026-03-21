@@ -817,8 +817,7 @@ public class IkIO {
         if (mouseWheelRequestAxisSwap) {
             mouseWheel += wheelY;
             mouseWheelH += wheelX;
-        }
-        else {
+        } else {
             mouseWheel += wheelX;
             mouseWheelH += wheelY;
         }

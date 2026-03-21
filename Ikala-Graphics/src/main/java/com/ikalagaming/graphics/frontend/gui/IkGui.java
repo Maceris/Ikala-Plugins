@@ -124,37 +124,90 @@ public class IkGui {
 
         final int ID = Hash.getID(title);
         pushID(ID);
-        Window window =
-                context.windowByID.computeIfAbsent(ID, ignored -> new Window(context, title));
-        window.reset(context, title);
+        Window window = context.windowByID.computeIfAbsent(ID, ignored -> new Window(title));
+
         window.id = ID;
-        window.name = title;
+        window.idWithinParent = 0;
+        window.idAsPopupWindow = 0;
+        window.childWindows.clear();
+        window.parentWindow = null;
+        window.rootWindow = null;
+        window.rootWindowIncludingPopups = null;
+        window.rootWindowForTitleBarHighlight = null;
+        window.rootWindowForNavigation = null;
+        window.scrollPosition.set(0, 0);
+        window.scrollExtent.set(0, 0);
+        window.scrollTarget.set(0, 0);
+        window.showScrollbarX = false; // TODO(ches) check window flags for scrollbar
+        window.showScrollbarY = false;
+        window.hidden = false;
+        window.skipRenderingContents = false;
+        window.reuseLastFrameContents = false;
+        window.appearing = false; // TODO(ches) calculate appearing
+        window.borderBeingHovered = Direction.NONE;
+        window.borderBeingDragged = Direction.NONE;
+        window.idStack.clear();
+        window.drawList.clear();
+        window.setPos = false;
+        window.treeDepth = 0;
+        window.currentTableIndex = 0;
+        window.itemWidthStack.clear();
+        window.textWrapPositionStack.clear();
+
         getStyleVarInt2(StyleVariable.WINDOW_PADDING, window.padding);
-        Vector2i framePadding = getStyleVarInt2(StyleVariable.FRAME_PADDING);
+        final int scrollbarSize = getStyleVarInt(StyleVariable.SCROLLBAR_SIZE);
+        window.scrollbarSizes.set(scrollbarSize, scrollbarSize);
+        final Vector2i framePadding = getStyleVarInt2(StyleVariable.FRAME_PADDING);
         window.titleBarHeight = getTextLineHeight() + 2 * framePadding.y;
-        window.menuBarHeight = 0;
+        window.menuBarHeight = 0; // TODO(ches) set height if we have a menu bar
         if (WindowFlags.NONE == windowFlags) {
             window.flags = context.nextWindowData.windowFlags;
         } else {
             window.flags = windowFlags;
         }
+        window.flagsAsChildWindow = WindowFlags.NONE;
+
         if (context.nextWindowData.viewport != null) {
             window.viewport = context.nextWindowData.viewport;
         } else {
             window.viewport = context.mainViewport;
         }
         // TODO(ches) position condition
+        switch (context.nextWindowData.positionCondition) {
+            case Condition.NONE:
+            case Condition.ALWAYS:
+            case Condition.ONCE:
+            case Condition.FIRST_USE_EVER:
+            case Condition.APPEARING:
+        }
         window.position.set(context.nextWindowData.positionValue);
 
         // TODO(ches) size condition
         window.sizeRequested.set(context.nextWindowData.sizeValue);
         // TODO(ches) collapsed condition
         window.collapsed = context.nextWindowData.collapsedValue;
+        window.collapseToggleRequested = false;
 
-        // TODO(ches) calculate actual size properly
+        // TODO(ches) calculate actual sizes properly
         window.sizeCurrent.set(window.sizeRequested);
+        window.sizeFull.set(window.sizeRequested);
+        window.sizeDesired.set(window.sizeRequested);
         window.rounding = getStyleVarInt(StyleVariable.WINDOW_ROUNDING);
+        window.borderSize = getStyleVarInt(StyleVariable.WINDOW_BORDER_SIZE);
+        window.rectFull.set(0, 0, 0, 0); // TODO(set rects)
+        window.rectInner.set(0, 0, 0, 0);
+        window.rectInnerClip.set(0, 0, 0, 0);
+        window.rectContent.set(0, 0, 0, 0);
+        window.rectCurrentClip.set(0, 0, 0, 0);
 
+        window.baseOffsetCurrentLine = 0;
+        window.baseOffsetPreviousLine = 0;
+        window.currentItemWidth = 0.0f;
+        window.currentTextWrapPosition = 0.0f;
+        window.indent = 0.0f;
+        window.sameLine = false;
+        window.lineSizePrevious.set(0, 0);
+        window.lineSizeCurrent.set(0, 0);
         window.cursorStartPosition.set(
                 window.position.x + window.padding.x,
                 window.position.y
@@ -215,7 +268,7 @@ public class IkGui {
                 getStyleColorWithGlobalAlpha(ColorType.BORDER),
                 window.rounding,
                 DrawFlags.ROUND_CORNERS_ALL,
-                getStyleVarInt(StyleVariable.WINDOW_BORDER_SIZE));
+                window.borderSize);
 
         return true;
     }
@@ -3826,10 +3879,6 @@ public class IkGui {
     public static void pushID(int id) {
         // TODO(ches) do we need to store the info about the current active ID?
         context.activeIDStack.push(id);
-    }
-
-    public static void pushID(long id) {
-        // TODO(ches) complete this
     }
 
     public static void pushID(String name) {

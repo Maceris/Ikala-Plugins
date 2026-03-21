@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.frontend.gui.flags.RefreshFlags;
 import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.frontend.gui.util.Rect;
 
+import lombok.NonNull;
 import org.joml.Vector2i;
 
 public class NextWindowData {
@@ -15,12 +16,12 @@ public class NextWindowData {
      */
     public int fieldFlags;
 
-    public Condition positionCondition;
+    public @NonNull Condition positionCondition;
     public final Vector2i positionValue;
     public final Vector2i positionPivot;
-    public Condition sizeCondition;
+    public @NonNull Condition sizeCondition;
     public final Vector2i sizeValue;
-    public Condition collapsedCondition;
+    public @NonNull Condition collapsedCondition;
     public boolean collapsedValue;
     public final Vector2i contentSizeValue;
     public final Vector2i scrollValue;
