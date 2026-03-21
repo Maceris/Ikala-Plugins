@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.frontend.gui.util;
 
 import lombok.*;
+import org.joml.Vector2i;
 import org.joml.Vector4i;
 
 @AllArgsConstructor
@@ -29,7 +30,7 @@ public class RectInt {
      * @param topLeft The left and top position.
      * @param size The width and height.
      */
-    public RectInt(@NonNull Vector4i topLeft, @NonNull Vector4i size) {
+    public RectInt(@NonNull Vector2i topLeft, @NonNull Vector2i size) {
         this(topLeft.x, topLeft.y, topLeft.x + size.x, topLeft.y + size.y);
     }
 
@@ -50,7 +51,7 @@ public class RectInt {
      * @param point The point to check.
      * @return true if the point is inside the rectangle, false otherwise.
      */
-    public boolean contains(@NonNull Vector4i point) {
+    public boolean contains(@NonNull Vector2i point) {
         return contains(point.x, point.y);
     }
 
@@ -102,7 +103,16 @@ public class RectInt {
      * @param topLeft The left and top position.
      * @param size The width and height.
      */
-    public void set(@NonNull Vector4i topLeft, @NonNull Vector4i size) {
+    public void set(@NonNull Vector2i topLeft, @NonNull Vector2i size) {
         set(topLeft.x, topLeft.y, topLeft.x + size.x, topLeft.y + size.y);
+    }
+
+    /**
+     * Set the values of this rectangle to the same as the other one.
+     *
+     * @param other The values to use.
+     */
+    public void set(@NonNull RectInt other) {
+        set(other.left, other.top, other.right, other.bottom);
     }
 }

@@ -13,7 +13,14 @@ public class WindowFlags {
     public static final int ALWAYS_VERTICAL_SCROLLBAR = 1 << 8;
     public static final int HORIZONTAL_SCROLLBAR = 1 << 9;
     public static final int ALWAYS_HORIZONTAL_SCROLLBAR = 1 << 10;
+
+    /**
+     * Disables scrolling with the mouse wheel. When used on a child window, mouse wheel input is
+     * forwarded to the parent window unless that also sets this flag. Does not affect visibility of
+     * the scrollbar.
+     */
     public static final int NO_SCROLL_WITH_MOUSE = 1 << 11;
+
     public static final int NO_MOUSE_INPUTS = 1 << 12;
     public static final int NO_NAV_INPUTS = 1 << 13;
     public static final int NO_NAV_FOCUS = 1 << 14;

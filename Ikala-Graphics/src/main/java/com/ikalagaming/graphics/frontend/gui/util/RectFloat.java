@@ -106,4 +106,13 @@ public class RectFloat {
     public void set(@NonNull Vector2f topLeft, @NonNull Vector2f size) {
         set(topLeft.x, topLeft.y, topLeft.x + size.x, topLeft.y + size.y);
     }
+
+    /**
+     * Set the values of this rectangle to the same as the other one.
+     *
+     * @param other The values to use.
+     */
+    public void set(@NonNull RectFloat other) {
+        set(other.left, other.top, other.right, other.bottom);
+    }
 }

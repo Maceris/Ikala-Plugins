@@ -126,6 +126,13 @@ public class IkGui {
         pushID(ID);
         Window window = context.windowByID.computeIfAbsent(ID, ignored -> new Window(title));
 
+        if (WindowFlags.NONE == windowFlags) {
+            window.flags = context.nextWindowData.windowFlags;
+        } else {
+            window.flags = windowFlags;
+        }
+        window.flagsAsChildWindow = WindowFlags.NONE;
+
         window.id = ID;
         window.idWithinParent = 0;
         window.idAsPopupWindow = 0;
@@ -138,8 +145,20 @@ public class IkGui {
         window.scrollPosition.set(0, 0);
         window.scrollExtent.set(0, 0);
         window.scrollTarget.set(0, 0);
-        window.showScrollbarX = false; // TODO(ches) check window flags for scrollbar
-        window.showScrollbarY = false;
+        if ((window.flags & WindowFlags.NO_SCROLLBAR) != 0) {
+            window.showScrollbarX = Visibility.NEVER;
+        } else if ((window.flags & WindowFlags.ALWAYS_HORIZONTAL_SCROLLBAR) != 0) {
+            window.showScrollbarX = Visibility.ALWAYS;
+        } else {
+            window.showScrollbarX = Visibility.IF_REQUIRED;
+        }
+        if ((window.flags & WindowFlags.NO_SCROLLBAR) != 0) {
+            window.showScrollbarY = Visibility.NEVER;
+        } else if ((window.flags & WindowFlags.ALWAYS_VERTICAL_SCROLLBAR) != 0) {
+            window.showScrollbarY = Visibility.ALWAYS;
+        } else {
+            window.showScrollbarY = Visibility.IF_REQUIRED;
+        }
         window.hidden = false;
         window.skipRenderingContents = false;
         window.reuseLastFrameContents = false;
@@ -160,12 +179,6 @@ public class IkGui {
         final Vector2i framePadding = getStyleVarInt2(StyleVariable.FRAME_PADDING);
         window.titleBarHeight = getTextLineHeight() + 2 * framePadding.y;
         window.menuBarHeight = 0; // TODO(ches) set height if we have a menu bar
-        if (WindowFlags.NONE == windowFlags) {
-            window.flags = context.nextWindowData.windowFlags;
-        } else {
-            window.flags = windowFlags;
-        }
-        window.flagsAsChildWindow = WindowFlags.NONE;
 
         if (context.nextWindowData.viewport != null) {
             window.viewport = context.nextWindowData.viewport;
@@ -194,11 +207,15 @@ public class IkGui {
         window.sizeDesired.set(window.sizeRequested);
         window.rounding = getStyleVarInt(StyleVariable.WINDOW_ROUNDING);
         window.borderSize = getStyleVarInt(StyleVariable.WINDOW_BORDER_SIZE);
-        window.rectFull.set(0, 0, 0, 0); // TODO(set rects)
-        window.rectInner.set(0, 0, 0, 0);
-        window.rectInnerClip.set(0, 0, 0, 0);
-        window.rectContent.set(0, 0, 0, 0);
-        window.rectCurrentClip.set(0, 0, 0, 0);
+        window.rectFull.set(window.position, window.sizeFull);
+        window.rectInner.set(
+                window.position.x + window.padding.x,
+                window.position.y + window.padding.y + window.titleBarHeight + window.menuBarHeight,
+                window.position.x + window.sizeFull.x - window.padding.x,
+                window.position.y + window.sizeFull.y - window.padding.y);
+        window.rectInnerClip.set(window.rectInner);
+        window.rectContent.set(window.rectInner);
+        window.rectCurrentClip.set(window.rectFull);
 
         window.baseOffsetCurrentLine = 0;
         window.baseOffsetPreviousLine = 0;

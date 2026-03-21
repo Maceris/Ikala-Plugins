@@ -2,9 +2,9 @@ package com.ikalagaming.graphics.frontend.gui.data;
 
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.enums.Direction;
+import com.ikalagaming.graphics.frontend.gui.enums.Visibility;
 import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
-import com.ikalagaming.graphics.frontend.gui.util.RectFloat;
-import com.ikalagaming.util.FloatArrayList;
+import com.ikalagaming.graphics.frontend.gui.util.RectInt;
 import com.ikalagaming.util.IntArrayList;
 
 import lombok.NonNull;
@@ -67,7 +67,7 @@ public class Window {
     public IntArrayList idStack;
     public int idWithinParent;
     public float indent;
-    public final FloatArrayList itemWidthStack;
+    public final IntArrayList itemWidthStack;
     public final Vector2i lineSizeCurrent;
     public final Vector2i lineSizePrevious;
     public int menuBarHeight;
@@ -87,19 +87,19 @@ public class Window {
     public final Vector2i position;
 
     /** The region that contains the contents, including parts scrolled out of view. */
-    public final RectFloat rectContent;
+    public final RectInt rectContent;
 
     /** Current clipping rect, since we can push and pop clip rects. */
-    public final RectFloat rectCurrentClip;
+    public final RectInt rectCurrentClip;
 
     /** The outer region of the window. */
-    public final RectFloat rectFull;
+    public final RectInt rectFull;
 
     /** The inner part of the window, excluding the title bar, menu, scroll bars. */
-    public final RectFloat rectInner;
+    public final RectInt rectInner;
 
     /** Inner rect, but shrunk by 0.5 * padding, and clipped by the viewport or parent clip rect. */
-    public final RectFloat rectInnerClip;
+    public final RectInt rectInnerClip;
 
     public boolean reuseLastFrameContents;
     public Window rootWindow;
@@ -124,8 +124,8 @@ public class Window {
 
     public final Vector2i scrollTarget;
     public boolean setPos;
-    public boolean showScrollbarX;
-    public boolean showScrollbarY;
+    public @NonNull Visibility showScrollbarX;
+    public @NonNull Visibility showScrollbarY;
 
     /** Size, which might be smaller than the full size if minimized. */
     public final Vector2i sizeCurrent;
@@ -140,7 +140,7 @@ public class Window {
     public final Vector2i sizeRequested;
 
     public boolean skipRenderingContents;
-    public final FloatArrayList textWrapPositionStack;
+    public final IntArrayList textWrapPositionStack;
     public int titleBarHeight;
     public int treeDepth;
     public Viewport viewport;
@@ -173,7 +173,7 @@ public class Window {
         idStack = new IntArrayList();
         idWithinParent = 0;
         indent = 0.0f;
-        itemWidthStack = new FloatArrayList();
+        itemWidthStack = new IntArrayList();
         lineSizeCurrent = new Vector2i(0, 0);
         lineSizePrevious = new Vector2i(0, 0);
         menuBarHeight = 0;
@@ -182,11 +182,11 @@ public class Window {
         padding = new Vector2i(0, 0);
         parentWindow = null;
         position = new Vector2i(0, 0);
-        rectContent = new RectFloat(0, 0, 0, 0);
-        rectCurrentClip = new RectFloat(0, 0, 0, 0);
-        rectFull = new RectFloat(0, 0, 0, 0);
-        rectInner = new RectFloat(0, 0, 0, 0);
-        rectInnerClip = new RectFloat(0, 0, 0, 0);
+        rectContent = new RectInt(0, 0, 0, 0);
+        rectCurrentClip = new RectInt(0, 0, 0, 0);
+        rectFull = new RectInt(0, 0, 0, 0);
+        rectInner = new RectInt(0, 0, 0, 0);
+        rectInnerClip = new RectInt(0, 0, 0, 0);
         reuseLastFrameContents = false;
         rootWindow = null;
         rootWindowForNavigation = null;
@@ -199,14 +199,14 @@ public class Window {
         scrollPosition = new Vector2i(0, 0);
         scrollTarget = new Vector2i(0, 0);
         setPos = false;
-        showScrollbarX = false;
-        showScrollbarY = false;
+        showScrollbarX = Visibility.IF_REQUIRED;
+        showScrollbarY = Visibility.IF_REQUIRED;
         sizeCurrent = new Vector2i(0, 0);
         sizeDesired = new Vector2i(0, 0);
         sizeFull = new Vector2i(0, 0);
         sizeRequested = new Vector2i(0, 0);
         skipRenderingContents = false;
-        textWrapPositionStack = new FloatArrayList();
+        textWrapPositionStack = new IntArrayList();
         titleBarHeight = 0;
         treeDepth = 0;
         viewport = null;
