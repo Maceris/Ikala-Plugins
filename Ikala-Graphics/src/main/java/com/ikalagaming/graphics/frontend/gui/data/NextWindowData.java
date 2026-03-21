@@ -5,7 +5,7 @@ import com.ikalagaming.graphics.frontend.gui.flags.ChildFlags;
 import com.ikalagaming.graphics.frontend.gui.flags.NextWindowFlags;
 import com.ikalagaming.graphics.frontend.gui.flags.RefreshFlags;
 import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
-import com.ikalagaming.graphics.frontend.gui.util.Rect;
+import com.ikalagaming.graphics.frontend.gui.util.RectFloat;
 
 import lombok.NonNull;
 import org.joml.Vector2i;
@@ -36,7 +36,7 @@ public class NextWindowData {
      */
     public int childFlags;
 
-    public final Rect sizeConstraintRect;
+    public final RectFloat sizeConstraintRect;
     public float backgroundAlpha;
     public final Vector2i menuBarOffsetMinValue;
 
@@ -61,7 +61,7 @@ public class NextWindowData {
         scrollValue = new Vector2i(0, 0);
         windowFlags = WindowFlags.NONE;
         childFlags = ChildFlags.NONE;
-        sizeConstraintRect = new Rect(0, 0, 0, 0);
+        sizeConstraintRect = new RectFloat(0, 0, 0, 0);
         backgroundAlpha = 1.0f;
         menuBarOffsetMinValue = new Vector2i(0, 0);
         windowRefreshFlags = RefreshFlags.NONE;

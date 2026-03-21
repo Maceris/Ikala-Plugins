@@ -6,7 +6,7 @@ import com.ikalagaming.graphics.frontend.gui.enums.GuiInputSource;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseCursor;
 import com.ikalagaming.graphics.frontend.gui.event.GuiInputEvent;
-import com.ikalagaming.graphics.frontend.gui.util.Rect;
+import com.ikalagaming.graphics.frontend.gui.util.RectFloat;
 import com.ikalagaming.util.FloatArrayList;
 import com.ikalagaming.util.IntArrayList;
 
@@ -123,10 +123,10 @@ public class Context {
     public int dragDropSourceFlags;
 
     public int dragDropSourceFrameCount;
-    public final Rect dragDropTargetClipRect;
+    public final RectFloat dragDropTargetClipRect;
     public int dragDropTargetID;
 
-    public final Rect dragDropTargetRect;
+    public final RectFloat dragDropTargetRect;
     public boolean dragDropWithinSource;
     public boolean dragDropWithinTarget;
     public float dragSpeedDefaultRatio;
@@ -354,9 +354,9 @@ public class Context {
 
     public int navNextActivateID;
     public int navScoringDebugCount;
-    public final Rect navScoringNoClipRect;
+    public final RectFloat navScoringNoClipRect;
 
-    public final Rect navScoringRect;
+    public final RectFloat navScoringRect;
     public int navTabbingCounter;
     public int navTabbingDirection;
 
@@ -425,7 +425,7 @@ public class Context {
     public Window windowHovered;
     public Window windowHoveredUnderMovingWindow;
     public Window windowMoving;
-    public final Rect windowResizeBorderExpectedRect;
+    public final RectFloat windowResizeBorderExpectedRect;
     public boolean windowResizeRelativeMode;
 
     /** Windows, sorted in display order, back to front. */
@@ -510,9 +510,9 @@ public class Context {
         dragDropPayloadBufferLocal = null;
         dragDropSourceFlags = 0;
         dragDropSourceFrameCount = 0;
-        dragDropTargetClipRect = new Rect(0, 0, 0, 0);
+        dragDropTargetClipRect = new RectFloat(0, 0, 0, 0);
         dragDropTargetID = 0;
-        dragDropTargetRect = new Rect(0, 0, 0, 0);
+        dragDropTargetRect = new RectFloat(0, 0, 0, 0);
         dragDropWithinSource = false;
         dragDropWithinTarget = false;
         dragSpeedDefaultRatio = 0.0f;
@@ -618,8 +618,8 @@ public class Context {
         navNextActivateFlags = 0;
         navNextActivateID = 0;
         navScoringDebugCount = 0;
-        navScoringNoClipRect = new Rect(0, 0, 0, 0);
-        navScoringRect = new Rect(0, 0, 0, 0);
+        navScoringNoClipRect = new RectFloat(0, 0, 0, 0);
+        navScoringRect = new RectFloat(0, 0, 0, 0);
         navTabbingCounter = 0;
         navTabbingDirection = 0;
         navTabbingResultFirst = new NavItemData();
@@ -664,7 +664,7 @@ public class Context {
         windowHovered = null;
         windowHoveredUnderMovingWindow = null;
         windowMoving = null;
-        windowResizeBorderExpectedRect = new Rect(0, 0, 0, 0);
+        windowResizeBorderExpectedRect = new RectFloat(0, 0, 0, 0);
         windowResizeRelativeMode = false;
         windowsDisplayOrder = new ArrayList<>();
         windowWheeling = null;

@@ -1,6 +1,6 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
-import com.ikalagaming.graphics.frontend.gui.util.Rect;
+import com.ikalagaming.graphics.frontend.gui.util.RectFloat;
 
 public class LastItemData {
     private int ID;
@@ -8,8 +8,8 @@ public class LastItemData {
     private int fieldFlags;
     private int statusFlags;
 
-    private Rect rect;
-    private Rect displayRect;
-    private Rect clipRect;
+    private RectFloat rect;
+    private RectFloat displayRect;
+    private RectFloat clipRect;
     private int shortcut;
 }

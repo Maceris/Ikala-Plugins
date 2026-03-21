@@ -1,6 +1,6 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
-import com.ikalagaming.graphics.frontend.gui.util.Rect;
+import com.ikalagaming.graphics.frontend.gui.util.RectFloat;
 
 import org.joml.Vector2f;
 
@@ -21,7 +21,7 @@ public class TabBar {
     private int visibleTabID;
     private int currentFrameVisible;
     private int previousFrameVisible;
-    private Rect bounds;
+    private RectFloat bounds;
     private float currentTabContentHeight;
     private float previousTabContentHeight;
     private float widthAllTabs;

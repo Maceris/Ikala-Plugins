@@ -2,7 +2,7 @@ package com.ikalagaming.graphics.frontend.gui.component;
 
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
-import com.ikalagaming.graphics.frontend.gui.util.Rect;
+import com.ikalagaming.graphics.frontend.gui.util.RectFloat;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.Getter;
@@ -136,7 +136,7 @@ public class Component implements Drawable {
      */
     public boolean containsPoint(final int screenWidth, final int screenHeight, final Vector2f p) {
         var actualRect =
-                new Rect(
+                new RectFloat(
                         getActualDisplaceX() * screenWidth,
                         getActualDisplaceY() * screenHeight,
                         (getActualDisplaceX() + getActualWidth()) * screenWidth,
@@ -232,9 +232,9 @@ public class Component implements Drawable {
      * @param screen The screen area we are drawing on.
      * @return The rectangle representing where this would be located on the canvas.
      */
-    public Rect getBoundingRect(@NonNull Rect screen) {
+    public RectFloat getBoundingRect(@NonNull RectFloat screen) {
         recalculate();
-        Rect bounds = new Rect();
+        RectFloat bounds = new RectFloat();
         final float x = globalDisplacement.x;
         final float y = globalDisplacement.y;
         final float w = globalScale.x;

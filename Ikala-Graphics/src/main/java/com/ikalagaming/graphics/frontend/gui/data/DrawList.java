@@ -5,7 +5,7 @@ import static com.ikalagaming.graphics.frontend.gui.flags.DrawFlags.*;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.flags.DrawFlags;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
-import com.ikalagaming.graphics.frontend.gui.util.Rect;
+import com.ikalagaming.graphics.frontend.gui.util.RectFloat;
 import com.ikalagaming.util.IntArrayList;
 
 import lombok.*;
@@ -109,7 +109,7 @@ public class DrawList {
      */
     public ByteBuffer commandBuffer;
 
-    private final Deque<Rect> clipRects;
+    private final Deque<RectFloat> clipRects;
     private final IntArrayList textures;
 
     /**
@@ -215,7 +215,7 @@ public class DrawList {
         float actualMaxX = maxX;
         float actualMaxY = maxY;
 
-        Rect clipRect = clipRects.peekFirst();
+        RectFloat clipRect = clipRects.peekFirst();
         if (clipRect != null) {
             actualMinX = Math.max(minX, clipRect.getLeft());
             actualMinY = Math.max(minY, clipRect.getTop());
@@ -366,14 +366,14 @@ public class DrawList {
 
     public void pushClipRect(
             float minX, float minY, float maxX, float maxY, boolean intersectWithCurrentClipRect) {
-        Rect newClipRect = new Rect(minX, minY, maxX, maxY);
+        RectFloat newClipRect = new RectFloat(minX, minY, maxX, maxY);
 
         if (!intersectWithCurrentClipRect) {
             clipRects.addFirst(newClipRect);
             return;
         }
 
-        Rect oldRect = clipRects.peekFirst();
+        RectFloat oldRect = clipRects.peekFirst();
         if (oldRect == null) {
             // No existing rect
             clipRects.addFirst(newClipRect);
@@ -397,7 +397,7 @@ public class DrawList {
 
     public void pushClipRectFullScreen() {
         IkIO io = IkGui.getIO();
-        Rect newRect = new Rect(0, 0, io.displaySize.x, io.displaySize.y);
+        RectFloat newRect = new RectFloat(0, 0, io.displaySize.x, io.displaySize.y);
         clipRects.addFirst(newRect);
     }
 
@@ -420,7 +420,7 @@ public class DrawList {
     }
 
     public void getClipRectMin(Vector2f output) {
-        Rect clipRect = clipRects.peekFirst();
+        RectFloat clipRect = clipRects.peekFirst();
         if (clipRect == null) {
             output.set(0, 0);
             return;
@@ -429,7 +429,7 @@ public class DrawList {
     }
 
     public float getClipRectMinX() {
-        Rect clipRect = clipRects.peekFirst();
+        RectFloat clipRect = clipRects.peekFirst();
         if (clipRect == null) {
             return 0;
         }
@@ -437,7 +437,7 @@ public class DrawList {
     }
 
     public float getClipRectMinY() {
-        Rect clipRect = clipRects.peekFirst();
+        RectFloat clipRect = clipRects.peekFirst();
         if (clipRect == null) {
             return 0;
         }
@@ -451,7 +451,7 @@ public class DrawList {
     }
 
     public void getClipRectMax(Vector2f output) {
-        Rect clipRect = clipRects.peekFirst();
+        RectFloat clipRect = clipRects.peekFirst();
         if (clipRect == null) {
             output.set(0, 0);
             return;
@@ -460,7 +460,7 @@ public class DrawList {
     }
 
     public float getClipRectMaxX() {
-        Rect clipRect = clipRects.peekFirst();
+        RectFloat clipRect = clipRects.peekFirst();
         if (clipRect == null) {
             IkIO io = IkGui.getIO();
             return io.displaySize.x;
@@ -469,7 +469,7 @@ public class DrawList {
     }
 
     public float getClipRectMaxY() {
-        Rect clipRect = clipRects.peekFirst();
+        RectFloat clipRect = clipRects.peekFirst();
         if (clipRect == null) {
             IkIO io = IkGui.getIO();
             return io.displaySize.y;

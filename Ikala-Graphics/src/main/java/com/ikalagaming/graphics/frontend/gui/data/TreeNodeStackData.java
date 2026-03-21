@@ -1,6 +1,6 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
-import com.ikalagaming.graphics.frontend.gui.util.Rect;
+import com.ikalagaming.graphics.frontend.gui.util.RectFloat;
 
 public class TreeNodeStackData {
     private int ID;
@@ -15,7 +15,7 @@ public class TreeNodeStackData {
      */
     private int itemFlags;
 
-    private Rect navRect;
+    private RectFloat navRect;
     private float drawLinesX1;
     private float drawLinesToNodeY2;
     private int drawLinesTableColumn;

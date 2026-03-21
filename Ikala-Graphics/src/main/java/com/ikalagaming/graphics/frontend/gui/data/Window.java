@@ -3,7 +3,7 @@ package com.ikalagaming.graphics.frontend.gui.data;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.enums.Direction;
 import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
-import com.ikalagaming.graphics.frontend.gui.util.Rect;
+import com.ikalagaming.graphics.frontend.gui.util.RectFloat;
 import com.ikalagaming.util.FloatArrayList;
 import com.ikalagaming.util.IntArrayList;
 
@@ -76,19 +76,19 @@ public class Window {
     public IntArrayList idStack;
 
     /** The outer region of the window. */
-    public final Rect rectFull;
+    public final RectFloat rectFull;
 
     /** The inner part of the window, excluding the title bar, menu, scroll bars. */
-    public final Rect rectInner;
+    public final RectFloat rectInner;
 
     /** Inner rect, but shrunk by 0.5 * padding, and clipped by the viewport or parent clip rect. */
-    public final Rect rectInnerClip;
+    public final RectFloat rectInnerClip;
 
     /** The region that contains the contents, including parts scrolled out of view. */
-    public final Rect rectContent;
+    public final RectFloat rectContent;
 
     /** Current clipping rect, since we can push and pop clip rects. */
-    public final Rect rectCurrentClip;
+    public final RectFloat rectCurrentClip;
 
     public DrawList drawList;
     public Window parentWindow;
@@ -164,11 +164,11 @@ public class Window {
         borderBeingHovered = Direction.NONE;
         borderBeingDragged = Direction.NONE;
         idStack = new IntArrayList();
-        rectFull = new Rect(0, 0, 0, 0);
-        rectInner = new Rect(0, 0, 0, 0);
-        rectInnerClip = new Rect(0, 0, 0, 0);
-        rectContent = new Rect(0, 0, 0, 0);
-        rectCurrentClip = new Rect(0, 0, 0, 0);
+        rectFull = new RectFloat(0, 0, 0, 0);
+        rectInner = new RectFloat(0, 0, 0, 0);
+        rectInnerClip = new RectFloat(0, 0, 0, 0);
+        rectContent = new RectFloat(0, 0, 0, 0);
+        rectCurrentClip = new RectFloat(0, 0, 0, 0);
         drawList = new DrawList(name);
         parentWindow = null;
         rootWindow = null;

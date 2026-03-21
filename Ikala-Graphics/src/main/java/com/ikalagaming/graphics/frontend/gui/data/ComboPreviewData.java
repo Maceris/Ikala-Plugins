@@ -1,12 +1,12 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
 import com.ikalagaming.graphics.frontend.gui.enums.LayoutType;
-import com.ikalagaming.graphics.frontend.gui.util.Rect;
+import com.ikalagaming.graphics.frontend.gui.util.RectFloat;
 
 import org.joml.Vector2f;
 
 public class ComboPreviewData {
-    private Rect previewRect;
+    private RectFloat previewRect;
     private Vector2f backupCursorPos;
     private Vector2f backupCursorMaxPos;
     private Vector2f backupCursorPosPreviousLine;
@@ -14,7 +14,7 @@ public class ComboPreviewData {
     private LayoutType backupLayout;
 
     public ComboPreviewData() {
-        this.previewRect = new Rect(0, 0, 0, 0);
+        this.previewRect = new RectFloat(0, 0, 0, 0);
         this.backupCursorPos = new Vector2f(0, 0);
         this.backupCursorMaxPos = new Vector2f(0, 0);
         this.backupCursorPosPreviousLine = new Vector2f(0, 0);

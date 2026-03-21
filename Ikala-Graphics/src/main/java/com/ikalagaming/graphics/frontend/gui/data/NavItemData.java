@@ -1,14 +1,14 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
 import com.ikalagaming.graphics.frontend.gui.flags.ItemFlags;
-import com.ikalagaming.graphics.frontend.gui.util.Rect;
+import com.ikalagaming.graphics.frontend.gui.util.RectFloat;
 
 public class NavItemData {
 
     private Window window;
     private int ID;
     private int focusScopeID;
-    private Rect rect;
+    private RectFloat rect;
 
     /**
      * @see com.ikalagaming.graphics.frontend.gui.flags.ItemFlags

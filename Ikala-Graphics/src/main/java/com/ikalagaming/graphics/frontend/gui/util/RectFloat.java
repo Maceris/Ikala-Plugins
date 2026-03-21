@@ -2,17 +2,37 @@ package com.ikalagaming.graphics.frontend.gui.util;
 
 import lombok.*;
 import org.joml.Vector2f;
+import org.joml.Vector4f;
 
 @AllArgsConstructor
 @NoArgsConstructor
 @Getter
 @Setter
 @EqualsAndHashCode
-public class Rect {
+public class RectFloat {
     private float left;
     private float top;
     private float right;
     private float bottom;
+
+    /**
+     * Construct from a Vector4f.
+     *
+     * @param values Left, top, right, and bottom in that order.
+     */
+    public RectFloat(@NonNull Vector4f values) {
+        this(values.x, values.y, values.z, values.w);
+    }
+
+    /**
+     * Construct a rect from a point and size.
+     *
+     * @param topLeft The left and top position.
+     * @param size The width and height.
+     */
+    public RectFloat(@NonNull Vector2f topLeft, @NonNull Vector2f size) {
+        this(topLeft.x, topLeft.y, topLeft.x + size.x, topLeft.y + size.y);
+    }
 
     /**
      * Returns true if (x, y) is inside the rectangle.
@@ -66,5 +86,24 @@ public class Rect {
         this.right = right;
         this.top = top;
         this.bottom = bottom;
+    }
+
+    /**
+     * Set the coordinates.
+     *
+     * @param values Left, top, right, and bottom in that order.
+     */
+    public void set(@NonNull Vector4f values) {
+        set(values.x, values.y, values.z, values.w);
+    }
+
+    /**
+     * Set based on a top left coordinate and size.
+     *
+     * @param topLeft The left and top position.
+     * @param size The width and height.
+     */
+    public void set(@NonNull Vector2f topLeft, @NonNull Vector2f size) {
+        set(topLeft.x, topLeft.y, topLeft.x + size.x, topLeft.y + size.y);
     }
 }
