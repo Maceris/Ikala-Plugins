@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.frontend.gui.data;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.enums.Direction;
 import com.ikalagaming.graphics.frontend.gui.enums.Visibility;
+import com.ikalagaming.graphics.frontend.gui.flags.ConditionAllowed;
 import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.frontend.gui.util.RectInt;
 import com.ikalagaming.util.IntArrayList;
@@ -31,6 +32,13 @@ public class Window {
     public final List<Window> childWindows;
 
     public boolean collapsed;
+
+    /**
+     * Flags for the collapsed conditions.
+     *
+     * @see ConditionAllowed
+     */
+    public int collapsedConditionAllowed;
 
     public boolean collapseToggleRequested;
 
@@ -86,6 +94,13 @@ public class Window {
 
     public final Vector2i position;
 
+    /**
+     * Flags for the position conditions.
+     *
+     * @see ConditionAllowed
+     */
+    public int positionConditionAllowed;
+
     /** The region that contains the contents, including parts scrolled out of view. */
     public final RectInt rectContent;
 
@@ -127,6 +142,13 @@ public class Window {
     public @NonNull Visibility showScrollbarX;
     public @NonNull Visibility showScrollbarY;
 
+    /**
+     * Flags for the size conditions.
+     *
+     * @see ConditionAllowed
+     */
+    public int sizeConditionAllowed;
+
     /** Size, which might be smaller than the full size if minimized. */
     public final Vector2i sizeCurrent;
 
@@ -146,6 +168,7 @@ public class Window {
     public Viewport viewport;
 
     public Window(@NonNull String name) {
+        //TODO(ches) handle loading from ini, update values based on what we find (or don't find)
         active = false;
         appearing = false;
         baseOffsetCurrentLine = 0;
@@ -155,6 +178,7 @@ public class Window {
         borderSize = 0;
         childWindows = new ArrayList<>();
         collapsed = false;
+        collapsedConditionAllowed = ConditionAllowed.ALL;
         collapseToggleRequested = false;
         currentItemWidth = 0.0f;
         currentTableIndex = 0;
@@ -182,6 +206,7 @@ public class Window {
         padding = new Vector2i(0, 0);
         parentWindow = null;
         position = new Vector2i(0, 0);
+        positionConditionAllowed = ConditionAllowed.ALL;
         rectContent = new RectInt(0, 0, 0, 0);
         rectCurrentClip = new RectInt(0, 0, 0, 0);
         rectFull = new RectInt(0, 0, 0, 0);
@@ -201,6 +226,7 @@ public class Window {
         setPos = false;
         showScrollbarX = Visibility.IF_REQUIRED;
         showScrollbarY = Visibility.IF_REQUIRED;
+        sizeConditionAllowed = ConditionAllowed.ALL;
         sizeCurrent = new Vector2i(0, 0);
         sizeDesired = new Vector2i(0, 0);
         sizeFull = new Vector2i(0, 0);

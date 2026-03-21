@@ -4,6 +4,7 @@ import com.ikalagaming.graphics.frontend.gui.callback.GuiInputTextCallback;
 import com.ikalagaming.graphics.frontend.gui.data.*;
 import com.ikalagaming.graphics.frontend.gui.enums.*;
 import com.ikalagaming.graphics.frontend.gui.enums.StyleVariable;
+import com.ikalagaming.graphics.frontend.gui.flags.ConditionAllowed;
 import com.ikalagaming.graphics.frontend.gui.flags.DrawFlags;
 import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
@@ -185,20 +186,29 @@ public class IkGui {
         } else {
             window.viewport = context.mainViewport;
         }
-        // TODO(ches) position condition
-        switch (context.nextWindowData.positionCondition) {
-            case Condition.NONE:
-            case Condition.ALWAYS:
-            case Condition.ONCE:
-            case Condition.FIRST_USE_EVER:
-            case Condition.APPEARING:
+        if (ConditionAllowed.shouldResolve(
+                context.nextWindowData.positionCondition, window.positionConditionAllowed)) {
+            window.position.set(context.nextWindowData.positionValue);
+            window.positionConditionAllowed =
+                    ConditionAllowed.updateFlags(
+                            context.nextWindowData.positionCondition,
+                            window.positionConditionAllowed);
         }
-        window.position.set(context.nextWindowData.positionValue);
-
-        // TODO(ches) size condition
-        window.sizeRequested.set(context.nextWindowData.sizeValue);
-        // TODO(ches) collapsed condition
-        window.collapsed = context.nextWindowData.collapsedValue;
+        if (ConditionAllowed.shouldResolve(
+                context.nextWindowData.sizeCondition, window.sizeConditionAllowed)) {
+            window.sizeRequested.set(context.nextWindowData.sizeValue);
+            window.sizeConditionAllowed =
+                    ConditionAllowed.updateFlags(
+                            context.nextWindowData.sizeCondition, window.sizeConditionAllowed);
+        }
+        if (ConditionAllowed.shouldResolve(
+                context.nextWindowData.collapsedCondition, window.collapsedConditionAllowed)) {
+            window.collapsed = context.nextWindowData.collapsedValue;
+            window.sizeConditionAllowed =
+                    ConditionAllowed.updateFlags(
+                            context.nextWindowData.collapsedCondition,
+                            window.collapsedConditionAllowed);
+        }
         window.collapseToggleRequested = false;
 
         // TODO(ches) calculate actual sizes properly
