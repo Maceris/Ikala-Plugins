@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.frontend.gui.util;
 
+import lombok.NonNull;
 import org.joml.Vector4f;
 
 public class Color {
@@ -13,7 +14,7 @@ public class Color {
      *
      * @param color The color we want to modify, in RGBA format.
      * @param alpha The alpha to add to the existing alpha.
-     * @return
+     * @return The new color in RGBA format.
      */
     public static int addAlpha(int color, int alpha) {
         final int originalAlpha = color & 0xFF;
@@ -26,7 +27,7 @@ public class Color {
      *
      * @param color The color we want to modify, in RGBA format.
      * @param alpha The alpha to multiply with the existing alpha.
-     * @return
+     * @return The new color value in RGBA format.
      */
     public static int multiplyAlpha(int color, float alpha) {
         final float originalAlpha = (color & 0xFF) / 255.0f;
@@ -36,36 +37,70 @@ public class Color {
         return (color & 0xFFFFFF00) | newAlphaInt;
     }
 
+    /**
+     * Convert components to our color representation.
+     *
+     * @param r The red component, in the range 0-255 inclusive.
+     * @param g The green component, in the range 0-255 inclusive.
+     * @param b The blue component, in the range 0-255 inclusive.
+     * @param a The alpha component, in the range 0-255 inclusive.
+     * @return The color in RGBA format.
+     */
     public static int rgba(int r, int g, int b, int a) {
         return intToColor(r, g, b, a);
     }
 
+    /**
+     * Convert components to our color representation, with an alpha of 255.
+     *
+     * @param r The red component, in the range 0-255 inclusive.
+     * @param g The green component, in the range 0-255 inclusive.
+     * @param b The blue component, in the range 0-255 inclusive.
+     * @return The color in RGBA format.
+     */
     public static int rgb(int r, int g, int b) {
         return intToColor(r, g, b, 255);
     }
 
+    /**
+     * Convert components to our color representation.
+     *
+     * @param r The red component, in the range 0-1 inclusive.
+     * @param g The green component, in the range 0-1 inclusive.
+     * @param b The blue component, in the range 0-1 inclusive.
+     * @param a The alpha component, in the range 0-1 inclusive.
+     * @return The color in RGBA format.
+     */
     public static int rgba(float r, float g, float b, float a) {
         return intToColor(
                 (int) (r * 255.0f), (int) (g * 255.0f), (int) (b * 255.0f), (int) (a * 255.0f));
     }
 
+    /**
+     * Convert components to our color representation, with an alpha of 1.
+     *
+     * @param r The red component, in the range 0-1 inclusive.
+     * @param g The green component, in the range 0-1 inclusive.
+     * @param b The blue component, in the range 0-1 inclusive.
+     * @return The color in RGBA format.
+     */
     public static int rgb(float r, float g, float b) {
         return intToColor((int) (r * 255.0f), (int) (g * 255.0f), (int) (b * 255.0f), 255);
     }
 
-    public static int rgba(String hex) {
+    public static int rgba(@NonNull String hex) {
         return rgbaToColor(hex);
     }
 
-    public static int rgb(String hex) {
+    public static int rgb(@NonNull String hex) {
         return rgbToColor(hex);
     }
 
-    public static int rgba(Vector4f color) {
+    public static int rgba(@NonNull Vector4f color) {
         return rgba(color.x, color.y, color.z, color.w);
     }
 
-    public static int rgb(Vector4f color) {
+    public static int rgb(@NonNull Vector4f color) {
         return rgb(color.x, color.y, color.z);
     }
 
@@ -100,7 +135,7 @@ public class Color {
                 Math.round(a * 255.0f));
     }
 
-    private static int rgbToColor(String hex) {
+    private static int rgbToColor(@NonNull String hex) {
         int r = Integer.parseInt(hex.substring(1, 3), 16);
         int g = Integer.parseInt(hex.substring(3, 5), 16);
         int b = Integer.parseInt(hex.substring(5, 7), 16);
@@ -108,7 +143,7 @@ public class Color {
         return intToColor(r, g, b, a);
     }
 
-    private static int rgbaToColor(String hex) {
+    private static int rgbaToColor(@NonNull String hex) {
         int r = Integer.parseInt(hex.substring(1, 3), 16);
         int g = Integer.parseInt(hex.substring(3, 5), 16);
         int b = Integer.parseInt(hex.substring(5, 7), 16);

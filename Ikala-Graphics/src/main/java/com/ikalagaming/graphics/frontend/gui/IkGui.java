@@ -272,7 +272,7 @@ public class IkGui {
                     window.position.y,
                     (float) window.position.x + window.sizeCurrent.x,
                     (float) window.position.y + window.sizeCurrent.y,
-                    getStyleColorWithGlobalAlpha(ColorType.WINDOW_BACKGROUND),
+                    getColorWithGlobalAlpha(ColorType.WINDOW_BACKGROUND),
                     window.rounding);
         }
 
@@ -288,7 +288,7 @@ public class IkGui {
                     window.position.y,
                     (float) window.position.x + window.sizeCurrent.x,
                     (float) window.position.y + window.titleBarHeight,
-                    getStyleColorWithGlobalAlpha(titleColor),
+                    getColorWithGlobalAlpha(titleColor),
                     window.rounding,
                     DrawFlags.ROUND_CORNERS_TOP);
 
@@ -298,7 +298,7 @@ public class IkGui {
                     context.fontSize,
                     (float) window.position.x + framePadding.x,
                     (float) window.position.y + framePadding.y,
-                    getStyleColor(ColorType.TEXT),
+                    getColorWithGlobalAlpha(ColorType.TEXT),
                     window.name);
         }
 
@@ -308,7 +308,7 @@ public class IkGui {
                     window.position.y,
                     (float) window.position.x + window.sizeCurrent.x,
                     (float) window.position.y + window.sizeCurrent.y,
-                    getStyleColorWithGlobalAlpha(ColorType.BORDER),
+                    getColorWithGlobalAlpha(ColorType.BORDER),
                     window.rounding,
                     DrawFlags.ROUND_CORNERS_ALL,
                     window.borderSize);
@@ -1718,19 +1718,149 @@ public class IkGui {
         return null;
     }
 
+    /**
+     * Fetch the current style color as it is stored in the style, after color mod overrides, but
+     * without the global alpha values.
+     *
+     * @param type The type of color we want.
+     * @return The color in RGBA format.
+     */
     public static int getColor(@NonNull ColorType type) {
-        // TODO(ches) complete this
-        return 0;
+        int result =
+                switch (type) {
+                    case ColorType.BORDER -> context.style.color.border;
+                    case ColorType.BORDER_SHADOW -> context.style.color.borderShadow;
+                    case ColorType.BUTTON -> context.style.color.button;
+                    case ColorType.BUTTON_ACTIVE -> context.style.color.buttonActive;
+                    case ColorType.BUTTON_HOVERED -> context.style.color.buttonHovered;
+                    case ColorType.CHECK_MARK -> context.style.color.checkMark;
+                    case ColorType.CHILD_BACKGROUND -> context.style.color.childBackground;
+                    case ColorType.DOCKING_EMPTY_BACKGROUND ->
+                            context.style.color.dockingEmptyBackground;
+                    case ColorType.DOCKING_PREVIEW -> context.style.color.dockingPreview;
+                    case ColorType.DRAG_DROP_TARGET -> context.style.color.dragDropTarget;
+                    case ColorType.FRAME_BACKGROUND -> context.style.color.frameBackground;
+                    case ColorType.FRAME_BACKGROUND_ACTIVE ->
+                            context.style.color.frameBackgroundActive;
+                    case ColorType.FRAME_BACKGROUND_HOVERED ->
+                            context.style.color.frameBackgroundHovered;
+                    case ColorType.HEADER -> context.style.color.header;
+                    case ColorType.HEADER_ACTIVE -> context.style.color.headerActive;
+                    case ColorType.HEADER_HOVERED -> context.style.color.headerHovered;
+                    case ColorType.MENU_BAR_BACKGROUND -> context.style.color.menuBarBackground;
+                    case ColorType.MODAL_WINDOWING_DIM_BACKGROUND ->
+                            context.style.color.modalWindowingDimBackground;
+                    case ColorType.NAV_HIGHLIGHT -> context.style.color.navHighlight;
+                    case ColorType.NAV_WINDOWING_DIM_BACKGROUND ->
+                            context.style.color.navWindowingDimBackground;
+                    case ColorType.NAV_WINDOWING_HIGHLIGHT ->
+                            context.style.color.navWindowingHighlight;
+                    case ColorType.PLOT_HISTOGRAM -> context.style.color.plotHistogram;
+                    case ColorType.PLOT_HISTOGRAM_HOVERED ->
+                            context.style.color.plotHistogramHovered;
+                    case ColorType.PLOT_LINES -> context.style.color.plotLines;
+                    case ColorType.PLOT_LINES_HOVERED -> context.style.color.plotLinesHovered;
+                    case ColorType.POPUP_BACKGROUND -> context.style.color.popupBackground;
+                    case ColorType.RESIZE_GRIP -> context.style.color.resizeGrip;
+                    case ColorType.RESIZE_GRIP_ACTIVE -> context.style.color.resizeGripActive;
+                    case ColorType.RESIZE_GRIP_HOVERED -> context.style.color.resizeGripHovered;
+                    case ColorType.SCROLLBAR_BACKGROUND -> context.style.color.scrollbarBackground;
+                    case ColorType.SCROLLBAR_GRAB -> context.style.color.scrollbarGrab;
+                    case ColorType.SCROLLBAR_GRAB_ACTIVE -> context.style.color.scrollbarGrabActive;
+                    case ColorType.SCROLLBAR_GRAB_HOVERED ->
+                            context.style.color.scrollbarGrabHovered;
+                    case ColorType.SEPARATOR -> context.style.color.separator;
+                    case ColorType.SEPARATOR_ACTIVE -> context.style.color.separatorActive;
+                    case ColorType.SEPARATOR_HOVERED -> context.style.color.separatorHovered;
+                    case ColorType.SLIDER_GRAB -> context.style.color.sliderGrab;
+                    case ColorType.SLIDER_GRAB_ACTIVE -> context.style.color.sliderGrabActive;
+                    case ColorType.TAB -> context.style.color.tab;
+                    case ColorType.TABLE_BORDER_LIGHT -> context.style.color.tableBorderLight;
+                    case ColorType.TABLE_BORDER_STRONG -> context.style.color.tableBorderStrong;
+                    case ColorType.TABLE_HEADER_BACKGROUND ->
+                            context.style.color.tableHeaderBackground;
+                    case ColorType.TABLE_ROW_BACKGROUND -> context.style.color.tableRowBackground;
+                    case ColorType.TABLE_ROW_BACKGROUND_ALT ->
+                            context.style.color.tableRowBackgroundAlt;
+                    case ColorType.TAB_DIMMED -> context.style.color.tabDimmed;
+                    case ColorType.TAB_DIMMED_SELECTED -> context.style.color.tabDimmedSelected;
+                    case ColorType.TAB_DIMMED_SELECTED_OVERLINE ->
+                            context.style.color.tabDimmedSelectedOverline;
+                    case ColorType.TAB_HOVERED -> context.style.color.tabHovered;
+                    case ColorType.TAB_SELECTED -> context.style.color.tabSelected;
+                    case ColorType.TAB_SELECTED_OVERLINE -> context.style.color.tabSelectedOverline;
+                    case ColorType.TEXT -> context.style.color.text;
+                    case ColorType.TEXT_DISABLED -> context.style.color.textDisabled;
+                    case ColorType.TEXT_SELECTED_BACKGROUND ->
+                            context.style.color.textSelectedBackground;
+                    case ColorType.TITLE_BACKGROUND -> context.style.color.titleBackground;
+                    case ColorType.TITLE_BACKGROUND_ACTIVE ->
+                            context.style.color.titleBackgroundActive;
+                    case ColorType.TITLE_BACKGROUND_COLLAPSED ->
+                            context.style.color.titleBackgroundCollapsed;
+                    case ColorType.WINDOW_BACKGROUND -> context.style.color.windowBackground;
+                };
+
+        for (var iterator = context.colorStack.descendingIterator(); iterator.hasNext(); ) {
+            ColorMod mod = iterator.next();
+            if (mod.type() == type) {
+                result = mod.color();
+                break;
+            }
+        }
+
+        return result;
     }
 
+    /**
+     * Fetch the current style color from the style, after color mod overrides, and after applying
+     * the specified alpha value (instead of the global alpha).
+     *
+     * @param type The color we want.
+     * @param alphaMultiplier The alpha multiplier to use.
+     * @return The color in RGBA format.
+     */
     public static int getColor(@NonNull ColorType type, float alphaMultiplier) {
-        // TODO(ches) complete this
-        return 0;
+        int color = getColor(type);
+        return Color.multiplyAlpha(color, alphaMultiplier);
     }
 
+    /**
+     * Fetch the current style color from the style, after color mod overrides, and after applying
+     * the global alpha value.
+     *
+     * @param styleColor The color we want.
+     * @return The color in RGBA format.
+     */
+    public static int getColorWithGlobalAlpha(@NonNull ColorType styleColor) {
+        int color = getColor(styleColor);
+        return applyGlobalAlpha(color);
+    }
+
+    /**
+     * Fetch the current style color from the style, after color mod overrides, and * after applying
+     * the global alpha value(s).
+     *
+     * @param styleColor The color we want.
+     * @param disabled True if the element is disabled, so we know to apply the disabled alpha.
+     * @return The color in RGBA format.
+     */
+    public static int getColorWithGlobalAlpha(@NonNull ColorType styleColor, boolean disabled) {
+        int color = getColor(styleColor);
+        return applyGlobalAlpha(color, disabled);
+    }
+
+    /**
+     * Convert components to our color representation.
+     *
+     * @param r The red component, in the range 0-1 inclusive.
+     * @param g The green component, in the range 0-1 inclusive.
+     * @param b The blue component, in the range 0-1 inclusive.
+     * @param a The alpha component, in the range 0-1 inclusive.
+     * @return The color as an integer.
+     */
     public static int getColor(float r, float g, float b, float a) {
-        // TODO(ches) complete this
-        return 0;
+        return Color.rgba(r, g, b, a);
     }
 
     public static Vector2f getContentRegionAvailable() {
@@ -1908,7 +2038,7 @@ public class IkGui {
         return context.io;
     }
 
-    public static float getItemRectheight() {
+    public static float getItemRectHeight() {
         // TODO(ches) complete this
         return 0;
     }
@@ -1963,7 +2093,7 @@ public class IkGui {
         // TODO(ches) complete this
     }
 
-    public static float getItemRectwidth() {
+    public static float getItemRectWidth() {
         // TODO(ches) complete this
         return 0;
     }
@@ -2108,127 +2238,8 @@ public class IkGui {
     }
 
     public static GuiStorage getStateStorage() {
+        // TODO(ches) complete this
         return null;
-    }
-
-    /**
-     * Fetch the current style color as it is stored in the style, after color mod overrides, but
-     * without the global alpha values.
-     *
-     * @param styleColor The color we want.
-     * @return The color in RGBA format.
-     */
-    public static int getStyleColor(@NonNull ColorType styleColor) {
-        int result =
-                switch (styleColor) {
-                    case ColorType.BORDER -> context.style.color.border;
-                    case ColorType.BORDER_SHADOW -> context.style.color.borderShadow;
-                    case ColorType.BUTTON -> context.style.color.button;
-                    case ColorType.BUTTON_ACTIVE -> context.style.color.buttonActive;
-                    case ColorType.BUTTON_HOVERED -> context.style.color.buttonHovered;
-                    case ColorType.CHECK_MARK -> context.style.color.checkMark;
-                    case ColorType.CHILD_BACKGROUND -> context.style.color.childBackground;
-                    case ColorType.DOCKING_EMPTY_BACKGROUND ->
-                            context.style.color.dockingEmptyBackground;
-                    case ColorType.DOCKING_PREVIEW -> context.style.color.dockingPreview;
-                    case ColorType.DRAG_DROP_TARGET -> context.style.color.dragDropTarget;
-                    case ColorType.FRAME_BACKGROUND -> context.style.color.frameBackground;
-                    case ColorType.FRAME_BACKGROUND_ACTIVE ->
-                            context.style.color.frameBackgroundActive;
-                    case ColorType.FRAME_BACKGROUND_HOVERED ->
-                            context.style.color.frameBackgroundHovered;
-                    case ColorType.HEADER -> context.style.color.header;
-                    case ColorType.HEADER_ACTIVE -> context.style.color.headerActive;
-                    case ColorType.HEADER_HOVERED -> context.style.color.headerHovered;
-                    case ColorType.MENU_BAR_BACKGROUND -> context.style.color.menuBarBackground;
-                    case ColorType.MODAL_WINDOWING_DIM_BACKGROUND ->
-                            context.style.color.modalWindowingDimBackground;
-                    case ColorType.NAV_HIGHLIGHT -> context.style.color.navHighlight;
-                    case ColorType.NAV_WINDOWING_DIM_BACKGROUND ->
-                            context.style.color.navWindowingDimBackground;
-                    case ColorType.NAV_WINDOWING_HIGHLIGHT ->
-                            context.style.color.navWindowingHighlight;
-                    case ColorType.PLOT_HISTOGRAM -> context.style.color.plotHistogram;
-                    case ColorType.PLOT_HISTOGRAM_HOVERED ->
-                            context.style.color.plotHistogramHovered;
-                    case ColorType.PLOT_LINES -> context.style.color.plotLines;
-                    case ColorType.PLOT_LINES_HOVERED -> context.style.color.plotLinesHovered;
-                    case ColorType.POPUP_BACKGROUND -> context.style.color.popupBackground;
-                    case ColorType.RESIZE_GRIP -> context.style.color.resizeGrip;
-                    case ColorType.RESIZE_GRIP_ACTIVE -> context.style.color.resizeGripActive;
-                    case ColorType.RESIZE_GRIP_HOVERED -> context.style.color.resizeGripHovered;
-                    case ColorType.SCROLLBAR_BACKGROUND -> context.style.color.scrollbarBackground;
-                    case ColorType.SCROLLBAR_GRAB -> context.style.color.scrollbarGrab;
-                    case ColorType.SCROLLBAR_GRAB_ACTIVE -> context.style.color.scrollbarGrabActive;
-                    case ColorType.SCROLLBAR_GRAB_HOVERED ->
-                            context.style.color.scrollbarGrabHovered;
-                    case ColorType.SEPARATOR -> context.style.color.separator;
-                    case ColorType.SEPARATOR_ACTIVE -> context.style.color.separatorActive;
-                    case ColorType.SEPARATOR_HOVERED -> context.style.color.separatorHovered;
-                    case ColorType.SLIDER_GRAB -> context.style.color.sliderGrab;
-                    case ColorType.SLIDER_GRAB_ACTIVE -> context.style.color.sliderGrabActive;
-                    case ColorType.TAB -> context.style.color.tab;
-                    case ColorType.TABLE_BORDER_LIGHT -> context.style.color.tableBorderLight;
-                    case ColorType.TABLE_BORDER_STRONG -> context.style.color.tableBorderStrong;
-                    case ColorType.TABLE_HEADER_BACKGROUND ->
-                            context.style.color.tableHeaderBackground;
-                    case ColorType.TABLE_ROW_BACKGROUND -> context.style.color.tableRowBackground;
-                    case ColorType.TABLE_ROW_BACKGROUND_ALT ->
-                            context.style.color.tableRowBackgroundAlt;
-                    case ColorType.TAB_DIMMED -> context.style.color.tabDimmed;
-                    case ColorType.TAB_DIMMED_SELECTED -> context.style.color.tabDimmedSelected;
-                    case ColorType.TAB_DIMMED_SELECTED_OVERLINE ->
-                            context.style.color.tabDimmedSelectedOverline;
-                    case ColorType.TAB_HOVERED -> context.style.color.tabHovered;
-                    case ColorType.TAB_SELECTED -> context.style.color.tabSelected;
-                    case ColorType.TAB_SELECTED_OVERLINE -> context.style.color.tabSelectedOverline;
-                    case ColorType.TEXT -> context.style.color.text;
-                    case ColorType.TEXT_DISABLED -> context.style.color.textDisabled;
-                    case ColorType.TEXT_SELECTED_BACKGROUND ->
-                            context.style.color.textSelectedBackground;
-                    case ColorType.TITLE_BACKGROUND -> context.style.color.titleBackground;
-                    case ColorType.TITLE_BACKGROUND_ACTIVE ->
-                            context.style.color.titleBackgroundActive;
-                    case ColorType.TITLE_BACKGROUND_COLLAPSED ->
-                            context.style.color.titleBackgroundCollapsed;
-                    case ColorType.WINDOW_BACKGROUND -> context.style.color.windowBackground;
-                };
-
-        for (var iterator = context.colorStack.descendingIterator(); iterator.hasNext(); ) {
-            ColorMod mod = iterator.next();
-            if (mod.type() == styleColor) {
-                result = mod.color();
-                break;
-            }
-        }
-
-        return result;
-    }
-
-    /**
-     * Fetch the current style color from the style, after color mod overrides, and after applying
-     * the global alpha value.
-     *
-     * @param styleColor The color we want.
-     * @return The color in RGBA format.
-     */
-    public static int getStyleColorWithGlobalAlpha(@NonNull ColorType styleColor) {
-        int color = getStyleColor(styleColor);
-        return applyGlobalAlpha(color);
-    }
-
-    /**
-     * Fetch the current style color from the style, after color mod overrides, and * after applying
-     * the global alpha value(s).
-     *
-     * @param styleColor The color we want.
-     * @param disabled True if the element is disabled, so we know to apply the disabled alpha.
-     * @return The color in RGBA format.
-     */
-    public static int getStyleColorWithGlobalAlpha(
-            @NonNull ColorType styleColor, boolean disabled) {
-        int color = getStyleColor(styleColor);
-        return applyGlobalAlpha(color, disabled);
     }
 
     /**
