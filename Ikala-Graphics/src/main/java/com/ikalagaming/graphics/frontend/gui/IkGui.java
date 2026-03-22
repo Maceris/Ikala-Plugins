@@ -178,8 +178,19 @@ public class IkGui {
         final int scrollbarSize = getStyleVarInt(StyleVariable.SCROLLBAR_SIZE);
         window.scrollbarSizes.set(scrollbarSize, scrollbarSize);
         final Vector2i framePadding = getStyleVarInt2(StyleVariable.FRAME_PADDING);
-        window.titleBarHeight = getTextLineHeight() + 2 * framePadding.y;
-        window.menuBarHeight = 0; // TODO(ches) set height if we have a menu bar
+
+        if ((window.flags & WindowFlags.NO_TITLE_BAR) != 0) {
+            window.titleBarHeight = 0;
+        } else {
+            window.titleBarHeight = getTextLineHeight() + 2 * framePadding.y;
+        }
+
+        if ((window.flags & WindowFlags.MENU_BAR) != 0) {
+            // TODO(ches) set height appropriately
+            window.menuBarHeight = 15;
+        } else {
+            window.menuBarHeight = 0;
+        }
 
         if (context.nextWindowData.viewport != null) {
             window.viewport = context.nextWindowData.viewport;
@@ -255,48 +266,53 @@ public class IkGui {
 
         context.drawData.drawLists.add(window.drawList);
 
-        window.drawList.addRectFilled(
-                window.position.x,
-                window.position.y,
-                (float) window.position.x + window.sizeCurrent.x,
-                (float) window.position.y + window.sizeCurrent.y,
-                getStyleColorWithGlobalAlpha(ColorType.WINDOW_BACKGROUND),
-                window.rounding);
-
-        ColorType titleColor = ColorType.TITLE_BACKGROUND;
-        if (window.collapsed) {
-            titleColor = ColorType.TITLE_BACKGROUND_COLLAPSED;
-        } else if (window.active) {
-            titleColor = ColorType.TITLE_BACKGROUND_ACTIVE;
+        if ((window.flags & WindowFlags.NO_BACKGROUND) == 0) {
+            window.drawList.addRectFilled(
+                    window.position.x,
+                    window.position.y,
+                    (float) window.position.x + window.sizeCurrent.x,
+                    (float) window.position.y + window.sizeCurrent.y,
+                    getStyleColorWithGlobalAlpha(ColorType.WINDOW_BACKGROUND),
+                    window.rounding);
         }
-        window.drawList.addRectFilled(
-                window.position.x,
-                window.position.y,
-                (float) window.position.x + window.sizeCurrent.x,
-                (float) window.position.y + window.titleBarHeight,
-                getStyleColorWithGlobalAlpha(titleColor),
-                window.rounding,
-                DrawFlags.ROUND_CORNERS_TOP);
 
-        // TODO(ches) handle special cases of names with # and ##
-        // TODO(ches) handle title alignment
-        window.drawList.addText(
-                context.fontSize,
-                (float) window.position.x + framePadding.x,
-                (float) window.position.y + framePadding.y,
-                getStyleColor(ColorType.TEXT),
-                window.name);
+        if (window.titleBarHeight > 0) {
+            ColorType titleColor = ColorType.TITLE_BACKGROUND;
+            if (window.collapsed) {
+                titleColor = ColorType.TITLE_BACKGROUND_COLLAPSED;
+            } else if (window.active) {
+                titleColor = ColorType.TITLE_BACKGROUND_ACTIVE;
+            }
+            window.drawList.addRectFilled(
+                    window.position.x,
+                    window.position.y,
+                    (float) window.position.x + window.sizeCurrent.x,
+                    (float) window.position.y + window.titleBarHeight,
+                    getStyleColorWithGlobalAlpha(titleColor),
+                    window.rounding,
+                    DrawFlags.ROUND_CORNERS_TOP);
 
-        window.drawList.addRect(
-                window.position.x,
-                window.position.y,
-                (float) window.position.x + window.sizeCurrent.x,
-                (float) window.position.y + window.sizeCurrent.y,
-                getStyleColorWithGlobalAlpha(ColorType.BORDER),
-                window.rounding,
-                DrawFlags.ROUND_CORNERS_ALL,
-                window.borderSize);
+            // TODO(ches) handle special cases of names with # and ##
+            // TODO(ches) handle title alignment
+            window.drawList.addText(
+                    context.fontSize,
+                    (float) window.position.x + framePadding.x,
+                    (float) window.position.y + framePadding.y,
+                    getStyleColor(ColorType.TEXT),
+                    window.name);
+        }
 
+        if (window.borderSize > 0) {
+            window.drawList.addRect(
+                    window.position.x,
+                    window.position.y,
+                    (float) window.position.x + window.sizeCurrent.x,
+                    (float) window.position.y + window.sizeCurrent.y,
+                    getStyleColorWithGlobalAlpha(ColorType.BORDER),
+                    window.rounding,
+                    DrawFlags.ROUND_CORNERS_ALL,
+                    window.borderSize);
+        }
         return true;
     }
 

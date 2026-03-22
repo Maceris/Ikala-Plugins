@@ -555,6 +555,10 @@ public class DrawList {
             log.warn("Invalid rounding {} in addRect", rounding);
             return;
         }
+        if (thickness <= 0) {
+            log.warn("Trying to add a non-filled rect with {} thickness", thickness);
+            return;
+        }
         if (!addScreenQuad(
                 minX - thickness, minY - thickness, maxX + thickness, maxY + thickness)) {
             return;

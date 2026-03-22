@@ -27,6 +27,8 @@ public class Window {
     public int baseOffsetPreviousLine;
     public Direction borderBeingDragged;
     public Direction borderBeingHovered;
+
+    /** Thickness of the border, in pixels. 0 if there is no border. */
     public int borderSize;
 
     public final List<Window> childWindows;
@@ -78,6 +80,8 @@ public class Window {
     public final IntArrayList itemWidthStack;
     public final Vector2i lineSizeCurrent;
     public final Vector2i lineSizePrevious;
+
+    /** The height of the menu bar in pixels. 0 if there is no visible menu bar. */
     public int menuBarHeight;
 
     public final String name;
@@ -163,12 +167,15 @@ public class Window {
 
     public boolean skipRenderingContents;
     public final IntArrayList textWrapPositionStack;
+
+    /** Height of the title bar, in pixels. 0 if there is no visible title bar. */
     public int titleBarHeight;
+
     public int treeDepth;
     public Viewport viewport;
 
     public Window(@NonNull String name) {
-        //TODO(ches) handle loading from ini, update values based on what we find (or don't find)
+        // TODO(ches) handle loading from ini, update values based on what we find (or don't find)
         active = false;
         appearing = false;
         baseOffsetCurrentLine = 0;
