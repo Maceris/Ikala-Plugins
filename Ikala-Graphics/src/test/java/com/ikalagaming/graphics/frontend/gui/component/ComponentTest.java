@@ -1,8 +1,7 @@
-package gui.component;
+package com.ikalagaming.graphics.frontend.gui.component;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.ikalagaming.graphics.frontend.gui.component.Component;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
 
 import org.junit.jupiter.api.Test;

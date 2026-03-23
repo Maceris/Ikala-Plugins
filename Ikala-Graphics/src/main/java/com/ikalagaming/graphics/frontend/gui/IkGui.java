@@ -14,7 +14,6 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
-import org.joml.Vector2i;
 import org.joml.Vector4f;
 
 import java.util.NoSuchElementException;
@@ -174,10 +173,10 @@ public class IkGui {
         window.itemWidthStack.clear();
         window.textWrapPositionStack.clear();
 
-        getStyleVarInt2(StyleVariable.WINDOW_PADDING, window.padding);
+        getStyleVarFloat2(StyleVariable.WINDOW_PADDING, window.padding);
         final int scrollbarSize = getStyleVarInt(StyleVariable.SCROLLBAR_SIZE);
         window.scrollbarSizes.set(scrollbarSize, scrollbarSize);
-        final Vector2i framePadding = getStyleVarInt2(StyleVariable.FRAME_PADDING);
+        final Vector2f framePadding = getStyleVarFloat2(StyleVariable.FRAME_PADDING);
 
         if ((window.flags & WindowFlags.NO_TITLE_BAR) != 0) {
             window.titleBarHeight = 0;
@@ -824,6 +823,19 @@ public class IkGui {
         context = new Context();
         storage = new Storage();
         return context;
+    }
+
+    public static void destroyContext() {
+        if (context == null) {
+            return;
+        }
+
+        if (context.frameCountEnded != context.frameCount) {
+            IkGui.endFrame();
+        }
+        context.io.setAppAcceptingEvents(false);
+        context = null;
+        storage = null;
     }
 
     public static void destroyPlatformWindows() {
@@ -2268,7 +2280,27 @@ public class IkGui {
         float result =
                 switch (variable) {
                     case ALPHA -> context.style.variable.alpha;
+                    case CHILD_BORDER_SIZE -> context.style.variable.childBorderSize;
+                    case CHILD_ROUNDING -> context.style.variable.childRounding;
                     case DISABLED_ALPHA -> context.style.variable.disabledAlpha;
+                    case FRAME_BORDER_SIZE -> context.style.variable.frameBorderSize;
+                    case FRAME_ROUNDING -> context.style.variable.frameRounding;
+                    case GRAB_MIN_SIZE -> context.style.variable.grabMinSize;
+                    case GRAB_ROUNDING -> context.style.variable.grabRounding;
+                    case INDENT_SPACING -> context.style.variable.indentSpacing;
+                    case LOG_SLIDER_DEADZONE -> context.style.variable.logSliderDeadzone;
+                    case POPUP_BORDER_SIZE -> context.style.variable.popupBorderSize;
+                    case POPUP_ROUNDING -> context.style.variable.popupRounding;
+                    case SCROLLBAR_ROUNDING -> context.style.variable.scrollbarRounding;
+                    case SCROLLBAR_SIZE -> context.style.variable.scrollbarSize;
+                    case SEPARATOR_TEXT_BORDER_SIZE ->
+                            context.style.variable.separatorTextBorderSize;
+                    case TAB_BAR_BORDER_SIZE -> context.style.variable.tabBarBorderSize;
+                    case TAB_ROUNDING -> context.style.variable.tabRounding;
+                    case TABLE_ANGLED_HEADERS_ANGLE ->
+                            context.style.variable.tableAngledHeadersAngle;
+                    case WINDOW_BORDER_SIZE -> context.style.variable.windowBorderSize;
+                    case WINDOW_ROUNDING -> context.style.variable.windowRounding;
                     default -> {
                         log.error(
                                 "Trying to fetch 1 float value for unexpected style variable {}",
@@ -2330,14 +2362,38 @@ public class IkGui {
             case BUTTON_TEXT_ALIGN:
                 target.set(context.style.variable.buttonTextAlign);
                 break;
+            case CELL_PADDING:
+                target.set(context.style.variable.cellPadding);
+                break;
+            case FRAME_PADDING:
+                target.set(context.style.variable.framePadding);
+                break;
+            case ITEM_INNER_SPACING:
+                target.set(context.style.variable.itemInnerSpacing);
+                break;
+            case ITEM_SPACING:
+                target.set(context.style.variable.itemSpacing);
+                break;
             case SELECTABLE_TEXT_ALIGN:
                 target.set(context.style.variable.selectableTextAlign);
                 break;
             case SEPARATOR_TEXT_ALIGN:
                 target.set(context.style.variable.separatorTextAlign);
                 break;
+            case SEPARATOR_TEXT_PADDING:
+                target.set(context.style.variable.separatorTextPadding);
+                break;
             case TABLE_ANGLED_HEADERS_TEXT_ALIGN:
                 target.set(context.style.variable.tableAngledHeadersTextAlign);
+                break;
+            case TOUCH_EXTRA_PADDING:
+                target.set(context.style.variable.touchExtraPadding);
+                break;
+            case WINDOW_MIN_SIZE:
+                target.set(context.style.variable.windowMinSize);
+                break;
+            case WINDOW_PADDING:
+                target.set(context.style.variable.windowPadding);
                 break;
             case WINDOW_TITLE_ALIGN:
                 target.set(context.style.variable.windowTitleAlign);
@@ -2382,30 +2438,10 @@ public class IkGui {
         }
         int result =
                 switch (variable) {
-                    case CHILD_BORDER_SIZE -> context.style.variable.childBorderSize;
-                    case CHILD_ROUNDING -> context.style.variable.childRounding;
                     case COLOR_BUTTON_POSITION ->
                             context.style.variable.colorButtonPosition.getIntValue();
-                    case FRAME_BORDER_SIZE -> context.style.variable.frameBorderSize;
-                    case FRAME_ROUNDING -> context.style.variable.frameRounding;
-                    case GRAB_MIN_SIZE -> context.style.variable.grabMinSize;
-                    case GRAB_ROUNDING -> context.style.variable.grabRounding;
-                    case INDENT_SPACING -> context.style.variable.indentSpacing;
-                    case LOG_SLIDER_DEADZONE -> context.style.variable.logSliderDeadzone;
-                    case POPUP_BORDER_SIZE -> context.style.variable.popupBorderSize;
-                    case POPUP_ROUNDING -> context.style.variable.popupRounding;
-                    case SCROLLBAR_ROUNDING -> context.style.variable.scrollbarRounding;
-                    case SCROLLBAR_SIZE -> context.style.variable.scrollbarSize;
-                    case SEPARATOR_TEXT_BORDER_SIZE ->
-                            context.style.variable.separatorTextBorderSize;
-                    case TAB_BAR_BORDER_SIZE -> context.style.variable.tabBarBorderSize;
-                    case TAB_ROUNDING -> context.style.variable.tabRounding;
-                    case TABLE_ANGLED_HEADERS_ANGLE ->
-                            context.style.variable.tableAngledHeadersAngle;
-                    case WINDOW_BORDER_SIZE -> context.style.variable.windowBorderSize;
                     case WINDOW_MENU_BUTTON_POSITION ->
                             context.style.variable.windowMenuButtonPosition.getIntValue();
-                    case WINDOW_ROUNDING -> context.style.variable.windowRounding;
                     default -> {
                         log.error(
                                 "Trying to fetch 1 int value for unexpected style variable {}",
@@ -2423,83 +2459,6 @@ public class IkGui {
         }
 
         return result;
-    }
-
-    /**
-     * Fetch the current style variable, inclusive of style mods. Creates a new Vec2 for the
-     * results. If the variable is of a different type or cardinality, this won't work and 0 will be
-     * returned.
-     *
-     * @param variable The variable to read.
-     * @return The value after style mods.
-     */
-    public static Vector2i getStyleVarInt2(@NonNull StyleVariable variable) {
-        Vector2i result = new Vector2i(0, 0);
-        getStyleVarInt2(variable, result);
-        return result;
-    }
-
-    /**
-     * Fetch the current style variable, inclusive of style mods, and store it in the target Vec2.
-     * If the variable is of a different type or cardinality, this won't work and 0 will be
-     * returned.
-     *
-     * @param variable The variable to read.
-     * @param target Where to store the values.
-     */
-    public static void getStyleVarInt2(@NonNull StyleVariable variable, @NonNull Vector2i target) {
-        if (variable.getDimensions() != 2) {
-            log.error(
-                    "Style variable {} has {} dimensions, trying to fetch 2 integers",
-                    variable,
-                    variable.getDimensions());
-            return;
-        }
-        if (variable.getExpectedType() != Integer.class) {
-            log.error(
-                    "Style variable {} is a {} value, trying to fetch as 2 integers",
-                    variable,
-                    variable.getExpectedType().getSimpleName());
-            return;
-        }
-        switch (variable) {
-            case CELL_PADDING:
-                target.set(context.style.variable.cellPadding);
-                break;
-            case FRAME_PADDING:
-                target.set(context.style.variable.framePadding);
-                break;
-            case ITEM_INNER_SPACING:
-                target.set(context.style.variable.itemInnerSpacing);
-                break;
-            case ITEM_SPACING:
-                target.set(context.style.variable.itemSpacing);
-                break;
-            case SEPARATOR_TEXT_PADDING:
-                target.set(context.style.variable.separatorTextPadding);
-                break;
-            case TOUCH_EXTRA_PADDING:
-                target.set(context.style.variable.touchExtraPadding);
-                break;
-            case WINDOW_MIN_SIZE:
-                target.set(context.style.variable.windowMinSize);
-                break;
-            case WINDOW_PADDING:
-                target.set(context.style.variable.windowPadding);
-                break;
-            default:
-                log.error(
-                        "Trying to fetch 2 int values for unexpected style variable {}", variable);
-                break;
-        }
-
-        for (var iterator = context.styleVariableStack.descendingIterator(); iterator.hasNext(); ) {
-            StyleMod mod = iterator.next();
-            if (mod.type() == variable) {
-                target.set((int) mod.x(), (int) mod.y());
-                break;
-            }
-        }
     }
 
     public static int getTextLineHeight() {
@@ -4132,15 +4091,15 @@ public class IkGui {
      *     of the last widget's rectangle.
      * @param spacingAfterCurrent The horizontal spacing between the current and next widget.
      */
-    public static void sameLine(final int offsetFromStartX, int spacingAfterCurrent) {
+    public static void sameLine(final float offsetFromStartX, float spacingAfterCurrent) {
         Window window = context.windowCurrent;
-        Vector2i cursor = window.cursorPosition;
+        Vector2f cursor = window.cursorPosition;
 
         if (spacingAfterCurrent == -1) {
             spacingAfterCurrent = context.style.variable.itemSpacing.x;
         }
 
-        int newX;
+        float newX;
         if (offsetFromStartX == 0) {
             newX = cursor.x + spacingAfterCurrent;
         } else {
@@ -4984,7 +4943,7 @@ public class IkGui {
     }
 
     public static void textColored(int color, @NonNull String text) {
-        Vector2i cursor = context.windowCurrent.cursorPosition;
+        Vector2f cursor = context.windowCurrent.cursorPosition;
 
         Window window = context.windowCurrent;
         window.updateCursorBeforeDrawing();

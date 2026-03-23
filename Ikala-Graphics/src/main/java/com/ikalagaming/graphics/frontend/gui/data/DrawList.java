@@ -549,7 +549,7 @@ public class DrawList {
             int color,
             float rounding,
             int drawFlagsRoundingCorners,
-            int thickness) {
+            float thickness) {
 
         if (rounding < 0) {
             log.warn("Invalid rounding {} in addRect", rounding);
