@@ -34,6 +34,14 @@ public class Window {
 
     public final List<Window> childWindows;
 
+    /**
+     * The locations in the canvas of items that care about mouse input. These are in the order they
+     * are added, but since the cursor can be moved around this means they're probably not in any
+     * kind of spatial ordering. This does not account for scrolling within the window and clipping
+     * to the window size, that's calculated separately.
+     */
+    public final List<ClickableItem> clickableItems;
+
     public boolean collapsed;
 
     /**
@@ -185,6 +193,7 @@ public class Window {
         borderBeingHovered = Direction.NONE;
         borderSize = 0.0f;
         childWindows = new ArrayList<>();
+        clickableItems = new ArrayList<>();
         collapsed = false;
         collapsedConditionAllowed = ConditionAllowed.ALL;
         collapseToggleRequested = false;

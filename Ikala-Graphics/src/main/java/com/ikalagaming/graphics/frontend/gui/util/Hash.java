@@ -11,8 +11,11 @@ public class Hash {
         if (name != null) {
             hash = name.hashCode();
         }
+        return getID(hash, parentID);
+    }
 
-        return 31 * parentID + hash;
+    public static int getID(int id, int parentID) {
+        return 31 * parentID + id;
     }
 
     /** Private constructor so this is not instantiated. */

@@ -122,8 +122,8 @@ public class IkGui {
     public static boolean begin(@NonNull String title, final IkBoolean open, int windowFlags) {
         // TODO(ches) complete this
 
-        final int ID = Hash.getID(title);
-        pushID(ID);
+        final int ID = pushID(title);
+
         Window window = context.windowByID.computeIfAbsent(ID, ignored -> new Window(title));
 
         if (WindowFlags.NONE == windowFlags) {
@@ -3889,14 +3889,32 @@ public class IkGui {
         context.fontSize = size;
     }
 
-    public static void pushID(int id) {
+    /**
+     * Push an ID onto the ID stack.
+     *
+     * @param id The ID.
+     * @return The new ID (which is based on the provided ID, and parent ID if there is one).
+     */
+    public static int pushID(int id) {
         // TODO(ches) do we need to store the info about the current active ID?
-        context.activeIDStack.push(id);
+        int result = Hash.getID(id, context.activeID);
+        context.activeIDStack.push(result);
+        context.activeID = result;
+        return result;
     }
 
-    public static void pushID(String name) {
-        // TODO(ches) complete this
-        pushID(Hash.getID(name, context.activeID));
+    /**
+     * Push an ID onto the ID stack.
+     *
+     * @param name The name, which might be null.
+     * @return The new ID (which is based on the name and parent ID if there is one).
+     */
+    public static int pushID(String name) {
+        int hash = 0;
+        if (name != null) {
+            hash = name.hashCode();
+        }
+        return pushID(hash);
     }
 
     public static void pushItemWidth(float width) {
