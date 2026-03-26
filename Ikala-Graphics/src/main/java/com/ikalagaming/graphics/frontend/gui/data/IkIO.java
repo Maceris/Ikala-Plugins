@@ -603,8 +603,23 @@ public class IkIO {
         appAcceptingEvents = acceptingEvents;
     }
 
-    public void clearEventsQueue() {
-        // TODO(ches) complete this
+    /** Clear out (discard) everything in the event queue. */
+    public void clearEventQueue() {
+        try {
+            eventQueueLock.lock();
+            eventQueue.clear();
+        } finally {
+            eventQueueLock.unlock();
+        }
+    }
+
+    /** Reset fields indicating state has changed this frame, in preparation for a new frame. */
+    public void clearFrameSpecificValues() {
+        mouseDelta.set(0, 0);
+        for (int i = 0; i < MouseButton.COUNT; ++i) {
+            mouseClicked[i] = false;
+            mouseReleased[i] = false;
+        }
     }
 
     public void clearInputKeys() {

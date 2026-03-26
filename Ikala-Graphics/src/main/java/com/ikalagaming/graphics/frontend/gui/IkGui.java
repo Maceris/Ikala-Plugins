@@ -174,7 +174,7 @@ public class IkGui {
         window.textWrapPositionStack.clear();
 
         getStyleVarFloat2(StyleVariable.WINDOW_PADDING, window.padding);
-        final int scrollbarSize = getStyleVarInt(StyleVariable.SCROLLBAR_SIZE);
+        final float scrollbarSize = getStyleVarFloat(StyleVariable.SCROLLBAR_SIZE);
         window.scrollbarSizes.set(scrollbarSize, scrollbarSize);
         final Vector2f framePadding = getStyleVarFloat2(StyleVariable.FRAME_PADDING);
 
@@ -225,8 +225,8 @@ public class IkGui {
         window.sizeCurrent.set(window.sizeRequested);
         window.sizeFull.set(window.sizeRequested);
         window.sizeDesired.set(window.sizeRequested);
-        window.rounding = getStyleVarInt(StyleVariable.WINDOW_ROUNDING);
-        window.borderSize = getStyleVarInt(StyleVariable.WINDOW_BORDER_SIZE);
+        window.rounding = getStyleVarFloat(StyleVariable.WINDOW_ROUNDING);
+        window.borderSize = getStyleVarFloat(StyleVariable.WINDOW_BORDER_SIZE);
         window.rectFull.set(window.position, window.sizeFull);
         window.rectInner.set(
                 window.position.x + window.padding.x,
@@ -3594,7 +3594,7 @@ public class IkGui {
         // TODO(ches) update window counts
 
         // Updating input events
-        context.io.mouseDelta.set(0, 0);
+        context.io.clearFrameSpecificValues();
         context.io.processInputEvents();
 
         // TODO(ches) update viewports

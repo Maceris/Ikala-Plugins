@@ -23,7 +23,7 @@ public record GuiInputEvent(
     public record KeyPress(@NonNull Key key, boolean down, float analogValue)
             implements EventData {}
 
-    //TODO(ches) do we need this?
+    // TODO(ches) do we need this?
     public record Text(char character) implements EventData {}
 
     public record Focused(boolean focused) implements EventData {}
