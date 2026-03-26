@@ -269,8 +269,8 @@ public class IkGui {
             window.drawList.addRectFilled(
                     window.position.x,
                     window.position.y,
-                    (float) window.position.x + window.sizeCurrent.x,
-                    (float) window.position.y + window.sizeCurrent.y,
+                    window.position.x + window.sizeCurrent.x,
+                    window.position.y + window.sizeCurrent.y,
                     getColorWithGlobalAlpha(ColorType.WINDOW_BACKGROUND),
                     window.rounding);
         }
@@ -285,8 +285,8 @@ public class IkGui {
             window.drawList.addRectFilled(
                     window.position.x,
                     window.position.y,
-                    (float) window.position.x + window.sizeCurrent.x,
-                    (float) window.position.y + window.titleBarHeight,
+                    window.position.x + window.sizeCurrent.x,
+                    window.position.y + window.titleBarHeight,
                     getColorWithGlobalAlpha(titleColor),
                     window.rounding,
                     DrawFlags.ROUND_CORNERS_TOP);
@@ -295,8 +295,8 @@ public class IkGui {
             // TODO(ches) handle title alignment
             window.drawList.addText(
                     context.fontSize,
-                    (float) window.position.x + framePadding.x,
-                    (float) window.position.y + framePadding.y,
+                    window.position.x + framePadding.x,
+                    window.position.y + framePadding.y,
                     getColorWithGlobalAlpha(ColorType.TEXT),
                     window.name);
         }
@@ -305,8 +305,8 @@ public class IkGui {
             window.drawList.addRect(
                     window.position.x,
                     window.position.y,
-                    (float) window.position.x + window.sizeCurrent.x,
-                    (float) window.position.y + window.sizeCurrent.y,
+                    window.position.x + window.sizeCurrent.x,
+                    window.position.y + window.sizeCurrent.y,
                     getColorWithGlobalAlpha(ColorType.BORDER),
                     window.rounding,
                     DrawFlags.ROUND_CORNERS_ALL,

@@ -1,7 +1,8 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
 import com.ikalagaming.graphics.frontend.gui.IkGui;
-import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
+import com.ikalagaming.graphics.frontend.gui.enums.*;
+import com.ikalagaming.graphics.frontend.gui.event.GuiInputEvent;
 import com.ikalagaming.graphics.frontend.gui.flags.BackendFlags;
 import com.ikalagaming.graphics.frontend.gui.flags.ConfigFlags;
 import com.ikalagaming.graphics.frontend.gui.flags.KeyModFlags;
@@ -17,103 +18,6 @@ import java.util.concurrent.locks.ReentrantLock;
 
 @Slf4j
 public class IkIO {
-
-    // TODO(ches) add some kind of KeyData struct
-
-    private enum IkIOEventType {
-        FOCUS,
-        KEY,
-        KEY_ANALOG,
-        MOUSE_BUTTON,
-        MOUSE_POSITION,
-        MOUSE_VIEWPORT,
-        MOUSE_WHEEL,
-    }
-
-    private abstract static class IkIOEvent {
-        public final IkIOEventType eventType;
-        public boolean canceled;
-
-        public IkIOEvent(@NonNull IkIOEventType eventType) {
-            this.eventType = eventType;
-            this.canceled = false;
-        }
-    }
-
-    private static class IkIOEventFocus extends IkIOEvent {
-        public boolean focused;
-
-        public IkIOEventFocus(boolean focused) {
-            super(IkIOEventType.FOCUS);
-            this.focused = focused;
-        }
-    }
-
-    private static class IkIOEventKey extends IkIOEvent {
-        int key;
-        boolean down;
-
-        public IkIOEventKey(int key, boolean down) {
-            super(IkIOEventType.KEY);
-            this.key = key;
-            this.down = down;
-        }
-    }
-
-    private static class IkIOEventKeyAnalog extends IkIOEvent {
-        int key;
-        boolean down;
-        float analogValue;
-
-        public IkIOEventKeyAnalog(int key, boolean down, float analogValue) {
-            super(IkIOEventType.KEY_ANALOG);
-            this.key = key;
-            this.down = down;
-            this.analogValue = analogValue;
-        }
-    }
-
-    private static class IkIOEventMouseButton extends IkIOEvent {
-        MouseButton button;
-        boolean down;
-
-        public IkIOEventMouseButton(MouseButton button, boolean down) {
-            super(IkIOEventType.MOUSE_BUTTON);
-            this.button = button;
-            this.down = down;
-        }
-    }
-
-    private static class IkIOEventMousePosition extends IkIOEvent {
-        float x;
-        float y;
-
-        public IkIOEventMousePosition(float x, float y) {
-            super(IkIOEventType.MOUSE_POSITION);
-            this.x = x;
-            this.y = y;
-        }
-    }
-
-    private static class IkIOEventMouseViewport extends IkIOEvent {
-        int id;
-
-        public IkIOEventMouseViewport(int id) {
-            super(IkIOEventType.MOUSE_VIEWPORT);
-            this.id = id;
-        }
-    }
-
-    private static class IkIOEventMouseWheel extends IkIOEvent {
-        float wheelX;
-        float wheelY;
-
-        public IkIOEventMouseWheel(float wheelX, float wheelY) {
-            super(IkIOEventType.MOUSE_WHEEL);
-            this.wheelX = wheelX;
-            this.wheelY = wheelY;
-        }
-    }
 
     /** Whether we are accepting events. */
     @Getter private boolean appAcceptingEvents;
@@ -228,12 +132,8 @@ public class IkIO {
     /** Main display size, in pixels. Might change every frame. */
     public final Vector2f displaySize;
 
-    /**
-     * The queue of all events. Each type of event may also be placed into their own queue, so they
-     * can be processed separately and possibly canceled so that they aren't processed. This is
-     * intended for things like combining events, moving events to the next frame, etc.
-     */
-    private final Queue<IkIOEvent> eventQueue;
+    /** The queue of all events. */
+    private final Queue<GuiInputEvent> eventQueue;
 
     private final ReentrantLock eventQueueLock;
 
@@ -400,6 +300,8 @@ public class IkIO {
      */
     public final long[] mouseReleasedTime;
 
+    public @NonNull MouseSource mouseSource;
+
     /** How long the mouse has been still, in milliseconds. */
     public long mouseStationaryTimer;
 
@@ -519,6 +421,7 @@ public class IkIO {
         mouseReleased = new boolean[MouseButton.COUNT];
         mouseReleasedTime = new long[MouseButton.COUNT];
         mousePositionPrevious = new Vector2f(-Float.MAX_VALUE, -Float.MAX_VALUE);
+        mouseSource = MouseSource.MOUSE;
         mouseStationaryTimer = 0;
         mouseWheel = 0.0f;
         mouseWheelH = 0.0f;
@@ -563,33 +466,45 @@ public class IkIO {
         }
         try {
             eventQueueLock.lock();
-            IkIOEventFocus event = new IkIOEventFocus(focused);
+            GuiInputEvent event =
+                    new GuiInputEvent(
+                            GuiInputEventType.FOCUS,
+                            GuiInputSource.NONE,
+                            new GuiInputEvent.Focused(focused));
             eventQueue.add(event);
         } finally {
             eventQueueLock.unlock();
         }
     }
 
-    public void addKeyEvent(int key, boolean down) {
+    public void addKeyEvent(Key key, boolean down) {
         if (!appAcceptingEvents) {
             return;
         }
         try {
             eventQueueLock.lock();
-            IkIOEventKey event = new IkIOEventKey(key, down);
+            GuiInputEvent event =
+                    new GuiInputEvent(
+                            GuiInputEventType.KEY,
+                            GuiInputSource.NONE,
+                            new GuiInputEvent.KeyPress(key, down, 0));
             eventQueue.add(event);
         } finally {
             eventQueueLock.unlock();
         }
     }
 
-    public void addKeyAnalogEvent(int key, boolean down, float analogValue) {
+    public void addKeyAnalogEvent(Key key, boolean down, float analogValue) {
         if (!appAcceptingEvents) {
             return;
         }
         try {
             eventQueueLock.lock();
-            IkIOEventKeyAnalog event = new IkIOEventKeyAnalog(key, down, analogValue);
+            GuiInputEvent event =
+                    new GuiInputEvent(
+                            GuiInputEventType.KEY,
+                            GuiInputSource.NONE,
+                            new GuiInputEvent.KeyPress(key, down, analogValue));
             eventQueue.add(event);
         } finally {
             eventQueueLock.unlock();
@@ -603,7 +518,11 @@ public class IkIO {
         // TODO(ches) we can probably ignore most of these to be honest
         try {
             eventQueueLock.lock();
-            IkIOEventMousePosition event = new IkIOEventMousePosition(x, y);
+            GuiInputEvent event =
+                    new GuiInputEvent(
+                            GuiInputEventType.MOUSE_POSITION,
+                            GuiInputSource.NONE,
+                            new GuiInputEvent.MousePosition(x, y, mouseSource));
             eventQueue.add(event);
         } finally {
             eventQueueLock.unlock();
@@ -622,7 +541,11 @@ public class IkIO {
         }
         try {
             eventQueueLock.lock();
-            IkIOEventMouseButton event = new IkIOEventMouseButton(button, down);
+            GuiInputEvent event =
+                    new GuiInputEvent(
+                            GuiInputEventType.MOUSE_BUTTON,
+                            GuiInputSource.NONE,
+                            new GuiInputEvent.MouseButton(button, down, mouseSource));
             eventQueue.add(event);
         } finally {
             eventQueueLock.unlock();
@@ -635,7 +558,11 @@ public class IkIO {
         }
         try {
             eventQueueLock.lock();
-            IkIOEventMouseWheel event = new IkIOEventMouseWheel(wheelX, wheelY);
+            GuiInputEvent event =
+                    new GuiInputEvent(
+                            GuiInputEventType.MOUSE_WHEEL,
+                            GuiInputSource.NONE,
+                            new GuiInputEvent.MouseWheel(wheelX, wheelY, mouseSource));
             eventQueue.add(event);
         } finally {
             eventQueueLock.unlock();
@@ -648,21 +575,26 @@ public class IkIO {
         }
         try {
             eventQueueLock.lock();
-            IkIOEventMouseViewport event = new IkIOEventMouseViewport(id);
+            GuiInputEvent event =
+                    new GuiInputEvent(
+                            GuiInputEventType.MOUSE_VIEWPORT,
+                            GuiInputSource.NONE,
+                            new GuiInputEvent.Viewport(id));
+            eventQueue.add(event);
         } finally {
             eventQueueLock.unlock();
         }
     }
 
-    public void addInputCharacter(int c) {
+    public void addInputCharacter(char c) {
         // TODO(ches) complete this
     }
 
-    public void addInputCharacterUTF16(short c) {
+    public void addInputCharacterUTF16(char c) {
         // TODO(ches) complete this
     }
 
-    public void addInputCharactersUTF8(String str) {
+    public void addInputCharactersUTF8(@NonNull String str) {
         // TODO(ches) complete this
     }
 
@@ -740,11 +672,7 @@ public class IkIO {
         }
     }
 
-    private void handleKey(int key, boolean down) {
-        // TODO(ches) complete this
-    }
-
-    private void handleKeyAnalog(int key, boolean down, float analogValue) {
+    private void handleKey(@NonNull Key key, boolean down, float analogValue) {
         // TODO(ches) complete this
     }
 
@@ -829,51 +757,44 @@ public class IkIO {
             eventQueueLock.lock();
 
             while (!eventQueue.isEmpty()) {
-                IkIOEvent event = eventQueue.poll();
-                if (event.canceled) {
-                    continue;
-                }
-                switch (event.eventType) {
-                    case IkIOEventType.FOCUS:
+                GuiInputEvent event = eventQueue.poll();
+                switch (event.type()) {
+                    case GuiInputEventType.FOCUS:
                         {
-                            IkIOEventFocus eventCast = (IkIOEventFocus) event;
-                            handleFocus(eventCast.focused);
+                            GuiInputEvent.Focused data = (GuiInputEvent.Focused) event.data();
+                            handleFocus(data.focused());
                         }
                         break;
-                    case IkIOEventType.KEY:
+                    case GuiInputEventType.KEY:
                         {
-                            IkIOEventKey eventCast = (IkIOEventKey) event;
-                            handleKey(eventCast.key, eventCast.down);
+                            GuiInputEvent.KeyPress data = (GuiInputEvent.KeyPress) event.data();
+                            handleKey(data.key(), data.down(), data.analogValue());
                         }
                         break;
-                    case IkIOEventType.KEY_ANALOG:
+                    case GuiInputEventType.MOUSE_BUTTON:
                         {
-                            IkIOEventKeyAnalog eventCast = (IkIOEventKeyAnalog) event;
-                            handleKeyAnalog(eventCast.key, eventCast.down, eventCast.analogValue);
+                            GuiInputEvent.MouseButton data =
+                                    (GuiInputEvent.MouseButton) event.data();
+                            handleMouseDown(data.button(), data.down());
                         }
                         break;
-                    case IkIOEventType.MOUSE_BUTTON:
+                    case GuiInputEventType.MOUSE_POSITION:
                         {
-                            IkIOEventMouseButton eventCast = (IkIOEventMouseButton) event;
-                            handleMouseDown(eventCast.button, eventCast.down);
+                            GuiInputEvent.MousePosition data =
+                                    (GuiInputEvent.MousePosition) event.data();
+                            handleMousePosition(data.posX(), data.posY());
                         }
                         break;
-                    case IkIOEventType.MOUSE_POSITION:
+                    case GuiInputEventType.MOUSE_VIEWPORT:
                         {
-                            IkIOEventMousePosition eventCast = (IkIOEventMousePosition) event;
-                            handleMousePosition(eventCast.x, eventCast.y);
+                            GuiInputEvent.Viewport data = (GuiInputEvent.Viewport) event.data();
+                            handleMouseViewport(data.id());
                         }
                         break;
-                    case IkIOEventType.MOUSE_VIEWPORT:
+                    case GuiInputEventType.MOUSE_WHEEL:
                         {
-                            IkIOEventMouseViewport eventCast = (IkIOEventMouseViewport) event;
-                            handleMouseViewport(eventCast.id);
-                        }
-                        break;
-                    case IkIOEventType.MOUSE_WHEEL:
-                        {
-                            IkIOEventMouseWheel eventCast = (IkIOEventMouseWheel) event;
-                            handleMouseWheel(eventCast.wheelX, eventCast.wheelY);
+                            GuiInputEvent.MouseWheel data = (GuiInputEvent.MouseWheel) event.data();
+                            handleMouseWheel(data.wheelX(), data.wheelY());
                         }
                         break;
                 }

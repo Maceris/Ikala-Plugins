@@ -40,7 +40,8 @@ public class Window {
      * kind of spatial ordering. This does not account for scrolling within the window and clipping
      * to the window size, that's calculated separately.
      */
-    public final List<ClickableItem> clickableItems;
+    public final List<ClickableItem>
+            clickableItems; // TODO(ches) I think we can delete this and detect clicks immediately
 
     public boolean collapsed;
 

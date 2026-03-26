@@ -6,6 +6,7 @@ public enum GuiInputEventType {
     MOUSE_POSITION,
     MOUSE_WHEEL,
     MOUSE_BUTTON,
+    MOUSE_VIEWPORT,
     NONE,
     TEXT,
 }
