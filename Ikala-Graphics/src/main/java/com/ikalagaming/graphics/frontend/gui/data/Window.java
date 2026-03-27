@@ -84,6 +84,7 @@ public class Window {
     public int id;
 
     public int idAsPopupWindow;
+    public int idMove;
     public IntArrayList idStack;
     public int idWithinParent;
     public float indent;

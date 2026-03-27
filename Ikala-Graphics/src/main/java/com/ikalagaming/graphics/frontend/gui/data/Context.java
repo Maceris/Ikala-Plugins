@@ -17,7 +17,9 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 public class Context {
+    /** The currently active ID, which may be 0 if there are no windows open. */
     public int activeID;
+
     public boolean activeIDActivatedThisFrame;
     public boolean activeIDAllowOverlap;
     public final Vector2f activeIDClickOffset;
@@ -353,6 +355,13 @@ public class Context {
     public int navNextActivateFlags;
 
     public int navNextActivateID;
+
+    /** The item that navigation has requested a context menu (popup) for. */
+    public int navOpenContextMenuItemID;
+
+    /** The window containing the item that navigation requested a context menu (popup) for. */
+    public int navOpenContextMenuWindowID;
+
     public int navScoringDebugCount;
     public final RectFloat navScoringNoClipRect;
 
@@ -617,6 +626,8 @@ public class Context {
         navMoveSubmitted = false;
         navNextActivateFlags = 0;
         navNextActivateID = 0;
+        navOpenContextMenuItemID = 0;
+        navOpenContextMenuWindowID = 0;
         navScoringDebugCount = 0;
         navScoringNoClipRect = new RectFloat(0, 0, 0, 0);
         navScoringRect = new RectFloat(0, 0, 0, 0);

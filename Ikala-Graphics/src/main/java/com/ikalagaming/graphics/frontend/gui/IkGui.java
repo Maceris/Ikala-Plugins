@@ -4,9 +4,7 @@ import com.ikalagaming.graphics.frontend.gui.callback.GuiInputTextCallback;
 import com.ikalagaming.graphics.frontend.gui.data.*;
 import com.ikalagaming.graphics.frontend.gui.enums.*;
 import com.ikalagaming.graphics.frontend.gui.enums.StyleVariable;
-import com.ikalagaming.graphics.frontend.gui.flags.ConditionAllowed;
-import com.ikalagaming.graphics.frontend.gui.flags.DrawFlags;
-import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
+import com.ikalagaming.graphics.frontend.gui.flags.*;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
 import com.ikalagaming.graphics.frontend.gui.util.Hash;
 
@@ -134,6 +132,7 @@ public class IkGui {
         window.flagsAsChildWindow = WindowFlags.NONE;
 
         window.id = ID;
+        window.idMove = Hash.getID("#MOVE", ID);
         window.idWithinParent = 0;
         window.idAsPopupWindow = 0;
         window.childWindows.clear();
@@ -262,6 +261,15 @@ public class IkGui {
         window.active = true;
 
         context.windowCurrent = window;
+        context.lastItemData.id = window.id;
+        context.lastItemData.statusFlags =
+                ItemStatusFlags.HAS_CLIP_RECT
+                        | ItemStatusFlags.HAS_DISPLAY_RECT
+                        | ItemStatusFlags.VISIBLE;
+        context.lastItemData.rect.set(window.rectFull);
+        context.lastItemData.clipRect.set(window.rectCurrentClip);
+        context.lastItemData.displayRect.set(window.rectFull);
+        context.lastItemData.shortcut = 0;
 
         context.drawData.drawLists.add(window.drawList);
 
@@ -431,34 +439,92 @@ public class IkGui {
         return false;
     }
 
-    public static boolean beginPopup(String name) {
+    public static boolean beginPopup(int id) {
         // TODO(ches) complete this
         return false;
     }
 
-    public static boolean beginPopup(String name, int windowFlags) {
+    public static boolean beginPopup(@NonNull String name) {
         // TODO(ches) complete this
         return false;
     }
 
+    public static boolean beginPopup(int id, int windowFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean beginPopup(@NonNull String name, int windowFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    /**
+     * Create a popup associated with the last item. Generally for things that don't have
+     * identifiers, like text. Essentially {@code beginPopupContextItem(context.lastItemData.id,
+     * PopupFlags.MOUSE_BUTTON_DEFAULT);}.
+     *
+     * @return Whether the popup is open.
+     * @see #beginPopupContextItem(int, int)
+     */
     public static boolean beginPopupContextItem() {
-        // TODO(ches) complete this
-        return false;
+        return beginPopupContextItem(context.lastItemData.id, PopupFlags.MOUSE_BUTTON_DEFAULT);
     }
 
+    /**
+     * Create a popup with an explicit ID. Essentially {@code beginPopupContextItem(id,
+     * PopupFlags.MOUSE_BUTTON_DEFAULT);}.
+     *
+     * @param id The ID.
+     * @return Whether the popup is open.
+     * @see #beginPopupContextItem(int, int)
+     */
     public static boolean beginPopupContextItem(int id) {
-        // TODO(ches) complete this
-        return false;
+        return beginPopupContextItem(id, PopupFlags.MOUSE_BUTTON_DEFAULT);
     }
 
-    public static boolean beginPopupContextItem(String name) {
-        // TODO(ches) complete this
-        return false;
+    /**
+     * Create a popup with an explicit ID. Essentially {@code beginPopupContextItem(Hash.getID(name,
+     * context.activeID), PopupFlags.MOUSE_BUTTON_DEFAULT);}.
+     *
+     * @param name The name of the popup.
+     * @return Whether the popup is open.
+     * @see #beginPopupContextItem(int, int)
+     */
+    public static boolean beginPopupContextItem(@NonNull String name) {
+        return beginPopupContextItem(
+                Hash.getID(name, context.activeID), PopupFlags.MOUSE_BUTTON_DEFAULT);
     }
 
-    public static boolean beginPopupContextItem(String name, int popupFlags) {
-        // TODO(ches) complete this
-        return false;
+    /**
+     * Create a popup with an explicit ID. Essentially {@code beginPopupContextItem(Hash.getID(name,
+     * context.activeID), popupFlags);}.
+     *
+     * @param name The name of the popup.
+     * @param popupFlags Flags for the popup.
+     * @return Whether the popup is open.
+     * @see PopupFlags
+     * @see #beginPopupContextItem(int, int)
+     */
+    public static boolean beginPopupContextItem(@NonNull String name, int popupFlags) {
+        return beginPopupContextItem(Hash.getID(name, context.activeID), popupFlags);
+    }
+
+    /**
+     * Create a popup with an explicit ID.
+     *
+     * <p>Essentially the same as {@code openPopupOnItemClick(id, popupFlags); return
+     * beginPopup(id); }. Which is essentially the same as {@code if (isItemHovered() &&
+     * isMouseReleased(MouseButton.RIGHT) {openPopup(id);} return beginPopup(id); }.
+     *
+     * @param id The ID.
+     * @param popupFlags Flags for the popup.
+     * @return Whether the popup is open.
+     * @see PopupFlags
+     */
+    public static boolean beginPopupContextItem(int id, int popupFlags) {
+        openPopupOnItemClick(id, popupFlags);
+        return beginPopup(id, popupFlags);
     }
 
     public static boolean beginPopupContextVoid() {
@@ -3428,18 +3494,45 @@ public class IkGui {
     }
 
     public static boolean isMouseReleased(@NonNull MouseButton button) {
+        return context.io.getMouseReleased(button);
+    }
+
+    public static boolean isPopupOpen(String name) {
         // TODO(ches) complete this
         return false;
     }
 
-    public static boolean isPopuopen(String name) {
+    public static boolean isPopupOpen(String name, int popupFlags) {
         // TODO(ches) complete this
         return false;
     }
 
-    public static boolean isPopuopen(String name, int popupFlags) {
-        // TODO(ches) complete this
-        return false;
+    /**
+     * Checks if there is a popup request open for the given ID.
+     *
+     * @param id The ID we care about for navigation. If 0 we'll use the active ID.
+     * @param popupFlags Used to decide which mouse button we are checking for, if applicable.
+     * @return Whether a mouse click or navigation action would result in a popup being requested.
+     */
+    public static boolean isPopupRequestOpenForItem(int id, int popupFlags) {
+        MouseButton button;
+        if ((popupFlags & PopupFlags.MOUSE_BUTTON_RIGHT) != 0) {
+            button = MouseButton.RIGHT;
+        } else if ((popupFlags & PopupFlags.MOUSE_BUTTON_MIDDLE) != 0) {
+            button = MouseButton.MIDDLE;
+        } else if ((popupFlags & PopupFlags.MOUSE_BUTTON_LEFT) != 0) {
+            button = MouseButton.LEFT;
+        } else {
+            button = MouseButton.RIGHT;
+        }
+
+        int actualID = id != 0 ? id : context.activeID;
+
+        if (isItemHovered(HoveredFlags.ALLOW_WHEN_BLOCKED_BY_POPUP) && isMouseReleased(button)) {
+            return true;
+        }
+        return context.navOpenContextMenuItemID == actualID
+                && (isItemFocused() || actualID == context.windowCurrent.idMove);
     }
 
     public static boolean isRectVisible(float width, float height) {
@@ -3619,28 +3712,102 @@ public class IkGui {
         // TODO(ches) complete this
     }
 
-    public static void openPopup(String name) {
+    /**
+     * Set a flag indicating a popup should be open, which should not be called every frame. This
+     * internal state is read by {@link #beginPopup(int)} to see if the popup is visible.
+     *
+     * @param id The ID of the popup.
+     */
+    public static void openPopup(int id) {
+        openPopup(id, PopupFlags.MOUSE_BUTTON_DEFAULT);
+    }
+
+    /**
+     * Set a flag indicating a popup should be open, which should not be called every frame. This
+     * internal state is read by {@link #beginPopup(String)} to see if the popup is visible.
+     *
+     * @param name The name of the popup.
+     */
+    public static void openPopup(@NonNull String name) {
+        openPopup(Hash.getID(name, context.activeID), PopupFlags.MOUSE_BUTTON_DEFAULT);
+    }
+
+    /**
+     * Set a flag indicating a popup should be open, which should not be called every frame. This
+     * internal state is read by {@link #beginPopup(int, int)} to see if the popup is visible.
+     *
+     * @param id The ID of the popup.
+     * @param popupFlags Flags for the popup.
+     */
+    public static void openPopup(int id, int popupFlags) {
         // TODO(ches) complete this
     }
 
-    public static void openPopup(String name, int popupFlags) {
-        // TODO(ches) complete this
+    /**
+     * Set a flag indicating a popup should be open, which should not be called every frame. This
+     * internal state is read by {@link #beginPopup(String, int)} to see if the popup is visible.
+     *
+     * @param name The name of the popup.
+     * @param popupFlags Flags for the popup.
+     */
+    public static void openPopup(@NonNull String name, int popupFlags) {
+        openPopup(Hash.getID(name, context.activeID), popupFlags);
     }
 
+    /**
+     * Open a popup if the last item was right-clicked, or navigation indicates we should open a
+     * popup.
+     *
+     * @see #openPopup(int)
+     */
     public static void openPopupOnItemClick() {
-        // TODO(ches) complete this
+        openPopupOnItemClick(context.lastItemData.id, PopupFlags.MOUSE_BUTTON_DEFAULT);
     }
 
+    /**
+     * Open a popup if the right mouse button was clicked (or navigation action) indicating we
+     * should.
+     *
+     * @param id The item we are interested in.
+     * @see #openPopup(int)
+     */
     public static void openPopupOnItemClick(int id) {
-        // TODO(ches) complete this
+        openPopupOnItemClick(id, PopupFlags.MOUSE_BUTTON_DEFAULT);
     }
 
-    public static void openPopupOnItemClick(String name) {
-        // TODO(ches) complete this
+    /**
+     * Open a popup if the right mouse button was clicked (or navigation action) indicating we
+     * should.
+     *
+     * @param name The item we are interested in.
+     * @see #openPopup(String)
+     */
+    public static void openPopupOnItemClick(@NonNull String name) {
+        openPopupOnItemClick(Hash.getID(name, context.activeID), PopupFlags.MOUSE_BUTTON_DEFAULT);
     }
 
-    public static void openPopupOnItemClick(String name, int popupFlags) {
-        // TODO(ches) complete this
+    /**
+     * Open a popup if the mouse button (or navigation action) indicates we should.
+     *
+     * @param id The item we are interested in.
+     * @param popupFlags Flags for the popup.
+     * @see #openPopup(int, int)
+     */
+    public static void openPopupOnItemClick(int id, int popupFlags) {
+        if (isPopupRequestOpenForItem(id, popupFlags)) {
+            openPopup(id, popupFlags);
+        }
+    }
+
+    /**
+     * Open a popup if the mouse button (or navigation action) indicates we should.
+     *
+     * @param name The item we are interested in.
+     * @param popupFlags Flags for the popup.
+     * @see #openPopup(String, int)
+     */
+    public static void openPopupOnItemClick(@NonNull String name, int popupFlags) {
+        openPopupOnItemClick(Hash.getID(name, context.activeID), popupFlags);
     }
 
     public static void plotHistogram(String label, float[] values, int count) {
@@ -3910,11 +4077,9 @@ public class IkGui {
      * @return The new ID (which is based on the name and parent ID if there is one).
      */
     public static int pushID(String name) {
-        int hash = 0;
-        if (name != null) {
-            hash = name.hashCode();
-        }
-        return pushID(hash);
+        // NOTE(ches) the other pushID will re-hash this ID with the active ID, so we don't need to
+        // include it here
+        return pushID(Hash.getID(name));
     }
 
     public static void pushItemWidth(float width) {
