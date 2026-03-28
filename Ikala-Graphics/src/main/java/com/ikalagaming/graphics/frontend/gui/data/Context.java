@@ -33,7 +33,6 @@ public class Context {
     public boolean activeIDRetainOnFocusLoss;
     public boolean activeIDSeenThisFrame;
     public GuiInputSource activeIDSource;
-    public final IntArrayList activeIDStack;
     public float activeIDTimer;
     public Window activeIDWindow;
 
@@ -222,6 +221,8 @@ public class Context {
 
     /** ID of the window that a mouse is stationary over, reset when it leaves the window. */
     public int hoverWindowUnlockedStationaryID;
+
+    public final IntArrayList idStack;
 
     public boolean initialized;
 
@@ -462,7 +463,6 @@ public class Context {
         activeIDRetainOnFocusLoss = false;
         activeIDSeenThisFrame = false;
         activeIDSource = GuiInputSource.NONE;
-        activeIDStack = new IntArrayList();
         activeIDTimer = 0.0f;
         activeIDWindow = null;
         backgroundDrawList = new DrawList("Background");
@@ -559,6 +559,7 @@ public class Context {
         hoverItemDelayTimer = 0.0f;
         hoverItemUnlockedStationaryID = 0;
         hoverWindowUnlockedStationaryID = 0;
+        idStack = new IntArrayList();
         initialized = false;
         inputEventQueue = new ArrayList<>();
         inputEventTrail = new ArrayList<>();

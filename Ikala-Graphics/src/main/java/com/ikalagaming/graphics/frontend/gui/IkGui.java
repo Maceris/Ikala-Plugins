@@ -16,7 +16,7 @@ import org.joml.Vector4f;
 
 import java.util.NoSuchElementException;
 
-/** Immediate mode GUI library based on ImGui. */
+/** Immediate mode GUI library based on <a href="https://github.com/ocornut/imgui">ImGui</a>. */
 @Slf4j
 public class IkGui {
 
@@ -461,8 +461,7 @@ public class IkGui {
 
     /**
      * Create a popup associated with the last item. Generally for things that don't have
-     * identifiers, like text. Essentially {@code beginPopupContextItem(context.lastItemData.id,
-     * PopupFlags.MOUSE_BUTTON_DEFAULT);}.
+     * identifiers, like text.
      *
      * @return Whether the popup is open.
      * @see #beginPopupContextItem(int, int)
@@ -472,8 +471,7 @@ public class IkGui {
     }
 
     /**
-     * Create a popup with an explicit ID. Essentially {@code beginPopupContextItem(id,
-     * PopupFlags.MOUSE_BUTTON_DEFAULT);}.
+     * Create a popup with an explicit ID.
      *
      * @param id The ID.
      * @return Whether the popup is open.
@@ -484,8 +482,7 @@ public class IkGui {
     }
 
     /**
-     * Create a popup with an explicit ID. Essentially {@code beginPopupContextItem(Hash.getID(name,
-     * context.activeID), PopupFlags.MOUSE_BUTTON_DEFAULT);}.
+     * Create a popup with an explicit ID.
      *
      * @param name The name of the popup.
      * @return Whether the popup is open.
@@ -493,12 +490,11 @@ public class IkGui {
      */
     public static boolean beginPopupContextItem(@NonNull String name) {
         return beginPopupContextItem(
-                Hash.getID(name, context.activeID), PopupFlags.MOUSE_BUTTON_DEFAULT);
+                Hash.getID(name, context.idStack.peek()), PopupFlags.MOUSE_BUTTON_DEFAULT);
     }
 
     /**
-     * Create a popup with an explicit ID. Essentially {@code beginPopupContextItem(Hash.getID(name,
-     * context.activeID), popupFlags);}.
+     * Create a popup with an explicit ID.
      *
      * @param name The name of the popup.
      * @param popupFlags Flags for the popup.
@@ -507,7 +503,7 @@ public class IkGui {
      * @see #beginPopupContextItem(int, int)
      */
     public static boolean beginPopupContextItem(@NonNull String name, int popupFlags) {
-        return beginPopupContextItem(Hash.getID(name, context.activeID), popupFlags);
+        return beginPopupContextItem(Hash.getID(name, context.idStack.peek()), popupFlags);
     }
 
     /**
@@ -2109,7 +2105,7 @@ public class IkGui {
     }
 
     public static int getID(String name) {
-        return Hash.getID(name, context.activeID);
+        return Hash.getID(name, context.idStack.peek());
     }
 
     public static IkIO getIO() {
@@ -3510,7 +3506,7 @@ public class IkGui {
     /**
      * Checks if there is a popup request open for the given ID.
      *
-     * @param id The ID we care about for navigation. If 0 we'll use the active ID.
+     * @param id The ID we care about for navigation. If 0 we'll use the last item ID.
      * @param popupFlags Used to decide which mouse button we are checking for, if applicable.
      * @return Whether a mouse click or navigation action would result in a popup being requested.
      */
@@ -3526,7 +3522,7 @@ public class IkGui {
             button = MouseButton.RIGHT;
         }
 
-        int actualID = id != 0 ? id : context.activeID;
+        int actualID = id != 0 ? id : context.lastItemData.id;
 
         if (isItemHovered(HoveredFlags.ALLOW_WHEN_BLOCKED_BY_POPUP) && isMouseReleased(button)) {
             return true;
@@ -3729,7 +3725,7 @@ public class IkGui {
      * @param name The name of the popup.
      */
     public static void openPopup(@NonNull String name) {
-        openPopup(Hash.getID(name, context.activeID), PopupFlags.MOUSE_BUTTON_DEFAULT);
+        openPopup(Hash.getID(name, context.idStack.peek()), PopupFlags.MOUSE_BUTTON_DEFAULT);
     }
 
     /**
@@ -3751,7 +3747,7 @@ public class IkGui {
      * @param popupFlags Flags for the popup.
      */
     public static void openPopup(@NonNull String name, int popupFlags) {
-        openPopup(Hash.getID(name, context.activeID), popupFlags);
+        openPopup(Hash.getID(name, context.idStack.peek()), popupFlags);
     }
 
     /**
@@ -3768,7 +3764,7 @@ public class IkGui {
      * Open a popup if the right mouse button was clicked (or navigation action) indicating we
      * should.
      *
-     * @param id The item we are interested in.
+     * @param id The item we are interested in. If 0, we'll use the last item ID.
      * @see #openPopup(int)
      */
     public static void openPopupOnItemClick(int id) {
@@ -3783,13 +3779,14 @@ public class IkGui {
      * @see #openPopup(String)
      */
     public static void openPopupOnItemClick(@NonNull String name) {
-        openPopupOnItemClick(Hash.getID(name, context.activeID), PopupFlags.MOUSE_BUTTON_DEFAULT);
+        openPopupOnItemClick(
+                Hash.getID(name, context.idStack.peek()), PopupFlags.MOUSE_BUTTON_DEFAULT);
     }
 
     /**
      * Open a popup if the mouse button (or navigation action) indicates we should.
      *
-     * @param id The item we are interested in.
+     * @param id The item we are interested in. If 0, we'll use the last item ID.
      * @param popupFlags Flags for the popup.
      * @see #openPopup(int, int)
      */
@@ -3807,7 +3804,7 @@ public class IkGui {
      * @see #openPopup(String, int)
      */
     public static void openPopupOnItemClick(@NonNull String name, int popupFlags) {
-        openPopupOnItemClick(Hash.getID(name, context.activeID), popupFlags);
+        openPopupOnItemClick(Hash.getID(name, context.idStack.peek()), popupFlags);
     }
 
     public static void plotHistogram(String label, float[] values, int count) {
@@ -3948,10 +3945,11 @@ public class IkGui {
     }
 
     public static void popID() {
-        context.activeIDStack.pop();
-        clearActiveID();
-        // TODO(ches) do we need to restore some info about the last active ID?
-        context.activeID = context.activeIDStack.peek();
+        if (context.idStack.isEmpty()) {
+            log.error("Trying to pop an ID that does not exist");
+            return;
+        }
+        context.idStack.pop();
     }
 
     public static void popItemWidth() {
@@ -4063,10 +4061,8 @@ public class IkGui {
      * @return The new ID (which is based on the provided ID, and parent ID if there is one).
      */
     public static int pushID(int id) {
-        // TODO(ches) do we need to store the info about the current active ID?
-        int result = Hash.getID(id, context.activeID);
-        context.activeIDStack.push(result);
-        context.activeID = result;
+        int result = Hash.getID(id, context.idStack.peek());
+        context.idStack.push(result);
         return result;
     }
 
@@ -4077,7 +4073,7 @@ public class IkGui {
      * @return The new ID (which is based on the name and parent ID if there is one).
      */
     public static int pushID(String name) {
-        // NOTE(ches) the other pushID will re-hash this ID with the active ID, so we don't need to
+        // NOTE(ches) the other pushID will re-hash this ID with the last ID, so we don't need to
         // include it here
         return pushID(Hash.getID(name));
     }
