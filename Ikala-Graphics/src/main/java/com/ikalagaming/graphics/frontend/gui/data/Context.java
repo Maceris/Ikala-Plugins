@@ -439,7 +439,7 @@ public class Context {
     public boolean windowResizeRelativeMode;
 
     /** Windows, sorted in display order, back to front. */
-    public final List<Window> windowsDisplayOrder;
+    public final List<Window> windowDisplayOrder;
 
     public Window windowWheeling;
     public final Vector2f windowWheelingAxisAverage;
@@ -678,7 +678,7 @@ public class Context {
         windowMoving = null;
         windowResizeBorderExpectedRect = new RectFloat(0, 0, 0, 0);
         windowResizeRelativeMode = false;
-        windowsDisplayOrder = new ArrayList<>();
+        windowDisplayOrder = new ArrayList<>();
         windowWheeling = null;
         windowWheelingAxisAverage = new Vector2f(0, 0);
         windowWheelingRefMousePosition = new Vector2f(0, 0);

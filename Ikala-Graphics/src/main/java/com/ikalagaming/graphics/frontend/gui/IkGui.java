@@ -270,6 +270,7 @@ public class IkGui {
         context.lastItemData.clipRect.set(window.rectCurrentClip);
         context.lastItemData.displayRect.set(window.rectFull);
         context.lastItemData.shortcut = 0;
+        context.windowDisplayOrder.add(window);
 
         context.drawData.drawLists.add(window.drawList);
 
@@ -726,23 +727,6 @@ public class IkGui {
         return false;
     }
 
-    private static void clearActiveID() {
-        context.activeIDActivatedThisFrame = false;
-        context.activeIDAllowOverlap = false;
-        context.activeIDClickOffset.set(0, 0);
-        context.activeIDFromShortcut = false;
-        context.activeIDHasBeenEditedBefore = false;
-        context.activeIDHasBeenEditedThisFrame = false;
-        context.activeIDHasBeenPressedBefore = false;
-        context.activeIDMouseButton = MouseButton.NONE;
-        context.activeIDPreviousFrame = 0;
-        context.activeIDRetainOnFocusLoss = false;
-        context.activeIDSeenThisFrame = false;
-        context.activeIDSource = GuiInputSource.NONE;
-        context.activeIDTimer = 0;
-        context.activeIDWindow = null;
-    }
-
     public static void closeCurrentPopup() {
         // TODO(ches) complete this
     }
@@ -883,6 +867,7 @@ public class IkGui {
             return context;
         }
         context = new Context();
+        IkGuiInternal.context = context;
         storage = new Storage();
         return context;
     }
@@ -897,6 +882,7 @@ public class IkGui {
         }
         context.io.setAppAcceptingEvents(false);
         context = null;
+        IkGuiInternal.context = null;
         storage = null;
     }
 
@@ -3493,7 +3479,17 @@ public class IkGui {
         return context.io.getMouseReleased(button);
     }
 
+    public static boolean isPopupOpen(int id) {
+        // TODO(ches) complete this
+        return false;
+    }
+
     public static boolean isPopupOpen(String name) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isPopupOpen(int id, int popupFlags) {
         // TODO(ches) complete this
         return false;
     }
@@ -3501,34 +3497,6 @@ public class IkGui {
     public static boolean isPopupOpen(String name, int popupFlags) {
         // TODO(ches) complete this
         return false;
-    }
-
-    /**
-     * Checks if there is a popup request open for the given ID.
-     *
-     * @param id The ID we care about for navigation. If 0 we'll use the last item ID.
-     * @param popupFlags Used to decide which mouse button we are checking for, if applicable.
-     * @return Whether a mouse click or navigation action would result in a popup being requested.
-     */
-    public static boolean isPopupRequestOpenForItem(int id, int popupFlags) {
-        MouseButton button;
-        if ((popupFlags & PopupFlags.MOUSE_BUTTON_RIGHT) != 0) {
-            button = MouseButton.RIGHT;
-        } else if ((popupFlags & PopupFlags.MOUSE_BUTTON_MIDDLE) != 0) {
-            button = MouseButton.MIDDLE;
-        } else if ((popupFlags & PopupFlags.MOUSE_BUTTON_LEFT) != 0) {
-            button = MouseButton.LEFT;
-        } else {
-            button = MouseButton.RIGHT;
-        }
-
-        int actualID = id != 0 ? id : context.lastItemData.id;
-
-        if (isItemHovered(HoveredFlags.ALLOW_WHEN_BLOCKED_BY_POPUP) && isMouseReleased(button)) {
-            return true;
-        }
-        return context.navOpenContextMenuItemID == actualID
-                && (isItemFocused() || actualID == context.windowCurrent.idMove);
     }
 
     public static boolean isRectVisible(float width, float height) {
@@ -3682,6 +3650,8 @@ public class IkGui {
         context.frameCount = (context.frameCount + 1) % FRAME_COUNT_CAP;
         // TODO(ches) update window counts
 
+        context.windowDisplayOrder.clear();
+
         // Updating input events
         context.io.clearFrameSpecificValues();
         context.io.processInputEvents();
@@ -3698,6 +3668,7 @@ public class IkGui {
         // TODO(ches) update hover delay
         // TODO(ches) update keyboard inputs
         // TODO(ches) update drag and drop
+        IkGuiInternal.handleWindowDragging();
         // TODO(ches) update navigation
         context.io.updateMouseInputs();
         // TODO(ches) clean up transient buffers
@@ -3791,7 +3762,7 @@ public class IkGui {
      * @see #openPopup(int, int)
      */
     public static void openPopupOnItemClick(int id, int popupFlags) {
-        if (isPopupRequestOpenForItem(id, popupFlags)) {
+        if (IkGuiInternal.isPopupRequestOpenForItem(id, popupFlags)) {
             openPopup(id, popupFlags);
         }
     }

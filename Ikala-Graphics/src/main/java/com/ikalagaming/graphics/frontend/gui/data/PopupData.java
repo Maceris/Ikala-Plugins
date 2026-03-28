@@ -3,12 +3,12 @@ package com.ikalagaming.graphics.frontend.gui.data;
 import org.joml.Vector2f;
 
 public class PopupData {
-    private int popupID;
-    private Window window;
-    private Window restoreNavWindow;
-    private int parentNavLayer;
-    private int openFrameCount;
-    private int openParentID;
-    private Vector2f preferredPosition;
-    private Vector2f mousePosition;
+    public int popupID;
+    public Window window;
+    public Window restoreNavWindow;
+    public int parentNavLayer;
+    public int openFrameCount;
+    public int openParentID;
+    public Vector2f preferredPosition;
+    public Vector2f mousePosition;
 }
