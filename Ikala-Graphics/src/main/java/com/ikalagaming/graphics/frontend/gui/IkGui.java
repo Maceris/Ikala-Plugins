@@ -310,7 +310,7 @@ public class IkGui {
                     window.name);
         }
 
-        if (window.borderSize > 0) {
+        if ((window.flags & WindowFlags.NO_BACKGROUND) == 0 && window.borderSize > 0) {
             window.drawList.addRect(
                     window.position.x,
                     window.position.y,
