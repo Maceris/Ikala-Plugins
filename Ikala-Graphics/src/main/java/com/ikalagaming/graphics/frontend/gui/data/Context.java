@@ -23,17 +23,20 @@ public class Context {
     public boolean activeIDActivatedThisFrame;
     public boolean activeIDAllowOverlap;
     public final Vector2f activeIDClickOffset;
-
+    public int activeIDDisabledId;
     public boolean activeIDFromShortcut;
     public boolean activeIDHasBeenEditedBefore;
     public boolean activeIDHasBeenEditedThisFrame;
     public boolean activeIDHasBeenPressedBefore;
+    public boolean activeIDIsAlive;
+    public boolean activeIDIsJustActivated;
     public MouseButton activeIDMouseButton;
+    public boolean activeIDNoClearOnFocusLost;
     public int activeIDPreviousFrame;
     public boolean activeIDRetainOnFocusLoss;
     public boolean activeIDSeenThisFrame;
     public GuiInputSource activeIDSource;
-    public float activeIDTimer;
+    public long activeIDTimer;
     public Window activeIDWindow;
 
     public DrawList backgroundDrawList;
@@ -201,20 +204,20 @@ public class Context {
 
     public boolean hoveredIDAllowOverlap;
     public boolean hoveredIDDisabled;
-    public float hoveredIDInactiveTimer;
+    public long hoveredIDInactiveTimer;
 
     public int hoveredIDPreviousFrame;
     public int hoveredIDPreviousFrameItemCount;
-    public float hoveredIDTimer;
+    public long hoveredIDTimer;
 
     /** Used by isItemHovered(), time before tooltip hover time gets cleared. */
-    public float hoverItemDelayClearTimer;
+    public long hoverItemDelayClearTimer;
 
     public int hoverItemDelayID;
     public int hoverItemDelayIDPreviousFrame;
 
     /** Used by isItemHovered(). */
-    public float hoverItemDelayTimer;
+    public long hoverItemDelayTimer;
 
     /** ID of the item that a mouse is stationary over, reset when it leaves the item. */
     public int hoverItemUnlockedStationaryID;
@@ -241,7 +244,7 @@ public class Context {
 
     public int lastActiveID;
 
-    public float lastActiveIDTimer;
+    public long lastActiveIDTimer;
 
     public LastItemData lastItemData;
 
@@ -265,7 +268,7 @@ public class Context {
     public final IntArrayList menuIDsSubmittedThisFrame;
     public MouseCursor mouseCursor;
     public final Vector2f mouseLastValidPosition;
-    public float mouseStationaryTimer;
+    public long mouseStationaryTimer;
     public final List<MultiSelectTempData> multiSelectStorage;
     public final List<MultiSelectTempData> multiSelectTempData;
     public int multiSelectTempDataStackSize;
@@ -287,7 +290,7 @@ public class Context {
     public final List<FocusScopeData> navFocusRoute;
     public int navFocusScopeID;
     public int navHighlightActivatedID;
-    public float navHighlightActivatedTimer;
+    public long navHighlightActivatedTimer;
 
     public boolean navHighlightIgnoreMouse;
 
@@ -382,7 +385,7 @@ public class Context {
     public Window navWindowingTarget;
     public Window navWindowingTargetPrev;
 
-    public float navWindowingTimer;
+    public long navWindowingTimer;
 
     public boolean navWindowingToggleLayer;
     public NextItemData nextItemData;
@@ -397,7 +400,7 @@ public class Context {
     /** 0 is scrolling to clicked location, +/- 1 is next/previous page. */
     public byte scrollbarSeekMode;
 
-    public float settingsDirtyTimer;
+    public long settingsDirtyTimer;
     public boolean settingsLoaded;
     public final List<ShrinkWidthItem> shrinkWidthBuffer;
 
@@ -444,7 +447,7 @@ public class Context {
     public Window windowWheeling;
     public final Vector2f windowWheelingAxisAverage;
     public final Vector2f windowWheelingRefMousePosition;
-    public float windowWheelingReleaseTimer;
+    public long windowWheelingReleaseTimer;
     public int windowWheelingScrolledFrame;
     public int windowWheelingStartFrame;
     public final Vector2f windowWheelingWheelRemainder;
@@ -454,16 +457,20 @@ public class Context {
         activeIDActivatedThisFrame = false;
         activeIDAllowOverlap = false;
         activeIDClickOffset = new Vector2f(0, 0);
+        activeIDDisabledId = 0;
         activeIDFromShortcut = false;
         activeIDHasBeenEditedBefore = false;
         activeIDHasBeenEditedThisFrame = false;
         activeIDHasBeenPressedBefore = false;
+        activeIDIsAlive = false;
+        activeIDIsJustActivated = false;
         activeIDMouseButton = MouseButton.NONE;
+        activeIDNoClearOnFocusLost = false;
         activeIDPreviousFrame = 0;
         activeIDRetainOnFocusLoss = false;
         activeIDSeenThisFrame = false;
         activeIDSource = GuiInputSource.NONE;
-        activeIDTimer = 0.0f;
+        activeIDTimer = 0;
         activeIDWindow = null;
         backgroundDrawList = new DrawList("Background");
         beginComboDepth = 0;
@@ -549,14 +556,14 @@ public class Context {
         hoveredID = 0;
         hoveredIDAllowOverlap = false;
         hoveredIDDisabled = false;
-        hoveredIDInactiveTimer = 0.0f;
+        hoveredIDInactiveTimer = 0;
         hoveredIDPreviousFrame = 0;
         hoveredIDPreviousFrameItemCount = 0;
-        hoveredIDTimer = 0.0f;
-        hoverItemDelayClearTimer = 0.0f;
+        hoveredIDTimer = 0;
+        hoverItemDelayClearTimer = 0;
         hoverItemDelayID = 0;
         hoverItemDelayIDPreviousFrame = 0;
-        hoverItemDelayTimer = 0.0f;
+        hoverItemDelayTimer = 0;
         hoverItemUnlockedStationaryID = 0;
         hoverWindowUnlockedStationaryID = 0;
         idStack = new IntArrayList();
@@ -569,7 +576,7 @@ public class Context {
         io = new IkIO();
         itemFlagsStack = new IntArrayList();
         lastActiveID = 0;
-        lastActiveIDTimer = 0.0f;
+        lastActiveIDTimer = 0;
         lastItemData = new LastItemData();
         lastKeyboardKeyPressTime = 0.0;
         lastKeyModsChangeFromNoneTime = 0.0;
@@ -583,7 +590,7 @@ public class Context {
         menuIDsSubmittedThisFrame = new IntArrayList();
         mouseCursor = MouseCursor.ARROW;
         mouseLastValidPosition = new Vector2f(0, 0);
-        mouseStationaryTimer = 0.0f;
+        mouseStationaryTimer = 0;
         multiSelectStorage = new ArrayList<>();
         multiSelectTempData = new ArrayList<>();
         multiSelectTempDataStackSize = 0;
@@ -598,7 +605,7 @@ public class Context {
         navFocusRoute = new ArrayList<>();
         navFocusScopeID = 0;
         navHighlightActivatedID = 0;
-        navHighlightActivatedTimer = 0.0f;
+        navHighlightActivatedTimer = 0;
         navHighlightIgnoreMouse = false;
         navID = 0;
         navIDAlive = false;
@@ -642,7 +649,7 @@ public class Context {
         navWindowingListWindow = null;
         navWindowingTarget = null;
         navWindowingTargetPrev = null;
-        navWindowingTimer = 0.0f;
+        navWindowingTimer = 0;
         navWindowingToggleLayer = false;
         nextItemData = new NextItemData();
         nextWindowData = new NextWindowData();
@@ -650,7 +657,7 @@ public class Context {
         platformIO = null;
         scrollbarClickDistanceToCenter = 0.0f;
         scrollbarSeekMode = 0;
-        settingsDirtyTimer = 0.0f;
+        settingsDirtyTimer = 0;
         settingsLoaded = false;
         shrinkWidthBuffer = new ArrayList<>();
         sliderCurrentAccumulatedDelta = 0.0f;
@@ -682,7 +689,7 @@ public class Context {
         windowWheeling = null;
         windowWheelingAxisAverage = new Vector2f(0, 0);
         windowWheelingRefMousePosition = new Vector2f(0, 0);
-        windowWheelingReleaseTimer = 0.0f;
+        windowWheelingReleaseTimer = 0;
         windowWheelingScrolledFrame = 0;
         windowWheelingStartFrame = 0;
         windowWheelingWheelRemainder = new Vector2f(0, 0);

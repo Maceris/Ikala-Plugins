@@ -76,6 +76,7 @@ public class Window {
     public final Vector2f cursorPreviousLinePosition;
 
     public final Vector2f cursorStartPosition;
+    public DockNode dockNodeAsHost;
     public DrawList drawList;
     public int flags;
     public int flagsAsChildWindow;
@@ -207,6 +208,7 @@ public class Window {
         cursorPosition = new Vector2f(0.0f, 0.0f);
         cursorPreviousLinePosition = new Vector2f(0.0f, 0.0f);
         cursorStartPosition = new Vector2f(0.0f, 0.0f);
+        dockNodeAsHost = null;
         drawList = new DrawList(name);
         flags = WindowFlags.NONE;
         flagsAsChildWindow = WindowFlags.NONE;

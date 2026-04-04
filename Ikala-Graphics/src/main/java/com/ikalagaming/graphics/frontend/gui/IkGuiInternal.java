@@ -5,32 +5,20 @@ import com.ikalagaming.graphics.frontend.gui.data.PopupData;
 import com.ikalagaming.graphics.frontend.gui.data.Window;
 import com.ikalagaming.graphics.frontend.gui.enums.GuiInputSource;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
-import com.ikalagaming.graphics.frontend.gui.flags.HoveredFlags;
-import com.ikalagaming.graphics.frontend.gui.flags.PopupFlags;
-import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
-import com.ikalagaming.graphics.frontend.gui.flags.WindowFocusRequestFlags;
+import com.ikalagaming.graphics.frontend.gui.flags.*;
+
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Optional;
 
+@Slf4j
 public class IkGuiInternal {
 
     static Context context;
 
     public static void clearActiveID() {
-        context.activeIDActivatedThisFrame = false;
-        context.activeIDAllowOverlap = false;
-        context.activeIDClickOffset.set(0, 0);
-        context.activeIDFromShortcut = false;
-        context.activeIDHasBeenEditedBefore = false;
-        context.activeIDHasBeenEditedThisFrame = false;
-        context.activeIDHasBeenPressedBefore = false;
-        context.activeIDMouseButton = MouseButton.NONE;
-        context.activeIDPreviousFrame = 0;
-        context.activeIDRetainOnFocusLoss = false;
-        context.activeIDSeenThisFrame = false;
-        context.activeIDSource = GuiInputSource.NONE;
-        context.activeIDTimer = 0;
-        context.activeIDWindow = null;
+        setActiveID(0, null);
     }
 
     public static void closePopupsOverWindow(
@@ -86,7 +74,7 @@ public class IkGuiInternal {
                                     hoveredRoot.idAsPopupWindow, PopupFlags.ANY_POPUP_LEVEL);
 
             if (hoveredRoot != null && !isClosingPopups) {
-                // TODO(ches) start dragging windows, check if we need to cancel moving
+                startMovingWindow(hoveredRoot);
             } else if (context.windowHovered == null && context.navFocusedWindow != null) {
                 // We are clicking outside a window, with a window focused
                 focusWindow(null, WindowFocusRequestFlags.UNLESS_BELOW_MODAL);
@@ -161,5 +149,107 @@ public class IkGuiInternal {
         }
 
         return false;
+    }
+
+    public static void setActiveID(int id, Window window) {
+        if (context.activeID != 0) {
+            // Clear previous active ID
+
+            context.deactivatedItemData.id = context.activeID;
+            context.deactivatedItemData.elapsedFrame =
+                    context.lastItemData.id == context.activeID
+                            ? context.frameCount
+                            : context.frameCount + 1;
+            context.deactivatedItemData.hasBeenEditedBefore = context.activeIDHasBeenEditedBefore;
+            context.deactivatedItemData.isAlive = context.activeIDIsAlive;
+
+            // TODO(ches) if it was an input text we might want to call a hook for it being
+            // deactivated
+
+            if (context.windowMoving != null && context.activeID == context.windowMoving.idMove) {
+                stopMovingWindow();
+            }
+        }
+
+        // Set active ID
+        context.activeIDIsJustActivated = context.activeID != id;
+
+        if (context.activeIDIsJustActivated) {
+            context.activeIDTimer = 0;
+            context.activeIDHasBeenPressedBefore = false;
+            context.activeIDHasBeenEditedBefore = false;
+            context.activeIDMouseButton = MouseButton.NONE;
+            if (id != 0) {
+                context.lastActiveID = id;
+                context.lastActiveIDTimer = 0;
+            }
+        }
+        context.activeID = id;
+        context.activeIDAllowOverlap = false;
+        context.activeIDNoClearOnFocusLost = false;
+        context.activeIDWindow = window;
+        context.activeIDHasBeenEditedThisFrame = false;
+        context.activeIDFromShortcut = false;
+        context.activeIDDisabledId = 0;
+        if (id != 0) {
+            context.activeIDIsAlive = true;
+            context.activeIDSource =
+                    (context.navActivateID == id || context.navJustMovedToID == id)
+                            ? context.navInputSource
+                            : GuiInputSource.MOUSE;
+
+            if (context.activeIDSource == GuiInputSource.NONE) {
+                log.error("Invalid input source when setting active ID");
+            }
+        }
+    }
+
+    /**
+     * Start moving a window, and set the active ID to the window's move ID.
+     *
+     * @param window The window we are dragging.
+     */
+    public static void startMovingWindow(@NonNull Window window) {
+        focusWindow(window, WindowFocusRequestFlags.NONE);
+
+        setActiveID(window.idMove, window);
+        context.activeIDClickOffset.set(context.io.mouseClickedPosition[MouseButton.LEFT.index]);
+        context.activeIDClickOffset.sub(
+                Optional.ofNullable(window.rootWindow).orElse(window).position);
+        context.activeIDNoClearOnFocusLost = true;
+
+        boolean canMoveWindow =
+                !((window.flags & WindowFlags.NO_MOVE) != 0
+                        || (window.rootWindow != null
+                                && (window.rootWindow.flags & WindowFlags.NO_MOVE) != 0));
+        if (window.dockNodeAsHost != null) {
+            // TODO(ches) dock node visible window has nomove flag
+        }
+        if (canMoveWindow) {
+            context.windowMoving = window;
+        }
+    }
+
+    /** Stop moving the window, but doesn't clear the active ID. */
+    public static void stopMovingWindow() {
+        if (context.windowMoving != null && context.windowMoving.viewport != null) {
+
+            if ((context.io.configFlags & ConfigFlags.VIEWPORTS_ENABLE) != 0) {
+                // TODO try to merge window into the current viewport
+            }
+
+            // TODO(ches) add isdragDropPayloadBeingAccepted
+            // TODO(ches) if we aren't dragging and dropping, update the mouse viewport to the
+            // window's viewport
+
+            boolean windowCanUseInputs =
+                    (context.windowMoving.flags & WindowFlags.NO_MOUSE_INPUTS) == 0
+                            || (context.windowMoving.flags & WindowFlags.NO_NAV_INPUTS) == 0;
+            if (windowCanUseInputs) {
+                context.windowMoving.viewport.flags &= ~ViewportFlags.NO_INPUTS;
+            }
+        }
+
+        context.windowMoving = null;
     }
 }

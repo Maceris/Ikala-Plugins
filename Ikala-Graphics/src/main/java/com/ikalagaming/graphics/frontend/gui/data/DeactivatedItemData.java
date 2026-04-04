@@ -1,8 +1,15 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
 public class DeactivatedItemData {
-    private int ID;
-    private int elapsedFrame;
-    private boolean hasBeenEditedBefore;
-    private boolean isAlive;
+    public int id;
+    public int elapsedFrame;
+    public boolean hasBeenEditedBefore;
+    public boolean isAlive;
+
+    public DeactivatedItemData() {
+        id = 0;
+        elapsedFrame = 0;
+        hasBeenEditedBefore = false;
+        isAlive = false;
+    }
 }
