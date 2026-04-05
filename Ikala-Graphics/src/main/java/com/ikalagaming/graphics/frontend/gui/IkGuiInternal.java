@@ -3,12 +3,14 @@ package com.ikalagaming.graphics.frontend.gui;
 import com.ikalagaming.graphics.frontend.gui.data.Context;
 import com.ikalagaming.graphics.frontend.gui.data.PopupData;
 import com.ikalagaming.graphics.frontend.gui.data.Window;
+import com.ikalagaming.graphics.frontend.gui.enums.Condition;
 import com.ikalagaming.graphics.frontend.gui.enums.GuiInputSource;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
 import com.ikalagaming.graphics.frontend.gui.flags.*;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Vector2f;
 
 import java.util.Optional;
 
@@ -46,54 +48,6 @@ public class IkGuiInternal {
             }
         }
         return null;
-    }
-
-    public static void handleWindowDragging() {
-        if (context.activeID != 0) {
-            // We already are interacting with something besides a window
-            return;
-        }
-        if (context.hoveredID != 0 && !context.hoveredIDDisabled) {
-            // We are hovering over something interactive
-            return;
-        }
-        if (context.navFocusedWindow != null && context.navFocusedWindow.appearing) {
-            // We just made a window appear
-            return;
-        }
-
-        if (context.io.getMouseClicked(MouseButton.LEFT)) {
-            Window hoveredRoot =
-                    Optional.ofNullable(context.windowHovered)
-                            .map(window -> window.rootWindow)
-                            .orElse(null);
-            boolean isClosingPopups =
-                    hoveredRoot != null
-                            && ((hoveredRoot.flags & WindowFlags.INTERNAL_POPUP) != 0)
-                            && !IkGui.isPopupOpen(
-                                    hoveredRoot.idAsPopupWindow, PopupFlags.ANY_POPUP_LEVEL);
-
-            if (hoveredRoot != null && !isClosingPopups) {
-                startMovingWindow(hoveredRoot);
-            } else if (context.windowHovered == null && context.navFocusedWindow != null) {
-                // We are clicking outside a window, with a window focused
-                focusWindow(null, WindowFocusRequestFlags.UNLESS_BELOW_MODAL);
-            }
-        }
-
-        if (context.io.getMouseClicked(MouseButton.RIGHT) && context.hoveredID == 0) {
-            /*
-             * We right-clicked out in empty space, and therefore would like to close popups without
-             * changing focus to where the mouse is. We can restore focus to the window under the bottom-most closed
-             * popup.
-             */
-
-            Window modal = getTopmostPopupModal();
-            boolean hoveredWindowAboveModal =
-                    context.windowHovered != null
-                            && (modal != null || isWindowAbove(context.windowHovered, modal));
-            closePopupsOverWindow(hoveredWindowAboveModal ? context.windowHovered : modal, true);
-        }
     }
 
     /**
@@ -149,6 +103,24 @@ public class IkGuiInternal {
         }
 
         return false;
+    }
+
+    /**
+     * Mark the given ID as alive.
+     *
+     * @param id The ID.
+     */
+    public static void keepAliveID(int id) {
+        if (context.activeID == id) {
+            context.activeIDIsAlive = true;
+        }
+        if (context.deactivatedItemData.id == id) {
+            context.deactivatedItemData.isAlive = true;
+        }
+    }
+
+    public static void markIniSettingsDirty(@NonNull Window window) {
+        // TODO(ches) complete this
     }
 
     public static void setActiveID(int id, Window window) {
@@ -251,5 +223,110 @@ public class IkGuiInternal {
         }
 
         context.windowMoving = null;
+    }
+
+    /**
+     * Truncate the given float to an integer value.
+     *
+     * @param x The float.
+     * @return The truncated float.
+     */
+    public static float truncate(float x) {
+        return (int) x;
+    }
+
+    /**
+     * Truncate both coordinates to integer values. This modifies the provided vector, but also
+     * returns it for convenience.
+     *
+     * @param vector The vector to truncate.
+     * @return The provided vector.
+     */
+    public static Vector2f truncate(@NonNull Vector2f vector) {
+        vector.set((int) vector.x, (int) vector.y);
+        return vector;
+    }
+
+    /**
+     * Handle focusing and moving window when clicking empty space within the window or the title
+     * bar, just focus when clicking a disabled item, or right-clicking.
+     */
+    public static void updateMouseMovingWindowEndFrame() {
+        if (context.activeID != 0) {
+            // We already are interacting with something besides a window
+            return;
+        }
+        if (context.hoveredID != 0 && !context.hoveredIDDisabled) {
+            // We are hovering over something interactive
+            return;
+        }
+        if (context.navFocusedWindow != null && context.navFocusedWindow.appearing) {
+            // We just made a window appear
+            return;
+        }
+
+        if (context.io.getMouseClicked(MouseButton.LEFT)) {
+            Window hoveredRoot =
+                    Optional.ofNullable(context.windowHovered)
+                            .map(window -> window.rootWindow)
+                            .orElse(null);
+            boolean isClosingPopups =
+                    hoveredRoot != null
+                            && ((hoveredRoot.flags & WindowFlags.INTERNAL_POPUP) != 0)
+                            && !IkGui.isPopupOpen(
+                                    hoveredRoot.idAsPopupWindow, PopupFlags.ANY_POPUP_LEVEL);
+
+            if (hoveredRoot != null && !isClosingPopups) {
+                startMovingWindow(hoveredRoot);
+            } else if (context.windowHovered == null && context.navFocusedWindow != null) {
+                // We are clicking outside a window, with a window focused
+                focusWindow(null, WindowFocusRequestFlags.UNLESS_BELOW_MODAL);
+            }
+        }
+
+        if (context.io.getMouseClicked(MouseButton.RIGHT) && context.hoveredID == 0) {
+            /*
+             * We right-clicked out in empty space, and therefore would like to close popups without
+             * changing focus to where the mouse is. We can restore focus to the window under the bottom-most closed
+             * popup.
+             */
+
+            Window modal = getTopmostPopupModal();
+            boolean hoveredWindowAboveModal =
+                    context.windowHovered != null
+                            && (modal != null || isWindowAbove(context.windowHovered, modal));
+            closePopupsOverWindow(hoveredWindowAboveModal ? context.windowHovered : modal, true);
+        }
+    }
+
+    public static void updateMouseMovingWindowNewFrame() {
+        if (context.windowMoving != null) {
+            keepAliveID(context.activeID);
+
+            if (context.windowMoving.rootWindow == null) {
+                log.error("Null root window when moving a window");
+                return;
+            }
+            Window movingWindow = context.windowMoving.rootWindow;
+            if (context.io.getMouseDown(MouseButton.LEFT)
+                    && IkGui.isMousePosValid(context.io.mousePosition)) {
+                Vector2f pos =
+                        new Vector2f(context.io.mousePosition).sub(context.activeIDClickOffset);
+                IkGui.setWindowPos(context.windowMoving, pos, Condition.ALWAYS);
+                focusWindow(context.windowMoving, WindowFocusRequestFlags.NONE);
+            } else {
+                stopMovingWindow();
+                clearActiveID();
+            }
+
+        } else {
+            if (context.activeIDWindow != null
+                    && context.activeIDWindow.idMove == context.activeID) {
+                keepAliveID(context.activeID);
+                if (!context.io.getMouseDown(MouseButton.LEFT)) {
+                    clearActiveID();
+                }
+            }
+        }
     }
 }

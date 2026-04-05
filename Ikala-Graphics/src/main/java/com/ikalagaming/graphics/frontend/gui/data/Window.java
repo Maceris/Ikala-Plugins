@@ -146,6 +146,15 @@ public class Window {
 
     public boolean sameLine;
 
+    /** Stores the window pivot. (0,0) is the top left, (1,1) is the bottom right. */
+    public final Vector2f setWindowPosPivot;
+
+    /**
+     * Stores the window position when using a non-zero pivot, as we have to defer setting the
+     * window position until we know the size.
+     */
+    public final Vector2f setWindowPosValue;
+
     /** X is the width of the vertical scrollbar, y is the height of the horizontal scrollbar. */
     public final Vector2f scrollbarSizes;
 
@@ -240,6 +249,8 @@ public class Window {
         rootWindowIncludingPopups = null;
         rounding = 0.0f;
         sameLine = false;
+        setWindowPosPivot = new Vector2f(0.0f, 0.0f);
+        setWindowPosValue = new Vector2f(0.0f, 0.0f);
         scrollbarSizes = new Vector2f(0.0f, 0.0f);
         scrollExtent = new Vector2f(0.0f, 0.0f);
         scrollPosition = new Vector2f(0.0f, 0.0f);

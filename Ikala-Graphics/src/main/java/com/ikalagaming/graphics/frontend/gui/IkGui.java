@@ -1697,6 +1697,8 @@ public class IkGui {
         // TODO(ches) update docking
         // TODO(ches) update drag and drop
         // TODO(ches) end the frame
+        IkGuiInternal.updateMouseMovingWindowEndFrame();
+
         context.backgroundDrawList.prepareForRender();
         context.foregroundDrawList.prepareForRender();
         // TODO(ches) update viewports list
@@ -3470,6 +3472,11 @@ public class IkGui {
         return false;
     }
 
+    public static boolean isMousePosValid(@NonNull Vector2f position) {
+        // TODO(ches) complete this
+        return false;
+    }
+
     public static boolean isMousePosValid(float x, float y) {
         // TODO(ches) complete this
         return false;
@@ -3668,7 +3675,10 @@ public class IkGui {
         // TODO(ches) update hover delay
         // TODO(ches) update keyboard inputs
         // TODO(ches) update drag and drop
-        IkGuiInternal.handleWindowDragging();
+
+        // TODO(ches) find hovered window
+        IkGuiInternal.updateMouseMovingWindowNewFrame();
+
         // TODO(ches) update navigation
         context.io.updateMouseInputs();
         // TODO(ches) clean up transient buffers
@@ -4564,12 +4574,60 @@ public class IkGui {
         // TODO(ches) complete this
     }
 
+    public static void setWindowPos(@NonNull Window window, @NonNull Vector2f position) {
+        setWindowPos(window, position.x, position.y, Condition.ALWAYS);
+    }
+
+    public static void setWindowPos(
+            @NonNull Window window, @NonNull Vector2f position, @NonNull Condition condition) {
+        setWindowPos(window, position.x, position.y, condition);
+    }
+
+    public static void setWindowPos(@NonNull Window window, float x, float y) {
+        setWindowPos(window, x, y, Condition.ALWAYS);
+    }
+
+    public static void setWindowPos(
+            @NonNull Window window, float x, float y, @NonNull Condition condition) {
+        if (!ConditionAllowed.shouldResolve(condition, window.positionConditionAllowed)) {
+            return;
+        }
+
+        window.positionConditionAllowed &=
+                ~(ConditionAllowed.ONCE
+                        | ConditionAllowed.FIRST_USE_EVER
+                        | ConditionAllowed.APPEARING);
+        window.setWindowPosValue.set(Float.MAX_VALUE, Float.MAX_VALUE);
+
+        Vector2f oldPos = new Vector2f(window.position);
+        window.position.set(x, y);
+        IkGuiInternal.truncate(window.position);
+        Vector2f offset = new Vector2f(window.position).sub(oldPos);
+        if (offset.x == 0.0f && offset.y == 0.0f) {
+            return;
+        }
+
+        IkGuiInternal.markIniSettingsDirty(window);
+        window.cursorPosition.add(offset);
+        window.cursorMaxPosition.add(offset);
+        window.cursorIdealMaxPosition.add(offset);
+        window.cursorStartPosition.add(offset);
+    }
+
+    public static void setWindowPos(@NonNull Vector2f position) {
+        setWindowPos(context.windowCurrent, position.x, position.y, Condition.ALWAYS);
+    }
+
+    public static void setWindowPos(@NonNull Vector2f position, @NonNull Condition condition) {
+        setWindowPos(context.windowCurrent, position.x, position.y, condition);
+    }
+
     public static void setWindowPos(float x, float y) {
-        // TODO(ches) complete this
+        setWindowPos(context.windowCurrent, x, y, Condition.ALWAYS);
     }
 
     public static void setWindowPos(float x, float y, @NonNull Condition condition) {
-        // TODO(ches) complete this
+        setWindowPos(context.windowCurrent, x, y, condition);
     }
 
     public static void setWindowPos(
