@@ -430,19 +430,27 @@ public class Context {
     public final List<Viewport> viewports;
     public int windowActiveCount;
 
+    /**
+     * Extra space around the border of a window that counts as still hovering over the window, to
+     * make resizing easier. Calculated based on the style variables for touch padding and border
+     * hover padding.
+     */
+    public float windowBorderHoverPadding;
+
     public final Map<Integer, Window> windowByID;
 
     public Window windowCurrent;
 
+    /** Windows, sorted in display order, back to front. */
+    public final List<Window> windowDisplayOrder;
+
     public final List<Window> windowFocusOrder;
     public Window windowHovered;
+    public Window windowHoveredBeforeClear;
     public Window windowHoveredUnderMovingWindow;
     public Window windowMoving;
     public final RectFloat windowResizeBorderExpectedRect;
     public boolean windowResizeRelativeMode;
-
-    /** Windows, sorted in display order, back to front. */
-    public final List<Window> windowDisplayOrder;
 
     public Window windowWheeling;
     public final Vector2f windowWheelingAxisAverage;
@@ -677,15 +685,17 @@ public class Context {
         treeNodeStack = new ArrayDeque<>();
         viewports = new ArrayList<>();
         windowActiveCount = 0;
+        windowBorderHoverPadding = 0.0f;
         windowByID = new HashMap<>();
         windowCurrent = null;
+        windowDisplayOrder = new ArrayList<>();
         windowFocusOrder = new ArrayList<>();
         windowHovered = null;
+        windowHoveredBeforeClear = null;
         windowHoveredUnderMovingWindow = null;
         windowMoving = null;
         windowResizeBorderExpectedRect = new RectFloat(0, 0, 0, 0);
         windowResizeRelativeMode = false;
-        windowDisplayOrder = new ArrayList<>();
         windowWheeling = null;
         windowWheelingAxisAverage = new Vector2f(0, 0);
         windowWheelingRefMousePosition = new Vector2f(0, 0);

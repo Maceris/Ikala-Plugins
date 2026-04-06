@@ -6,7 +6,9 @@ import com.ikalagaming.graphics.frontend.gui.data.Window;
 import com.ikalagaming.graphics.frontend.gui.enums.Condition;
 import com.ikalagaming.graphics.frontend.gui.enums.GuiInputSource;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
+import com.ikalagaming.graphics.frontend.gui.enums.StyleVariable;
 import com.ikalagaming.graphics.frontend.gui.flags.*;
+import com.ikalagaming.graphics.frontend.gui.util.RectFloat;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +32,63 @@ public class IkGuiInternal {
         }
 
         // TODO(ches) close popups above the reference window
+    }
+
+    /**
+     * Finds the window that is hovered under the provided position, and updates {@link
+     * Context#windowHovered} and {@link Context#windowHoveredUnderMovingWindow}.
+     *
+     * @param position The mouse position.
+     */
+    public static void findHoveredWindow(@NonNull Vector2f position) {
+        context.windowHovered = null;
+        context.windowHoveredUnderMovingWindow = null;
+
+        if (context.windowMoving != null
+                && ((context.windowMoving.flags & WindowFlags.NO_MOUSE_INPUTS) == 0)) {
+            context.windowHovered = context.windowMoving;
+        }
+
+        Vector2f paddingRegular = IkGui.getStyleVarFloat2(StyleVariable.TOUCH_EXTRA_PADDING);
+        Vector2f paddingForResize =
+                new Vector2f(context.windowBorderHoverPadding, context.windowBorderHoverPadding);
+
+        for (Window window : context.windowDisplayOrder.reversed()) {
+            if (!window.active
+                    || window.hidden
+                    || (window.flags & WindowFlags.NO_MOUSE_INPUTS) != 0) {
+                continue;
+            }
+            Vector2f hitPadding =
+                    (window.flags & (WindowFlags.NO_RESIZE | WindowFlags.ALWAYS_AUTO_RESIZE)) != 0
+                            ? paddingRegular
+                            : paddingForResize;
+
+            if (!window.rectOuterClipped.containsWithPadding(position, hitPadding)) {
+                continue;
+            }
+
+            if (window.hitTestHoleSize.x != 0) {
+                Vector2f holePosition = new Vector2f(window.hitTestHolePosition);
+                holePosition.add(window.position);
+
+                if (new RectFloat(holePosition, window.hitTestHoleSize).contains(position)) {
+                    continue;
+                }
+            }
+
+            if (context.windowHovered == null) {
+                context.windowHovered = window;
+            }
+            if (context.windowHoveredUnderMovingWindow == null
+                    && (context.windowMoving == null
+                            || window.rootWindow != context.windowMoving.rootWindow)) {
+                context.windowHoveredUnderMovingWindow = window;
+            }
+            if (context.windowHoveredUnderMovingWindow != null) {
+                break;
+            }
+        }
     }
 
     public static void focusWindow(Window window, int focusRequestFlags) {
@@ -102,6 +161,19 @@ public class IkGuiInternal {
             }
         }
 
+        return false;
+    }
+
+    public static boolean isWindowWithinBeginStackOf(Window window, Window potentialParent) {
+        if (window.rootWindow == potentialParent) {
+            return true;
+        }
+        while (window != null) {
+            if (window == potentialParent) {
+                return true;
+            }
+            window = window.parentWindowInBeginStack;
+        }
         return false;
     }
 
@@ -247,6 +319,102 @@ public class IkGuiInternal {
         return vector;
     }
 
+    public static void updateHoveredWindowAndCaptureFlags(@NonNull Vector2f mousePosition) {
+        context.windowBorderHoverPadding =
+                Math.max(
+                        Math.max(
+                                context.style.variable.touchExtraPadding.x,
+                                context.style.variable.touchExtraPadding.y),
+                        context.style.variable.windowBorderHoverPadding);
+
+        boolean clearHoveredWindows = false;
+
+        findHoveredWindow(mousePosition);
+        context.windowHoveredBeforeClear = context.windowHovered;
+
+        Window modalWindow = getTopmostPopupModal();
+        if (modalWindow != null
+                && context.windowHovered != null
+                && !isWindowWithinBeginStackOf(context.windowHovered.rootWindow, modalWindow)) {
+            clearHoveredWindows = true;
+        }
+
+        if ((context.io.configFlags & ConfigFlags.NO_MOUSE) != 0) {
+            clearHoveredWindows = true;
+        }
+
+        final boolean hasOpenPopup = !context.openPopupStack.isEmpty();
+        final boolean hasOpenModal = modalWindow != null;
+        int mouseEarliestDown = -1;
+        boolean mouseAnyDown = false;
+
+        for (int i = 0; i < MouseButton.COUNT; ++i) {
+            if (context.io.mouseClicked[i]) {
+                context.io.mouseDownOwned[i] = (context.windowHovered != null) || hasOpenPopup;
+                context.io.mouseDownOwnedUnlessPopupClose[i] =
+                        (context.windowHovered != null) || hasOpenModal;
+            }
+            mouseAnyDown = mouseAnyDown || context.io.mouseDown[i];
+            if ((context.io.mouseDown[i] || context.io.mouseReleased[i])
+                    && (mouseEarliestDown == -1
+                            || context.io.mouseClickedTime[i]
+                                    < context.io.mouseClickedTime[mouseEarliestDown])) {
+                mouseEarliestDown = i;
+            }
+        }
+
+        final boolean mouseAvailable =
+                (mouseEarliestDown == -1) || context.io.mouseDownOwned[mouseEarliestDown];
+        final boolean mouseAvailableUnlessPopupClose =
+                (mouseEarliestDown == -1)
+                        || context.io.mouseDownOwnedUnlessPopupClose[mouseEarliestDown];
+
+        final boolean mouseDraggingExternalPayload =
+                context.dragDropActive
+                        && (context.dragDropSourceFlags & DragDropFlags.SOURCE_EXTERN) != 0;
+
+        if (!mouseAvailable && !mouseDraggingExternalPayload) {
+            clearHoveredWindows = true;
+        }
+
+        if (clearHoveredWindows) {
+            context.windowHovered = null;
+            context.windowHoveredUnderMovingWindow = null;
+        }
+
+        if (context.io.wantCaptureMouseNextFrame) {
+            context.io.wantCaptureMouse = true;
+            context.io.wantCaptureMouseUnlessPopupClose = true;
+        } else {
+            context.io.wantCaptureMouse =
+                    (mouseAvailable && (context.windowHovered != null || mouseAnyDown))
+                            || hasOpenPopup;
+            context.io.wantCaptureMouseUnlessPopupClose =
+                    (mouseAvailableUnlessPopupClose
+                                    && (context.windowHovered != null || mouseAnyDown))
+                            || hasOpenModal;
+        }
+
+        context.io.wantCaptureKeyboard = false;
+        if ((context.io.configFlags & ConfigFlags.NO_KEYBOARD) == 0) {
+            if (context.activeID != 0 || modalWindow != null) {
+                context.io.wantCaptureKeyboard = true;
+            } else if (context.io.navActive
+                    && ((context.io.configFlags & ConfigFlags.NAV_ENABLE_KEYBOARD) != 0)
+                    && context.io.configNavCaptureKeyboard) {
+                context.io.wantCaptureKeyboard = true;
+            }
+        }
+
+        if (context.io.wantCaptureKeyboardNextFrame) {
+            context.io.wantCaptureKeyboard = true;
+        }
+
+        if (context.io.wantTextInputNextFrame) {
+            context.io.wantTextInput = true;
+        }
+    }
+
     /**
      * Handle focusing and moving window when clicking empty space within the window or the title
      * bar, just focus when clicking a disabled item, or right-clicking.
@@ -294,7 +462,7 @@ public class IkGuiInternal {
             Window modal = getTopmostPopupModal();
             boolean hoveredWindowAboveModal =
                     context.windowHovered != null
-                            && (modal != null || isWindowAbove(context.windowHovered, modal));
+                            && (modal == null || isWindowAbove(context.windowHovered, modal));
             closePopupsOverWindow(hoveredWindowAboveModal ? context.windowHovered : modal, true);
         }
     }
@@ -312,7 +480,7 @@ public class IkGuiInternal {
                     && IkGui.isMousePosValid(context.io.mousePosition)) {
                 Vector2f pos =
                         new Vector2f(context.io.mousePosition).sub(context.activeIDClickOffset);
-                IkGui.setWindowPos(context.windowMoving, pos, Condition.ALWAYS);
+                IkGui.setWindowPos(movingWindow, pos, Condition.ALWAYS);
                 focusWindow(context.windowMoving, WindowFocusRequestFlags.NONE);
             } else {
                 stopMovingWindow();

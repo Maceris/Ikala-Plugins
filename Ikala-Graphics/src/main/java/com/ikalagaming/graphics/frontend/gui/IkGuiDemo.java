@@ -1,9 +1,6 @@
 package com.ikalagaming.graphics.frontend.gui;
 
-import com.ikalagaming.graphics.frontend.gui.data.DrawData;
-import com.ikalagaming.graphics.frontend.gui.data.DrawList;
-import com.ikalagaming.graphics.frontend.gui.data.IkBoolean;
-import com.ikalagaming.graphics.frontend.gui.data.IkIO;
+import com.ikalagaming.graphics.frontend.gui.data.*;
 import com.ikalagaming.graphics.frontend.gui.enums.Condition;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
 import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
@@ -13,6 +10,7 @@ import imgui.ImVec2;
 import imgui.flag.ImGuiCond;
 
 import java.nio.ByteBuffer;
+import java.util.Optional;
 
 class IkGuiDemo {
 
@@ -58,6 +56,24 @@ class IkGuiDemo {
         }
 
         IkIO ikIO = IkGui.getIO();
+
+        if (ImGui.treeNode("Windows")) {
+            if (ImGui.treeNode("By Display Order")) {
+                IkGui.getContext().windowDisplayOrder.forEach(IkGuiDemo::showWindowDetails);
+                ImGui.treePop();
+            }
+            if (ImGui.treeNode("By Focus Order")) {
+                IkGui.getContext().windowFocusOrder.forEach(IkGuiDemo::showWindowDetails);
+                ImGui.treePop();
+            }
+            if (ImGui.treeNode("By Submission Order (begin stack)")) {
+                // TODO(ches) fill this out
+
+                ImGui.treePop();
+            }
+
+            ImGui.treePop();
+        }
 
         if (ImGui.treeNode("DrawLists")) {
             DrawData drawData = IkGui.getContext().drawData;
@@ -178,6 +194,52 @@ class IkGuiDemo {
         }
         if (ImGui.treeNode("Outputs")) {
             // TODO(ches) fill this out
+
+            ImGui.treePop();
+        }
+
+        if (ImGui.treeNode("Internal State")) {
+            Context context = IkGui.getContext();
+
+            ImGui.text("WINDOWING");
+            ImGui.indent();
+            ImGui.text(
+                    String.format(
+                            "Hovered Window: '%s'",
+                            Optional.ofNullable(context.windowHovered)
+                                    .map(win -> win.name)
+                                    .orElse("null")));
+            ImGui.text(
+                    String.format(
+                            "Hovered Window Root: '%s'",
+                            Optional.ofNullable(context.windowHovered)
+                                    .map(win -> win.rootWindow)
+                                    .map(win -> win.name)
+                                    .orElse("null")));
+            ImGui.text(
+                    String.format(
+                            "Hovered Window Under Moving Window: '%s'",
+                            Optional.ofNullable(context.windowHoveredUnderMovingWindow)
+                                    .map(win -> win.name)
+                                    .orElse("null")));
+            // TODO(ches) hovered dock node
+            ImGui.text(
+                    String.format(
+                            "Moving Window: '%s'",
+                            Optional.ofNullable(context.windowMoving)
+                                    .map(win -> win.name)
+                                    .orElse("null")));
+            // TODO(ches) mouse viewport
+            ImGui.unindent();
+            ImGui.text("ITEMS");
+            ImGui.indent();
+            // TODO(ches) fill this out
+            ImGui.unindent();
+
+            ImGui.text("NAV/FOCUS");
+            ImGui.indent();
+            // TODO(ches) fill this out
+            ImGui.unindent();
 
             ImGui.treePop();
         }
@@ -359,5 +421,22 @@ class IkGuiDemo {
         }
         // TODO(ches) fill this out
         IkGui.text("Not yet completed");
+    }
+
+    private static void showWindowDetails(Window window) {
+        if (ImGui.treeNode(window.name)) {
+            // TODO(ches) fill this out
+            ImGui.text(
+                    String.format("Position: (%.2f, %.2f)", window.position.x, window.position.y));
+            ImGui.text(
+                    String.format(
+                            "Size: (%.2f, %.2f)", window.sizeCurrent.x, window.sizeCurrent.y));
+            ImGui.text(
+                    String.format(
+                            "Content Size: (%.2f, %.2f)",
+                            window.rectContent.getWidth(), window.rectContent.getHeight()));
+
+            ImGui.treePop();
+        }
     }
 }

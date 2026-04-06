@@ -4,8 +4,6 @@ public class ConfigFlags {
     public static final int NONE = 0;
     public static final int NAV_ENABLE_KEYBOARD = 1;
     public static final int NAV_ENABLE_GAMEPAD = 1 << 1;
-    public static final int NAV_ENABLE_SET_MOUSE_POS = 1 << 2;
-    public static final int NAV_NO_CAPTURE_KEYBOARD = 1 << 3;
     public static final int NO_MOUSE = 1 << 4;
     public static final int NO_MOUSE_CURSOR_CHANGE = 1 << 5;
     public static final int NO_KEYBOARD = 1 << 6;

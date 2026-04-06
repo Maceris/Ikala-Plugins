@@ -16,7 +16,10 @@ import org.joml.Vector4f;
 
 import java.util.NoSuchElementException;
 
-/** Immediate mode GUI library based on <a href="https://github.com/ocornut/imgui">ImGui</a>. */
+/**
+ * Immediate mode GUI library, a customized Java fork of <a
+ * href="https://github.com/ocornut/imgui">ImGui</a>.
+ */
 @Slf4j
 public class IkGui {
 
@@ -226,7 +229,8 @@ public class IkGui {
         window.sizeDesired.set(window.sizeRequested);
         window.rounding = getStyleVarFloat(StyleVariable.WINDOW_ROUNDING);
         window.borderSize = getStyleVarFloat(StyleVariable.WINDOW_BORDER_SIZE);
-        window.rectFull.set(window.position, window.sizeFull);
+        window.rectOuter.set(window.position, window.sizeFull);
+        window.rectOuterClipped.set(window.rectOuter);
         window.rectInner.set(
                 window.position.x + window.padding.x,
                 window.position.y + window.padding.y + window.titleBarHeight + window.menuBarHeight,
@@ -234,7 +238,7 @@ public class IkGui {
                 window.position.y + window.sizeFull.y - window.padding.y);
         window.rectInnerClip.set(window.rectInner);
         window.rectContent.set(window.rectInner);
-        window.rectCurrentClip.set(window.rectFull);
+        window.rectCurrentClip.set(window.rectOuterClipped);
 
         window.baseOffsetCurrentLine = 0;
         window.baseOffsetPreviousLine = 0;
@@ -266,11 +270,12 @@ public class IkGui {
                 ItemStatusFlags.HAS_CLIP_RECT
                         | ItemStatusFlags.HAS_DISPLAY_RECT
                         | ItemStatusFlags.VISIBLE;
-        context.lastItemData.rect.set(window.rectFull);
+        context.lastItemData.rect.set(window.rectOuter);
         context.lastItemData.clipRect.set(window.rectCurrentClip);
-        context.lastItemData.displayRect.set(window.rectFull);
+        context.lastItemData.displayRect.set(window.rectOuterClipped);
         context.lastItemData.shortcut = 0;
         context.windowDisplayOrder.add(window);
+        context.windowFocusOrder.add(window);
 
         context.drawData.drawLists.add(window.drawList);
 
@@ -869,6 +874,8 @@ public class IkGui {
         context = new Context();
         IkGuiInternal.context = context;
         storage = new Storage();
+
+        // TODO(ches) create a dummy window in the background as a fallback
         return context;
     }
 
@@ -2349,6 +2356,8 @@ public class IkGui {
                     case TAB_ROUNDING -> context.style.variable.tabRounding;
                     case TABLE_ANGLED_HEADERS_ANGLE ->
                             context.style.variable.tableAngledHeadersAngle;
+                    case WINDOW_BORDER_HOVER_PADDING ->
+                            context.style.variable.windowBorderHoverPadding;
                     case WINDOW_BORDER_SIZE -> context.style.variable.windowBorderSize;
                     case WINDOW_ROUNDING -> context.style.variable.windowRounding;
                     default -> {
@@ -3657,8 +3666,6 @@ public class IkGui {
         context.frameCount = (context.frameCount + 1) % FRAME_COUNT_CAP;
         // TODO(ches) update window counts
 
-        context.windowDisplayOrder.clear();
-
         // Updating input events
         context.io.clearFrameSpecificValues();
         context.io.processInputEvents();
@@ -3676,12 +3683,14 @@ public class IkGui {
         // TODO(ches) update keyboard inputs
         // TODO(ches) update drag and drop
 
-        // TODO(ches) find hovered window
+        IkGuiInternal.updateHoveredWindowAndCaptureFlags(context.io.mousePosition);
         IkGuiInternal.updateMouseMovingWindowNewFrame();
 
         // TODO(ches) update navigation
         context.io.updateMouseInputs();
         // TODO(ches) clean up transient buffers
+        context.windowDisplayOrder.clear();
+        context.windowFocusOrder.clear();
         // TODO(ches) create fallback window
     }
 

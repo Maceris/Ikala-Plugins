@@ -46,6 +46,25 @@ public class RectFloat {
     }
 
     /**
+     * Returns true if the point is inside the rectangle, inclusive of extra padding. For example, x
+     * padding of 1 would mean 1 unit on either side of the x-axis would count as still inside the
+     * rect.
+     *
+     * @param x The x coordinate to check.
+     * @param y The y coordinate to check.
+     * @param paddingX Padding to add on both sides of the x-axis.
+     * @param paddingY Padding to add on both sides of the y-axis.
+     * @return true if the point is inside the rectangle plus padding, false otherwise.
+     */
+    public boolean containsWithPadding(
+            final float x, final float y, final float paddingX, final float paddingY) {
+        return (x >= left - paddingX)
+                && (x <= right + paddingX)
+                && (y >= top - paddingY)
+                && (y <= bottom + paddingY);
+    }
+
+    /**
      * Returns true if the point is inside the rectangle.
      *
      * @param point The point to check.
@@ -53,6 +72,18 @@ public class RectFloat {
      */
     public boolean contains(@NonNull Vector2f point) {
         return contains(point.x, point.y);
+    }
+
+    /**
+     * Returns true if the point is inside the rectangle, inclusive of extra padding.
+     *
+     * @param point The point to check.
+     * @param padding Padding to add in the x and y axes. For example, x padding of 1 would mean 1
+     *     unit on either side of the x-axis would count as still inside the rect.
+     * @return true if the point is inside the rectangle plus padding, false otherwise.
+     */
+    public boolean containsWithPadding(@NonNull Vector2f point, @NonNull Vector2f padding) {
+        return containsWithPadding(point.x, point.y, padding.x, padding.y);
     }
 
     /**

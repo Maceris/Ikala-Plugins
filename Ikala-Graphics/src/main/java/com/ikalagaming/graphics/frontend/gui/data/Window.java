@@ -82,6 +82,17 @@ public class Window {
     public int flagsAsChildWindow;
     public boolean hidden;
 
+    /**
+     * Location of a rectangular hole in the window that ignores hit tests. Zero values if not
+     * needed.
+     */
+    public final Vector2f hitTestHolePosition;
+
+    /**
+     * Size of a rectangular hole in the window that ignores hit tests. Zero values if not needed.
+     */
+    public final Vector2f hitTestHoleSize;
+
     public int id;
 
     public int idAsPopupWindow;
@@ -108,6 +119,8 @@ public class Window {
 
     public Window parentWindow;
 
+    public Window parentWindowInBeginStack;
+
     public final Vector2f position;
 
     /**
@@ -123,14 +136,17 @@ public class Window {
     /** Current clipping rect, since we can push and pop clip rects. */
     public final RectFloat rectCurrentClip;
 
-    /** The outer region of the window. */
-    public final RectFloat rectFull;
-
     /** The inner part of the window, excluding the title bar, menu, scroll bars. */
     public final RectFloat rectInner;
 
     /** Inner rect, but shrunk by 0.5 * padding, and clipped by the viewport or parent clip rect. */
     public final RectFloat rectInnerClip;
+
+    /** The outer region of the window. */
+    public final RectFloat rectOuter;
+
+    /** {@link #rectOuter} just after setup in begin. {@link #rectOuter} for root window. */
+    public final RectFloat rectOuterClipped;
 
     public boolean reuseLastFrameContents;
     public Window rootWindow;
@@ -222,6 +238,8 @@ public class Window {
         flags = WindowFlags.NONE;
         flagsAsChildWindow = WindowFlags.NONE;
         hidden = false;
+        hitTestHolePosition = new Vector2f(0.0f, 0.0f);
+        hitTestHoleSize = new Vector2f(0.0f, 0.0f);
         id = 0;
         idAsPopupWindow = 0;
         idStack = new IntArrayList();
@@ -235,15 +253,17 @@ public class Window {
         open = new IkBoolean();
         padding = new Vector2f(0.0f, 0.0f);
         parentWindow = null;
+        parentWindowInBeginStack = null;
         position = new Vector2f(0.0f, 0.0f);
         positionConditionAllowed = ConditionAllowed.ALL;
         rectContent = new RectFloat(0.0f, 0.0f, 0.0f, 0.0f);
         rectCurrentClip = new RectFloat(0.0f, 0.0f, 0.0f, 0.0f);
-        rectFull = new RectFloat(0.0f, 0.0f, 0.0f, 0.0f);
         rectInner = new RectFloat(0.0f, 0.0f, 0.0f, 0.0f);
         rectInnerClip = new RectFloat(0.0f, 0.0f, 0.0f, 0.0f);
+        rectOuter = new RectFloat(0.0f, 0.0f, 0.0f, 0.0f);
+        rectOuterClipped = new RectFloat(0.0f, 0.0f, 0.0f, 0.0f);
         reuseLastFrameContents = false;
-        rootWindow = null;
+        rootWindow = this;
         rootWindowForNavigation = null;
         rootWindowForTitleBarHighlight = null;
         rootWindowIncludingPopups = null;

@@ -99,6 +99,12 @@ public class StyleVariables {
     /** Values between 0 and 10. */
     public final Vector2f touchExtraPadding;
 
+    /**
+     * Extra space around the border of a window that counts as still hovering over the window, to
+     * make resizing easier.
+     */
+    public float windowBorderHoverPadding;
+
     /** Values between 0 and 1. */
     public float windowBorderSize;
 
@@ -145,6 +151,7 @@ public class StyleVariables {
         tableAngledHeadersTextAlign = new Vector2f(0.5f, 0.0f);
         tabRounding = 4;
         touchExtraPadding = new Vector2f(0, 0);
+        windowBorderHoverPadding = 4;
         windowBorderSize = 1;
         windowMenuButtonPosition = WindowMenuButtonPosition.LEFT;
         windowMinSize = new Vector2f(32, 32);
@@ -230,6 +237,9 @@ public class StyleVariables {
                 break;
             case TAB_ROUNDING:
                 tabRounding = value;
+                break;
+            case WINDOW_BORDER_HOVER_PADDING:
+                windowBorderHoverPadding = value;
                 break;
             case WINDOW_BORDER_SIZE:
                 windowBorderSize = value;

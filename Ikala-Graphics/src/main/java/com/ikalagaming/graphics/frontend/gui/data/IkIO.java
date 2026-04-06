@@ -93,6 +93,12 @@ public class IkIO {
     /** Request that we draw a cursor instead of the platform. */
     public boolean configMouseDrawCursor;
 
+    /** Whether navigation captures the keyboard. */
+    public boolean configNavCaptureKeyboard;
+
+    /** Whether navigation sets the mosue position. */
+    public boolean configNavMoveSetMousePosition;
+
     /**
      * Makes all floating windows use their own viewports. Otherwise, they are merged into the main
      * viewport when overlapping it.
@@ -329,11 +335,25 @@ public class IkIO {
     /** Touch pen pressure, 0.0f to 1.0f, should be >0 only when the first mouse input is down. */
     public float penPressure;
 
-    /** Set when we want to use keyboard inputs and not dispatch them to the main application. */
+    /**
+     * Set when we want to capture keyboard inputs and not dispatch them to the main application.
+     */
     public boolean wantCaptureKeyboard;
+
+    /**
+     * Set when we will want to capture keyboard inputs next frame, and not dispatch them to the
+     * main application.
+     */
+    public boolean wantCaptureKeyboardNextFrame;
 
     /** Set when we want to capture mouse inputs and not dispatch them to the main application. */
     public boolean wantCaptureMouse;
+
+    /**
+     * Set when we will want to capture mouse inputs next frame, and not dispatch them to the main
+     * application.
+     */
+    public boolean wantCaptureMouseNextFrame;
 
     /**
      * Set when we want to capture mouse inputs when a click over an empty area is expected to close
@@ -351,6 +371,12 @@ public class IkIO {
     /** For mobile/console, we want to display an on-screen keyboard for textual inputs. */
     public boolean wantTextInput;
 
+    /**
+     * For mobile/console, we will want to display an on-screen keyboard for textual inputs next
+     * frame.
+     */
+    public boolean wantTextInputNextFrame;
+
     public IkIO() {
         appAcceptingEvents = true;
         appFocusLost = false;
@@ -367,6 +393,8 @@ public class IkIO {
         configMacOSXBehaviors = false;
         configMemoryCompactTimer = 60.0f;
         configMouseDrawCursor = false;
+        configNavCaptureKeyboard = false;
+        configNavMoveSetMousePosition = false;
         configViewportsNoAutoMerge = false;
         configViewportsNoDecoration = true;
         configViewportsNoDefaultParent = true;
@@ -430,10 +458,13 @@ public class IkIO {
         navVisible = false;
         penPressure = 0.0f;
         wantCaptureKeyboard = false;
+        wantCaptureKeyboardNextFrame = false;
         wantCaptureMouse = false;
+        wantCaptureMouseNextFrame = false;
         wantCaptureMouseUnlessPopupClose = false;
         wantSaveIniSettings = false;
         wantTextInput = false;
+        wantTextInputNextFrame = false;
     }
 
     public void addConfigFlags(int flags) {

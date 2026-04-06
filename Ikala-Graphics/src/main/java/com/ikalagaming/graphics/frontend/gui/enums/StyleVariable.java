@@ -35,6 +35,7 @@ public enum StyleVariable {
     TABLE_ANGLED_HEADERS_TEXT_ALIGN(2, Float.class, 0, 1),
     TAB_ROUNDING(1, Float.class, 0, 12),
     TOUCH_EXTRA_PADDING(2, Float.class, 0, 10),
+    WINDOW_BORDER_HOVER_PADDING(1, Float.class, 0, 5),
     WINDOW_BORDER_SIZE(1, Float.class, 0, 1),
     WINDOW_MENU_BUTTON_POSITION(1, Integer.class, 0, 2),
     WINDOW_MIN_SIZE(2, Float.class, 0, Integer.MAX_VALUE),
