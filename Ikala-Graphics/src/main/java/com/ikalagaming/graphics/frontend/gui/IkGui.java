@@ -139,11 +139,7 @@ public class IkGui {
         window.idWithinParent = 0;
         window.idAsPopupWindow = 0;
         window.childWindows.clear();
-        window.parentWindow = null;
-        window.rootWindow = null;
-        window.rootWindowIncludingPopups = null;
-        window.rootWindowForTitleBarHighlight = null;
-        window.rootWindowForNavigation = null;
+        // TODO(ches) handle parent windows
         window.scrollPosition.set(0, 0);
         window.scrollExtent.set(0, 0);
         window.scrollTarget.set(0, 0);
@@ -3477,18 +3473,16 @@ public class IkGui {
     }
 
     public static boolean isMousePosValid() {
-        // TODO(ches) complete this
-        return false;
+        return isMousePosValid(context.io.mousePosition);
     }
 
     public static boolean isMousePosValid(@NonNull Vector2f position) {
-        // TODO(ches) complete this
-        return false;
+        return isMousePosValid(position.x, position.y);
     }
 
     public static boolean isMousePosValid(float x, float y) {
-        // TODO(ches) complete this
-        return false;
+        final float MOUSE_INVALID = -256_000.0f;
+        return x >= MOUSE_INVALID && y >= MOUSE_INVALID;
     }
 
     public static boolean isMouseReleased(@NonNull MouseButton button) {

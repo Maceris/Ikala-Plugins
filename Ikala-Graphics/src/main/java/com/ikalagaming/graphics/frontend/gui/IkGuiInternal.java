@@ -211,7 +211,7 @@ public class IkGuiInternal {
             // deactivated
 
             if (context.windowMoving != null && context.activeID == context.windowMoving.idMove) {
-                stopMovingWindow();
+                stopMouseMovingWindow();
             }
         }
 
@@ -253,13 +253,12 @@ public class IkGuiInternal {
      *
      * @param window The window we are dragging.
      */
-    public static void startMovingWindow(@NonNull Window window) {
+    public static void startMouseMovingWindow(@NonNull Window window) {
         focusWindow(window, WindowFocusRequestFlags.NONE);
 
         setActiveID(window.idMove, window);
         context.activeIDClickOffset.set(context.io.mouseClickedPosition[MouseButton.LEFT.index]);
-        context.activeIDClickOffset.sub(
-                Optional.ofNullable(window.rootWindow).orElse(window).position);
+        context.activeIDClickOffset.sub(window.rootWindow.position);
         context.activeIDNoClearOnFocusLost = true;
 
         boolean canMoveWindow =
@@ -275,7 +274,7 @@ public class IkGuiInternal {
     }
 
     /** Stop moving the window, but doesn't clear the active ID. */
-    public static void stopMovingWindow() {
+    public static void stopMouseMovingWindow() {
         if (context.windowMoving != null && context.windowMoving.viewport != null) {
 
             if ((context.io.configFlags & ConfigFlags.VIEWPORTS_ENABLE) != 0) {
@@ -445,7 +444,7 @@ public class IkGuiInternal {
                                     hoveredRoot.idAsPopupWindow, PopupFlags.ANY_POPUP_LEVEL);
 
             if (hoveredRoot != null && !isClosingPopups) {
-                startMovingWindow(hoveredRoot);
+                startMouseMovingWindow(hoveredRoot);
             } else if (context.windowHovered == null && context.navFocusedWindow != null) {
                 // We are clicking outside a window, with a window focused
                 focusWindow(null, WindowFocusRequestFlags.UNLESS_BELOW_MODAL);
@@ -483,7 +482,7 @@ public class IkGuiInternal {
                 IkGui.setWindowPos(movingWindow, pos, Condition.ALWAYS);
                 focusWindow(context.windowMoving, WindowFocusRequestFlags.NONE);
             } else {
-                stopMovingWindow();
+                stopMouseMovingWindow();
                 clearActiveID();
             }
 

@@ -264,9 +264,9 @@ public class Window {
         rectOuterClipped = new RectFloat(0.0f, 0.0f, 0.0f, 0.0f);
         reuseLastFrameContents = false;
         rootWindow = this;
-        rootWindowForNavigation = null;
-        rootWindowForTitleBarHighlight = null;
-        rootWindowIncludingPopups = null;
+        rootWindowForNavigation = this;
+        rootWindowForTitleBarHighlight = this;
+        rootWindowIncludingPopups = this;
         rounding = 0.0f;
         sameLine = false;
         setWindowPosPivot = new Vector2f(0.0f, 0.0f);
