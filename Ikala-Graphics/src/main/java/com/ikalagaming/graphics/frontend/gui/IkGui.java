@@ -264,57 +264,47 @@ public class IkGui {
     }
 
     public static void beginGroup() {
-        // TODO(ches) complete this
+        IkGuiImplLayout.beginGroup();
     }
 
     public static boolean beginListBox(String label) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.beginListBox(label, 0, 0);
     }
 
     public static boolean beginListBox(String label, float width, float height) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.beginListBox(label, width, height);
     }
 
     public static boolean beginMainMenuBar() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.beginMainMenuBar();
     }
 
     public static boolean beginMenu(String label) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.beginMenu(label, true);
     }
 
     public static boolean beginMenu(String label, boolean enabled) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.beginMenu(label, enabled);
     }
 
     public static boolean beginMenuBar() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.beginMenuBar();
     }
 
     public static boolean beginPopup(int id) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.beginPopup(id, PopupFlags.NONE);
     }
 
     public static boolean beginPopup(@NonNull String name) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.beginPopup(Hash.getID(name), PopupFlags.NONE);
     }
 
     public static boolean beginPopup(int id, int windowFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.beginPopup(id, windowFlags);
     }
 
     public static boolean beginPopup(@NonNull String name, int windowFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.beginPopup(Hash.getID(name), windowFlags);
     }
 
     /**
@@ -325,7 +315,8 @@ public class IkGui {
      * @see #beginPopupContextItem(int, int)
      */
     public static boolean beginPopupContextItem() {
-        return beginPopupContextItem(context.lastItemData.id, PopupFlags.MOUSE_BUTTON_DEFAULT);
+        return IkGuiImplWindows.beginPopupContextItem(
+                context.lastItemData.id, PopupFlags.MOUSE_BUTTON_DEFAULT);
     }
 
     /**
@@ -336,7 +327,7 @@ public class IkGui {
      * @see #beginPopupContextItem(int, int)
      */
     public static boolean beginPopupContextItem(int id) {
-        return beginPopupContextItem(id, PopupFlags.MOUSE_BUTTON_DEFAULT);
+        return IkGuiImplWindows.beginPopupContextItem(id, PopupFlags.MOUSE_BUTTON_DEFAULT);
     }
 
     /**
@@ -347,7 +338,7 @@ public class IkGui {
      * @see #beginPopupContextItem(int, int)
      */
     public static boolean beginPopupContextItem(@NonNull String name) {
-        return beginPopupContextItem(
+        return IkGuiImplWindows.beginPopupContextItem(
                 Hash.getID(name, context.idStack.peek()), PopupFlags.MOUSE_BUTTON_DEFAULT);
     }
 
@@ -361,7 +352,8 @@ public class IkGui {
      * @see #beginPopupContextItem(int, int)
      */
     public static boolean beginPopupContextItem(@NonNull String name, int popupFlags) {
-        return beginPopupContextItem(Hash.getID(name, context.idStack.peek()), popupFlags);
+        return IkGuiImplWindows.beginPopupContextItem(
+                Hash.getID(name, context.idStack.peek()), popupFlags);
     }
 
     /**
@@ -377,108 +369,117 @@ public class IkGui {
      * @see PopupFlags
      */
     public static boolean beginPopupContextItem(int id, int popupFlags) {
-        openPopupOnItemClick(id, popupFlags);
-        return beginPopup(id, popupFlags);
+        return IkGuiImplWindows.beginPopupContextItem(id, popupFlags);
     }
 
     public static boolean beginPopupContextVoid() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.beginPopupContextVoid(0, PopupFlags.NONE);
     }
 
     public static boolean beginPopupContextVoid(int id) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.beginPopupContextVoid(id, PopupFlags.NONE);
     }
 
     public static boolean beginPopupContextVoid(String name) {
+        return IkGuiImplWindows.beginPopupContextVoid(Hash.getID(name), PopupFlags.NONE);
+    }
+
+    public static boolean beginPopupContextVoid(int id, int popupFlags) {
         // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.beginPopupContextVoid(id, popupFlags);
     }
 
     public static boolean beginPopupContextVoid(String name, int popupFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.beginPopupContextVoid(Hash.getID(name), popupFlags);
     }
 
     public static boolean beginPopupContextWindow() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.beginPopupContextWindow(0, PopupFlags.NONE);
     }
 
     public static boolean beginPopupContextWindow(int id) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.beginPopupContextWindow(id, PopupFlags.NONE);
     }
 
     public static boolean beginPopupContextWindow(String name) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.beginPopupContextWindow(Hash.getID(name), PopupFlags.NONE);
+    }
+
+    public static boolean beginPopupContextWindow(int id, int popupFlags) {
+        return IkGuiImplWindows.beginPopupContextWindow(id, popupFlags);
     }
 
     public static boolean beginPopupContextWindow(String name, int popupFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.beginPopupContextWindow(Hash.getID(name), popupFlags);
     }
 
     public static boolean beginPopupModal(String name) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.beginPopupModal(name, null, WindowFlags.NONE);
     }
 
     public static boolean beginPopupModal(String name, IkBoolean open) {
-        return false;
+        return IkGuiImplWindows.beginPopupModal(name, open, WindowFlags.NONE);
     }
 
     public static boolean beginPopupModal(String name, IkBoolean open, int windowFlags) {
-        return false;
+        return IkGuiImplWindows.beginPopupModal(name, open, windowFlags);
     }
 
     public static boolean beginPopupModal(String name, int windowFlags) {
-        return false;
+        return IkGuiImplWindows.beginPopupModal(name, null, windowFlags);
     }
 
     public static boolean beginTabBar(String label) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplTabs.beginTabBar(label, TabBarFlags.NONE);
     }
 
     public static boolean beginTabBar(String label, int tabBarFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplTabs.beginTabBar(label, tabBarFlags);
     }
 
     public static boolean beginTabItem(String label) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplTabs.beginTabItem(label, null, TabItemFlags.NONE);
     }
 
     public static boolean beginTabItem(String label, IkBoolean open) {
-        return false;
+        return IkGuiImplTabs.beginTabItem(label, open, TabItemFlags.NONE);
     }
 
     public static boolean beginTabItem(String label, IkBoolean open, int tabItemFlags) {
-        return false;
+        return IkGuiImplTabs.beginTabItem(label, open, tabItemFlags);
     }
 
     public static boolean beginTabItem(String label, int tabItemFlags) {
-        return false;
+        return IkGuiImplTabs.beginTabItem(label, null, tabItemFlags);
     }
 
     public static boolean beginTable(String name, int columns) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplTables.beginTable(name, columns, TableFlags.NONE, 0.0f, 0.0f, 0.0f);
     }
 
     public static boolean beginTable(String name, int columns, int tableFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplTables.beginTable(name, columns, tableFlags, 0.0f, 0.0f, 0.0f);
+    }
+
+    public static boolean beginTable(
+            String name, int columns, int tableFlags, @NonNull Vector2f outerSize) {
+        return IkGuiImplTables.beginTable(
+                name, columns, tableFlags, outerSize.x, outerSize.y, 0.0f);
     }
 
     public static boolean beginTable(
             String name, int columns, int tableFlags, float outerWidth, float outerHeight) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplTables.beginTable(name, columns, tableFlags, outerWidth, outerHeight, 0.0f);
+    }
+
+    public static boolean beginTable(
+            String name,
+            int columns,
+            int tableFlags,
+            @NonNull Vector2f outerSize,
+            float innerWidth) {
+        return IkGuiImplTables.beginTable(
+                name, columns, tableFlags, outerSize.x, outerSize.y, innerWidth);
     }
 
     public static boolean beginTable(
@@ -488,8 +489,8 @@ public class IkGui {
             float outerWidth,
             float outerHeight,
             float innerWidth) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplTables.beginTable(
+                name, columns, tableFlags, outerWidth, outerHeight, innerWidth);
     }
 
     public static void beginTooltip() {
@@ -710,7 +711,10 @@ public class IkGui {
         context = new Context();
         IkGuiImplButtons.context = context;
         IkGuiImplDragDrop.context = context;
+        IkGuiImplLayout.context = context;
         IkGuiImplMiscWidgets.context = context;
+        IkGuiImplTables.context = context;
+        IkGuiImplTabs.context = context;
         IkGuiImplText.context = context;
         IkGuiImplUtils.context = context;
         IkGuiImplWindows.context = context;
@@ -734,7 +738,10 @@ public class IkGui {
         context = null;
         IkGuiImplButtons.context = null;
         IkGuiImplDragDrop.context = null;
+        IkGuiImplLayout.context = null;
         IkGuiImplMiscWidgets.context = null;
+        IkGuiImplTables.context = null;
+        IkGuiImplTabs.context = null;
         IkGuiImplText.context = null;
         IkGuiImplUtils.context = null;
         IkGuiImplWindows.context = null;
@@ -3543,7 +3550,7 @@ public class IkGui {
      * @param id The ID of the popup.
      */
     public static void openPopup(int id) {
-        openPopup(id, PopupFlags.MOUSE_BUTTON_DEFAULT);
+        IkGuiImplWindows.openPopup(id, PopupFlags.MOUSE_BUTTON_DEFAULT);
     }
 
     /**
@@ -3553,7 +3560,8 @@ public class IkGui {
      * @param name The name of the popup.
      */
     public static void openPopup(@NonNull String name) {
-        openPopup(Hash.getID(name, context.idStack.peek()), PopupFlags.MOUSE_BUTTON_DEFAULT);
+        IkGuiImplWindows.openPopup(
+                Hash.getID(name, context.idStack.peek()), PopupFlags.MOUSE_BUTTON_DEFAULT);
     }
 
     /**
@@ -3564,7 +3572,7 @@ public class IkGui {
      * @param popupFlags Flags for the popup.
      */
     public static void openPopup(int id, int popupFlags) {
-        // TODO(ches) complete this
+        IkGuiImplWindows.openPopup(id, popupFlags);
     }
 
     /**
@@ -3575,7 +3583,7 @@ public class IkGui {
      * @param popupFlags Flags for the popup.
      */
     public static void openPopup(@NonNull String name, int popupFlags) {
-        openPopup(Hash.getID(name, context.idStack.peek()), popupFlags);
+        IkGuiImplWindows.openPopup(Hash.getID(name, context.idStack.peek()), popupFlags);
     }
 
     /**
@@ -3585,7 +3593,8 @@ public class IkGui {
      * @see #openPopup(int)
      */
     public static void openPopupOnItemClick() {
-        openPopupOnItemClick(context.lastItemData.id, PopupFlags.MOUSE_BUTTON_DEFAULT);
+        IkGuiImplWindows.openPopupOnItemClick(
+                context.lastItemData.id, PopupFlags.MOUSE_BUTTON_DEFAULT);
     }
 
     /**
@@ -3596,7 +3605,7 @@ public class IkGui {
      * @see #openPopup(int)
      */
     public static void openPopupOnItemClick(int id) {
-        openPopupOnItemClick(id, PopupFlags.MOUSE_BUTTON_DEFAULT);
+        IkGuiImplWindows.openPopupOnItemClick(id, PopupFlags.MOUSE_BUTTON_DEFAULT);
     }
 
     /**
@@ -3607,7 +3616,7 @@ public class IkGui {
      * @see #openPopup(String)
      */
     public static void openPopupOnItemClick(@NonNull String name) {
-        openPopupOnItemClick(
+        IkGuiImplWindows.openPopupOnItemClick(
                 Hash.getID(name, context.idStack.peek()), PopupFlags.MOUSE_BUTTON_DEFAULT);
     }
 
@@ -3619,9 +3628,7 @@ public class IkGui {
      * @see #openPopup(int, int)
      */
     public static void openPopupOnItemClick(int id, int popupFlags) {
-        if (IkGuiInternal.isPopupRequestOpenForItem(id, popupFlags)) {
-            openPopup(id, popupFlags);
-        }
+        IkGuiImplWindows.openPopupOnItemClick(id, popupFlags);
     }
 
     /**
@@ -3632,7 +3639,7 @@ public class IkGui {
      * @see #openPopup(String, int)
      */
     public static void openPopupOnItemClick(@NonNull String name, int popupFlags) {
-        openPopupOnItemClick(Hash.getID(name, context.idStack.peek()), popupFlags);
+        IkGuiImplWindows.openPopupOnItemClick(Hash.getID(name, context.idStack.peek()), popupFlags);
     }
 
     public static void plotHistogram(String label, float[] values, int count) {

@@ -2,22 +2,22 @@ package com.ikalagaming.graphics.frontend.gui;
 
 import com.ikalagaming.graphics.frontend.gui.data.Context;
 
-class IkGuiImplMiscWidgets {
-
+class IkGuiImplTables {
     static Context context;
 
-    public static boolean beginCombo(String label, String previewValue, int comboFlags) {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public static boolean beginListBox(String label, float width, float height) {
+    public static boolean beginTable(
+            String name,
+            int columns,
+            int tableFlags,
+            float outerWidth,
+            float outerHeight,
+            float innerWidth) {
         // TODO(ches) complete this
         return false;
     }
 
     /** Private constructor so this is not instantiated. */
-    private IkGuiImplMiscWidgets() {
+    private IkGuiImplTables() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
     }
 }

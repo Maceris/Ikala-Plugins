@@ -1,23 +1,23 @@
 package com.ikalagaming.graphics.frontend.gui;
 
 import com.ikalagaming.graphics.frontend.gui.data.Context;
+import com.ikalagaming.graphics.frontend.gui.data.IkBoolean;
 
-class IkGuiImplMiscWidgets {
-
+class IkGuiImplTabs {
     static Context context;
 
-    public static boolean beginCombo(String label, String previewValue, int comboFlags) {
+    public static boolean beginTabBar(String label, int tabBarFlags) {
         // TODO(ches) complete this
         return false;
     }
 
-    public static boolean beginListBox(String label, float width, float height) {
+    public static boolean beginTabItem(String label, IkBoolean open, int tabItemFlags) {
         // TODO(ches) complete this
         return false;
     }
 
     /** Private constructor so this is not instantiated. */
-    private IkGuiImplMiscWidgets() {
+    private IkGuiImplTabs() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
     }
 }

@@ -230,6 +230,56 @@ class IkGuiImplWindows {
         // TODO(ches) complete this
     }
 
+    public static boolean beginMainMenuBar() {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean beginMenu(String label, boolean enabled) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean beginMenuBar() {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean beginPopup(int id, int windowFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean beginPopupContextItem(int id, int popupFlags) {
+        openPopupOnItemClick(id, popupFlags);
+        return beginPopup(id, popupFlags);
+    }
+
+    public static boolean beginPopupContextVoid(int id, int popupFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean beginPopupContextWindow(int id, int popupFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean beginPopupModal(String name, IkBoolean open, int windowFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static void openPopup(int id, int popupFlags) {
+        // TODO(ches) complete this
+    }
+
+    public static void openPopupOnItemClick(int id, int popupFlags) {
+        if (IkGuiInternal.isPopupRequestOpenForItem(id, popupFlags)) {
+            openPopup(id, popupFlags);
+        }
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplWindows() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
