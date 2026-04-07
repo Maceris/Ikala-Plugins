@@ -16,6 +16,10 @@ import org.joml.Vector2f;
 
 import java.util.Optional;
 
+/**
+ * These are internal functions, not intended for end users. These are subject to change or removal
+ * at any time.
+ */
 @Slf4j
 public class IkGuiInternal {
 
@@ -495,5 +499,10 @@ public class IkGuiInternal {
                 }
             }
         }
+    }
+
+    /** Private constructor so this is not instantiated. */
+    private IkGuiInternal() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
     }
 }

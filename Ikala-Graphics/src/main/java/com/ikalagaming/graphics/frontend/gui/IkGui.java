@@ -35,37 +35,23 @@ public class IkGui {
     private static Storage storage;
 
     public static <T> T acceptDragDropPayload(Class<T> aClass) {
-        // TODO(ches) complete this
-        return null;
+        return IkGuiImplDragDrop.acceptDragDropPayload(aClass, DragDropFlags.NONE);
     }
 
     public static <T> T acceptDragDropPayload(Class<T> aClass, int dragDropFlags) {
-        // TODO(ches) complete this
-        return null;
+        return IkGuiImplDragDrop.acceptDragDropPayload(aClass, dragDropFlags);
     }
 
     public static <T> T acceptDragDropPayload(String dataType) {
-        // TODO(ches) complete this
-        return null;
-    }
-
-    public static <T> T acceptDragDropPayload(String dataType, Class<T> aClass) {
-        // TODO(ches) complete this
-        return null;
+        return IkGuiImplDragDrop.acceptDragDropPayload(dataType, DragDropFlags.NONE);
     }
 
     public static <T> T acceptDragDropPayload(String dataType, int dragDropFlags) {
-        // TODO(ches) complete this
-        return null;
-    }
-
-    public static <T> T acceptDragDropPayload(String dataType, int dragDropFlags, Class<T> aClass) {
-        // TODO(ches) complete this
-        return null;
+        return IkGuiImplDragDrop.acceptDragDropPayload(dataType, dragDropFlags);
     }
 
     public static void alignTextToFramePadding() {
-        // TODO(ches) complete this
+        IkGuiImplText.alignTextToFramePadding();
     }
 
     /**
@@ -76,7 +62,7 @@ public class IkGui {
      * @return The scaled color.
      */
     public static int applyGlobalAlpha(int color) {
-        return applyGlobalAlpha(color, false);
+        return IkGuiImplUtils.applyGlobalAlpha(color, false);
     }
 
     /**
@@ -88,25 +74,37 @@ public class IkGui {
      * @return The scaled color.
      */
     public static int applyGlobalAlpha(int color, boolean disabled) {
-        int result = color;
-        result = Color.multiplyAlpha(result, context.style.variable.alpha);
-        if (disabled) {
-            result = Color.multiplyAlpha(result, context.style.variable.disabledAlpha);
-        }
-        return result;
+        return IkGuiImplUtils.applyGlobalAlpha(color, disabled);
     }
 
     public static boolean arrowButton(String text, @NonNull Direction direction) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplButtons.arrowButton(text, direction);
     }
 
+    /**
+     * Start a new window to add widgets to. The window name is a unique identifier used to preserve
+     * information across frames. Every call to begin should be matched with a call to {@link
+     * #end()} even if false is returned.
+     *
+     * @param title The unique title of the window.
+     * @return false if the window is collapsed.
+     */
     public static boolean begin(@NonNull String title) {
-        return begin(title, null, WindowFlags.NONE);
+        return IkGuiImplWindows.begin(title, null, WindowFlags.NONE);
     }
 
+    /**
+     * Start a new window to add widgets to. The window name is a unique identifier used to preserve
+     * information across frames. Every call to begin should be matched with a call to {@link
+     * #end()} even if false is returned.
+     *
+     * @param title The unique title of the window.
+     * @param open Non-null values display a close button on the window, which will be set to false
+     *     if the close button is pressed.
+     * @return false if the window is collapsed.
+     */
     public static boolean begin(@NonNull String title, final IkBoolean open) {
-        return begin(title, open, WindowFlags.NONE);
+        return IkGuiImplWindows.begin(title, open, WindowFlags.NONE);
     }
 
     /**
@@ -121,290 +119,148 @@ public class IkGui {
      * @return false if the window is collapsed.
      */
     public static boolean begin(@NonNull String title, final IkBoolean open, int windowFlags) {
-        // TODO(ches) complete this
-
-        final int ID = pushID(title);
-
-        Window window = context.windowByID.computeIfAbsent(ID, ignored -> new Window(title));
-
-        if (WindowFlags.NONE == windowFlags) {
-            window.flags = context.nextWindowData.windowFlags;
-        } else {
-            window.flags = windowFlags;
-        }
-        window.flagsAsChildWindow = WindowFlags.NONE;
-
-        window.id = ID;
-        window.idMove = Hash.getID("#MOVE", ID);
-        window.idWithinParent = 0;
-        window.idAsPopupWindow = 0;
-        window.childWindows.clear();
-        // TODO(ches) handle parent windows
-        window.scrollPosition.set(0, 0);
-        window.scrollExtent.set(0, 0);
-        window.scrollTarget.set(0, 0);
-        if ((window.flags & WindowFlags.NO_SCROLLBAR) != 0) {
-            window.showScrollbarX = Visibility.NEVER;
-        } else if ((window.flags & WindowFlags.ALWAYS_HORIZONTAL_SCROLLBAR) != 0) {
-            window.showScrollbarX = Visibility.ALWAYS;
-        } else {
-            window.showScrollbarX = Visibility.IF_REQUIRED;
-        }
-        if ((window.flags & WindowFlags.NO_SCROLLBAR) != 0) {
-            window.showScrollbarY = Visibility.NEVER;
-        } else if ((window.flags & WindowFlags.ALWAYS_VERTICAL_SCROLLBAR) != 0) {
-            window.showScrollbarY = Visibility.ALWAYS;
-        } else {
-            window.showScrollbarY = Visibility.IF_REQUIRED;
-        }
-        window.hidden = false;
-        window.skipRenderingContents = false;
-        window.reuseLastFrameContents = false;
-        window.appearing = false; // TODO(ches) calculate appearing
-        window.borderBeingHovered = Direction.NONE;
-        window.borderBeingDragged = Direction.NONE;
-        window.idStack.clear();
-        window.drawList.clear();
-        window.setPos = false;
-        window.treeDepth = 0;
-        window.currentTableIndex = 0;
-        window.itemWidthStack.clear();
-        window.textWrapPositionStack.clear();
-
-        getStyleVarFloat2(StyleVariable.WINDOW_PADDING, window.padding);
-        final float scrollbarSize = getStyleVarFloat(StyleVariable.SCROLLBAR_SIZE);
-        window.scrollbarSizes.set(scrollbarSize, scrollbarSize);
-        final Vector2f framePadding = getStyleVarFloat2(StyleVariable.FRAME_PADDING);
-
-        if ((window.flags & WindowFlags.NO_TITLE_BAR) != 0) {
-            window.titleBarHeight = 0;
-        } else {
-            window.titleBarHeight = getTextLineHeight() + 2 * framePadding.y;
-        }
-
-        if ((window.flags & WindowFlags.MENU_BAR) != 0) {
-            // TODO(ches) set height appropriately
-            window.menuBarHeight = 15;
-        } else {
-            window.menuBarHeight = 0;
-        }
-
-        if (context.nextWindowData.viewport != null) {
-            window.viewport = context.nextWindowData.viewport;
-        } else {
-            window.viewport = context.mainViewport;
-        }
-        if (ConditionAllowed.shouldResolve(
-                context.nextWindowData.positionCondition, window.positionConditionAllowed)) {
-            window.position.set(context.nextWindowData.positionValue);
-            window.positionConditionAllowed =
-                    ConditionAllowed.updateFlags(
-                            context.nextWindowData.positionCondition,
-                            window.positionConditionAllowed);
-        }
-        if (ConditionAllowed.shouldResolve(
-                context.nextWindowData.sizeCondition, window.sizeConditionAllowed)) {
-            window.sizeRequested.set(context.nextWindowData.sizeValue);
-            window.sizeConditionAllowed =
-                    ConditionAllowed.updateFlags(
-                            context.nextWindowData.sizeCondition, window.sizeConditionAllowed);
-        }
-        if (ConditionAllowed.shouldResolve(
-                context.nextWindowData.collapsedCondition, window.collapsedConditionAllowed)) {
-            window.collapsed = context.nextWindowData.collapsedValue;
-            window.sizeConditionAllowed =
-                    ConditionAllowed.updateFlags(
-                            context.nextWindowData.collapsedCondition,
-                            window.collapsedConditionAllowed);
-        }
-        window.collapseToggleRequested = false;
-
-        // TODO(ches) calculate actual sizes properly
-        window.sizeCurrent.set(window.sizeRequested);
-        window.sizeFull.set(window.sizeRequested);
-        window.sizeDesired.set(window.sizeRequested);
-        window.rounding = getStyleVarFloat(StyleVariable.WINDOW_ROUNDING);
-        window.borderSize = getStyleVarFloat(StyleVariable.WINDOW_BORDER_SIZE);
-        window.rectOuter.set(window.position, window.sizeFull);
-        window.rectOuterClipped.set(window.rectOuter);
-        window.rectInner.set(
-                window.position.x + window.padding.x,
-                window.position.y + window.padding.y + window.titleBarHeight + window.menuBarHeight,
-                window.position.x + window.sizeFull.x - window.padding.x,
-                window.position.y + window.sizeFull.y - window.padding.y);
-        window.rectInnerClip.set(window.rectInner);
-        window.rectContent.set(window.rectInner);
-        window.rectCurrentClip.set(window.rectOuterClipped);
-
-        window.baseOffsetCurrentLine = 0;
-        window.baseOffsetPreviousLine = 0;
-        window.currentItemWidth = 0.0f;
-        window.currentTextWrapPosition = 0.0f;
-        window.indent = 0.0f;
-        window.sameLine = false;
-        window.lineSizePrevious.set(0, 0);
-        window.lineSizeCurrent.set(0, 0);
-        window.cursorStartPosition.set(
-                window.position.x + window.padding.x,
-                window.position.y
-                        + window.padding.y
-                        + window.titleBarHeight
-                        + window.menuBarHeight);
-        window.cursorPosition.set(window.cursorStartPosition);
-        window.cursorIdealMaxPosition.set(window.cursorPosition);
-        window.cursorIdealMaxPosition.add(window.sizeRequested);
-        window.cursorMaxPosition.set(window.cursorPosition);
-        window.cursorMaxPosition.add(window.sizeCurrent);
-        window.cursorPreviousLinePosition.set(window.cursorStartPosition);
-
-        window.open = open;
-        window.active = true;
-
-        context.windowCurrent = window;
-        context.lastItemData.id = window.id;
-        context.lastItemData.statusFlags =
-                ItemStatusFlags.HAS_CLIP_RECT
-                        | ItemStatusFlags.HAS_DISPLAY_RECT
-                        | ItemStatusFlags.VISIBLE;
-        context.lastItemData.rect.set(window.rectOuter);
-        context.lastItemData.clipRect.set(window.rectCurrentClip);
-        context.lastItemData.displayRect.set(window.rectOuterClipped);
-        context.lastItemData.shortcut = 0;
-        context.windowDisplayOrder.add(window);
-        context.windowFocusOrder.add(window);
-
-        context.drawData.drawLists.add(window.drawList);
-
-        if ((window.flags & WindowFlags.NO_BACKGROUND) == 0) {
-            window.drawList.addRectFilled(
-                    window.position.x,
-                    window.position.y,
-                    window.position.x + window.sizeCurrent.x,
-                    window.position.y + window.sizeCurrent.y,
-                    getColorWithGlobalAlpha(ColorType.WINDOW_BACKGROUND),
-                    window.rounding);
-        }
-
-        if (window.titleBarHeight > 0) {
-            ColorType titleColor = ColorType.TITLE_BACKGROUND;
-            if (window.collapsed) {
-                titleColor = ColorType.TITLE_BACKGROUND_COLLAPSED;
-            } else if (window.active) {
-                titleColor = ColorType.TITLE_BACKGROUND_ACTIVE;
-            }
-            window.drawList.addRectFilled(
-                    window.position.x,
-                    window.position.y,
-                    window.position.x + window.sizeCurrent.x,
-                    window.position.y + window.titleBarHeight,
-                    getColorWithGlobalAlpha(titleColor),
-                    window.rounding,
-                    DrawFlags.ROUND_CORNERS_TOP);
-
-            // TODO(ches) handle special cases of names with # and ##
-            // TODO(ches) handle title alignment
-            window.drawList.addText(
-                    context.fontSize,
-                    window.position.x + framePadding.x,
-                    window.position.y + framePadding.y,
-                    getColorWithGlobalAlpha(ColorType.TEXT),
-                    window.name);
-        }
-
-        if ((window.flags & WindowFlags.NO_BACKGROUND) == 0 && window.borderSize > 0) {
-            window.drawList.addRect(
-                    window.position.x,
-                    window.position.y,
-                    window.position.x + window.sizeCurrent.x,
-                    window.position.y + window.sizeCurrent.y,
-                    getColorWithGlobalAlpha(ColorType.BORDER),
-                    window.rounding,
-                    DrawFlags.ROUND_CORNERS_ALL,
-                    window.borderSize);
-        }
-        return true;
+        return IkGuiImplWindows.begin(title, open, windowFlags);
     }
 
+    /**
+     * Start a new window to add widgets to. The window name is a unique identifier used to preserve
+     * information across frames. Every call to begin should be matched with a call to {@link
+     * #end()} even if false is returned.
+     *
+     * @param title The unique title of the window.
+     * @param windowFlags Flags for modifying the window.
+     * @return false if the window is collapsed.
+     */
     public static boolean begin(@NonNull String title, int windowFlags) {
-        return begin(title, null, windowFlags);
+        return IkGuiImplWindows.begin(title, null, windowFlags);
     }
 
+    /**
+     * Creates a child window, which is a self-contained independent scrolling/clipping region
+     * within a host window.
+     *
+     * @param id The ID of the child.
+     */
     public static void beginChild(int id) {
-        // TODO(ches) complete this
+        IkGuiImplWindows.beginChild(id, 0, 0, ChildFlags.NONE, WindowFlags.NONE);
     }
 
+    /**
+     * Creates a child window, which is a self-contained independent scrolling/clipping region
+     * within a host window.
+     *
+     * @param id The ID of the child.
+     * @param width The width in pixels.
+     * @param height The height in pixels.
+     */
     public static void beginChild(int id, float width, float height) {
-        // TODO(ches) complete this
+        IkGuiImplWindows.beginChild(id, width, height, ChildFlags.NONE, WindowFlags.NONE);
     }
 
-    public static void beginChild(int id, float width, float height, boolean border) {
-        // TODO(ches) complete this
+    /**
+     * Creates a child window, which is a self-contained independent scrolling/clipping region
+     * within a host window.
+     *
+     * @param id The ID of the child.
+     * @param size The size in pixels.
+     */
+    public static void beginChild(int id, @NonNull Vector2f size) {
+        IkGuiImplWindows.beginChild(id, size.x, size.y, ChildFlags.NONE, WindowFlags.NONE);
     }
 
+    /**
+     * Creates a child window, which is a self-contained independent scrolling/clipping region
+     * within a host window.
+     *
+     * @param id The ID of the child.
+     * @param size The size in pixels.
+     * @param childFlags Child flags.
+     * @param windowFlags Window flags.
+     * @see ChildFlags
+     * @see WindowFlags
+     */
+    public static void beginChild(int id, @NonNull Vector2f size, int childFlags, int windowFlags) {
+        IkGuiImplWindows.beginChild(id, size.x, size.y, childFlags, windowFlags);
+    }
+
+    /**
+     * Creates a child window, which is a self-contained independent scrolling/clipping region
+     * within a host window.
+     *
+     * @param id The ID of the child.
+     * @param width The width in pixels.
+     * @param height The height in pixels.
+     * @param childFlags Child flags.
+     * @param windowFlags Window flags.
+     * @see ChildFlags
+     * @see WindowFlags
+     */
     public static void beginChild(
-            int id, float width, float height, boolean border, int windowFlags) {
-        // TODO(ches) complete this
+            int id, float width, float height, int childFlags, int windowFlags) {
+        IkGuiImplWindows.beginChild(id, width, height, childFlags, windowFlags);
     }
 
+    /**
+     * Creates a child window, which is a self-contained independent scrolling/clipping region
+     * within a host window.
+     *
+     * @param name The name of the child.
+     */
     public static void beginChild(@NonNull String name) {
-        // TODO(ches) complete this
+        IkGuiImplWindows.beginChild(Hash.getID(name), 0, 0, ChildFlags.NONE, WindowFlags.NONE);
     }
 
+    /**
+     * Creates a child window, which is a self-contained independent scrolling/clipping region
+     * within a host window.
+     *
+     * @param name The name of the child.
+     * @param size The size in pixels.
+     */
+    public static void beginChild(@NonNull String name, @NonNull Vector2f size) {
+        IkGuiImplWindows.beginChild(
+                Hash.getID(name), size.x, size.y, ChildFlags.NONE, WindowFlags.NONE);
+    }
+
+    /**
+     * Creates a child window, which is a self-contained independent scrolling/clipping region
+     * within a host window.
+     *
+     * @param name The name of the child.
+     * @param width The width in pixels.
+     * @param height The height in pixels.
+     */
     public static void beginChild(@NonNull String name, float width, float height) {
-        // TODO(ches) complete this
-    }
-
-    public static void beginChild(@NonNull String name, float width, float height, boolean border) {
-        // TODO(ches) complete this
-    }
-
-    public static void beginChild(
-            String name, float width, float height, boolean border, int windowFlags) {
-        // TODO(ches) complete this
-    }
-
-    public static boolean beginChildFrame(int id, float width, float height) {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public static boolean beginChildFrame(int id, float width, float height, int windowFlags) {
-        // TODO(ches) complete this
-        return false;
+        IkGuiImplWindows.beginChild(
+                Hash.getID(name), width, height, ChildFlags.NONE, WindowFlags.NONE);
     }
 
     public static boolean beginCombo(String label, String previewValue) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.beginCombo(label, previewValue, ComboFlags.NONE);
     }
 
     public static boolean beginCombo(String label, String previewValue, int comboFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.beginCombo(label, previewValue, comboFlags);
     }
 
     public static void beginDisabled() {
-        beginDisabled(true);
-        // TODO(ches) complete this
+        IkGuiImplUtils.beginDisabled(true);
     }
 
     public static void beginDisabled(boolean disabled) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.beginDisabled(disabled);
     }
 
     public static boolean beginDragDropSource() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplDragDrop.beginDragDropSource(DragDropFlags.NONE);
     }
 
     public static boolean beginDragDropSource(int dragDropFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplDragDrop.beginDragDropSource(dragDropFlags);
     }
 
     public static boolean beginDragDropTarget() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplDragDrop.beginDragDropTarget();
     }
 
     public static void beginGroup() {
@@ -699,22 +555,6 @@ public class IkGui {
         return 0;
     }
 
-    public static void captureKeyboardFromApp() {
-        // TODO(ches) complete this
-    }
-
-    public static void captureKeyboardFromApp(boolean capture) {
-        // TODO(ches) complete this
-    }
-
-    public static void captureMouseFromApp() {
-        // TODO(ches) complete this
-    }
-
-    public static void captureMouseFromApp(boolean wantToCaptureNextFrame) {
-        // TODO(ches) complete this
-    }
-
     public static boolean checkbox(String label, boolean initialState) {
         // TODO(ches) complete this
         return false;
@@ -868,7 +708,14 @@ public class IkGui {
             return context;
         }
         context = new Context();
+        IkGuiImplButtons.context = context;
+        IkGuiImplDragDrop.context = context;
+        IkGuiImplMiscWidgets.context = context;
+        IkGuiImplText.context = context;
+        IkGuiImplUtils.context = context;
+        IkGuiImplWindows.context = context;
         IkGuiInternal.context = context;
+
         storage = new Storage();
 
         // TODO(ches) create a dummy window in the background as a fallback
@@ -885,6 +732,12 @@ public class IkGui {
         }
         context.io.setAppAcceptingEvents(false);
         context = null;
+        IkGuiImplButtons.context = null;
+        IkGuiImplDragDrop.context = null;
+        IkGuiImplMiscWidgets.context = null;
+        IkGuiImplText.context = null;
+        IkGuiImplUtils.context = null;
+        IkGuiImplWindows.context = null;
         IkGuiInternal.context = null;
         storage = null;
     }
@@ -1663,10 +1516,6 @@ public class IkGui {
         // TODO(ches) complete this
     }
 
-    public static void endChildFrame() {
-        // TODO(ches) complete this
-    }
-
     public static void endCombo() {
         // TODO(ches) complete this
     }
@@ -2159,11 +2008,6 @@ public class IkGui {
     }
 
     public static float getItemRectWidth() {
-        // TODO(ches) complete this
-        return 0;
-    }
-
-    public static int getKeyIndex(@NonNull Key key) {
         // TODO(ches) complete this
         return 0;
     }
@@ -3893,14 +3737,6 @@ public class IkGui {
         // TODO(ches) complete this
     }
 
-    public static void popAllowKeyboardFocus() {
-        // TODO(ches) complete this
-    }
-
-    public static void popButtonRepeat() {
-        // TODO(ches) complete this
-    }
-
     public static void popClipRect() {
         // TODO(ches) complete this
     }
@@ -3994,14 +3830,6 @@ public class IkGui {
     }
 
     public static void progressBar(float progress, float width, float height, String overlayText) {
-        // TODO(ches) complete this
-    }
-
-    public static void pushAllowKeyboardFocus(boolean allow) {
-        // TODO(ches) complete this
-    }
-
-    public static void pushButtonRepeat(boolean repeat) {
         // TODO(ches) complete this
     }
 
@@ -4427,10 +4255,6 @@ public class IkGui {
      */
     public static void setFontSize(int fontSize) {
         context.fontSize = fontSize;
-    }
-
-    public static void setItemAllowOverlap() {
-        // TODO(ches) complete this
     }
 
     public static void setItemDefaultFocus() {
@@ -5476,5 +5300,10 @@ public class IkGui {
             String format,
             int sliderFlags) {
         return false;
+    }
+
+    /** Private constructor so this is not instantiated. */
+    private IkGui() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
     }
 }
