@@ -280,6 +280,14 @@ class IkGuiImplWindows {
         }
     }
 
+    public static void beginTooltip() {
+        // TODO(ches) complete this
+    }
+
+    public static void closeCurrentPopup() {
+        // TODO(ches) complete this
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplWindows() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

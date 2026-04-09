@@ -1013,6 +1013,7 @@ public class DrawList {
             }
         }
 
+        // TODO(ches) We should probably share this logic with IkGui.calcTextSize()
         int currentX = (int) posX;
         int maxHeight = 0;
         for (Vector4i pos : positions) {

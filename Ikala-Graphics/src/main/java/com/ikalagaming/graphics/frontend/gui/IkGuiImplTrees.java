@@ -1,24 +1,18 @@
 package com.ikalagaming.graphics.frontend.gui;
 
 import com.ikalagaming.graphics.frontend.gui.data.Context;
+import com.ikalagaming.graphics.frontend.gui.data.IkBoolean;
 
-class IkGuiImplText {
+class IkGuiImplTrees {
     static Context context;
 
-    public static void alignTextToFramePadding() {
+    public static boolean collapsingHeader(String label, IkBoolean visible, int treeNodeFlags) {
         // TODO(ches) complete this
-    }
-
-    public static void bullet() {
-        // TODO(ches) complete this
-    }
-
-    public static void bulletText(String text) {
-        // TODO(ches) complete this
+        return false;
     }
 
     /** Private constructor so this is not instantiated. */
-    private IkGuiImplText() {
+    private IkGuiImplTrees() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
     }
 }

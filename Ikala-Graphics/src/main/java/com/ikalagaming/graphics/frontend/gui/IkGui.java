@@ -494,186 +494,167 @@ public class IkGui {
     }
 
     public static void beginTooltip() {
-        // TODO(ches) complete this
+        IkGuiImplWindows.beginTooltip();
     }
 
     public static void bullet() {
-        // TODO(ches) complete this
+        IkGuiImplText.bullet();
     }
 
     public static void bulletText(String text) {
-        // TODO(ches) complete this
+        IkGuiImplText.bulletText(text);
     }
 
     public static boolean button(String text) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.button(text, 0, 0);
     }
 
     public static boolean button(String text, float width, float height) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.button(text, width, height);
     }
 
     public static Vector2f calcTextSize(String text) {
         Vector2f value = new Vector2f();
-        calcTextSize(value, text);
+        IkGuiImplUtils.calcTextSize(value, text, false, -1.0f);
         return value;
     }
 
     public static Vector2f calcTextSize(String text, boolean hideTextAfterDoubleHash) {
         Vector2f value = new Vector2f();
-        calcTextSize(value, text, hideTextAfterDoubleHash);
+        IkGuiImplUtils.calcTextSize(value, text, hideTextAfterDoubleHash, -1.0f);
         return value;
     }
 
     public static Vector2f calcTextSize(
             String text, boolean hideTextAfterDoubleHash, float wrapWidth) {
         Vector2f value = new Vector2f();
-        calcTextSize(value, text, hideTextAfterDoubleHash, wrapWidth);
+        IkGuiImplUtils.calcTextSize(value, text, hideTextAfterDoubleHash, wrapWidth);
         return value;
     }
 
     public static void calcTextSize(Vector2f result, String text) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.calcTextSize(result, text, false, -1.0f);
     }
 
     public static void calcTextSize(Vector2f result, String text, boolean hideTextAfterDoubleHash) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.calcTextSize(result, text, hideTextAfterDoubleHash, -1.0f);
     }
 
     public static void calcTextSize(
             Vector2f result, String text, boolean hideTextAfterDoubleHash, float wrapWidth) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.calcTextSize(result, text, hideTextAfterDoubleHash, wrapWidth);
     }
 
     public static void calcTextSize(Vector2f result, String text, float wrapWidth) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.calcTextSize(result, text, false, wrapWidth);
     }
 
     public static float calculateItemWidth() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplUtils.calculateItemWidth();
     }
 
     public static boolean checkbox(String label, boolean initialState) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.checkbox(label, initialState);
     }
 
     public static boolean checkbox(String label, IkBoolean active) {
-        return false;
+        return IkGuiImplMiscWidgets.checkbox(label, active);
     }
 
     public static boolean checkboxFlags(String label, IkInt flags, int flagsValue) {
-        return false;
+        return IkGuiImplMiscWidgets.checkboxFlags(label, flags, flagsValue);
     }
 
     public static void closeCurrentPopup() {
-        // TODO(ches) complete this
+        IkGuiImplWindows.closeCurrentPopup();
     }
 
     public static boolean collapsingHeader(String label) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplTrees.collapsingHeader(label, null, TreeNodeFlags.NONE);
     }
 
     public static boolean collapsingHeader(String label, IkBoolean visible) {
-        return false;
+        return IkGuiImplTrees.collapsingHeader(label, visible, TreeNodeFlags.NONE);
     }
 
     public static boolean collapsingHeader(String label, IkBoolean visible, int treeNodeFlags) {
-        return false;
+        return IkGuiImplTrees.collapsingHeader(label, visible, treeNodeFlags);
     }
 
     public static boolean collapsingHeader(String label, int treeNodeFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplTrees.collapsingHeader(label, null, treeNodeFlags);
     }
 
     public static boolean colorButton(String label, float[] color) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.colorButton(label, color, ColorEditFlags.NONE, 0, 0);
     }
 
     public static boolean colorButton(String label, float[] color, int colorEditFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.colorButton(label, color, colorEditFlags, 0, 0);
     }
 
     public static boolean colorButton(
             String label, float[] color, int colorEditFlags, float width, float height) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.colorButton(label, color, colorEditFlags, width, height);
     }
 
     public static int colorConvertFloat4ToU32(float r, float g, float b, float a) {
-        // TODO(ches) complete this
-        return 0;
+        return Color.rgba(r, g, b, a);
     }
 
     public static void colorConvertHSVtoRGB(float[] in, float[] out) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.colorConvertHSVtoRGB(in, out);
     }
 
     public static void colorConvertRGBtoHSV(float[] in, float[] out) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.colorConvertRGBtoHSV(in, out);
     }
 
-    public static final Vector4f colorConvertU32ToFloat4(int in) {
+    public static Vector4f colorConvertU32ToFloat4(int in) {
         Vector4f value = new Vector4f();
-        colorConvertU32ToFloat4(in, value);
+        IkGuiImplUtils.colorConvertU32ToFloat4(in, value);
         return value;
     }
 
     public static void colorConvertU32ToFloat4(int in, Vector4f out) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.colorConvertU32ToFloat4(in, out);
     }
 
     public static boolean colorEdit3(String label, float[] value) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.colorEdit3(label, value, ColorEditFlags.NONE);
     }
 
     public static boolean colorEdit3(String label, float[] value, int colorEditFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.colorEdit3(label, value, colorEditFlags);
     }
 
     public static boolean colorEdit4(String label, float[] value) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.colorEdit4(label, value, ColorEditFlags.NONE);
     }
 
     public static boolean colorEdit4(String label, float[] value, int colorEditFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.colorEdit4(label, value, colorEditFlags);
     }
 
     public static boolean colorPicker3(String label, float[] value) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.colorPicker3(label, value, ColorEditFlags.NONE);
     }
 
     public static boolean colorPicker3(String label, float[] value, int colorEditFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.colorPicker3(label, value, colorEditFlags);
     }
 
     public static boolean colorPicker4(String label, float[] value) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.colorPicker4(label, value, ColorEditFlags.NONE, null);
     }
 
     public static boolean colorPicker4(String label, float[] value, int colorEditFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.colorPicker4(label, value, colorEditFlags, null);
     }
 
     public static boolean colorPicker4(
-            String label, float[] value, int colorEditFlags, float referenceColor) {
-        // TODO(ches) complete this
-        return false;
+            String label, float[] value, int colorEditFlags, float[] referenceColor) {
+        return IkGuiImplMiscWidgets.colorPicker4(label, value, colorEditFlags, referenceColor);
     }
 
     public static boolean combo(String label, IkInt currentItem, String itemsSeparatedByZeros) {
@@ -716,6 +697,7 @@ public class IkGui {
         IkGuiImplTables.context = context;
         IkGuiImplTabs.context = context;
         IkGuiImplText.context = context;
+        IkGuiImplTrees.context = context;
         IkGuiImplUtils.context = context;
         IkGuiImplWindows.context = context;
         IkGuiInternal.context = context;
@@ -743,6 +725,7 @@ public class IkGui {
         IkGuiImplTables.context = null;
         IkGuiImplTabs.context = null;
         IkGuiImplText.context = null;
+        IkGuiImplTrees.context = null;
         IkGuiImplUtils.context = null;
         IkGuiImplWindows.context = null;
         IkGuiInternal.context = null;
