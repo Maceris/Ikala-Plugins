@@ -6,6 +6,8 @@ import com.ikalagaming.graphics.frontend.gui.data.IkInt;
 
 class IkGuiImplMiscWidgets {
 
+    public static final String DRAG_FLOAT_DEFAULT_FORMAT = "%.3f";
+
     static Context context;
 
     public static boolean beginCombo(String label, String previewValue, int comboFlags) {
@@ -61,6 +63,74 @@ class IkGuiImplMiscWidgets {
 
     public static boolean colorPicker4(
             String label, float[] value, int colorEditFlags, float[] referenceColor) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean combo(
+            String label, IkInt currentItem, String[] items, int popumaxHeightInItems) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean dragFloat(
+            String label,
+            float[] value,
+            float speed,
+            float min,
+            float max,
+            String format,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean dragFloat2(
+            String label,
+            float[] values,
+            float speed,
+            float min,
+            float max,
+            String format,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean dragFloat3(
+            String label,
+            float[] values,
+            float speed,
+            float min,
+            float max,
+            String format,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean dragFloat4(
+            String label,
+            float[] values,
+            float speed,
+            float min,
+            float max,
+            String format,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean dragFloatRange2(
+            String label,
+            float[] currentMin,
+            float[] currentMax,
+            float speed,
+            float min,
+            float max,
+            String format,
+            String formatMax,
+            int sliderFlags) {
         // TODO(ches) complete this
         return false;
     }

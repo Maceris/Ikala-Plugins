@@ -657,25 +657,13 @@ public class IkGui {
         return IkGuiImplMiscWidgets.colorPicker4(label, value, colorEditFlags, referenceColor);
     }
 
-    public static boolean combo(String label, IkInt currentItem, String itemsSeparatedByZeros) {
-        return false;
-    }
-
-    public static boolean combo(
-            String label,
-            IkInt currentItem,
-            String itemsSeparatedByZeros,
-            int popumaxHeightInItems) {
-        return false;
-    }
-
     public static boolean combo(String label, IkInt currentItem, String[] items) {
-        return false;
+        return IkGuiImplMiscWidgets.combo(label, currentItem, items, -1);
     }
 
     public static boolean combo(
             String label, IkInt currentItem, String[] items, int popumaxHeightInItems) {
-        return false;
+        return IkGuiImplMiscWidgets.combo(label, currentItem, items, popumaxHeightInItems);
     }
 
     /**
@@ -732,54 +720,68 @@ public class IkGui {
         storage = null;
     }
 
-    public static void destroyPlatformWindows() {
-        // TODO(ches) complete this
-    }
-
     public static int dockSpace(int id) {
-        return 0;
+        return IkGuiImplWindows.dockSpace(id, 0, 0, DockNodeFlags.NONE);
     }
 
     public static int dockSpace(int id, float width, float height) {
-        return 0;
+        return IkGuiImplWindows.dockSpace(id, width, height, DockNodeFlags.NONE);
     }
 
     public static int dockSpace(int id, float width, float height, int dockNodeFlags) {
-        return 0;
+        return IkGuiImplWindows.dockSpace(id, width, height, dockNodeFlags);
     }
 
     public static int dockSpaceOverViewport() {
-        return 0;
+        return IkGuiImplWindows.dockSpaceOverViewport(context.mainViewport, DockNodeFlags.NONE);
     }
 
     public static int dockSpaceOverViewport(Viewport viewport) {
-        return 0;
+        return IkGuiImplWindows.dockSpaceOverViewport(viewport, DockNodeFlags.NONE);
     }
 
     public static int dockSpaceOverViewport(Viewport viewport, int dockNodeFlags) {
-        return 0;
+        return IkGuiImplWindows.dockSpaceOverViewport(viewport, dockNodeFlags);
     }
 
     public static boolean dragFloat(String label, float[] value) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.dragFloat(
+                label,
+                value,
+                1.0f,
+                0.0f,
+                0.0f,
+                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
     public static boolean dragFloat(String label, float[] value, float speed) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.dragFloat(
+                label,
+                value,
+                speed,
+                0.0f,
+                0.0f,
+                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
     public static boolean dragFloat(
             String label, float[] value, float speed, float min, float max) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.dragFloat(
+                label,
+                value,
+                speed,
+                min,
+                max,
+                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
     public static boolean dragFloat(
             String label, float[] value, float speed, float min, float max, String format) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.dragFloat(
+                label, value, speed, min, max, format, SliderFlags.NONE);
     }
 
     public static boolean dragFloat(
@@ -790,121 +792,187 @@ public class IkGui {
             float max,
             String format,
             int sliderFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.dragFloat(label, value, speed, min, max, format, sliderFlags);
     }
 
-    public static boolean dragFloat2(String label, float[] value) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean dragFloat2(String label, float[] values) {
+        return IkGuiImplMiscWidgets.dragFloat2(
+                label,
+                values,
+                1.0f,
+                0.0f,
+                0.0f,
+                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
-    public static boolean dragFloat2(String label, float[] value, float speed) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean dragFloat2(String label, float[] values, float speed) {
+        return IkGuiImplMiscWidgets.dragFloat2(
+                label,
+                values,
+                speed,
+                0.0f,
+                0.0f,
+                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
     public static boolean dragFloat2(
-            String label, float[] value, float speed, float min, float max) {
-        // TODO(ches) complete this
-        return false;
+            String label, float[] values, float speed, float min, float max) {
+        return IkGuiImplMiscWidgets.dragFloat2(
+                label,
+                values,
+                speed,
+                min,
+                max,
+                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
     public static boolean dragFloat2(
-            String label, float[] value, float speed, float min, float max, String format) {
-        // TODO(ches) complete this
-        return false;
+            String label, float[] values, float speed, float min, float max, String format) {
+        return IkGuiImplMiscWidgets.dragFloat2(
+                label, values, speed, min, max, format, SliderFlags.NONE);
     }
 
     public static boolean dragFloat2(
             String label,
-            float[] value,
+            float[] values,
             float speed,
             float min,
             float max,
             String format,
             int sliderFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.dragFloat2(label, values, speed, min, max, format, sliderFlags);
     }
 
-    public static boolean dragFloat3(String label, float[] value) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean dragFloat3(String label, float[] values) {
+        return IkGuiImplMiscWidgets.dragFloat3(
+                label,
+                values,
+                1.0f,
+                0.0f,
+                0.0f,
+                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
-    public static boolean dragFloat3(String label, float[] value, float speed) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean dragFloat3(String label, float[] values, float speed) {
+        return IkGuiImplMiscWidgets.dragFloat3(
+                label,
+                values,
+                speed,
+                0.0f,
+                0.0f,
+                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
     public static boolean dragFloat3(
-            String label, float[] value, float speed, float min, float max) {
-        // TODO(ches) complete this
-        return false;
+            String label, float[] values, float speed, float min, float max) {
+        return IkGuiImplMiscWidgets.dragFloat3(
+                label,
+                values,
+                speed,
+                min,
+                max,
+                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
     public static boolean dragFloat3(
-            String label, float[] value, float speed, float min, float max, String format) {
-        // TODO(ches) complete this
-        return false;
+            String label, float[] values, float speed, float min, float max, String format) {
+        return IkGuiImplMiscWidgets.dragFloat3(
+                label, values, speed, min, max, format, SliderFlags.NONE);
     }
 
     public static boolean dragFloat3(
             String label,
-            float[] value,
+            float[] values,
             float speed,
             float min,
             float max,
             String format,
             int sliderFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.dragFloat3(label, values, speed, min, max, format, sliderFlags);
     }
 
-    public static boolean dragFloat4(String label, float[] value) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean dragFloat4(String label, float[] values) {
+        return IkGuiImplMiscWidgets.dragFloat4(
+                label,
+                values,
+                1.0f,
+                0.0f,
+                0.0f,
+                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
-    public static boolean dragFloat4(String label, float[] value, float speed) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean dragFloat4(String label, float[] values, float speed) {
+        return IkGuiImplMiscWidgets.dragFloat4(
+                label,
+                values,
+                speed,
+                0.0f,
+                0.0f,
+                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
     public static boolean dragFloat4(
-            String label, float[] value, float speed, float min, float max) {
-        // TODO(ches) complete this
-        return false;
+            String label, float[] values, float speed, float min, float max) {
+        return IkGuiImplMiscWidgets.dragFloat4(
+                label,
+                values,
+                speed,
+                min,
+                max,
+                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
     public static boolean dragFloat4(
-            String label, float[] value, float speed, float min, float max, String format) {
-        // TODO(ches) complete this
-        return false;
+            String label, float[] values, float speed, float min, float max, String format) {
+        return IkGuiImplMiscWidgets.dragFloat4(
+                label, values, speed, min, max, format, SliderFlags.NONE);
     }
 
     public static boolean dragFloat4(
             String label,
-            float[] value,
+            float[] values,
             float speed,
             float min,
             float max,
             String format,
             int sliderFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.dragFloat4(label, values, speed, min, max, format, sliderFlags);
     }
 
     public static boolean dragFloatRange2(String label, float[] currentMin, float[] currentMax) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.dragFloatRange2(
+                label,
+                currentMin,
+                currentMax,
+                1.0f,
+                0.0f,
+                0.0f,
+                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                null,
+                SliderFlags.NONE);
     }
 
     public static boolean dragFloatRange2(
             String label, float[] currentMin, float[] currentMax, float speed) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.dragFloatRange2(
+                label,
+                currentMin,
+                currentMax,
+                speed,
+                0.0f,
+                0.0f,
+                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                null,
+                SliderFlags.NONE);
     }
 
     public static boolean dragFloatRange2(
@@ -914,8 +982,16 @@ public class IkGui {
             float speed,
             float min,
             float max) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.dragFloatRange2(
+                label,
+                currentMin,
+                currentMax,
+                speed,
+                min,
+                max,
+                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                null,
+                SliderFlags.NONE);
     }
 
     public static boolean dragFloatRange2(
@@ -926,8 +1002,8 @@ public class IkGui {
             float min,
             float max,
             String format) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.dragFloatRange2(
+                label, currentMin, currentMax, speed, min, max, format, null, SliderFlags.NONE);
     }
 
     public static boolean dragFloatRange2(
@@ -939,8 +1015,16 @@ public class IkGui {
             float max,
             String format,
             String formatMax) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.dragFloatRange2(
+                label,
+                currentMin,
+                currentMax,
+                speed,
+                min,
+                max,
+                format,
+                formatMax,
+                SliderFlags.NONE);
     }
 
     public static boolean dragFloatRange2(
@@ -953,27 +1037,27 @@ public class IkGui {
             String format,
             String formatMax,
             int sliderFlags) {
+        return IkGuiImplMiscWidgets.dragFloatRange2(
+                label, currentMin, currentMax, speed, min, max, format, formatMax, sliderFlags);
+    }
+
+    public static boolean dragInt(String label, int[] value) {
         // TODO(ches) complete this
         return false;
     }
 
-    public static boolean dragInt(String label, int[] values) {
+    public static boolean dragInt(String label, int[] value, float speed) {
         // TODO(ches) complete this
         return false;
     }
 
-    public static boolean dragInt(String label, int[] values, float speed) {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public static boolean dragInt(String label, int[] values, float speed, float min, float max) {
+    public static boolean dragInt(String label, int[] value, float speed, float min, float max) {
         // TODO(ches) complete this
         return false;
     }
 
     public static boolean dragInt(
-            String label, int[] values, float speed, float min, float max, String format) {
+            String label, int[] value, float speed, float min, float max, String format) {
         // TODO(ches) complete this
         return false;
     }
@@ -1600,11 +1684,6 @@ public class IkGui {
     }
 
     public static Viewport findViewportByID(int id) {
-        // TODO(ches) complete this
-        return null;
-    }
-
-    public static Viewport findViewportByPlatformHandle(long platformHandle) {
         // TODO(ches) complete this
         return null;
     }
@@ -4038,10 +4117,6 @@ public class IkGui {
         context.frameCountRendered = (context.frameCountRendered + 1) % FRAME_COUNT_CAP;
     }
 
-    public static void renderPlatformWindowsDefault() {
-        // TODO(ches) complete this
-    }
-
     public static void resetMouseDragDelta() {
         // TODO(ches) complete this
     }
@@ -5048,10 +5123,6 @@ public class IkGui {
     }
 
     public static void unindent(float width) {
-        // TODO(ches) complete this
-    }
-
-    public static void updatePlatformWindows() {
         // TODO(ches) complete this
     }
 

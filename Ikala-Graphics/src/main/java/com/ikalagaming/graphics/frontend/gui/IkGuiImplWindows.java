@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.frontend.gui;
 
 import com.ikalagaming.graphics.frontend.gui.data.Context;
 import com.ikalagaming.graphics.frontend.gui.data.IkBoolean;
+import com.ikalagaming.graphics.frontend.gui.data.Viewport;
 import com.ikalagaming.graphics.frontend.gui.data.Window;
 import com.ikalagaming.graphics.frontend.gui.enums.ColorType;
 import com.ikalagaming.graphics.frontend.gui.enums.Direction;
@@ -268,6 +269,16 @@ class IkGuiImplWindows {
     public static boolean beginPopupModal(String name, IkBoolean open, int windowFlags) {
         // TODO(ches) complete this
         return false;
+    }
+
+    public static int dockSpace(int id, float width, float height, int dockNodeFlags) {
+        // TODO(ches) complete this
+        return 0;
+    }
+
+    public static int dockSpaceOverViewport(Viewport viewport, int dockNodeFlags) {
+        // TODO(ches) complete this
+        return 0;
     }
 
     public static void openPopup(int id, int popupFlags) {
