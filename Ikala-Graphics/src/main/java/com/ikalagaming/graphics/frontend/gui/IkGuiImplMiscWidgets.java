@@ -3,10 +3,14 @@ package com.ikalagaming.graphics.frontend.gui;
 import com.ikalagaming.graphics.frontend.gui.data.Context;
 import com.ikalagaming.graphics.frontend.gui.data.IkBoolean;
 import com.ikalagaming.graphics.frontend.gui.data.IkInt;
+import com.ikalagaming.graphics.frontend.gui.enums.SliderDataType;
+
+import lombok.NonNull;
 
 class IkGuiImplMiscWidgets {
 
     public static final String DRAG_FLOAT_DEFAULT_FORMAT = "%.3f";
+    public static final String DRAG_INT_DEFAULT_FORMAT = "%.3f";
 
     static Context context;
 
@@ -130,6 +134,95 @@ class IkGuiImplMiscWidgets {
             float max,
             String format,
             String formatMax,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean dragInt(
+            String label,
+            int[] value,
+            float speed,
+            int min,
+            int max,
+            String format,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean dragInt2(
+            String label,
+            int[] values,
+            float speed,
+            float min,
+            float max,
+            String format,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean dragInt3(
+            String label,
+            int[] values,
+            float speed,
+            int min,
+            int max,
+            String format,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean dragInt4(
+            String label,
+            int[] values,
+            float speed,
+            int min,
+            int max,
+            String format,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean dragIntRange2(
+            String label,
+            int[] currentMin,
+            int[] currentMax,
+            float speed,
+            int min,
+            int max,
+            String format,
+            String formatMax,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean dragScalar(
+            String label,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            float speed,
+            double min,
+            double max,
+            String format,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean dragScalarN(
+            String label,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            int components,
+            float speed,
+            double min,
+            double max,
+            String format,
             int sliderFlags) {
         // TODO(ches) complete this
         return false;
