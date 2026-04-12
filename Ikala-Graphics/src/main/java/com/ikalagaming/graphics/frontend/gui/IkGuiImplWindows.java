@@ -318,6 +318,26 @@ class IkGuiImplWindows {
         // TODO(ches) complete this
     }
 
+    public static void endMainMenuBar() {
+        // TODO(ches) complete this
+    }
+
+    public static void endMenu() {
+        // TODO(ches) complete this
+    }
+
+    public static void endMenuBar() {
+        // TODO(ches) complete this
+    }
+
+    public static void endPopup() {
+        // TODO(ches) complete this
+    }
+
+    public static void endTooltip() {
+        // TODO(ches) complete this
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplWindows() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

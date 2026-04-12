@@ -16,6 +16,10 @@ class IkGuiImplTables {
         return false;
     }
 
+    public static void endTable() {
+        // TODO(ches) complete this
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplTables() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
