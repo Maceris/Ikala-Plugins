@@ -25,13 +25,6 @@ public class IkGui {
 
     @Getter private static Context context;
 
-    /**
-     * Used to wrap a large frame count back to 0, which I like more than accidentally wrapping into
-     * the negatives. We just need the numbers to be different each frame anyway, so this shouldn't
-     * matter much.
-     */
-    private static final int FRAME_COUNT_CAP = 2_000_000_000;
-
     private static Storage storage;
 
     public static <T> T acceptDragDropPayload(Class<T> aClass) {
@@ -385,7 +378,6 @@ public class IkGui {
     }
 
     public static boolean beginPopupContextVoid(int id, int popupFlags) {
-        // TODO(ches) complete this
         return IkGuiImplWindows.beginPopupContextVoid(id, popupFlags);
     }
 
@@ -1432,78 +1424,40 @@ public class IkGui {
                 label, dataType, data, components, speed, min, max, format, sliderFlags);
     }
 
+    public static void dummy(@NonNull Vector2f size) {
+        IkGuiImplMiscWidgets.dummy(size.x, size.y);
+    }
+
     public static void dummy(float width, float height) {
-        // TODO(ches) complete this
+        IkGuiImplMiscWidgets.dummy(width, height);
     }
 
     public static void end() {
-        // TODO(ches) complete this
-        if (context.windowCurrent == null) {
-            log.error("Trying to end a window that has not started");
-            return;
-        }
-
-        popID();
-
-        context.windowCurrent.drawList.prepareForRender();
-        context.windowCurrent = null;
+        IkGuiImplWindows.end();
     }
 
     public static void endChild() {
-        // TODO(ches) complete this
+        IkGuiImplWindows.endChild();
     }
 
     public static void endCombo() {
-        // TODO(ches) complete this
+        IkGuiImplMiscWidgets.endCombo();
     }
 
     public static void endDisabled() {
-        // TODO(ches) complete this
+        IkGuiImplUtils.endDisabled();
     }
 
     public static void endDragDropSource() {
-        // TODO(ches) complete this
+        IkGuiImplDragDrop.endDragDropSource();
     }
 
     public static void endDragDropTarget() {
-        // TODO(ches) complete this
+        IkGuiImplDragDrop.endDragDropTarget();
     }
 
     public static void endFrame() {
-        // TODO(ches) complete this
-
-        if (context.frameCountEnded == context.frameCount) {
-            log.error("newFrame() must be called before endFrame()");
-            return;
-        }
-
-        if (!context.styleVariableStack.isEmpty()) {
-            log.error("Did not pop off all style variables before ending frame");
-            context.styleVariableStack.clear();
-        }
-
-        // TODO(ches) update navigation
-        // TODO(ches) update docking
-        // TODO(ches) update drag and drop
-        // TODO(ches) end the frame
-        IkGuiInternal.updateMouseMovingWindowEndFrame();
-
-        context.backgroundDrawList.prepareForRender();
-        context.foregroundDrawList.prepareForRender();
-        // TODO(ches) update viewports list
-        // TODO(ches) sort the window list
-        // TODO(ches) check the window parents/children are sane
-        // TODO(ches) update textures
-        // TODO(ches) unlock the font atlas
-        context.io.mousePositionPrevious.set(context.io.mousePosition);
-        context.io.appFocusLost = false;
-        context.io.mouseWheel = 0.0f;
-        context.io.mouseWheelH = 0.0f;
-        // TODO(ches) clear input queue?
-
-        // TODO(ches) call context hooks
-
-        context.frameCountEnded = (context.frameCountEnded + 1) % FRAME_COUNT_CAP;
+        IkGuiImplUtils.endFrame();
     }
 
     public static void endGroup() {
@@ -3422,46 +3376,7 @@ public class IkGui {
     }
 
     public static void newFrame() {
-        // TODO(ches) complete this
-
-        // TODO(ches) sanity checks for IO and configuration
-        // TODO(ches) update settings
-        // Updating frame time and count
-        final long lastFrameStart = context.frameStartTime;
-        context.frameStartTime = System.currentTimeMillis();
-        if (lastFrameStart > 0) {
-            context.io.deltaTime = context.frameStartTime - lastFrameStart;
-        }
-        context.time += context.io.deltaTime;
-        context.frameCount = (context.frameCount + 1) % FRAME_COUNT_CAP;
-        // TODO(ches) update window counts
-
-        // Updating input events
-        context.io.clearFrameSpecificValues();
-        context.io.processInputEvents();
-
-        // TODO(ches) update viewports
-
-        // Update draw lists
-        context.drawData.clear();
-        context.backgroundDrawList.clear();
-        context.foregroundDrawList.clear();
-        context.drawData.drawLists.add(context.backgroundDrawList);
-        context.drawData.drawLists.add(context.foregroundDrawList);
-        // TODO(ches) update active IDs
-        // TODO(ches) update hover delay
-        // TODO(ches) update keyboard inputs
-        // TODO(ches) update drag and drop
-
-        IkGuiInternal.updateHoveredWindowAndCaptureFlags(context.io.mousePosition);
-        IkGuiInternal.updateMouseMovingWindowNewFrame();
-
-        // TODO(ches) update navigation
-        context.io.updateMouseInputs();
-        // TODO(ches) clean up transient buffers
-        context.windowDisplayOrder.clear();
-        context.windowFocusOrder.clear();
-        // TODO(ches) create fallback window
+        IkGuiImplUtils.newFrame();
     }
 
     public static void newLine() {
@@ -3971,13 +3886,7 @@ public class IkGui {
     }
 
     public static void render() {
-        // TODO(ches) complete this
-
-        if (context.frameCountEnded != context.frameCount) {
-            IkGui.endFrame();
-        }
-
-        context.frameCountRendered = (context.frameCountRendered + 1) % FRAME_COUNT_CAP;
+        IkGuiImplUtils.render();
     }
 
     public static void resetMouseDragDelta() {

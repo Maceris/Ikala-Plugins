@@ -228,6 +228,14 @@ class IkGuiImplMiscWidgets {
         return false;
     }
 
+    public static void dummy(float width, float height) {
+        // TODO(ches) complete this
+    }
+
+    public static void endCombo() {
+        // TODO(ches) complete this
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplMiscWidgets() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

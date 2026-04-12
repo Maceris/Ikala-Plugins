@@ -31,6 +31,14 @@ class IkGuiImplDragDrop {
         return false;
     }
 
+    public static void endDragDropSource() {
+        // TODO(ches) complete this
+    }
+
+    public static void endDragDropTarget() {
+        // TODO(ches) complete this
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplDragDrop() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

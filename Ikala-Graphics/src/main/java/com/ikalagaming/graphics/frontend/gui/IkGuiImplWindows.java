@@ -15,8 +15,10 @@ import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.frontend.gui.util.Hash;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 
+@Slf4j
 class IkGuiImplWindows {
 
     static Context context;
@@ -296,6 +298,23 @@ class IkGuiImplWindows {
     }
 
     public static void closeCurrentPopup() {
+        // TODO(ches) complete this
+    }
+
+    public static void end() {
+        // TODO(ches) complete this
+        if (context.windowCurrent == null) {
+            log.error("Trying to end a window that has not started");
+            return;
+        }
+
+        IkGui.popID();
+
+        context.windowCurrent.drawList.prepareForRender();
+        context.windowCurrent = null;
+    }
+
+    public static void endChild() {
         // TODO(ches) complete this
     }
 
