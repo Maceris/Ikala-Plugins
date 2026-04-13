@@ -39,6 +39,21 @@ class IkGuiImplDragDrop {
         // TODO(ches) complete this
     }
 
+    public static <T> T getDragDropPayload() {
+        // TODO(ches) complete this
+        return null;
+    }
+
+    public static <T> T getDragDropPayload(Class<T> aClass) {
+        // TODO(ches) complete this
+        return null;
+    }
+
+    public static <T> T getDragDropPayload(String dataType) {
+        // TODO(ches) complete this
+        return null;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplDragDrop() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

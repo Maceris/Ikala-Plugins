@@ -1672,18 +1672,15 @@ public class IkGui {
     }
 
     public static <T> T getDragDropPayload() {
-        // TODO(ches) complete this
-        return null;
+        return IkGuiImplDragDrop.getDragDropPayload();
     }
 
     public static <T> T getDragDropPayload(Class<T> aClass) {
-        // TODO(ches) complete this
-        return null;
+        return IkGuiImplDragDrop.getDragDropPayload(aClass);
     }
 
     public static <T> T getDragDropPayload(String dataType) {
-        // TODO(ches) complete this
-        return null;
+        return IkGuiImplDragDrop.getDragDropPayload(dataType);
     }
 
     public static int getFontSize() {
@@ -1691,33 +1688,33 @@ public class IkGui {
     }
 
     public static DrawList getForegroundDrawList() {
-        return null;
+        return IkGuiImplUtils.getForegroundDrawList(context.mainViewport);
     }
 
     public static DrawList getForegroundDrawList(Viewport viewport) {
-        return null;
+        return IkGuiImplUtils.getForegroundDrawList(viewport);
     }
 
     public static int getFrameCount() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplUtils.getFrameCount();
     }
 
     public static float getFrameHeight() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplLayout.getFrameHeight();
     }
 
     public static float getFrameHeightWithSpacing() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplLayout.getFrameHeightWithSpacing();
     }
 
-    public static int getID(long id) {
-        // TODO(ches) complete this
-        return 0;
-    }
-
+    /**
+     * Get an ID given the current ID stack.
+     *
+     * @param name The name of the element.
+     * @return The new hash.
+     * @see Hash#getID(String)
+     * @see Hash#getID(String, int)
+     */
     public static int getID(String name) {
         return Hash.getID(name, context.idStack.peek());
     }
@@ -1727,63 +1724,57 @@ public class IkGui {
     }
 
     public static float getItemRectHeight() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplLayout.getItemRectHeight();
     }
 
     public static Vector2f getItemRectMax() {
         Vector2f value = new Vector2f();
-        getItemRectMax(value);
+        IkGuiImplLayout.getItemRectMax(value);
         return value;
     }
 
-    public static void getItemRectMax(Vector2f value) {
-        // TODO(ches) complete this
+    public static void getItemRectMax(@NonNull Vector2f value) {
+        IkGuiImplLayout.getItemRectMax(value);
     }
 
     public static float getItemRectMaxX() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplLayout.getItemRectMaxX();
     }
 
     public static float getItemRectMaxY() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplLayout.getItemRectMaxY();
     }
 
     public static Vector2f getItemRectMin() {
         Vector2f value = new Vector2f();
-        getItemRectMin(value);
+        IkGuiImplLayout.getItemRectMin(value);
         return value;
     }
 
-    public static void getItemRectMin(Vector2f value) {
-        // TODO(ches) complete this
+    public static void getItemRectMin(@NonNull Vector2f value) {
+        IkGuiImplLayout.getItemRectMin(value);
     }
 
     public static float getItemRectMinX() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplLayout.getItemRectMinX();
     }
 
     public static float getItemRectMinY() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplLayout.getItemRectMinY();
     }
 
     public static Vector2f getItemRectSize() {
         Vector2f value = new Vector2f();
-        getItemRectSize(value);
+        IkGuiImplLayout.getItemRectSize(value);
         return value;
     }
 
-    public static void getItemRectSize(Vector2f value) {
-        // TODO(ches) complete this
+    public static void getItemRectSize(@NonNull Vector2f value) {
+        IkGuiImplLayout.getItemRectSize(value);
     }
 
     public static float getItemRectWidth() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplLayout.getItemRectWidth();
     }
 
     public static boolean getKeyPressedAmount(int userKeyIndex, float repeatDelay, float rate) {

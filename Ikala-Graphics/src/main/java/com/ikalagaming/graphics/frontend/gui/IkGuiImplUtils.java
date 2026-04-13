@@ -397,6 +397,16 @@ class IkGuiImplUtils {
         return 0;
     }
 
+    public static DrawList getForegroundDrawList(Viewport viewport) {
+        // TODO(ches) complete this
+        return null;
+    }
+
+    public static int getFrameCount() {
+        // TODO(ches) complete this
+        return 0;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplUtils() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
