@@ -1787,74 +1787,66 @@ public class IkGui {
     }
 
     public static int getMouseClickedCount(@NonNull MouseButton button) {
-        // TODO(ches) complete this
-        return 0;
+        return context.io.mouseClickedCount[button.index];
     }
 
     public static int getMouseCursor() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplUtils.getMouseCursor();
     }
 
     public static Vector2f getMouseDragDelta() {
         Vector2f value = new Vector2f();
-        getMouseDragDelta(value);
+        IkGuiImplUtils.getMouseDragDelta(value, MouseButton.LEFT, -1.0f);
         return value;
     }
 
     public static Vector2f getMouseDragDelta(@NonNull MouseButton button) {
         Vector2f value = new Vector2f();
-        getMouseDragDelta(value, button);
+        IkGuiImplUtils.getMouseDragDelta(value, button, -1.0f);
         return value;
     }
 
     public static Vector2f getMouseDragDelta(@NonNull MouseButton button, float lockThreshold) {
         Vector2f value = new Vector2f();
-        getMouseDragDelta(value, button, lockThreshold);
+        IkGuiImplUtils.getMouseDragDelta(value, button, lockThreshold);
         return value;
     }
 
-    public static void getMouseDragDelta(Vector2f output) {
-        // TODO(ches) complete this
+    public static void getMouseDragDelta(@NonNull Vector2f output) {
+        IkGuiImplUtils.getMouseDragDelta(output, MouseButton.LEFT, -1.0f);
     }
 
-    public static void getMouseDragDelta(Vector2f output, @NonNull MouseButton button) {
-        // TODO(ches) complete this
+    public static void getMouseDragDelta(@NonNull Vector2f output, @NonNull MouseButton button) {
+        IkGuiImplUtils.getMouseDragDelta(output, button, -1.0f);
     }
 
     public static void getMouseDragDelta(
             Vector2f output, @NonNull MouseButton button, float lockThreshold) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.getMouseDragDelta(output, button, lockThreshold);
     }
 
     public static float getMouseDragDeltaX() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplUtils.getMouseDragDeltaX(MouseButton.LEFT, -1.0f);
     }
 
     public static float getMouseDragDeltaX(@NonNull MouseButton button) {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplUtils.getMouseDragDeltaX(button, -1.0f);
     }
 
     public static float getMouseDragDeltaX(@NonNull MouseButton button, float lockThreshold) {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplUtils.getMouseDragDeltaX(button, lockThreshold);
     }
 
     public static float getMouseDragDeltaY() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplUtils.getMouseDragDeltaY(MouseButton.LEFT, -1.0f);
     }
 
     public static float getMouseDragDeltaY(@NonNull MouseButton button) {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplUtils.getMouseDragDeltaY(button, -1.0f);
     }
 
     public static float getMouseDragDeltaY(@NonNull MouseButton button, float lockThreshold) {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplUtils.getMouseDragDeltaY(button, lockThreshold);
     }
 
     public static Vector2f getMousePos() {

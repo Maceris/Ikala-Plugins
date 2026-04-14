@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.frontend.gui.data.Context;
 import com.ikalagaming.graphics.frontend.gui.data.DrawList;
 import com.ikalagaming.graphics.frontend.gui.data.Viewport;
 import com.ikalagaming.graphics.frontend.gui.enums.ColorType;
+import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
 
 import lombok.NonNull;
@@ -403,6 +404,26 @@ class IkGuiImplUtils {
     }
 
     public static int getFrameCount() {
+        // TODO(ches) complete this
+        return 0;
+    }
+
+    public static int getMouseCursor() {
+        // TODO(ches) complete this
+        return 0;
+    }
+
+    public static void getMouseDragDelta(
+            Vector2f output, @NonNull MouseButton button, float lockThreshold) {
+        // TODO(ches) complete this
+    }
+
+    public static float getMouseDragDeltaX(@NonNull MouseButton button, float lockThreshold) {
+        // TODO(ches) complete this
+        return 0;
+    }
+
+    public static float getMouseDragDeltaY(@NonNull MouseButton button, float lockThreshold) {
         // TODO(ches) complete this
         return 0;
     }
