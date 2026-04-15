@@ -414,7 +414,7 @@ class IkGuiImplUtils {
     }
 
     public static void getMouseDragDelta(
-            Vector2f output, @NonNull MouseButton button, float lockThreshold) {
+            @NonNull Vector2f output, @NonNull MouseButton button, float lockThreshold) {
         // TODO(ches) complete this
     }
 
@@ -424,6 +424,34 @@ class IkGuiImplUtils {
     }
 
     public static float getMouseDragDeltaY(@NonNull MouseButton button, float lockThreshold) {
+        // TODO(ches) complete this
+        return 0;
+    }
+
+    public static void getMousePos(@NonNull Vector2f output) {
+        output.set(context.io.mousePosition);
+    }
+
+    public static void getMousePosOnOpeningCurrentPopup(@NonNull Vector2f output) {
+        // TODO(ches) complete this
+    }
+
+    public static float getMousePosOnOpeningCurrentPopupX() {
+        // TODO(ches) complete this
+        return 0;
+    }
+
+    public static float getMousePosOnOpeningCurrentPopupY() {
+        // TODO(ches) complete this
+        return 0;
+    }
+
+    public static float getScrollX() {
+        // TODO(ches) complete this
+        return 0;
+    }
+
+    public static float getScrollY() {
         // TODO(ches) complete this
         return 0;
     }

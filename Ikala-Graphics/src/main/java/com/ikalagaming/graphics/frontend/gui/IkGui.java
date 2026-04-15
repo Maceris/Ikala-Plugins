@@ -1821,7 +1821,7 @@ public class IkGui {
     }
 
     public static void getMouseDragDelta(
-            Vector2f output, @NonNull MouseButton button, float lockThreshold) {
+            @NonNull Vector2f output, @NonNull MouseButton button, float lockThreshold) {
         IkGuiImplUtils.getMouseDragDelta(output, button, lockThreshold);
     }
 
@@ -1851,42 +1851,38 @@ public class IkGui {
 
     public static Vector2f getMousePos() {
         Vector2f value = new Vector2f();
-        getMousePos(value);
+        IkGuiImplUtils.getMousePos(value);
         return value;
     }
 
-    public static void getMousePos(Vector2f output) {
-        // TODO(ches) complete this
+    public static void getMousePos(@NonNull Vector2f output) {
+        IkGuiImplUtils.getMousePos(output);
     }
 
     public static Vector2f getMousePosOnOpeningCurrentPopup() {
         Vector2f value = new Vector2f();
-        getMousePosOnOpeningCurrentPopup(value);
+        IkGuiImplUtils.getMousePosOnOpeningCurrentPopup(value);
         return value;
     }
 
-    public static void getMousePosOnOpeningCurrentPopup(Vector2f output) {
-        // TODO(ches) complete this
+    public static void getMousePosOnOpeningCurrentPopup(@NonNull Vector2f output) {
+        IkGuiImplUtils.getMousePosOnOpeningCurrentPopup(output);
     }
 
     public static float getMousePosOnOpeningCurrentPopupX() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplUtils.getMousePosOnOpeningCurrentPopupX();
     }
 
     public static float getMousePosOnOpeningCurrentPopupY() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplUtils.getMousePosOnOpeningCurrentPopupY();
     }
 
     public static float getMousePosX() {
-        // TODO(ches) complete this
-        return 0;
+        return context.io.mousePosition.x;
     }
 
     public static float getMousePosY() {
-        // TODO(ches) complete this
-        return 0;
+        return context.io.mousePosition.y;
     }
 
     public static PlatformIO getPlatformIO() {
@@ -1894,13 +1890,11 @@ public class IkGui {
     }
 
     public static float getScrollX() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplUtils.getScrollX();
     }
 
     public static float getScrollY() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplUtils.getScrollY();
     }
 
     public static GuiStorage getStateStorage() {
