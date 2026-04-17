@@ -1897,9 +1897,8 @@ public class IkGui {
         return IkGuiImplUtils.getScrollY();
     }
 
-    public static GuiStorage getStateStorage() {
-        // TODO(ches) complete this
-        return null;
+    public static Storage getStateStorage() {
+        return storage;
     }
 
     /**
@@ -4080,8 +4079,6 @@ public class IkGui {
     public static void setScrollY(float x) {
         // TODO(ches) complete this
     }
-
-    public static void setStateStorage(GuiStorage storage) {}
 
     public static void setTabItemClosed(String label) {
         // TODO(ches) complete this
