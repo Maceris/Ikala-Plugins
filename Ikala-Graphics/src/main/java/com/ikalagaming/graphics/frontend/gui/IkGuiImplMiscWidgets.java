@@ -1,16 +1,15 @@
 package com.ikalagaming.graphics.frontend.gui;
 
-import com.ikalagaming.graphics.frontend.gui.data.Context;
-import com.ikalagaming.graphics.frontend.gui.data.IkBoolean;
-import com.ikalagaming.graphics.frontend.gui.data.IkInt;
+import com.ikalagaming.graphics.frontend.gui.data.*;
 import com.ikalagaming.graphics.frontend.gui.enums.SliderDataType;
 
 import lombok.NonNull;
 
 class IkGuiImplMiscWidgets {
 
-    public static final String DRAG_FLOAT_DEFAULT_FORMAT = "%.3f";
-    public static final String DRAG_INT_DEFAULT_FORMAT = "%.3f";
+    public static final String FLOAT_DEFAULT_FORMAT = "%.3f";
+    public static final String INT_DEFAULT_FORMAT = "%d";
+    public static final String DOUBLE_DEFAULT_FORMAT = "%.6f";
 
     static Context context;
 
@@ -270,6 +269,66 @@ class IkGuiImplMiscWidgets {
             int background,
             int tint) {
         // TODO(ches) complete this
+    }
+
+    public static boolean inputDouble(
+            String label,
+            double[] value,
+            double step,
+            double stepFast,
+            String format,
+            int inputTextFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean inputFloat(
+            String label,
+            float[] value,
+            float step,
+            float stepFast,
+            String format,
+            int inputTextFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean inputFloat2(
+            String label, float[] values, String format, int inputTextFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean inputFloat3(
+            String label, float[] values, String format, int inputTextFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean inputFloat4(
+            String label, float[] values, String format, int inputTextFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean inputInt(
+            String label, int[] value, int step, int stepFast, int inputTextFlags) {
+        return false;
+    }
+
+    public static boolean inputInt2(String label, int[] values, int inputTextFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean inputInt3(String label, int[] values, int inputTextFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean inputInt4(String label, int[] values, int inputTextFlags) {
+        // TODO(ches) complete this
+        return false;
     }
 
     /** Private constructor so this is not instantiated. */

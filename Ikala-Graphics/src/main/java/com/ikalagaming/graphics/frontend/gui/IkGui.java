@@ -743,7 +743,7 @@ public class IkGui {
                 1.0f,
                 0.0f,
                 0.0f,
-                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -754,7 +754,7 @@ public class IkGui {
                 speed,
                 0.0f,
                 0.0f,
-                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -766,7 +766,7 @@ public class IkGui {
                 speed,
                 min,
                 max,
-                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -794,7 +794,7 @@ public class IkGui {
                 1.0f,
                 0.0f,
                 0.0f,
-                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -805,7 +805,7 @@ public class IkGui {
                 speed,
                 0.0f,
                 0.0f,
-                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -817,7 +817,7 @@ public class IkGui {
                 speed,
                 min,
                 max,
-                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -845,7 +845,7 @@ public class IkGui {
                 1.0f,
                 0.0f,
                 0.0f,
-                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -856,7 +856,7 @@ public class IkGui {
                 speed,
                 0.0f,
                 0.0f,
-                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -868,7 +868,7 @@ public class IkGui {
                 speed,
                 min,
                 max,
-                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -896,7 +896,7 @@ public class IkGui {
                 1.0f,
                 0.0f,
                 0.0f,
-                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -907,7 +907,7 @@ public class IkGui {
                 speed,
                 0.0f,
                 0.0f,
-                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -919,7 +919,7 @@ public class IkGui {
                 speed,
                 min,
                 max,
-                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -948,7 +948,7 @@ public class IkGui {
                 1.0f,
                 0.0f,
                 0.0f,
-                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
                 null,
                 SliderFlags.NONE);
     }
@@ -962,7 +962,7 @@ public class IkGui {
                 speed,
                 0.0f,
                 0.0f,
-                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
                 null,
                 SliderFlags.NONE);
     }
@@ -981,7 +981,7 @@ public class IkGui {
                 speed,
                 min,
                 max,
-                IkGuiImplMiscWidgets.DRAG_FLOAT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
                 null,
                 SliderFlags.NONE);
     }
@@ -1040,7 +1040,7 @@ public class IkGui {
                 1.0f,
                 0,
                 0,
-                IkGuiImplMiscWidgets.DRAG_INT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -1051,7 +1051,7 @@ public class IkGui {
                 speed,
                 0,
                 0,
-                IkGuiImplMiscWidgets.DRAG_INT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -1062,7 +1062,7 @@ public class IkGui {
                 speed,
                 min,
                 max,
-                IkGuiImplMiscWidgets.DRAG_INT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -1090,7 +1090,7 @@ public class IkGui {
                 1.0f,
                 0,
                 0,
-                IkGuiImplMiscWidgets.DRAG_INT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -1101,7 +1101,7 @@ public class IkGui {
                 speed,
                 0,
                 0,
-                IkGuiImplMiscWidgets.DRAG_INT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -1112,7 +1112,7 @@ public class IkGui {
                 speed,
                 min,
                 max,
-                IkGuiImplMiscWidgets.DRAG_INT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -1140,7 +1140,7 @@ public class IkGui {
                 1.0f,
                 0,
                 0,
-                IkGuiImplMiscWidgets.DRAG_INT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -1151,7 +1151,7 @@ public class IkGui {
                 speed,
                 0,
                 0,
-                IkGuiImplMiscWidgets.DRAG_INT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -1162,7 +1162,7 @@ public class IkGui {
                 speed,
                 min,
                 max,
-                IkGuiImplMiscWidgets.DRAG_INT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -1190,7 +1190,7 @@ public class IkGui {
                 1.0f,
                 0,
                 0,
-                IkGuiImplMiscWidgets.DRAG_INT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -1201,7 +1201,7 @@ public class IkGui {
                 speed,
                 0,
                 0,
-                IkGuiImplMiscWidgets.DRAG_INT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -1212,7 +1212,7 @@ public class IkGui {
                 speed,
                 min,
                 max,
-                IkGuiImplMiscWidgets.DRAG_INT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT,
                 SliderFlags.NONE);
     }
 
@@ -1241,7 +1241,7 @@ public class IkGui {
                 1.0f,
                 0,
                 0,
-                IkGuiImplMiscWidgets.DRAG_INT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT,
                 null,
                 SliderFlags.NONE);
     }
@@ -1255,7 +1255,7 @@ public class IkGui {
                 speed,
                 0,
                 0,
-                IkGuiImplMiscWidgets.DRAG_INT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT,
                 null,
                 SliderFlags.NONE);
     }
@@ -1269,7 +1269,7 @@ public class IkGui {
                 speed,
                 min,
                 max,
-                IkGuiImplMiscWidgets.DRAG_INT_DEFAULT_FORMAT,
+                IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT,
                 null,
                 SliderFlags.NONE);
     }
@@ -2258,28 +2258,89 @@ public class IkGui {
     }
 
     public static void indent() {
-        // TODO(ches) complete this
+        IkGuiImplLayout.indent(0);
     }
 
+    /**
+     * Move content position towards the right by width, or by the style's indent spacing if width
+     * &lt= 0.
+     *
+     * @param width The width in pixels.
+     */
     public static void indent(float width) {
-        // TODO(ches) complete this
+        IkGuiImplLayout.indent(width);
     }
 
     public static boolean inputDouble(String label, IkDouble value) {
-        return false;
+        return IkGuiImplMiscWidgets.inputDouble(
+                label,
+                value.getData(),
+                0.0f,
+                0.0f,
+                IkGuiImplMiscWidgets.DOUBLE_DEFAULT_FORMAT,
+                InputTextFlags.NONE);
+    }
+
+    public static boolean inputDouble(String label, double[] value) {
+        return IkGuiImplMiscWidgets.inputDouble(
+                label,
+                value,
+                0.0f,
+                0.0f,
+                IkGuiImplMiscWidgets.DOUBLE_DEFAULT_FORMAT,
+                InputTextFlags.NONE);
     }
 
     public static boolean inputDouble(String label, IkDouble value, double step) {
-        return false;
+        return IkGuiImplMiscWidgets.inputDouble(
+                label,
+                value.getData(),
+                step,
+                0.0f,
+                IkGuiImplMiscWidgets.DOUBLE_DEFAULT_FORMAT,
+                InputTextFlags.NONE);
+    }
+
+    public static boolean inputDouble(String label, double[] value, double step) {
+        return IkGuiImplMiscWidgets.inputDouble(
+                label,
+                value,
+                step,
+                0.0f,
+                IkGuiImplMiscWidgets.DOUBLE_DEFAULT_FORMAT,
+                InputTextFlags.NONE);
     }
 
     public static boolean inputDouble(String label, IkDouble value, double step, double stepFast) {
-        return false;
+        return IkGuiImplMiscWidgets.inputDouble(
+                label,
+                value.getData(),
+                step,
+                stepFast,
+                IkGuiImplMiscWidgets.DOUBLE_DEFAULT_FORMAT,
+                InputTextFlags.NONE);
+    }
+
+    public static boolean inputDouble(String label, double[] value, double step, double stepFast) {
+        return IkGuiImplMiscWidgets.inputDouble(
+                label,
+                value,
+                step,
+                stepFast,
+                IkGuiImplMiscWidgets.DOUBLE_DEFAULT_FORMAT,
+                InputTextFlags.NONE);
     }
 
     public static boolean inputDouble(
             String label, IkDouble value, double step, double stepFast, String format) {
-        return false;
+        return IkGuiImplMiscWidgets.inputDouble(
+                label, value.getData(), step, stepFast, format, InputTextFlags.NONE);
+    }
+
+    public static boolean inputDouble(
+            String label, double[] value, double step, double stepFast, String format) {
+        return IkGuiImplMiscWidgets.inputDouble(
+                label, value, step, stepFast, format, InputTextFlags.NONE);
     }
 
     public static boolean inputDouble(
@@ -2289,24 +2350,91 @@ public class IkGui {
             double stepFast,
             String format,
             int inputTextFlags) {
-        return false;
+        return IkGuiImplMiscWidgets.inputDouble(
+                label, value.getData(), step, stepFast, format, inputTextFlags);
+    }
+
+    public static boolean inputDouble(
+            String label,
+            double[] value,
+            double step,
+            double stepFast,
+            String format,
+            int inputTextFlags) {
+        return IkGuiImplMiscWidgets.inputDouble(
+                label, value, step, stepFast, format, inputTextFlags);
     }
 
     public static boolean inputFloat(String label, IkFloat value) {
-        return false;
+        return IkGuiImplMiscWidgets.inputFloat(
+                label,
+                value.getData(),
+                0.0f,
+                0.0f,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
+                InputTextFlags.NONE);
+    }
+
+    public static boolean inputFloat(String label, float[] value) {
+        return IkGuiImplMiscWidgets.inputFloat(
+                label,
+                value,
+                0.0f,
+                0.0f,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
+                InputTextFlags.NONE);
     }
 
     public static boolean inputFloat(String label, IkFloat value, float step) {
-        return false;
+        return IkGuiImplMiscWidgets.inputFloat(
+                label,
+                value.getData(),
+                step,
+                0.0f,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
+                InputTextFlags.NONE);
+    }
+
+    public static boolean inputFloat(String label, float[] value, float step) {
+        return IkGuiImplMiscWidgets.inputFloat(
+                label,
+                value,
+                step,
+                0.0f,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
+                InputTextFlags.NONE);
     }
 
     public static boolean inputFloat(String label, IkFloat value, float step, float stepFast) {
-        return false;
+        return IkGuiImplMiscWidgets.inputFloat(
+                label,
+                value.getData(),
+                step,
+                stepFast,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
+                InputTextFlags.NONE);
+    }
+
+    public static boolean inputFloat(String label, float[] value, float step, float stepFast) {
+        return IkGuiImplMiscWidgets.inputFloat(
+                label,
+                value,
+                step,
+                stepFast,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
+                InputTextFlags.NONE);
     }
 
     public static boolean inputFloat(
             String label, IkFloat value, float step, float stepFast, String format) {
-        return false;
+        return IkGuiImplMiscWidgets.inputFloat(
+                label, value.getData(), step, stepFast, format, InputTextFlags.NONE);
+    }
+
+    public static boolean inputFloat(
+            String label, float[] value, float step, float stepFast, String format) {
+        return IkGuiImplMiscWidgets.inputFloat(
+                label, value, step, stepFast, format, InputTextFlags.NONE);
     }
 
     public static boolean inputFloat(
@@ -2316,102 +2444,137 @@ public class IkGui {
             float stepFast,
             String format,
             int inputTextFlags) {
-        return false;
+        return IkGuiImplMiscWidgets.inputFloat(
+                label, value.getData(), step, stepFast, format, inputTextFlags);
     }
 
-    public static boolean inputFloat2(String label, float[] value) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean inputFloat(
+            String label,
+            float[] value,
+            float step,
+            float stepFast,
+            String format,
+            int inputTextFlags) {
+        return IkGuiImplMiscWidgets.inputFloat(
+                label, value, step, stepFast, format, inputTextFlags);
     }
 
-    public static boolean inputFloat2(String label, float[] value, String format) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean inputFloat2(String label, float[] values) {
+        return IkGuiImplMiscWidgets.inputFloat2(
+                label, values, IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT, InputTextFlags.NONE);
+    }
+
+    public static boolean inputFloat2(String label, float[] values, String format) {
+        return IkGuiImplMiscWidgets.inputFloat2(label, values, format, InputTextFlags.NONE);
+    }
+
+    public static boolean inputFloat2(String label, float[] values, int inputTextFlags) {
+        return IkGuiImplMiscWidgets.inputFloat2(
+                label, values, IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT, inputTextFlags);
     }
 
     public static boolean inputFloat2(
-            String label, float[] value, String format, int inputTextFlags) {
-        // TODO(ches) complete this
-        return false;
+            String label, float[] values, String format, int inputTextFlags) {
+        return IkGuiImplMiscWidgets.inputFloat2(label, values, format, inputTextFlags);
     }
 
-    public static boolean inputFloat2(String label, int[] value) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean inputFloat3(String label, float[] values) {
+        return IkGuiImplMiscWidgets.inputFloat3(
+                label, values, IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT, InputTextFlags.NONE);
     }
 
-    public static boolean inputFloat2(String label, int[] value, int inputTextFlags) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean inputFloat3(String label, float[] values, String format) {
+        return IkGuiImplMiscWidgets.inputFloat3(label, values, format, InputTextFlags.NONE);
     }
 
-    public static boolean inputFloat3(String label, float[] value) {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public static boolean inputFloat3(String label, float[] value, String format) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean inputFloat3(String label, float[] values, int inputTextFlags) {
+        return IkGuiImplMiscWidgets.inputFloat3(
+                label, values, IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT, inputTextFlags);
     }
 
     public static boolean inputFloat3(
-            String label, float[] value, String format, int inputTextFlags) {
-        // TODO(ches) complete this
-        return false;
+            String label, float[] values, String format, int inputTextFlags) {
+        return IkGuiImplMiscWidgets.inputFloat3(label, values, format, inputTextFlags);
     }
 
-    public static boolean inputFloat3(String label, int[] value) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean inputFloat4(String label, float[] values) {
+        return IkGuiImplMiscWidgets.inputFloat4(
+                label, values, IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT, InputTextFlags.NONE);
     }
 
-    public static boolean inputFloat3(String label, int[] value, int inputTextFlags) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean inputFloat4(String label, float[] values, String format) {
+        return IkGuiImplMiscWidgets.inputFloat4(label, values, format, InputTextFlags.NONE);
     }
 
-    public static boolean inputFloat4(String label, float[] value) {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public static boolean inputFloat4(String label, float[] value, String format) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean inputFloat4(String label, float[] values, int inputTextFlags) {
+        return IkGuiImplMiscWidgets.inputFloat4(
+                label, values, IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT, inputTextFlags);
     }
 
     public static boolean inputFloat4(
-            String label, float[] value, String format, int inputTextFlags) {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public static boolean inputFloat4(String label, int[] value) {
-        // TODO(ches) complete this
-        return false;
-    }
-
-    public static boolean inputFloat4(String label, int[] value, int inputTextFlags) {
-        // TODO(ches) complete this
-        return false;
+            String label, float[] values, String format, int inputTextFlags) {
+        return IkGuiImplMiscWidgets.inputFloat4(label, values, format, inputTextFlags);
     }
 
     public static boolean inputInt(String label, IkInt value) {
-        return false;
+        return IkGuiImplMiscWidgets.inputInt(label, value.getData(), 1, 100, InputTextFlags.NONE);
+    }
+
+    public static boolean inputInt(String label, int[] value) {
+        return IkGuiImplMiscWidgets.inputInt(label, value, 1, 100, InputTextFlags.NONE);
     }
 
     public static boolean inputInt(String label, IkInt value, int step) {
-        return false;
+        return IkGuiImplMiscWidgets.inputInt(
+                label, value.getData(), step, 100, InputTextFlags.NONE);
+    }
+
+    public static boolean inputInt(String label, int[] value, int step) {
+        return IkGuiImplMiscWidgets.inputInt(label, value, step, 100, InputTextFlags.NONE);
     }
 
     public static boolean inputInt(String label, IkInt value, int step, int stepFast) {
-        return false;
+        return IkGuiImplMiscWidgets.inputInt(
+                label, value.getData(), step, stepFast, InputTextFlags.NONE);
+    }
+
+    public static boolean inputInt(String label, int[] value, int step, int stepFast) {
+        return IkGuiImplMiscWidgets.inputInt(label, value, step, stepFast, InputTextFlags.NONE);
     }
 
     public static boolean inputInt(
             String label, IkInt value, int step, int stepFast, int inputTextFlags) {
-        return false;
+        return IkGuiImplMiscWidgets.inputInt(
+                label, value.getData(), step, stepFast, inputTextFlags);
+    }
+
+    public static boolean inputInt(
+            String label, int[] value, int step, int stepFast, int inputTextFlags) {
+        return IkGuiImplMiscWidgets.inputInt(label, value, step, stepFast, inputTextFlags);
+    }
+
+    public static boolean inputInt2(String label, int[] values) {
+        return IkGuiImplMiscWidgets.inputInt2(label, values, InputTextFlags.NONE);
+    }
+
+    public static boolean inputInt2(String label, int[] values, int inputTextFlags) {
+        return IkGuiImplMiscWidgets.inputInt2(label, values, inputTextFlags);
+    }
+
+    public static boolean inputInt3(String label, int[] values) {
+        return IkGuiImplMiscWidgets.inputInt3(label, values, InputTextFlags.NONE);
+    }
+
+    public static boolean inputInt3(String label, int[] values, int inputTextFlags) {
+        return IkGuiImplMiscWidgets.inputInt3(label, values, inputTextFlags);
+    }
+
+    public static boolean inputInt4(String label, int[] values) {
+        return IkGuiImplMiscWidgets.inputInt4(label, values, InputTextFlags.NONE);
+    }
+
+    public static boolean inputInt4(String label, int[] values, int inputTextFlags) {
+        return IkGuiImplMiscWidgets.inputInt4(label, values, inputTextFlags);
     }
 
     public static boolean inputScalar(String label, int dataType, IkDouble data) {

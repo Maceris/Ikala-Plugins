@@ -82,6 +82,10 @@ class IkGuiImplLayout {
         return 0;
     }
 
+    public static void indent(float width) {
+        // TODO(ches) complete this
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplLayout() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
