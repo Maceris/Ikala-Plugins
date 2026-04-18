@@ -338,6 +338,49 @@ class IkGuiImplWindows {
         // TODO(ches) complete this
     }
 
+    public static int getWindowDockID() {
+        // TODO(ches) complete this
+        return 0;
+    }
+
+    public static float getWindowHeight() {
+        Window window = context.windowCurrent;
+        return window == null ? 0 : window.sizeCurrent.y;
+    }
+
+    public static void getWindowPos(@NonNull Vector2f pos) {
+        Window window = context.windowCurrent;
+        if (window == null) {
+            pos.set(0, 0);
+        } else {
+            pos.set(window.position);
+        }
+    }
+
+    public static float getWindowPosX() {
+        Window window = context.windowCurrent;
+        return window == null ? 0 : window.position.x;
+    }
+
+    public static float getWindowPosY() {
+        Window window = context.windowCurrent;
+        return window == null ? 0 : window.position.y;
+    }
+
+    public static void getWindowSize(@NonNull Vector2f size) {
+        Window window = context.windowCurrent;
+        if (window == null) {
+            size.set(0, 0);
+        } else {
+            size.set(window.sizeCurrent);
+        }
+    }
+
+    public static float getWindowWidth() {
+        Window window = context.windowCurrent;
+        return window == null ? 0 : window.sizeCurrent.x;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplWindows() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

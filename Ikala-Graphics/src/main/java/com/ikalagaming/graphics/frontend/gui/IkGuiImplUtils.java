@@ -1,11 +1,9 @@
 package com.ikalagaming.graphics.frontend.gui;
 
-import com.ikalagaming.graphics.frontend.gui.data.ColorMod;
-import com.ikalagaming.graphics.frontend.gui.data.Context;
-import com.ikalagaming.graphics.frontend.gui.data.DrawList;
-import com.ikalagaming.graphics.frontend.gui.data.Viewport;
+import com.ikalagaming.graphics.frontend.gui.data.*;
 import com.ikalagaming.graphics.frontend.gui.enums.ColorType;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
+import com.ikalagaming.graphics.frontend.gui.enums.StyleVariable;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
 
 import lombok.NonNull;
@@ -454,6 +452,179 @@ class IkGuiImplUtils {
     public static float getScrollY() {
         // TODO(ches) complete this
         return 0;
+    }
+
+    public static float getStyleVarFloat(@NonNull StyleVariable variable) {
+        if (variable.getDimensions() != 1) {
+            log.error(
+                    "Style variable {} has {} dimensions, trying to fetch 1 float",
+                    variable,
+                    variable.getDimensions());
+            return 0;
+        }
+        if (variable.getExpectedType() != Float.class) {
+            log.error(
+                    "Style variable {} is a {} value, trying to fetch as float",
+                    variable,
+                    variable.getExpectedType().getSimpleName());
+            return 0;
+        }
+
+        float result =
+                switch (variable) {
+                    case ALPHA -> context.style.variable.alpha;
+                    case CHILD_BORDER_SIZE -> context.style.variable.childBorderSize;
+                    case CHILD_ROUNDING -> context.style.variable.childRounding;
+                    case DISABLED_ALPHA -> context.style.variable.disabledAlpha;
+                    case FRAME_BORDER_SIZE -> context.style.variable.frameBorderSize;
+                    case FRAME_ROUNDING -> context.style.variable.frameRounding;
+                    case GRAB_MIN_SIZE -> context.style.variable.grabMinSize;
+                    case GRAB_ROUNDING -> context.style.variable.grabRounding;
+                    case INDENT_SPACING -> context.style.variable.indentSpacing;
+                    case LOG_SLIDER_DEADZONE -> context.style.variable.logSliderDeadzone;
+                    case POPUP_BORDER_SIZE -> context.style.variable.popupBorderSize;
+                    case POPUP_ROUNDING -> context.style.variable.popupRounding;
+                    case SCROLLBAR_ROUNDING -> context.style.variable.scrollbarRounding;
+                    case SCROLLBAR_SIZE -> context.style.variable.scrollbarSize;
+                    case SEPARATOR_TEXT_BORDER_SIZE ->
+                            context.style.variable.separatorTextBorderSize;
+                    case TAB_BAR_BORDER_SIZE -> context.style.variable.tabBarBorderSize;
+                    case TAB_ROUNDING -> context.style.variable.tabRounding;
+                    case TABLE_ANGLED_HEADERS_ANGLE ->
+                            context.style.variable.tableAngledHeadersAngle;
+                    case WINDOW_BORDER_HOVER_PADDING ->
+                            context.style.variable.windowBorderHoverPadding;
+                    case WINDOW_BORDER_SIZE -> context.style.variable.windowBorderSize;
+                    case WINDOW_ROUNDING -> context.style.variable.windowRounding;
+                    default -> {
+                        log.error(
+                                "Trying to fetch 1 float value for unexpected style variable {}",
+                                variable);
+                        yield 0;
+                    }
+                };
+
+        for (var iterator = context.styleVariableStack.descendingIterator(); iterator.hasNext(); ) {
+            StyleMod mod = iterator.next();
+            if (mod.type() == variable) {
+                result = mod.x();
+                break;
+            }
+        }
+        return result;
+    }
+
+    public static void getStyleVarFloat2(
+            @NonNull StyleVariable variable, @NonNull Vector2f target) {
+        if (variable.getDimensions() != 2) {
+            log.error(
+                    "Style variable {} has {} dimensions, trying to fetch 2 floats",
+                    variable,
+                    variable.getDimensions());
+            return;
+        }
+        if (variable.getExpectedType() != Float.class) {
+            log.error(
+                    "Style variable {} is a {} value, trying to fetch as 2 floats",
+                    variable,
+                    variable.getExpectedType().getSimpleName());
+            return;
+        }
+
+        switch (variable) {
+            case BUTTON_TEXT_ALIGN:
+                target.set(context.style.variable.buttonTextAlign);
+                break;
+            case CELL_PADDING:
+                target.set(context.style.variable.cellPadding);
+                break;
+            case FRAME_PADDING:
+                target.set(context.style.variable.framePadding);
+                break;
+            case ITEM_INNER_SPACING:
+                target.set(context.style.variable.itemInnerSpacing);
+                break;
+            case ITEM_SPACING:
+                target.set(context.style.variable.itemSpacing);
+                break;
+            case SELECTABLE_TEXT_ALIGN:
+                target.set(context.style.variable.selectableTextAlign);
+                break;
+            case SEPARATOR_TEXT_ALIGN:
+                target.set(context.style.variable.separatorTextAlign);
+                break;
+            case SEPARATOR_TEXT_PADDING:
+                target.set(context.style.variable.separatorTextPadding);
+                break;
+            case TABLE_ANGLED_HEADERS_TEXT_ALIGN:
+                target.set(context.style.variable.tableAngledHeadersTextAlign);
+                break;
+            case TOUCH_EXTRA_PADDING:
+                target.set(context.style.variable.touchExtraPadding);
+                break;
+            case WINDOW_MIN_SIZE:
+                target.set(context.style.variable.windowMinSize);
+                break;
+            case WINDOW_PADDING:
+                target.set(context.style.variable.windowPadding);
+                break;
+            case WINDOW_TITLE_ALIGN:
+                target.set(context.style.variable.windowTitleAlign);
+                break;
+            default:
+                log.error(
+                        "Trying to fetch 2 float values for unexpected style variable {}",
+                        variable);
+                break;
+        }
+
+        for (var iterator = context.styleVariableStack.descendingIterator(); iterator.hasNext(); ) {
+            StyleMod mod = iterator.next();
+            if (mod.type() == variable) {
+                target.set(mod.x(), mod.y());
+                break;
+            }
+        }
+    }
+
+    public static int getStyleVarInt(@NonNull StyleVariable variable) {
+        if (variable.getDimensions() != 1) {
+            log.error(
+                    "Style variable {} has {} dimensions, trying to fetch 1 int",
+                    variable,
+                    variable.getDimensions());
+            return 0;
+        }
+        if (variable.getExpectedType() != Integer.class) {
+            log.error(
+                    "Style variable {} is a {} value, trying to fetch as int",
+                    variable,
+                    variable.getExpectedType().getSimpleName());
+            return 0;
+        }
+        int result =
+                switch (variable) {
+                    case COLOR_BUTTON_POSITION ->
+                            context.style.variable.colorButtonPosition.getIntValue();
+                    case WINDOW_MENU_BUTTON_POSITION ->
+                            context.style.variable.windowMenuButtonPosition.getIntValue();
+                    default -> {
+                        log.error(
+                                "Trying to fetch 1 int value for unexpected style variable {}",
+                                variable);
+                        yield 0;
+                    }
+                };
+
+        for (var iterator = context.styleVariableStack.descendingIterator(); iterator.hasNext(); ) {
+            StyleMod mod = iterator.next();
+            if (mod.type() == variable) {
+                result = (int) mod.x();
+                break;
+            }
+        }
+
+        return result;
     }
 
     /** Private constructor so this is not instantiated. */

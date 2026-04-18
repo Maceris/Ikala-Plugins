@@ -67,6 +67,21 @@ class IkGuiImplLayout {
         return 0;
     }
 
+    public static int getTextLineHeight() {
+        float fontScale = (float) context.dpiScaleScreen / context.dpiScaleFont;
+        return (int) (fontScale * context.fontSize);
+    }
+
+    public static int getTextLineHeightWithSpacing() {
+        float fontScale = (float) context.dpiScaleScreen / context.dpiScaleFont;
+        return (int) (fontScale * 1.1f * context.fontSize);
+    }
+
+    public static float getTreeNodeToLabelSpacing() {
+        // TODO(ches) complete this
+        return 0;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplLayout() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

@@ -240,6 +240,38 @@ class IkGuiImplMiscWidgets {
         // TODO(ches) complete this
     }
 
+    public static void image(
+            int textureID, float width, float height, float u0, float v0, float u1, float v1) {
+        // TODO(ches) complete this
+    }
+
+    public static boolean imageButton(
+            int textureID,
+            float width,
+            float height,
+            float u0,
+            float v0,
+            float u1,
+            float v1,
+            int background,
+            int tint) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static void imageWithBackground(
+            int textureID,
+            float width,
+            float height,
+            float u0,
+            float v0,
+            float u1,
+            float v1,
+            int background,
+            int tint) {
+        // TODO(ches) complete this
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplMiscWidgets() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
