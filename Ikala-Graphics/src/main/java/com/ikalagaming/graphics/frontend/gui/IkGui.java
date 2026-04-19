@@ -2263,7 +2263,7 @@ public class IkGui {
 
     /**
      * Move content position towards the right by width, or by the style's indent spacing if width
-     * &lt= 0.
+     * less than or equal to 0.
      *
      * @param width The width in pixels.
      */
@@ -2577,344 +2577,101 @@ public class IkGui {
         return IkGuiImplMiscWidgets.inputInt4(label, values, inputTextFlags);
     }
 
-    public static boolean inputScalar(String label, int dataType, IkDouble data) {
-        return false;
-    }
-
-    public static boolean inputScalar(String label, int dataType, IkDouble data, double step) {
-        return false;
+    public static boolean inputScalar(
+            String label, @NonNull SliderDataType dataType, @NonNull Object data) {
+        return IkGuiImplMiscWidgets.inputScalar(
+                label, dataType, data, 0.0d, 0.0d, null, InputTextFlags.NONE);
     }
 
     public static boolean inputScalar(
-            String label, int dataType, IkDouble data, double step, double stepFast) {
-        return false;
+            String label, @NonNull SliderDataType dataType, @NonNull Object data, double step) {
+        return IkGuiImplMiscWidgets.inputScalar(
+                label, dataType, data, step, 0.0d, null, InputTextFlags.NONE);
     }
 
     public static boolean inputScalar(
             String label,
-            int dataType,
-            IkDouble data,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            double step,
+            double stepFast) {
+        return IkGuiImplMiscWidgets.inputScalar(
+                label, dataType, data, step, stepFast, null, InputTextFlags.NONE);
+    }
+
+    public static boolean inputScalar(
+            String label,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
             double step,
             double stepFast,
             String format) {
-        return false;
+        return IkGuiImplMiscWidgets.inputScalar(
+                label, dataType, data, step, stepFast, format, InputTextFlags.NONE);
     }
 
     public static boolean inputScalar(
             String label,
-            int dataType,
-            IkDouble data,
-            double step,
-            double stepFast,
-            String format,
-            int inputTextFlags) {
-        return false;
-    }
-
-    public static boolean inputScalar(String label, int dataType, IkFloat data) {
-        return false;
-    }
-
-    public static boolean inputScalar(String label, int dataType, IkFloat data, float step) {
-        return false;
-    }
-
-    public static boolean inputScalar(
-            String label, int dataType, IkFloat data, float step, float stepFast) {
-        return false;
-    }
-
-    public static boolean inputScalar(
-            String label, int dataType, IkFloat data, float step, float stepFast, String format) {
-        return false;
-    }
-
-    public static boolean inputScalar(
-            String label,
-            int dataType,
-            IkFloat data,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
             float step,
             float stepFast,
             String format,
             int inputTextFlags) {
-        return false;
-    }
-
-    public static boolean inputScalar(String label, int dataType, IkInt data) {
-        return false;
-    }
-
-    public static boolean inputScalar(String label, int dataType, IkInt data, int step) {
-        return false;
-    }
-
-    public static boolean inputScalar(
-            String label, int dataType, IkInt data, int step, int stepFast) {
-        return false;
-    }
-
-    public static boolean inputScalar(
-            String label, int dataType, IkInt data, int step, int stepFast, String format) {
-        return false;
-    }
-
-    public static boolean inputScalar(
-            String label,
-            int dataType,
-            IkInt data,
-            int step,
-            int stepFast,
-            String format,
-            int inputTextFlags) {
-        return false;
-    }
-
-    public static boolean inputScalar(String label, int dataType, IkLong data) {
-        return false;
-    }
-
-    public static boolean inputScalar(String label, int dataType, IkLong data, long step) {
-        return false;
-    }
-
-    public static boolean inputScalar(
-            String label, int dataType, IkLong data, long step, long stepFast) {
-        return false;
-    }
-
-    public static boolean inputScalar(
-            String label, int dataType, IkLong data, long step, long stepFast, String format) {
-        return false;
-    }
-
-    public static boolean inputScalar(
-            String label,
-            int dataType,
-            IkLong data,
-            long step,
-            long stepFast,
-            String format,
-            int inputTextFlags) {
-        return false;
-    }
-
-    public static boolean inputScalar(String label, int dataType, IkShort data) {
-        return false;
-    }
-
-    public static boolean inputScalar(String label, int dataType, IkShort data, short step) {
-        return false;
-    }
-
-    public static boolean inputScalar(
-            String label, int dataType, IkShort data, short step, short stepFast) {
-        return false;
-    }
-
-    public static boolean inputScalar(
-            String label, int dataType, IkShort data, short step, short stepFast, String format) {
-        return false;
-    }
-
-    public static boolean inputScalar(
-            String label,
-            int dataType,
-            IkShort data,
-            short step,
-            short stepFast,
-            String format,
-            int inputTextFlags) {
-        return false;
-    }
-
-    public static boolean inputScalarN(String label, int dataType, IkDouble data, int components) {
-        return false;
+        return IkGuiImplMiscWidgets.inputScalar(
+                label, dataType, data, step, stepFast, format, inputTextFlags);
     }
 
     public static boolean inputScalarN(
-            String label, int dataType, IkDouble data, int components, double step) {
-        return false;
+            String label, @NonNull SliderDataType dataType, @NonNull Object data, int components) {
+        return IkGuiImplMiscWidgets.inputScalarN(
+                label, dataType, data, components, 0.0d, 0.0d, null, InputTextFlags.NONE);
     }
 
     public static boolean inputScalarN(
             String label,
-            int dataType,
-            IkDouble data,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            int components,
+            double step) {
+        return IkGuiImplMiscWidgets.inputScalarN(
+                label, dataType, data, components, step, 0.0d, null, InputTextFlags.NONE);
+    }
+
+    public static boolean inputScalarN(
+            String label,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
             int components,
             double step,
             double stepFast) {
-        return false;
+        return IkGuiImplMiscWidgets.inputScalarN(
+                label, dataType, data, components, step, stepFast, null, InputTextFlags.NONE);
     }
 
     public static boolean inputScalarN(
             String label,
-            int dataType,
-            IkDouble data,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
             int components,
             double step,
             double stepFast,
             String format) {
-        return false;
+        return IkGuiImplMiscWidgets.inputScalarN(
+                label, dataType, data, components, step, stepFast, format, InputTextFlags.NONE);
     }
 
     public static boolean inputScalarN(
             String label,
-            int dataType,
-            IkDouble data,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
             int components,
             double step,
             double stepFast,
             String format,
             int inputTextFlags) {
-        return false;
-    }
-
-    public static boolean inputScalarN(String label, int dataType, IkFloat data, int components) {
-        return false;
-    }
-
-    public static boolean inputScalarN(
-            String label, int dataType, IkFloat data, int components, float step) {
-        return false;
-    }
-
-    public static boolean inputScalarN(
-            String label, int dataType, IkFloat data, int components, float step, float stepFast) {
-        return false;
-    }
-
-    public static boolean inputScalarN(
-            String label,
-            int dataType,
-            IkFloat data,
-            int components,
-            float step,
-            float stepFast,
-            String format) {
-        return false;
-    }
-
-    public static boolean inputScalarN(
-            String label,
-            int dataType,
-            IkFloat data,
-            int components,
-            float step,
-            float stepFast,
-            String format,
-            int inputTextFlags) {
-        return false;
-    }
-
-    public static boolean inputScalarN(String label, int dataType, IkInt data, int components) {
-        return false;
-    }
-
-    public static boolean inputScalarN(
-            String label, int dataType, IkInt data, int components, int step) {
-        return false;
-    }
-
-    public static boolean inputScalarN(
-            String label, int dataType, IkInt data, int components, int step, int stepFast) {
-        return false;
-    }
-
-    public static boolean inputScalarN(
-            String label,
-            int dataType,
-            IkInt data,
-            int components,
-            int step,
-            int stepFast,
-            String format) {
-        return false;
-    }
-
-    public static boolean inputScalarN(
-            String label,
-            int dataType,
-            IkInt data,
-            int components,
-            int step,
-            int stepFast,
-            String format,
-            int inputTextFlags) {
-        return false;
-    }
-
-    public static boolean inputScalarN(String label, int dataType, IkLong data, int components) {
-        return false;
-    }
-
-    public static boolean inputScalarN(
-            String label, int dataType, IkLong data, int components, long step) {
-        return false;
-    }
-
-    public static boolean inputScalarN(
-            String label, int dataType, IkLong data, int components, long step, long stepFast) {
-        return false;
-    }
-
-    public static boolean inputScalarN(
-            String label,
-            int dataType,
-            IkLong data,
-            int components,
-            long step,
-            long stepFast,
-            String format) {
-        return false;
-    }
-
-    public static boolean inputScalarN(
-            String label,
-            int dataType,
-            IkLong data,
-            int components,
-            long step,
-            long stepFast,
-            String format,
-            int inputTextFlags) {
-        return false;
-    }
-
-    public static boolean inputScalarN(String label, int dataType, IkShort data, int components) {
-        return false;
-    }
-
-    public static boolean inputScalarN(
-            String label, int dataType, IkShort data, int components, short step) {
-        return false;
-    }
-
-    public static boolean inputScalarN(
-            String label, int dataType, IkShort data, int components, short step, short stepFast) {
-        return false;
-    }
-
-    public static boolean inputScalarN(
-            String label,
-            int dataType,
-            IkShort data,
-            int components,
-            short step,
-            short stepFast,
-            String format) {
-        return false;
-    }
-
-    public static boolean inputScalarN(
-            String label,
-            int dataType,
-            IkShort data,
-            int components,
-            short step,
-            short stepFast,
-            String format,
-            int inputTextFlags) {
-        return false;
+        return IkGuiImplMiscWidgets.inputScalarN(
+                label, dataType, data, components, step, stepFast, format, inputTextFlags);
     }
 
     public static boolean inputText(String label, IkString text) {

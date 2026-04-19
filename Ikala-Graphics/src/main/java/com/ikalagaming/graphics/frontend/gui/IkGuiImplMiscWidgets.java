@@ -331,6 +331,31 @@ class IkGuiImplMiscWidgets {
         return false;
     }
 
+    public static boolean inputScalar(
+            String label,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            double step,
+            double stepFast,
+            String format,
+            int inputTextFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean inputScalarN(
+            String label,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            int components,
+            double step,
+            double stepFast,
+            String format,
+            int inputTextFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplMiscWidgets() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
