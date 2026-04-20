@@ -2675,157 +2675,156 @@ public class IkGui {
     }
 
     public static boolean inputText(String label, IkString text) {
-        return false;
+        return IkGuiImplText.inputText(label, text, InputTextFlags.NONE, null);
     }
 
     public static boolean inputText(String label, IkString text, int inputTextFlags) {
-        return false;
+        return IkGuiImplText.inputText(label, text, inputTextFlags, null);
     }
 
     public static boolean inputText(
-            String label, IkString text, int inputTextFlags, GuiInputTextCallback callback) {
-        return false;
+            String label,
+            @NonNull IkString text,
+            int inputTextFlags,
+            GuiInputTextCallback callback) {
+        return IkGuiImplText.inputText(label, text, inputTextFlags, callback);
     }
 
-    public static boolean inputTextMultiline(String label, IkString text) {
-        return false;
+    public static boolean inputTextMultiline(String label, @NonNull IkString text) {
+        return IkGuiImplText.inputTextMultiline(label, text, 0.0f, 0.0f, InputTextFlags.NONE, null);
     }
 
     public static boolean inputTextMultiline(
-            String label, IkString text, float width, float height) {
-        return false;
+            String label, @NonNull IkString text, float width, float height) {
+        return IkGuiImplText.inputTextMultiline(
+                label, text, width, height, InputTextFlags.NONE, null);
     }
 
     public static boolean inputTextMultiline(
-            String label, IkString text, float width, float height, int inputTextFlags) {
-        return false;
+            String label, @NonNull IkString text, float width, float height, int inputTextFlags) {
+        return IkGuiImplText.inputTextMultiline(label, text, width, height, inputTextFlags, null);
     }
 
     public static boolean inputTextMultiline(
             String label,
-            IkString text,
+            @NonNull IkString text,
             float width,
             float height,
             int inputTextFlags,
             GuiInputTextCallback callback) {
-        return false;
-    }
-
-    public static boolean inputTextMultiline(String label, IkString text, int inputTextFlags) {
-        return false;
+        return IkGuiImplText.inputTextMultiline(
+                label, text, width, height, inputTextFlags, callback);
     }
 
     public static boolean inputTextMultiline(
-            String label, IkString text, int inputTextFlags, GuiInputTextCallback callback) {
-        return false;
+            String label, @NonNull IkString text, int inputTextFlags) {
+        return IkGuiImplText.inputTextMultiline(label, text, 0.0f, 0.0f, inputTextFlags, null);
     }
 
-    public static boolean inputTextWithHint(String label, String hint, IkString text) {
-        return false;
+    public static boolean inputTextMultiline(
+            String label,
+            @NonNull IkString text,
+            int inputTextFlags,
+            GuiInputTextCallback callback) {
+        return IkGuiImplText.inputTextMultiline(label, text, 0.0f, 0.0f, inputTextFlags, callback);
+    }
+
+    public static boolean inputTextWithHint(String label, String hint, @NonNull IkString text) {
+        return IkGuiImplText.inputTextWithHint(label, hint, text, InputTextFlags.NONE, null);
     }
 
     public static boolean inputTextWithHint(
-            String label, String hint, IkString text, int inputTextFlags) {
-        return false;
+            String label, String hint, @NonNull IkString text, int inputTextFlags) {
+        return IkGuiImplText.inputTextWithHint(label, hint, text, inputTextFlags, null);
     }
 
     public static boolean inputTextWithHint(
             String label,
             String hint,
-            IkString text,
+            @NonNull IkString text,
             int inputTextFlags,
             GuiInputTextCallback callback) {
-        return false;
+        return IkGuiImplText.inputTextWithHint(label, hint, text, inputTextFlags, callback);
+    }
+
+    public static boolean invisibleButton(String text, @NonNull Vector2f size) {
+        return IkGuiImplMiscWidgets.invisibleButton(text, size.x, size.y, ButtonFlags.NONE);
     }
 
     public static boolean invisibleButton(String text, float width, float height) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.invisibleButton(text, width, height, ButtonFlags.NONE);
+    }
+
+    public static boolean invisibleButton(String text, @NonNull Vector2f size, int buttonFlags) {
+        return IkGuiImplMiscWidgets.invisibleButton(text, size.x, size.y, buttonFlags);
     }
 
     public static boolean invisibleButton(String text, float width, float height, int buttonFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.invisibleButton(text, width, height, buttonFlags);
     }
 
     public static boolean isAnyItemActive() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isAnyItemActive();
     }
 
     public static boolean isAnyItemFocused() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isAnyItemFocused();
     }
 
     public static boolean isAnyItemHovered() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isAnyItemHovered();
     }
 
     public static boolean isAnyMouseDown() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isAnyMouseDown();
     }
 
     public static boolean isItemActivated() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isItemActivated();
     }
 
     public static boolean isItemActive() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isItemActive();
     }
 
     public static boolean isItemClicked() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isItemClicked(MouseButton.LEFT);
     }
 
     public static boolean isItemClicked(@NonNull MouseButton button) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isItemClicked(button);
     }
 
     public static boolean isItemDeactivated() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isItemDeactivated();
     }
 
     public static boolean isItemDeactivatedAfterEdit() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isItemDeactivatedAfterEdit();
     }
 
     public static boolean isItemEdited() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isItemEdited();
     }
 
     public static boolean isItemFocused() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isItemFocused();
     }
 
     public static boolean isItemHovered() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isItemHovered(HoveredFlags.NONE);
     }
 
     public static boolean isItemHovered(int hoveredFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isItemHovered(hoveredFlags);
     }
 
     public static boolean isItemToggledOpen() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isItemToggledOpen();
     }
 
     public static boolean isItemVisible() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isItemVisible();
     }
 
     public static boolean isKeyDown(int userKeyIndex) {

@@ -627,6 +627,76 @@ class IkGuiImplUtils {
         return result;
     }
 
+    public static boolean isAnyItemActive() {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isAnyItemFocused() {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isAnyItemHovered() {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isAnyMouseDown() {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isItemActivated() {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isItemActive() {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isItemClicked(@NonNull MouseButton button) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isItemDeactivated() {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isItemDeactivatedAfterEdit() {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isItemEdited() {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isItemFocused() {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isItemHovered(int hoveredFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isItemToggledOpen() {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isItemVisible() {
+        // TODO(ches) complete this
+        return false;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplUtils() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

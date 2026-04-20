@@ -356,6 +356,11 @@ class IkGuiImplMiscWidgets {
         return false;
     }
 
+    public static boolean invisibleButton(String text, float width, float height, int buttonFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplMiscWidgets() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
