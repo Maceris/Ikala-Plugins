@@ -2827,54 +2827,44 @@ public class IkGui {
         return IkGuiImplUtils.isItemVisible();
     }
 
-    public static boolean isKeyDown(int userKeyIndex) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean isKeyDown(@NonNull Key key) {
+        return IkGuiImplUtils.isKeyDown(key);
     }
 
-    public static boolean isKeyPressed(int userKeyIndex) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean isKeyPressed(@NonNull Key key) {
+        return IkGuiImplUtils.isKeyPressed(key, true);
     }
 
-    public static boolean isKeyPressed(int userKeyIndex, boolean repeat) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean isKeyPressed(@NonNull Key key, boolean repeat) {
+        return IkGuiImplUtils.isKeyPressed(key, repeat);
     }
 
-    public static boolean isKeyReleased(int userKeyIndex) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean isKeyReleased(@NonNull Key key) {
+        return IkGuiImplUtils.isKeyReleased(key);
     }
 
     public static boolean isMouseClicked(@NonNull MouseButton button) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isMouseClicked(button, false);
     }
 
     public static boolean isMouseClicked(@NonNull MouseButton button, boolean repeat) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isMouseClicked(button, repeat);
     }
 
     public static boolean isMouseDoubleClicked(@NonNull MouseButton button) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isMouseDoubleClicked(button);
     }
 
     public static boolean isMouseDown(@NonNull MouseButton button) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isMouseDown(button);
     }
 
     public static boolean isMouseDragging(@NonNull MouseButton button) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isMouseDragging(button, -1.0f);
     }
 
     public static boolean isMouseDragging(@NonNull MouseButton button, float lockThreshold) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isMouseDragging(button, lockThreshold);
     }
 
     public static boolean isMouseHoveringRect(float minX, float minY, float maxX, float maxY) {

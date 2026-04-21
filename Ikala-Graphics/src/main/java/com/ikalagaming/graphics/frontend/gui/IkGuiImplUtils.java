@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.frontend.gui;
 
 import com.ikalagaming.graphics.frontend.gui.data.*;
 import com.ikalagaming.graphics.frontend.gui.enums.ColorType;
+import com.ikalagaming.graphics.frontend.gui.enums.Key;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
 import com.ikalagaming.graphics.frontend.gui.enums.StyleVariable;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
@@ -693,6 +694,41 @@ class IkGuiImplUtils {
     }
 
     public static boolean isItemVisible() {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isKeyDown(@NonNull Key key) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isKeyPressed(@NonNull Key key, boolean repeat) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isKeyReleased(@NonNull Key key) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isMouseClicked(@NonNull MouseButton button, boolean repeat) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isMouseDoubleClicked(@NonNull MouseButton button) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isMouseDown(@NonNull MouseButton button) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isMouseDragging(@NonNull MouseButton button, float lockThreshold) {
         // TODO(ches) complete this
         return false;
     }
