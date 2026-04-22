@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.frontend.gui.enums.StyleVariable;
 import com.ikalagaming.graphics.frontend.gui.flags.*;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
 import com.ikalagaming.graphics.frontend.gui.util.Hash;
+import com.ikalagaming.graphics.frontend.gui.util.RectFloat;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -2867,15 +2868,23 @@ public class IkGui {
         return IkGuiImplUtils.isMouseDragging(button, lockThreshold);
     }
 
+    public static boolean isMouseHoveringRect(@NonNull RectFloat rect) {
+        return IkGuiImplUtils.isMouseHoveringRect(
+                rect.getLeft(), rect.getTop(), rect.getRight(), rect.getBottom(), true);
+    }
+
     public static boolean isMouseHoveringRect(float minX, float minY, float maxX, float maxY) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isMouseHoveringRect(minX, minY, maxX, maxY, true);
+    }
+
+    public static boolean isMouseHoveringRect(@NonNull RectFloat rect, boolean clip) {
+        return IkGuiImplUtils.isMouseHoveringRect(
+                rect.getLeft(), rect.getTop(), rect.getRight(), rect.getBottom(), clip);
     }
 
     public static boolean isMouseHoveringRect(
             float minX, float minY, float maxX, float maxY, boolean clip) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isMouseHoveringRect(minX, minY, maxX, maxY, clip);
     }
 
     public static boolean isMousePosValid() {

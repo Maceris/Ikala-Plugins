@@ -733,6 +733,12 @@ class IkGuiImplUtils {
         return false;
     }
 
+    public static boolean isMouseHoveringRect(
+            float minX, float minY, float maxX, float maxY, boolean clip) {
+        // TODO(ches) complete this
+        return false;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplUtils() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
