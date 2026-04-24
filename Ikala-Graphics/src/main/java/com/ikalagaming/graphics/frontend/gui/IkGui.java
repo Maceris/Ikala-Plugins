@@ -2888,16 +2888,16 @@ public class IkGui {
     }
 
     public static boolean isMousePosValid() {
-        return isMousePosValid(context.io.mousePosition);
+        Vector2f position = context.io.mousePosition;
+        return IkGuiImplUtils.isMousePosValid(position.x, position.y);
     }
 
     public static boolean isMousePosValid(@NonNull Vector2f position) {
-        return isMousePosValid(position.x, position.y);
+        return IkGuiImplUtils.isMousePosValid(position.x, position.y);
     }
 
     public static boolean isMousePosValid(float x, float y) {
-        final float MOUSE_INVALID = -256_000.0f;
-        return x >= MOUSE_INVALID && y >= MOUSE_INVALID;
+        return IkGuiImplUtils.isMousePosValid(x, y);
     }
 
     public static boolean isMouseReleased(@NonNull MouseButton button) {
@@ -2905,23 +2905,19 @@ public class IkGui {
     }
 
     public static boolean isPopupOpen(int id) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.isPopupOpen(id, PopupFlags.NONE);
     }
 
     public static boolean isPopupOpen(String name) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.isPopupOpen(Hash.getID(name), PopupFlags.NONE);
     }
 
     public static boolean isPopupOpen(int id, int popupFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.isPopupOpen(id, popupFlags);
     }
 
     public static boolean isPopupOpen(String name, int popupFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplWindows.isPopupOpen(Hash.getID(name), popupFlags);
     }
 
     public static boolean isRectVisible(float width, float height) {

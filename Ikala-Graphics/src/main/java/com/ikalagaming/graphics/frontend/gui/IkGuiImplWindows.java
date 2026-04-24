@@ -381,6 +381,11 @@ class IkGuiImplWindows {
         return window == null ? 0 : window.sizeCurrent.x;
     }
 
+    public static boolean isPopupOpen(int id, int popupFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplWindows() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

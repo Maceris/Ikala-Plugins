@@ -739,6 +739,11 @@ class IkGuiImplUtils {
         return false;
     }
 
+    public static boolean isMousePosValid(float x, float y) {
+        final float MOUSE_INVALID = -256_000.0f;
+        return x >= MOUSE_INVALID && y >= MOUSE_INVALID;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplUtils() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
