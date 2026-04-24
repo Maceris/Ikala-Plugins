@@ -2920,49 +2920,48 @@ public class IkGui {
         return IkGuiImplWindows.isPopupOpen(Hash.getID(name), popupFlags);
     }
 
+    public static boolean isRectVisible(@NonNull Vector2f size) {
+        return IkGuiImplUtils.isRectVisible(size.x, size.y);
+    }
+
     public static boolean isRectVisible(float width, float height) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isRectVisible(width, height);
+    }
+
+    public static boolean isRectVisible(@NonNull RectFloat rect) {
+        return IkGuiImplUtils.isRectVisible(rect.getLeft(), rect.getTop(), rect.getRight(), rect.getBottom());
     }
 
     public static boolean isRectVisible(float minX, float minY, float maxX, float maxY) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isRectVisible(minX, minY, maxX, maxY);
     }
 
     public static boolean isWindowAppearing() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isWindowAppearing();
     }
 
     public static boolean isWindowCollapsed() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isWindowCollapsed();
     }
 
     public static boolean isWindowDocked() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isWindowDocked();
     }
 
     public static boolean isWindowFocused() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isWindowFocused(FocusedFlags.NONE);
     }
 
     public static boolean isWindowFocused(int focusedFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isWindowFocused(focusedFlags);
     }
 
     public static boolean isWindowHovered() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isWindowHovered(HoveredFlags.NONE);
     }
 
     public static boolean isWindowHovered(int hoveredFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.isWindowHovered(hoveredFlags);
     }
 
     public static void labelText(String label, String text) {

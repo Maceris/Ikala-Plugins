@@ -744,6 +744,41 @@ class IkGuiImplUtils {
         return x >= MOUSE_INVALID && y >= MOUSE_INVALID;
     }
 
+    public static boolean isRectVisible(float width, float height) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isRectVisible(float minX, float minY, float maxX, float maxY) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isWindowAppearing() {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isWindowCollapsed() {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isWindowDocked() {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isWindowFocused(int focusedFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean isWindowHovered(int hoveredFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplUtils() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
