@@ -361,6 +361,15 @@ class IkGuiImplMiscWidgets {
         return false;
     }
 
+    public static void labelText(String label, @NonNull String text) {
+        // TODO(ches) complete this
+    }
+
+    public static void listBox(
+            String label, IkInt currentItem, @NonNull String[] items, int heightInItems) {
+        // TODO(ches) complete this
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplMiscWidgets() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

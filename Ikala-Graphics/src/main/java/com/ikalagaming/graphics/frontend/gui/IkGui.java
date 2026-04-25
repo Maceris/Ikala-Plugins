@@ -672,6 +672,7 @@ public class IkGui {
         }
         context = new Context();
         IkGuiImplButtons.context = context;
+        IkGuiImplConfig.context = context;
         IkGuiImplDragDrop.context = context;
         IkGuiImplLayout.context = context;
         IkGuiImplMiscWidgets.context = context;
@@ -700,6 +701,7 @@ public class IkGui {
         context.io.setAppAcceptingEvents(false);
         context = null;
         IkGuiImplButtons.context = null;
+        IkGuiImplConfig.context = null;
         IkGuiImplDragDrop.context = null;
         IkGuiImplLayout.context = null;
         IkGuiImplMiscWidgets.context = null;
@@ -2929,7 +2931,8 @@ public class IkGui {
     }
 
     public static boolean isRectVisible(@NonNull RectFloat rect) {
-        return IkGuiImplUtils.isRectVisible(rect.getLeft(), rect.getTop(), rect.getRight(), rect.getBottom());
+        return IkGuiImplUtils.isRectVisible(
+                rect.getLeft(), rect.getTop(), rect.getRight(), rect.getBottom());
     }
 
     public static boolean isRectVisible(float minX, float minY, float maxX, float maxY) {
@@ -2964,28 +2967,25 @@ public class IkGui {
         return IkGuiImplUtils.isWindowHovered(hoveredFlags);
     }
 
-    public static void labelText(String label, String text) {
-        // TODO(ches) complete this
+    public static void labelText(String label, @NonNull String text) {
+        IkGuiImplMiscWidgets.labelText(label, text);
     }
 
-    public static void listBox(String label, IkInt currentItem, String[] items) {
-        // TODO(ches) complete this
+    public static void listBox(String label, @NonNull IkInt currentItem, @NonNull String[] items) {
+        IkGuiImplMiscWidgets.listBox(label, currentItem, items, -1);
     }
 
-    public static void listBox(String label, IkInt currentItem, String[] items, int heightInItems) {
-        // TODO(ches) complete this
+    public static void listBox(
+            String label, @NonNull IkInt currentItem, @NonNull String[] items, int heightInItems) {
+        IkGuiImplMiscWidgets.listBox(label, currentItem, items, heightInItems);
     }
 
-    public static void loadIniSettingsFromDisk(String filename) {
-        // TODO(ches) complete this
+    public static void loadIniSettingsFromDisk(@NonNull String filename) {
+        IkGuiImplConfig.loadIniSettingsFromDisk(filename);
     }
 
-    public static void loadIniSettingsFromMemory(String data) {
-        // TODO(ches) complete this
-    }
-
-    public static void loadIniSettingsFromMemory(String data, int size) {
-        // TODO(ches) complete this
+    public static void loadIniSettingsFromMemory(@NonNull String data) {
+        IkGuiImplConfig.loadIniSettingsFromMemory(data);
     }
 
     public static void logButtons() {
