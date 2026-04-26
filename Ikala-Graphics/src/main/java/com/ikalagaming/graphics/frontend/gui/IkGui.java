@@ -675,6 +675,7 @@ public class IkGui {
         IkGuiImplConfig.context = context;
         IkGuiImplDragDrop.context = context;
         IkGuiImplLayout.context = context;
+        IkGuiImplLogging.context = context;
         IkGuiImplMiscWidgets.context = context;
         IkGuiImplTables.context = context;
         IkGuiImplTabs.context = context;
@@ -704,6 +705,7 @@ public class IkGui {
         IkGuiImplConfig.context = null;
         IkGuiImplDragDrop.context = null;
         IkGuiImplLayout.context = null;
+        IkGuiImplLogging.context = null;
         IkGuiImplMiscWidgets.context = null;
         IkGuiImplTables.context = null;
         IkGuiImplTabs.context = null;
@@ -2989,43 +2991,43 @@ public class IkGui {
     }
 
     public static void logButtons() {
-        // TODO(ches) complete this
+        IkGuiImplLogging.logButtons();
     }
 
     public static void logFinish() {
-        // TODO(ches) complete this
+        IkGuiImplLogging.logFinish();
     }
 
-    public static void logText(String text) {
-        // TODO(ches) complete this
+    public static void logText(@NonNull String text) {
+        IkGuiImplLogging.logText(text);
     }
 
     public static void logToClipboard() {
-        // TODO(ches) complete this
+        IkGuiImplLogging.logToClipboard(-1);
     }
 
     public static void logToClipboard(int maxDepth) {
-        // TODO(ches) complete this
+        IkGuiImplLogging.logToClipboard(maxDepth);
     }
 
     public static void logToFile() {
-        // TODO(ches) complete this
+        IkGuiImplLogging.logToFile(-1, null);
     }
 
     public static void logToFile(int maxDepth) {
-        // TODO(ches) complete this
+        IkGuiImplLogging.logToFile(maxDepth, null);
     }
 
     public static void logToFile(int maxDepth, String filename) {
-        // TODO(ches) complete this
+        IkGuiImplLogging.logToFile(maxDepth, filename);
     }
 
     public static void logToTTY() {
-        // TODO(ches) complete this
+        IkGuiImplLogging.logToTTY(-1);
     }
 
     public static void logToTTY(int maxDepth) {
-        // TODO(ches) complete this
+        IkGuiImplLogging.logToTTY(maxDepth);
     }
 
     public static boolean menuItem(String label) {
