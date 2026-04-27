@@ -86,6 +86,10 @@ class IkGuiImplLayout {
         // TODO(ches) complete this
     }
 
+    public static void newLine() {
+        // TODO(ches) complete this
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplLayout() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

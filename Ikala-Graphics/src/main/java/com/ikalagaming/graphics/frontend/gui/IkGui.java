@@ -3030,31 +3030,30 @@ public class IkGui {
         IkGuiImplLogging.logToTTY(maxDepth);
     }
 
-    public static boolean menuItem(String label) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean menuItem(@NonNull String label) {
+        return IkGuiImplWindows.menuItem(label, null, false, true);
     }
 
-    public static boolean menuItem(String label, String shortcut) {
-        return false;
+    public static boolean menuItem(@NonNull String label, String shortcut) {
+        return IkGuiImplWindows.menuItem(label, shortcut, false, true);
     }
 
-    public static boolean menuItem(String label, String shortcut, boolean selected) {
-        return false;
-    }
-
-    public static boolean menuItem(
-            String label, String shortcut, boolean selected, boolean enabled) {
-        return false;
-    }
-
-    public static boolean menuItem(String label, String shortcut, IkBoolean selected) {
-        return false;
+    public static boolean menuItem(@NonNull String label, String shortcut, boolean selected) {
+        return IkGuiImplWindows.menuItem(label, shortcut, selected, true);
     }
 
     public static boolean menuItem(
-            String label, String shortcut, IkBoolean selected, boolean enabled) {
-        return false;
+            @NonNull String label, String shortcut, boolean selected, boolean enabled) {
+        return IkGuiImplWindows.menuItem(label, shortcut, selected, enabled);
+    }
+
+    public static boolean menuItem(@NonNull String label, String shortcut, IkBoolean selected) {
+        return IkGuiImplWindows.menuItem(label, shortcut, selected, true);
+    }
+
+    public static boolean menuItem(
+            @NonNull String label, String shortcut, IkBoolean selected, boolean enabled) {
+        return IkGuiImplWindows.menuItem(label, shortcut, selected, enabled);
     }
 
     public static void newFrame() {
@@ -3062,7 +3061,7 @@ public class IkGui {
     }
 
     public static void newLine() {
-        // TODO(ches) complete this
+        IkGuiImplLayout.newLine();
     }
 
     /**

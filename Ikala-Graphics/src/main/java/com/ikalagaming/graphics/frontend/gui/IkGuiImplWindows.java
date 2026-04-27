@@ -386,6 +386,16 @@ class IkGuiImplWindows {
         return false;
     }
 
+    public static boolean menuItem(
+            @NonNull String label, String shortcut, boolean selected, boolean enabled) {
+        return false;
+    }
+
+    public static boolean menuItem(
+            @NonNull String label, String shortcut, IkBoolean selected, boolean enabled) {
+        return false;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplWindows() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
