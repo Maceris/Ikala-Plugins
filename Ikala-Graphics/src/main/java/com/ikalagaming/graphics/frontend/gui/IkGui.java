@@ -16,6 +16,7 @@ import org.joml.Vector2f;
 import org.joml.Vector4f;
 
 import java.util.NoSuchElementException;
+import java.util.function.IntFunction;
 
 /**
  * Immediate mode GUI library, a customized Java fork of <a
@@ -3163,17 +3164,62 @@ public class IkGui {
         IkGuiImplWindows.openPopupOnItemClick(Hash.getID(name, context.idStack.peek()), popupFlags);
     }
 
+    public static void plotHistogram(
+            String label, @NonNull IntFunction<Float> valuesGetter, int count) {
+        IkGuiImplMiscWidgets.plotHistogram(
+                label, valuesGetter, count, 0, null, Float.MAX_VALUE, Float.MAX_VALUE, 0, 0);
+    }
+
     public static void plotHistogram(String label, float[] values, int count) {
-        // TODO(ches) complete this
+        IkGuiImplMiscWidgets.plotHistogram(
+                label, values, count, 0, null, Float.MAX_VALUE, Float.MAX_VALUE, 0, 0);
+    }
+
+    public static void plotHistogram(
+            String label, @NonNull IntFunction<Float> valuesGetter, int count, int offset) {
+        IkGuiImplMiscWidgets.plotHistogram(
+                label, valuesGetter, count, offset, null, Float.MAX_VALUE, Float.MAX_VALUE, 0, 0);
     }
 
     public static void plotHistogram(String label, float[] values, int count, int offset) {
-        // TODO(ches) complete this
+        IkGuiImplMiscWidgets.plotHistogram(
+                label, values, count, offset, null, Float.MAX_VALUE, Float.MAX_VALUE, 0, 0);
+    }
+
+    public static void plotHistogram(
+            String label,
+            @NonNull IntFunction<Float> valuesGetter,
+            int count,
+            int offset,
+            String overlay) {
+        IkGuiImplMiscWidgets.plotHistogram(
+                label,
+                valuesGetter,
+                count,
+                offset,
+                overlay,
+                Float.MAX_VALUE,
+                Float.MAX_VALUE,
+                0,
+                0);
     }
 
     public static void plotHistogram(
             String label, float[] values, int count, int offset, String overlay) {
-        // TODO(ches) complete this
+        IkGuiImplMiscWidgets.plotHistogram(
+                label, values, count, offset, overlay, Float.MAX_VALUE, Float.MAX_VALUE, 0, 0);
+    }
+
+    public static void plotHistogram(
+            String label,
+            @NonNull IntFunction<Float> valuesGetter,
+            int count,
+            int offset,
+            String overlay,
+            float scaleMin,
+            float scaleMax) {
+        IkGuiImplMiscWidgets.plotHistogram(
+                label, valuesGetter, count, offset, overlay, scaleMin, scaleMax, 0, 0);
     }
 
     public static void plotHistogram(
@@ -3184,7 +3230,22 @@ public class IkGui {
             String overlay,
             float scaleMin,
             float scaleMax) {
-        // TODO(ches) complete this
+        IkGuiImplMiscWidgets.plotHistogram(
+                label, values, count, offset, overlay, scaleMin, scaleMax, 0, 0);
+    }
+
+    public static void plotHistogram(
+            String label,
+            @NonNull IntFunction<Float> valuesGetter,
+            int count,
+            int offset,
+            String overlay,
+            float scaleMin,
+            float scaleMax,
+            float width,
+            float height) {
+        IkGuiImplMiscWidgets.plotHistogram(
+                label, valuesGetter, count, offset, overlay, scaleMin, scaleMax, width, height);
     }
 
     public static void plotHistogram(
@@ -3197,21 +3258,8 @@ public class IkGui {
             float scaleMax,
             float width,
             float height) {
-        // TODO(ches) complete this
-    }
-
-    public static void plotHistogram(
-            String label,
-            float[] values,
-            int count,
-            int offset,
-            String overlay,
-            float scaleMin,
-            float scaleMax,
-            float width,
-            float height,
-            int stride) {
-        // TODO(ches) complete this
+        IkGuiImplMiscWidgets.plotHistogram(
+                label, values, count, offset, overlay, scaleMin, scaleMax, width, height);
     }
 
     public static void plotLines(String label, float[] values, int count) {

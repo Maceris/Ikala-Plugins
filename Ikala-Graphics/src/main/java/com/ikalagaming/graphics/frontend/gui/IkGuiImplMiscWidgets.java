@@ -5,6 +5,8 @@ import com.ikalagaming.graphics.frontend.gui.enums.SliderDataType;
 
 import lombok.NonNull;
 
+import java.util.function.IntFunction;
+
 class IkGuiImplMiscWidgets {
 
     public static final String FLOAT_DEFAULT_FORMAT = "%.3f";
@@ -367,6 +369,32 @@ class IkGuiImplMiscWidgets {
 
     public static void listBox(
             String label, IkInt currentItem, @NonNull String[] items, int heightInItems) {
+        // TODO(ches) complete this
+    }
+
+    public static void plotHistogram(
+            String label,
+            @NonNull IntFunction<Float> valuesGetter,
+            int count,
+            int offset,
+            String overlay,
+            float scaleMin,
+            float scaleMax,
+            float width,
+            float height) {
+        // TODO(ches) complete this
+    }
+
+    public static void plotHistogram(
+            String label,
+            float[] values,
+            int count,
+            int offset,
+            String overlay,
+            float scaleMin,
+            float scaleMax,
+            float width,
+            float height) {
         // TODO(ches) complete this
     }
 
