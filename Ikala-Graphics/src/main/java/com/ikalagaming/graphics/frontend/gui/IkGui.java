@@ -3167,23 +3167,31 @@ public class IkGui {
     public static void plotHistogram(
             String label, @NonNull IntFunction<Float> valuesGetter, int count) {
         IkGuiImplMiscWidgets.plotHistogram(
-                label, valuesGetter, count, 0, null, Float.MAX_VALUE, Float.MAX_VALUE, 0, 0);
+                label, valuesGetter, count, 0, null, Float.MAX_VALUE, Float.MAX_VALUE, 0.0f, 0.0f);
     }
 
     public static void plotHistogram(String label, float[] values, int count) {
         IkGuiImplMiscWidgets.plotHistogram(
-                label, values, count, 0, null, Float.MAX_VALUE, Float.MAX_VALUE, 0, 0);
+                label, values, count, 0, null, Float.MAX_VALUE, Float.MAX_VALUE, 0.0f, 0.0f);
     }
 
     public static void plotHistogram(
             String label, @NonNull IntFunction<Float> valuesGetter, int count, int offset) {
         IkGuiImplMiscWidgets.plotHistogram(
-                label, valuesGetter, count, offset, null, Float.MAX_VALUE, Float.MAX_VALUE, 0, 0);
+                label,
+                valuesGetter,
+                count,
+                offset,
+                null,
+                Float.MAX_VALUE,
+                Float.MAX_VALUE,
+                0.0f,
+                0.0f);
     }
 
     public static void plotHistogram(String label, float[] values, int count, int offset) {
         IkGuiImplMiscWidgets.plotHistogram(
-                label, values, count, offset, null, Float.MAX_VALUE, Float.MAX_VALUE, 0, 0);
+                label, values, count, offset, null, Float.MAX_VALUE, Float.MAX_VALUE, 0.0f, 0.0f);
     }
 
     public static void plotHistogram(
@@ -3200,14 +3208,22 @@ public class IkGui {
                 overlay,
                 Float.MAX_VALUE,
                 Float.MAX_VALUE,
-                0,
-                0);
+                0.0f,
+                0.0f);
     }
 
     public static void plotHistogram(
             String label, float[] values, int count, int offset, String overlay) {
         IkGuiImplMiscWidgets.plotHistogram(
-                label, values, count, offset, overlay, Float.MAX_VALUE, Float.MAX_VALUE, 0, 0);
+                label,
+                values,
+                count,
+                offset,
+                overlay,
+                Float.MAX_VALUE,
+                Float.MAX_VALUE,
+                0.0f,
+                0.0f);
     }
 
     public static void plotHistogram(
@@ -3219,7 +3235,7 @@ public class IkGui {
             float scaleMin,
             float scaleMax) {
         IkGuiImplMiscWidgets.plotHistogram(
-                label, valuesGetter, count, offset, overlay, scaleMin, scaleMax, 0, 0);
+                label, valuesGetter, count, offset, overlay, scaleMin, scaleMax, 0.0f, 0.0f);
     }
 
     public static void plotHistogram(
@@ -3231,7 +3247,7 @@ public class IkGui {
             float scaleMin,
             float scaleMax) {
         IkGuiImplMiscWidgets.plotHistogram(
-                label, values, count, offset, overlay, scaleMin, scaleMax, 0, 0);
+                label, values, count, offset, overlay, scaleMin, scaleMax, 0.0f, 0.0f);
     }
 
     public static void plotHistogram(
@@ -3262,17 +3278,78 @@ public class IkGui {
                 label, values, count, offset, overlay, scaleMin, scaleMax, width, height);
     }
 
+    public static void plotLines(
+            String label, @NonNull IntFunction<Float> valuesGetter, int count) {
+        IkGuiImplMiscWidgets.plotLines(
+                label, valuesGetter, count, 0, null, Float.MAX_VALUE, Float.MAX_VALUE, 0.0f, 0.0f);
+    }
+
     public static void plotLines(String label, float[] values, int count) {
-        // TODO(ches) complete this
+        IkGuiImplMiscWidgets.plotLines(
+                label, values, count, 0, null, Float.MAX_VALUE, Float.MAX_VALUE, 0.0f, 0.0f);
+    }
+
+    public static void plotLines(
+            String label, @NonNull IntFunction<Float> valuesGetter, int count, int offset) {
+        IkGuiImplMiscWidgets.plotLines(
+                label,
+                valuesGetter,
+                count,
+                offset,
+                null,
+                Float.MAX_VALUE,
+                Float.MAX_VALUE,
+                0.0f,
+                0.0f);
     }
 
     public static void plotLines(String label, float[] values, int count, int offset) {
-        // TODO(ches) complete this
+        IkGuiImplMiscWidgets.plotLines(
+                label, values, count, offset, null, Float.MAX_VALUE, Float.MAX_VALUE, 0.0f, 0.0f);
+    }
+
+    public static void plotLines(
+            String label,
+            @NonNull IntFunction<Float> valuesGetter,
+            int count,
+            int offset,
+            String overlay) {
+        IkGuiImplMiscWidgets.plotLines(
+                label,
+                valuesGetter,
+                count,
+                offset,
+                overlay,
+                Float.MAX_VALUE,
+                Float.MAX_VALUE,
+                0.0f,
+                0.0f);
     }
 
     public static void plotLines(
             String label, float[] values, int count, int offset, String overlay) {
-        // TODO(ches) complete this
+        IkGuiImplMiscWidgets.plotLines(
+                label,
+                values,
+                count,
+                offset,
+                overlay,
+                Float.MAX_VALUE,
+                Float.MAX_VALUE,
+                0.0f,
+                0.0f);
+    }
+
+    public static void plotLines(
+            String label,
+            @NonNull IntFunction<Float> valuesGetter,
+            int count,
+            int offset,
+            String overlay,
+            float scaleMin,
+            float scaleMax) {
+        IkGuiImplMiscWidgets.plotLines(
+                label, valuesGetter, count, offset, overlay, scaleMin, scaleMax, 0.0f, 0.0f);
     }
 
     public static void plotLines(
@@ -3283,7 +3360,22 @@ public class IkGui {
             String overlay,
             float scaleMin,
             float scaleMax) {
-        // TODO(ches) complete this
+        IkGuiImplMiscWidgets.plotLines(
+                label, values, count, offset, overlay, scaleMin, scaleMax, 0.0f, 0.0f);
+    }
+
+    public static void plotLines(
+            String label,
+            @NonNull IntFunction<Float> valuesGetter,
+            int count,
+            int offset,
+            String overlay,
+            float scaleMin,
+            float scaleMax,
+            float width,
+            float height) {
+        IkGuiImplMiscWidgets.plotLines(
+                label, valuesGetter, count, offset, overlay, scaleMin, scaleMax, width, height);
     }
 
     public static void plotLines(
@@ -3296,21 +3388,8 @@ public class IkGui {
             float scaleMax,
             float width,
             float height) {
-        // TODO(ches) complete this
-    }
-
-    public static void plotLines(
-            String label,
-            float[] values,
-            int count,
-            int offset,
-            String overlay,
-            float scaleMin,
-            float scaleMax,
-            float width,
-            float height,
-            int stride) {
-        // TODO(ches) complete this
+        IkGuiImplMiscWidgets.plotLines(
+                label, values, count, offset, overlay, scaleMin, scaleMax, width, height);
     }
 
     public static void popClipRect() {

@@ -398,6 +398,32 @@ class IkGuiImplMiscWidgets {
         // TODO(ches) complete this
     }
 
+    public static void plotLines(
+            String label,
+            @NonNull IntFunction<Float> valuesGetter,
+            int count,
+            int offset,
+            String overlay,
+            float scaleMin,
+            float scaleMax,
+            float width,
+            float height) {
+        // TODO(ches) complete this
+    }
+
+    public static void plotLines(
+            String label,
+            float[] values,
+            int count,
+            int offset,
+            String overlay,
+            float scaleMin,
+            float scaleMax,
+            float width,
+            float height) {
+        // TODO(ches) complete this
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplMiscWidgets() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
