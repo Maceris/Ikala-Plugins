@@ -15,7 +15,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 import org.joml.Vector4f;
 
-import java.util.NoSuchElementException;
 import java.util.function.IntFunction;
 
 /**
@@ -3393,82 +3392,39 @@ public class IkGui {
     }
 
     public static void popClipRect() {
-        // TODO(ches) complete this
+        IkGuiImplLayout.popClipRect();
     }
 
     public static void popFont() {
-        if (context.fontStack.isEmpty()) {
-            log.error("Trying to pop a font when none are pushed");
-            return;
-        }
-        FontBackup backupInfo = context.fontStack.pop();
-
-        if (backupInfo.name() == null) {
-            context.font = null;
-            context.fontSize = backupInfo.size();
-            return;
-        }
-
-        if (!context.io.fonts.isFontLoaded(backupInfo.name())) {
-            log.warn(
-                    "The font {} was unloaded while it was on the font stack, ignoring it",
-                    backupInfo.name());
-            return;
-        }
-        context.font = context.io.fonts.getFont(backupInfo.name());
-        context.fontSize = backupInfo.size();
+        IkGuiImplText.popFont();
     }
 
     public static void popID() {
-        if (context.idStack.isEmpty()) {
-            log.error("Trying to pop an ID that does not exist");
-            return;
-        }
-        context.idStack.pop();
+        IkGuiImplUtils.popID();
     }
 
     public static void popItemWidth() {
-        // TODO(ches) complete this
+        IkGuiImplLayout.popItemWidth();
     }
 
     public static void popStyleColor() {
-        try {
-            context.colorStack.pop();
-        } catch (NoSuchElementException ignored) {
-            log.error("Trying to pop more style colors than we have pushed");
-        }
+        IkGuiImplUtils.popStyleColor();
     }
 
     public static void popStyleColor(int count) {
-        try {
-            for (int i = 0; i < count; ++i) {
-                context.colorStack.pop();
-            }
-        } catch (NoSuchElementException ignored) {
-            log.error("Trying to pop more style colors (pop {}) than we have pushed", count);
-        }
+        IkGuiImplUtils.popStyleColor(count);
     }
 
     public static void popStyleVar() {
-        try {
-            context.styleVariableStack.pop();
-        } catch (NoSuchElementException ignored) {
-            log.error("Trying to pop more style variables than we have pushed");
-        }
+        IkGuiImplUtils.popStyleVar();
     }
 
     public static void popStyleVar(int count) {
-        try {
-            for (int i = 0; i < count; ++i) {
-                context.styleVariableStack.pop();
-            }
-        } catch (NoSuchElementException ignored) {
-            log.error("Trying to pop more style variables (pop {}) than we have pushed", count);
-        }
+        IkGuiImplUtils.popStyleVar(count);
     }
 
     public static void popTextWrapPos() {
-        // TODO(ches) complete this
+        IkGuiImplLayout.popTextWrapPos();
     }
 
     /**

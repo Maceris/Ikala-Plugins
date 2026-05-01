@@ -12,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 import org.joml.Vector4f;
 
+import java.util.NoSuchElementException;
+
 @Slf4j
 class IkGuiImplUtils {
 
@@ -777,6 +779,50 @@ class IkGuiImplUtils {
     public static boolean isWindowHovered(int hoveredFlags) {
         // TODO(ches) complete this
         return false;
+    }
+
+    public static void popID() {
+        if (context.idStack.isEmpty()) {
+            log.error("Trying to pop an ID that does not exist");
+            return;
+        }
+        context.idStack.pop();
+    }
+
+    public static void popStyleColor() {
+        try {
+            context.colorStack.pop();
+        } catch (NoSuchElementException ignored) {
+            log.error("Trying to pop more style colors than we have pushed");
+        }
+    }
+
+    public static void popStyleColor(int count) {
+        try {
+            for (int i = 0; i < count; ++i) {
+                context.colorStack.pop();
+            }
+        } catch (NoSuchElementException ignored) {
+            log.error("Trying to pop more style colors (pop {}) than we have pushed", count);
+        }
+    }
+
+    public static void popStyleVar() {
+        try {
+            context.styleVariableStack.pop();
+        } catch (NoSuchElementException ignored) {
+            log.error("Trying to pop more style variables than we have pushed");
+        }
+    }
+
+    public static void popStyleVar(int count) {
+        try {
+            for (int i = 0; i < count; ++i) {
+                context.styleVariableStack.pop();
+            }
+        } catch (NoSuchElementException ignored) {
+            log.error("Trying to pop more style variables (pop {}) than we have pushed", count);
+        }
     }
 
     /** Private constructor so this is not instantiated. */

@@ -2,10 +2,13 @@ package com.ikalagaming.graphics.frontend.gui;
 
 import com.ikalagaming.graphics.frontend.gui.callback.GuiInputTextCallback;
 import com.ikalagaming.graphics.frontend.gui.data.Context;
+import com.ikalagaming.graphics.frontend.gui.data.FontBackup;
 import com.ikalagaming.graphics.frontend.gui.data.IkString;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 class IkGuiImplText {
     static Context context;
 
@@ -46,6 +49,29 @@ class IkGuiImplText {
             int inputTextFlags,
             GuiInputTextCallback callback) {
         return false;
+    }
+
+    public static void popFont() {
+        if (context.fontStack.isEmpty()) {
+            log.error("Trying to pop a font when none are pushed");
+            return;
+        }
+        FontBackup backupInfo = context.fontStack.pop();
+
+        if (backupInfo.name() == null) {
+            context.font = null;
+            context.fontSize = backupInfo.size();
+            return;
+        }
+
+        if (!context.io.fonts.isFontLoaded(backupInfo.name())) {
+            log.warn(
+                    "The font {} was unloaded while it was on the font stack, ignoring it",
+                    backupInfo.name());
+            return;
+        }
+        context.font = context.io.fonts.getFont(backupInfo.name());
+        context.fontSize = backupInfo.size();
     }
 
     /** Private constructor so this is not instantiated. */

@@ -90,6 +90,18 @@ class IkGuiImplLayout {
         // TODO(ches) complete this
     }
 
+    public static void popClipRect() {
+        // TODO(ches) complete this
+    }
+
+    public static void popItemWidth() {
+        // TODO(ches) complete this
+    }
+
+    public static void popTextWrapPos() {
+        // TODO(ches) complete this
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplLayout() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
