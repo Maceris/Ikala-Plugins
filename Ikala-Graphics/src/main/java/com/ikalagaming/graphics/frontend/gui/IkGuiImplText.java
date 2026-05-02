@@ -74,6 +74,13 @@ class IkGuiImplText {
         context.fontSize = backupInfo.size();
     }
 
+    public static void pushFont(@NonNull String font, int size) {
+        String oldFont = context.font == null ? null : context.font.name;
+        context.fontStack.push(new FontBackup(oldFont, context.fontSize));
+        context.font = context.io.fonts.getFont(font);
+        context.fontSize = size;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplText() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

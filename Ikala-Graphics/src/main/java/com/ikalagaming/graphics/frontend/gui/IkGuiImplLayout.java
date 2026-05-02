@@ -102,6 +102,15 @@ class IkGuiImplLayout {
         // TODO(ches) complete this
     }
 
+    public static void pushClipRect(
+            float minX, float minY, float maxX, float maxY, boolean intersectWithCurrentClipRect) {
+        // TODO(ches) complete this
+    }
+
+    public static void pushItemWidth(float width) {
+        // TODO(ches) complete this
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplLayout() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

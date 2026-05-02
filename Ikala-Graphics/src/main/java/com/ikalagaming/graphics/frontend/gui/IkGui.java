@@ -3433,20 +3433,20 @@ public class IkGui {
      * @param progress The progress, ranging from 0.0 (0%) to 1.0 (100%).
      */
     public static void progressBar(float progress) {
-        // TODO(ches) complete this
+        IkGuiImplMiscWidgets.progressBar(progress, -Float.MIN_VALUE, 0, null);
     }
 
     public static void progressBar(float progress, float width, float height) {
-        // TODO(ches) complete this
+        IkGuiImplMiscWidgets.progressBar(progress, width, height, null);
     }
 
     public static void progressBar(float progress, float width, float height, String overlayText) {
-        // TODO(ches) complete this
+        IkGuiImplMiscWidgets.progressBar(progress, width, height, overlayText);
     }
 
     public static void pushClipRect(
             float minX, float minY, float maxX, float maxY, boolean intersectWithCurrentClipRect) {
-        // TODO(ches) complete this
+        IkGuiImplLayout.pushClipRect(minX, minY, maxX, maxY, intersectWithCurrentClipRect);
     }
 
     /**
@@ -3458,7 +3458,7 @@ public class IkGui {
      * @see #setFont(String)
      */
     public static void pushFont(@NonNull String font) {
-        pushFont(font, context.fontSize);
+        IkGuiImplText.pushFont(font, context.fontSize);
     }
 
     /**
@@ -3471,10 +3471,7 @@ public class IkGui {
      * @see #setFont(String, int)
      */
     public static void pushFont(@NonNull String font, int size) {
-        String oldFont = context.font == null ? null : context.font.name;
-        context.fontStack.push(new FontBackup(oldFont, context.fontSize));
-        context.font = context.io.fonts.getFont(font);
-        context.fontSize = size;
+        IkGuiImplText.pushFont(font, size);
     }
 
     /**
@@ -3484,9 +3481,7 @@ public class IkGui {
      * @return The new ID (which is based on the provided ID, and parent ID if there is one).
      */
     public static int pushID(int id) {
-        int result = Hash.getID(id, context.idStack.peek());
-        context.idStack.push(result);
-        return result;
+        return IkGuiImplUtils.pushID(id);
     }
 
     /**
@@ -3496,13 +3491,11 @@ public class IkGui {
      * @return The new ID (which is based on the name and parent ID if there is one).
      */
     public static int pushID(String name) {
-        // NOTE(ches) the other pushID will re-hash this ID with the last ID, so we don't need to
-        // include it here
-        return pushID(Hash.getID(name));
+        return IkGuiImplUtils.pushID(name);
     }
 
     public static void pushItemWidth(float width) {
-        // TODO(ches) complete this
+        IkGuiImplLayout.pushItemWidth(width);
     }
 
     public static void pushStyleColor(@NonNull ColorType type, float r, float g, float b, float a) {

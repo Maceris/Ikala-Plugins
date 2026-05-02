@@ -6,6 +6,7 @@ import com.ikalagaming.graphics.frontend.gui.enums.Key;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
 import com.ikalagaming.graphics.frontend.gui.enums.StyleVariable;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
+import com.ikalagaming.graphics.frontend.gui.util.Hash;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -823,6 +824,18 @@ class IkGuiImplUtils {
         } catch (NoSuchElementException ignored) {
             log.error("Trying to pop more style variables (pop {}) than we have pushed", count);
         }
+    }
+
+    public static int pushID(int id) {
+        int result = Hash.getID(id, context.idStack.peek());
+        context.idStack.push(result);
+        return result;
+    }
+
+    public static int pushID(String name) {
+        // NOTE(ches) the other pushID will re-hash this ID with the last ID, so we don't need to
+        // include it here
+        return pushID(Hash.getID(name));
     }
 
     /** Private constructor so this is not instantiated. */
