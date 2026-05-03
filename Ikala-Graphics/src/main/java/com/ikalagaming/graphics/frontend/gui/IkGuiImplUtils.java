@@ -838,6 +838,124 @@ class IkGuiImplUtils {
         return pushID(Hash.getID(name));
     }
 
+    public static void pushStyleColor(@NonNull ColorType type, int rgba) {
+        context.colorStack.push(new ColorMod(type, rgba));
+    }
+
+    public static void pushStyleVarFloat(@NonNull StyleVariable variable, float value) {
+        if (variable.getDimensions() != 1) {
+            log.error(
+                    "Style variable {} has {} dimensions, 1 float provided",
+                    variable,
+                    variable.getDimensions());
+            return;
+        }
+        if (variable.getExpectedType() != Float.class) {
+            log.error(
+                    "Style variable {} expects a {} value, Float provided",
+                    variable,
+                    variable.getExpectedType().getSimpleName());
+            return;
+        }
+        if (value < variable.getMinValue() || value > variable.getMaxValue()) {
+            log.warn(
+                    "Variable {} outside the expected float range ({}, {})",
+                    variable,
+                    variable.getMinValue(),
+                    variable.getMaxValue());
+        }
+        context.styleVariableStack.push(new StyleMod(variable, value, 0));
+    }
+
+    public static void pushStyleVarFloat2(@NonNull StyleVariable variable, float x, float y) {
+        if (variable.getDimensions() != 2) {
+            log.error(
+                    "Style variable {} has {} dimensions, 2 floats provided",
+                    variable,
+                    variable.getDimensions());
+            return;
+        }
+        if (variable.getExpectedType() != Float.class) {
+            log.error(
+                    "Style variable {} expects {} values, Floats provided",
+                    variable,
+                    variable.getExpectedType().getSimpleName());
+            return;
+        }
+        if (x < variable.getMinValue() || x > variable.getMaxValue()) {
+            log.warn(
+                    "Variable {} x value outside the expected float range({}, {})",
+                    variable,
+                    variable.getMinValue(),
+                    variable.getMaxValue());
+        }
+        if (y < variable.getMinValue() || y > variable.getMaxValue()) {
+            log.warn(
+                    "Variable {} y value outside the expected float range({}, {})",
+                    variable,
+                    variable.getMinValue(),
+                    variable.getMaxValue());
+        }
+        context.styleVariableStack.push(new StyleMod(variable, x, y));
+    }
+
+    public static void pushStyleVarInt(@NonNull StyleVariable variable, int value) {
+        if (variable.getDimensions() != 1) {
+            log.error(
+                    "Style variable {} has {} dimensions, 1 int provided",
+                    variable,
+                    variable.getDimensions());
+            return;
+        }
+        if (variable.getExpectedType() != Integer.class) {
+            log.error(
+                    "Style variable {} expects a {} value, Integer provided",
+                    variable,
+                    variable.getExpectedType().getSimpleName());
+            return;
+        }
+        if (value < variable.getMinValue() || value > variable.getMaxValue()) {
+            log.warn(
+                    "Variable {} outside the expected int range ({}, {})",
+                    variable,
+                    variable.getMinValue(),
+                    variable.getMaxValue());
+        }
+        context.styleVariableStack.push(new StyleMod(variable, value, 0));
+    }
+
+    public static void pushStyleVarInt2(@NonNull StyleVariable variable, int x, int y) {
+        if (variable.getDimensions() != 2) {
+            log.error(
+                    "Style variable {} has {} dimensions, 2 integers provided",
+                    variable,
+                    variable.getDimensions());
+            return;
+        }
+        if (variable.getExpectedType() != Integer.class) {
+            log.error(
+                    "Style variable {} expects {} values, Integers provided",
+                    variable,
+                    variable.getExpectedType().getSimpleName());
+            return;
+        }
+        if (x < variable.getMinValue() || x > variable.getMaxValue()) {
+            log.warn(
+                    "Variable {} x value outside of the expected int range ({}, {})",
+                    variable,
+                    variable.getMinValue(),
+                    variable.getMaxValue());
+        }
+        if (y < variable.getMinValue() || y > variable.getMaxValue()) {
+            log.warn(
+                    "Variable {} y value outside of the expected int range ({}, {})",
+                    variable,
+                    variable.getMinValue(),
+                    variable.getMaxValue());
+        }
+        context.styleVariableStack.push(new StyleMod(variable, x, y));
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplUtils() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
