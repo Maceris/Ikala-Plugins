@@ -3527,11 +3527,18 @@ public class IkGui {
     }
 
     public static void pushTextWrapPos() {
-        // TODO(ches) complete this
+        IkGuiImplLayout.pushTextWrapPos(0.0f);
     }
 
-    public static void pushTextWrapPos(float x) {
-        // TODO(ches) complete this
+    /**
+     * Push word-wrapping position for text commands. If less than 0, no wrapping. If 0, wrap to end
+     * of window (or column). If greater than 0, wrap at 'wrapLocalPosX' position in window local
+     * space.
+     *
+     * @param wrapLocalPosX The wrapping position.
+     */
+    public static void pushTextWrapPos(float wrapLocalPosX) {
+        IkGuiImplLayout.pushTextWrapPos(wrapLocalPosX);
     }
 
     public static boolean radioButton(String label, boolean initialState) {
