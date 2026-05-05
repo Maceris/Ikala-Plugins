@@ -428,6 +428,16 @@ class IkGuiImplMiscWidgets {
         // TODO(ches) complete this
     }
 
+    public static boolean radioButton(String label, boolean initialState) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean radioButton(String label, @NonNull IkInt selectionStorage, int value) {
+        // TODO(ches) complete this
+        return false;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplMiscWidgets() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

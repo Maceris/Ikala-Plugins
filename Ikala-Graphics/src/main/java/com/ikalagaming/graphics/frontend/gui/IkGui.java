@@ -3542,12 +3542,11 @@ public class IkGui {
     }
 
     public static boolean radioButton(String label, boolean initialState) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.radioButton(label, initialState);
     }
 
-    public static boolean radioButton(String label, IkInt selectionStorage, int value) {
-        return false;
+    public static boolean radioButton(String label, @NonNull IkInt selectionStorage, int value) {
+        return IkGuiImplMiscWidgets.radioButton(label, selectionStorage, value);
     }
 
     public static void render() {
@@ -3555,16 +3554,16 @@ public class IkGui {
     }
 
     public static void resetMouseDragDelta() {
-        // TODO(ches) complete this
+        IkGuiImplUtils.resetMouseDragDelta(MouseButton.LEFT);
     }
 
     public static void resetMouseDragDelta(@NonNull MouseButton button) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.resetMouseDragDelta(button);
     }
 
     /** Keep rendering on the same line. */
     public static void sameLine() {
-        sameLine(0, -1);
+        IkGuiImplLayout.sameLine(0, -1);
     }
 
     /**
@@ -3574,7 +3573,7 @@ public class IkGui {
      *     of the last widget's rectangle.
      */
     public static void sameLine(int offsetFromStartX) {
-        sameLine(offsetFromStartX, -1);
+        IkGuiImplLayout.sameLine(offsetFromStartX, -1);
     }
 
     /**
@@ -3585,36 +3584,15 @@ public class IkGui {
      * @param spacingAfterCurrent The horizontal spacing between the current and next widget.
      */
     public static void sameLine(final float offsetFromStartX, float spacingAfterCurrent) {
-        Window window = context.windowCurrent;
-        Vector2f cursor = window.cursorPosition;
-
-        if (spacingAfterCurrent == -1) {
-            spacingAfterCurrent = context.style.variable.itemSpacing.x;
-        }
-
-        float newX;
-        if (offsetFromStartX == 0) {
-            newX = cursor.x + spacingAfterCurrent;
-        } else {
-            newX = window.cursorStartPosition.x + offsetFromStartX;
-        }
-
-        window.sameLine = true;
-        cursor.set(newX, cursor.y);
+        IkGuiImplLayout.sameLine(offsetFromStartX, spacingAfterCurrent);
     }
 
-    public static void saveIniSettingsToDisk(String filename) {
-        // TODO(ches) complete this
+    public static void saveIniSettingsToDisk(@NonNull String filename) {
+        IkGuiImplConfig.saveIniSettingsToDisk(filename);
     }
 
     public static String saveIniSettingsToMemory() {
-        // TODO(ches) complete this
-        return null;
-    }
-
-    public static String saveIniSettingsToMemory(long size) {
-        // TODO(ches) complete this
-        return null;
+        return IkGuiImplConfig.saveIniSettingsToMemory();
     }
 
     public static boolean selectable(String label) {

@@ -16,6 +16,15 @@ class IkGuiImplConfig {
         // TODO(ches) complete this
     }
 
+    public static void saveIniSettingsToDisk(@NonNull String filename) {
+        // TODO(ches) complete this
+    }
+
+    public static String saveIniSettingsToMemory() {
+        // TODO(ches) complete this
+        return null;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplConfig() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

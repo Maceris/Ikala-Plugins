@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.frontend.gui;
 
 import com.ikalagaming.graphics.frontend.gui.data.Context;
+import com.ikalagaming.graphics.frontend.gui.data.Window;
 
 import org.joml.Vector2f;
 
@@ -113,6 +114,25 @@ class IkGuiImplLayout {
 
     public static void pushTextWrapPos(float wrapLocalPosX) {
         // TODO(ches) complete this
+    }
+
+    public static void sameLine(final float offsetFromStartX, float spacingAfterCurrent) {
+        Window window = context.windowCurrent;
+        Vector2f cursor = window.cursorPosition;
+
+        if (spacingAfterCurrent == -1) {
+            spacingAfterCurrent = context.style.variable.itemSpacing.x;
+        }
+
+        float newX;
+        if (offsetFromStartX == 0) {
+            newX = cursor.x + spacingAfterCurrent;
+        } else {
+            newX = window.cursorStartPosition.x + offsetFromStartX;
+        }
+
+        window.sameLine = true;
+        cursor.set(newX, cursor.y);
     }
 
     /** Private constructor so this is not instantiated. */

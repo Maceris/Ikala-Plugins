@@ -956,6 +956,10 @@ class IkGuiImplUtils {
         context.styleVariableStack.push(new StyleMod(variable, x, y));
     }
 
+    public static void resetMouseDragDelta(@NonNull MouseButton button) {
+        // TODO(ches) complete this
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplUtils() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
