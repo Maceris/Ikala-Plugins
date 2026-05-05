@@ -135,6 +135,10 @@ class IkGuiImplLayout {
         cursor.set(newX, cursor.y);
     }
 
+    public static void separator() {
+        // TODO(ches) complete this
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplLayout() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

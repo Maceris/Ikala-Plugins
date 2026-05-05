@@ -438,6 +438,21 @@ class IkGuiImplMiscWidgets {
         return false;
     }
 
+    public static boolean selectable(
+            String label, boolean selected, int selectableFlags, float width, float height) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean selectable(
+            String label,
+            @NonNull IkBoolean selected,
+            int selectableFlags,
+            float width,
+            float height) {
+        return false;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplMiscWidgets() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

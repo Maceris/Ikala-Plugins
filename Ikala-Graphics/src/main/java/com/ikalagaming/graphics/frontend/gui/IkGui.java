@@ -3596,41 +3596,42 @@ public class IkGui {
     }
 
     public static boolean selectable(String label) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.selectable(label, false, SelectableFlags.NONE, 0.0f, 0.0f);
     }
 
     public static boolean selectable(String label, boolean selected) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.selectable(label, selected, SelectableFlags.NONE, 0.0f, 0.0f);
     }
 
     public static boolean selectable(String label, boolean selected, int selectableFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.selectable(label, selected, selectableFlags, 0.0f, 0.0f);
     }
 
     public static boolean selectable(
             String label, boolean selected, int selectableFlags, float width, float height) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.selectable(label, selected, selectableFlags, width, height);
     }
 
-    public static boolean selectable(String label, IkBoolean selected) {
-        return false;
-    }
-
-    public static boolean selectable(String label, IkBoolean selected, int imGuiSelectableFlags) {
-        return false;
+    public static boolean selectable(String label, @NonNull IkBoolean selected) {
+        return IkGuiImplMiscWidgets.selectable(label, selected, SelectableFlags.NONE, 0.0f, 0.0f);
     }
 
     public static boolean selectable(
-            String label, IkBoolean selected, int imGuiSelectableFlags, float width, float height) {
-        return false;
+            String label, @NonNull IkBoolean selected, int selectableFlags) {
+        return IkGuiImplMiscWidgets.selectable(label, selected, selectableFlags, 0.0f, 0.0f);
+    }
+
+    public static boolean selectable(
+            String label,
+            @NonNull IkBoolean selected,
+            int selectableFlags,
+            float width,
+            float height) {
+        return IkGuiImplMiscWidgets.selectable(label, selected, selectableFlags, width, height);
     }
 
     public static void separator() {
-        // TODO(ches) complete this
+        IkGuiImplLayout.separator();
     }
 
     public static void setClipboardText(String text) {
