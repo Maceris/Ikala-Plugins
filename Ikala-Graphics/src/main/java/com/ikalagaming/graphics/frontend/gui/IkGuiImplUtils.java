@@ -960,6 +960,30 @@ class IkGuiImplUtils {
         // TODO(ches) complete this
     }
 
+    public static void setClipboardText(String text) {
+        // TODO(ches) complete this
+    }
+
+    public static void setColorEditOptions(int colorEditFlags) {
+        // TODO(ches) complete this
+    }
+
+    public static void setCursorPos(float x, float y) {
+        // TODO(ches) complete this
+    }
+
+    public static void setCursorPosX(float x) {
+        // TODO(ches) complete this
+    }
+
+    public static void setCursorPosY(float y) {
+        // TODO(ches) complete this
+    }
+
+    public static void setCursorScreenPos(float x, float y) {
+        // TODO(ches) complete this
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplUtils() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

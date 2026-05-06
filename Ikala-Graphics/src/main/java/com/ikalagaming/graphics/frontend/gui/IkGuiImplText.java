@@ -81,6 +81,31 @@ class IkGuiImplText {
         context.fontSize = size;
     }
 
+    public static void setFont(@NonNull String fontPath, int size) {
+        if (!context.io.fonts.isFontLoaded(fontPath)) {
+            log.error(
+                    "Font {} is not loaded, cannot use it as the current font until loaded.",
+                    fontPath);
+            return;
+        }
+        context.font = context.io.fonts.getFont(fontPath);
+        context.fontSize = size;
+    }
+
+    public static void setFontFallbacks(@NonNull String... fontList) {
+        context.fontFallbacks.clear();
+        for (String fontName : fontList) {
+            if (!context.io.fonts.isFontLoaded(fontName) && !context.io.fonts.loadFont(fontName)) {
+                continue;
+            }
+            context.fontFallbacks.add(context.io.fonts.getFont(fontName));
+        }
+    }
+
+    public static void setFontSize(int fontSize) {
+        context.fontSize = fontSize;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplText() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

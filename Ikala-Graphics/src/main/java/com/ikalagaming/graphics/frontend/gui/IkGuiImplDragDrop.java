@@ -1,6 +1,9 @@
 package com.ikalagaming.graphics.frontend.gui;
 
 import com.ikalagaming.graphics.frontend.gui.data.Context;
+import com.ikalagaming.graphics.frontend.gui.enums.Condition;
+
+import lombok.NonNull;
 
 class IkGuiImplDragDrop {
 
@@ -52,6 +55,17 @@ class IkGuiImplDragDrop {
     public static <T> T getDragDropPayload(String dataType) {
         // TODO(ches) complete this
         return null;
+    }
+
+    public static boolean setDragDropPayload(Object payload, @NonNull Condition condition) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean setDragDropPayload(
+            String dataType, Object payload, @NonNull Condition condition) {
+        // TODO(ches) complete this
+        return false;
     }
 
     /** Private constructor so this is not instantiated. */

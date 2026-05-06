@@ -3635,48 +3635,52 @@ public class IkGui {
     }
 
     public static void setClipboardText(String text) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setClipboardText(text);
     }
 
     public static void setColorEditOptions(int colorEditFlags) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setColorEditOptions(colorEditFlags);
+    }
+
+    public static void setCursorPos(@NonNull Vector2f pos) {
+        IkGuiImplUtils.setCursorPos(pos.x, pos.y);
     }
 
     public static void setCursorPos(float x, float y) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setCursorPos(x, y);
     }
 
     public static void setCursorPosX(float x) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setCursorPosX(x);
     }
 
     public static void setCursorPosY(float y) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setCursorPosY(y);
+    }
+
+    public static void setCursorScreenPos(@NonNull Vector2f pos) {
+        IkGuiImplUtils.setCursorScreenPos(pos.x, pos.y);
     }
 
     public static void setCursorScreenPos(float x, float y) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setCursorScreenPos(x, y);
     }
 
     public static boolean setDragDropPayload(Object payload) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplDragDrop.setDragDropPayload(payload, Condition.ALWAYS);
     }
 
     public static boolean setDragDropPayload(Object payload, @NonNull Condition condition) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplDragDrop.setDragDropPayload(payload, condition);
     }
 
     public static boolean setDragDropPayload(String dataType, Object payload) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplDragDrop.setDragDropPayload(dataType, payload, Condition.ALWAYS);
     }
 
     public static boolean setDragDropPayload(
             String dataType, Object payload, @NonNull Condition condition) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplDragDrop.setDragDropPayload(dataType, payload, condition);
     }
 
     /**
@@ -3687,7 +3691,7 @@ public class IkGui {
      * @see #setFontFallbacks(String...)
      */
     public static void setFont(@NonNull String fontPath) {
-        setFont(fontPath, context.fontSize);
+        IkGuiImplText.setFont(fontPath, context.fontSize);
     }
 
     /**
@@ -3701,14 +3705,7 @@ public class IkGui {
      * @see #setFontSize(int)
      */
     public static void setFont(@NonNull String fontPath, int size) {
-        if (!context.io.fonts.isFontLoaded(fontPath)) {
-            log.error(
-                    "Font {} is not loaded, cannot use it as the current font until loaded.",
-                    fontPath);
-            return;
-        }
-        context.font = context.io.fonts.getFont(fontPath);
-        context.fontSize = size;
+        IkGuiImplText.setFont(fontPath, size);
     }
 
     /**
@@ -3719,13 +3716,7 @@ public class IkGui {
      * @see Context#fontFallbacks
      */
     public static void setFontFallbacks(@NonNull String... fontList) {
-        context.fontFallbacks.clear();
-        for (String fontName : fontList) {
-            if (!context.io.fonts.isFontLoaded(fontName) && !context.io.fonts.loadFont(fontName)) {
-                continue;
-            }
-            context.fontFallbacks.add(context.io.fonts.getFont(fontName));
-        }
+        IkGuiImplText.setFontFallbacks(fontList);
     }
 
     /**
@@ -3735,7 +3726,7 @@ public class IkGui {
      * @see #pushFont(String, int)
      */
     public static void setFontSize(int fontSize) {
-        context.fontSize = fontSize;
+        IkGuiImplText.setFontSize(fontSize);
     }
 
     public static void setItemDefaultFocus() {
