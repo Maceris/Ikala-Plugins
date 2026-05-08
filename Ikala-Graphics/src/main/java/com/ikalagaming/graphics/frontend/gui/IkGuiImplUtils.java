@@ -1,10 +1,7 @@
 package com.ikalagaming.graphics.frontend.gui;
 
 import com.ikalagaming.graphics.frontend.gui.data.*;
-import com.ikalagaming.graphics.frontend.gui.enums.ColorType;
-import com.ikalagaming.graphics.frontend.gui.enums.Key;
-import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
-import com.ikalagaming.graphics.frontend.gui.enums.StyleVariable;
+import com.ikalagaming.graphics.frontend.gui.enums.*;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
 import com.ikalagaming.graphics.frontend.gui.util.Hash;
 
@@ -981,6 +978,50 @@ class IkGuiImplUtils {
     }
 
     public static void setCursorScreenPos(float x, float y) {
+        // TODO(ches) complete this
+    }
+
+    public static void setItemDefaultFocus() {
+        // TODO(ches) complete this
+    }
+
+    public static void setKeyboardFocusHere(int offset) {
+        // TODO(ches) complete this
+    }
+
+    public static void setMouseCursor(@NonNull MouseCursor cursor) {
+        // TODO(ches) complete this
+    }
+
+    public static void setNextItemOpen(boolean isOpen, @NonNull Condition condition) {
+        // TODO(ches) complete this
+    }
+
+    public static void setNextItemWidth(float width) {
+        // TODO(ches) complete this
+    }
+
+    public static void setScrollFromX(float localX, float centerXRatio) {
+        // TODO(ches) complete this
+    }
+
+    public static void setScrollFromY(float localY, float centerYRatio) {
+        // TODO(ches) complete this
+    }
+
+    public static void setScrollHereX(float centerXRatio) {
+        // TODO(ches) complete this
+    }
+
+    public static void setScrollHereY(float centerYRatio) {
+        // TODO(ches) complete this
+    }
+
+    public static void setScrollX(float x) {
+        // TODO(ches) complete this
+    }
+
+    public static void setScrollY(float y) {
         // TODO(ches) complete this
     }
 

@@ -4,10 +4,7 @@ import com.ikalagaming.graphics.frontend.gui.data.Context;
 import com.ikalagaming.graphics.frontend.gui.data.IkBoolean;
 import com.ikalagaming.graphics.frontend.gui.data.Viewport;
 import com.ikalagaming.graphics.frontend.gui.data.Window;
-import com.ikalagaming.graphics.frontend.gui.enums.ColorType;
-import com.ikalagaming.graphics.frontend.gui.enums.Direction;
-import com.ikalagaming.graphics.frontend.gui.enums.StyleVariable;
-import com.ikalagaming.graphics.frontend.gui.enums.Visibility;
+import com.ikalagaming.graphics.frontend.gui.enums.*;
 import com.ikalagaming.graphics.frontend.gui.flags.ConditionAllowed;
 import com.ikalagaming.graphics.frontend.gui.flags.DrawFlags;
 import com.ikalagaming.graphics.frontend.gui.flags.ItemStatusFlags;
@@ -394,6 +391,90 @@ class IkGuiImplWindows {
     public static boolean menuItem(
             @NonNull String label, String shortcut, IkBoolean selected, boolean enabled) {
         return false;
+    }
+
+    public static void setNextWindowCollapsed(boolean collapsed, @NonNull Condition condition) {
+        // TODO(ches) complete this
+    }
+
+    public static void setNextWindowDockID(int id, @NonNull Condition condition) {
+        // TODO(ches) complete this
+    }
+
+    public static void setNextWindowFocus() {
+        // TODO(ches) complete this
+    }
+
+    public static void setNextWindowPos(
+            int x, int y, @NonNull Condition condition, int pivotX, int pivotY) {
+
+        if (pivotX < 0f || pivotX > 1.0f) {
+            log.error("Invalid pivotX in setNextWindowPos, should be in the range [0, 1]");
+            return;
+        }
+        if (pivotY < 0f || pivotY > 1.0f) {
+            log.error("Invalid pivotY in setNextWindowPos, should be in the range [0, 1]");
+            return;
+        }
+        // TODO(ches) complete this
+
+        context.nextWindowData.positionPivot.set(pivotX, pivotY);
+        context.nextWindowData.positionValue.set(x, y);
+        context.nextWindowData.positionCondition = condition;
+    }
+
+    public static void setNextWindowSize(int x, int y, @NonNull Condition condition) {
+        // TODO(ches) complete this
+        context.nextWindowData.sizeCondition = condition;
+        context.nextWindowData.sizeValue.set(x, y);
+    }
+
+    public static void setTooltip(String text) {
+        // TODO(ches) complete this
+    }
+
+    public static void setWindowCollapsed(boolean collapsed, @NonNull Condition condition) {
+        // TODO(ches) complete this
+    }
+
+    public static void setWindowFocus() {
+        // TODO(ches) complete this
+    }
+
+    public static void setWindowPos(
+            @NonNull Window window, float x, float y, @NonNull Condition condition) {
+        if (!ConditionAllowed.shouldResolve(condition, window.positionConditionAllowed)) {
+            return;
+        }
+
+        window.positionConditionAllowed &=
+                ~(ConditionAllowed.ONCE
+                        | ConditionAllowed.FIRST_USE_EVER
+                        | ConditionAllowed.APPEARING);
+        window.setWindowPosValue.set(Float.MAX_VALUE, Float.MAX_VALUE);
+
+        Vector2f oldPos = new Vector2f(window.position);
+        window.position.set(x, y);
+        IkGuiInternal.truncate(window.position);
+        Vector2f offset = new Vector2f(window.position).sub(oldPos);
+        if (offset.x == 0.0f && offset.y == 0.0f) {
+            return;
+        }
+
+        IkGuiInternal.markIniSettingsDirty(window);
+        window.cursorPosition.add(offset);
+        window.cursorMaxPosition.add(offset);
+        window.cursorIdealMaxPosition.add(offset);
+        window.cursorStartPosition.add(offset);
+    }
+
+    public static void setWindowPos(
+            float x, float y, @NonNull Condition condition, int pivotX, int pivotY) {
+        // TODO(ches) complete this
+    }
+
+    public static void setWindowSize(float x, float y, @NonNull Condition condition) {
+        // TODO(ches) complete this
     }
 
     /** Private constructor so this is not instantiated. */

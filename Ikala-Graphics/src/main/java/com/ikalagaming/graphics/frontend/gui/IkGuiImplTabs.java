@@ -24,6 +24,10 @@ class IkGuiImplTabs {
         // TODO(ches) complete this
     }
 
+    public static void setTabItemClosed(String label) {
+        // TODO(ches) complete this
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplTabs() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

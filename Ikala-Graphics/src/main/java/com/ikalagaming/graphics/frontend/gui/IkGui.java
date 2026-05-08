@@ -3667,7 +3667,7 @@ public class IkGui {
     }
 
     public static boolean setDragDropPayload(Object payload) {
-        return IkGuiImplDragDrop.setDragDropPayload(payload, Condition.ALWAYS);
+        return IkGuiImplDragDrop.setDragDropPayload(payload, Condition.NONE);
     }
 
     public static boolean setDragDropPayload(Object payload, @NonNull Condition condition) {
@@ -3675,7 +3675,7 @@ public class IkGui {
     }
 
     public static boolean setDragDropPayload(String dataType, Object payload) {
-        return IkGuiImplDragDrop.setDragDropPayload(dataType, payload, Condition.ALWAYS);
+        return IkGuiImplDragDrop.setDragDropPayload(dataType, payload, Condition.NONE);
     }
 
     public static boolean setDragDropPayload(
@@ -3730,218 +3730,179 @@ public class IkGui {
     }
 
     public static void setItemDefaultFocus() {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setItemDefaultFocus();
     }
 
     public static void setKeyboardFocusHere() {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setKeyboardFocusHere(0);
     }
 
     public static void setKeyboardFocusHere(int offset) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setKeyboardFocusHere(offset);
     }
 
     public static void setMouseCursor(@NonNull MouseCursor cursor) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setMouseCursor(cursor);
     }
 
     public static void setNextItemOpen(boolean isOpen) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setNextItemOpen(isOpen, Condition.NONE);
     }
 
     public static void setNextItemOpen(boolean isOpen, @NonNull Condition condition) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setNextItemOpen(isOpen, condition);
     }
 
     public static void setNextItemWidth(float width) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setNextItemWidth(width);
     }
 
     public static void setNextWindowCollapsed(boolean collapsed) {
-        // TODO(ches) complete this
+        IkGuiImplWindows.setNextWindowCollapsed(collapsed, Condition.NONE);
     }
 
     public static void setNextWindowCollapsed(boolean collapsed, @NonNull Condition condition) {
-        // TODO(ches) complete this
+        IkGuiImplWindows.setNextWindowCollapsed(collapsed, condition);
     }
 
     public static void setNextWindowDockID(int id) {
-        // TODO(ches) complete this
+        IkGuiImplWindows.setNextWindowDockID(id, Condition.NONE);
     }
 
     public static void setNextWindowDockID(int id, @NonNull Condition condition) {
-        // TODO(ches) complete this
+        IkGuiImplWindows.setNextWindowDockID(id, condition);
     }
 
     public static void setNextWindowFocus() {
-        // TODO(ches) complete this
+        IkGuiImplWindows.setNextWindowFocus();
     }
 
     public static void setNextWindowPos(int x, int y) {
-        setNextWindowPos(x, y, Condition.ALWAYS, 0, 0);
+        IkGuiImplWindows.setNextWindowPos(x, y, Condition.NONE, 0, 0);
     }
 
     public static void setNextWindowPos(int x, int y, @NonNull Condition condition) {
-        setNextWindowPos(x, y, condition, 0, 0);
+        IkGuiImplWindows.setNextWindowPos(x, y, condition, 0, 0);
     }
 
     public static void setNextWindowPos(
             int x, int y, @NonNull Condition condition, int pivotX, int pivotY) {
-
-        if (pivotX < 0f || pivotX > 1.0f) {
-            log.error("Invalid pivotX in setNextWindowPos, should be in the range [0, 1]");
-            return;
-        }
-        if (pivotY < 0f || pivotY > 1.0f) {
-            log.error("Invalid pivotY in setNextWindowPos, should be in the range [0, 1]");
-            return;
-        }
-
-        context.nextWindowData.positionPivot.set(pivotX, pivotY);
-        context.nextWindowData.positionValue.set(x, y);
-        context.nextWindowData.positionCondition = condition;
+        IkGuiImplWindows.setNextWindowPos(x, y, condition, pivotX, pivotY);
     }
 
     public static void setNextWindowSize(int x, int y) {
-        setNextWindowSize(x, y, Condition.ALWAYS);
+        IkGuiImplWindows.setNextWindowSize(x, y, Condition.NONE);
     }
 
     public static void setNextWindowSize(int x, int y, @NonNull Condition condition) {
-        context.nextWindowData.sizeCondition = condition;
-        context.nextWindowData.sizeValue.set(x, y);
+        IkGuiImplWindows.setNextWindowSize(x, y, condition);
     }
 
     public static void setScrollFromX(float localX) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setScrollFromX(localX, 0.5f);
     }
 
     public static void setScrollFromX(float localX, float centerXRatio) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setScrollFromX(localX, centerXRatio);
     }
 
     public static void setScrollFromY(float localY) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setScrollFromY(localY, 0.5f);
     }
 
     public static void setScrollFromY(float localY, float centerYRatio) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setScrollFromY(localY, centerYRatio);
     }
 
     public static void setScrollHereX() {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setScrollHereX(0.5f);
     }
 
     public static void setScrollHereX(float centerXRatio) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setScrollHereX(centerXRatio);
     }
 
     public static void setScrollHereY() {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setScrollHereY(0.5f);
     }
 
     public static void setScrollHereY(float centerYRatio) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setScrollHereY(centerYRatio);
     }
 
     public static void setScrollX(float x) {
-        // TODO(ches) complete this
+        IkGuiImplUtils.setScrollX(x);
     }
 
-    public static void setScrollY(float x) {
-        // TODO(ches) complete this
+    public static void setScrollY(float y) {
+        IkGuiImplUtils.setScrollY(y);
     }
 
     public static void setTabItemClosed(String label) {
-        // TODO(ches) complete this
+        IkGuiImplTabs.setTabItemClosed(label);
     }
 
     public static void setTooltip(String text) {
-        // TODO(ches) complete this
+        IkGuiImplWindows.setTooltip(text);
     }
 
     public static void setWindowCollapsed(boolean collapsed) {
-        // TODO(ches) complete this
+        IkGuiImplWindows.setWindowCollapsed(collapsed, Condition.NONE);
     }
 
     public static void setWindowCollapsed(boolean collapsed, @NonNull Condition condition) {
-        // TODO(ches) complete this
+        IkGuiImplWindows.setWindowCollapsed(collapsed, condition);
     }
 
     public static void setWindowFocus() {
-        // TODO(ches) complete this
+        IkGuiImplWindows.setWindowFocus();
     }
 
     public static void setWindowPos(@NonNull Window window, @NonNull Vector2f position) {
-        setWindowPos(window, position.x, position.y, Condition.ALWAYS);
+        IkGuiImplWindows.setWindowPos(window, position.x, position.y, Condition.NONE);
     }
 
     public static void setWindowPos(
             @NonNull Window window, @NonNull Vector2f position, @NonNull Condition condition) {
-        setWindowPos(window, position.x, position.y, condition);
+        IkGuiImplWindows.setWindowPos(window, position.x, position.y, condition);
     }
 
     public static void setWindowPos(@NonNull Window window, float x, float y) {
-        setWindowPos(window, x, y, Condition.ALWAYS);
+        IkGuiImplWindows.setWindowPos(window, x, y, Condition.NONE);
     }
 
     public static void setWindowPos(
             @NonNull Window window, float x, float y, @NonNull Condition condition) {
-        if (!ConditionAllowed.shouldResolve(condition, window.positionConditionAllowed)) {
-            return;
-        }
-
-        window.positionConditionAllowed &=
-                ~(ConditionAllowed.ONCE
-                        | ConditionAllowed.FIRST_USE_EVER
-                        | ConditionAllowed.APPEARING);
-        window.setWindowPosValue.set(Float.MAX_VALUE, Float.MAX_VALUE);
-
-        Vector2f oldPos = new Vector2f(window.position);
-        window.position.set(x, y);
-        IkGuiInternal.truncate(window.position);
-        Vector2f offset = new Vector2f(window.position).sub(oldPos);
-        if (offset.x == 0.0f && offset.y == 0.0f) {
-            return;
-        }
-
-        IkGuiInternal.markIniSettingsDirty(window);
-        window.cursorPosition.add(offset);
-        window.cursorMaxPosition.add(offset);
-        window.cursorIdealMaxPosition.add(offset);
-        window.cursorStartPosition.add(offset);
+        IkGuiImplWindows.setWindowPos(window, x, y, condition);
     }
 
     public static void setWindowPos(@NonNull Vector2f position) {
-        setWindowPos(context.windowCurrent, position.x, position.y, Condition.ALWAYS);
+        IkGuiImplWindows.setWindowPos(
+                context.windowCurrent, position.x, position.y, Condition.NONE);
     }
 
     public static void setWindowPos(@NonNull Vector2f position, @NonNull Condition condition) {
-        setWindowPos(context.windowCurrent, position.x, position.y, condition);
+        IkGuiImplWindows.setWindowPos(context.windowCurrent, position.x, position.y, condition);
     }
 
     public static void setWindowPos(float x, float y) {
-        setWindowPos(context.windowCurrent, x, y, Condition.ALWAYS);
+        IkGuiImplWindows.setWindowPos(context.windowCurrent, x, y, Condition.NONE);
     }
 
     public static void setWindowPos(float x, float y, @NonNull Condition condition) {
-        setWindowPos(context.windowCurrent, x, y, condition);
-    }
-
-    public static void setWindowPos(
-            float x, float y, @NonNull Condition condition, int pivotX, int pivotY) {
-        // TODO(ches) complete this
+        IkGuiImplWindows.setWindowPos(context.windowCurrent, x, y, condition);
     }
 
     public static void setWindowSize(float x, float y) {
-        // TODO(ches) complete this
+        IkGuiImplWindows.setWindowSize(x, y, Condition.NONE);
     }
 
     public static void setWindowSize(float x, float y, @NonNull Condition condition) {
-        // TODO(ches) complete this
+        IkGuiImplWindows.setWindowSize(x, y, condition);
     }
 
     public static void showDemoWindow() {
-        showDemoWindow(null);
+        IkGuiDemo.showDemoWindow(null);
     }
 
     public static void showDemoWindow(final IkBoolean open) {
