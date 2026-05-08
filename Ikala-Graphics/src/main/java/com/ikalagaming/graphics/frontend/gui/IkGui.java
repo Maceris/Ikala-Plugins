@@ -3910,20 +3910,41 @@ public class IkGui {
     }
 
     public static boolean sliderAngle(String label, float[] value) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.sliderAngle(
+                label,
+                value,
+                -360.0f,
+                360.0f,
+                IkGuiImplMiscWidgets.SLIDER_ANGLE_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
     public static boolean sliderAngle(
             String label, float[] value, float minDegrees, float maxDegrees) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.sliderAngle(
+                label,
+                value,
+                minDegrees,
+                maxDegrees,
+                IkGuiImplMiscWidgets.SLIDER_ANGLE_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
     public static boolean sliderAngle(
             String label, float[] value, float minDegrees, float maxDegrees, String format) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.sliderAngle(
+                label, value, minDegrees, maxDegrees, format, SliderFlags.NONE);
+    }
+
+    public static boolean sliderAngle(
+            String label,
+            float[] value,
+            float minDegrees,
+            float maxDegrees,
+            String format,
+            int sliderFlags) {
+        return IkGuiImplMiscWidgets.sliderAngle(
+                label, value, minDegrees, maxDegrees, format, sliderFlags);
     }
 
     public static boolean sliderFloat(String label, float[] value, float min, float max) {

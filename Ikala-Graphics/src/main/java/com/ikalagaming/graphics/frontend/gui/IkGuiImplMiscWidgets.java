@@ -12,6 +12,7 @@ class IkGuiImplMiscWidgets {
     public static final String FLOAT_DEFAULT_FORMAT = "%.3f";
     public static final String INT_DEFAULT_FORMAT = "%d";
     public static final String DOUBLE_DEFAULT_FORMAT = "%.6f";
+    public static final String SLIDER_ANGLE_DEFAULT_FORMAT = "%.0f deg";
 
     static Context context;
 
@@ -450,6 +451,17 @@ class IkGuiImplMiscWidgets {
             int selectableFlags,
             float width,
             float height) {
+        return false;
+    }
+
+    public static boolean sliderAngle(
+            String label,
+            float[] value,
+            float minDegrees,
+            float maxDegrees,
+            String format,
+            int sliderFlags) {
+        // TODO(ches) complete this
         return false;
     }
 
