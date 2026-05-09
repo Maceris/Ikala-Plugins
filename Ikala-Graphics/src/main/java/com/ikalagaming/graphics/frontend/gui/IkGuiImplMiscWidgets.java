@@ -465,6 +465,105 @@ class IkGuiImplMiscWidgets {
         return false;
     }
 
+    public static boolean sliderFloat(
+            String label, float[] value, float min, float max, String format, int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean sliderFloat2(
+            String label, float[] values, float min, float max, String format, int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean sliderFloat3(
+            String label, float[] values, float min, float max, String format, int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean sliderFloat4(
+            String label, float[] values, float min, float max, String format, int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean sliderFloatRange2(
+            String label,
+            float[] currentMin,
+            float[] currentMax,
+            float min,
+            float max,
+            String format,
+            String formatMax,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean sliderInt(
+            String label, int[] value, int min, int max, String format, int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean sliderInt2(
+            String label, int[] values, float min, float max, String format, int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean sliderInt3(
+            String label, int[] values, int min, int max, String format, int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean sliderInt4(
+            String label, int[] values, int min, int max, String format, int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean sliderIntRange2(
+            String label,
+            int[] currentMin,
+            int[] currentMax,
+            int min,
+            int max,
+            String format,
+            String formatMax,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean sliderScalar(
+            String label,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            double min,
+            double max,
+            String format,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean sliderScalarN(
+            String label,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            int components,
+            double min,
+            double max,
+            String format,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplMiscWidgets() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

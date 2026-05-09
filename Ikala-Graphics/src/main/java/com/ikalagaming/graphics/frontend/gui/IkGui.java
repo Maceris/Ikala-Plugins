@@ -752,10 +752,32 @@ public class IkGui {
                 SliderFlags.NONE);
     }
 
+    public static boolean dragFloat(String label, @NonNull IkFloat value) {
+        return IkGuiImplMiscWidgets.dragFloat(
+                label,
+                value.getData(),
+                1.0f,
+                0.0f,
+                0.0f,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
+    }
+
     public static boolean dragFloat(String label, float[] value, float speed) {
         return IkGuiImplMiscWidgets.dragFloat(
                 label,
                 value,
+                speed,
+                0.0f,
+                0.0f,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
+    }
+
+    public static boolean dragFloat(String label, @NonNull IkFloat value, float speed) {
+        return IkGuiImplMiscWidgets.dragFloat(
+                label,
+                value.getData(),
                 speed,
                 0.0f,
                 0.0f,
@@ -776,9 +798,32 @@ public class IkGui {
     }
 
     public static boolean dragFloat(
+            String label, @NonNull IkFloat value, float speed, float min, float max) {
+        return IkGuiImplMiscWidgets.dragFloat(
+                label,
+                value.getData(),
+                speed,
+                min,
+                max,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
+    }
+
+    public static boolean dragFloat(
             String label, float[] value, float speed, float min, float max, String format) {
         return IkGuiImplMiscWidgets.dragFloat(
                 label, value, speed, min, max, format, SliderFlags.NONE);
+    }
+
+    public static boolean dragFloat(
+            String label,
+            @NonNull IkFloat value,
+            float speed,
+            float min,
+            float max,
+            String format) {
+        return IkGuiImplMiscWidgets.dragFloat(
+                label, value.getData(), speed, min, max, format, SliderFlags.NONE);
     }
 
     public static boolean dragFloat(
@@ -790,6 +835,18 @@ public class IkGui {
             String format,
             int sliderFlags) {
         return IkGuiImplMiscWidgets.dragFloat(label, value, speed, min, max, format, sliderFlags);
+    }
+
+    public static boolean dragFloat(
+            String label,
+            @NonNull IkFloat value,
+            float speed,
+            float min,
+            float max,
+            String format,
+            int sliderFlags) {
+        return IkGuiImplMiscWidgets.dragFloat(
+                label, value.getData(), speed, min, max, format, sliderFlags);
     }
 
     public static boolean dragFloat2(String label, float[] values) {
@@ -3948,355 +4005,220 @@ public class IkGui {
     }
 
     public static boolean sliderFloat(String label, float[] value, float min, float max) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.sliderFloat(
+                label,
+                value,
+                min,
+                max,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
     public static boolean sliderFloat(
             String label, float[] value, float min, float max, String format) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.sliderFloat(label, value, min, max, format, SliderFlags.NONE);
     }
 
     public static boolean sliderFloat(
             String label, float[] value, float min, float max, String format, int sliderFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.sliderFloat(label, value, min, max, format, sliderFlags);
     }
 
-    public static boolean sliderFloat2(String label, float[] value, float min, float max) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean sliderFloat2(String label, float[] values, float min, float max) {
+        return IkGuiImplMiscWidgets.sliderFloat2(
+                label,
+                values,
+                min,
+                max,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
     public static boolean sliderFloat2(
-            String label, float[] value, float min, float max, String format) {
-        // TODO(ches) complete this
-        return false;
+            String label, float[] values, float min, float max, String format) {
+        return IkGuiImplMiscWidgets.sliderFloat2(label, values, min, max, format, SliderFlags.NONE);
     }
 
     public static boolean sliderFloat2(
-            String label, float[] value, float min, float max, String format, int sliderFlags) {
-        // TODO(ches) complete this
-        return false;
+            String label, float[] values, float min, float max, String format, int sliderFlags) {
+        return IkGuiImplMiscWidgets.sliderFloat2(label, values, min, max, format, sliderFlags);
     }
 
-    public static boolean sliderFloat3(String label, float[] value, float min, float max) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean sliderFloat3(String label, float[] values, float min, float max) {
+        return IkGuiImplMiscWidgets.sliderFloat3(
+                label,
+                values,
+                min,
+                max,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
     public static boolean sliderFloat3(
-            String label, float[] value, float min, float max, String format) {
-        // TODO(ches) complete this
-        return false;
+            String label, float[] values, float min, float max, String format) {
+        return IkGuiImplMiscWidgets.sliderFloat3(label, values, min, max, format, SliderFlags.NONE);
     }
 
     public static boolean sliderFloat3(
-            String label, float[] value, float min, float max, String format, int sliderFlags) {
-        // TODO(ches) complete this
-        return false;
+            String label, float[] values, float min, float max, String format, int sliderFlags) {
+        return IkGuiImplMiscWidgets.sliderFloat3(label, values, min, max, format, sliderFlags);
     }
 
-    public static boolean sliderFloat4(String label, float[] value, float min, float max) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean sliderFloat4(String label, float[] values, float min, float max) {
+        return IkGuiImplMiscWidgets.sliderFloat4(
+                label,
+                values,
+                min,
+                max,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
     public static boolean sliderFloat4(
-            String label, float[] value, float min, float max, String format) {
-        // TODO(ches) complete this
-        return false;
+            String label, float[] values, float min, float max, String format) {
+        return IkGuiImplMiscWidgets.sliderFloat4(label, values, min, max, format, SliderFlags.NONE);
     }
 
     public static boolean sliderFloat4(
-            String label, float[] value, float min, float max, String format, int sliderFlags) {
-        // TODO(ches) complete this
-        return false;
+            String label, float[] values, float min, float max, String format, int sliderFlags) {
+        return IkGuiImplMiscWidgets.sliderFloat4(label, values, min, max, format, sliderFlags);
     }
 
     public static boolean sliderInt(String label, int[] value, int min, int max) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.sliderInt(
+                label, value, min, max, IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT, SliderFlags.NONE);
     }
 
     public static boolean sliderInt(String label, int[] value, int min, int max, String format) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.sliderInt(label, value, min, max, format, SliderFlags.NONE);
     }
 
-    public static boolean sliderInt2(String label, int[] value, int min, int max) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean sliderInt(
+            String label, int[] value, int min, int max, String format, int sliderFlags) {
+        return IkGuiImplMiscWidgets.sliderInt(label, value, min, max, format, sliderFlags);
     }
 
-    public static boolean sliderInt2(String label, int[] value, int min, int max, String format) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean sliderInt2(String label, int[] values, int min, int max) {
+        return IkGuiImplMiscWidgets.sliderInt2(
+                label, values, min, max, IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT, SliderFlags.NONE);
     }
 
-    public static boolean sliderInt3(String label, int[] value, int min, int max) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean sliderInt2(String label, int[] values, int min, int max, String format) {
+        return IkGuiImplMiscWidgets.sliderInt2(label, values, min, max, format, SliderFlags.NONE);
     }
 
-    public static boolean sliderInt3(String label, int[] value, int min, int max, String format) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean sliderInt2(
+            String label, int[] values, int min, int max, String format, int sliderFlags) {
+        return IkGuiImplMiscWidgets.sliderInt2(label, values, min, max, format, sliderFlags);
     }
 
-    public static boolean sliderInt4(String label, int[] value, int min, int max) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean sliderInt3(String label, int[] values, int min, int max) {
+        return IkGuiImplMiscWidgets.sliderInt3(
+                label, values, min, max, IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT, SliderFlags.NONE);
     }
 
-    public static boolean sliderInt4(String label, int[] value, int min, int max, String format) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean sliderInt3(String label, int[] values, int min, int max, String format) {
+        return IkGuiImplMiscWidgets.sliderInt3(label, values, min, max, format, SliderFlags.NONE);
+    }
+
+    public static boolean sliderInt3(
+            String label, int[] values, int min, int max, String format, int sliderFlags) {
+        return IkGuiImplMiscWidgets.sliderInt3(label, values, min, max, format, sliderFlags);
+    }
+
+    public static boolean sliderInt4(String label, int[] values, int min, int max) {
+        return IkGuiImplMiscWidgets.sliderInt3(
+                label, values, min, max, IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT, SliderFlags.NONE);
+    }
+
+    public static boolean sliderInt4(String label, int[] values, int min, int max, String format) {
+        return IkGuiImplMiscWidgets.sliderInt3(label, values, min, max, format, SliderFlags.NONE);
+    }
+
+    public static boolean sliderInt4(
+            String label, int[] values, int min, int max, String format, int sliderFlags) {
+        return IkGuiImplMiscWidgets.sliderInt3(label, values, min, max, format, sliderFlags);
     }
 
     public static boolean sliderScalar(
-            String label, int dataType, IkDouble value, double min, double max) {
-        return false;
-    }
-
-    public static boolean sliderScalar(
-            String label, int dataType, IkDouble value, double min, double max, String format) {
-        return false;
+            String label, @NonNull SliderDataType dataType, @NonNull Object data) {
+        return IkGuiImplMiscWidgets.sliderScalar(
+                label, dataType, data, 0, 0, null, SliderFlags.NONE);
     }
 
     public static boolean sliderScalar(
             String label,
-            int dataType,
-            IkDouble value,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            double min,
+            double max) {
+        return IkGuiImplMiscWidgets.sliderScalar(
+                label, dataType, data, min, max, null, SliderFlags.NONE);
+    }
+
+    public static boolean sliderScalar(
+            String label,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            double min,
+            double max,
+            String format) {
+        return IkGuiImplMiscWidgets.sliderScalar(
+                label, dataType, data, min, max, format, SliderFlags.NONE);
+    }
+
+    public static boolean sliderScalar(
+            String label,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
             double min,
             double max,
             String format,
             int sliderFlags) {
-        return false;
-    }
-
-    public static boolean sliderScalar(
-            String label, int dataType, IkFloat value, float min, float max) {
-        return false;
-    }
-
-    public static boolean sliderScalar(
-            String label, int dataType, IkFloat value, float min, float max, String format) {
-        return false;
-    }
-
-    public static boolean sliderScalar(
-            String label,
-            int dataType,
-            IkFloat value,
-            float min,
-            float max,
-            String format,
-            int sliderFlags) {
-        return false;
-    }
-
-    public static boolean sliderScalar(String label, int dataType, IkInt value, int min, int max) {
-        return false;
-    }
-
-    public static boolean sliderScalar(
-            String label, int dataType, IkInt value, int min, int max, String format) {
-        return false;
-    }
-
-    public static boolean sliderScalar(
-            String label,
-            int dataType,
-            IkInt value,
-            int min,
-            int max,
-            String format,
-            int sliderFlags) {
-        return false;
-    }
-
-    public static boolean sliderScalar(
-            String label, int dataType, IkLong value, long min, long max) {
-        return false;
-    }
-
-    public static boolean sliderScalar(
-            String label, int dataType, IkLong value, long min, long max, String format) {
-        return false;
-    }
-
-    public static boolean sliderScalar(
-            String label,
-            int dataType,
-            IkLong value,
-            long min,
-            long max,
-            String format,
-            int sliderFlags) {
-        return false;
-    }
-
-    public static boolean sliderScalar(
-            String label, int dataType, IkShort value, short min, short max) {
-        return false;
-    }
-
-    public static boolean sliderScalar(
-            String label, int dataType, IkShort value, short min, short max, String format) {
-        return false;
-    }
-
-    public static boolean sliderScalar(
-            String label,
-            int dataType,
-            IkShort value,
-            short min,
-            short max,
-            String format,
-            int sliderFlags) {
-        return false;
+        return IkGuiImplMiscWidgets.sliderScalar(
+                label, dataType, data, min, max, format, sliderFlags);
     }
 
     public static boolean sliderScalarN(
-            String label, int dataType, int components, IkDouble value, double min, double max) {
-        return false;
+            String label, @NonNull SliderDataType dataType, @NonNull Object data, int components) {
+        return IkGuiImplMiscWidgets.sliderScalarN(
+                label, dataType, data, components, 0, 0, null, SliderFlags.NONE);
     }
 
     public static boolean sliderScalarN(
             String label,
-            int dataType,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
             int components,
-            IkDouble value,
+            double min,
+            double max) {
+        return IkGuiImplMiscWidgets.sliderScalarN(
+                label, dataType, data, components, min, max, null, SliderFlags.NONE);
+    }
+
+    public static boolean sliderScalarN(
+            String label,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            int components,
             double min,
             double max,
             String format) {
-        return false;
+        return IkGuiImplMiscWidgets.sliderScalarN(
+                label, dataType, data, components, min, max, format, SliderFlags.NONE);
     }
 
     public static boolean sliderScalarN(
             String label,
-            int dataType,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
             int components,
-            IkDouble value,
             double min,
             double max,
             String format,
             int sliderFlags) {
-        return false;
-    }
-
-    public static boolean sliderScalarN(
-            String label, int dataType, int components, IkFloat value, float min, float max) {
-        return false;
-    }
-
-    public static boolean sliderScalarN(
-            String label,
-            int dataType,
-            int components,
-            IkFloat value,
-            float min,
-            float max,
-            String format) {
-        return false;
-    }
-
-    public static boolean sliderScalarN(
-            String label,
-            int dataType,
-            int components,
-            IkFloat value,
-            float min,
-            float max,
-            String format,
-            int sliderFlags) {
-        return false;
-    }
-
-    public static boolean sliderScalarN(
-            String label, int dataType, int components, IkInt value, int min, int max) {
-        return false;
-    }
-
-    public static boolean sliderScalarN(
-            String label,
-            int dataType,
-            int components,
-            IkInt value,
-            int min,
-            int max,
-            String format) {
-        return false;
-    }
-
-    public static boolean sliderScalarN(
-            String label,
-            int dataType,
-            int components,
-            IkInt value,
-            int min,
-            int max,
-            String format,
-            int sliderFlags) {
-        return false;
-    }
-
-    public static boolean sliderScalarN(
-            String label, int dataType, int components, IkLong value, long min, long max) {
-        return false;
-    }
-
-    public static boolean sliderScalarN(
-            String label,
-            int dataType,
-            int components,
-            IkLong value,
-            long min,
-            long max,
-            String format) {
-        return false;
-    }
-
-    public static boolean sliderScalarN(
-            String label,
-            int dataType,
-            int components,
-            IkLong value,
-            long min,
-            long max,
-            String format,
-            int sliderFlags) {
-        return false;
-    }
-
-    public static boolean sliderScalarN(
-            String label, int dataType, int components, IkShort value, short min, short max) {
-        return false;
-    }
-
-    public static boolean sliderScalarN(
-            String label,
-            int dataType,
-            int components,
-            IkShort value,
-            short min,
-            short max,
-            String format) {
-        return false;
-    }
-
-    public static boolean sliderScalarN(
-            String label,
-            int dataType,
-            int components,
-            IkShort value,
-            short min,
-            short max,
-            String format,
-            int sliderFlags) {
-        return false;
+        return IkGuiImplMiscWidgets.sliderScalarN(
+                label, dataType, data, components, min, max, format, sliderFlags);
     }
 
     public static boolean smallButton(String text) {
