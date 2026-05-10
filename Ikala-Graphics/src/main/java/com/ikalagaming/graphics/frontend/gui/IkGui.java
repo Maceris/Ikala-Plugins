@@ -655,8 +655,8 @@ public class IkGui {
     }
 
     public static boolean combo(
-            String label, IkInt currentItem, String[] items, int popumaxHeightInItems) {
-        return IkGuiImplMiscWidgets.combo(label, currentItem, items, popumaxHeightInItems);
+            String label, IkInt currentItem, String[] items, int popupMaxHeightInItems) {
+        return IkGuiImplMiscWidgets.combo(label, currentItem, items, popupMaxHeightInItems);
     }
 
     /**
@@ -1840,8 +1840,7 @@ public class IkGui {
     }
 
     public static boolean getKeyPressedAmount(int userKeyIndex, float repeatDelay, float rate) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplUtils.getKeyPressedAmount(userKeyIndex, repeatDelay, rate);
     }
 
     public static Viewport getMainViewport() {
@@ -4222,243 +4221,244 @@ public class IkGui {
     }
 
     public static boolean smallButton(String text) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.smallButton(text);
     }
 
     /** Adds vertical space, equal to the current style's y spacing. */
     public static void spacing() {
-        // TODO(ches) complete this
+        IkGuiImplLayout.spacing();
     }
 
     public static boolean tabItemButton(String label) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplTabs.tabItemButton(label, TabItemFlags.NONE);
     }
 
     public static boolean tabItemButton(String label, int tabItemFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplTabs.tabItemButton(label, tabItemFlags);
     }
 
     public static int tableGetColumnCount() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplTables.tableGetColumnCount();
     }
 
     public static int tableGetColumnFlags() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplTables.tableGetColumnFlags(-1);
     }
 
     public static int tableGetColumnFlags(int index) {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplTables.tableGetColumnFlags(index);
     }
 
     public static int tableGetColumnIndex() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplTables.tableGetColumnIndex();
     }
 
     public static String tableGetColumnName() {
-        // TODO(ches) complete this
-        return null;
+        return IkGuiImplTables.tableGetColumnName(-1);
     }
 
     public static String tableGetColumnName(int index) {
-        // TODO(ches) complete this
-        return null;
+        return IkGuiImplTables.tableGetColumnName(index);
     }
 
     public static int tableGetRowIndex() {
-        // TODO(ches) complete this
-        return 0;
+        return IkGuiImplTables.tableGetRowIndex();
     }
 
     public static void tableHeader(String label) {
-        // TODO(ches) complete this
+        IkGuiImplTables.tableHeader(label);
     }
 
     public static void tableHeadersRow() {
-        // TODO(ches) complete this
+        IkGuiImplTables.tableHeadersRow();
     }
 
     public static boolean tableNextColumn() {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplTables.tableNextColumn();
     }
 
     public static void tableNextRow() {
-        // TODO(ches) complete this
+        IkGuiImplTables.tableNextRow(TableRowFlags.NONE, 0.0f);
     }
 
     public static void tableNextRow(int tableRowFlags) {
-        // TODO(ches) complete this
+        IkGuiImplTables.tableNextRow(tableRowFlags, 0.0f);
     }
 
     public static void tableNextRow(int tableRowFlags, float minHeight) {
-        // TODO(ches) complete this
+        IkGuiImplTables.tableNextRow(tableRowFlags, minHeight);
     }
 
-    public static void tableSetBgColor(@NonNull TableBackgroundTarget target, int color) {
-        // TODO(ches) complete this
+    public static void tableSetBackgroundColor(@NonNull TableBackgroundTarget target, int color) {
+        IkGuiImplTables.tableSetBackgroundColor(target, color, -1);
     }
 
     public static void tableSetBgColor(
             @NonNull TableBackgroundTarget target, int color, int columnIndex) {
-        // TODO(ches) complete this
+        IkGuiImplTables.tableSetBackgroundColor(target, color, columnIndex);
     }
 
     public static boolean tableSetColumnIndex(int index) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplTables.tableSetColumnIndex(index);
     }
 
     public static void tableSetupColumn(String label) {
-        // TODO(ches) complete this
+        IkGuiImplTables.tableSetupColumn(label, TableColumnFlags.NONE, 0.0f, 0);
     }
 
     public static void tableSetupColumn(String label, int tableColumnFlags) {
-        // TODO(ches) complete this
+        IkGuiImplTables.tableSetupColumn(label, tableColumnFlags, 0.0f, 0);
     }
 
     public static void tableSetupColumn(String label, int tableColumnFlags, float widthOrWeight) {
-        // TODO(ches) complete this
+        IkGuiImplTables.tableSetupColumn(label, tableColumnFlags, widthOrWeight, 0);
     }
 
     public static void tableSetupColumn(
             String label, int tableColumnFlags, float widthOrWeight, int userID) {
-        // TODO(ches) complete this
+        IkGuiImplTables.tableSetupColumn(label, tableColumnFlags, widthOrWeight, userID);
     }
 
     public static void tableSetupScrollFreeze(int frozenRows, int frozenColumns) {
-        // TODO(ches) complete this
+        IkGuiImplTables.tableSetupScrollFreeze(frozenRows, frozenColumns);
     }
 
     public static void text(@NonNull String text) {
-        int color = context.style.color.text;
-        textColored(color, text);
+        IkGuiImplText.text(text);
     }
 
     public static void textColored(float r, float g, float b, float a, @NonNull String text) {
-        int color = Color.rgba(r, g, b, a);
-        textColored(color, text);
+        IkGuiImplText.textColored(r, g, b, a, text);
     }
 
     public static void textColored(int r, int g, int b, int a, @NonNull String text) {
-        int color = Color.rgba(r, g, b, a);
-        textColored(color, text);
+        IkGuiImplText.textColored(r, g, b, a, text);
     }
 
     public static void textColored(int color, @NonNull String text) {
-        Vector2f cursor = context.windowCurrent.cursorPosition;
-
-        Window window = context.windowCurrent;
-        window.updateCursorBeforeDrawing();
-
-        int cursorDelta =
-                context.windowCurrent.drawList.addText(
-                        context.fontSize, cursor.x, cursor.y, color, text);
-        window.updateCursorAfterDrawing(cursorDelta, getTextLineHeightWithSpacing());
+        IkGuiImplText.textColored(color, text);
     }
 
     public static void textDisabled(@NonNull String text) {
-        int color = context.style.color.textDisabled;
-        textColored(color, text);
+        IkGuiImplText.textDisabled(text);
     }
 
     public static void textUnformatted(@NonNull String text) {
-        // TODO(ches) complete this
+        IkGuiImplText.textUnformatted(text);
     }
 
     public static void textWrapped(@NonNull String text) {
-        // TODO(ches) complete this
+        IkGuiImplText.textWrapped(text);
     }
 
-    public static boolean treeNode(long id, String format) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean treeNode(int id, String format) {
+        return IkGuiImplTrees.treeNode(id, format);
     }
 
     public static boolean treeNode(String label) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplTrees.treeNode(label);
     }
 
-    public static boolean treeNode(String name, String format) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean treeNode(String label, String format) {
+        return IkGuiImplTrees.treeNode(Hash.getID(label), format);
     }
 
-    public static boolean treeNodeEx(long id, int treeNodeFlags, String format) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean treeNodeEx(int id, int treeNodeFlags, String format) {
+        return IkGuiImplTrees.treeNodeEx(id, treeNodeFlags, format);
     }
 
     public static boolean treeNodeEx(String label) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplTrees.treeNodeEx(label, TreeNodeFlags.NONE);
     }
 
-    public static boolean treeNodeEx(String name, int treeNodeFlags) {
-        // TODO(ches) complete this
-        return false;
+    public static boolean treeNodeEx(String label, int treeNodeFlags) {
+        return IkGuiImplTrees.treeNodeEx(label, treeNodeFlags);
     }
 
     public static boolean treeNodeEx(String name, int treeNodeFlags, String format) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplTrees.treeNodeEx(Hash.getID(name), treeNodeFlags, format);
     }
 
     public static void treePop() {
-        // TODO(ches) complete this
+        IkGuiImplTrees.treePop();
     }
 
     public static void treePush() {
-        // TODO(ches) complete this
+        IkGuiImplTrees.treePush();
     }
 
-    public static void treePush(long id) {
-        // TODO(ches) complete this
+    public static void treePush(int id) {
+        IkGuiImplTrees.treePush(id);
     }
 
     public static void treePush(String name) {
-        // TODO(ches) complete this
+        IkGuiImplTrees.treePush(Hash.getID(name));
     }
 
     public static void unindent() {
-        // TODO(ches) complete this
+        IkGuiImplLayout.unindent(0.0f);
     }
 
     public static void unindent(float width) {
-        // TODO(ches) complete this
+        IkGuiImplLayout.unindent(width);
     }
 
     public static void value(String prefix, boolean value) {
-        // TODO(ches) complete this
+        IkGuiImplText.value(prefix, value);
     }
 
     public static void value(String prefix, float value) {
-        // TODO(ches) complete this
+        IkGuiImplText.value(prefix, value);
     }
 
     public static void value(String prefix, float value, String format) {
-        // TODO(ches) complete this
+        IkGuiImplText.value(prefix, value, format);
     }
 
     public static void value(String prefix, int value) {
-        // TODO(ches) complete this
+        IkGuiImplText.value(prefix, value);
     }
 
     public static void value(String prefix, long value) {
-        // TODO(ches) complete this
+        IkGuiImplText.value(prefix, value);
+    }
+
+    public static boolean vSliderFloat(
+            String label, float width, float height, @NonNull IkFloat value, float min, float max) {
+        return IkGuiImplMiscWidgets.vSliderFloat(
+                label,
+                width,
+                height,
+                value.getData(),
+                min,
+                max,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
     public static boolean vSliderFloat(
             String label, float width, float height, float[] value, float min, float max) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.vSliderFloat(
+                label,
+                width,
+                height,
+                value,
+                min,
+                max,
+                IkGuiImplMiscWidgets.FLOAT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
+    }
+
+    public static boolean vSliderFloat(
+            String label,
+            float width,
+            float height,
+            @NonNull IkFloat value,
+            float min,
+            float max,
+            String format) {
+        return IkGuiImplMiscWidgets.vSliderFloat(
+                label, width, height, value.getData(), min, max, format, SliderFlags.NONE);
     }
 
     public static boolean vSliderFloat(
@@ -4469,8 +4469,21 @@ public class IkGui {
             float min,
             float max,
             String format) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.vSliderFloat(
+                label, width, height, value, min, max, format, SliderFlags.NONE);
+    }
+
+    public static boolean vSliderFloat(
+            String label,
+            float width,
+            float height,
+            @NonNull IkFloat value,
+            float min,
+            float max,
+            String format,
+            int sliderFlags) {
+        return IkGuiImplMiscWidgets.vSliderFloat(
+                label, width, height, value.getData(), min, max, format, sliderFlags);
     }
 
     public static boolean vSliderFloat(
@@ -4482,194 +4495,172 @@ public class IkGui {
             float max,
             String format,
             int sliderFlags) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.vSliderFloat(
+                label, width, height, value, min, max, format, sliderFlags);
+    }
+
+    public static boolean vSliderInt(
+            String label, float width, float height, @NonNull IkInt value, int min, int max) {
+        return IkGuiImplMiscWidgets.vSliderInt(
+                label,
+                width,
+                height,
+                value.getData(),
+                min,
+                max,
+                IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
     }
 
     public static boolean vSliderInt(
             String label, float width, float height, int[] value, int min, int max) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.vSliderInt(
+                label,
+                width,
+                height,
+                value,
+                min,
+                max,
+                IkGuiImplMiscWidgets.INT_DEFAULT_FORMAT,
+                SliderFlags.NONE);
+    }
+
+    public static boolean vSliderInt(
+            String label,
+            float width,
+            float height,
+            @NonNull IkInt value,
+            int min,
+            int max,
+            String format) {
+        return IkGuiImplMiscWidgets.vSliderInt(
+                label, width, height, value.getData(), min, max, format, SliderFlags.NONE);
     }
 
     public static boolean vSliderInt(
             String label, float width, float height, int[] value, int min, int max, String format) {
-        // TODO(ches) complete this
-        return false;
+        return IkGuiImplMiscWidgets.vSliderInt(
+                label, width, height, value, min, max, format, SliderFlags.NONE);
+    }
+
+    public static boolean vSliderInt(
+            String label,
+            float width,
+            float height,
+            @NonNull IkInt value,
+            int min,
+            int max,
+            String format,
+            int sliderFlags) {
+        return IkGuiImplMiscWidgets.vSliderInt(
+                label, width, height, value.getData(), min, max, format, sliderFlags);
+    }
+
+    public static boolean vSliderInt(
+            String label,
+            float width,
+            float height,
+            int[] value,
+            int min,
+            int max,
+            String format,
+            int sliderFlags) {
+        return IkGuiImplMiscWidgets.vSliderInt(
+                label, width, height, value, min, max, format, sliderFlags);
+    }
+
+    public static boolean vSliderScalar(
+            String label,
+            @NonNull Vector2f size,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data) {
+        return IkGuiImplMiscWidgets.vSliderScalar(
+                label, size.x, size.y, dataType, data, 0, 0, null, SliderFlags.NONE);
     }
 
     public static boolean vSliderScalar(
             String label,
             float width,
             float height,
-            int dataType,
-            IkDouble value,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data) {
+        return IkGuiImplMiscWidgets.vSliderScalar(
+                label, width, height, dataType, data, 0, 0, null, SliderFlags.NONE);
+    }
+
+    public static boolean vSliderScalar(
+            String label,
+            @NonNull Vector2f size,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
             double min,
             double max) {
-        return false;
+        return IkGuiImplMiscWidgets.vSliderScalar(
+                label, size.x, size.y, dataType, data, min, max, null, SliderFlags.NONE);
     }
 
     public static boolean vSliderScalar(
             String label,
             float width,
             float height,
-            int dataType,
-            IkDouble value,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            double min,
+            double max) {
+        return IkGuiImplMiscWidgets.vSliderScalar(
+                label, width, height, dataType, data, min, max, null, SliderFlags.NONE);
+    }
+
+    public static boolean vSliderScalar(
+            String label,
+            @NonNull Vector2f size,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
             double min,
             double max,
             String format) {
-        return false;
+        return IkGuiImplMiscWidgets.vSliderScalar(
+                label, size.x, size.y, dataType, data, min, max, format, SliderFlags.NONE);
     }
 
     public static boolean vSliderScalar(
             String label,
             float width,
             float height,
-            int dataType,
-            IkDouble value,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            double min,
+            double max,
+            String format) {
+        return IkGuiImplMiscWidgets.vSliderScalar(
+                label, width, height, dataType, data, min, max, format, SliderFlags.NONE);
+    }
+
+    public static boolean vSliderScalar(
+            String label,
+            @NonNull Vector2f size,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
             double min,
             double max,
             String format,
             int sliderFlags) {
-        return false;
+        return IkGuiImplMiscWidgets.vSliderScalar(
+                label, size.x, size.y, dataType, data, min, max, format, sliderFlags);
     }
 
     public static boolean vSliderScalar(
             String label,
             float width,
             float height,
-            int dataType,
-            IkFloat value,
-            float min,
-            float max) {
-        return false;
-    }
-
-    public static boolean vSliderScalar(
-            String label,
-            float width,
-            float height,
-            int dataType,
-            IkFloat value,
-            float min,
-            float max,
-            String format) {
-        return false;
-    }
-
-    public static boolean vSliderScalar(
-            String label,
-            float width,
-            float height,
-            int dataType,
-            IkFloat value,
-            float min,
-            float max,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
+            double min,
+            double max,
             String format,
             int sliderFlags) {
-        return false;
-    }
-
-    public static boolean vSliderScalar(
-            String label, float width, float height, int dataType, IkInt value, int min, int max) {
-        return false;
-    }
-
-    public static boolean vSliderScalar(
-            String label,
-            float width,
-            float height,
-            int dataType,
-            IkInt value,
-            int min,
-            int max,
-            String format) {
-        return false;
-    }
-
-    public static boolean vSliderScalar(
-            String label,
-            float width,
-            float height,
-            int dataType,
-            IkInt value,
-            int min,
-            int max,
-            String format,
-            int sliderFlags) {
-        return false;
-    }
-
-    public static boolean vSliderScalar(
-            String label,
-            float width,
-            float height,
-            int dataType,
-            IkLong value,
-            long min,
-            long max) {
-        return false;
-    }
-
-    public static boolean vSliderScalar(
-            String label,
-            float width,
-            float height,
-            int dataType,
-            IkLong value,
-            long min,
-            long max,
-            String format) {
-        return false;
-    }
-
-    public static boolean vSliderScalar(
-            String label,
-            float width,
-            float height,
-            int dataType,
-            IkLong value,
-            long min,
-            long max,
-            String format,
-            int sliderFlags) {
-        return false;
-    }
-
-    public static boolean vSliderScalar(
-            String label,
-            float width,
-            float height,
-            int dataType,
-            IkShort value,
-            short min,
-            short max) {
-        return false;
-    }
-
-    public static boolean vSliderScalar(
-            String label,
-            float width,
-            float height,
-            int dataType,
-            IkShort value,
-            short min,
-            short max,
-            String format) {
-        return false;
-    }
-
-    public static boolean vSliderScalar(
-            String label,
-            float width,
-            float height,
-            int dataType,
-            IkShort value,
-            short min,
-            short max,
-            String format,
-            int sliderFlags) {
-        return false;
+        return IkGuiImplMiscWidgets.vSliderScalar(
+                label, width, height, dataType, data, min, max, format, sliderFlags);
     }
 
     /** Private constructor so this is not instantiated. */

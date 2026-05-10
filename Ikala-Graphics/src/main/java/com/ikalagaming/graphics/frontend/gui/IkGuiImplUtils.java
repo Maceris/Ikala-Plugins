@@ -407,6 +407,11 @@ class IkGuiImplUtils {
         return 0;
     }
 
+    public static boolean getKeyPressedAmount(int userKeyIndex, float repeatDelay, float rate) {
+        // TODO(ches) complete this
+        return false;
+    }
+
     public static int getMouseCursor() {
         // TODO(ches) complete this
         return 0;

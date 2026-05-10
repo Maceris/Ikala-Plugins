@@ -28,6 +28,11 @@ class IkGuiImplTabs {
         // TODO(ches) complete this
     }
 
+    public static boolean tabItemButton(String label, int tabItemFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
     /** Private constructor so this is not instantiated. */
     private IkGuiImplTabs() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

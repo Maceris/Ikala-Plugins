@@ -4,9 +4,12 @@ import com.ikalagaming.graphics.frontend.gui.callback.GuiInputTextCallback;
 import com.ikalagaming.graphics.frontend.gui.data.Context;
 import com.ikalagaming.graphics.frontend.gui.data.FontBackup;
 import com.ikalagaming.graphics.frontend.gui.data.IkString;
+import com.ikalagaming.graphics.frontend.gui.data.Window;
+import com.ikalagaming.graphics.frontend.gui.util.Color;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Vector2f;
 
 @Slf4j
 class IkGuiImplText {
@@ -104,6 +107,67 @@ class IkGuiImplText {
 
     public static void setFontSize(int fontSize) {
         context.fontSize = fontSize;
+    }
+
+    public static void text(@NonNull String text) {
+        int color = context.style.color.text;
+        textColored(color, text);
+    }
+
+    public static void textColored(float r, float g, float b, float a, @NonNull String text) {
+        int color = Color.rgba(r, g, b, a);
+        textColored(color, text);
+    }
+
+    public static void textColored(int r, int g, int b, int a, @NonNull String text) {
+        int color = Color.rgba(r, g, b, a);
+        textColored(color, text);
+    }
+
+    public static void textColored(int color, @NonNull String text) {
+        Vector2f cursor = context.windowCurrent.cursorPosition;
+
+        Window window = context.windowCurrent;
+        window.updateCursorBeforeDrawing();
+
+        int cursorDelta =
+                context.windowCurrent.drawList.addText(
+                        context.fontSize, cursor.x, cursor.y, color, text);
+        window.updateCursorAfterDrawing(
+                cursorDelta, IkGuiImplLayout.getTextLineHeightWithSpacing());
+    }
+
+    public static void textDisabled(@NonNull String text) {
+        int color = context.style.color.textDisabled;
+        textColored(color, text);
+    }
+
+    public static void textUnformatted(@NonNull String text) {
+        // TODO(ches) complete this
+    }
+
+    public static void textWrapped(@NonNull String text) {
+        // TODO(ches) complete this
+    }
+
+    public static void value(String prefix, boolean value) {
+        // TODO(ches) complete this
+    }
+
+    public static void value(String prefix, float value) {
+        // TODO(ches) complete this
+    }
+
+    public static void value(String prefix, float value, String format) {
+        // TODO(ches) complete this
+    }
+
+    public static void value(String prefix, int value) {
+        // TODO(ches) complete this
+    }
+
+    public static void value(String prefix, long value) {
+        // TODO(ches) complete this
     }
 
     /** Private constructor so this is not instantiated. */

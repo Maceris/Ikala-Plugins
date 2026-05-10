@@ -74,7 +74,7 @@ class IkGuiImplMiscWidgets {
     }
 
     public static boolean combo(
-            String label, IkInt currentItem, String[] items, int popumaxHeightInItems) {
+            String label, IkInt currentItem, String[] items, int popupMaxHeightInItems) {
         // TODO(ches) complete this
         return false;
     }
@@ -556,6 +556,51 @@ class IkGuiImplMiscWidgets {
             @NonNull SliderDataType dataType,
             @NonNull Object data,
             int components,
+            double min,
+            double max,
+            String format,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean smallButton(String text) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean vSliderFloat(
+            String label,
+            float width,
+            float height,
+            float[] value,
+            float min,
+            float max,
+            String format,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean vSliderInt(
+            String label,
+            float width,
+            float height,
+            int[] value,
+            int min,
+            int max,
+            String format,
+            int sliderFlags) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static boolean vSliderScalar(
+            String label,
+            float width,
+            float height,
+            @NonNull SliderDataType dataType,
+            @NonNull Object data,
             double min,
             double max,
             String format,
