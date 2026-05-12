@@ -231,7 +231,6 @@ class IkGuiImplWindows {
         context.lastItemData.displayRect.set(window.rectOuterClipped);
         context.lastItemData.shortcut = 0;
         context.windowDisplayOrder.add(window);
-        context.windowFocusOrder.add(window);
 
         context.drawData.drawLists.add(window.drawList);
 

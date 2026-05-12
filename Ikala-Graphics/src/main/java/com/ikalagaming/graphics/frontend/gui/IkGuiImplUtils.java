@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.frontend.gui;
 
 import com.ikalagaming.graphics.frontend.gui.data.*;
 import com.ikalagaming.graphics.frontend.gui.enums.*;
+import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
 import com.ikalagaming.graphics.frontend.gui.util.Hash;
 
@@ -74,7 +75,7 @@ class IkGuiImplUtils {
     public static void endFrame() {
         // TODO(ches) complete this
 
-        if (context.frameCountEnded == context.frameCount) {
+        if (context.frameCountEnded == context.frameCount || !context.withinFrameScope) {
             log.error("newFrame() must be called before endFrame()");
             return;
         }
@@ -83,6 +84,9 @@ class IkGuiImplUtils {
             log.error("Did not pop off all style variables before ending frame");
             context.styleVariableStack.clear();
         }
+
+        context.withinFrameScopeWithImplicitWindow = false;
+        // TODO(ches) Hide and unfocus implicit/fallback "Debug" window if it hasn't been used
 
         // TODO(ches) update navigation
         // TODO(ches) update docking
@@ -129,6 +133,8 @@ class IkGuiImplUtils {
 
         // TODO(ches) update viewports
 
+        context.withinFrameScope = true;
+
         // Update draw lists
         context.drawData.clear();
         context.backgroundDrawList.clear();
@@ -156,7 +162,15 @@ class IkGuiImplUtils {
         // TODO(ches) clean up transient buffers
         context.windowDisplayOrder.clear();
         context.windowFocusOrder.clear();
-        // TODO(ches) create fallback window
+
+        context.withinFrameScopeWithImplicitWindow = true;
+        IkGuiImplWindows.setNextWindowSize(400, 400, Condition.FIRST_USE_EVER);
+        IkGuiImplWindows.begin("Debug##Default", null, WindowFlags.NONE);
+        if (!context.windowCurrent.isFallbackWindow) {
+            log.error("Failed to set up fallback debug window");
+        }
+        // TODO(ches) Store error recovery state
+        // TODO(ches) call context hooks
     }
 
     public static void render() {
