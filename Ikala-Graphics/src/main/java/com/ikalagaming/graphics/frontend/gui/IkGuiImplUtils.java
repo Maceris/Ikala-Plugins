@@ -140,6 +140,14 @@ class IkGuiImplUtils {
         // TODO(ches) update keyboard inputs
         // TODO(ches) update drag and drop
 
+        for (Window window : context.windowDisplayOrder) {
+            window.wasActive = window.active;
+            window.active = false;
+            window.writeAccessed = false;
+            window.beginCountPreviousFrame = window.beginCount;
+            window.beginCount = 0;
+        }
+
         IkGuiInternal.updateHoveredWindowAndCaptureFlags(context.io.mousePosition);
         IkGuiInternal.updateMouseMovingWindowNewFrame();
 

@@ -26,6 +26,19 @@ public class Window {
 
     public float baseOffsetCurrentLine;
     public float baseOffsetPreviousLine;
+
+    /**
+     * Number of begin calls during the current frame. Normally 0 or 1, but could be more if
+     * appending using multiple begin/end pairs.
+     */
+    public short beginCount;
+
+    /** The number of begin calls from the previous frame. */
+    public short beginCountPreviousFrame;
+
+    public short beginOrderWithinContext;
+    public short beginOrderWithinParent;
+
     public Direction borderBeingDragged;
     public Direction borderBeingHovered;
 
@@ -76,9 +89,18 @@ public class Window {
     public final Vector2f cursorPreviousLinePosition;
 
     public final Vector2f cursorStartPosition;
+
+    /**
+     * Flags for the dock conditions.
+     *
+     * @see ConditionAllowed
+     */
+    public int dockConditionAllowed;
+
     public DockNode dockNodeAsHost;
     public DrawList drawList;
     public int flags;
+    public int flagsPreviousFrame;
     public int flagsAsChildWindow;
     public boolean hidden;
 
@@ -100,7 +122,11 @@ public class Window {
     public IntArrayList idStack;
     public int idWithinParent;
     public float indent;
+    public boolean isExplicitChild;
+    public boolean isFallbackWindow;
     public final IntArrayList itemWidthStack;
+    public int lastFrameActive;
+    public long lastTimeActive;
     public final Vector2f lineSizeCurrent;
     public final Vector2f lineSizePrevious;
 
@@ -210,6 +236,10 @@ public class Window {
 
     public int treeDepth;
     public Viewport viewport;
+    public boolean wasActive;
+
+    /** Set to true when any widget accesses the window. */
+    public boolean writeAccessed;
 
     public Window(@NonNull String name) {
         // TODO(ches) handle loading from ini, update values based on what we find (or don't find)
@@ -217,6 +247,10 @@ public class Window {
         appearing = false;
         baseOffsetCurrentLine = 0.0f;
         baseOffsetPreviousLine = 0.0f;
+        beginCount = 0;
+        beginCountPreviousFrame = 0;
+        beginOrderWithinContext = 0;
+        beginOrderWithinParent = 0;
         borderBeingDragged = Direction.NONE;
         borderBeingHovered = Direction.NONE;
         borderSize = 0.0f;
@@ -233,9 +267,11 @@ public class Window {
         cursorPosition = new Vector2f(0.0f, 0.0f);
         cursorPreviousLinePosition = new Vector2f(0.0f, 0.0f);
         cursorStartPosition = new Vector2f(0.0f, 0.0f);
+        dockConditionAllowed = ConditionAllowed.ALL;
         dockNodeAsHost = null;
         drawList = new DrawList(name);
         flags = WindowFlags.NONE;
+        flagsPreviousFrame = WindowFlags.NONE;
         flagsAsChildWindow = WindowFlags.NONE;
         hidden = false;
         hitTestHolePosition = new Vector2f(0.0f, 0.0f);
@@ -245,7 +281,11 @@ public class Window {
         idStack = new IntArrayList();
         idWithinParent = 0;
         indent = 0.0f;
+        isExplicitChild = false;
+        isFallbackWindow = false;
         itemWidthStack = new IntArrayList();
+        lastFrameActive = -1;
+        lastTimeActive = 0;
         lineSizeCurrent = new Vector2f(0.0f, 0.0f);
         lineSizePrevious = new Vector2f(0.0f, 0.0f);
         menuBarHeight = 0.0f;
@@ -288,10 +328,25 @@ public class Window {
         titleBarHeight = 0.0f;
         treeDepth = 0;
         viewport = null;
+        wasActive = false;
+        writeAccessed = false;
     }
 
     public boolean hasCloseButton() {
         return open != null;
+    }
+
+    public void setConditionAllowFlags(final int flags, final boolean enabled) {
+        positionConditionAllowed =
+                enabled ? (positionConditionAllowed | flags) : (positionConditionAllowed & ~flags);
+        sizeConditionAllowed =
+                enabled ? (sizeConditionAllowed | flags) : (sizeConditionAllowed & ~flags);
+        collapsedConditionAllowed =
+                enabled
+                        ? (collapsedConditionAllowed | flags)
+                        : (collapsedConditionAllowed & ~flags);
+        dockConditionAllowed =
+                enabled ? (dockConditionAllowed | flags) : (dockConditionAllowed & ~flags);
     }
 
     public void updateCursorAfterDrawing(float lastItemWidth, float lastItemHeight) {

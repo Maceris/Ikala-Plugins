@@ -435,6 +435,10 @@ class IkGuiDemo {
                     String.format(
                             "Content Size: (%.2f, %.2f)",
                             window.rectContent.getWidth(), window.rectContent.getHeight()));
+            ImGui.text(
+                    String.format(
+                            "Active: %b, Collapsed: %b, Appearing: %b, Hidden: %b",
+                            window.active, window.collapsed, window.appearing, window.hidden));
 
             ImGui.treePop();
         }

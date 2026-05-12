@@ -13,6 +13,9 @@ public class NextWindowFlags {
     public static final int HAS_WINDOW_FLAGS = 1 << 8;
     public static final int HAS_CHILD_FLAGS = 1 << 9;
     public static final int HAS_REFRESH_POLICY = 1 << 10;
+    public static final int HAS_VIEWPORT = 1 << 11;
+    public static final int HAS_DOCK = 1 << 12;
+    public static final int HAS_WINDOW_CLASS = 1 << 13;
 
     /** Private constructor so this is not instantiated. */
     private NextWindowFlags() {

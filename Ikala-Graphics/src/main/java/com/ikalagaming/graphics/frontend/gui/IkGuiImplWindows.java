@@ -1,14 +1,8 @@
 package com.ikalagaming.graphics.frontend.gui;
 
-import com.ikalagaming.graphics.frontend.gui.data.Context;
-import com.ikalagaming.graphics.frontend.gui.data.IkBoolean;
-import com.ikalagaming.graphics.frontend.gui.data.Viewport;
-import com.ikalagaming.graphics.frontend.gui.data.Window;
+import com.ikalagaming.graphics.frontend.gui.data.*;
 import com.ikalagaming.graphics.frontend.gui.enums.*;
-import com.ikalagaming.graphics.frontend.gui.flags.ConditionAllowed;
-import com.ikalagaming.graphics.frontend.gui.flags.DrawFlags;
-import com.ikalagaming.graphics.frontend.gui.flags.ItemStatusFlags;
-import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
+import com.ikalagaming.graphics.frontend.gui.flags.*;
 import com.ikalagaming.graphics.frontend.gui.util.Hash;
 
 import lombok.NonNull;
@@ -21,19 +15,85 @@ class IkGuiImplWindows {
     static Context context;
 
     public static boolean begin(@NonNull String title, final IkBoolean open, int windowFlags) {
-        // TODO(ches) complete this
-
         final int ID = IkGui.pushID(title);
 
-        Window window = context.windowByID.computeIfAbsent(ID, ignored -> new Window(title));
+        boolean windowJustCreated = false;
+        Window window = context.windowByID.getOrDefault(ID, null);
 
-        if (WindowFlags.NONE == windowFlags) {
-            window.flags = context.nextWindowData.windowFlags;
-        } else {
-            window.flags = windowFlags;
+        if (window == null) {
+            windowJustCreated = true;
+            window = new Window(title);
+            context.windowByID.put(ID, window);
         }
-        window.flagsAsChildWindow = WindowFlags.NONE;
 
+        if ((windowFlags & WindowFlags.NO_INPUTS) == WindowFlags.NO_INPUTS) {
+            windowFlags |= WindowFlags.NO_MOVE | WindowFlags.NO_RESIZE;
+        }
+
+        final int currentFrame = context.frameCount;
+        final boolean firstBeginOfFrame = window.lastFrameActive != currentFrame;
+
+        window.isFallbackWindow =
+                context.windowStack.isEmpty() && context.withinFrameScopeWithImplicitWindow;
+
+        boolean windowJustActivatedByUser = window.lastFrameActive < currentFrame - 1;
+
+        if ((windowFlags & WindowFlags.INTERNAL_POPUP) != 0) {
+            PopupData popupReference = context.openPopupStack.peek();
+            if (popupReference == null) {
+                log.error(
+                        "Calling begin with a popup flag, instead of going through the popup flow");
+                return false;
+            } else {
+                // We recycle popups, so treat windows as activated if the popup ID changed
+                windowJustActivatedByUser =
+                        windowJustActivatedByUser
+                                || (window.idAsPopupWindow != popupReference.popupID);
+                windowJustActivatedByUser =
+                        windowJustActivatedByUser || (window != popupReference.window);
+            }
+        }
+
+        final boolean windowWasAppearing = window.appearing;
+
+        if (firstBeginOfFrame) {
+            // Update window in focus order list
+            final boolean newIsExplicitChild =
+                    (windowFlags & WindowFlags.INTERNAL_CHILD_WINDOW) != 0
+                            && ((windowFlags & WindowFlags.INTERNAL_POPUP) != 0
+                                    || (windowFlags & WindowFlags.INTERNAL_CHILD_MENU) != 0);
+            final boolean childFlagChanged = newIsExplicitChild != window.isExplicitChild;
+            if ((windowJustCreated || childFlagChanged) && !newIsExplicitChild) {
+                if (context.windowFocusOrder.contains(window)) {
+                    log.error("Window already exists in focus order!");
+                    return false;
+                }
+                context.windowFocusOrder.add(window);
+            } else if (!windowJustCreated && childFlagChanged && newIsExplicitChild) {
+                context.windowFocusOrder.remove(window);
+            }
+            window.isExplicitChild = newIsExplicitChild;
+
+            window.appearing = windowJustActivatedByUser;
+            if (windowJustActivatedByUser) {
+                window.setConditionAllowFlags(ConditionAllowed.APPEARING, true);
+            }
+            window.flagsPreviousFrame = window.flags;
+            window.flags = windowFlags;
+            window.flagsAsChildWindow =
+                    (context.nextWindowData.fieldFlags & NextWindowFlags.HAS_CHILD_FLAGS) != 0
+                            ? context.nextWindowData.childFlags
+                            : 0;
+            window.lastFrameActive = currentFrame;
+            window.lastTimeActive = context.time;
+            window.beginOrderWithinParent = 0;
+            window.beginOrderWithinContext = (short) context.windowActiveCount;
+            context.windowActiveCount += 1;
+        } else {
+            windowFlags = window.flags;
+        }
+
+        // TODO(ches) port the rest of this
         window.id = ID;
         window.idMove = Hash.getID("#MOVE", ID);
         window.idWithinParent = 0;

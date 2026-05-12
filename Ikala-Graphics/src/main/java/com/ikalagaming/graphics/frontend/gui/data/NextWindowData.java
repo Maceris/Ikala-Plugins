@@ -11,6 +11,10 @@ import lombok.NonNull;
 import org.joml.Vector2i;
 
 public class NextWindowData {
+
+    public @NonNull Condition dockCondition;
+    public int dockID;
+
     /**
      * @see com.ikalagaming.graphics.frontend.gui.flags.NextWindowFlags
      */
@@ -27,6 +31,8 @@ public class NextWindowData {
     public final Vector2i scrollValue;
 
     /**
+     * Only honored by beginTable.
+     *
      * @see com.ikalagaming.graphics.frontend.gui.flags.WindowFlags
      */
     public int windowFlags;
@@ -37,7 +43,10 @@ public class NextWindowData {
     public int childFlags;
 
     public final RectFloat sizeConstraintRect;
+
+    /** Override background alpha. */
     public float backgroundAlpha;
+
     public final Vector2i menuBarOffsetMinValue;
 
     /**
@@ -49,6 +58,8 @@ public class NextWindowData {
     public Viewport viewport;
 
     public NextWindowData() {
+        dockCondition = Condition.NONE;
+        dockID = 0;
         fieldFlags = NextWindowFlags.NONE;
         positionCondition = Condition.NONE;
         positionValue = new Vector2i(0, 0);

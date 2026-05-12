@@ -452,6 +452,8 @@ public class Context {
     public final RectFloat windowResizeBorderExpectedRect;
     public boolean windowResizeRelativeMode;
 
+    public final List<WindowStackData> windowStack;
+
     public Window windowWheeling;
     public final Vector2f windowWheelingAxisAverage;
     public final Vector2f windowWheelingRefMousePosition;
@@ -459,6 +461,15 @@ public class Context {
     public int windowWheelingScrolledFrame;
     public int windowWheelingStartFrame;
     public final Vector2f windowWheelingWheelRemainder;
+
+    /** Set by {@link IkGui#newFrame()}, cleared by {@link IkGui#endFrame()}. */
+    public boolean withinFrameScope;
+
+    /**
+     * Set by {@link IkGui#newFrame()}, cleared by {@link IkGui#endFrame()} when the implicit debug
+     * window has been pushed.
+     */
+    public boolean withinFrameScopeWithImplicitWindow;
 
     public Context() {
         activeID = 0;
@@ -696,6 +707,7 @@ public class Context {
         windowMoving = null;
         windowResizeBorderExpectedRect = new RectFloat(0, 0, 0, 0);
         windowResizeRelativeMode = false;
+        windowStack = new ArrayList<>();
         windowWheeling = null;
         windowWheelingAxisAverage = new Vector2f(0, 0);
         windowWheelingRefMousePosition = new Vector2f(0, 0);
@@ -703,6 +715,8 @@ public class Context {
         windowWheelingScrolledFrame = 0;
         windowWheelingStartFrame = 0;
         windowWheelingWheelRemainder = new Vector2f(0, 0);
+        withinFrameScope = false;
+        withinFrameScopeWithImplicitWindow = false;
 
         drawData.drawLists.add(backgroundDrawList);
         drawData.drawLists.add(foregroundDrawList);
