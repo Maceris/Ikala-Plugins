@@ -407,6 +407,8 @@ public class Context {
     public float sliderCurrentAccumulatedDelta;
     public boolean sliderCurrentAccumulatedDeltaDirty;
     public float sliderGrabClickOffset;
+    public ErrorRecoveryState stackSizesInBegin;
+    public ErrorRecoveryState stackSizesInNewFrame;
     public final Style style;
     public final Deque<StyleMod> styleVariableStack;
     public final List<TabBar> tabBars;
@@ -682,6 +684,8 @@ public class Context {
         sliderCurrentAccumulatedDelta = 0.0f;
         sliderCurrentAccumulatedDeltaDirty = false;
         sliderGrabClickOffset = 0.0f;
+        stackSizesInBegin = new ErrorRecoveryState();
+        stackSizesInNewFrame = new ErrorRecoveryState();
         style = new Style();
         styleVariableStack = new ArrayDeque<>();
         tabBars = new ArrayList<>();

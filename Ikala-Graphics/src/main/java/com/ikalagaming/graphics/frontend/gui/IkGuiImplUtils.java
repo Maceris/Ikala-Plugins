@@ -169,7 +169,10 @@ class IkGuiImplUtils {
         if (!context.windowCurrent.isFallbackWindow) {
             log.error("Failed to set up fallback debug window");
         }
-        // TODO(ches) Store error recovery state
+
+        context.errorCountCurrentFrame = 0;
+        IkGuiInternal.errorRecoveryStoreState(context.stackSizesInNewFrame);
+
         // TODO(ches) call context hooks
     }
 

@@ -1,8 +1,6 @@
 package com.ikalagaming.graphics.frontend.gui;
 
-import com.ikalagaming.graphics.frontend.gui.data.Context;
-import com.ikalagaming.graphics.frontend.gui.data.PopupData;
-import com.ikalagaming.graphics.frontend.gui.data.Window;
+import com.ikalagaming.graphics.frontend.gui.data.*;
 import com.ikalagaming.graphics.frontend.gui.enums.Condition;
 import com.ikalagaming.graphics.frontend.gui.enums.GuiInputSource;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
@@ -36,6 +34,20 @@ public class IkGuiInternal {
         }
 
         // TODO(ches) close popups above the reference window
+    }
+
+    public static void errorRecoveryStoreState(@NonNull ErrorRecoveryState stateOut) {
+        stateOut.sizeOfWindowStack = (short) context.windowStack.size();
+        stateOut.sizeOfIDStack = (short) context.windowCurrent.idStack.size();
+        stateOut.sizeOfTreeStack = (short) context.windowCurrent.treeDepth;
+        stateOut.sizeOfColorStack = (short) context.colorStack.size();
+        stateOut.sizeOfStyleVarStack = (short) context.styleVariableStack.size();
+        stateOut.sizeOfFontStack = (short) context.fontStack.size();
+        stateOut.sizeOfFocusScopeStack = (short) context.focusScopeStack.size();
+        stateOut.sizeOfGroupStack = (short) context.groupStack.size();
+        stateOut.sizeOfItemFlagsStack = (short) context.itemFlagsStack.size();
+        stateOut.sizeOfBeginPopupStack = (short) context.beginPopupStack.size();
+        stateOut.sizeOfDisabledStack = context.disabledStackSize;
     }
 
     /**
