@@ -97,7 +97,38 @@ public class Window {
      */
     public int dockConditionAllowed;
 
+    /**
+     * Backup of the last valid dockNode ID, so single windows remember their dock node ID even when
+     * not bound anymore.
+     */
+    public int dockID;
+
+    /** If docking artifacts are actually visible. When set, dockNode will be non-null. */
+    public boolean dockIsActive;
+
+    public boolean dockIsVisible;
+
+    /**
+     * Which dock node the window is docked into. Prefer checking {@link #dockIsActive}, as this can
+     * be set even if the dock node is hidden.
+     */
+    public DockNode dockNode;
+
+    /** The node that we own, for parent windows. */
     public DockNode dockNodeAsHost;
+
+    /**
+     * Order of the last time the window was visible within it's dock node. Used to reorder windows
+     * that are reappearing in the same frame. It's possible to have the same value between windows
+     * that were active and windows that were none.
+     */
+    public short dockOrder;
+
+    /** If the window is visible this frame, the corresponding tab is selected. */
+    public boolean dockTabIsVisible;
+
+    public boolean dockTabWantClose;
+
     public DrawList drawList;
     public int flags;
     public int flagsPreviousFrame;
@@ -267,8 +298,15 @@ public class Window {
         cursorPosition = new Vector2f(0.0f, 0.0f);
         cursorPreviousLinePosition = new Vector2f(0.0f, 0.0f);
         cursorStartPosition = new Vector2f(0.0f, 0.0f);
+        dockID = 0;
         dockConditionAllowed = ConditionAllowed.ALL;
+        dockIsActive = false;
+        dockIsVisible = false;
+        dockNode = null;
         dockNodeAsHost = null;
+        dockOrder = 0;
+        dockTabIsVisible = false;
+        dockTabWantClose = false;
         drawList = new DrawList(name);
         flags = WindowFlags.NONE;
         flagsPreviousFrame = WindowFlags.NONE;

@@ -93,6 +93,11 @@ class IkGuiImplWindows {
             windowFlags = window.flags;
         }
 
+        if (window.dockNode != null && window.dockNodeAsHost != null) {
+            log.error("CAnnot have both dock node and dock node as host set");
+            return false;
+        }
+
         // TODO(ches) port the rest of this
         window.id = ID;
         window.idMove = Hash.getID("#MOVE", ID);
