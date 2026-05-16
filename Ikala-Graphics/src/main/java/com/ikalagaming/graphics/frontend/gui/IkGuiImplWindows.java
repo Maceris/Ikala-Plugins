@@ -98,6 +98,11 @@ class IkGuiImplWindows {
             return false;
         }
 
+        if ((context.nextWindowData.fieldFlags & NextWindowFlags.HAS_DOCK) != 0) {
+            window.setWindowDock(
+                    context.nextWindowData.dockID, context.nextWindowData.dockCondition);
+        }
+
         // TODO(ches) port the rest of this
         window.id = ID;
         window.idMove = Hash.getID("#MOVE", ID);

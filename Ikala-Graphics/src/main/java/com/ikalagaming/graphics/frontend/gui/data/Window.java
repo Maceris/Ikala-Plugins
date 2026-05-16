@@ -1,6 +1,8 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
 import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.IkGuiInternal;
+import com.ikalagaming.graphics.frontend.gui.enums.Condition;
 import com.ikalagaming.graphics.frontend.gui.enums.Direction;
 import com.ikalagaming.graphics.frontend.gui.enums.Visibility;
 import com.ikalagaming.graphics.frontend.gui.flags.ConditionAllowed;
@@ -396,6 +398,23 @@ public class Window {
         }
         cursorPosition.add(lastItemWidth, 0.0f);
         sameLine = false;
+    }
+
+    public void setWindowDock(int dockID, Condition condition) {
+        if (!ConditionAllowed.shouldResolve(condition, sizeConditionAllowed)) {
+            return;
+        }
+        dockConditionAllowed &=
+                ~(ConditionAllowed.ONCE
+                        | ConditionAllowed.FIRST_USE_EVER
+                        | ConditionAllowed.APPEARING);
+
+        if (this.dockID == dockID) {
+            return;
+        }
+        // TODO(ches) complete this
+        DockNode newNode = IkGuiInternal.dockContextFindNodeByID(dockID);
+        if (newNode != null) {}
     }
 
     public void updateCursorBeforeDrawing() {

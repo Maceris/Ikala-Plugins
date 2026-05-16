@@ -36,6 +36,11 @@ public class IkGuiInternal {
         // TODO(ches) close popups above the reference window
     }
 
+    public static DockNode dockContextFindNodeByID(int dockID) {
+        // TODO(ches) complete this
+        return null;
+    }
+
     public static void errorRecoveryStoreState(@NonNull ErrorRecoveryState stateOut) {
         stateOut.sizeOfWindowStack = (short) context.windowStack.size();
         stateOut.sizeOfIDStack = (short) context.windowCurrent.idStack.size();

@@ -16,6 +16,8 @@ public class NextWindowData {
     public int dockID;
 
     /**
+     * Which fields of the next window data are set.
+     *
      * @see com.ikalagaming.graphics.frontend.gui.flags.NextWindowFlags
      */
     public int fieldFlags;
