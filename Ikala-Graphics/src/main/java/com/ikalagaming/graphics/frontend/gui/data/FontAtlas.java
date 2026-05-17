@@ -11,7 +11,6 @@ import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import lombok.Synchronized;
 import lombok.extern.slf4j.Slf4j;
-import org.joml.Vector4i;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.util.freetype.*;
@@ -26,6 +25,23 @@ import java.util.*;
 /** Handles all the loaded fonts, and the texture used to cache and render characters. */
 @Slf4j
 public class FontAtlas {
+
+    public static class CharInfo {
+        /** The actual character value. */
+        public final char value;
+
+        public int x;
+        public int y;
+        public int width;
+        public int height;
+        public int bearingX;
+        public int bearingY;
+
+        public CharInfo(final char value) {
+            this.value = value;
+        }
+    }
+
     private static class CacheElement {
         /** Previous element in the doubly-linked list. */
         public CacheElement previous;
@@ -36,19 +52,15 @@ public class FontAtlas {
         /** The next value in the case of collisions. */
         public CacheElement chain;
 
-        /** The actual character value. */
-        public final char value;
-
-        public int x;
-        public int y;
-        public int width;
-        public int height;
+        public final CharInfo info;
 
         public CacheElement(final char value) {
             this.previous = null;
             this.next = null;
             this.chain = null;
-            this.value = value;
+            // TODO(ches) we should probably allocate these from an array instead of randomly on the
+            // heap
+            this.info = new CharInfo(value);
         }
     }
 
@@ -133,11 +145,11 @@ public class FontAtlas {
 
     public FontAtlas() {
         cacheHead = new CacheElement(' ');
-        cacheHead.x = -1;
-        cacheHead.y = -1;
+        cacheHead.info.x = -1;
+        cacheHead.info.y = -1;
         cacheTail = new CacheElement(' ');
-        cacheTail.x = -1;
-        cacheTail.y = -1;
+        cacheTail.info.x = -1;
+        cacheTail.info.y = -1;
 
         cacheHead.next = cacheTail;
         cacheHead.previous = null;
@@ -197,7 +209,7 @@ public class FontAtlas {
         boolean exists = false;
 
         CacheElement element = cacheElements[index];
-        while (element != null && element.value != c) {
+        while (element != null && element.info.value != c) {
             element = element.chain;
         }
         if (element != null) {
@@ -305,8 +317,8 @@ public class FontAtlas {
                 for (FreeBlock block : shelf.freeList) {
                     if (block.size >= width) {
                         // Found one
-                        element.x = block.position;
-                        element.y = shelf.y;
+                        element.info.x = block.position;
+                        element.info.y = shelf.y;
                         block.position += width;
                         block.size -= width;
                         return;
@@ -330,8 +342,8 @@ public class FontAtlas {
                     block.size -= shelfHeight;
 
                     FreeBlock shelfSpace = newShelf.freeList.getFirst();
-                    element.x = shelfSpace.position;
-                    element.y = newShelf.y;
+                    element.info.x = shelfSpace.position;
+                    element.info.y = newShelf.y;
                     shelfSpace.position += width;
                     shelfSpace.size -= width;
                     return;
@@ -342,7 +354,7 @@ public class FontAtlas {
             CacheElement oldestElement = cacheTail.previous;
             Shelf oldShelf = null;
             for (Shelf shelf : shelves) {
-                if (shelf.y == oldestElement.y) {
+                if (shelf.y == oldestElement.info.y) {
                     oldShelf = shelf;
                     break;
                 }
@@ -353,22 +365,22 @@ public class FontAtlas {
                 return;
             }
 
-            if (oldestElement.width >= width && oldShelf.height >= height) {
-                element.x = oldestElement.x;
-                element.y = oldShelf.y;
+            if (oldestElement.info.width >= width && oldShelf.height >= height) {
+                element.info.x = oldestElement.info.x;
+                element.info.y = oldShelf.y;
 
                 cacheRemove(oldestElement, cacheIndex);
-                if (oldestElement.width > width) {
+                if (oldestElement.info.width > width) {
                     // It's smaller than the old element, so add in a sliver of empty space
                     FreeBlock newBlock =
-                            new FreeBlock(element.x + width, oldestElement.width - width);
+                            new FreeBlock(element.info.x + width, oldestElement.info.width - width);
                     mergeBlock(oldShelf.freeList, newBlock);
                 }
                 break;
             }
 
             // it is not enough
-            FreeBlock newBlock = new FreeBlock(oldestElement.x, oldestElement.width);
+            FreeBlock newBlock = new FreeBlock(oldestElement.info.x, oldestElement.info.width);
             mergeBlock(oldShelf.freeList, newBlock);
 
             if (oldShelf.freeList.size() == 1
@@ -446,11 +458,10 @@ public class FontAtlas {
      *
      * @param c The character to look up.
      * @param fontSize The font size.
-     * @param output The x, y, width, and height of the character in pixels on the font atlas.
-     * @return Whether we actually found the character.
+     * @return An optional that contains the character info if we found it.
      */
     @Synchronized
-    public boolean getFontMapPosition(char c, int fontSize, Vector4i output) {
+    public Optional<CharInfo> getFontMapInfo(char c, int fontSize) {
         Font font = null;
         Font primary = IkGui.getContext().font;
 
@@ -475,15 +486,14 @@ public class FontAtlas {
         final int index = hashValue & CACHE_MASK;
 
         CacheElement element = cacheElements[index];
-        while (element != null && element.value != c) {
+        while (element != null && element.info.value != c) {
             element = element.chain;
         }
         if (element == null) {
-            return false;
+            return Optional.empty();
         }
         moveToFront(element);
-        output.set(element.x, element.y, element.width, element.height);
-        return true;
+        return Optional.of(element.info);
     }
 
     @Synchronized
@@ -614,8 +624,8 @@ public class FontAtlas {
 
             ByteBuffer oldContents = bitmap.buffer(originalBufferSize);
             if (oldContents == null) {
-                element.width = 0;
-                element.height = 0;
+                element.info.width = 0;
+                element.info.height = 0;
                 return EMPTY_BITMAP;
             }
             ByteBuffer newContents = ByteBuffer.allocateDirect(width * height * Integer.BYTES);
@@ -699,12 +709,18 @@ public class FontAtlas {
             }
             newContents.flip();
 
+            FT_Glyph_Metrics metrics = slot.metrics();
+
             allocAtlasSpace(width, height, element, cacheIndex);
-            element.width = width;
-            element.height = height;
+            element.info.width = width;
+            element.info.height = height;
+            // TODO(ches) handle vertical font bearings
+            // These are in 26.6 pixel format (i.e. 1/64 of a pixel). Hence the dividing.
+            element.info.bearingX = (int) (metrics.horiBearingX() / 64);
+            element.info.bearingY = (int) (metrics.horiBearingY() / 64);
 
             StagedBitmap newBitmap =
-                    new StagedBitmap(newContents, element.x, element.y, width, height);
+                    new StagedBitmap(newContents, element.info.x, element.info.y, width, height);
             stagedBitmaps.add(newBitmap);
 
             return newBitmap;

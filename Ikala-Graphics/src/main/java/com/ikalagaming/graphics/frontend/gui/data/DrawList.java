@@ -11,14 +11,10 @@ import com.ikalagaming.util.IntArrayList;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
-import org.joml.Vector4i;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.List;
+import java.util.*;
 
 @Slf4j
 public class DrawList {
@@ -999,33 +995,34 @@ public class DrawList {
 
         // TODO(ches) RTL, vertical
 
-        List<Vector4i> positions = new ArrayList<>(text.length());
+        List<FontAtlas.CharInfo> infoList = new ArrayList<>(text.length());
 
         for (int pos = 0; pos < text.length(); ++pos) {
             final char c = text.charAt(pos);
             atlas.registerCharacter(c, fontSize);
 
-            Vector4i charPosition = new Vector4i();
-            positions.add(charPosition);
-
-            if (!atlas.getFontMapPosition(c, fontSize, charPosition)) {
+            Optional<FontAtlas.CharInfo> maybeInfo = atlas.getFontMapInfo(c, fontSize);
+            if (maybeInfo.isEmpty()) {
                 log.error("Could not find a font for character '{}'", c);
+            } else {
+                infoList.add(maybeInfo.get());
             }
         }
 
         // TODO(ches) We should probably share this logic with IkGui.calcTextSize()
         int currentX = (int) posX;
         int maxHeight = 0;
-        for (Vector4i pos : positions) {
-            if (pos.w > maxHeight) {
-                maxHeight = pos.w;
+        for (FontAtlas.CharInfo info : infoList) {
+            final int heightAboveBaseline = info.bearingY;
+            if (heightAboveBaseline > maxHeight) {
+                maxHeight = heightAboveBaseline;
             }
         }
 
-        for (int i = 0; i < positions.size(); ++i) {
-            Vector4i pos = positions.get(i);
+        for (int i = 0; i < infoList.size(); ++i) {
+            FontAtlas.CharInfo info = infoList.get(i);
 
-            if (pos.z == 0 && pos.y == 0) {
+            if (info.width == 0 && info.y == 0) {
                 char c = text.charAt(i);
                 if (c == ' ') {
                     int width = (int) (fontSize * fontScale * 0.25);
@@ -1035,10 +1032,19 @@ public class DrawList {
                 continue;
             }
 
-            addScreenQuad(
-                    currentX, posY + maxHeight - pos.w, (float) currentX + pos.z, posY + maxHeight);
-            final int pointIndex = addPoint(currentX, posY + maxHeight - pos.w, 0, 0);
-            addPoint(pos.x, pos.y, pos.z, pos.w);
+            // TODO(ches) fix the occasionally sketchy kerning
+
+            final float quadMinX = (float) currentX + info.bearingX;
+            final float quadMinY = posY + maxHeight - info.bearingY;
+            final float quadMaxX = (float) currentX + info.width + info.bearingX;
+            // Needs to include the lil nub below baseline
+            final float quadMaxY = posY + maxHeight + (info.height - info.bearingY);
+
+            addScreenQuad(quadMinX, quadMinY, quadMaxX, quadMaxY);
+            // Quad info
+            final int pointIndex = addPoint(quadMinX, quadMinY, 0, 0);
+            // Text info
+            addPoint(info.x, info.y, info.width, info.height);
 
             addCommand(
                     pointIndex,
@@ -1049,9 +1055,9 @@ public class DrawList {
                     ElementStyle.TEXTURE,
                     borderStroke);
 
-            if (i + 1 < positions.size()) {
+            if (i + 1 < infoList.size()) {
                 int kerning = atlas.getKerning(text.charAt(i), text.charAt(i + 1), fontSize);
-                currentX += pos.z + kerning;
+                currentX += info.width + kerning;
             }
         }
 
