@@ -25,6 +25,7 @@ class IkGuiDemo {
         }
 
         IkGui.setFontSize(12);
+        IkGui.text("The quick brown fox jumped over the lazy dog?");
         IkGui.text("Hello world size 12!");
         IkGui.sameLine();
         IkGui.text("This should be on the same line.");
