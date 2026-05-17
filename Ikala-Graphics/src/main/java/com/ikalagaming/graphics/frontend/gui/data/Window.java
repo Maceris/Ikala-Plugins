@@ -271,6 +271,8 @@ public class Window {
     public Viewport viewport;
     public boolean wasActive;
 
+    public WindowClass windowClass;
+
     /** Set to true when any widget accesses the window. */
     public boolean writeAccessed;
 
@@ -369,6 +371,7 @@ public class Window {
         treeDepth = 0;
         viewport = null;
         wasActive = false;
+        windowClass = new WindowClass();
         writeAccessed = false;
     }
 
