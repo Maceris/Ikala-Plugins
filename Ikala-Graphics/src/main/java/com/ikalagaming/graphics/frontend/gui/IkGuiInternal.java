@@ -36,9 +36,35 @@ public class IkGuiInternal {
         // TODO(ches) close popups above the reference window
     }
 
+    /**
+     * Look up a dock node by ID.
+     *
+     * @param dockID The dock ID.
+     * @return The node, which might be null if not found.
+     */
     public static DockNode dockContextFindNodeByID(int dockID) {
+        return context.dockContext.nodes.get(dockID);
+    }
+
+    /**
+     * Fetch the root node for a given node.
+     *
+     * @param node The node to fetch a parent for.
+     * @return The root node, or null if node was null.
+     */
+    public static DockNode dockNodeGetRootNode(DockNode node) {
+        if (node == null) {
+            return null;
+        }
+        while (node.parentNode != null) {
+            node = node.parentNode;
+        }
+        return node;
+    }
+
+    public static void dockNodeRemoveWindow(
+            @NonNull DockNode node, @NonNull Window window, int saveDockID) {
         // TODO(ches) complete this
-        return null;
     }
 
     public static void errorRecoveryStoreState(@NonNull ErrorRecoveryState stateOut) {

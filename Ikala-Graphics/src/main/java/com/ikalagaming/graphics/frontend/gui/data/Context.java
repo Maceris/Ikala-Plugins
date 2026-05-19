@@ -95,6 +95,8 @@ public class Context {
     public float disabledAlphaBackup;
     public short disabledStackSize;
 
+    public DockContext dockContext;
+
     /** The number of font points in one inch. */
     public int dpiScaleFont;
 
@@ -531,6 +533,7 @@ public class Context {
         dimBackgroundRatio = 0.0f;
         disabledAlphaBackup = 0.0f;
         disabledStackSize = 0;
+        dockContext = new DockContext();
         dpiScaleFont = 72;
         dpiScaleScreen = 96;
         dragCurrentAccumulatedDelta = 0.0f;

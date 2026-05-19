@@ -12,11 +12,13 @@ import com.ikalagaming.util.FloatArrayList;
 import com.ikalagaming.util.IntArrayList;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 
 import java.util.ArrayList;
 import java.util.List;
 
+@Slf4j
 public class Window {
     public boolean active;
 
@@ -415,9 +417,28 @@ public class Window {
         if (this.dockID == dockID) {
             return;
         }
-        // TODO(ches) complete this
+
         DockNode newNode = IkGuiInternal.dockContextFindNodeByID(dockID);
-        if (newNode != null) {}
+        if (newNode != null && newNode.isSplitNode()) {
+            newNode = IkGuiInternal.dockNodeGetRootNode(newNode);
+            if (newNode.isCentralNode()) {
+                if (!newNode.centralNode.isCentralNode()) {
+                    log.error(
+                            "Central node flag set, but not a central node. Something was set up wrong.");
+                    return;
+                }
+                dockID = newNode.centralNode.id;
+            } else {
+                dockID = newNode.lastFocusedNodeID;
+            }
+        }
+        if (this.dockID == dockID) {
+            return;
+        }
+        if (this.dockNode != null) {
+            IkGuiInternal.dockNodeRemoveWindow(this.dockNode, this, 0);
+        }
+        this.dockID = dockID;
     }
 
     public void updateCursorBeforeDrawing() {
