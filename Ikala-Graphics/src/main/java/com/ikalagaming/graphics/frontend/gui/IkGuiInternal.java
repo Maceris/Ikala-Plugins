@@ -64,6 +64,24 @@ public class IkGuiInternal {
 
     public static void dockNodeRemoveWindow(
             @NonNull DockNode node, @NonNull Window window, int saveDockID) {
+        if (window.dockNode != node) {
+            log.error("Window not in dock node we are trying to remove it from");
+            return;
+        }
+        if (saveDockID != 0 && saveDockID != node.id) {
+            log.error("Trying to save an invalid dock node ID while removing window");
+            return;
+        }
+
+        window.dockNode = null;
+        window.dockIsActive = false;
+        window.dockTabWantClose = false;
+        window.dockID = saveDockID;
+        window.flags &= ~WindowFlags.INTERNAL_CHILD_WINDOW;
+        if (window.parentWindow != null) {
+            window.parentWindow.childWindows.remove(window);
+        }
+        updateWindowParentAndRootLinks(window, window.flags, null);
         // TODO(ches) complete this
     }
 
@@ -542,6 +560,11 @@ public class IkGuiInternal {
                 }
             }
         }
+    }
+
+    public static void updateWindowParentAndRootLinks(
+            @NonNull Window window, int windowFlags, Window parentWindow) {
+        // TODO(ches) complete this
     }
 
     /** Private constructor so this is not instantiated. */
