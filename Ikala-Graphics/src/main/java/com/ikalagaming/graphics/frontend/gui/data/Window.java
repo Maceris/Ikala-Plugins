@@ -181,6 +181,7 @@ public class Window {
     public Window parentWindow;
 
     public Window parentWindowInBeginStack;
+    public Window parentWindowForFocusRoute;
 
     public final Vector2f position;
 
@@ -213,7 +214,8 @@ public class Window {
     public Window rootWindow;
     public Window rootWindowForNavigation;
     public Window rootWindowForTitleBarHighlight;
-    public Window rootWindowIncludingPopups;
+    public Window rootWindowPopupTree;
+    public Window rootWindowDockTree;
 
     /**
      * Corner rounding radius for the window. Window flags are used to specify which corners are
@@ -338,6 +340,7 @@ public class Window {
         padding = new Vector2f(0.0f, 0.0f);
         parentWindow = null;
         parentWindowInBeginStack = null;
+        parentWindowForFocusRoute = null;
         position = new Vector2f(0.0f, 0.0f);
         positionConditionAllowed = ConditionAllowed.ALL;
         rectContent = new RectFloat(0.0f, 0.0f, 0.0f, 0.0f);
@@ -350,7 +353,8 @@ public class Window {
         rootWindow = this;
         rootWindowForNavigation = this;
         rootWindowForTitleBarHighlight = this;
-        rootWindowIncludingPopups = this;
+        rootWindowPopupTree = this;
+        rootWindowDockTree = this;
         rounding = 0.0f;
         sameLine = false;
         setWindowPosPivot = new Vector2f(0.0f, 0.0f);

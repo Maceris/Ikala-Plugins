@@ -564,7 +564,38 @@ public class IkGuiInternal {
 
     public static void updateWindowParentAndRootLinks(
             @NonNull Window window, int windowFlags, Window parentWindow) {
-        // TODO(ches) complete this
+        window.parentWindow = parentWindow;
+        window.rootWindow = window;
+        window.rootWindowPopupTree = window;
+        window.rootWindowDockTree = window;
+        window.rootWindowForTitleBarHighlight = window;
+        window.rootWindowForNavigation = window;
+
+        if (parentWindow != null
+                && (windowFlags & WindowFlags.INTERNAL_CHILD_WINDOW) != 0
+                && (windowFlags & WindowFlags.INTERNAL_DOCK_NODE_HOST) == 0) {
+            window.rootWindowDockTree = parentWindow.rootWindowDockTree;
+            if (!window.dockIsActive
+                    && (parentWindow.flags & WindowFlags.INTERNAL_DOCK_NODE_HOST) == 0) {
+                window.rootWindow = parentWindow.rootWindow;
+            }
+        }
+        if (parentWindow != null && (windowFlags & WindowFlags.INTERNAL_POPUP) != 0) {
+            window.rootWindowPopupTree = parentWindow.rootWindowPopupTree;
+        }
+        if (parentWindow != null
+                && (windowFlags & WindowFlags.INTERNAL_MODAL) == 0
+                && (windowFlags & WindowFlags.NO_TITLE_BAR) == 0) {
+            window.rootWindowForTitleBarHighlight = parentWindow.rootWindowForTitleBarHighlight;
+        }
+        while ((window.rootWindowForNavigation.flagsAsChildWindow & ChildFlags.NAV_FLATTENED)
+                != 0) {
+            if (window.rootWindowForNavigation.parentWindow == null) {
+                log.error("Parent window null while navigation child flags are set");
+                return;
+            }
+            window.rootWindowForNavigation = window.rootWindowForNavigation.parentWindow;
+        }
     }
 
     /** Private constructor so this is not instantiated. */
