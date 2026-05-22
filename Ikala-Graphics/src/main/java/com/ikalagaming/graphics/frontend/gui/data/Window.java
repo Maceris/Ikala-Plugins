@@ -273,6 +273,8 @@ public class Window {
 
     public int treeDepth;
     public Viewport viewport;
+    public int viewportID;
+    public boolean viewportOwned;
     public boolean wasActive;
 
     public WindowClass windowClass;
@@ -376,6 +378,8 @@ public class Window {
         titleBarHeight = 0.0f;
         treeDepth = 0;
         viewport = null;
+        viewportID = 0;
+        viewportOwned = false;
         wasActive = false;
         windowClass = new WindowClass();
         writeAccessed = false;

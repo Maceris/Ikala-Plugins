@@ -82,6 +82,27 @@ public class IkGuiInternal {
             window.parentWindow.childWindows.remove(window);
         }
         updateWindowParentAndRootLinks(window, window.flags, null);
+
+        if (node.hostWindow != null && node.hostWindow.viewportOwned) {
+            // When undocking from a user interaction this will always run in newFrame() and have
+            // little effect.
+            // But mid-frame, if we clear viewport we need to mark window as hidden as well.
+            window.viewport = null;
+            window.viewportID = 0;
+            window.viewportOwned = false;
+            window.hidden = true;
+        }
+
+        final boolean erased = node.windows.remove(window);
+        if (!erased) {
+            log.error("Could not find window to remove");
+            return;
+        }
+        if (node.visibleWindow == window) {
+            node.visibleWindow = null;
+        }
+        node.wantHiddenTabBarUpdate = true;
+
         // TODO(ches) complete this
     }
 
