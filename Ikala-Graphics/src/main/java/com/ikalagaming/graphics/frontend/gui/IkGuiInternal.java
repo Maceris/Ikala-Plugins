@@ -1,10 +1,7 @@
 package com.ikalagaming.graphics.frontend.gui;
 
 import com.ikalagaming.graphics.frontend.gui.data.*;
-import com.ikalagaming.graphics.frontend.gui.enums.Condition;
-import com.ikalagaming.graphics.frontend.gui.enums.GuiInputSource;
-import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
-import com.ikalagaming.graphics.frontend.gui.enums.StyleVariable;
+import com.ikalagaming.graphics.frontend.gui.enums.*;
 import com.ikalagaming.graphics.frontend.gui.flags.*;
 import com.ikalagaming.graphics.frontend.gui.util.RectFloat;
 
@@ -36,6 +33,25 @@ public class IkGuiInternal {
         // TODO(ches) close popups above the reference window
     }
 
+    public static DockNode dockContextAddNode(int id) {
+        // TODO(ches) complete this
+        return null;
+    }
+
+    public static DockNode dockContextBindNodeToWindow(Window window) {
+        // TODO(ches) complete this
+        return null;
+    }
+
+    public static void dockContextBuildAddWindowsToNodes(int root_id) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockContextBuildNodesFromSettings(
+            DockNodeSettings node_settings_array, int node_settings_count) {
+        // TODO(ches) complete this
+    }
+
     public static void dockContextDeleteNode(@NonNull DockNode node) {
         dockNodeRemoveTabBar(node);
         context.dockContext.nodes.remove(node.id);
@@ -49,6 +65,18 @@ public class IkGuiInternal {
      */
     public static DockNode dockContextFindNodeByID(int dockID) {
         return context.dockContext.nodes.get(dockID);
+    }
+
+    public static void dockContextProcessDock(DockNodeRequest req) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockContextPruneUnusedSettingsNodes() {
+        // TODO(ches) complete this
+    }
+
+    public static void dockContextQueueNotifyRemovedNode(DockNode node) {
+        // TODO(ches) complete this
     }
 
     public static void dockContextRemoveNode(
@@ -93,6 +121,57 @@ public class IkGuiInternal {
         }
     }
 
+    public static void dockNodeAddTabBar(DockNode node) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockNodeAddWindow(DockNode node, Window window, boolean add_to_tab_bar) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockNodeApplyPosSizeToWindows(DockNode node) {
+        // TODO(ches) complete this
+    }
+
+    public static boolean dockNodeCalcDropRectsAndTestMousePos(
+            RectFloat parent,
+            Direction dir,
+            RectFloat out_draw,
+            boolean outer_docking,
+            Vector2f test_mouse_pos) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static void dockNodeCalcSplitRects(
+            Vector2f pos_old,
+            Vector2f size_old,
+            Vector2f pos_new,
+            Vector2f size_new,
+            Direction dir,
+            Vector2f size_new_desired) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockNodeCalcTabBarLayout(
+            DockNode node,
+            RectFloat out_title_rect,
+            RectFloat out_tab_bar_rect,
+            Vector2f out_window_menu_button_pos,
+            Vector2f out_close_button_pos) {
+        // TODO(ches) complete this
+    }
+
+    public static Window dockNodeFindWindowByID(DockNode node, int id) {
+        // TODO(ches) complete this
+        return null;
+    }
+
+    public static String dockNodeGetHostWindowTitle(DockNode node, String buf) {
+        // TODO(ches) complete this
+        return null;
+    }
+
     /**
      * Fetch the root node for a given node.
      *
@@ -107,6 +186,45 @@ public class IkGuiInternal {
             node = node.parentNode;
         }
         return node;
+    }
+
+    public static int dockNodeGetTabOrder(Window window) {
+        // TODO(ches) complete this
+        return 0;
+    }
+
+    public static void dockNodeHideHostWindow(DockNode node) {
+        // TODO(ches) complete this
+    }
+
+    public static boolean dockNodeIsDropAllowed(Window host_window, Window payload_window) {
+        // TODO(ches) complete this
+        return false;
+    }
+
+    public static void dockNodeMoveChildNodes(DockNode destinationNode, DockNode sourceNode) {}
+
+    public static void dockNodeMoveWindows(DockNode dst_node, DockNode src_node) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockNodePreviewDockRender(
+            Window host_window,
+            DockNode host_node,
+            Window payload_window,
+            DockPreviewData preview_data) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockNodePreviewDockSetup(
+            Window host_window,
+            DockNode host_node,
+            Window payload_window,
+            DockNode payload_node,
+            DockPreviewData preview_data,
+            boolean is_explicit_target,
+            boolean is_outer_docking) {
+        // TODO(ches) complete this
     }
 
     private static void dockNodeRemoveTabBar(@NonNull DockNode node) {
@@ -186,7 +304,91 @@ public class IkGuiInternal {
         dockNodeUpdateVisibleFlag(node);
     }
 
+    public static void dockNodeStartMouseMovingWindow(DockNode node, Window window) {
+        // TODO(ches) complete this
+    }
+
+    public static DockNode dockNodeTreeFindFallbackLeafNode(DockNode node) {
+        // TODO(ches) complete this
+        return null;
+    }
+
+    public static DockNode dockNodeTreeFindVisibleNodeByPos(DockNode node, Vector2f pos) {
+        // TODO(ches) complete this
+        return null;
+    }
+
     public static void dockNodeTreeMerge(@NonNull DockNode parentNode, DockNode mergeLeadChild) {
+        // TODO(ches) complete this
+        // When called from dockContextProcessUndockNode() it is possible that one of the child is
+        // NULL.
+
+        DockNode child0 = parentNode.childNodes[0];
+        DockNode child1 = parentNode.childNodes[1];
+
+        if (child0 == null && child1 == null) {
+            log.error("No children nodes to merge");
+            return;
+        }
+        if ((child0 != null && !child0.windows.isEmpty())
+                || (child1 != null && !child1.windows.isEmpty())) {
+            if (parentNode.tabBar != null) {
+                log.error("No tab bar when trying to merge dock nodes into parent");
+                return;
+            }
+            if (parentNode.windows.size() != 0) {
+                log.error("Parent node already has a window while merging dock nodes");
+                return;
+            }
+        }
+        log.trace(
+                "dockNodeTreeMerge: {} + {} into parent {}",
+                child0 != null ? child0.id : 0,
+                child1 != null ? child1.id : 0,
+                parentNode.id);
+
+        Vector2f backupLastExplicitSize = new Vector2f(parentNode.sizeRef);
+    }
+
+    public static void dockNodeTreeSplit(
+            DockNode parent_node,
+            Axis split_axis,
+            int split_first_child,
+            float split_ratio,
+            DockNode new_node) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockNodeTreeUpdatePosSize(DockNode node, Vector2f pos, Vector2f size) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockNodeTreeUpdatePosSize(
+            DockNode node, Vector2f pos, Vector2f size, DockNode onlyWriteToSingleNode) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockNodeTreeUpdateSplitter(DockNode node) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockNodeUpdate(DockNode node) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockNodeUpdateFlagsAndCollapse(DockNode node) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockNodeUpdateForRootNode(DockNode node) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockNodeUpdateHasCentralNodeChild(DockNode node) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockNodeUpdateTabBar(DockNode node, Window host_window) {
         // TODO(ches) complete this
     }
 
@@ -196,6 +398,44 @@ public class IkGuiInternal {
         isVisible = isVisible || (node.childNodes[0] != null && node.childNodes[0].isVisible);
         isVisible = isVisible || (node.childNodes[1] != null && node.childNodes[1].isVisible);
         node.isVisible = isVisible;
+    }
+
+    public static void dockNodeWindowMenuUpdate(DockNode node, TabBar tab_bar) {
+        // TODO(ches) complete this
+    }
+
+    public static DockNodeSettings dockSettingsFindNodeSettings(int node_id) {
+        // TODO(ches) complete this
+        return null;
+    }
+
+    public static void dockSettingsHandlerApplyAll(SettingsHandler handler) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockSettingsHandlerClearAll(SettingsHandler handler) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockSettingsHandlerReadLine(
+            SettingsHandler handler, Object entry, String line) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockSettingsHandlerReadOpen(SettingsHandler handler, String name) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockSettingsHandlerWriteAll(SettingsHandler handler, StringBuilder buf) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockSettingsRemoveNodeReferences(int[] node_ids) {
+        // TODO(ches) complete this
+    }
+
+    public static void dockSettingsRenameNodeReferences(int old_node_id, int new_node_id) {
+        // TODO(ches) complete this
     }
 
     public static void errorRecoveryStoreState(@NonNull ErrorRecoveryState stateOut) {
