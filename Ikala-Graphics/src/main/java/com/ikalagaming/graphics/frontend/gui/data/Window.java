@@ -153,8 +153,15 @@ public class Window {
     public int id;
 
     public int idAsPopupWindow;
+
+    /** ID of the "#MOVE" element. */
     public int idMove;
+
     public IntArrayList idStack;
+
+    /** ID of the "#TAB" element. */
+    public int idTab;
+
     public int idWithinParent;
     public float indent;
     public boolean isExplicitChild;
@@ -327,6 +334,7 @@ public class Window {
         id = 0;
         idAsPopupWindow = 0;
         idStack = new IntArrayList();
+        idTab = 0;
         idWithinParent = 0;
         indent = 0.0f;
         isExplicitChild = false;

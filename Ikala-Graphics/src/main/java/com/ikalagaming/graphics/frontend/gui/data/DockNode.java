@@ -178,52 +178,54 @@ public class DockNode {
         windows = new ArrayList<>();
     }
 
-    boolean isRootNode() {
+    public boolean isRootNode() {
         return parentNode == null;
     }
 
-    boolean isDockSpace() {
+    public boolean isDockSpace() {
         return (mergedFlags & DockNodeFlags.INTERNAL_DOCK_SPACE) != 0;
     }
 
-    boolean isFloatingNode() {
+    public boolean isFloatingNode() {
         return parentNode == null && (mergedFlags & DockNodeFlags.INTERNAL_DOCK_SPACE) == 0;
     }
 
-    boolean isCentralNode() {
+    public boolean isCentralNode() {
         return (mergedFlags & DockNodeFlags.INTERNAL_CENTRAL_NODE) != 0;
     }
 
-    boolean isHiddenTabBar() {
+    public boolean isHiddenTabBar() {
+        // Hidden tab bar can be shown back by clicking the small triangle
         return (mergedFlags & DockNodeFlags.INTERNAL_HIDDEN_TAB_BAR) != 0;
-    } // Hidden tab bar can be shown back by clicking the small triangle
+    }
 
-    boolean isNoTabBar() {
+    public boolean isNoTabBar() {
+        // Never show a tab bar
         return (mergedFlags & DockNodeFlags.INTERNAL_NO_TAB_BAR) != 0;
-    } // Never show a tab bar
+    }
 
-    boolean isSplitNode() {
+    public boolean isSplitNode() {
         return childNodes[0] != null;
     }
 
-    boolean isLeafNode() {
+    public boolean isLeafNode() {
         return childNodes[0] == null;
     }
 
-    boolean isEmpty() {
+    public boolean isEmpty() {
         return childNodes[0] == null && windows.isEmpty();
     }
 
-    RectFloat rect() {
+    public RectFloat rect() {
         return new RectFloat(position.x, position.y, position.x + size.x, position.y + size.y);
     }
 
-    void setLocalFlags(int flags) {
+    public void setLocalFlags(int flags) {
         localFlags = flags;
         updateMergedFlags();
     }
 
-    void updateMergedFlags() {
+    public void updateMergedFlags() {
         mergedFlags = sharedFlags | localFlags | localFlagsInWindows;
     }
 }

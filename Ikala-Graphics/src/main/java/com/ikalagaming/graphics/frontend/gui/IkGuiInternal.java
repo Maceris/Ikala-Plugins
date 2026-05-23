@@ -36,6 +36,11 @@ public class IkGuiInternal {
         // TODO(ches) close popups above the reference window
     }
 
+    public static void dockContextDeleteNode(@NonNull DockNode node) {
+        dockNodeRemoveTabBar(node);
+        context.dockContext.nodes.remove(node.id);
+    }
+
     /**
      * Look up a dock node by ID.
      *
@@ -44,6 +49,48 @@ public class IkGuiInternal {
      */
     public static DockNode dockContextFindNodeByID(int dockID) {
         return context.dockContext.nodes.get(dockID);
+    }
+
+    public static void dockContextRemoveNode(
+            @NonNull DockNode node, boolean mergeSiblingIntoParentNode) {
+        log.trace("Removing dock node {}", node.id);
+        if (context.dockContext.nodes.get(node.id) != node) {
+            log.error("Node out of sync with context's list of nodes");
+            return;
+        }
+        if (node.childNodes[0] != null || node.childNodes[1] != null) {
+            log.error("Child nodes aren't empty, can't reasonably remove node");
+            return;
+        }
+        if (!node.windows.isEmpty()) {
+            log.error("Node contains a window, can't reasonably remove it");
+            return;
+        }
+
+        if (node.hostWindow != null) {
+            node.hostWindow.dockNodeAsHost = null;
+        }
+
+        DockNode parentNode = node.parentNode;
+        final boolean merge = mergeSiblingIntoParentNode && parentNode != null;
+        if (merge) {
+            if (parentNode.childNodes[0] != node && parentNode.childNodes[1] != node) {
+                log.error("Parent node does not contain the node, merging would go weird");
+                return;
+            }
+            DockNode siblingNode =
+                    parentNode.childNodes[0] == node
+                            ? parentNode.childNodes[1]
+                            : parentNode.childNodes[0];
+            dockNodeTreeMerge(parentNode, siblingNode);
+        } else {
+            for (int n = 0; parentNode != null && n < parentNode.childNodes.length; n++) {
+                if (parentNode.childNodes[n] == node) {
+                    node.parentNode.childNodes[n] = null;
+                }
+            }
+            dockContextDeleteNode(node);
+        }
     }
 
     /**
@@ -60,6 +107,14 @@ public class IkGuiInternal {
             node = node.parentNode;
         }
         return node;
+    }
+
+    private static void dockNodeRemoveTabBar(@NonNull DockNode node) {
+        if (node.tabBar == null) {
+            return;
+        }
+        node.tabBar.tabs.clear();
+        node.tabBar = null;
     }
 
     public static void dockNodeRemoveWindow(
@@ -102,8 +157,45 @@ public class IkGuiInternal {
             node.visibleWindow = null;
         }
         node.wantHiddenTabBarUpdate = true;
+        if (node.tabBar != null) {
+            tabBarRemoveTab(node.tabBar, window.idTab);
+            final int tabCountThresholdForTabBar = node.isCentralNode() ? 1 : 2;
+            if (node.windows.size() < tabCountThresholdForTabBar) {
+                dockNodeRemoveTabBar(node);
+            }
+        }
 
+        if (node.windows.isEmpty()
+                && !node.isCentralNode()
+                && !node.isDockSpace()
+                && window.dockID != node.id) {
+            // Dock nodes delete themselves if they aren't holding at least one tab
+            dockContextRemoveNode(node, true);
+            return;
+        }
+
+        if (node.windows.size() == 1 && !node.isCentralNode() && node.hostWindow != null) {
+            Window remainingWindow = node.windows.getFirst();
+            remainingWindow.collapsed = node.hostWindow.collapsed;
+        }
+
+        /*
+         * We need to update visibility immediately so the dockNodeUpdateRemoveInactiveChildren processing
+         * can reflect changes up the tree
+         */
+        dockNodeUpdateVisibleFlag(node);
+    }
+
+    public static void dockNodeTreeMerge(@NonNull DockNode parentNode, DockNode mergeLeadChild) {
         // TODO(ches) complete this
+    }
+
+    public static void dockNodeUpdateVisibleFlag(@NonNull DockNode node) {
+        boolean isVisible = node.parentNode != null ? node.isDockSpace() : node.isCentralNode();
+        isVisible = isVisible || !node.windows.isEmpty();
+        isVisible = isVisible || (node.childNodes[0] != null && node.childNodes[0].isVisible);
+        isVisible = isVisible || (node.childNodes[1] != null && node.childNodes[1].isVisible);
+        node.isVisible = isVisible;
     }
 
     public static void errorRecoveryStoreState(@NonNull ErrorRecoveryState stateOut) {
@@ -380,6 +472,19 @@ public class IkGuiInternal {
         }
 
         context.windowMoving = null;
+    }
+
+    private static void tabBarRemoveTab(@NonNull TabBar tabBar, int tabID) {
+        tabBar.tabs.removeIf(item -> item.id == tabID);
+        if (tabBar.visibleTabID == tabID) {
+            tabBar.visibleTabID = 0;
+        }
+        if (tabBar.selectedTabID == tabID) {
+            tabBar.selectedTabID = 0;
+        }
+        if (tabBar.nextSelectedTabID == tabID) {
+            tabBar.nextSelectedTabID = 0;
+        }
     }
 
     /**
