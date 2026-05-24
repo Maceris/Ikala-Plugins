@@ -319,10 +319,8 @@ public class IkGuiInternal {
     }
 
     public static void dockNodeTreeMerge(@NonNull DockNode parentNode, DockNode mergeLeadChild) {
-        // TODO(ches) complete this
-        // When called from dockContextProcessUndockNode() it is possible that one of the child is
-        // NULL.
-
+        // When called from dockContextProcessUndockNode() it is possible that one of the children
+        // is NULL.
         DockNode child0 = parentNode.childNodes[0];
         DockNode child1 = parentNode.childNodes[1];
 
@@ -336,7 +334,7 @@ public class IkGuiInternal {
                 log.error("No tab bar when trying to merge dock nodes into parent");
                 return;
             }
-            if (parentNode.windows.size() != 0) {
+            if (!parentNode.windows.isEmpty()) {
                 log.error("Parent node already has a window while merging dock nodes");
                 return;
             }
@@ -348,6 +346,43 @@ public class IkGuiInternal {
                 parentNode.id);
 
         Vector2f backupLastExplicitSize = new Vector2f(parentNode.sizeRef);
+        dockNodeMoveChildNodes(parentNode, mergeLeadChild);
+        if (child0 != null) {
+            // Generally only 1 of the 2 child nodes will have windows
+            dockNodeMoveWindows(parentNode, child0);
+            dockSettingsRenameNodeReferences(child0.id, parentNode.id);
+        }
+        if (child1 != null) {
+            dockNodeMoveWindows(parentNode, child1);
+            dockSettingsRenameNodeReferences(child1.id, parentNode.id);
+        }
+        dockNodeApplyPosSizeToWindows(parentNode);
+        parentNode.authorityForPosition = DataAuthority.AUTO;
+        parentNode.authorityForSize = DataAuthority.AUTO;
+        parentNode.authorityForViewport = DataAuthority.AUTO;
+        parentNode.visibleWindow = mergeLeadChild.visibleWindow;
+        parentNode.sizeRef.set(backupLastExplicitSize);
+
+        // Flags transfer
+        parentNode.localFlags &= ~DockNodeFlags.LOCAL_FLAGS_TRANSFER_MASK;
+        parentNode.localFlags |=
+                (child0 != null ? child0.localFlags : DockNodeFlags.NONE)
+                        & DockNodeFlags.LOCAL_FLAGS_TRANSFER_MASK;
+        parentNode.localFlags |=
+                (child1 != null ? child1.localFlags : DockNodeFlags.NONE)
+                        & DockNodeFlags.LOCAL_FLAGS_TRANSFER_MASK;
+        // TODO(ches) Would be more consistent to update from actual windows
+        parentNode.localFlagsInWindows =
+                (child0 != null ? child0.localFlagsInWindows : DockNodeFlags.NONE)
+                        | (child1 != null ? child1.localFlagsInWindows : DockNodeFlags.NONE);
+        parentNode.updateMergedFlags();
+
+        if (child0 != null) {
+            dockContextDeleteNode(child0);
+        }
+        if (child1 != null) {
+            dockContextDeleteNode(child1);
+        }
     }
 
     public static void dockNodeTreeSplit(
