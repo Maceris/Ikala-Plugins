@@ -202,7 +202,25 @@ public class IkGuiInternal {
         return false;
     }
 
-    public static void dockNodeMoveChildNodes(DockNode destinationNode, DockNode sourceNode) {}
+    public static void dockNodeMoveChildNodes(
+            @NonNull DockNode destinationNode, @NonNull DockNode sourceNode) {
+        if (!destinationNode.windows.isEmpty()) {
+            log.error("Destination node already ahs windows, cannot move child nodes");
+            return;
+        }
+        destinationNode.childNodes[0] = sourceNode.childNodes[0];
+        destinationNode.childNodes[1] = sourceNode.childNodes[1];
+        if (destinationNode.childNodes[0] != null) {
+            destinationNode.childNodes[0].parentNode = destinationNode;
+        }
+        if (destinationNode.childNodes[1] != null) {
+            destinationNode.childNodes[1].parentNode = destinationNode;
+        }
+        destinationNode.splitAxis = sourceNode.splitAxis;
+        destinationNode.sizeRef.set(sourceNode.sizeRef);
+        sourceNode.childNodes[0] = null;
+        sourceNode.childNodes[1] = null;
+    }
 
     public static void dockNodeMoveWindows(DockNode dst_node, DockNode src_node) {
         // TODO(ches) complete this
