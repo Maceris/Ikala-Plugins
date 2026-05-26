@@ -121,12 +121,86 @@ public class IkGuiInternal {
         }
     }
 
-    public static void dockNodeAddTabBar(DockNode node) {
-        // TODO(ches) complete this
+    public static void dockNodeAddTabBar(@NonNull DockNode node) {
+        if (node.tabBar != null) {
+            log.error("Node already has a tab bar, can't add one");
+            return;
+        }
+        node.tabBar = new TabBar();
     }
 
-    public static void dockNodeAddWindow(DockNode node, Window window, boolean add_to_tab_bar) {
-        // TODO(ches) complete this
+    public static void dockNodeAddWindow(
+            @NonNull DockNode node, @NonNull Window window, boolean addToTabBar) {
+        if (window.dockNode != null) {
+            // Can overwrite an existing window->DockNode (e.g. pointing to a disabled DockSpace
+            // node)
+            if (window.dockNode.id == node.id) {
+                log.error("Trying to add a node to a window that already contains it");
+                return;
+            }
+            dockNodeRemoveWindow(window.dockNode, window, 0);
+        }
+        if (window.dockNode != null && window.dockNodeAsHost != null) {
+            log.error("Window already has a dock node");
+            return;
+        }
+        log.trace("dockNodeAddWindow node {} window {}", node.id, window.name);
+
+        /*
+         * If more than 2 windows appeared on the same frame leading to the creation of a new hosting window,
+         * we'll hide windows until the host window is ready. Hide the first window after it's been output
+         * (so it is not visible for one frame).
+         * We will call dockNodeHideWindowDuringHostWindowCreation() on ourselves in begin()
+         */
+        if (node.hostWindow == null
+                && node.windows.size() == 1
+                && !node.windows.getFirst().wasActive) {
+            dockNodeHideWindowDuringHostWindowCreation(node.windows.getFirst());
+        }
+
+        node.windows.add(window);
+        node.wantHiddenTabBarUpdate = true;
+        window.dockNode = node;
+        window.dockID = node.id;
+        window.dockIsActive = node.windows.size() > 1;
+        window.dockTabWantClose = false;
+
+        /*
+         * When reactivating a node with one or two loose windows, the window pos/size/viewport are
+         * authoritative over the node storage. In particular, it is important we initialize the viewport from the
+         * first window, so we don't create two viewports and drop one.
+         */
+        if (node.hostWindow == null && node.isFloatingNode()) {
+            if (node.authorityForPosition == DataAuthority.AUTO) {
+                node.authorityForPosition = DataAuthority.WINDOW;
+            }
+            if (node.authorityForSize == DataAuthority.AUTO) {
+                node.authorityForSize = DataAuthority.WINDOW;
+            }
+            if (node.authorityForViewport == DataAuthority.AUTO) {
+                node.authorityForViewport = DataAuthority.WINDOW;
+            }
+        }
+
+        if (addToTabBar) {
+            if (node.tabBar == null) {
+                dockNodeAddTabBar(node);
+                node.tabBar.selectedTabID = node.selectedTabID;
+                node.tabBar.nextSelectedTabID = node.selectedTabID;
+            }
+            tabBarAddTab(node.tabBar, TabItemFlags.INTERNAL_UNSORTED, window);
+        }
+
+        dockNodeUpdateVisibleFlag(node);
+
+        /*
+         * Update this without waiting for the next time we begin() in the window, so our host window will have the
+         * proper title bar color on its first frame.
+         */
+        if (node.hostWindow != null) {
+            updateWindowParentAndRootLinks(
+                    window, window.flags | WindowFlags.INTERNAL_CHILD_WINDOW, node.hostWindow);
+        }
     }
 
     public static void dockNodeApplyPosSizeToWindows(DockNode node) {
@@ -193,6 +267,11 @@ public class IkGuiInternal {
         return 0;
     }
 
+    public static void dockNodeHideWindowDuringHostWindowCreation(@NonNull Window window) {
+        window.hidden = true;
+        window.hiddenFramesCanSkipItems = window.active ? 1 : 2;
+    }
+
     public static void dockNodeHideHostWindow(DockNode node) {
         // TODO(ches) complete this
     }
@@ -205,7 +284,7 @@ public class IkGuiInternal {
     public static void dockNodeMoveChildNodes(
             @NonNull DockNode destinationNode, @NonNull DockNode sourceNode) {
         if (!destinationNode.windows.isEmpty()) {
-            log.error("Destination node already ahs windows, cannot move child nodes");
+            log.error("Destination node already has windows, cannot move child nodes");
             return;
         }
         destinationNode.childNodes[0] = sourceNode.childNodes[0];
@@ -222,8 +301,42 @@ public class IkGuiInternal {
         sourceNode.childNodes[1] = null;
     }
 
-    public static void dockNodeMoveWindows(DockNode dst_node, DockNode src_node) {
-        // TODO(ches) complete this
+    public static void dockNodeMoveWindows(
+            @NonNull DockNode destinationNode, @NonNull DockNode sourceNode) {
+        // Insert tabs in the same orders as currently ordered (node.windows isn't ordered)
+        if (destinationNode == sourceNode) {
+            log.error("Trying to move windows but source and destination are the same");
+            return;
+        }
+        TabBar sourceTabBar = sourceNode.tabBar;
+        if (sourceTabBar != null && sourceNode.windows.size() > sourceTabBar.tabs.size()) {
+            log.error("The source node has more windows than the tab bar would suggest");
+            return;
+        }
+
+        // If the dst_node is empty we can just move the entire tab bar (to preserve selection,
+        // scrolling, etc.)
+        final boolean moveTabBar = sourceTabBar != null && destinationNode.tabBar == null;
+
+        if (moveTabBar) {
+            destinationNode.tabBar = sourceTabBar;
+            sourceNode.tabBar = null;
+        }
+
+        // Tab order is not important here, it is preserved by sorting in dockNodeUpdateTabBar().
+        for (Window window : sourceNode.windows) {
+            window.dockNode = null;
+            window.dockIsActive = false;
+            dockNodeAddWindow(destinationNode, window, !moveTabBar);
+        }
+        sourceNode.windows.clear();
+
+        if (!moveTabBar && sourceNode.tabBar != null) {
+            if (destinationNode.tabBar != null) {
+                destinationNode.tabBar.selectedTabID = sourceNode.tabBar.selectedTabID;
+            }
+            dockNodeRemoveTabBar(sourceNode);
+        }
     }
 
     public static void dockNodePreviewDockRender(
@@ -245,7 +358,7 @@ public class IkGuiInternal {
         // TODO(ches) complete this
     }
 
-    private static void dockNodeRemoveTabBar(@NonNull DockNode node) {
+    public static void dockNodeRemoveTabBar(@NonNull DockNode node) {
         if (node.tabBar == null) {
             return;
         }
@@ -767,7 +880,51 @@ public class IkGuiInternal {
         context.windowMoving = null;
     }
 
-    private static void tabBarRemoveTab(@NonNull TabBar tabBar, int tabID) {
+    /**
+     * Add a window to the tab bar. The purpose of this is to register tab in advance, so we can
+     * control their order at the time they appear. Otherwise, calling this is unnecessary as tabs
+     * are appending as needed by the beginTabItem() function.
+     *
+     * @param tabBar The tab bar we are adding to.
+     * @param tabFlags Tab flags.
+     * @param window The window to add.
+     * @see TabItemFlags
+     */
+    public static void tabBarAddTab(@NonNull TabBar tabBar, int tabFlags, @NonNull Window window) {
+        if (tabBarFindTabByID(tabBar, window.idTab) != null) {
+            log.error("Tab bar already contains the tab we are trying to add");
+            return;
+        }
+        if (tabBar.currentFrameVisible >= context.frameCount) {
+            log.error(
+                    "Updating the active tab bar, we don't have an X offset yet so there's no good way of updating it");
+            return;
+        }
+        if (window.hasCloseButton()) {
+            tabFlags |= TabItemFlags.INTERNAL_NO_CLOSE_BUTTON;
+        }
+
+        TabItem newTab = new TabItem();
+        newTab.id = window.idTab;
+        newTab.flags = tabFlags;
+        // Required so BeginTabBar() doesn't ditch the tab
+        newTab.lastFrameVisible = tabBar.currentFrameVisible;
+        if (newTab.lastFrameVisible == -1) {
+            newTab.lastFrameVisible = context.frameCount - 1;
+        }
+        // Required so tab bar layout can compute the tab width before tab submission
+        newTab.window = window;
+        tabBar.tabs.add(newTab);
+    }
+
+    public static TabItem tabBarFindTabByID(@NonNull TabBar tabBar, int tabID) {
+        if (tabID == 0) {
+            return null;
+        }
+        return tabBar.tabs.stream().filter(item -> item.id == tabID).findAny().orElse(null);
+    }
+
+    public static void tabBarRemoveTab(@NonNull TabBar tabBar, int tabID) {
         tabBar.tabs.removeIf(item -> item.id == tabID);
         if (tabBar.visibleTabID == tabID) {
             tabBar.visibleTabID = 0;

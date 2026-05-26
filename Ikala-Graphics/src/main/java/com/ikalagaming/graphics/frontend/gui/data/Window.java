@@ -94,6 +94,9 @@ public class Window {
 
     public final Vector2f cursorStartPosition;
 
+    /** Disable window interactions for N frames. */
+    public int disableInputsFrames;
+
     /**
      * Flags for the dock conditions.
      *
@@ -138,6 +141,18 @@ public class Window {
     public int flagsPreviousFrame;
     public int flagsAsChildWindow;
     public boolean hidden;
+
+    /** Hide the window for n frames. */
+    public int hiddenFramesCanSkipItems;
+
+    /**
+     * Hide the window for N frames while allowing items to be submitted, so we can measure their
+     * size
+     */
+    public int hiddenFramesCannotSkipItems;
+
+    /** Hide the window until frame N at render() time only */
+    public int hiddenFramesForRenderOnly;
 
     /**
      * Location of a rectangular hole in the window that ignores hit tests. Zero values if not
@@ -315,6 +330,7 @@ public class Window {
         cursorPosition = new Vector2f(0.0f, 0.0f);
         cursorPreviousLinePosition = new Vector2f(0.0f, 0.0f);
         cursorStartPosition = new Vector2f(0.0f, 0.0f);
+        disableInputsFrames = 0;
         dockID = 0;
         dockConditionAllowed = ConditionAllowed.ALL;
         dockIsActive = false;
@@ -329,6 +345,9 @@ public class Window {
         flagsPreviousFrame = WindowFlags.NONE;
         flagsAsChildWindow = WindowFlags.NONE;
         hidden = false;
+        hiddenFramesCanSkipItems = 0;
+        hiddenFramesCannotSkipItems = 0;
+        hiddenFramesForRenderOnly = 0;
         hitTestHolePosition = new Vector2f(0.0f, 0.0f);
         hitTestHoleSize = new Vector2f(0.0f, 0.0f);
         id = 0;
