@@ -3950,11 +3950,11 @@ public class IkGui {
     }
 
     public static void setWindowSize(float x, float y) {
-        IkGuiImplWindows.setWindowSize(x, y, Condition.NONE);
+        IkGuiImplWindows.setWindowSize(context.windowCurrent, x, y, Condition.NONE);
     }
 
     public static void setWindowSize(float x, float y, @NonNull Condition condition) {
-        IkGuiImplWindows.setWindowSize(x, y, condition);
+        IkGuiImplWindows.setWindowSize(context.windowCurrent, x, y, condition);
     }
 
     public static void showDemoWindow() {

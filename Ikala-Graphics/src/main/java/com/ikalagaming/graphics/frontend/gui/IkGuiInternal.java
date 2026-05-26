@@ -203,8 +203,12 @@ public class IkGuiInternal {
         }
     }
 
-    public static void dockNodeApplyPosSizeToWindows(DockNode node) {
-        // TODO(ches) complete this
+    public static void dockNodeApplyPosSizeToWindows(@NonNull DockNode node) {
+        for (Window window : node.windows) {
+            IkGuiImplWindows.setWindowPos(
+                    window, node.position.x, node.position.y, Condition.ALWAYS);
+            IkGuiImplWindows.setWindowSize(window, node.size.x, node.size.y, Condition.ALWAYS);
+        }
     }
 
     public static boolean dockNodeCalcDropRectsAndTestMousePos(
@@ -269,7 +273,7 @@ public class IkGuiInternal {
 
     public static void dockNodeHideWindowDuringHostWindowCreation(@NonNull Window window) {
         window.hidden = true;
-        window.hiddenFramesCanSkipItems = window.active ? 1 : 2;
+        window.hiddenFramesCanSkipItems.set(window.active ? 1 : 2);
     }
 
     public static void dockNodeHideHostWindow(DockNode node) {
@@ -600,8 +604,20 @@ public class IkGuiInternal {
         // TODO(ches) complete this
     }
 
-    public static void dockSettingsRenameNodeReferences(int old_node_id, int new_node_id) {
-        // TODO(ches) complete this
+    public static void dockSettingsRenameNodeReferences(int oldNodeID, int newNodeID) {
+        log.trace("dockSettingsRenameNodeReferences: from {} to {}", oldNodeID, newNodeID);
+        context.windowByID.forEach(
+                (id, window) -> {
+                    if (window.dockID == oldNodeID && window.dockNode == null) {
+                        window.dockID = newNodeID;
+                    }
+                });
+        context.settingsWindows.forEach(
+                settings -> {
+                    if (settings.dockID == oldNodeID) {
+                        settings.dockID = newNodeID;
+                    }
+                });
     }
 
     public static void errorRecoveryStoreState(@NonNull ErrorRecoveryState stateOut) {
@@ -940,11 +956,11 @@ public class IkGuiInternal {
     /**
      * Truncate the given float to an integer value.
      *
-     * @param x The float.
+     * @param value The float.
      * @return The truncated float.
      */
-    public static float truncate(float x) {
-        return (int) x;
+    public static float truncate(float value) {
+        return (int) value;
     }
 
     /**

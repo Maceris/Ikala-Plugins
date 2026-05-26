@@ -522,10 +522,12 @@ class IkGuiImplWindows {
                         | ConditionAllowed.APPEARING);
         window.setWindowPosValue.set(Float.MAX_VALUE, Float.MAX_VALUE);
 
-        Vector2f oldPos = new Vector2f(window.position);
+        final float oldX = window.position.x;
+        final float oldY = window.position.y;
+
         window.position.set(x, y);
         IkGuiInternal.truncate(window.position);
-        Vector2f offset = new Vector2f(window.position).sub(oldPos);
+        Vector2f offset = new Vector2f(window.position).sub(oldX, oldY);
         if (offset.x == 0.0f && offset.y == 0.0f) {
             return;
         }
@@ -537,13 +539,40 @@ class IkGuiImplWindows {
         window.cursorStartPosition.add(offset);
     }
 
-    public static void setWindowPos(
-            float x, float y, @NonNull Condition condition, int pivotX, int pivotY) {
-        // TODO(ches) complete this
-    }
+    public static void setWindowSize(
+            @NonNull Window window, float x, float y, @NonNull Condition condition) {
+        if (!ConditionAllowed.shouldResolve(condition, window.sizeConditionAllowed)) {
+            return;
+        }
+        window.sizeConditionAllowed &=
+                ~(ConditionAllowed.ONCE
+                        | ConditionAllowed.FIRST_USE_EVER
+                        | ConditionAllowed.APPEARING);
 
-    public static void setWindowSize(float x, float y, @NonNull Condition condition) {
-        // TODO(ches) complete this
+        // Enable auto-fit (not done in beginChild() path unless appearing or combined with
+        // ChildFlags.ALWAYS_AUTO_RESIZE)
+        if ((window.flags & WindowFlags.INTERNAL_CHILD_WINDOW) == 0
+                || window.appearing
+                || (window.flagsAsChildWindow & ChildFlags.ALWAYS_AUTO_RESIZE) != 0) {
+            window.autoFitFramesX.set(x <= 0.0f ? 2 : 0);
+            window.autoFitFramesY.set(y <= 0.0f ? 2 : 0);
+        }
+
+        final float oldX = window.sizeFull.x;
+        final float oldY = window.sizeFull.y;
+        if (x <= 0.0f) {
+            window.autoFitOnlyGrows = false;
+        } else {
+            window.sizeFull.x = IkGuiInternal.truncate(x);
+        }
+        if (y <= 0.0f) {
+            window.autoFitOnlyGrows = false;
+        } else {
+            window.sizeFull.y = IkGuiInternal.truncate(y);
+        }
+        if (oldX != window.sizeFull.x || oldY != window.sizeFull.y) {
+            IkGuiInternal.markIniSettingsDirty(window);
+        }
     }
 
     /** Private constructor so this is not instantiated. */

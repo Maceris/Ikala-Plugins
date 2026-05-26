@@ -11,8 +11,8 @@ public class TabItemFlags {
 
     /**
      * Disable behavior of closing tabs (that are submitted with open != null) with middle mouse
-     * button. You may handle this behavior manually on user's side with if (isItemHovered() &&
-     * isMouseClicked(MouseButton.MIDDLE)) open = false.
+     * button. You may handle this behavior manually on user's side with if (isItemHovered()
+     * &amp;&amp; isMouseClicked(MouseButton.MIDDLE)) open = false.
      */
     public static final int NO_CLOSE_WITH_MIDDLE_MOUSE_BUTTON = 1 << 2;
 

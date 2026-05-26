@@ -28,6 +28,11 @@ public class Window {
      */
     public boolean appearing;
 
+    public IkByte autoFitFramesX;
+    public IkByte autoFitFramesY;
+
+    public boolean autoFitOnlyGrows;
+
     public float baseOffsetCurrentLine;
     public float baseOffsetPreviousLine;
 
@@ -95,7 +100,7 @@ public class Window {
     public final Vector2f cursorStartPosition;
 
     /** Disable window interactions for N frames. */
-    public int disableInputsFrames;
+    public IkByte disableInputsFrames;
 
     /**
      * Flags for the dock conditions.
@@ -143,16 +148,16 @@ public class Window {
     public boolean hidden;
 
     /** Hide the window for n frames. */
-    public int hiddenFramesCanSkipItems;
+    public IkByte hiddenFramesCanSkipItems;
 
     /**
      * Hide the window for N frames while allowing items to be submitted, so we can measure their
      * size
      */
-    public int hiddenFramesCannotSkipItems;
+    public IkByte hiddenFramesCannotSkipItems;
 
     /** Hide the window until frame N at render() time only */
-    public int hiddenFramesForRenderOnly;
+    public IkByte hiddenFramesForRenderOnly;
 
     /**
      * Location of a rectangular hole in the window that ignores hit tests. Zero values if not
@@ -308,6 +313,9 @@ public class Window {
         // TODO(ches) handle loading from ini, update values based on what we find (or don't find)
         active = false;
         appearing = false;
+        autoFitFramesX = new IkByte();
+        autoFitFramesY = new IkByte();
+        autoFitOnlyGrows = false;
         baseOffsetCurrentLine = 0.0f;
         baseOffsetPreviousLine = 0.0f;
         beginCount = 0;
@@ -330,7 +338,7 @@ public class Window {
         cursorPosition = new Vector2f(0.0f, 0.0f);
         cursorPreviousLinePosition = new Vector2f(0.0f, 0.0f);
         cursorStartPosition = new Vector2f(0.0f, 0.0f);
-        disableInputsFrames = 0;
+        disableInputsFrames = new IkByte();
         dockID = 0;
         dockConditionAllowed = ConditionAllowed.ALL;
         dockIsActive = false;
@@ -345,9 +353,9 @@ public class Window {
         flagsPreviousFrame = WindowFlags.NONE;
         flagsAsChildWindow = WindowFlags.NONE;
         hidden = false;
-        hiddenFramesCanSkipItems = 0;
-        hiddenFramesCannotSkipItems = 0;
-        hiddenFramesForRenderOnly = 0;
+        hiddenFramesCanSkipItems = new IkByte();
+        hiddenFramesCannotSkipItems = new IkByte();
+        hiddenFramesForRenderOnly = new IkByte();
         hitTestHolePosition = new Vector2f(0.0f, 0.0f);
         hitTestHoleSize = new Vector2f(0.0f, 0.0f);
         id = 0;
@@ -440,7 +448,7 @@ public class Window {
         sameLine = false;
     }
 
-    public void setWindowDock(int dockID, Condition condition) {
+    public void setWindowDock(int dockID, @NonNull Condition condition) {
         if (!ConditionAllowed.shouldResolve(condition, sizeConditionAllowed)) {
             return;
         }

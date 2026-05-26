@@ -404,6 +404,7 @@ public class Context {
 
     public long settingsDirtyTimer;
     public boolean settingsLoaded;
+    public final List<WindowSettings> settingsWindows;
     public final List<ShrinkWidthItem> shrinkWidthBuffer;
 
     public float sliderCurrentAccumulatedDelta;
@@ -683,6 +684,7 @@ public class Context {
         scrollbarSeekMode = 0;
         settingsDirtyTimer = 0;
         settingsLoaded = false;
+        settingsWindows = new ArrayList<>();
         shrinkWidthBuffer = new ArrayList<>();
         sliderCurrentAccumulatedDelta = 0.0f;
         sliderCurrentAccumulatedDeltaDirty = false;

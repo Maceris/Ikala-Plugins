@@ -24,6 +24,10 @@ public class IkByte implements Comparable<IkByte> {
         this.data[0] = value;
     }
 
+    public void set(int value) {
+        this.data[0] = (byte) value;
+    }
+
     public void set(IkByte value) {
         this.set(value.get());
     }
