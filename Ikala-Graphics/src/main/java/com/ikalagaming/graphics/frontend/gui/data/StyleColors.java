@@ -23,7 +23,7 @@ public class StyleColors {
     public int headerHovered;
     public int menuBarBackground;
     public int modalWindowingDimBackground;
-    public int navHighlight;
+    public int navCursor;
     public int navWindowingDimBackground;
     public int navWindowingHighlight;
     public int plotHistogram;
@@ -86,7 +86,7 @@ public class StyleColors {
         target.headerHovered = Color.rgba(66, 150, 250, 204);
         target.menuBarBackground = Color.rgba(36, 36, 36, 255);
         target.modalWindowingDimBackground = Color.rgba(204, 204, 204, 89);
-        target.navHighlight = Color.rgba(66, 150, 250, 255);
+        target.navCursor = Color.rgba(66, 150, 250, 255);
         target.navWindowingDimBackground = Color.rgba(204, 204, 204, 51);
         target.navWindowingHighlight = Color.rgba(255, 255, 255, 179);
         target.plotHistogram = Color.rgba(230, 179, 0, 255);

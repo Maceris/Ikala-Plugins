@@ -225,7 +225,7 @@ class IkGuiImplUtils {
                     case ColorType.MENU_BAR_BACKGROUND -> context.style.color.menuBarBackground;
                     case ColorType.MODAL_WINDOWING_DIM_BACKGROUND ->
                             context.style.color.modalWindowingDimBackground;
-                    case ColorType.NAV_HIGHLIGHT -> context.style.color.navHighlight;
+                    case ColorType.NAV_CURSOR -> context.style.color.navCursor;
                     case ColorType.NAV_WINDOWING_DIM_BACKGROUND ->
                             context.style.color.navWindowingDimBackground;
                     case ColorType.NAV_WINDOWING_HIGHLIGHT ->
