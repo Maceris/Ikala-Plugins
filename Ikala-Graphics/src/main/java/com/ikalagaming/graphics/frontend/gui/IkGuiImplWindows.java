@@ -93,14 +93,39 @@ class IkGuiImplWindows {
             windowFlags = window.flags;
         }
 
+        // Docking
+        /*
+         * Note: during the frame dock nodes are created, it is possible that (window.dockIsActive == false)
+         * even though (window.dockNode->windows.size() > 1).
+         */
         if (window.dockNode != null && window.dockNodeAsHost != null) {
-            log.error("CAnnot have both dock node and dock node as host set");
+            log.error("Cannot have both dock node and dock node as host set");
             return false;
         }
 
         if ((context.nextWindowData.fieldFlags & NextWindowFlags.HAS_DOCK) != 0) {
             window.setWindowDock(
                     context.nextWindowData.dockID, context.nextWindowData.dockCondition);
+        }
+        if (firstBeginOfFrame) {
+            final boolean hasDockNode = window.dockID != 0 || window.dockNode != null;
+            final boolean newAutoDockNode =
+                    !hasDockNode && IkGuiInternal.windowAlwaysWantOwnTabBar(window);
+            final boolean dockNodeWasVisible = window.dockNodeIsVisible;
+            final boolean dockTabWasVisible = window.dockTabIsVisible;
+            window.dockIsActive = false;
+            window.dockNodeIsVisible = false;
+            window.dockTabIsVisible = false;
+
+            if (hasDockNode || newAutoDockNode) {
+                if (window.isFallbackWindow && !window.wasActive) {
+                    IkGuiInternal.dockNodeHideWindowDuringHostWindowCreation(window);
+                } else {
+                    IkGuiInternal.beginDocked(window, open);
+                }
+                // TODO(ches) complete this
+
+            }
         }
 
         // TODO(ches) port the rest of this
@@ -174,7 +199,7 @@ class IkGuiImplWindows {
         }
         if (ConditionAllowed.shouldResolve(
                 context.nextWindowData.sizeCondition, window.sizeConditionAllowed)) {
-            window.sizeRequested.set(context.nextWindowData.sizeValue);
+            window.size.set(context.nextWindowData.sizeValue);
             window.sizeConditionAllowed =
                     ConditionAllowed.updateFlags(
                             context.nextWindowData.sizeCondition, window.sizeConditionAllowed);
@@ -190,9 +215,7 @@ class IkGuiImplWindows {
         window.collapseToggleRequested = false;
 
         // TODO(ches) calculate actual sizes properly
-        window.sizeCurrent.set(window.sizeRequested);
-        window.sizeFull.set(window.sizeRequested);
-        window.sizeDesired.set(window.sizeRequested);
+        window.sizeFull.set(window.size);
         window.rounding = IkGui.getStyleVarFloat(StyleVariable.WINDOW_ROUNDING);
         window.borderSize = IkGui.getStyleVarFloat(StyleVariable.WINDOW_BORDER_SIZE);
         window.rectOuter.set(window.position, window.sizeFull);
@@ -222,9 +245,9 @@ class IkGuiImplWindows {
                         + window.menuBarHeight);
         window.cursorPosition.set(window.cursorStartPosition);
         window.cursorIdealMaxPosition.set(window.cursorPosition);
-        window.cursorIdealMaxPosition.add(window.sizeRequested);
+        window.cursorIdealMaxPosition.add(window.size);
         window.cursorMaxPosition.set(window.cursorPosition);
-        window.cursorMaxPosition.add(window.sizeCurrent);
+        window.cursorMaxPosition.add(window.size);
         window.cursorPreviousLinePosition.set(window.cursorStartPosition);
 
         window.open = open;
@@ -248,8 +271,8 @@ class IkGuiImplWindows {
             window.drawList.addRectFilled(
                     window.position.x,
                     window.position.y,
-                    window.position.x + window.sizeCurrent.x,
-                    window.position.y + window.sizeCurrent.y,
+                    window.position.x + window.size.x,
+                    window.position.y + window.size.y,
                     IkGui.getColorWithGlobalAlpha(ColorType.WINDOW_BACKGROUND),
                     window.rounding);
         }
@@ -264,7 +287,7 @@ class IkGuiImplWindows {
             window.drawList.addRectFilled(
                     window.position.x,
                     window.position.y,
-                    window.position.x + window.sizeCurrent.x,
+                    window.position.x + window.size.x,
                     window.position.y + window.titleBarHeight,
                     IkGui.getColorWithGlobalAlpha(titleColor),
                     window.rounding,
@@ -284,8 +307,8 @@ class IkGuiImplWindows {
             window.drawList.addRect(
                     window.position.x,
                     window.position.y,
-                    window.position.x + window.sizeCurrent.x,
-                    window.position.y + window.sizeCurrent.y,
+                    window.position.x + window.size.x,
+                    window.position.y + window.size.y,
                     IkGui.getColorWithGlobalAlpha(ColorType.BORDER),
                     window.rounding,
                     DrawFlags.ROUND_CORNERS_ALL,
@@ -411,7 +434,7 @@ class IkGuiImplWindows {
 
     public static float getWindowHeight() {
         Window window = context.windowCurrent;
-        return window == null ? 0 : window.sizeCurrent.y;
+        return window == null ? 0 : window.size.y;
     }
 
     public static void getWindowPos(@NonNull Vector2f pos) {
@@ -438,13 +461,13 @@ class IkGuiImplWindows {
         if (window == null) {
             size.set(0, 0);
         } else {
-            size.set(window.sizeCurrent);
+            size.set(window.size);
         }
     }
 
     public static float getWindowWidth() {
         Window window = context.windowCurrent;
-        return window == null ? 0 : window.sizeCurrent.x;
+        return window == null ? 0 : window.size.x;
     }
 
     public static boolean isPopupOpen(int id, int popupFlags) {

@@ -118,8 +118,6 @@ public class Window {
     /** If docking artifacts are actually visible. When set, dockNode will be non-null. */
     public boolean dockIsActive;
 
-    public boolean dockIsVisible;
-
     /**
      * Which dock node the window is docked into. Prefer checking {@link #dockIsActive}, as this can
      * be set even if the dock node is hidden.
@@ -128,6 +126,8 @@ public class Window {
 
     /** The node that we own, for parent windows. */
     public DockNode dockNodeAsHost;
+
+    public boolean dockNodeIsVisible;
 
     /**
      * Order of the last time the window was visible within it's dock node. Used to reorder windows
@@ -280,17 +280,11 @@ public class Window {
      */
     public int sizeConditionAllowed;
 
-    /** Size, which might be smaller than the full size if minimized. */
-    public final Vector2f sizeCurrent;
-
-    /** Size the window would like to be, given its contents. */
-    public final Vector2f sizeDesired;
+    /** Size,(==sizeFull or collapsed title bar size). */
+    public final Vector2f size;
 
     /** The full size of the window when not collapsed. */
     public final Vector2f sizeFull;
-
-    /** Size that was requested for the window before it was drawn. */
-    public final Vector2f sizeRequested;
 
     public boolean skipRenderingContents;
     public final FloatArrayList textWrapPositionStack;
@@ -342,9 +336,9 @@ public class Window {
         dockID = 0;
         dockConditionAllowed = ConditionAllowed.ALL;
         dockIsActive = false;
-        dockIsVisible = false;
         dockNode = null;
         dockNodeAsHost = null;
+        dockNodeIsVisible = false;
         dockOrder = 0;
         dockTabIsVisible = false;
         dockTabWantClose = false;
@@ -404,10 +398,8 @@ public class Window {
         showScrollbarX = Visibility.IF_REQUIRED;
         showScrollbarY = Visibility.IF_REQUIRED;
         sizeConditionAllowed = ConditionAllowed.ALL;
-        sizeCurrent = new Vector2f(0.0f, 0.0f);
-        sizeDesired = new Vector2f(0.0f, 0.0f);
+        size = new Vector2f(0.0f, 0.0f);
         sizeFull = new Vector2f(0.0f, 0.0f);
-        sizeRequested = new Vector2f(0.0f, 0.0f);
         skipRenderingContents = false;
         textWrapPositionStack = new FloatArrayList();
         titleBarHeight = 0.0f;

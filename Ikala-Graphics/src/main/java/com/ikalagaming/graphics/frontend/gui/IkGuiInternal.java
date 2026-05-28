@@ -20,6 +20,48 @@ public class IkGuiInternal {
 
     static Context context;
 
+    public static void beginDocked(@NonNull Window window, final IkBoolean open) {
+        final boolean autoDockNode = windowAlwaysWantOwnTabBar(window);
+        if (autoDockNode) {
+            if (window.dockID == 0) {
+                if (window.dockNode != null) {
+                    log.error("Trying to dock when there's already a node");
+                    return;
+                }
+                window.dockID = dockContextGenerateNodeID();
+            }
+        } else {
+            // Calling setNextWindowPos() undocks windows by default (by setting posUndock)
+            boolean wantUndock = (window.flags & WindowFlags.NO_DOCKING) != 0;
+            wantUndock =
+                    wantUndock
+                            || ((context.nextWindowData.fieldFlags & NextWindowFlags.HAS_POSITION)
+                                            != 0
+                                    && ConditionAllowed.shouldResolve(
+                                            context.nextWindowData.positionCondition,
+                                            window.positionConditionAllowed)
+                                    && context.nextWindowData.positionUndock);
+            if (wantUndock) {
+                dockContextProcessUndockWindow(window, false);
+                return;
+            }
+        }
+
+        // Bind to our dock node
+        DockNode node = window.dockNode;
+        if (node != null && window.dockID != node.id) {
+            log.error("Dock ID set without a dock node");
+            return;
+        }
+        if (window.dockID != 0 && node == null) {
+            node = dockContextBindNodeToWindow(window);
+            if (node == null) {
+                return;
+            }
+        }
+        // TODO(ches) complete this
+    }
+
     public static void clearActiveID() {
         setActiveID(0, null);
     }
@@ -67,8 +109,38 @@ public class IkGuiInternal {
         return context.dockContext.nodes.get(dockID);
     }
 
+    public static int dockContextGenerateNodeID() {
+        int id = 1;
+        while (!context.dockContext.nodes.containsKey(id)) {
+            id += 1;
+        }
+        return id;
+    }
+
     public static void dockContextProcessDock(DockNodeRequest req) {
         // TODO(ches) complete this
+    }
+
+    public static void dockContextProcessUndockWindow(
+            @NonNull Window window, boolean clearPersistentDockingReference) {
+        log.trace(
+                "dockContextProcessUndockWindow window {}, clearPersistentDockingReference {}",
+                window.name,
+                clearPersistentDockingReference);
+        if (window.dockNode != null) {
+            dockNodeRemoveWindow(
+                    window.dockNode, window, clearPersistentDockingReference ? 0 : window.dockID);
+        } else {
+            window.dockID = 0;
+        }
+        window.collapsed = false;
+        window.dockIsActive = false;
+        window.dockNodeIsVisible = false;
+        window.dockTabIsVisible = false;
+        fixLargeWindowsWhenUndocking(window.sizeFull, window.viewport);
+        window.size.set(window.sizeFull);
+
+        markIniSettingsDirty();
     }
 
     public static void dockContextPruneUnusedSettingsNodes() {
@@ -691,6 +763,31 @@ public class IkGuiInternal {
         }
     }
 
+    /**
+     * Undocking a large (~full screen) window would leave it so large that the bottom-right sizing
+     * corner would more than likely be off the screen and the window would be hard to resize to fit
+     * on screen. This can be particularly problematic with 'configWindowsMoveFromTitleBarOnly=true'
+     * and/or with 'configWindowsResizeFromEdges=false' as well (the later can be due to a missing
+     * BackendFlags.HAS_MOUSE_CURSORS backend flag). When undocking a window we currently force its
+     * maximum size to 90% of the host viewport or monitor.
+     *
+     * @param size The size of the window, which will likely be modified by this method.
+     * @param referenceViewport The viewport.
+     */
+    public static void fixLargeWindowsWhenUndocking(
+            @NonNull Vector2f size, Viewport referenceViewport) {
+        // TODO(ches) May not need this if we preserve docked/undocked size
+        if (referenceViewport == null) {
+            return;
+        }
+        Vector2f maxSize = new Vector2f(referenceViewport.workSize).mul(0.90f);
+        IkGuiInternal.truncate(maxSize);
+        if ((context.io.configFlags & ConfigFlags.VIEWPORTS_ENABLE) != 0) {
+            // TODO(ches) grab the monitor size and use that instead
+        }
+        size.min(maxSize);
+    }
+
     public static void focusWindow(Window window, int focusRequestFlags) {
         // TODO(ches) set focus to window
     }
@@ -791,8 +888,16 @@ public class IkGuiInternal {
         }
     }
 
+    public static void markIniSettingsDirty() {
+        if (context.settingsDirtyTimer <= 0) {
+            context.settingsDirtyTimer = context.io.iniSavingRate;
+        }
+    }
+
     public static void markIniSettingsDirty(@NonNull Window window) {
-        // TODO(ches) complete this
+        if ((window.flags & WindowFlags.NO_SAVED_SETTINGS) == 0 && context.settingsDirtyTimer < 0) {
+            context.settingsDirtyTimer = context.io.iniSavingRate;
+        }
     }
 
     public static void setActiveID(int id, Window window) {
@@ -1188,6 +1293,18 @@ public class IkGuiInternal {
             }
             window.rootWindowForNavigation = window.rootWindowForNavigation.parentWindow;
         }
+    }
+
+    public static boolean windowAlwaysWantOwnTabBar(@NonNull Window window) {
+        // We don't support AlwaysTabBar on the fallback/implicit window to avoid unused dock-node
+        // overhead/noise
+        return (context.io.configDockingAlwaysTabBar || window.windowClass.dockingAlwaysTabBar)
+                && (window.flags
+                                & (WindowFlags.INTERNAL_CHILD_WINDOW
+                                        | WindowFlags.NO_TITLE_BAR
+                                        | WindowFlags.NO_DOCKING))
+                        == 0
+                && !window.isFallbackWindow;
     }
 
     /** Private constructor so this is not instantiated. */

@@ -12,6 +12,18 @@ import org.joml.Vector2i;
 
 public class NextWindowData {
 
+    /** Override background alpha. */
+    public float backgroundAlpha;
+
+    /**
+     * @see com.ikalagaming.graphics.frontend.gui.flags.ChildFlags
+     */
+    public int childFlags;
+
+    public @NonNull Condition collapsedCondition;
+    public boolean collapsedValue;
+    public final Vector2i contentSizeValue;
+
     public @NonNull Condition dockCondition;
     public int dockID;
 
@@ -22,15 +34,19 @@ public class NextWindowData {
      */
     public int fieldFlags;
 
+    public final Vector2i menuBarOffsetMinValue;
+
     public @NonNull Condition positionCondition;
-    public final Vector2i positionValue;
     public final Vector2i positionPivot;
-    public @NonNull Condition sizeCondition;
-    public final Vector2i sizeValue;
-    public @NonNull Condition collapsedCondition;
-    public boolean collapsedValue;
-    public final Vector2i contentSizeValue;
+    public boolean positionUndock;
+    public final Vector2i positionValue;
     public final Vector2i scrollValue;
+    public @NonNull Condition sizeCondition;
+    public final RectFloat sizeConstraintRect;
+    public final Vector2i sizeValue;
+
+    /** Only non-null if we specified the viewport for the next window. */
+    public Viewport viewport;
 
     /**
      * Only honored by beginTable.
@@ -40,44 +56,30 @@ public class NextWindowData {
     public int windowFlags;
 
     /**
-     * @see com.ikalagaming.graphics.frontend.gui.flags.ChildFlags
-     */
-    public int childFlags;
-
-    public final RectFloat sizeConstraintRect;
-
-    /** Override background alpha. */
-    public float backgroundAlpha;
-
-    public final Vector2i menuBarOffsetMinValue;
-
-    /**
      * @see com.ikalagaming.graphics.frontend.gui.flags.RefreshFlags
      */
     public int windowRefreshFlags;
 
-    /** Only non-null if we specified the viewport for the next window. */
-    public Viewport viewport;
-
     public NextWindowData() {
-        dockCondition = Condition.NONE;
-        dockID = 0;
-        fieldFlags = NextWindowFlags.NONE;
-        positionCondition = Condition.NONE;
-        positionValue = new Vector2i(0, 0);
-        positionPivot = new Vector2i(0, 0);
-        sizeCondition = Condition.NONE;
-        sizeValue = new Vector2i(0, 0);
+        backgroundAlpha = 1.0f;
+        childFlags = ChildFlags.NONE;
         collapsedCondition = Condition.NONE;
         collapsedValue = false;
         contentSizeValue = new Vector2i(0, 0);
-        scrollValue = new Vector2i(0, 0);
-        windowFlags = WindowFlags.NONE;
-        childFlags = ChildFlags.NONE;
-        sizeConstraintRect = new RectFloat(0, 0, 0, 0);
-        backgroundAlpha = 1.0f;
+        dockCondition = Condition.NONE;
+        dockID = 0;
+        fieldFlags = NextWindowFlags.NONE;
         menuBarOffsetMinValue = new Vector2i(0, 0);
-        windowRefreshFlags = RefreshFlags.NONE;
+        positionCondition = Condition.NONE;
+        positionPivot = new Vector2i(0, 0);
+        positionUndock = false;
+        positionValue = new Vector2i(0, 0);
+        scrollValue = new Vector2i(0, 0);
+        sizeCondition = Condition.NONE;
+        sizeConstraintRect = new RectFloat(0, 0, 0, 0);
+        sizeValue = new Vector2i(0, 0);
         viewport = null;
+        windowFlags = WindowFlags.NONE;
+        windowRefreshFlags = RefreshFlags.NONE;
     }
 }

@@ -429,9 +429,7 @@ class IkGuiDemo {
             // TODO(ches) fill this out
             ImGui.text(
                     String.format("Position: (%.2f, %.2f)", window.position.x, window.position.y));
-            ImGui.text(
-                    String.format(
-                            "Size: (%.2f, %.2f)", window.sizeCurrent.x, window.sizeCurrent.y));
+            ImGui.text(String.format("Size: (%.2f, %.2f)", window.size.x, window.size.y));
             ImGui.text(
                     String.format(
                             "Content Size: (%.2f, %.2f)",

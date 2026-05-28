@@ -149,8 +149,8 @@ public class IkIO {
     /** Path to the .ini file, set to null to disable automatic .ini loading/saving. */
     public String iniFilename;
 
-    /** Minimum time between saving positions/sizes to .ini file, in seconds. */
-    public float iniSavingRate;
+    /** Minimum time between saving positions/sizes to .ini file, in milliseconds. */
+    public long iniSavingRate;
 
     /** Whether the alt key is down. */
     public boolean keyAlt;
@@ -409,7 +409,7 @@ public class IkIO {
         eventQueueLock = new ReentrantLock();
         fonts = new FontAtlas();
         iniFilename = "ikgui.ini";
-        iniSavingRate = 5.0f;
+        iniSavingRate = 5000;
         keyAlt = false;
         keyCtrl = false;
         keyMods = KeyModFlags.NONE;
