@@ -55,10 +55,29 @@ public class IkGuiInternal {
         }
         if (window.dockID != 0 && node == null) {
             node = dockContextBindNodeToWindow(window);
-            if (node == null) {
-                return;
-            }
         }
+        if (node == null) {
+            log.warn("Node probably shouldn't be null halfway through beginDocked");
+            return;
+        }
+
+        // Undock if our dockspace node disappeared
+        /*
+         * Note how we are testing for lastFrameAlive and NOT lastFrameActive.
+         * A DockSpace node can be maintained alive while being inactive with DockNodeFlags.KEEP_ALIVE_ONLY.
+         */
+        if (node.lastFrameAlive < context.frameCount) {
+            DockNode rootNode = dockNodeGetRootNode(node);
+            if (rootNode.lastFrameAlive < context.frameCount) {
+                dockContextProcessUndockWindow(window, false);
+            } else {
+                window.dockIsActive = true;
+            }
+            return;
+        }
+
+        storeDockStyleForWindow(window);
+
         // TODO(ches) complete this
     }
 
@@ -999,6 +1018,15 @@ public class IkGuiInternal {
         }
 
         context.windowMoving = null;
+    }
+
+    public static void storeDockStyleForWindow(@NonNull Window window) {
+        int i = 0;
+        for (WindowDockStyleColor dockStyleColor : WindowDockStyleColor.values()) {
+            final ColorType actualColor = WindowDockStyleColor.mapToColor(dockStyleColor);
+            window.dockStyle.colors[i] = IkGuiImplUtils.getColor(actualColor);
+            i += 1;
+        }
     }
 
     /**

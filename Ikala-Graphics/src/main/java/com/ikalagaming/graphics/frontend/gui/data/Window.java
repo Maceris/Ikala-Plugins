@@ -136,6 +136,8 @@ public class Window {
      */
     public short dockOrder;
 
+    public WindowDockStyle dockStyle;
+
     /** If the window is visible this frame, the corresponding tab is selected. */
     public boolean dockTabIsVisible;
 
@@ -340,6 +342,7 @@ public class Window {
         dockNodeAsHost = null;
         dockNodeIsVisible = false;
         dockOrder = 0;
+        dockStyle = new WindowDockStyle();
         dockTabIsVisible = false;
         dockTabWantClose = false;
         drawList = new DrawList(name);
