@@ -343,11 +343,14 @@ class IkGuiDemo {
 
                         float radius = pointDetailBuffer.getFloat(pointDetailBufferIndex);
                         pointDetailBufferIndex += Float.BYTES;
+                        float alphaRadius = pointDetailBuffer.getFloat(pointDetailBufferIndex);
+                        pointDetailBufferIndex += Float.BYTES;
                         int colorOrTextureID = pointDetailBuffer.getInt(pointDetailBufferIndex);
                         pointDetailBufferIndex += Integer.BYTES;
                         int tint = pointDetailBuffer.getInt(pointDetailBufferIndex);
 
                         ImGui.text(String.format("Radius: %f", radius));
+                        ImGui.text(String.format("Alpha radius: %f", alphaRadius));
                         ImGui.text(String.format("Color or texture ID: %#08X", colorOrTextureID));
                         ImGui.text(String.format("Tint: %d", tint));
 

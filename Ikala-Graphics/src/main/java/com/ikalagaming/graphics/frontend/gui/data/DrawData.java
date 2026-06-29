@@ -10,7 +10,7 @@ import java.util.List;
 @Slf4j
 public class DrawData {
     public static final int SIZE_OF_POINT = 4 * Float.BYTES;
-    public static final int SIZE_OF_POINT_DETAIL = Float.BYTES + 2 * Integer.BYTES;
+    public static final int SIZE_OF_POINT_DETAIL = 2 * Float.BYTES + 2 * Integer.BYTES;
     public static final int SIZE_OF_DRAW_COMMAND = 6 * Integer.BYTES + Float.BYTES;
     public static final int SIZE_OF_VERTEX = 2 * Float.BYTES;
 

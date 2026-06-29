@@ -63,7 +63,19 @@ public class DrawList {
         }
     }
 
-    private record SDFPointDetail(float radius, int colorOrTextureID, int tint) {}
+    /**
+     * Details for one point.
+     *
+     * @param radius The radius for rounding.
+     * @param alphaRadius The radius for blending to transparent. 0 means no blending, positive
+     *     numbers indicate the radius fading from an opaque (well, "regular" colored) center to
+     *     fully transparent edge, negative numbers indicate an opaque (unmodified) edge fading to a
+     *     transparent center.
+     * @param colorOrTextureID The color (RGBA32) or texture ID.
+     * @param tint The tint to modify by.
+     */
+    private record SDFPointDetail(
+            float radius, float alphaRadius, int colorOrTextureID, int tint) {}
 
     public final String windowName;
 
@@ -94,8 +106,9 @@ public class DrawList {
     public ByteBuffer pointBuffer;
 
     /**
-     * float radius (for rounding), int colorOrTextureID, int tint. Stored generally starting on the
-     * top-left, and always ordered clockwise for polygons and in-order for paths.
+     * float radius (for rounding), float alphaRadius (used to blend to transparent), int
+     * colorOrTextureID, int tint. Stored generally starting on the top-left, and always ordered
+     * clockwise for polygons and in-order for paths.
      */
     public ByteBuffer pointDetailBuffer;
 
@@ -125,13 +138,18 @@ public class DrawList {
      *
      * @param textureID The texture ID or color to use.
      * @param rounding The rounding radius.
+     * @param alphaRadius The alpha radius.
      * @param drawFlagsRoundingCorners Draw flags for which corners need rounding.
      * @param tint Tint, for tinting textures.
      * @return The (four) point details for each of the corners (top left, top right, bottom right,
      *     then bottom left).
      */
     private static SDFPointDetail[] getSdfPointDetails(
-            int textureID, float rounding, int drawFlagsRoundingCorners, int tint) {
+            int textureID,
+            float rounding,
+            float alphaRadius,
+            int drawFlagsRoundingCorners,
+            int tint) {
         final float topLeftRadius =
                 (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_LEFT) != 0 ? rounding : 0;
         final float topRightRadius =
@@ -141,11 +159,20 @@ public class DrawList {
         final float bottomRightRadius =
                 (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? rounding : 0;
 
+        final float topLeftAlphaRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_LEFT) != 0 ? alphaRadius : 0;
+        final float topRightAlphaRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_RIGHT) != 0 ? alphaRadius : 0;
+        final float bottomLeftAlphaRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_LEFT) != 0 ? alphaRadius : 0;
+        final float bottomRightAlphaRadius =
+                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? alphaRadius : 0;
+
         return new SDFPointDetail[] {
-            new SDFPointDetail(topLeftRadius, textureID, tint),
-            new SDFPointDetail(topRightRadius, textureID, tint),
-            new SDFPointDetail(bottomRightRadius, textureID, tint),
-            new SDFPointDetail(bottomLeftRadius, textureID, tint),
+            new SDFPointDetail(topLeftRadius, topLeftAlphaRadius, textureID, tint),
+            new SDFPointDetail(topRightRadius, topRightAlphaRadius, textureID, tint),
+            new SDFPointDetail(bottomRightRadius, bottomRightAlphaRadius, textureID, tint),
+            new SDFPointDetail(bottomLeftRadius, bottomLeftAlphaRadius, textureID, tint),
         };
     }
 
@@ -291,6 +318,7 @@ public class DrawList {
 
         for (SDFPointDetail detail : details) {
             pointDetailBuffer.putFloat(detail.radius());
+            pointDetailBuffer.putFloat(detail.alphaRadius());
             pointDetailBuffer.putInt(detail.colorOrTextureID());
             pointDetailBuffer.putInt(detail.tint());
         }
@@ -484,8 +512,8 @@ public class DrawList {
         }
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(thickness, color, Color.CLEAR),
-            new SDFPointDetail(thickness, color, Color.CLEAR),
+            new SDFPointDetail(thickness, 0.0f, color, Color.CLEAR),
+            new SDFPointDetail(thickness, 0.0f, color, Color.CLEAR),
         };
 
         // TODO(ches) add quad
@@ -566,7 +594,7 @@ public class DrawList {
         final float height = maxY - minY;
 
         SDFPointDetail[] details =
-                getSdfPointDetails(color, rounding, drawFlagsRoundingCorners, Color.CLEAR);
+                getSdfPointDetails(color, rounding, 0, drawFlagsRoundingCorners, Color.CLEAR);
 
         int pointIndex = addPoint(centerX, centerY, width, height);
         int detailIndex = addDetails(details);
@@ -584,12 +612,12 @@ public class DrawList {
     }
 
     public void addRectFilled(float minX, float minY, float maxX, float maxY, int color) {
-        addRectFilled(minX, minY, maxX, maxY, color, 0.0f, DrawFlags.ROUND_CORNERS_ALL);
+        addRectFilled(minX, minY, maxX, maxY, color, 0.0f, DrawFlags.ROUND_CORNERS_ALL, 0.0f);
     }
 
     public void addRectFilled(
             float minX, float minY, float maxX, float maxY, int color, float rounding) {
-        addRectFilled(minX, minY, maxX, maxY, color, rounding, DrawFlags.ROUND_CORNERS_ALL);
+        addRectFilled(minX, minY, maxX, maxY, color, rounding, DrawFlags.ROUND_CORNERS_ALL, 0.0f);
     }
 
     public void addRectFilled(
@@ -600,6 +628,18 @@ public class DrawList {
             int color,
             float rounding,
             int drawFlagsRoundingCorners) {
+        addRectFilled(minX, minY, maxX, maxY, color, rounding, drawFlagsRoundingCorners, 0.0f);
+    }
+
+    public void addRectFilled(
+            float minX,
+            float minY,
+            float maxX,
+            float maxY,
+            int color,
+            float rounding,
+            int drawFlagsRoundingCorners,
+            float alphaRadius) {
 
         if (rounding < 0) {
             log.warn("Invalid rounding {} in addRectFilled", rounding);
@@ -617,7 +657,8 @@ public class DrawList {
         final int borderStroke = 0;
 
         SDFPointDetail[] details =
-                getSdfPointDetails(color, rounding, drawFlagsRoundingCorners, Color.CLEAR);
+                getSdfPointDetails(
+                        color, rounding, alphaRadius, drawFlagsRoundingCorners, Color.CLEAR);
 
         int pointIndex = addPoint(centerX, centerY, width, height);
         int detailIndex = addDetails(details);
@@ -653,7 +694,8 @@ public class DrawList {
                 colorUpperLeft,
                 colorUpperRight,
                 colorBottomRight,
-                colorBottomLeft);
+                colorBottomLeft,
+                0.0f);
     }
 
     public void addRectFilledMultiColor(
@@ -676,7 +718,8 @@ public class DrawList {
                 colorUpperLeft,
                 colorUpperRight,
                 colorBottomRight,
-                colorBottomLeft);
+                colorBottomLeft,
+                0.0f);
     }
 
     public void addRectFilledMultiColor(
@@ -690,6 +733,32 @@ public class DrawList {
             int colorUpperRight,
             int colorBottomRight,
             int colorBottomLeft) {
+        addRectFilledMultiColor(
+                minX,
+                minY,
+                maxX,
+                maxY,
+                rounding,
+                drawFlagsRoundingCorners,
+                colorUpperLeft,
+                colorUpperRight,
+                colorBottomRight,
+                colorBottomLeft,
+                0.0f);
+    }
+
+    public void addRectFilledMultiColor(
+            float minX,
+            float minY,
+            float maxX,
+            float maxY,
+            float rounding,
+            int drawFlagsRoundingCorners,
+            int colorUpperLeft,
+            int colorUpperRight,
+            int colorBottomRight,
+            int colorBottomLeft,
+            float alphaRadius) {
 
         if (rounding < 0) {
             log.warn("Invalid rounding {} in addRectFilledMultiColor", rounding);
@@ -712,10 +781,10 @@ public class DrawList {
                 (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? rounding : 0;
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(topLeftRadius, colorUpperLeft, Color.CLEAR),
-            new SDFPointDetail(topRightRadius, colorUpperRight, Color.CLEAR),
-            new SDFPointDetail(bottomRightRadius, colorBottomRight, Color.CLEAR),
-            new SDFPointDetail(bottomLeftRadius, colorBottomLeft, Color.CLEAR),
+            new SDFPointDetail(topLeftRadius, alphaRadius, colorUpperLeft, Color.CLEAR),
+            new SDFPointDetail(topRightRadius, alphaRadius, colorUpperRight, Color.CLEAR),
+            new SDFPointDetail(bottomRightRadius, alphaRadius, colorBottomRight, Color.CLEAR),
+            new SDFPointDetail(bottomLeftRadius, alphaRadius, colorBottomLeft, Color.CLEAR),
         };
         // TODO(ches) add quad
         // TODO(ches) Skip adding any other data if we didn't need to add the quad
@@ -760,10 +829,10 @@ public class DrawList {
             float thickness) {
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, color, Color.CLEAR),
-            new SDFPointDetail(0, color, Color.CLEAR),
-            new SDFPointDetail(0, color, Color.CLEAR),
-            new SDFPointDetail(0, color, Color.CLEAR),
+            new SDFPointDetail(0, 0, color, Color.CLEAR),
+            new SDFPointDetail(0, 0, color, Color.CLEAR),
+            new SDFPointDetail(0, 0, color, Color.CLEAR),
+            new SDFPointDetail(0, 0, color, Color.CLEAR),
         };
 
         // TODO(ches) add quad
@@ -799,14 +868,28 @@ public class DrawList {
             float p4X,
             float p4Y,
             int color) {
+        addQuadFilled(p1X, p1Y, p2X, p2Y, p3X, p3Y, p4X, p4Y, color, 0.0f);
+    }
+
+    public void addQuadFilled(
+            float p1X,
+            float p1Y,
+            float p2X,
+            float p2Y,
+            float p3X,
+            float p3Y,
+            float p4X,
+            float p4Y,
+            int color,
+            float alphaRadius) {
 
         final int borderStroke = 0;
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, color, Color.CLEAR),
-            new SDFPointDetail(0, color, Color.CLEAR),
-            new SDFPointDetail(0, color, Color.CLEAR),
-            new SDFPointDetail(0, color, Color.CLEAR),
+            new SDFPointDetail(0, alphaRadius, color, Color.CLEAR),
+            new SDFPointDetail(0, alphaRadius, color, Color.CLEAR),
+            new SDFPointDetail(0, alphaRadius, color, Color.CLEAR),
+            new SDFPointDetail(0, alphaRadius, color, Color.CLEAR),
         };
         // TODO(ches) add quad
         // TODO(ches) Skip adding any other data if we didn't need to add the quad
@@ -846,7 +929,7 @@ public class DrawList {
             float thickness) {
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, color, Color.CLEAR),
+            new SDFPointDetail(0, 0.0f, color, Color.CLEAR),
         };
 
         // TODO(ches) add quad
@@ -872,11 +955,23 @@ public class DrawList {
 
     public void addTriangleFilled(
             float p1X, float p1Y, float p2X, float p2Y, float p3X, float p3Y, int color) {
+        addTriangleFilled(p1X, p1Y, p2X, p2Y, p3X, p3Y, color, 0.0f);
+    }
+
+    public void addTriangleFilled(
+            float p1X,
+            float p1Y,
+            float p2X,
+            float p2Y,
+            float p3X,
+            float p3Y,
+            int color,
+            float alphaRadius) {
 
         final int borderStroke = 0;
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, color, Color.CLEAR),
+            new SDFPointDetail(0, alphaRadius, color, Color.CLEAR),
         };
         // TODO(ches) add quad
         // TODO(ches) Skip adding any other data if we didn't need to add the quad
@@ -906,7 +1001,7 @@ public class DrawList {
     public void addCircle(float centerX, float centerY, float radius, int color, float thickness) {
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, color, Color.CLEAR),
+            new SDFPointDetail(0, 0.0f, color, Color.CLEAR),
         };
 
         // TODO(ches) add quad
@@ -928,8 +1023,13 @@ public class DrawList {
     }
 
     public void addCircleFilled(float centerX, float centerY, float radius, int color) {
+        addCircleFilled(centerX, centerY, radius, color, 0.0f);
+    }
+
+    public void addCircleFilled(
+            float centerX, float centerY, float radius, int color, float alphaRadius) {
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, color, Color.CLEAR),
+            new SDFPointDetail(0, alphaRadius, color, Color.CLEAR),
         };
 
         final int borderStroke = 0;
@@ -971,6 +1071,16 @@ public class DrawList {
         // TODO(ches) implement this
     }
 
+    public void addNgonFilled(
+            float centerX,
+            float centerY,
+            float radius,
+            int color,
+            int segmentCount,
+            float alphaRadius) {
+        // TODO(ches) implement this
+    }
+
     /**
      * Add text to the draw list.
      *
@@ -984,7 +1094,7 @@ public class DrawList {
     public int addText(int fontSize, float posX, float posY, int color, @NonNull String text) {
         FontAtlas atlas = IkGui.getContext().io.fonts;
 
-        SDFPointDetail detail = new SDFPointDetail(0, 0, color);
+        SDFPointDetail detail = new SDFPointDetail(0, 0.0f, 0, color);
         final int detailIndex = addDetails(detail);
         final int pointCount = 2;
         final int detailCount = 1;
@@ -1083,6 +1193,11 @@ public class DrawList {
         // TODO(ches) implement this
     }
 
+    public void addConvexPolyFilled(
+            Vector2f[] points, int pointCount, int color, float alphaRadius) {
+        // TODO(ches) implement this
+    }
+
     public void addBezierCubic(
             float p1X,
             float p1Y,
@@ -1170,12 +1285,27 @@ public class DrawList {
             float maxU,
             float maxV,
             int color) {
+        addImage(textureID, minX, minY, maxX, maxY, minU, minV, maxU, maxV, color);
+    }
+
+    public void addImage(
+            int textureID,
+            float minX,
+            float minY,
+            float maxX,
+            float maxY,
+            float minU,
+            float minV,
+            float maxU,
+            float maxV,
+            int color,
+            float alphaRadius) {
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, textureID, color),
-            new SDFPointDetail(0, textureID, color),
-            new SDFPointDetail(0, textureID, color),
-            new SDFPointDetail(0, textureID, color),
+            new SDFPointDetail(0, alphaRadius, textureID, color),
+            new SDFPointDetail(0, alphaRadius, textureID, color),
+            new SDFPointDetail(0, alphaRadius, textureID, color),
+            new SDFPointDetail(0, alphaRadius, textureID, color),
         };
 
         // TODO(ches) add quad
@@ -1228,7 +1358,8 @@ public class DrawList {
                 1,
                 0,
                 1,
-                Color.WHITE);
+                Color.WHITE,
+                0.0f);
     }
 
     public void addImageQuad(
@@ -1261,7 +1392,8 @@ public class DrawList {
                 1,
                 0,
                 1,
-                Color.WHITE);
+                Color.WHITE,
+                0.0f);
     }
 
     public void addImageQuad(
@@ -1296,7 +1428,8 @@ public class DrawList {
                 1,
                 0,
                 1,
-                Color.WHITE);
+                Color.WHITE,
+                0.0f);
     }
 
     public void addImageQuad(
@@ -1333,7 +1466,8 @@ public class DrawList {
                 v3,
                 0,
                 1,
-                Color.WHITE);
+                Color.WHITE,
+                0.0f);
     }
 
     public void addImageQuad(
@@ -1372,7 +1506,8 @@ public class DrawList {
                 v3,
                 u4,
                 v4,
-                Color.WHITE);
+                Color.WHITE,
+                0.0f);
     }
 
     public void addImageQuad(
@@ -1394,14 +1529,39 @@ public class DrawList {
             float u4,
             float v4,
             int color) {
+        addImageQuad(
+                textureID, p1X, p1Y, p2X, p2Y, p3X, p3Y, p4X, p4Y, u1, v1, u2, v2, u3, v3, u4, v4,
+                color, 0.0f);
+    }
+
+    public void addImageQuad(
+            int textureID,
+            float p1X,
+            float p1Y,
+            float p2X,
+            float p2Y,
+            float p3X,
+            float p3Y,
+            float p4X,
+            float p4Y,
+            float u1,
+            float v1,
+            float u2,
+            float v2,
+            float u3,
+            float v3,
+            float u4,
+            float v4,
+            int color,
+            float alphaRadius) {
 
         final int borderStroke = 0;
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, textureID, color),
-            new SDFPointDetail(0, textureID, color),
-            new SDFPointDetail(0, textureID, color),
-            new SDFPointDetail(0, textureID, color),
+            new SDFPointDetail(0, alphaRadius, textureID, color),
+            new SDFPointDetail(0, alphaRadius, textureID, color),
+            new SDFPointDetail(0, alphaRadius, textureID, color),
+            new SDFPointDetail(0, alphaRadius, textureID, color),
         };
         // TODO(ches) add quad
         // TODO(ches) Skip adding any other data if we didn't need to add the quad
@@ -1450,7 +1610,8 @@ public class DrawList {
                 maxV,
                 color,
                 rounding,
-                DrawFlags.ROUND_CORNERS_ALL);
+                DrawFlags.ROUND_CORNERS_ALL,
+                0.0f);
     }
 
     public void addImageRounded(
@@ -1466,6 +1627,36 @@ public class DrawList {
             int color,
             float rounding,
             int drawFlagsRoundingCorners) {
+        addImageRounded(
+                textureID,
+                minX,
+                minY,
+                maxX,
+                maxY,
+                minU,
+                minV,
+                maxU,
+                maxV,
+                color,
+                rounding,
+                drawFlagsRoundingCorners,
+                0.0f);
+    }
+
+    public void addImageRounded(
+            int textureID,
+            float minX,
+            float minY,
+            float maxX,
+            float maxY,
+            float minU,
+            float minV,
+            float maxU,
+            float maxV,
+            int color,
+            float rounding,
+            int drawFlagsRoundingCorners,
+            float alphaRounding) {
 
         if (rounding < 0) {
             log.warn("Invalid rounding {} in addImageRounded", rounding);
@@ -1473,7 +1664,8 @@ public class DrawList {
         }
 
         SDFPointDetail[] details =
-                getSdfPointDetails(textureID, rounding, drawFlagsRoundingCorners, color);
+                getSdfPointDetails(
+                        textureID, rounding, alphaRounding, drawFlagsRoundingCorners, color);
 
         // TODO(ches) add quad
         // TODO(ches) Skip adding any other data if we didn't need to add the quad

@@ -274,7 +274,9 @@ class IkGuiImplWindows {
                     window.position.x + window.size.x,
                     window.position.y + window.size.y,
                     IkGui.getColorWithGlobalAlpha(ColorType.WINDOW_BACKGROUND),
-                    window.rounding);
+                    window.rounding,
+                    DrawFlags.ROUND_CORNERS_DEFAULT,
+                    0.0f); // TODO(ches) window rounding
         }
 
         if (window.titleBarHeight > 0) {
@@ -291,7 +293,8 @@ class IkGuiImplWindows {
                     window.position.y + window.titleBarHeight,
                     IkGui.getColorWithGlobalAlpha(titleColor),
                     window.rounding,
-                    DrawFlags.ROUND_CORNERS_TOP);
+                    DrawFlags.ROUND_CORNERS_TOP,
+                    0.0f); // TODO(ches) make alpha radius a style option
 
             // TODO(ches) handle special cases of names with # and ##
             // TODO(ches) handle title alignment

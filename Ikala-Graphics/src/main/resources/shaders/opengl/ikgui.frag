@@ -23,6 +23,7 @@ struct Point
 struct PointDetail
 {
     float radius;
+    float alphaRadius;
     int colorOrTextureID;
     int tint;
 };
@@ -135,10 +136,23 @@ void draw_rectangle(Command command, vec2 fragPos) {
     const vec2 d = abs(posRelative) - halfSize + relevantRadius;
     const float sdf = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - relevantRadius;
 
+    const vec2 alphaD = abs(posRelative) - halfSize + abs(relevantDetail.alphaRadius);
+    const float alphaSdf = length(max(alphaD, 0.0)) + min(max(alphaD.x, alphaD.y), 0.0) - abs(relevantDetail.alphaRadius);
+
+    float alphaMul = 1.0f;
+    if (relevantDetail.alphaRadius > 0) {
+        alphaMul = clamp(-(alphaSdf / abs(relevantDetail.alphaRadius)), 0, 1);
+    }
+    else if (relevantDetail.alphaRadius < 0) {
+        alphaMul = 1 - clamp(-(alphaSdf / abs(relevantDetail.alphaRadius)), 0, 1);
+    }
+    // else 0, leave at 1.0f
+
     switch (command.style) {
         case ELEMENT_STYLE_FILL:
             if (sdf < 0) {
                 outColor = colorAndTint(relevantDetail.colorOrTextureID, relevantDetail.tint);
+                outColor.a *= alphaMul;
             }
             else {
                 outColor = vec4(0, 0, 0, 0);
