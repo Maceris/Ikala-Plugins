@@ -130,21 +130,55 @@ void draw_rectangle(Command command, vec2 fragPos) {
 
     detail0 = posRelative.y < 0 ? detail0 : detail3;
     detail1 = posRelative.y < 0 ? detail1 : detail2;
-    PointDetail relevantDetail = posRelative.x > 0 ? detail1 : detail0;
+    PointDetail relevantDetail = posRelative.x < 0 ? detail0 : detail1;
     const float relevantRadius = relevantDetail.radius;
 
     const vec2 d = abs(posRelative) - halfSize + relevantRadius;
     const float sdf = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - relevantRadius;
 
-    const vec2 alphaD = abs(posRelative) - halfSize + abs(relevantDetail.alphaRadius);
-    const float alphaSdf = length(max(alphaD, 0.0)) + min(max(alphaD.x, alphaD.y), 0.0) - abs(relevantDetail.alphaRadius);
+    vec2 alphaD = abs(posRelative) - halfSize;
+    // Now find which corner is second closest, unless we are actually strictly diagonal
+    const bool moreVerticalThanHorizontal = alphaD.y > alphaD.x;
+    PointDetail adjacentDetail = relevantDetail;
+    if (alphaD.x != alphaD.y) {
+        // Reset the detail ordering
+        detail0 = pointDetails[command.detailIndex];    //top left
+        detail1 = pointDetails[command.detailIndex + 1];//top right
+        detail2 = pointDetails[command.detailIndex + 2];//bottom right
+        detail3 = pointDetails[command.detailIndex + 3];//bottom left
 
-    float alphaMul = 1.0f;
-    if (relevantDetail.alphaRadius > 0) {
-        alphaMul = clamp(-(alphaSdf / abs(relevantDetail.alphaRadius)), 0, 1);
+         if (posRelative.y < 0 && posRelative.x < 0) {
+            // Top left
+            adjacentDetail = moreVerticalThanHorizontal ? detail1 : detail3;
+         }
+         else if (posRelative.y < 0 && posRelative.x >= 0) {
+            // Top right
+            adjacentDetail = moreVerticalThanHorizontal ? detail0 : detail2;
+         }
+         else if (posRelative.y >= 0 && posRelative.x >= 0) {
+            // Bottom right
+            adjacentDetail = moreVerticalThanHorizontal ? detail3 : detail1;
+         }
+         else {
+            // Bottom left
+            adjacentDetail = moreVerticalThanHorizontal ? detail2 : detail0;
+         }
     }
-    else if (relevantDetail.alphaRadius < 0) {
-        alphaMul = 1 - clamp(-(alphaSdf / abs(relevantDetail.alphaRadius)), 0, 1);
+    const float roundedRadius = max(abs(relevantDetail.alphaRadius), abs(adjacentDetail.alphaRadius));
+    alphaD = alphaD + roundedRadius;
+    const float alphaSdf = length(max(alphaD, 0.0)) + min(max(alphaD.x, alphaD.y), 0.0) - roundedRadius;
+
+    //TODO(ches) Fix the sharp line at non-rounded half-quadrants
+    float relevantAlphaRadius = relevantDetail.alphaRadius;
+    if (relevantAlphaRadius == 0 && adjacentDetail.alphaRadius != 0) {
+        relevantAlphaRadius = adjacentDetail.alphaRadius;
+    }
+    float alphaMul = 1.0f;
+    if (relevantAlphaRadius > 0) {
+        alphaMul = clamp(-(alphaSdf / roundedRadius), 0, 1);
+    }
+    else if (relevantAlphaRadius < 0) {
+        alphaMul = 1 - clamp(-(alphaSdf / roundedRadius), 0, 1);
     }
     // else 0, leave at 1.0f
 
