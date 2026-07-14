@@ -523,6 +523,7 @@ class IkGuiImplUtils {
                     case TAB_ROUNDING -> context.style.variable.tabRounding;
                     case TABLE_ANGLED_HEADERS_ANGLE ->
                             context.style.variable.tableAngledHeadersAngle;
+                    case WINDOW_ALPHA_RADIUS -> context.style.variable.windowAlphaRadius;
                     case WINDOW_BORDER_HOVER_PADDING ->
                             context.style.variable.windowBorderHoverPadding;
                     case WINDOW_BORDER_SIZE -> context.style.variable.windowBorderSize;

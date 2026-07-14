@@ -216,6 +216,7 @@ class IkGuiImplWindows {
 
         // TODO(ches) calculate actual sizes properly
         window.sizeFull.set(window.size);
+        window.alphaRadius = IkGui.getStyleVarFloat(StyleVariable.WINDOW_ALPHA_RADIUS);
         window.rounding = IkGui.getStyleVarFloat(StyleVariable.WINDOW_ROUNDING);
         window.borderSize = IkGui.getStyleVarFloat(StyleVariable.WINDOW_BORDER_SIZE);
         window.rectOuter.set(window.position, window.sizeFull);
@@ -276,7 +277,7 @@ class IkGuiImplWindows {
                     IkGui.getColorWithGlobalAlpha(ColorType.WINDOW_BACKGROUND),
                     window.rounding,
                     DrawFlags.ROUND_CORNERS_DEFAULT,
-                    0.0f); // TODO(ches) window rounding
+                    window.alphaRadius);
         }
 
         if (window.titleBarHeight > 0) {
@@ -294,7 +295,7 @@ class IkGuiImplWindows {
                     IkGui.getColorWithGlobalAlpha(titleColor),
                     window.rounding,
                     DrawFlags.ROUND_CORNERS_TOP,
-                    0.0f); // TODO(ches) make alpha radius a style option
+                    window.alphaRadius);
 
             // TODO(ches) handle special cases of names with # and ##
             // TODO(ches) handle title alignment

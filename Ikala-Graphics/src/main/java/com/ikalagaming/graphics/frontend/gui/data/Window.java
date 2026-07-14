@@ -23,6 +23,14 @@ public class Window {
     public boolean active;
 
     /**
+     * The radius for blending around the edges to/from transparent. 0 means no blending, positive
+     * numbers indicate the radius fading from an opaque (well, "regular" colored) center to fully
+     * transparent edge, negative numbers indicate an opaque (unmodified) edge fading to a
+     * transparent center. Window flags are used to specify which corners are involved.
+     */
+    public float alphaRadius;
+
+    /**
      * Whether the window is in the process of appearing after being hidden or inactive, or the
      * first frame it's displayed.
      */
@@ -308,6 +316,7 @@ public class Window {
     public Window(@NonNull String name) {
         // TODO(ches) handle loading from ini, update values based on what we find (or don't find)
         active = false;
+        alphaRadius = 0;
         appearing = false;
         autoFitFramesX = new IkByte();
         autoFitFramesY = new IkByte();

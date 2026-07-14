@@ -100,6 +100,14 @@ public class StyleVariables {
     public final Vector2f touchExtraPadding;
 
     /**
+     * The radius for blending around the edges to/from transparent. 0 means no blending, positive
+     * numbers indicate the radius fading from an opaque (well, "regular" colored) center to fully
+     * transparent edge, negative numbers indicate an opaque (unmodified) edge fading to a
+     * transparent center. Values between 0 and 12.
+     */
+    public float windowAlphaRadius;
+
+    /**
      * Extra space around the border of a window that counts as still hovering over the window, to
      * make resizing easier.
      */
@@ -151,6 +159,7 @@ public class StyleVariables {
         tableAngledHeadersTextAlign = new Vector2f(0.5f, 0.0f);
         tabRounding = 4;
         touchExtraPadding = new Vector2f(0, 0);
+        windowAlphaRadius = 0;
         windowBorderHoverPadding = 4;
         windowBorderSize = 1;
         windowMenuButtonPosition = WindowMenuButtonPosition.LEFT;
@@ -237,6 +246,9 @@ public class StyleVariables {
                 break;
             case TAB_ROUNDING:
                 tabRounding = value;
+                break;
+            case WINDOW_ALPHA_RADIUS:
+                windowAlphaRadius = value;
                 break;
             case WINDOW_BORDER_HOVER_PADDING:
                 windowBorderHoverPadding = value;
