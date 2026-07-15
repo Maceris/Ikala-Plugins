@@ -476,13 +476,17 @@ class IkGuiImplUtils {
     }
 
     public static float getScrollX() {
-        // TODO(ches) complete this
-        return 0;
+        if (context.windowCurrent == null) {
+            return 0;
+        }
+        return context.windowCurrent.scrollPosition.x;
     }
 
     public static float getScrollY() {
-        // TODO(ches) complete this
-        return 0;
+        if (context.windowCurrent == null) {
+            return 0;
+        }
+        return context.windowCurrent.scrollPosition.y;
     }
 
     public static float getStyleVarFloat(@NonNull StyleVariable variable) {
