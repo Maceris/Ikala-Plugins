@@ -297,7 +297,9 @@ public class VulkanInstance implements Instance {
     }
 
     private void createSwapchain(@NonNull Window window) {
-        try (MemoryStack stack = stackPush()) {}
+        try (MemoryStack stack = stackPush()) {
+            // TODO(ches) actually create the swapchain
+        }
     }
 
     /**
@@ -390,7 +392,9 @@ public class VulkanInstance implements Instance {
     }
 
     @Override
-    public void cleanup() {}
+    public void cleanup() {
+        // TODO(ches) complete this
+    }
 
     /**
      * Look up the queue family indices for the specified device.
@@ -433,18 +437,25 @@ public class VulkanInstance implements Instance {
     }
 
     @Override
-    public void processResources() {}
+    public void processResources() {
+        // TODO(ches) complete this
+    }
 
     @Override
     public TextureLoader getTextureLoader() {
         return null;
+        // TODO(ches) complete this
     }
 
     @Override
-    public void render(@NonNull Scene scene) {}
+    public void render(@NonNull Scene scene) {
+        // TODO(ches) complete this
+    }
 
     @Override
-    public void resize(int width, int height) {}
+    public void resize(int width, int height) {
+        // TODO(ches) complete this
+    }
 
     /**
      * Give a device a score based on how suitable it is, for use in device selection.
@@ -522,7 +533,7 @@ public class VulkanInstance implements Instance {
      * Check if the specified device supports the required device extensions.
      *
      * @param device The device
-     * @return
+     * @return Whether we found the support that we need.
      */
     private boolean supportsRequiredExtensions(@NonNull VkPhysicalDevice device) {
         vkEnumerateDeviceExtensionProperties(device, (String) null, intOutput, null);
@@ -550,5 +561,8 @@ public class VulkanInstance implements Instance {
     }
 
     @Override
-    public void swapPipeline(final int config) {}
+    public void swapPipeline(final int config) {
+        // TODO(ches) complete this
+        // TODO(ches) Can we eliminate pipelines as a concept?
+    }
 }
