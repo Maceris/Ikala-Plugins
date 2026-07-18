@@ -8,7 +8,8 @@ import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.frontend.gui.component.Checkbox;
 import com.ikalagaming.graphics.frontend.gui.component.MainToolbar;
 import com.ikalagaming.graphics.frontend.gui.windows.GraphicsDebug;
-import com.ikalagaming.graphics.frontend.gui.windows.GuiDemo;
+import com.ikalagaming.graphics.frontend.gui.windows.IkGuiDemo;
+import com.ikalagaming.graphics.frontend.gui.windows.ImGuiDemo;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.events.Shutdown;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -22,7 +23,8 @@ import lombok.NonNull;
 public class DebugToolbar extends MainToolbar {
     private final WindowManager windowManager;
     private final Checkbox debug;
-    private final Checkbox demoWindow;
+    private final Checkbox ikDemoWindow;
+    private final Checkbox imDemoWindow;
     private final Checkbox graphicsWindow;
 
     public DebugToolbar(@NonNull WindowManager windowManager) {
@@ -33,10 +35,15 @@ public class DebugToolbar extends MainToolbar {
                         "TOOLBAR_DEBUG_DEBUG", ConverterPlugin.getResourceBundle());
         debug = new Checkbox(textDebug, windowManager.isVisible(DEBUG.getName()));
 
-        var textDemo =
+        var textIkDemo =
                 SafeResourceLoader.getString(
                         "TOOLBAR_DEBUG_DEMO", ConverterPlugin.getResourceBundle());
-        demoWindow = new Checkbox(textDemo, windowManager.isVisible(GuiDemo.WINDOW_NAME));
+        ikDemoWindow = new Checkbox(textIkDemo, windowManager.isVisible(IkGuiDemo.WINDOW_NAME));
+
+        var textImDemo =
+                SafeResourceLoader.getString(
+                        "TOOLBAR_DEBUG_DEMO", ConverterPlugin.getResourceBundle());
+        imDemoWindow = new Checkbox(textImDemo, windowManager.isVisible(ImGuiDemo.WINDOW_NAME));
 
         var textGraphics =
                 SafeResourceLoader.getString(
@@ -50,7 +57,8 @@ public class DebugToolbar extends MainToolbar {
         if (ImGui.beginMainMenuBar()) {
             if (ImGui.beginMenu("Windows")) {
                 debug.draw(width, height);
-                demoWindow.draw(width, height);
+                ikDemoWindow.draw(width, height);
+                imDemoWindow.draw(width, height);
                 graphicsWindow.draw(width, height);
                 ImGui.endMenu();
             }
@@ -70,8 +78,12 @@ public class DebugToolbar extends MainToolbar {
             windowManager.setVisible(DEBUG.getName(), debug.getState());
             return true;
         }
-        if (demoWindow.checkResult()) {
-            windowManager.setVisible(GuiDemo.WINDOW_NAME, demoWindow.getState());
+        if (ikDemoWindow.checkResult()) {
+            windowManager.setVisible(IkGuiDemo.WINDOW_NAME, ikDemoWindow.getState());
+            return true;
+        }
+        if (imDemoWindow.checkResult()) {
+            windowManager.setVisible(ImGuiDemo.WINDOW_NAME, imDemoWindow.getState());
             return true;
         }
         if (graphicsWindow.checkResult()) {

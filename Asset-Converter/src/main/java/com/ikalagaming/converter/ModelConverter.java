@@ -1,7 +1,6 @@
 package com.ikalagaming.converter;
 
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.exceptions.ModelException;
 import com.ikalagaming.graphics.frontend.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
@@ -306,7 +305,9 @@ public class ModelConverter {
         String fixedPath = file.getAbsolutePath();
 
         if (!file.exists()) {
-            final String error = SafeResourceLoader.format("Model path does not exist [{}]", file.getAbsolutePath());
+            final String error =
+                    SafeResourceLoader.format(
+                            "Model path does not exist [{}]", file.getAbsolutePath());
             log.info(error);
             throw new ModelException(error);
         }
@@ -319,9 +320,7 @@ public class ModelConverter {
 
         AIScene aiScene = Assimp.aiImportFile(fixedPath, flags);
         if (aiScene == null) {
-            String error =
-                    SafeResourceLoader.format(
-                            "Error loading model [{}]", fixedPath);
+            String error = SafeResourceLoader.format("Error loading model [{}]", fixedPath);
             log.info(error);
             throw new ModelException(error);
         }
