@@ -187,7 +187,9 @@ public class Color {
 
     /**
      * Convert hsv floats ([0-1],[0-1],[0-1]) to rgb floats ([0-1],[0-1],[0-1]), from Foley and van
-     * Dam p593. Also, http://en.wikipedia.org/wiki/HSL_and_HSV and ImGui source.
+     * Dam p593. Also, <a
+     * href="http://en.wikipedia.org/wiki/HSL_and_HSV">http://en.wikipedia.org/wiki/HSL_and_HSV</a>
+     * and ImGui source.
      *
      * @param in The HSV values.
      * @param out The RGB values.
@@ -256,7 +258,9 @@ public class Color {
 
     /**
      * Convert hsv floats ([0-1],[0-1],[0-1]) to rgb floats ([0-1],[0-1],[0-1]), from Foley and van
-     * Dam p593. Also, http://en.wikipedia.org/wiki/HSL_and_HSV and ImGui source.
+     * Dam p593. Also, <a
+     * href="http://en.wikipedia.org/wiki/HSL_and_HSV">http://en.wikipedia.org/wiki/HSL_and_HSV</a>
+     * and ImGui source.
      *
      * @param h Hue.
      * @param s Saturation.
@@ -334,6 +338,53 @@ public class Color {
             return p + (q - p) * ((2f / 3) - t) * 6;
         }
         return p;
+    }
+
+    /**
+     * Convert rgb floats ([0-1],[0-1],[0-1]) to hsv floats ([0-1],[0-1],[0-1]), from Foley and van
+     * Dam p592 Optimized <a
+     * href="http://lolengine.net/blog/2013/01/13/fast-rgb-to-hsv">http://lolengine.net/blog/2013/01/13/fast-rgb-to-hsv</a>,
+     * based on ImGui source.
+     *
+     * @param in The RGB values.
+     * @param out The HSV values.
+     * @return If we modified the out values, i.e. if we were successful.
+     */
+    public static boolean rgbTohsv(float[] in, float[] out) {
+        final int H = 0;
+        final int S = 1;
+        final int V = 2;
+
+        final int R = 0;
+        final int G = 1;
+        final int B = 2;
+        if (in == null || out == null || in.length < 3 || out.length < 3) {
+            return false;
+        }
+
+        float r = in[R];
+        float g = in[G];
+        float b = in[B];
+
+        float k = 0.0f;
+        if (g < b) {
+            float temp = b;
+            b = g;
+            g = temp;
+            k = -1.0f;
+        }
+        if (r < b) {
+            float temp = g;
+            g = r;
+            r = temp;
+            k = -2.0f / 6.0f - k;
+        }
+
+        final float chroma = r - Math.min(g, b);
+        out[H] = Math.abs(k + (g - b) / (6.0f * chroma + 1e-20f));
+        out[S] = chroma / (r + 1e-20f);
+        out[V] = r;
+        return true;
     }
 
     /** Private constructor so this is not instantiated. */

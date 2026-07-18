@@ -59,10 +59,12 @@ class IkGuiImplUtils {
     }
 
     public static void colorConvertRGBtoHSV(float[] in, float[] out) {
-        // TODO(ches) complete this
-        if (in.length != 3 || out.length != 3) {
+        if (in == null
+                || out == null
+                || in.length != 3
+                || out.length != 3
+                || !Color.rgbTohsv(in, out)) {
             log.error("colorConvertRGBtoHSV expects arrays of size 3");
-            return;
         }
     }
 
