@@ -120,6 +120,22 @@ public class Color {
         return hslToColor(h / 360.0f, s / 100.0f, l / 100.0f, 1.0f);
     }
 
+    public static int hsva(float h, float s, float l, float a) {
+        return hsvToColor(h, s, l, a);
+    }
+
+    public static int hsv(float h, float s, float l) {
+        return hsvToColor(h, s, l, 1.0f);
+    }
+
+    public static int hsva(int h, int s, int l, int a) {
+        return hsvToColor(h / 360.0f, s / 100.0f, l / 100.0f, a);
+    }
+
+    public static int hsv(int h, int s, int l) {
+        return hsvToColor(h / 360.0f, s / 100.0f, l / 100.0f, 1.0f);
+    }
+
     private static int intToColor(int r, int g, int b, int a) {
         return Math.clamp(r, 0, 255) << 24
                 | Math.clamp(g, 0, 255) << 16
@@ -165,6 +181,138 @@ public class Color {
             r = hue2rgb(p, q, h + (1f / 3));
             g = hue2rgb(p, q, h);
             b = hue2rgb(p, q, h - (1f / 3));
+        }
+        return floatToColor(r, g, b, a);
+    }
+
+    /**
+     * Convert hsv floats ([0-1],[0-1],[0-1]) to rgb floats ([0-1],[0-1],[0-1]), from Foley and van
+     * Dam p593. Also, http://en.wikipedia.org/wiki/HSL_and_HSV and ImGui source.
+     *
+     * @param in The HSV values.
+     * @param out The RGB values.
+     * @return Whether we were successful. False if in/out aren't non-null arrays of size >= 3.
+     */
+    public static boolean hsvToColor(float[] in, float[] out) {
+        final int H = 0;
+        final int S = 1;
+        final int V = 2;
+
+        final int R = 0;
+        final int G = 1;
+        final int B = 2;
+        if (in == null || out == null || in.length < 3 || out.length < 3) {
+            return false;
+        }
+
+        if (in[S] == 0.0f) {
+            out[R] = in[V];
+            out[G] = in[V];
+            out[B] = in[V];
+        } else {
+            final float h = (in[H] % 1.0f) / (60.0f / 360.0f);
+            final int i = (int) h;
+            final float f = h - i;
+            final float p = in[V] * (1.0f - in[S]);
+            final float q = in[V] * (1.0f - in[S] * f);
+            final float t = in[V] * (1.0f - in[S] * (1.0f - f));
+
+            switch (i) {
+                case 0:
+                    out[R] = in[V];
+                    out[G] = t;
+                    out[B] = p;
+                    break;
+                case 1:
+                    out[R] = q;
+                    out[G] = in[V];
+                    out[B] = p;
+                    break;
+                case 2:
+                    out[R] = p;
+                    out[G] = in[V];
+                    out[B] = t;
+                    break;
+                case 3:
+                    out[R] = p;
+                    out[G] = q;
+                    out[B] = in[V];
+                    break;
+                case 4:
+                    out[R] = t;
+                    out[G] = p;
+                    out[B] = in[V];
+                    break;
+                case 5:
+                default:
+                    out[R] = in[V];
+                    out[G] = p;
+                    out[B] = q;
+                    break;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Convert hsv floats ([0-1],[0-1],[0-1]) to rgb floats ([0-1],[0-1],[0-1]), from Foley and van
+     * Dam p593. Also, http://en.wikipedia.org/wiki/HSL_and_HSV and ImGui source.
+     *
+     * @param h Hue.
+     * @param s Saturation.
+     * @param v Value.
+     * @param a Alpha.
+     * @return The color in RGBA format.
+     */
+    private static int hsvToColor(float h, float s, float v, float a) {
+        float r;
+        float g;
+        float b;
+        if (s == 0.0f) {
+            r = v;
+            g = v;
+            b = v;
+        } else {
+            h = (h % 1.0f) / (60.0f / 360.0f);
+            final int i = (int) h;
+            final float f = h - i;
+            final float p = v * (1.0f - s);
+            final float q = v * (1.0f - s * f);
+            final float t = v * (1.0f - s * (1.0f - f));
+
+            switch (i) {
+                case 0:
+                    r = v;
+                    g = t;
+                    b = p;
+                    break;
+                case 1:
+                    r = q;
+                    g = v;
+                    b = p;
+                    break;
+                case 2:
+                    r = p;
+                    g = v;
+                    b = t;
+                    break;
+                case 3:
+                    r = p;
+                    g = q;
+                    b = v;
+                    break;
+                case 4:
+                    r = t;
+                    g = p;
+                    b = v;
+                    break;
+                case 5:
+                default:
+                    r = v;
+                    g = p;
+                    b = q;
+                    break;
+            }
         }
         return floatToColor(r, g, b, a);
     }

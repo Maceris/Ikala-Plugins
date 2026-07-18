@@ -49,17 +49,19 @@ class IkGuiImplUtils {
     }
 
     public static void colorConvertHSVtoRGB(float[] in, float[] out) {
-        // TODO(ches) complete this
-        if (in.length != 3 || out.length != 3) {
+        if (in == null
+                || out == null
+                || in.length != 3
+                || out.length != 3
+                || !Color.hsvToColor(in, out)) {
             log.error("colorConvertHSVtoRGB expects arrays of size 3");
-            return;
         }
     }
 
     public static void colorConvertRGBtoHSV(float[] in, float[] out) {
         // TODO(ches) complete this
         if (in.length != 3 || out.length != 3) {
-            log.error("colorConvertHSVtoRGB expects arrays of size 3");
+            log.error("colorConvertRGBtoHSV expects arrays of size 3");
             return;
         }
     }
