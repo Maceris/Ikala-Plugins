@@ -72,11 +72,11 @@ dependencies {
 	runtimeOnly "org.lwjgl:lwjgl-freetype:${lwjglVersion}:natives-windows"
 	runtimeOnly "io.github.spair:imgui-java-natives-windows:${imguiJavaVersion}"
 	
-	runtimeOnly "org.lwjgl:lwjgl:${lwjglVersion}:natives-macos"
-	runtimeOnly "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-macos"
-	runtimeOnly "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-macos"
-	runtimeOnly "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-macos"
-	runtimeOnly "org.lwjgl:lwjgl-freetype:${lwjglVersion}:natives-macos"
+	runtimeOnly "org.lwjgl:lwjgl:${lwjglVersion}:natives-macos-arm64"
+	runtimeOnly "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-macos-arm64"
+	runtimeOnly "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-macos-arm64"
+	runtimeOnly "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-macos-arm64"
+	runtimeOnly "org.lwjgl:lwjgl-freetype:${lwjglVersion}:natives-macos-arm64"
 	runtimeOnly "io.github.spair:imgui-java-natives-macos:${imguiJavaVersion}"
 	
 	jarInclude "org.joml:joml:${jomlVersion}"
