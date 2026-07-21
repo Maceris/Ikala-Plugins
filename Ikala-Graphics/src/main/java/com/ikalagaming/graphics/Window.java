@@ -131,6 +131,14 @@ public class Window {
             throw new WindowCreationException(error);
         }
 
+        {
+            GLFWErrorCallback oldErrorCallback =
+                    glfwSetErrorCallback(GLFWErrorCallback.createPrint(System.err));
+            if (oldErrorCallback != null) {
+                log.debug("We are replacing a GLFWErrorCallback, hope that's fine");
+            }
+        }
+
         if (BackendType.VULKAN == GraphicsManager.getBackendType()
                 && !GLFWVulkan.glfwVulkanSupported()) {
             final String error = "GLFW cannot find the Vulkan loader";
