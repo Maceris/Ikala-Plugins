@@ -4,7 +4,6 @@ import static org.lwjgl.glfw.GLFWVulkan.glfwCreateWindowSurface;
 import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.system.MemoryUtil.NULL;
-import static org.lwjgl.system.MemoryUtil.memAllocPointer;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
 import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.VK10.*;
@@ -146,14 +145,14 @@ public class VulkanInstance implements Instance {
     private void createVulkanInstance(@NonNull Window window) {
         try (MemoryStack stack = stackPush()) {
 
-            PointerBuffer requiredExtensionNames = memAllocPointer(64);
+            PointerBuffer requiredExtensionNames = stack.callocPointer(64);
 
             populateRequiredExtensions(requiredExtensionNames);
 
             PointerBuffer requiredLayerNames = null;
 
             if (ENABLE_VALIDATION) {
-                requiredLayerNames = stack.mallocPointer(VALIDATION_LAYERS.length);
+                requiredLayerNames = stack.callocPointer(VALIDATION_LAYERS.length);
                 for (String validationLayer : VALIDATION_LAYERS) {
                     requiredLayerNames.put(stack.ASCII(validationLayer));
                 }
@@ -161,7 +160,7 @@ public class VulkanInstance implements Instance {
                 try (MemoryStack extraFrame = stackPush()) {
                     checkError(vkEnumerateInstanceLayerProperties(intOutput, null));
                     VkLayerProperties.Buffer availableLayers =
-                            VkLayerProperties.malloc(intOutput.get(0), extraFrame);
+                            VkLayerProperties.calloc(intOutput.get(0), extraFrame);
                     checkError(vkEnumerateInstanceLayerProperties(intOutput, availableLayers));
 
                     checkLayers(availableLayers, requiredLayerNames);
@@ -213,9 +212,7 @@ public class VulkanInstance implements Instance {
             }
 
             int error = vkCreateInstance(instanceInfo, null, pointerOutput);
-            requiredExtensionNames.free();
             if (error == VK_ERROR_INCOMPATIBLE_DRIVER) {
-
                 var message = "Could not find a compatible Vulkan driver";
                 log.error(message);
                 throw new RenderException(message);
