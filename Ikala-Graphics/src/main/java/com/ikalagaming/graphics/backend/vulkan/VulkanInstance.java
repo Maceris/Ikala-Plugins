@@ -6,16 +6,20 @@ import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.system.MemoryUtil.NULL;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
 import static org.lwjgl.vulkan.KHRSurface.*;
-import static org.lwjgl.vulkan.VK10.*;
+import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.frontend.Instance;
 import com.ikalagaming.graphics.frontend.TextureLoader;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.data.IkIO;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.SafeResourceLoader;
 
+import imgui.ImGui;
+import imgui.ImGuiIO;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.PointerBuffer;
@@ -128,7 +132,29 @@ public class VulkanInstance implements Instance {
     public boolean initialize(@NonNull Window window) {
         createVulkanInstance(window);
         createSwapchain(window);
+
+        initializeGui(window);
         return true;
+    }
+
+    /**
+     * Create an IkGui context and configure it.
+     *
+     * @param window The window to pull display info from.
+     */
+    private void initializeGui(@NonNull Window window) {
+        // TODO(ches) clear out ImGui
+        ImGui.createContext();
+
+        ImGuiIO imGuiIO = ImGui.getIO();
+        imGuiIO.setIniFilename(null);
+        imGuiIO.setDisplaySize(window.getWidth(), window.getHeight());
+
+        IkGui.createContext();
+
+        IkIO ikIO = IkGui.getIO();
+        ikIO.iniFilename = null;
+        ikIO.displaySize.set(window.getWidth(), window.getHeight());
     }
 
     @Override
@@ -447,6 +473,8 @@ public class VulkanInstance implements Instance {
     @Override
     public void render(@NonNull Scene scene) {
         // TODO(ches) complete this
+
+        // TODO(ches) vkQueuePresentKHR()... somewhere
     }
 
     @Override
