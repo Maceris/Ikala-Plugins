@@ -184,7 +184,9 @@ public class Window {
             }
         }
 
-        setWindowIcon();
+        if (glfwGetPlatform() != GLFW_PLATFORM_COCOA) {
+            setWindowIcon();
+        }
 
         glfwShowWindow(windowHandle);
 
