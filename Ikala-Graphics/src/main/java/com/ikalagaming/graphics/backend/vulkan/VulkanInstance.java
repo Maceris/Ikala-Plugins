@@ -488,41 +488,43 @@ public class VulkanInstance implements Instance {
      * @param device The device we want to score.
      * @return The score for the device.
      */
-    private int scoreDevice(@NonNull VkPhysicalDevice device) {
-        int score = 0;
-
+    private QueueFamilyIndices scoreDevice(@NonNull VkPhysicalDevice device, int[] score) {
         vkGetPhysicalDeviceFeatures(device, state.device.deviceFeatures);
 
         if (!state.device.deviceFeatures.geometryShader()) {
-            return 0;
+            score[0] = 0;
+            return null;
         }
 
-        var queueFamilies = findQueueFamilies(device);
+        QueueFamilyIndices queueFamilies = findQueueFamilies(device);
 
         if (!queueFamilies.hasAllValues()) {
-            return 0;
+            score[0] = 0;
+            return queueFamilies;
         }
 
         if (!supportsRequiredExtensions(device)) {
-            return 0;
+            score[0] = 0;
+            return queueFamilies;
         }
 
         var swapChainSupport = checkSwapChainSupport(device);
         if (swapChainSupport.isMissingSupport()) {
             swapChainSupport.free();
-            return 0;
+            score[0] = 0;
+            return queueFamilies;
         }
 
         swapChainSupport.free();
 
         vkGetPhysicalDeviceProperties(device, state.device.deviceProperties);
         if (state.device.deviceProperties.deviceType() == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
-            score += 1_000_000;
+            score[0] += 1_000_000;
         }
 
-        score += state.device.deviceProperties.limits().maxImageDimension2D();
+        score[0] += state.device.deviceProperties.limits().maxImageDimension2D();
 
-        return score;
+        return queueFamilies;
     }
 
     /**
@@ -537,20 +539,24 @@ public class VulkanInstance implements Instance {
         VkPhysicalDevice bestChoice = null;
         int highestScore = Integer.MIN_VALUE;
 
+        int[] score = {0};
+        QueueFamilyIndices indices = null;
         for (VkPhysicalDevice device : vkPhysicalDevices) {
-            int score = scoreDevice(device);
-            if (score > highestScore) {
-                highestScore = score;
+            score[0] = 0;
+            indices = scoreDevice(device, score);
+            if (score[0] > highestScore) {
+                highestScore = score[0];
                 bestChoice = device;
             }
         }
 
-        if (null == bestChoice) {
+        if (null == bestChoice || null == indices) {
             final var message = "No valid physical device found";
             log.error(message);
             throw new RenderException(message);
         }
 
+        state.device.queueFamilyIndices = indices;
         return bestChoice;
     }
 
