@@ -414,7 +414,9 @@ public class Window {
 
     /** Render the window. */
     public void update() {
-        glfwSwapBuffers(windowHandle);
+        if (GraphicsManager.getBackendType() == BackendType.OPENGL) {
+            glfwSwapBuffers(windowHandle);
+        }
     }
 
     /**
