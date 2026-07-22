@@ -486,14 +486,17 @@ public class VulkanInstance implements Instance {
      * Give a device a score based on how suitable it is, for use in device selection.
      *
      * @param device The device we want to score.
-     * @return The score for the device.
+     * @param score A 1-sized array of integers, used as an out parameter for the score.
+     * @return Queue family indices for the device.
      */
     private QueueFamilyIndices scoreDevice(@NonNull VkPhysicalDevice device, int[] score) {
+        assert score != null && score.length >= 1;
+
         vkGetPhysicalDeviceFeatures(device, state.device.deviceFeatures);
 
         if (!state.device.deviceFeatures.geometryShader()) {
             score[0] = 0;
-            return null;
+            return new QueueFamilyIndices(QueueFamilyIndices.MISSING, QueueFamilyIndices.MISSING);
         }
 
         QueueFamilyIndices queueFamilies = findQueueFamilies(device);
@@ -550,7 +553,7 @@ public class VulkanInstance implements Instance {
             }
         }
 
-        if (null == bestChoice || null == indices) {
+        if (null == bestChoice) {
             final var message = "No valid physical device found";
             log.error(message);
             throw new RenderException(message);
