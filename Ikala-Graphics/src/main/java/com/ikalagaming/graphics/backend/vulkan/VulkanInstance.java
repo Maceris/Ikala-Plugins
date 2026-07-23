@@ -28,6 +28,7 @@ import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
 
 import java.nio.ByteBuffer;
+import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 import java.util.ArrayList;
@@ -265,19 +266,60 @@ public class VulkanInstance implements Instance {
 
             checkError(vkEnumeratePhysicalDevices(state.instance, intOutput, null));
 
-            if (intOutput.get(0) > 0) {
-                PointerBuffer physicalDevices = stack.mallocPointer(intOutput.get(0));
-                checkError(vkEnumeratePhysicalDevices(state.instance, intOutput, physicalDevices));
-
-                List<VkPhysicalDevice> devices = new ArrayList<>();
-                for (int i = 0; i < physicalDevices.limit(); ++i) {
-                    devices.add(new VkPhysicalDevice(physicalDevices.get(i), state.instance));
-                }
-
-                state.device.physical = selectPhysicalDevice(devices);
-                vkGetPhysicalDeviceProperties(state.device.physical, state.device.deviceProperties);
-                vkGetPhysicalDeviceFeatures(state.device.physical, state.device.deviceFeatures);
+            if (intOutput.get(0) <= 0) {
+                log.error("Could not find number of physical devices");
+                return;
             }
+            PointerBuffer physicalDevices = stack.mallocPointer(intOutput.get(0));
+            checkError(vkEnumeratePhysicalDevices(state.instance, intOutput, physicalDevices));
+
+            List<VkPhysicalDevice> devices = new ArrayList<>();
+            for (int i = 0; i < physicalDevices.limit(); ++i) {
+                devices.add(new VkPhysicalDevice(physicalDevices.get(i), state.instance));
+            }
+
+            state.device.physical = selectPhysicalDevice(devices);
+            vkGetPhysicalDeviceProperties(state.device.physical, state.device.deviceProperties);
+            vkGetPhysicalDeviceFeatures(state.device.physical, state.device.deviceFeatures);
+
+            VkPhysicalDeviceVulkan13Features enabledVk13Features =
+                    VkPhysicalDeviceVulkan13Features.calloc(stack);
+            enabledVk13Features.synchronization2(true).dynamicRendering(true);
+
+            VkPhysicalDeviceVulkan12Features enabledVk12Features =
+                    VkPhysicalDeviceVulkan12Features.calloc(stack);
+            enabledVk12Features
+                    .descriptorIndexing(true)
+                    .shaderSampledImageArrayNonUniformIndexing(true)
+                    .descriptorBindingVariableDescriptorCount(true)
+                    .runtimeDescriptorArray(true)
+                    .bufferDeviceAddress(true)
+                    .pNext(enabledVk13Features.address());
+
+            VkPhysicalDeviceFeatures enabledVkFeatures = VkPhysicalDeviceFeatures.calloc(stack);
+            enabledVkFeatures.samplerAnisotropy(true);
+
+            int queueCount = 1;
+            if (state.device.queueFamilyIndices.graphics()
+                    != state.device.queueFamilyIndices.present()) {
+                queueCount = 2;
+            }
+
+            FloatBuffer priorities = FloatBuffer.allocate(1);
+            priorities.put(1.0f);
+            priorities.flip();
+            // TODO(ches) crequte queue info;
+
+            VkDeviceQueueCreateInfo deviceQueueCreateInfo = VkDeviceQueueCreateInfo.calloc(stack);
+            deviceQueueCreateInfo
+                    .queueFamilyIndex(state.device.queueFamilyIndices.graphics())
+                    .pQueuePriorities(priorities);
+
+            VkDeviceCreateInfo deviceCreateInfo = VkDeviceCreateInfo.calloc(stack);
+            deviceCreateInfo
+                    .pEnabledFeatures(enabledVkFeatures)
+                    .pNext(enabledVk12Features.address());
+            // TODO(ches) fill out the rest of this struct
         }
     }
 
