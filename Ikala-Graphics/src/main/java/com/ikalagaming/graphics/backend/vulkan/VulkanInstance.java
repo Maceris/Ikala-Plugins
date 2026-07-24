@@ -43,7 +43,11 @@ public class VulkanInstance implements Instance {
                     .map(MemoryUtil::memASCII)
                     .toArray(ByteBuffer[]::new);
 
-    private static final List<String> REQUIRED_DEVICE_EXTENSIONS = List.of("VK_KHR_swapchain");
+    private static final List<String> REQUIRED_DEVICE_EXTENSION_NAMES = List.of("VK_KHR_swapchain");
+    private static final ByteBuffer[] REQUIRED_DEVICE_EXTENSIONS =
+            REQUIRED_DEVICE_EXTENSION_NAMES.stream()
+                    .map(MemoryUtil::memASCII)
+                    .toArray(ByteBuffer[]::new);
 
     /** The list of validation layers we want if validation is enabled. */
     private static final String[] VALIDATION_LAYERS = {"VK_LAYER_KHRONOS_validation"};
@@ -308,18 +312,32 @@ public class VulkanInstance implements Instance {
             FloatBuffer priorities = FloatBuffer.allocate(1);
             priorities.put(1.0f);
             priorities.flip();
-            // TODO(ches) crequte queue info;
 
-            VkDeviceQueueCreateInfo deviceQueueCreateInfo = VkDeviceQueueCreateInfo.calloc(stack);
-            deviceQueueCreateInfo
-                    .queueFamilyIndex(state.device.queueFamilyIndices.graphics())
-                    .pQueuePriorities(priorities);
+            VkDeviceQueueCreateInfo.Buffer deviceQueueCreateInfos =
+                    VkDeviceQueueCreateInfo.calloc(queueCount, stack);
+
+            for (int i = 0; i < queueCount; i++) {
+                int index =
+                        switch (i) {
+                            case 0 -> state.device.queueFamilyIndices.graphics();
+                            case 1 -> state.device.queueFamilyIndices.present();
+                            default -> 0;
+                        };
+                deviceQueueCreateInfos.queueFamilyIndex(index).pQueuePriorities(priorities);
+            }
+
+            PointerBuffer deviceExtensionNames =
+                    stack.callocPointer(REQUIRED_DEVICE_EXTENSION_NAMES.size());
+            for (int i = 0; i < REQUIRED_DEVICE_EXTENSION_NAMES.size(); i++) {
+                deviceExtensionNames.put(REQUIRED_DEVICE_EXTENSIONS[i]);
+            }
 
             VkDeviceCreateInfo deviceCreateInfo = VkDeviceCreateInfo.calloc(stack);
             deviceCreateInfo
                     .pEnabledFeatures(enabledVkFeatures)
-                    .pNext(enabledVk12Features.address());
-            // TODO(ches) fill out the rest of this struct
+                    .pNext(enabledVk12Features.address())
+                    .pQueueCreateInfos(deviceQueueCreateInfos)
+                    .ppEnabledExtensionNames(deviceExtensionNames);
         }
     }
 
@@ -616,7 +634,7 @@ public class VulkanInstance implements Instance {
         var properties = VkExtensionProperties.malloc(intOutput.get(0));
         vkEnumerateDeviceExtensionProperties(device, (String) null, intOutput, properties);
 
-        List<String> missingExtensions = new ArrayList<>(REQUIRED_DEVICE_EXTENSIONS);
+        List<String> missingExtensions = new ArrayList<>(REQUIRED_DEVICE_EXTENSION_NAMES);
 
         for (int i = 0; i < properties.limit(); ++i) {
             if (missingExtensions.isEmpty()) {
