@@ -5,6 +5,7 @@ import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
 import static org.lwjgl.system.MemoryUtil.NULL;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
 import static org.lwjgl.vulkan.KHRSurface.*;
+import static org.lwjgl.vulkan.KHRSwapchain.VK_KHR_SWAPCHAIN_EXTENSION_NAME;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.BufferHolder;
@@ -37,13 +38,15 @@ import java.util.List;
 @Slf4j
 public class VulkanInstance implements Instance {
 
-    private static final List<String> REQUIRED_INSTANCE_EXTENSION_NAMES = List.of("VK_KHR_surface");
+    private static final List<String> REQUIRED_INSTANCE_EXTENSION_NAMES =
+            List.of(VK_KHR_SURFACE_EXTENSION_NAME);
     private static final ByteBuffer[] REQUIRED_INSTANCE_EXTENSIONS =
             REQUIRED_INSTANCE_EXTENSION_NAMES.stream()
                     .map(MemoryUtil::memASCII)
                     .toArray(ByteBuffer[]::new);
 
-    private static final List<String> REQUIRED_DEVICE_EXTENSION_NAMES = List.of("VK_KHR_swapchain");
+    private static final List<String> REQUIRED_DEVICE_EXTENSION_NAMES =
+            List.of(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     private static final ByteBuffer[] REQUIRED_DEVICE_EXTENSIONS =
             REQUIRED_DEVICE_EXTENSION_NAMES.stream()
                     .map(MemoryUtil::memASCII)
@@ -122,9 +125,43 @@ public class VulkanInstance implements Instance {
      */
     private static void checkError(int errorCode) {
         if (errorCode != 0) {
+            final String errorName =
+                    switch (errorCode) {
+                            // Vulkan 1.0 errors
+                        case VK_ERROR_OUT_OF_HOST_MEMORY -> "VK_ERROR_OUT_OF_HOST_MEMORY";
+                        case VK_ERROR_OUT_OF_DEVICE_MEMORY -> "VK_ERROR_OUT_OF_DEVICE_MEMORY";
+                        case VK_ERROR_INITIALIZATION_FAILED -> "VK_ERROR_INITIALIZATION_FAILED";
+                        case VK_ERROR_DEVICE_LOST -> "VK_ERROR_DEVICE_LOST";
+                        case VK_ERROR_MEMORY_MAP_FAILED -> "VK_ERROR_MEMORY_MAP_FAILED";
+                        case VK_ERROR_LAYER_NOT_PRESENT -> "VK_ERROR_LAYER_NOT_PRESENT";
+                        case VK_ERROR_EXTENSION_NOT_PRESENT -> "VK_ERROR_EXTENSION_NOT_PRESENT";
+                        case VK_ERROR_FEATURE_NOT_PRESENT -> "VK_ERROR_FEATURE_NOT_PRESENT";
+                        case VK_ERROR_INCOMPATIBLE_DRIVER -> "VK_ERROR_INCOMPATIBLE_DRIVER";
+                        case VK_ERROR_TOO_MANY_OBJECTS -> "VK_ERROR_TOO_MANY_OBJECTS";
+                        case VK_ERROR_FORMAT_NOT_SUPPORTED -> "VK_ERROR_FORMAT_NOT_SUPPORTED";
+                        case VK_ERROR_FRAGMENTED_POOL -> "VK_ERROR_FRAGMENTED_POOL";
+                        case VK_ERROR_UNKNOWN -> "VK_ERROR_UNKNOWN";
+                        case VK_ERROR_VALIDATION_FAILED -> "VK_ERROR_VALIDATION_FAILED";
+
+                            // Vulkan 1.1 errors
+                        case VK_ERROR_OUT_OF_POOL_MEMORY -> "VK_ERROR_OUT_OF_POOL_MEMORY";
+                        case VK_ERROR_INVALID_EXTERNAL_HANDLE -> "VK_ERROR_INVALID_EXTERNAL_HANDLE";
+
+                            // Vulkan 1.2 errors
+                        case VK_ERROR_FRAGMENTATION -> "VK_ERROR_FRAGMENTATION";
+                        case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS ->
+                                "VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS";
+
+                            // Vulkan 1.3 errors
+                            // Nothing for now
+
+                            // Fallback
+                        default -> "Unrecognized error code";
+                    };
+
             var message =
                     SafeResourceLoader.format(
-                            "Vulkan error [{}]", String.format("0x%X", errorCode));
+                            "Vulkan error {} ({})", String.format("0x%X", errorCode), errorName);
             log.error(message);
             throw new RenderException(message);
         }
@@ -351,6 +388,24 @@ public class VulkanInstance implements Instance {
 
                 state.device.logical =
                         new VkDevice(pointerOutput.get(0), state.device.physical, deviceCreateInfo);
+            }
+
+            vkGetDeviceQueue(
+                    state.device.logical,
+                    state.device.queueFamilyIndices.graphics(),
+                    0,
+                    pointerOutput);
+            final long graphicsQueueIndex = pointerOutput.get(0);
+            state.device.graphicsQueue = new VkQueue(graphicsQueueIndex, state.device.logical);
+            if (queueCount == 1) {
+                state.device.presentQueue = state.device.graphicsQueue;
+            } else {
+                vkGetDeviceQueue(
+                        state.device.logical,
+                        state.device.queueFamilyIndices.present(),
+                        0,
+                        pointerOutput);
+                state.device.presentQueue = new VkQueue(pointerOutput.get(0), state.device.logical);
             }
         }
     }
