@@ -22,12 +22,14 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.glfw.*;
 import org.lwjgl.stb.STBImage;
+import org.lwjgl.system.APIUtil;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
+import java.util.Map;
 import java.util.concurrent.Callable;
 
 /** Provides convenience methods for an OpenGL window. */
@@ -131,12 +133,8 @@ public class Window {
             throw new WindowCreationException(error);
         }
 
-        {
-            GLFWErrorCallback oldErrorCallback =
-                    glfwSetErrorCallback(GLFWErrorCallback.createPrint(System.err));
-            if (oldErrorCallback != null) {
-                log.debug("We are replacing a GLFWErrorCallback, hope that's fine");
-            }
+        if (glfwSetErrorCallback(createGLFWErrorLogger()) != null) {
+            log.debug("We are replacing a GLFWErrorCallback, hope that's fine");
         }
 
         if (BackendType.VULKAN == GraphicsManager.getBackendType()
@@ -239,6 +237,37 @@ public class Window {
                             break;
                     }
                 });
+    }
+
+    private GLFWErrorCallback createGLFWErrorLogger() {
+        return new GLFWErrorCallback() {
+            private final Map<Integer, String> ERROR_CODES =
+                    APIUtil.apiClassTokens(
+                            (field, value) -> 0x10000 < value && value < 0x20000, null, GLFW.class);
+
+            @Override
+            public void invoke(int error, long description) {
+                String msg = getDescription(description);
+
+                StringBuilder sb = new StringBuilder(512);
+                sb.append("[GLFW] ")
+                        .append(ERROR_CODES.get(error))
+                        .append(" error\n")
+                        .append("\tDescription : ")
+                        .append(msg)
+                        .append("\n")
+                        .append("\tStacktrace  :\n");
+
+                StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+                for (int i = 4; i < stack.length; i++) {
+                    sb.append("\t\t");
+                    sb.append(stack[i]);
+                    sb.append("\n");
+                }
+
+                log.error(sb.toString());
+            }
+        };
     }
 
     /**
