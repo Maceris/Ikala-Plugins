@@ -2,12 +2,12 @@ package com.ikalagaming.graphics.backend.vulkan;
 
 import static org.lwjgl.glfw.GLFWVulkan.glfwCreateWindowSurface;
 import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
-import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.system.MemoryUtil.NULL;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
 import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.VK13.*;
 
+import com.ikalagaming.graphics.BufferHolder;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.frontend.Instance;
@@ -28,10 +28,10 @@ import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
 
 import java.nio.ByteBuffer;
-import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 @Slf4j
@@ -174,36 +174,39 @@ public class VulkanInstance implements Instance {
      * @throws RenderException If an unrecoverable issue occurs setting up vulkan.
      */
     private void createVulkanInstance(@NonNull Window window) {
-        try (MemoryStack stack = stackPush()) {
-
-            PointerBuffer requiredExtensionNames = stack.callocPointer(64);
+        try (BufferHolder freeThese = new BufferHolder()) {
+            PointerBuffer requiredExtensionNames = PointerBuffer.allocateDirect(64);
 
             populateRequiredExtensions(requiredExtensionNames);
+            requiredExtensionNames.flip();
 
             PointerBuffer requiredLayerNames = null;
 
             if (ENABLE_VALIDATION) {
-                requiredLayerNames = stack.callocPointer(VALIDATION_LAYERS.length);
+                requiredLayerNames = PointerBuffer.allocateDirect(VALIDATION_LAYERS.length);
                 for (String validationLayer : VALIDATION_LAYERS) {
-                    requiredLayerNames.put(stack.ASCII(validationLayer));
-                }
-
-                try (MemoryStack extraFrame = stackPush()) {
-                    checkError(vkEnumerateInstanceLayerProperties(intOutput, null));
-                    VkLayerProperties.Buffer availableLayers =
-                            VkLayerProperties.calloc(intOutput.get(0), extraFrame);
-                    checkError(vkEnumerateInstanceLayerProperties(intOutput, availableLayers));
-
-                    checkLayers(availableLayers, requiredLayerNames);
+                    ByteBuffer converted = MemoryUtil.memASCII(validationLayer);
+                    freeThese.add(converted);
+                    requiredLayerNames.put(converted);
                 }
                 requiredLayerNames.flip();
+
+                checkError(vkEnumerateInstanceLayerProperties(intOutput, null));
+
+                VkLayerProperties.Buffer availableLayers =
+                        VkLayerProperties.create(intOutput.get(0));
+                checkError(vkEnumerateInstanceLayerProperties(intOutput, availableLayers));
+
+                checkLayers(availableLayers, requiredLayerNames);
             }
 
-            ByteBuffer appName = stack.UTF8(window.getTitle());
-            ByteBuffer engineName = stack.UTF8("Ikala Engine");
+            ByteBuffer appName = MemoryUtil.memUTF8(window.getTitle());
+            freeThese.add(appName);
+            ByteBuffer engineName = MemoryUtil.memUTF8("Ikala Engine");
+            freeThese.add(engineName);
 
             var applicationInfo =
-                    VkApplicationInfo.malloc(stack)
+                    VkApplicationInfo.create()
                             .sType$Default()
                             .pNext(NULL)
                             .pApplicationName(appName)
@@ -212,9 +215,8 @@ public class VulkanInstance implements Instance {
                             .engineVersion(1)
                             .apiVersion(VK_MAKE_API_VERSION(0, 1, 3, 0));
 
-            requiredExtensionNames.flip();
             var instanceInfo =
-                    VkInstanceCreateInfo.malloc(stack)
+                    VkInstanceCreateInfo.create()
                             .sType$Default()
                             .pNext(NULL)
                             .flags(0)
@@ -226,7 +228,7 @@ public class VulkanInstance implements Instance {
 
             if (ENABLE_VALIDATION) {
                 debugCreateInfo =
-                        VkDebugUtilsMessengerCreateInfoEXT.malloc(stack)
+                        VkDebugUtilsMessengerCreateInfoEXT.create()
                                 .sType$Default()
                                 .pNext(NULL)
                                 .flags(0)
@@ -274,7 +276,7 @@ public class VulkanInstance implements Instance {
                 log.error("Could not find number of physical devices");
                 return;
             }
-            PointerBuffer physicalDevices = stack.mallocPointer(intOutput.get(0));
+            PointerBuffer physicalDevices = PointerBuffer.allocateDirect(intOutput.get(0));
             checkError(vkEnumeratePhysicalDevices(state.instance, intOutput, physicalDevices));
 
             List<VkPhysicalDevice> devices = new ArrayList<>();
@@ -287,12 +289,13 @@ public class VulkanInstance implements Instance {
             vkGetPhysicalDeviceFeatures(state.device.physical, state.device.deviceFeatures);
 
             VkPhysicalDeviceVulkan13Features enabledVk13Features =
-                    VkPhysicalDeviceVulkan13Features.calloc(stack);
-            enabledVk13Features.synchronization2(true).dynamicRendering(true);
+                    VkPhysicalDeviceVulkan13Features.create();
+            enabledVk13Features.sType$Default().synchronization2(true).dynamicRendering(true);
 
             VkPhysicalDeviceVulkan12Features enabledVk12Features =
-                    VkPhysicalDeviceVulkan12Features.calloc(stack);
+                    VkPhysicalDeviceVulkan12Features.create();
             enabledVk12Features
+                    .sType$Default()
                     .descriptorIndexing(true)
                     .shaderSampledImageArrayNonUniformIndexing(true)
                     .descriptorBindingVariableDescriptorCount(true)
@@ -300,7 +303,7 @@ public class VulkanInstance implements Instance {
                     .bufferDeviceAddress(true)
                     .pNext(enabledVk13Features.address());
 
-            VkPhysicalDeviceFeatures enabledVkFeatures = VkPhysicalDeviceFeatures.calloc(stack);
+            VkPhysicalDeviceFeatures enabledVkFeatures = VkPhysicalDeviceFeatures.create();
             enabledVkFeatures.samplerAnisotropy(true);
 
             int queueCount = 1;
@@ -309,35 +312,46 @@ public class VulkanInstance implements Instance {
                 queueCount = 2;
             }
 
-            FloatBuffer priorities = FloatBuffer.allocate(1);
-            priorities.put(1.0f);
-            priorities.flip();
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                VkDeviceQueueCreateInfo.Buffer deviceQueueCreateInfos =
+                        VkDeviceQueueCreateInfo.create(queueCount);
 
-            VkDeviceQueueCreateInfo.Buffer deviceQueueCreateInfos =
-                    VkDeviceQueueCreateInfo.calloc(queueCount, stack);
+                for (int i = 0; i < queueCount; i++) {
+                    final int index =
+                            switch (i) {
+                                case 0 -> state.device.queueFamilyIndices.graphics();
+                                case 1 -> state.device.queueFamilyIndices.present();
+                                default -> 0;
+                            };
+                    deviceQueueCreateInfos
+                            .get(i)
+                            .sType$Default()
+                            .pNext(NULL)
+                            .flags(0)
+                            .queueFamilyIndex(index)
+                            .pQueuePriorities(stack.floats(1.0f));
+                }
 
-            for (int i = 0; i < queueCount; i++) {
-                int index =
-                        switch (i) {
-                            case 0 -> state.device.queueFamilyIndices.graphics();
-                            case 1 -> state.device.queueFamilyIndices.present();
-                            default -> 0;
-                        };
-                deviceQueueCreateInfos.queueFamilyIndex(index).pQueuePriorities(priorities);
+                PointerBuffer deviceExtensionNames =
+                        PointerBuffer.allocateDirect(REQUIRED_DEVICE_EXTENSIONS.length);
+                Arrays.stream(REQUIRED_DEVICE_EXTENSIONS).forEach(deviceExtensionNames::put);
+                deviceExtensionNames.flip();
+
+                VkDeviceCreateInfo deviceCreateInfo = VkDeviceCreateInfo.create();
+                deviceCreateInfo
+                        .sType$Default()
+                        .pEnabledFeatures(enabledVkFeatures)
+                        .pNext(enabledVk12Features)
+                        .pQueueCreateInfos(deviceQueueCreateInfos)
+                        .ppEnabledExtensionNames(deviceExtensionNames);
+
+                checkError(
+                        vkCreateDevice(
+                                state.device.physical, deviceCreateInfo, null, pointerOutput));
+
+                state.device.logical =
+                        new VkDevice(pointerOutput.get(0), state.device.physical, deviceCreateInfo);
             }
-
-            PointerBuffer deviceExtensionNames =
-                    stack.callocPointer(REQUIRED_DEVICE_EXTENSION_NAMES.size());
-            for (int i = 0; i < REQUIRED_DEVICE_EXTENSION_NAMES.size(); i++) {
-                deviceExtensionNames.put(REQUIRED_DEVICE_EXTENSIONS[i]);
-            }
-
-            VkDeviceCreateInfo deviceCreateInfo = VkDeviceCreateInfo.calloc(stack);
-            deviceCreateInfo
-                    .pEnabledFeatures(enabledVkFeatures)
-                    .pNext(enabledVk12Features.address())
-                    .pQueueCreateInfos(deviceQueueCreateInfos)
-                    .ppEnabledExtensionNames(deviceExtensionNames);
         }
     }
 
@@ -380,9 +394,7 @@ public class VulkanInstance implements Instance {
     }
 
     private void createSwapchain(@NonNull Window window) {
-        try (MemoryStack stack = stackPush()) {
-            // TODO(ches) actually create the swapchain
-        }
+        // TODO(ches) actually create the swapchain
     }
 
     /**
@@ -396,7 +408,6 @@ public class VulkanInstance implements Instance {
             @NonNull VkLayerProperties.Buffer availableLayerNames,
             PointerBuffer requiredLayerNames) {
 
-        requiredLayerNames.flip();
         List<String> missingLayers = new ArrayList<>();
 
         for (int i = 0; i < requiredLayerNames.limit(); ++i) {
