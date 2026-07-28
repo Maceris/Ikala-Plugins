@@ -6,6 +6,7 @@ import static org.lwjgl.system.MemoryUtil.NULL;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
 import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.KHRSwapchain.*;
+import static org.lwjgl.vulkan.VK10.vkGetPhysicalDeviceProperties;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.BufferHolder;
@@ -174,6 +175,7 @@ public class VulkanInstance implements Instance {
     @Override
     public boolean initialize(@NonNull Window window) {
         createVulkanInstance(window);
+        createSurface(window);
         createSwapchain(window);
 
         initializeGui(window);
@@ -203,6 +205,117 @@ public class VulkanInstance implements Instance {
     @Override
     public void initializeModel(@NonNull Model model) {
         // TODO(ches) initialize model
+    }
+
+    /**
+     * Set up a surface for a window.
+     *
+     * @param window The window.
+     */
+    private void createSurface(@NonNull Window window) {
+        VulkanState.WindowInfo windowInfo = new VulkanState.WindowInfo();
+        state.windows.add(windowInfo);
+
+        checkError(
+                glfwCreateWindowSurface(
+                        state.instance, window.getWindowHandle(), null, longOutput));
+        windowInfo.surfaceHandle = longOutput.get(0);
+
+        state.device.physical = selectPhysicalDevice(windowInfo.surfaceHandle);
+
+        VkPhysicalDeviceVulkan13Features enabledVk13Features =
+                VkPhysicalDeviceVulkan13Features.create();
+        enabledVk13Features.sType$Default().synchronization2(true).dynamicRendering(true);
+
+        VkPhysicalDeviceVulkan12Features enabledVk12Features =
+                VkPhysicalDeviceVulkan12Features.create();
+        enabledVk12Features
+                .sType$Default()
+                .descriptorIndexing(true)
+                .shaderSampledImageArrayNonUniformIndexing(true)
+                .descriptorBindingVariableDescriptorCount(true)
+                .runtimeDescriptorArray(true)
+                .bufferDeviceAddress(true)
+                .pNext(enabledVk13Features.address());
+
+        VkPhysicalDeviceFeatures enabledVkFeatures = VkPhysicalDeviceFeatures.create();
+        enabledVkFeatures.samplerAnisotropy(true);
+
+        int queueCount = 1;
+        if (state.device.physical.queueFamilyIndices.graphics()
+                != state.device.physical.queueFamilyIndices.present()) {
+            queueCount = 2;
+        }
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkDeviceQueueCreateInfo.Buffer deviceQueueCreateInfos =
+                    VkDeviceQueueCreateInfo.create(queueCount);
+
+            for (int i = 0; i < queueCount; i++) {
+                final int index =
+                        switch (i) {
+                            case 0 -> state.device.physical.queueFamilyIndices.graphics();
+                            case 1 -> state.device.physical.queueFamilyIndices.present();
+                            default -> 0;
+                        };
+                deviceQueueCreateInfos
+                        .get(i)
+                        .sType$Default()
+                        .pNext(NULL)
+                        .flags(0)
+                        .queueFamilyIndex(index)
+                        .pQueuePriorities(stack.floats(1.0f));
+            }
+
+            PointerBuffer deviceExtensionNames =
+                    PointerBuffer.allocateDirect(REQUIRED_DEVICE_EXTENSIONS.length);
+            Arrays.stream(REQUIRED_DEVICE_EXTENSIONS).forEach(deviceExtensionNames::put);
+            deviceExtensionNames.flip();
+
+            VkDeviceCreateInfo deviceCreateInfo = VkDeviceCreateInfo.create();
+            deviceCreateInfo
+                    .sType$Default()
+                    .pEnabledFeatures(enabledVkFeatures)
+                    .pNext(enabledVk12Features)
+                    .pQueueCreateInfos(deviceQueueCreateInfos)
+                    .ppEnabledExtensionNames(deviceExtensionNames);
+
+            checkError(
+                    vkCreateDevice(
+                            state.device.physical.physicalDevice,
+                            deviceCreateInfo,
+                            null,
+                            pointerOutput));
+
+            state.device.logical =
+                    new VkDevice(
+                            pointerOutput.get(0),
+                            state.device.physical.physicalDevice,
+                            deviceCreateInfo);
+        }
+
+        vkGetDeviceQueue(
+                state.device.logical,
+                state.device.physical.queueFamilyIndices.graphics(),
+                0,
+                pointerOutput);
+        final long graphicsQueueIndex = pointerOutput.get(0);
+        state.device.graphicsQueue = new VkQueue(graphicsQueueIndex, state.device.logical);
+        if (queueCount == 1) {
+            state.device.presentQueue = state.device.graphicsQueue;
+        } else {
+            vkGetDeviceQueue(
+                    state.device.logical,
+                    state.device.physical.queueFamilyIndices.present(),
+                    0,
+                    pointerOutput);
+            state.device.presentQueue = new VkQueue(pointerOutput.get(0), state.device.logical);
+        }
+
+        checkError(
+                glfwCreateWindowSurface(
+                        state.instance, window.getWindowHandle(), null, longOutput));
+        windowInfo.surfaceHandle = longOutput.get(0);
     }
 
     /**
@@ -303,11 +416,6 @@ public class VulkanInstance implements Instance {
 
             state.instance = new VkInstance(pointerOutput.get(0), instanceInfo);
 
-            checkError(
-                    glfwCreateWindowSurface(
-                            state.instance, window.getWindowHandle(), null, longOutput));
-            state.surfaceHandle = longOutput.get(0);
-
             checkError(vkEnumeratePhysicalDevices(state.instance, intOutput, null));
 
             if (intOutput.get(0) <= 0) {
@@ -317,102 +425,24 @@ public class VulkanInstance implements Instance {
             PointerBuffer physicalDevices = PointerBuffer.allocateDirect(intOutput.get(0));
             checkError(vkEnumeratePhysicalDevices(state.instance, intOutput, physicalDevices));
 
-            List<VkPhysicalDevice> devices = new ArrayList<>();
             for (int i = 0; i < physicalDevices.limit(); ++i) {
-                devices.add(new VkPhysicalDevice(physicalDevices.get(i), state.instance));
+                VulkanState.PhysicalDeviceInfo deviceInfo = new VulkanState.PhysicalDeviceInfo();
+                deviceInfo.physicalDevice =
+                        new VkPhysicalDevice(physicalDevices.get(i), state.instance);
+
+                vkGetPhysicalDeviceFeatures(deviceInfo.physicalDevice, deviceInfo.deviceFeatures);
+                vkGetPhysicalDeviceProperties(
+                        deviceInfo.physicalDevice, deviceInfo.deviceProperties);
+
+                vkGetPhysicalDeviceQueueFamilyProperties(
+                        deviceInfo.physicalDevice, intOutput, null);
+                // NOTE(ches) it's important that we use a buffer that doesn't need manual freeing
+                deviceInfo.queueFamilyProperties = VkQueueFamilyProperties.create(intOutput.get(0));
+                vkGetPhysicalDeviceQueueFamilyProperties(
+                        deviceInfo.physicalDevice, intOutput, deviceInfo.queueFamilyProperties);
+
+                state.physicalDevices.add(deviceInfo);
             }
-
-            state.device.physical = selectPhysicalDevice(devices);
-            vkGetPhysicalDeviceProperties(state.device.physical, state.device.deviceProperties);
-            vkGetPhysicalDeviceFeatures(state.device.physical, state.device.deviceFeatures);
-
-            VkPhysicalDeviceVulkan13Features enabledVk13Features =
-                    VkPhysicalDeviceVulkan13Features.create();
-            enabledVk13Features.sType$Default().synchronization2(true).dynamicRendering(true);
-
-            VkPhysicalDeviceVulkan12Features enabledVk12Features =
-                    VkPhysicalDeviceVulkan12Features.create();
-            enabledVk12Features
-                    .sType$Default()
-                    .descriptorIndexing(true)
-                    .shaderSampledImageArrayNonUniformIndexing(true)
-                    .descriptorBindingVariableDescriptorCount(true)
-                    .runtimeDescriptorArray(true)
-                    .bufferDeviceAddress(true)
-                    .pNext(enabledVk13Features.address());
-
-            VkPhysicalDeviceFeatures enabledVkFeatures = VkPhysicalDeviceFeatures.create();
-            enabledVkFeatures.samplerAnisotropy(true);
-
-            int queueCount = 1;
-            if (state.device.queueFamilyIndices.graphics()
-                    != state.device.queueFamilyIndices.present()) {
-                queueCount = 2;
-            }
-
-            try (MemoryStack stack = MemoryStack.stackPush()) {
-                VkDeviceQueueCreateInfo.Buffer deviceQueueCreateInfos =
-                        VkDeviceQueueCreateInfo.create(queueCount);
-
-                for (int i = 0; i < queueCount; i++) {
-                    final int index =
-                            switch (i) {
-                                case 0 -> state.device.queueFamilyIndices.graphics();
-                                case 1 -> state.device.queueFamilyIndices.present();
-                                default -> 0;
-                            };
-                    deviceQueueCreateInfos
-                            .get(i)
-                            .sType$Default()
-                            .pNext(NULL)
-                            .flags(0)
-                            .queueFamilyIndex(index)
-                            .pQueuePriorities(stack.floats(1.0f));
-                }
-
-                PointerBuffer deviceExtensionNames =
-                        PointerBuffer.allocateDirect(REQUIRED_DEVICE_EXTENSIONS.length);
-                Arrays.stream(REQUIRED_DEVICE_EXTENSIONS).forEach(deviceExtensionNames::put);
-                deviceExtensionNames.flip();
-
-                VkDeviceCreateInfo deviceCreateInfo = VkDeviceCreateInfo.create();
-                deviceCreateInfo
-                        .sType$Default()
-                        .pEnabledFeatures(enabledVkFeatures)
-                        .pNext(enabledVk12Features)
-                        .pQueueCreateInfos(deviceQueueCreateInfos)
-                        .ppEnabledExtensionNames(deviceExtensionNames);
-
-                checkError(
-                        vkCreateDevice(
-                                state.device.physical, deviceCreateInfo, null, pointerOutput));
-
-                state.device.logical =
-                        new VkDevice(pointerOutput.get(0), state.device.physical, deviceCreateInfo);
-            }
-
-            vkGetDeviceQueue(
-                    state.device.logical,
-                    state.device.queueFamilyIndices.graphics(),
-                    0,
-                    pointerOutput);
-            final long graphicsQueueIndex = pointerOutput.get(0);
-            state.device.graphicsQueue = new VkQueue(graphicsQueueIndex, state.device.logical);
-            if (queueCount == 1) {
-                state.device.presentQueue = state.device.graphicsQueue;
-            } else {
-                vkGetDeviceQueue(
-                        state.device.logical,
-                        state.device.queueFamilyIndices.present(),
-                        0,
-                        pointerOutput);
-                state.device.presentQueue = new VkQueue(pointerOutput.get(0), state.device.logical);
-            }
-
-            checkError(
-                    glfwCreateWindowSurface(
-                            state.instance, window.getWindowHandle(), null, longOutput));
-            state.surfaceHandle = longOutput.get(0);
         }
     }
 
@@ -455,13 +485,16 @@ public class VulkanInstance implements Instance {
     }
 
     private void createSwapchain(@NonNull Window window) {
-        // TODO(ches) actually create the swapchain
+        // TODO(ches) this should be associated with the window, rather than just having one
+        VulkanState.WindowInfo windowInfo = state.windows.getFirst();
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkSurfaceCapabilitiesKHR surfaceCapabilities = VkSurfaceCapabilitiesKHR.calloc(stack);
             checkError(
                     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-                            state.device.physical, state.surfaceHandle, surfaceCapabilities));
+                            state.device.physical.physicalDevice,
+                            windowInfo.surfaceHandle,
+                            surfaceCapabilities));
             VkExtent2D swapchainExtent = VkExtent2D.calloc(stack);
 
             if (surfaceCapabilities.currentExtent().width() == 0xFFFF_FFFF) {
@@ -477,7 +510,7 @@ public class VulkanInstance implements Instance {
              */
             swapchainCreateInfo
                     .sType$Default()
-                    .surface(state.surfaceHandle)
+                    .surface(windowInfo.surfaceHandle)
                     .minImageCount(surfaceCapabilities.minImageCount())
                     .imageFormat(VK_FORMAT_B8G8R8A8_SRGB)
                     .imageColorSpace(VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
@@ -491,19 +524,19 @@ public class VulkanInstance implements Instance {
             checkError(
                     vkCreateSwapchainKHR(
                             state.device.logical, swapchainCreateInfo, null, longOutput));
-            state.swapchainHandle = longOutput.get(0);
+            windowInfo.swapchainHandle = longOutput.get(0);
 
             checkError(
                     vkGetSwapchainImagesKHR(
-                            state.device.logical, state.swapchainHandle, intOutput, null));
+                            state.device.logical, windowInfo.swapchainHandle, intOutput, null));
             final int imageCount = intOutput.get(0);
             LongBuffer images = stack.callocLong(imageCount);
             checkError(
                     vkGetSwapchainImagesKHR(
-                            state.device.logical, state.swapchainHandle, intOutput, images));
+                            state.device.logical, windowInfo.swapchainHandle, intOutput, images));
 
-            state.swapchainImages = new long[imageCount];
-            images.get(0, state.swapchainImages);
+            windowInfo.swapchainImages = new long[imageCount];
+            images.get(0, windowInfo.swapchainImages);
 
             // TODO(ches) set up depth attachment, image views
         }
@@ -563,38 +596,44 @@ public class VulkanInstance implements Instance {
     /**
      * Check the swap chain support provided for the surface by the provided device.
      *
-     * @param device The device.
-     * @return Swap chain support information provided for the surface by the provided device.
+     * @param deviceInfo The device info to update.
      */
-    private SwapChainSupport checkSwapChainSupport(@NonNull VkPhysicalDevice device) {
-        var capabilities = VkSurfaceCapabilitiesKHR.malloc();
-        VkSurfaceFormatKHR.Buffer formats = null;
-        int[] presentModes = null;
-        checkError(
-                vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-                        device, state.surfaceHandle, capabilities));
+    private void updateSwapChainSupport(
+            @NonNull VulkanState.PhysicalDeviceInfo deviceInfo, long surfaceHandle) {
+        deviceInfo.capabilities = VkSurfaceCapabilitiesKHR.create();
 
         checkError(
-                vkGetPhysicalDeviceSurfaceFormatsKHR(device, state.surfaceHandle, intOutput, null));
+                vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+                        deviceInfo.physicalDevice, surfaceHandle, deviceInfo.capabilities));
+
+        checkError(
+                vkGetPhysicalDeviceSurfaceFormatsKHR(
+                        deviceInfo.physicalDevice, surfaceHandle, intOutput, null));
+
         if (intOutput.get(0) > 0) {
-            formats = VkSurfaceFormatKHR.malloc(intOutput.get(0));
+            deviceInfo.formats = VkSurfaceFormatKHR.create(intOutput.get(0));
             checkError(
                     vkGetPhysicalDeviceSurfaceFormatsKHR(
-                            device, state.surfaceHandle, intOutput, formats));
+                            deviceInfo.physicalDevice,
+                            surfaceHandle,
+                            intOutput,
+                            deviceInfo.formats));
         }
 
         checkError(
                 vkGetPhysicalDeviceSurfacePresentModesKHR(
-                        device, state.surfaceHandle, intOutput, null));
+                        deviceInfo.physicalDevice, surfaceHandle, intOutput, null));
         if (intOutput.get(0) > 0) {
-            presentModes = new int[intOutput.get(0)];
-            int[] presentModeCount = new int[] {intOutput.get(0)};
+            final int presentModeCount = intOutput.get(0);
+            deviceInfo.presentModes = new int[presentModeCount];
+            int[] arrayForSignatureReasons = new int[] {presentModeCount};
             checkError(
                     vkGetPhysicalDeviceSurfacePresentModesKHR(
-                            device, state.surfaceHandle, presentModeCount, presentModes));
+                            deviceInfo.physicalDevice,
+                            surfaceHandle,
+                            arrayForSignatureReasons,
+                            deviceInfo.presentModes));
         }
-
-        return new SwapChainSupport(capabilities, formats, presentModes);
     }
 
     @Override
@@ -603,43 +642,43 @@ public class VulkanInstance implements Instance {
     }
 
     /**
-     * Look up the queue family indices for the specified device.
+     * Look up the queue family indices for the specified device, update tracking info for the
+     * device.
      *
-     * @param device The physical device.
-     * @return The queue family indices, which will be non-null but may have missing values.
+     * @param deviceInfo The device we are interested in.
+     * @param surfaceHandle The surface handle, for checking support.
      */
-    private QueueFamilyIndices findQueueFamilies(@NonNull VkPhysicalDevice device) {
-        vkGetPhysicalDeviceQueueFamilyProperties(device, intOutput, null);
-        VkQueueFamilyProperties.Buffer queueProperties =
-                VkQueueFamilyProperties.malloc(intOutput.get(0));
-        vkGetPhysicalDeviceQueueFamilyProperties(device, intOutput, queueProperties);
-
+    private void updateQueueFamilies(
+            @NonNull VulkanState.PhysicalDeviceInfo deviceInfo, final long surfaceHandle) {
         int graphicsFamily = QueueFamilyIndices.MISSING;
         int presentFamily = QueueFamilyIndices.MISSING;
 
-        for (int i = 0; i < queueProperties.limit(); ++i) {
-            var family = queueProperties.get(i);
+        try {
+            for (int i = 0; i < deviceInfo.queueFamilyProperties.limit(); ++i) {
+                var family = deviceInfo.queueFamilyProperties.get(i);
 
-            if ((family.queueFlags() & VK_QUEUE_GRAPHICS_BIT) != 0) {
-                graphicsFamily = i;
+                if ((family.queueFlags() & VK_QUEUE_GRAPHICS_BIT) != 0) {
+                    graphicsFamily = i;
+                }
+
+                checkError(
+                        vkGetPhysicalDeviceSurfaceSupportKHR(
+                                deviceInfo.physicalDevice, i, surfaceHandle, intOutput));
+
+                if (intOutput.get(0) == VK_TRUE) {
+                    presentFamily = i;
+                }
+
+                if (graphicsFamily != QueueFamilyIndices.MISSING
+                        && presentFamily != QueueFamilyIndices.MISSING) {
+                    break;
+                }
             }
-
-            checkError(
-                    vkGetPhysicalDeviceSurfaceSupportKHR(
-                            device, i, state.surfaceHandle, intOutput));
-
-            if (intOutput.get(0) == VK_TRUE) {
-                presentFamily = i;
-            }
-
-            if (graphicsFamily != QueueFamilyIndices.MISSING
-                    && presentFamily != QueueFamilyIndices.MISSING) {
-                break;
-            }
+        } finally {
+            deviceInfo.queueFamilyIndices = new QueueFamilyIndices(graphicsFamily, presentFamily);
+            // NOTE(ches) it's important that we use a buffer that doesn't need manual freeing
+            deviceInfo.queueFamilyProperties = null;
         }
-
-        queueProperties.free();
-        return new QueueFamilyIndices(graphicsFamily, presentFamily);
     }
 
     @Override
@@ -668,70 +707,60 @@ public class VulkanInstance implements Instance {
     /**
      * Give a device a score based on how suitable it is, for use in device selection.
      *
-     * @param device The device we want to score.
-     * @param score A 1-sized array of integers, used as an out parameter for the score.
-     * @return Queue family indices for the device.
+     * @param deviceInfo The device we want to score.
+     * @param surfaceHandle The surface handle, for checking swapchain support.
      */
-    private QueueFamilyIndices scoreDevice(@NonNull VkPhysicalDevice device, int[] score) {
-        assert score != null && score.length >= 1;
+    private int scoreDevice(
+            @NonNull VulkanState.PhysicalDeviceInfo deviceInfo, final long surfaceHandle) {
+        updateQueueFamilies(deviceInfo, surfaceHandle);
 
-        vkGetPhysicalDeviceFeatures(device, state.device.deviceFeatures);
-
-        if (!state.device.deviceFeatures.geometryShader()) {
-            score[0] = 0;
-            return new QueueFamilyIndices(QueueFamilyIndices.MISSING, QueueFamilyIndices.MISSING);
+        if (!deviceInfo.queueFamilyIndices.hasAllValues()) {
+            return 0;
         }
 
-        QueueFamilyIndices queueFamilies = findQueueFamilies(device);
-
-        if (!queueFamilies.hasAllValues()) {
-            score[0] = 0;
-            return queueFamilies;
+        if (!deviceInfo.deviceFeatures.geometryShader()) {
+            return 0;
         }
 
-        if (!supportsRequiredExtensions(device)) {
-            score[0] = 0;
-            return queueFamilies;
+        if (!supportsRequiredExtensions(deviceInfo.physicalDevice)) {
+            return 0;
         }
 
-        var swapChainSupport = checkSwapChainSupport(device);
-        if (swapChainSupport.isMissingSupport()) {
-            swapChainSupport.free();
-            score[0] = 0;
-            return queueFamilies;
+        updateSwapChainSupport(deviceInfo, surfaceHandle);
+        if (deviceInfo.formats == null
+                || deviceInfo.presentModes == null
+                || deviceInfo.presentModes.length == 0) {
+            deviceInfo.capabilities = null;
+            deviceInfo.formats = null;
+            deviceInfo.presentModes = null;
+            return 0;
+        }
+        int score = 0;
+
+        if (deviceInfo.deviceProperties.deviceType() == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+            score += 1_000_000;
         }
 
-        swapChainSupport.free();
+        score += deviceInfo.deviceProperties.limits().maxImageDimension2D();
 
-        vkGetPhysicalDeviceProperties(device, state.device.deviceProperties);
-        if (state.device.deviceProperties.deviceType() == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
-            score[0] += 1_000_000;
-        }
-
-        score[0] += state.device.deviceProperties.limits().maxImageDimension2D();
-
-        return queueFamilies;
+        return score;
     }
 
     /**
      * Select a physical device to use.
      *
-     * @param vkPhysicalDevices The list of devices to choose from.
+     * @param surfaceHandle The surface handle, for checking swapchain support.
      * @return The selected physical device.
      * @throws RenderException If no device could possibly work.
      */
-    private VkPhysicalDevice selectPhysicalDevice(
-            @NonNull List<VkPhysicalDevice> vkPhysicalDevices) {
-        VkPhysicalDevice bestChoice = null;
+    private VulkanState.PhysicalDeviceInfo selectPhysicalDevice(final long surfaceHandle) {
+        VulkanState.PhysicalDeviceInfo bestChoice = null;
         int highestScore = Integer.MIN_VALUE;
 
-        int[] score = {0};
-        QueueFamilyIndices indices = null;
-        for (VkPhysicalDevice device : vkPhysicalDevices) {
-            score[0] = 0;
-            indices = scoreDevice(device, score);
-            if (score[0] > highestScore) {
-                highestScore = score[0];
+        for (VulkanState.PhysicalDeviceInfo device : state.physicalDevices) {
+            int score = scoreDevice(device, surfaceHandle);
+            if (score > highestScore) {
+                highestScore = score;
                 bestChoice = device;
             }
         }
@@ -742,7 +771,6 @@ public class VulkanInstance implements Instance {
             throw new RenderException(message);
         }
 
-        state.device.queueFamilyIndices = indices;
         return bestChoice;
     }
 
@@ -754,7 +782,7 @@ public class VulkanInstance implements Instance {
      */
     private boolean supportsRequiredExtensions(@NonNull VkPhysicalDevice device) {
         vkEnumerateDeviceExtensionProperties(device, (String) null, intOutput, null);
-        var properties = VkExtensionProperties.malloc(intOutput.get(0));
+        var properties = VkExtensionProperties.calloc(intOutput.get(0));
         vkEnumerateDeviceExtensionProperties(device, (String) null, intOutput, properties);
 
         List<String> missingExtensions = new ArrayList<>(REQUIRED_DEVICE_EXTENSION_NAMES);
