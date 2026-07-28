@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.backend.vulkan;
 import static org.lwjgl.glfw.GLFWVulkan.glfwCreateWindowSurface;
 import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
 import static org.lwjgl.system.MemoryUtil.NULL;
+import static org.lwjgl.util.vma.Vma.*;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
 import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.KHRSwapchain.*;
@@ -28,6 +29,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
+import org.lwjgl.util.vma.VmaAllocationCreateInfo;
+import org.lwjgl.util.vma.VmaAllocatorCreateInfo;
+import org.lwjgl.util.vma.VmaVulkanFunctions;
 import org.lwjgl.vulkan.*;
 
 import java.nio.ByteBuffer;
@@ -176,6 +180,22 @@ public class VulkanInstance implements Instance {
     public boolean initialize(@NonNull Window window) {
         createVulkanInstance(window);
         createSurface(window);
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VmaVulkanFunctions vkFunctions =
+                    VmaVulkanFunctions.calloc(stack).set(state.instance, state.device.logical);
+
+            VmaAllocatorCreateInfo vmaAllocatorCreateInfo =
+                    VmaAllocatorCreateInfo.calloc(stack)
+                            .flags(VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT)
+                            .physicalDevice(state.device.physical.physicalDevice)
+                            .device(state.device.logical)
+                            .pVulkanFunctions(vkFunctions)
+                            .instance(state.instance);
+            checkError(vmaCreateAllocator(vmaAllocatorCreateInfo, pointerOutput));
+            state.vmaAllocator = pointerOutput.get(0);
+        }
+
         createSwapchain(window);
 
         initializeGui(window);
@@ -208,7 +228,7 @@ public class VulkanInstance implements Instance {
     }
 
     /**
-     * Set up a surface for a window.
+     * Set up a surface for a window, and selects the physical device.
      *
      * @param window The window.
      */
@@ -538,7 +558,80 @@ public class VulkanInstance implements Instance {
             windowInfo.swapchainImages = new long[imageCount];
             images.get(0, windowInfo.swapchainImages);
 
-            // TODO(ches) set up depth attachment, image views
+            int depthFormat = VK_FORMAT_UNDEFINED;
+            final int[] depthFormatList =
+                    new int[] {VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT};
+            for (int format : depthFormatList) {
+                VkFormatProperties2 formatProperties =
+                        VkFormatProperties2.calloc(stack).sType$Default();
+                vkGetPhysicalDeviceFormatProperties2(
+                        state.device.physical.physicalDevice, format, formatProperties);
+                if ((formatProperties.formatProperties().optimalTilingFeatures()
+                                & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+                        != 0) {
+                    depthFormat = format;
+                    break;
+                }
+            }
+            if (depthFormat == VK_FORMAT_UNDEFINED) {
+                // Can't happen (tm) unless the spec changes, log error and barrel forwards until
+                // something breaks
+                log.error("Couldn't find a desirable depth format");
+            }
+
+            VkExtent3D depthExtent =
+                    VkExtent3D.calloc(stack).set(window.getWidth(), window.getHeight(), 1);
+
+            VkImageCreateInfo depthImageCreateInfo =
+                    VkImageCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .imageType(VK_IMAGE_TYPE_2D)
+                            .format(depthFormat)
+                            .extent(depthExtent)
+                            .mipLevels(1)
+                            .arrayLayers(1)
+                            .samples(VK_SAMPLE_COUNT_1_BIT)
+                            .tiling(VK_IMAGE_TILING_OPTIMAL)
+                            .usage(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+                            .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED);
+
+            VmaAllocationCreateInfo depthImageAlloc =
+                    VmaAllocationCreateInfo.calloc(stack)
+                            .flags(VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT)
+                            .usage(VMA_MEMORY_USAGE_AUTO);
+
+            checkError(
+                    vmaCreateImage(
+                            state.vmaAllocator,
+                            depthImageCreateInfo,
+                            depthImageAlloc,
+                            longOutput,
+                            pointerOutput,
+                            null));
+            final long depthImage = longOutput.get(0);
+            final long depthImageAllocation = pointerOutput.get(0);
+
+            VkImageSubresourceRange depthViewSubresourceRange =
+                    VkImageSubresourceRange.calloc(stack)
+                            .aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT)
+                            .levelCount(1)
+                            .layerCount(1);
+
+            VkImageViewCreateInfo depthViewCreateInfo =
+                    VkImageViewCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .image(depthImage)
+                            .viewType(VK_IMAGE_VIEW_TYPE_2D)
+                            .format(depthFormat)
+                            .subresourceRange(depthViewSubresourceRange);
+
+            checkError(
+                    vkCreateImageView(state.device.logical, depthViewCreateInfo, null, longOutput));
+            final long depthView = longOutput.get(0);
+
+            /*
+             * TODO(ches) store the depth handles somewhere rather than just leaking it all immediately
+             */
         }
     }
 

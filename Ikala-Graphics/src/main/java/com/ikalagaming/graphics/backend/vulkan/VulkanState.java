@@ -16,6 +16,9 @@ public class VulkanState {
     /** The physical devices we found on the system. */
     public final List<PhysicalDeviceInfo> physicalDevices = new ArrayList<>();
 
+    /** The Vulkan Memory Allocator handle. */
+    public long vmaAllocator = VK_NULL_HANDLE;
+
     /** Info specific to windows. */
     public final List<WindowInfo> windows = new ArrayList<>();
 
