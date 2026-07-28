@@ -336,8 +336,9 @@ public class GraphicsManager {
         }
 
         if (qualityChanged.get() && requestedQuality != null) {
+            final GraphicsSettings.Quality oldQuality = settings.quality;
             settings.quality = requestedQuality;
-            renderInstance.setQuality(requestedQuality);
+            renderInstance.setQuality(oldQuality, requestedQuality);
             qualityChanged.set(false);
         }
 

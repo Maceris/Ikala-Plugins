@@ -458,7 +458,9 @@ public class OpenGLInstance implements Instance {
     }
 
     @Override
-    public void setQuality(GraphicsSettings.@NonNull Quality quality) {
+    public void setQuality(
+            @NonNull GraphicsSettings.Quality oldQuality,
+            @NonNull GraphicsSettings.Quality newQuality) {
         // TODO(ches) we might want to do something here
     }
 

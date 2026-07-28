@@ -806,7 +806,9 @@ public class VulkanInstance implements Instance {
     }
 
     @Override
-    public void setQuality(GraphicsSettings.@NonNull Quality quality) {
+    public void setQuality(
+            @NonNull GraphicsSettings.Quality oldQuality,
+            @NonNull GraphicsSettings.Quality newQuality) {
         // TODO(ches) set up or clean up as needed
     }
 

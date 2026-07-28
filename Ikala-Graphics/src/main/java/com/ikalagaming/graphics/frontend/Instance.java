@@ -66,9 +66,12 @@ public interface Instance {
     /**
      * Update graphics quality. This is a very heavy operation, and should only be used internally.
      *
-     * @param quality The new quality to use.
+     * @param oldQuality The new quality to use, so we know what sort of resources to clean up.
+     * @param newQuality The new quality to use, so we know what to set up for.
      */
-    void setQuality(@NonNull GraphicsSettings.Quality quality);
+    void setQuality(
+            @NonNull GraphicsSettings.Quality oldQuality,
+            @NonNull GraphicsSettings.Quality newQuality);
 
     /**
      * Change over to another rendering pipeline.
