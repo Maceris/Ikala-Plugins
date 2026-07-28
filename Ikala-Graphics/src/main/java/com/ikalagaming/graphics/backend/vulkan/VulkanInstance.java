@@ -11,6 +11,7 @@ import static org.lwjgl.vulkan.VK13.*;
 import com.ikalagaming.graphics.BufferHolder;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.exceptions.RenderException;
+import com.ikalagaming.graphics.frontend.GraphicsSettings;
 import com.ikalagaming.graphics.frontend.Instance;
 import com.ikalagaming.graphics.frontend.TextureLoader;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
@@ -774,6 +775,11 @@ public class VulkanInstance implements Instance {
     public int getPipelineConfig() {
         // TODO(ches) return config
         return 0;
+    }
+
+    @Override
+    public void setQuality(GraphicsSettings.@NonNull Quality quality) {
+        // TODO(ches) set up or clean up as needed
     }
 
     @Override

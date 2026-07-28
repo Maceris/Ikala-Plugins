@@ -7,10 +7,7 @@ import static org.lwjgl.glfw.GLFW.glfwTerminate;
 import com.ikalagaming.graphics.backend.opengl.OpenGLInstance;
 import com.ikalagaming.graphics.backend.vulkan.VulkanInstance;
 import com.ikalagaming.graphics.events.WindowCreated;
-import com.ikalagaming.graphics.frontend.BackendType;
-import com.ikalagaming.graphics.frontend.DeletionQueue;
-import com.ikalagaming.graphics.frontend.Instance;
-import com.ikalagaming.graphics.frontend.RenderConfig;
+import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.frontend.gui.data.IkIO;
@@ -22,6 +19,7 @@ import com.ikalagaming.launcher.events.Shutdown;
 
 import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.glfw.GLFWErrorCallback;
@@ -29,6 +27,7 @@ import org.lwjgl.glfw.GLFWErrorCallback;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.annotation.Nullable;
 
 /** Provides utilities for handling graphics. */
 @Slf4j
@@ -92,6 +91,15 @@ public class GraphicsManager {
      */
     @Getter private static int lastFPS;
 
+    /** Used to signal that someone has requested the rendering quality be changed. */
+    private static final AtomicBoolean qualityChanged = new AtomicBoolean(false);
+
+    /**
+     * The new quality that was requested. Null if irrelevant, but see {@link #qualityChanged} for
+     * determining if the quality was set.
+     */
+    @Nullable private static GraphicsSettings.Quality requestedQuality = null;
+
     /** Whether we should shut down. */
     @Getter(value = AccessLevel.PACKAGE)
     private static final AtomicBoolean shutdownFlag = new AtomicBoolean(false);
@@ -125,6 +133,9 @@ public class GraphicsManager {
 
     @Getter private static final BackendType backendType = BackendType.OPENGL;
 
+    /** The settings to use for rendering. Should be set up before creating a window. */
+    @Getter private static final GraphicsSettings settings = new GraphicsSettings();
+
     /**
      * Creates a graphics window, fires off a {@link WindowCreated} event. Won't do anything if a
      * window already exists.
@@ -135,13 +146,16 @@ public class GraphicsManager {
         }
         shutdownFlag.set(false);
 
-        Window.WindowOptions opts = new Window.WindowOptions();
-        opts.antiAliasing = true;
-        opts.fps = TARGET_FPS;
+        /*
+         * TODO(ches) we will probably want to refactor this so windows are more transient, rather than being treated
+         * as equivalent to the application. Some amount of the rendering instance can survive windows being
+         * created and destroyed, besides things like swapchains.
+         */
+
         window =
                 new Window(
                         "Ikala Gaming",
-                        opts,
+                        settings,
                         () -> {
                             resize();
                             return null;
@@ -150,6 +164,10 @@ public class GraphicsManager {
         log.debug("Window created");
         new WindowCreated(window.getWindowHandle()).fire();
 
+        /*
+         * TODO(ches) honestly, we will probably just port to Vulkan and throw away OpenGL. Macs are stuck at like
+         *  OpenGL 4.1, which is honestly not even worth using as a fallback.
+         */
         renderInstance =
                 switch (backendType) {
                     case OPENGL -> new OpenGLInstance();
@@ -205,6 +223,21 @@ public class GraphicsManager {
         int height = window.getHeight();
         scene.resize(width, height);
         renderInstance.resize(width, height);
+    }
+
+    /**
+     * Request that a new rendering quality be used. This is a very heavy operation, so it will
+     * happen at a time the rendering engine finds most convenient rather than immediately, and this
+     * call is ignored if the requested quality is the quality that we currently are using.
+     *
+     * @param quality The new quality.
+     */
+    public static void setQuality(@NonNull GraphicsSettings.Quality quality) {
+        if (settings.quality == quality) {
+            return;
+        }
+        requestedQuality = quality;
+        qualityChanged.set(true);
     }
 
     /**
@@ -300,6 +333,12 @@ public class GraphicsManager {
             // Update the next time we should update models
             lastUpdateTime = currentTime;
             nextUpdateTime = currentTime + UPDATE_TIME;
+        }
+
+        if (qualityChanged.get() && requestedQuality != null) {
+            settings.quality = requestedQuality;
+            renderInstance.setQuality(requestedQuality);
+            qualityChanged.set(false);
         }
 
         if (currentTime >= nextRenderTime) {

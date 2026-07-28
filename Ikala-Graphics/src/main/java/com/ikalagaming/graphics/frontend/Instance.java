@@ -64,6 +64,13 @@ public interface Instance {
     int getPipelineConfig();
 
     /**
+     * Update graphics quality. This is a very heavy operation, and should only be used internally.
+     *
+     * @param quality The new quality to use.
+     */
+    void setQuality(@NonNull GraphicsSettings.Quality quality);
+
+    /**
      * Change over to another rendering pipeline.
      *
      * @param config The configuration specifying the pipeline to switch to.

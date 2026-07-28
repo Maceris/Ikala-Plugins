@@ -458,6 +458,11 @@ public class OpenGLInstance implements Instance {
     }
 
     @Override
+    public void setQuality(GraphicsSettings.@NonNull Quality quality) {
+        // TODO(ches) we might want to do something here
+    }
+
+    @Override
     public void swapPipeline(final int config) {
         renderConfig = config;
         pipeline = pipelineManager.getPipeline(config);

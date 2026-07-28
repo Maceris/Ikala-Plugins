@@ -6,6 +6,7 @@ import static org.lwjgl.system.MemoryUtil.NULL;
 import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.graphics.exceptions.WindowCreationException;
 import com.ikalagaming.graphics.frontend.BackendType;
+import com.ikalagaming.graphics.frontend.GraphicsSettings;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
 import com.ikalagaming.launcher.PluginFolder;
@@ -39,35 +40,17 @@ public class Window {
     // TODO(ches) move this somewhere more specific, like frontend. Possibly tighter integration
     // with the gui system
 
-    /** Options for the window. */
-    public static class WindowOptions {
-        /** Whether anti-aliasing is enabled. */
-        public boolean antiAliasing;
-
-        /** Whether we want to use a compatible profile instead of the core one. */
-        public boolean compatibleProfile;
-
-        /** The target frames per second, which relates to vsync. */
-        public int fps;
-
-        /** The height of the window in pixels. */
-        public int height;
-
-        /** The width of the window in pixels. */
-        public int width;
-    }
-
     /**
      * Set up the window hints.
      *
-     * @param options The configuration to use.
+     * @param settings The configuration to use.
      */
-    private static void setWindowHints(@NonNull WindowOptions options) {
+    private static void setWindowHints(@NonNull GraphicsSettings settings) {
         glfwDefaultWindowHints();
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-        if (options.antiAliasing) {
+        if (settings.antiAliasing) {
             glfwWindowHint(GLFW_SAMPLES, 4);
         }
 
@@ -75,7 +58,7 @@ public class Window {
             glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
             glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
             glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-            if (options.compatibleProfile) {
+            if (settings.compatibleProfile) {
                 glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
             } else {
                 glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -117,12 +100,12 @@ public class Window {
      * Create a new window.
      *
      * @param title The title of the window to display.
-     * @param opts Options for the window setup.
+     * @param settings Graphics settings.
      * @param resizeFunc The function to call upon the window resizing.
      */
     public Window(
             @NonNull String title,
-            @NonNull WindowOptions opts,
+            @NonNull GraphicsSettings settings,
             @NonNull Callable<Void> resizeFunc) {
         this.resizeFunc = resizeFunc;
 
@@ -144,11 +127,11 @@ public class Window {
             throw new WindowCreationException(error);
         }
 
-        setWindowHints(opts);
+        setWindowHints(settings);
 
-        if (opts.width > 0 && opts.height > 0) {
-            width = opts.width;
-            height = opts.height;
+        if (settings.requestedWindowWidth > 0 && settings.requestedWindowHeight > 0) {
+            width = settings.requestedWindowWidth;
+            height = settings.requestedWindowHeight;
         } else {
             glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
             GLFWVidMode vidMode = glfwGetVideoMode(glfwGetPrimaryMonitor());
@@ -175,7 +158,7 @@ public class Window {
         if (BackendType.OPENGL == GraphicsManager.getBackendType()) {
             glfwMakeContextCurrent(windowHandle);
 
-            if (opts.fps > 0) {
+            if (settings.targetFPS > 0) {
                 glfwSwapInterval(0);
             } else {
                 glfwSwapInterval(1);
