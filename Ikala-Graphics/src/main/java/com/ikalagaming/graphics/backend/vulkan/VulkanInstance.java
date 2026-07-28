@@ -5,7 +5,7 @@ import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
 import static org.lwjgl.system.MemoryUtil.NULL;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
 import static org.lwjgl.vulkan.KHRSurface.*;
-import static org.lwjgl.vulkan.KHRSwapchain.VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+import static org.lwjgl.vulkan.KHRSwapchain.*;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.BufferHolder;
@@ -407,6 +407,11 @@ public class VulkanInstance implements Instance {
                         pointerOutput);
                 state.device.presentQueue = new VkQueue(pointerOutput.get(0), state.device.logical);
             }
+
+            checkError(
+                    glfwCreateWindowSurface(
+                            state.instance, window.getWindowHandle(), null, longOutput));
+            state.surfaceHandle = longOutput.get(0);
         }
     }
 
@@ -450,6 +455,57 @@ public class VulkanInstance implements Instance {
 
     private void createSwapchain(@NonNull Window window) {
         // TODO(ches) actually create the swapchain
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkSurfaceCapabilitiesKHR surfaceCapabilities = VkSurfaceCapabilitiesKHR.calloc(stack);
+            checkError(
+                    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+                            state.device.physical, state.surfaceHandle, surfaceCapabilities));
+            VkExtent2D swapchainExtent = VkExtent2D.calloc(stack);
+
+            if (surfaceCapabilities.currentExtent().width() == 0xFFFF_FFFF) {
+                swapchainExtent.set(window.getWidth(), window.getHeight());
+            } else {
+                swapchainExtent.set(surfaceCapabilities.currentExtent());
+            }
+
+            VkSwapchainCreateInfoKHR swapchainCreateInfo = VkSwapchainCreateInfoKHR.calloc(stack);
+            /*
+             * NOTE(ches) The swapchain is BGRA as that's guaranteed to be everywhere, though our app generally operates in RGBA. We'll just swizzle at the
+             * last possible second. VK_PRESENT_MODE_FIFO_KHR is a v-synced mode and the only mode guaranteed to be available everywhere.
+             */
+            swapchainCreateInfo
+                    .sType$Default()
+                    .surface(state.surfaceHandle)
+                    .minImageCount(surfaceCapabilities.minImageCount())
+                    .imageFormat(VK_FORMAT_B8G8R8A8_SRGB)
+                    .imageColorSpace(VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+                    .imageExtent(swapchainExtent)
+                    .imageArrayLayers(1)
+                    .imageUsage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+                    .preTransform(VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+                    .compositeAlpha(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
+                    .presentMode(VK_PRESENT_MODE_FIFO_KHR);
+
+            checkError(
+                    vkCreateSwapchainKHR(
+                            state.device.logical, swapchainCreateInfo, null, longOutput));
+            state.swapchainHandle = longOutput.get(0);
+
+            checkError(
+                    vkGetSwapchainImagesKHR(
+                            state.device.logical, state.swapchainHandle, intOutput, null));
+            final int imageCount = intOutput.get(0);
+            LongBuffer images = stack.callocLong(imageCount);
+            checkError(
+                    vkGetSwapchainImagesKHR(
+                            state.device.logical, state.swapchainHandle, intOutput, images));
+
+            state.swapchainImages = new long[imageCount];
+            images.get(0, state.swapchainImages);
+
+            // TODO(ches) set up depth attachment, image views
+        }
     }
 
     /**

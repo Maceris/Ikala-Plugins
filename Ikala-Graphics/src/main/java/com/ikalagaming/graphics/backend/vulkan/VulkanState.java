@@ -10,6 +10,8 @@ public class VulkanState {
     public Device device = new Device();
 
     public long surfaceHandle;
+    public long swapchainHandle;
+    public long[] swapchainImages;
 
     public static class Device {
         public VkPhysicalDevice physical;
