@@ -2,9 +2,10 @@ package com.ikalagaming.graphics.backend.vulkan;
 
 import static org.lwjgl.vulkan.VK13.VK_NULL_HANDLE;
 
+import com.ikalagaming.graphics.GraphicsManager;
+
 import org.lwjgl.vulkan.*;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -12,6 +13,18 @@ public class VulkanState {
 
     public VkInstance instance = null;
     public Device device = new Device();
+
+    /** Fences for signaling frames. One per frame in flight. */
+    public long[] fences = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /**
+     * The current frame index, values in the range [0, {@link
+     * com.ikalagaming.graphics.GraphicsManager#MAX_FRAMES_IN_FLIGHT}).
+     */
+    public int frameIndex = 0;
+
+    /** Semaphores for signaling presentation. One per frame in flight. */
+    public long[] imageAcquiredSemaphores = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
     /** The physical devices we found on the system. */
     public final List<PhysicalDeviceInfo> physicalDevices = new ArrayList<>();
@@ -39,8 +52,6 @@ public class VulkanState {
          * queue. If using the same queue, these will share the same Java object.
          */
         public VkQueue presentQueue = null;
-
-        public ByteBuffer descriptorPool = null;
     }
 
     /** Information about the physical hardware devices. */
@@ -82,5 +93,8 @@ public class VulkanState {
         public long swapchainHandle = VK_NULL_HANDLE;
         public long[] swapchainImages = null;
         public TextureInfo depthImage = null;
+
+        /** Semaphores for signaling presentation. One per swapchain image. */
+        public long[] renderCompleteSemaphores;
     }
 }

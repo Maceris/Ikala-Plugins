@@ -11,6 +11,7 @@ import static org.lwjgl.vulkan.VK10.vkGetPhysicalDeviceProperties;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.BufferHolder;
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.frontend.GraphicsSettings;
@@ -437,6 +438,16 @@ public class VulkanInstance implements Instance {
             windowInfo.swapchainImages = new long[imageCount];
             images.get(0, windowInfo.swapchainImages);
 
+            windowInfo.renderCompleteSemaphores = new long[imageCount];
+            VkSemaphoreCreateInfo semaphoreCreateInfo =
+                    VkSemaphoreCreateInfo.calloc(stack).sType$Default();
+            for (int i = 0; i < imageCount; i++) {
+                checkError(
+                        vkCreateSemaphore(
+                                state.device.logical, semaphoreCreateInfo, null, longOutput));
+                windowInfo.renderCompleteSemaphores[i] = longOutput.get(0);
+            }
+
             int depthFormat = VK_FORMAT_UNDEFINED;
             final int[] depthFormatList =
                     new int[] {VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT};
@@ -678,6 +689,33 @@ public class VulkanInstance implements Instance {
 
         createSwapchain(window);
 
+        // TODO(ches) setup shader data buffers * MAX_FRAMES_IN_FLIGHT
+        // TODO(ches) setup command buffers * MAX_FRAMES_IN_FLIGHT
+        // TODO(ches) setup shaders
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkSemaphoreCreateInfo semaphoreCreateInfo =
+                    VkSemaphoreCreateInfo.calloc(stack).sType$Default();
+            VkFenceCreateInfo fenceCreateInfo =
+                    VkFenceCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .flags(VK_FENCE_CREATE_SIGNALED_BIT);
+
+            assert state.fences != null
+                    && state.fences.length == GraphicsManager.MAX_FRAMES_IN_FLIGHT;
+            assert state.imageAcquiredSemaphores != null
+                    && state.imageAcquiredSemaphores.length == GraphicsManager.MAX_FRAMES_IN_FLIGHT;
+
+            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+                checkError(vkCreateFence(state.device.logical, fenceCreateInfo, null, longOutput));
+                state.fences[i] = longOutput.get(0);
+                checkError(
+                        vkCreateSemaphore(
+                                state.device.logical, semaphoreCreateInfo, null, longOutput));
+                state.imageAcquiredSemaphores[i] = longOutput.get(0);
+            }
+        }
+
         initializeGui(window);
         return true;
     }
@@ -714,9 +752,20 @@ public class VulkanInstance implements Instance {
 
     @Override
     public void render(@NonNull Scene scene) {
-        // TODO(ches) complete this
+        if (false) {
+            // TODO(ches) actually run this once we have fences being signaled from shaders
+            longOutput.put(0, state.fences[state.frameIndex]);
+            checkError(vkWaitForFences(state.device.logical, longOutput, true, Integer.MAX_VALUE));
+            longOutput.put(0, state.fences[state.frameIndex]);
+            checkError(vkResetFences(state.device.logical, longOutput));
+        }
+        // TODO(ches) acquire next image
+        // TODO(ches) recreate swapchain if necessary
+        // TODO(ches) update shader data
+        // TODO(ches) record command buffer
+        // TODO(ches) submit command buffer
+        // TODO(ches) present image
 
-        // TODO(ches) vkQueuePresentKHR()... somewhere
     }
 
     @Override
