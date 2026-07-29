@@ -9,13 +9,20 @@ import org.lwjgl.vulkan.*;
 import java.util.ArrayList;
 import java.util.List;
 
+/** Global state for Vulkan. */
 public class VulkanState {
 
+    /** The Vulkan instance. */
     public VkInstance instance = null;
-    public Device device = new Device();
+
+    /** Command buffers for each frame. */
+    public final long[] commandBuffers = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /** Device information. */
+    public final Device device = new Device();
 
     /** Fences for signaling frames. One per frame in flight. */
-    public long[] fences = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+    public final long[] fences = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
     /**
      * The current frame index, values in the range [0, {@link
@@ -24,10 +31,14 @@ public class VulkanState {
     public int frameIndex = 0;
 
     /** Semaphores for signaling presentation. One per frame in flight. */
-    public long[] imageAcquiredSemaphores = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+    public final long[] imageAcquiredSemaphores = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
     /** The physical devices we found on the system. */
     public final List<PhysicalDeviceInfo> physicalDevices = new ArrayList<>();
+
+    /** Shader data buffers per frame. */
+    public final ShaderDataBuffer[] shaderDataBuffers =
+            new ShaderDataBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
     /** The Vulkan Memory Allocator handle. */
     public long vmaAllocator = VK_NULL_HANDLE;

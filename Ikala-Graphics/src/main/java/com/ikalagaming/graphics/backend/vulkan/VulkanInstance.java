@@ -273,6 +273,49 @@ public class VulkanInstance implements Instance {
         // TODO(ches) complete this
     }
 
+    private void createShaderData() {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            // TODO(ches) figure out the shader data size
+            long shaderSize = 1;
+            VkBufferCreateInfo bufferCreateInfo =
+                    VkBufferCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .size(shaderSize)
+                            .usage(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
+            VmaAllocationCreateInfo bufferAllocationCreateInfo =
+                    VmaAllocationCreateInfo.calloc(stack)
+                            .flags(
+                                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+                                            | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT
+                                            | VMA_ALLOCATION_CREATE_MAPPED_BIT)
+                            .usage(VMA_MEMORY_USAGE_AUTO);
+            VkBufferDeviceAddressInfo bufferDeviceAddressInfo =
+                    VkBufferDeviceAddressInfo.calloc(stack).sType$Default();
+
+            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+                state.shaderDataBuffers[i] = new ShaderDataBuffer();
+                ShaderDataBuffer dataBuffer = state.shaderDataBuffers[i];
+
+                checkError(
+                        vmaCreateBuffer(
+                                state.vmaAllocator,
+                                bufferCreateInfo,
+                                bufferAllocationCreateInfo,
+                                longOutput,
+                                pointerOutput,
+                                dataBuffer.allocationInfo));
+                dataBuffer.buffer = longOutput.get(0);
+                dataBuffer.allocation = pointerOutput.get(0);
+
+                bufferDeviceAddressInfo.buffer(dataBuffer.buffer);
+                dataBuffer.deviceAddress =
+                        vkGetBufferDeviceAddress(state.device.logical, bufferDeviceAddressInfo);
+            }
+        }
+
+        // TODO(ches) setup command pools, and coommand buffers * MAX_FRAMES_IN_FLIGHT
+    }
+
     /**
      * Set up a surface for a window, and selects the physical device.
      *
@@ -289,24 +332,6 @@ public class VulkanInstance implements Instance {
 
         state.device.physical = selectPhysicalDevice(windowInfo.surfaceHandle);
 
-        VkPhysicalDeviceVulkan13Features enabledVk13Features =
-                VkPhysicalDeviceVulkan13Features.create();
-        enabledVk13Features.sType$Default().synchronization2(true).dynamicRendering(true);
-
-        VkPhysicalDeviceVulkan12Features enabledVk12Features =
-                VkPhysicalDeviceVulkan12Features.create();
-        enabledVk12Features
-                .sType$Default()
-                .descriptorIndexing(true)
-                .shaderSampledImageArrayNonUniformIndexing(true)
-                .descriptorBindingVariableDescriptorCount(true)
-                .runtimeDescriptorArray(true)
-                .bufferDeviceAddress(true)
-                .pNext(enabledVk13Features.address());
-
-        VkPhysicalDeviceFeatures enabledVkFeatures = VkPhysicalDeviceFeatures.create();
-        enabledVkFeatures.samplerAnisotropy(true);
-
         int queueCount = 1;
         if (state.device.physical.queueFamilyIndices.graphics()
                 != state.device.physical.queueFamilyIndices.present()) {
@@ -314,8 +339,26 @@ public class VulkanInstance implements Instance {
         }
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkPhysicalDeviceVulkan13Features enabledVk13Features =
+                    VkPhysicalDeviceVulkan13Features.calloc(stack);
+            enabledVk13Features.sType$Default().synchronization2(true).dynamicRendering(true);
+
+            VkPhysicalDeviceVulkan12Features enabledVk12Features =
+                    VkPhysicalDeviceVulkan12Features.calloc(stack);
+            enabledVk12Features
+                    .sType$Default()
+                    .descriptorIndexing(true)
+                    .shaderSampledImageArrayNonUniformIndexing(true)
+                    .descriptorBindingVariableDescriptorCount(true)
+                    .runtimeDescriptorArray(true)
+                    .bufferDeviceAddress(true)
+                    .pNext(enabledVk13Features.address());
+
+            VkPhysicalDeviceFeatures enabledVkFeatures = VkPhysicalDeviceFeatures.calloc(stack);
+            enabledVkFeatures.samplerAnisotropy(true);
+
             VkDeviceQueueCreateInfo.Buffer deviceQueueCreateInfos =
-                    VkDeviceQueueCreateInfo.create(queueCount);
+                    VkDeviceQueueCreateInfo.calloc(queueCount, stack);
 
             for (int i = 0; i < queueCount; i++) {
                 final int index =
@@ -527,6 +570,31 @@ public class VulkanInstance implements Instance {
         }
     }
 
+    private void createSynchronizationInfo() {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkSemaphoreCreateInfo semaphoreCreateInfo =
+                    VkSemaphoreCreateInfo.calloc(stack).sType$Default();
+            VkFenceCreateInfo fenceCreateInfo =
+                    VkFenceCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .flags(VK_FENCE_CREATE_SIGNALED_BIT);
+
+            assert state.fences != null
+                    && state.fences.length == GraphicsManager.MAX_FRAMES_IN_FLIGHT;
+            assert state.imageAcquiredSemaphores != null
+                    && state.imageAcquiredSemaphores.length == GraphicsManager.MAX_FRAMES_IN_FLIGHT;
+
+            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+                checkError(vkCreateFence(state.device.logical, fenceCreateInfo, null, longOutput));
+                state.fences[i] = longOutput.get(0);
+                checkError(
+                        vkCreateSemaphore(
+                                state.device.logical, semaphoreCreateInfo, null, longOutput));
+                state.imageAcquiredSemaphores[i] = longOutput.get(0);
+            }
+        }
+    }
+
     /**
      * Set up the vulkan instance.
      *
@@ -688,33 +756,11 @@ public class VulkanInstance implements Instance {
         }
 
         createSwapchain(window);
+        createShaderData();
 
-        // TODO(ches) setup shader data buffers * MAX_FRAMES_IN_FLIGHT
-        // TODO(ches) setup command buffers * MAX_FRAMES_IN_FLIGHT
         // TODO(ches) setup shaders
 
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            VkSemaphoreCreateInfo semaphoreCreateInfo =
-                    VkSemaphoreCreateInfo.calloc(stack).sType$Default();
-            VkFenceCreateInfo fenceCreateInfo =
-                    VkFenceCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .flags(VK_FENCE_CREATE_SIGNALED_BIT);
-
-            assert state.fences != null
-                    && state.fences.length == GraphicsManager.MAX_FRAMES_IN_FLIGHT;
-            assert state.imageAcquiredSemaphores != null
-                    && state.imageAcquiredSemaphores.length == GraphicsManager.MAX_FRAMES_IN_FLIGHT;
-
-            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
-                checkError(vkCreateFence(state.device.logical, fenceCreateInfo, null, longOutput));
-                state.fences[i] = longOutput.get(0);
-                checkError(
-                        vkCreateSemaphore(
-                                state.device.logical, semaphoreCreateInfo, null, longOutput));
-                state.imageAcquiredSemaphores[i] = longOutput.get(0);
-            }
-        }
+        createSynchronizationInfo();
 
         initializeGui(window);
         return true;
