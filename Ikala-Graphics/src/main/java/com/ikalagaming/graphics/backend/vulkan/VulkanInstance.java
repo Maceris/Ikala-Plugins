@@ -64,12 +64,55 @@ public class VulkanInstance implements Instance {
     /** Whether to enable validation layers and logging. */
     private static final boolean ENABLE_VALIDATION = true;
 
-    private final IntBuffer intOutput = MemoryUtil.memAllocInt(1);
-    private final LongBuffer longOutput = MemoryUtil.memAllocLong(1);
-    private final PointerBuffer pointerOutput = MemoryUtil.memAllocPointer(1);
+    /**
+     * Check for an error, and if there is one then log it and throw an exception.
+     *
+     * @param errorCode The result from a Vulkan function.
+     * @throws RenderException If the error code is not 0.
+     */
+    private static void checkError(int errorCode) {
+        if (errorCode != 0) {
+            final String errorName =
+                    switch (errorCode) {
+                            // Vulkan 1.0 errors
+                        case VK_ERROR_OUT_OF_HOST_MEMORY -> "VK_ERROR_OUT_OF_HOST_MEMORY";
+                        case VK_ERROR_OUT_OF_DEVICE_MEMORY -> "VK_ERROR_OUT_OF_DEVICE_MEMORY";
+                        case VK_ERROR_INITIALIZATION_FAILED -> "VK_ERROR_INITIALIZATION_FAILED";
+                        case VK_ERROR_DEVICE_LOST -> "VK_ERROR_DEVICE_LOST";
+                        case VK_ERROR_MEMORY_MAP_FAILED -> "VK_ERROR_MEMORY_MAP_FAILED";
+                        case VK_ERROR_LAYER_NOT_PRESENT -> "VK_ERROR_LAYER_NOT_PRESENT";
+                        case VK_ERROR_EXTENSION_NOT_PRESENT -> "VK_ERROR_EXTENSION_NOT_PRESENT";
+                        case VK_ERROR_FEATURE_NOT_PRESENT -> "VK_ERROR_FEATURE_NOT_PRESENT";
+                        case VK_ERROR_INCOMPATIBLE_DRIVER -> "VK_ERROR_INCOMPATIBLE_DRIVER";
+                        case VK_ERROR_TOO_MANY_OBJECTS -> "VK_ERROR_TOO_MANY_OBJECTS";
+                        case VK_ERROR_FORMAT_NOT_SUPPORTED -> "VK_ERROR_FORMAT_NOT_SUPPORTED";
+                        case VK_ERROR_FRAGMENTED_POOL -> "VK_ERROR_FRAGMENTED_POOL";
+                        case VK_ERROR_UNKNOWN -> "VK_ERROR_UNKNOWN";
+                        case VK_ERROR_VALIDATION_FAILED -> "VK_ERROR_VALIDATION_FAILED";
 
-    private final VkDebugUtilsMessengerCallbackEXT debugLogger =
-            VkDebugUtilsMessengerCallbackEXT.create(VulkanInstance::logDebugMessage);
+                            // Vulkan 1.1 errors
+                        case VK_ERROR_OUT_OF_POOL_MEMORY -> "VK_ERROR_OUT_OF_POOL_MEMORY";
+                        case VK_ERROR_INVALID_EXTERNAL_HANDLE -> "VK_ERROR_INVALID_EXTERNAL_HANDLE";
+
+                            // Vulkan 1.2 errors
+                        case VK_ERROR_FRAGMENTATION -> "VK_ERROR_FRAGMENTATION";
+                        case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS ->
+                                "VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS";
+
+                            // Vulkan 1.3 errors
+                            // Nothing for now
+
+                            // Fallback
+                        default -> "Unrecognized error code";
+                    };
+
+            var message =
+                    SafeResourceLoader.format(
+                            "Vulkan error {} ({})", String.format("0x%X", errorCode), errorName);
+            log.error(message);
+            throw new RenderException(message);
+        }
+    }
 
     /**
      * Log a debug message from Vulkan. Intended to be used by the {@link #debugLogger}, not called
@@ -124,107 +167,109 @@ public class VulkanInstance implements Instance {
     }
 
     /**
-     * Check for an error, and if there is one then log it and throw an exception.
+     * Populate the list of required instance extensions based on what we need to run.
      *
-     * @param errorCode The result from a Vulkan function.
-     * @throws RenderException If the error code is not 0.
+     * @param requiredExtensionNames The buffer to store the required extension names in.
      */
-    private static void checkError(int errorCode) {
-        if (errorCode != 0) {
-            final String errorName =
-                    switch (errorCode) {
-                            // Vulkan 1.0 errors
-                        case VK_ERROR_OUT_OF_HOST_MEMORY -> "VK_ERROR_OUT_OF_HOST_MEMORY";
-                        case VK_ERROR_OUT_OF_DEVICE_MEMORY -> "VK_ERROR_OUT_OF_DEVICE_MEMORY";
-                        case VK_ERROR_INITIALIZATION_FAILED -> "VK_ERROR_INITIALIZATION_FAILED";
-                        case VK_ERROR_DEVICE_LOST -> "VK_ERROR_DEVICE_LOST";
-                        case VK_ERROR_MEMORY_MAP_FAILED -> "VK_ERROR_MEMORY_MAP_FAILED";
-                        case VK_ERROR_LAYER_NOT_PRESENT -> "VK_ERROR_LAYER_NOT_PRESENT";
-                        case VK_ERROR_EXTENSION_NOT_PRESENT -> "VK_ERROR_EXTENSION_NOT_PRESENT";
-                        case VK_ERROR_FEATURE_NOT_PRESENT -> "VK_ERROR_FEATURE_NOT_PRESENT";
-                        case VK_ERROR_INCOMPATIBLE_DRIVER -> "VK_ERROR_INCOMPATIBLE_DRIVER";
-                        case VK_ERROR_TOO_MANY_OBJECTS -> "VK_ERROR_TOO_MANY_OBJECTS";
-                        case VK_ERROR_FORMAT_NOT_SUPPORTED -> "VK_ERROR_FORMAT_NOT_SUPPORTED";
-                        case VK_ERROR_FRAGMENTED_POOL -> "VK_ERROR_FRAGMENTED_POOL";
-                        case VK_ERROR_UNKNOWN -> "VK_ERROR_UNKNOWN";
-                        case VK_ERROR_VALIDATION_FAILED -> "VK_ERROR_VALIDATION_FAILED";
-
-                            // Vulkan 1.1 errors
-                        case VK_ERROR_OUT_OF_POOL_MEMORY -> "VK_ERROR_OUT_OF_POOL_MEMORY";
-                        case VK_ERROR_INVALID_EXTERNAL_HANDLE -> "VK_ERROR_INVALID_EXTERNAL_HANDLE";
-
-                            // Vulkan 1.2 errors
-                        case VK_ERROR_FRAGMENTATION -> "VK_ERROR_FRAGMENTATION";
-                        case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS ->
-                                "VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS";
-
-                            // Vulkan 1.3 errors
-                            // Nothing for now
-
-                            // Fallback
-                        default -> "Unrecognized error code";
-                    };
-
-            var message =
-                    SafeResourceLoader.format(
-                            "Vulkan error {} ({})", String.format("0x%X", errorCode), errorName);
+    private static void populateRequiredExtensions(@NonNull PointerBuffer requiredExtensionNames) {
+        PointerBuffer glfwExtensionNames = glfwGetRequiredInstanceExtensions();
+        if (glfwExtensionNames == null) {
+            final var message = "Failed to find required GLFW extension names";
             log.error(message);
             throw new RenderException(message);
         }
+
+        for (int i = 0; i < glfwExtensionNames.limit(); ++i) {
+            requiredExtensionNames.put(glfwExtensionNames.get(i));
+        }
+
+        assert REQUIRED_INSTANCE_EXTENSIONS.length == REQUIRED_INSTANCE_EXTENSION_NAMES.size();
+
+        var limit = glfwExtensionNames.limit();
+
+        for (int i = 0; i < REQUIRED_INSTANCE_EXTENSIONS.length; ++i) {
+            boolean duplicate = false;
+            for (int j = 0; j < limit; ++j) {
+                if (requiredExtensionNames
+                        .getStringASCII(j)
+                        .equals(REQUIRED_INSTANCE_EXTENSION_NAMES.get(i))) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate) {
+                requiredExtensionNames.put(REQUIRED_INSTANCE_EXTENSIONS[i]);
+                ++limit;
+            }
+        }
     }
+
+    private final IntBuffer intOutput = MemoryUtil.memAllocInt(1);
+
+    private final LongBuffer longOutput = MemoryUtil.memAllocLong(1);
+
+    private final PointerBuffer pointerOutput = MemoryUtil.memAllocPointer(1);
+
+    private final VkDebugUtilsMessengerCallbackEXT debugLogger =
+            VkDebugUtilsMessengerCallbackEXT.create(VulkanInstance::logDebugMessage);
 
     /** Tracks the state and handles. */
     private final VulkanState state = new VulkanState();
 
-    @Override
-    public boolean initialize(@NonNull Window window) {
-        createVulkanInstance(window);
-        createSurface(window);
+    /**
+     * Check that the specified layers are available, and throw an exception if any are not.
+     *
+     * @param availableLayerNames The layer names that are available.
+     * @param requiredLayerNames The layers that we require.
+     * @throws RenderException If required layers are missing.
+     */
+    private void checkLayers(
+            @NonNull VkLayerProperties.Buffer availableLayerNames,
+            PointerBuffer requiredLayerNames) {
 
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            VmaVulkanFunctions vkFunctions =
-                    VmaVulkanFunctions.calloc(stack).set(state.instance, state.device.logical);
+        List<String> missingLayers = new ArrayList<>();
 
-            VmaAllocatorCreateInfo vmaAllocatorCreateInfo =
-                    VmaAllocatorCreateInfo.calloc(stack)
-                            .flags(VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT)
-                            .physicalDevice(state.device.physical.physicalDevice)
-                            .device(state.device.logical)
-                            .pVulkanFunctions(vkFunctions)
-                            .instance(state.instance);
-            checkError(vmaCreateAllocator(vmaAllocatorCreateInfo, pointerOutput));
-            state.vmaAllocator = pointerOutput.get(0);
+        for (int i = 0; i < requiredLayerNames.limit(); ++i) {
+            boolean found = false;
+
+            final String required = requiredLayerNames.getStringASCII(i);
+
+            for (int j = 0; j < availableLayerNames.capacity(); ++j) {
+                availableLayerNames.position(j);
+                if (required.equals(availableLayerNames.layerNameString())) {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                missingLayers.add(required);
+            }
         }
 
-        createSwapchain(window);
+        if (!missingLayers.isEmpty()) {
+            final var layerNames = String.join(", ", missingLayers);
+            final var message = SafeResourceLoader.format("Vulkan layers missing: {}", layerNames);
+            log.error(message);
 
-        initializeGui(window);
-        return true;
-    }
+            if (log.isDebugEnabled()) {
+                List<String> layers = new ArrayList<>();
+                for (int j = 0; j < availableLayerNames.capacity(); ++j) {
+                    var layer = availableLayerNames.get(j);
+                    layers.add(
+                            String.format(
+                                    "%s (%s)", layer.layerNameString(), layer.descriptionString()));
+                }
+                log.debug("Found Vulkan layers: {}", String.join(", ", layers));
+            }
 
-    /**
-     * Create an IkGui context and configure it.
-     *
-     * @param window The window to pull display info from.
-     */
-    private void initializeGui(@NonNull Window window) {
-        // TODO(ches) clear out ImGui
-        ImGui.createContext();
-
-        ImGuiIO imGuiIO = ImGui.getIO();
-        imGuiIO.setIniFilename(null);
-        imGuiIO.setDisplaySize(window.getWidth(), window.getHeight());
-
-        IkGui.createContext();
-
-        IkIO ikIO = IkGui.getIO();
-        ikIO.iniFilename = null;
-        ikIO.displaySize.set(window.getWidth(), window.getHeight());
+            throw new RenderException(message);
+        }
     }
 
     @Override
-    public void initializeModel(@NonNull Model model) {
-        // TODO(ches) initialize model
+    public void cleanup() {
+        // TODO(ches) complete this
     }
 
     /**
@@ -336,172 +381,6 @@ public class VulkanInstance implements Instance {
                 glfwCreateWindowSurface(
                         state.instance, window.getWindowHandle(), null, longOutput));
         windowInfo.surfaceHandle = longOutput.get(0);
-    }
-
-    /**
-     * Set up the vulkan instance.
-     *
-     * @param window The window we are setting up to render with.
-     * @throws RenderException If an unrecoverable issue occurs setting up vulkan.
-     */
-    private void createVulkanInstance(@NonNull Window window) {
-        try (BufferHolder freeThese = new BufferHolder()) {
-            PointerBuffer requiredExtensionNames = PointerBuffer.allocateDirect(64);
-
-            populateRequiredExtensions(requiredExtensionNames);
-            requiredExtensionNames.flip();
-
-            PointerBuffer requiredLayerNames = null;
-
-            if (ENABLE_VALIDATION) {
-                requiredLayerNames = PointerBuffer.allocateDirect(VALIDATION_LAYERS.length);
-                for (String validationLayer : VALIDATION_LAYERS) {
-                    ByteBuffer converted = MemoryUtil.memASCII(validationLayer);
-                    freeThese.add(converted);
-                    requiredLayerNames.put(converted);
-                }
-                requiredLayerNames.flip();
-
-                checkError(vkEnumerateInstanceLayerProperties(intOutput, null));
-
-                VkLayerProperties.Buffer availableLayers =
-                        VkLayerProperties.create(intOutput.get(0));
-                checkError(vkEnumerateInstanceLayerProperties(intOutput, availableLayers));
-
-                checkLayers(availableLayers, requiredLayerNames);
-            }
-
-            ByteBuffer appName = MemoryUtil.memUTF8(window.getTitle());
-            freeThese.add(appName);
-            ByteBuffer engineName = MemoryUtil.memUTF8("Ikala Engine");
-            freeThese.add(engineName);
-
-            var applicationInfo =
-                    VkApplicationInfo.create()
-                            .sType$Default()
-                            .pNext(NULL)
-                            .pApplicationName(appName)
-                            .applicationVersion(1)
-                            .pEngineName(engineName)
-                            .engineVersion(1)
-                            .apiVersion(VK_MAKE_API_VERSION(0, 1, 3, 0));
-
-            var instanceInfo =
-                    VkInstanceCreateInfo.create()
-                            .sType$Default()
-                            .pNext(NULL)
-                            .flags(0)
-                            .pApplicationInfo(applicationInfo)
-                            .ppEnabledLayerNames(requiredLayerNames)
-                            .ppEnabledExtensionNames(requiredExtensionNames);
-
-            VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
-
-            if (ENABLE_VALIDATION) {
-                debugCreateInfo =
-                        VkDebugUtilsMessengerCreateInfoEXT.create()
-                                .sType$Default()
-                                .pNext(NULL)
-                                .flags(0)
-                                .messageSeverity(
-                                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
-                                                | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
-                                .messageType(
-                                        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
-                                                | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
-                                                | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)
-                                .pfnUserCallback(debugLogger)
-                                .pUserData(NULL);
-                instanceInfo.pNext(debugCreateInfo.address());
-            }
-
-            int error = vkCreateInstance(instanceInfo, null, pointerOutput);
-            if (error == VK_ERROR_INCOMPATIBLE_DRIVER) {
-                var message = "Could not find a compatible Vulkan driver";
-                log.error(message);
-                throw new RenderException(message);
-            }
-            if (error == VK_ERROR_EXTENSION_NOT_PRESENT) {
-                var message = "Could not find a required Vulkan extension";
-                log.error(message);
-                throw new RenderException(message);
-            }
-            if (error != 0) {
-                var message =
-                        SafeResourceLoader.format(
-                                "Failed to create a Vulkan instance, error code {}", error);
-                log.error(message);
-                throw new RenderException(message);
-            }
-
-            state.instance = new VkInstance(pointerOutput.get(0), instanceInfo);
-
-            checkError(vkEnumeratePhysicalDevices(state.instance, intOutput, null));
-
-            if (intOutput.get(0) <= 0) {
-                log.error("Could not find number of physical devices");
-                return;
-            }
-            PointerBuffer physicalDevices = PointerBuffer.allocateDirect(intOutput.get(0));
-            checkError(vkEnumeratePhysicalDevices(state.instance, intOutput, physicalDevices));
-
-            for (int i = 0; i < physicalDevices.limit(); ++i) {
-                VulkanState.PhysicalDeviceInfo deviceInfo = new VulkanState.PhysicalDeviceInfo();
-                deviceInfo.physicalDevice =
-                        new VkPhysicalDevice(physicalDevices.get(i), state.instance);
-
-                vkGetPhysicalDeviceFeatures(deviceInfo.physicalDevice, deviceInfo.deviceFeatures);
-                vkGetPhysicalDeviceProperties(
-                        deviceInfo.physicalDevice, deviceInfo.deviceProperties);
-
-                vkGetPhysicalDeviceQueueFamilyProperties(
-                        deviceInfo.physicalDevice, intOutput, null);
-                // NOTE(ches) it's important that we use a buffer that doesn't need manual freeing
-                deviceInfo.queueFamilyProperties = VkQueueFamilyProperties.create(intOutput.get(0));
-                vkGetPhysicalDeviceQueueFamilyProperties(
-                        deviceInfo.physicalDevice, intOutput, deviceInfo.queueFamilyProperties);
-
-                state.physicalDevices.add(deviceInfo);
-            }
-        }
-    }
-
-    /**
-     * Populate the list of required instance extensions based on what we need to run.
-     *
-     * @param requiredExtensionNames The buffer to store the required extension names in.
-     */
-    private static void populateRequiredExtensions(@NonNull PointerBuffer requiredExtensionNames) {
-        PointerBuffer glfwExtensionNames = glfwGetRequiredInstanceExtensions();
-        if (glfwExtensionNames == null) {
-            final var message = "Failed to find required GLFW extension names";
-            log.error(message);
-            throw new RenderException(message);
-        }
-
-        for (int i = 0; i < glfwExtensionNames.limit(); ++i) {
-            requiredExtensionNames.put(glfwExtensionNames.get(i));
-        }
-
-        assert REQUIRED_INSTANCE_EXTENSIONS.length == REQUIRED_INSTANCE_EXTENSION_NAMES.size();
-
-        var limit = glfwExtensionNames.limit();
-
-        for (int i = 0; i < REQUIRED_INSTANCE_EXTENSIONS.length; ++i) {
-            boolean duplicate = false;
-            for (int j = 0; j < limit; ++j) {
-                if (requiredExtensionNames
-                        .getStringASCII(j)
-                        .equals(REQUIRED_INSTANCE_EXTENSION_NAMES.get(i))) {
-                    duplicate = true;
-                    break;
-                }
-            }
-            if (!duplicate) {
-                requiredExtensionNames.put(REQUIRED_INSTANCE_EXTENSIONS[i]);
-                ++limit;
-            }
-        }
     }
 
     private void createSwapchain(@NonNull Window window) {
@@ -636,152 +515,198 @@ public class VulkanInstance implements Instance {
     }
 
     /**
-     * Check that the specified layers are available, and throw an exception if any are not.
+     * Set up the vulkan instance.
      *
-     * @param availableLayerNames The layer names that are available.
-     * @param requiredLayerNames The layers that we require.
-     * @throws RenderException If required layers are missing.
+     * @param window The window we are setting up to render with.
+     * @throws RenderException If an unrecoverable issue occurs setting up vulkan.
      */
-    private void checkLayers(
-            @NonNull VkLayerProperties.Buffer availableLayerNames,
-            PointerBuffer requiredLayerNames) {
+    private void createVulkanInstance(@NonNull Window window) {
+        try (BufferHolder freeThese = new BufferHolder()) {
+            PointerBuffer requiredExtensionNames = PointerBuffer.allocateDirect(64);
 
-        List<String> missingLayers = new ArrayList<>();
+            populateRequiredExtensions(requiredExtensionNames);
+            requiredExtensionNames.flip();
 
-        for (int i = 0; i < requiredLayerNames.limit(); ++i) {
-            boolean found = false;
+            PointerBuffer requiredLayerNames = null;
 
-            final String required = requiredLayerNames.getStringASCII(i);
-
-            for (int j = 0; j < availableLayerNames.capacity(); ++j) {
-                availableLayerNames.position(j);
-                if (required.equals(availableLayerNames.layerNameString())) {
-                    found = true;
-                    break;
+            if (ENABLE_VALIDATION) {
+                requiredLayerNames = PointerBuffer.allocateDirect(VALIDATION_LAYERS.length);
+                for (String validationLayer : VALIDATION_LAYERS) {
+                    ByteBuffer converted = MemoryUtil.memASCII(validationLayer);
+                    freeThese.add(converted);
+                    requiredLayerNames.put(converted);
                 }
+                requiredLayerNames.flip();
+
+                checkError(vkEnumerateInstanceLayerProperties(intOutput, null));
+
+                VkLayerProperties.Buffer availableLayers =
+                        VkLayerProperties.create(intOutput.get(0));
+                checkError(vkEnumerateInstanceLayerProperties(intOutput, availableLayers));
+
+                checkLayers(availableLayers, requiredLayerNames);
             }
 
-            if (!found) {
-                missingLayers.add(required);
+            ByteBuffer appName = MemoryUtil.memUTF8(window.getTitle());
+            freeThese.add(appName);
+            ByteBuffer engineName = MemoryUtil.memUTF8("Ikala Engine");
+            freeThese.add(engineName);
+
+            var applicationInfo =
+                    VkApplicationInfo.create()
+                            .sType$Default()
+                            .pNext(NULL)
+                            .pApplicationName(appName)
+                            .applicationVersion(1)
+                            .pEngineName(engineName)
+                            .engineVersion(1)
+                            .apiVersion(VK_MAKE_API_VERSION(0, 1, 3, 0));
+
+            var instanceInfo =
+                    VkInstanceCreateInfo.create()
+                            .sType$Default()
+                            .pNext(NULL)
+                            .flags(0)
+                            .pApplicationInfo(applicationInfo)
+                            .ppEnabledLayerNames(requiredLayerNames)
+                            .ppEnabledExtensionNames(requiredExtensionNames);
+
+            VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
+
+            if (ENABLE_VALIDATION) {
+                debugCreateInfo =
+                        VkDebugUtilsMessengerCreateInfoEXT.create()
+                                .sType$Default()
+                                .pNext(NULL)
+                                .flags(0)
+                                .messageSeverity(
+                                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+                                                | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+                                .messageType(
+                                        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+                                                | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
+                                                | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)
+                                .pfnUserCallback(debugLogger)
+                                .pUserData(NULL);
+                instanceInfo.pNext(debugCreateInfo.address());
             }
-        }
 
-        if (!missingLayers.isEmpty()) {
-            final var layerNames = String.join(", ", missingLayers);
-            final var message = SafeResourceLoader.format("Vulkan layers missing: {}", layerNames);
-            log.error(message);
-
-            if (log.isDebugEnabled()) {
-                List<String> layers = new ArrayList<>();
-                for (int j = 0; j < availableLayerNames.capacity(); ++j) {
-                    var layer = availableLayerNames.get(j);
-                    layers.add(
-                            String.format(
-                                    "%s (%s)", layer.layerNameString(), layer.descriptionString()));
-                }
-                log.debug("Found Vulkan layers: {}", String.join(", ", layers));
+            int error = vkCreateInstance(instanceInfo, null, pointerOutput);
+            if (error == VK_ERROR_INCOMPATIBLE_DRIVER) {
+                var message = "Could not find a compatible Vulkan driver";
+                log.error(message);
+                throw new RenderException(message);
+            }
+            if (error == VK_ERROR_EXTENSION_NOT_PRESENT) {
+                var message = "Could not find a required Vulkan extension";
+                log.error(message);
+                throw new RenderException(message);
+            }
+            if (error != 0) {
+                var message =
+                        SafeResourceLoader.format(
+                                "Failed to create a Vulkan instance, error code {}", error);
+                log.error(message);
+                throw new RenderException(message);
             }
 
-            throw new RenderException(message);
-        }
-    }
+            state.instance = new VkInstance(pointerOutput.get(0), instanceInfo);
 
-    /**
-     * Check the swap chain support provided for the surface by the provided device.
-     *
-     * @param deviceInfo The device info to update.
-     */
-    private void updateSwapChainSupport(
-            @NonNull VulkanState.PhysicalDeviceInfo deviceInfo, long surfaceHandle) {
-        deviceInfo.capabilities = VkSurfaceCapabilitiesKHR.create();
+            checkError(vkEnumeratePhysicalDevices(state.instance, intOutput, null));
 
-        checkError(
-                vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-                        deviceInfo.physicalDevice, surfaceHandle, deviceInfo.capabilities));
+            if (intOutput.get(0) <= 0) {
+                log.error("Could not find number of physical devices");
+                return;
+            }
+            PointerBuffer physicalDevices = PointerBuffer.allocateDirect(intOutput.get(0));
+            checkError(vkEnumeratePhysicalDevices(state.instance, intOutput, physicalDevices));
 
-        checkError(
-                vkGetPhysicalDeviceSurfaceFormatsKHR(
-                        deviceInfo.physicalDevice, surfaceHandle, intOutput, null));
+            for (int i = 0; i < physicalDevices.limit(); ++i) {
+                VulkanState.PhysicalDeviceInfo deviceInfo = new VulkanState.PhysicalDeviceInfo();
+                deviceInfo.physicalDevice =
+                        new VkPhysicalDevice(physicalDevices.get(i), state.instance);
 
-        if (intOutput.get(0) > 0) {
-            deviceInfo.formats = VkSurfaceFormatKHR.create(intOutput.get(0));
-            checkError(
-                    vkGetPhysicalDeviceSurfaceFormatsKHR(
-                            deviceInfo.physicalDevice,
-                            surfaceHandle,
-                            intOutput,
-                            deviceInfo.formats));
-        }
+                vkGetPhysicalDeviceFeatures(deviceInfo.physicalDevice, deviceInfo.deviceFeatures);
+                vkGetPhysicalDeviceProperties(
+                        deviceInfo.physicalDevice, deviceInfo.deviceProperties);
 
-        checkError(
-                vkGetPhysicalDeviceSurfacePresentModesKHR(
-                        deviceInfo.physicalDevice, surfaceHandle, intOutput, null));
-        if (intOutput.get(0) > 0) {
-            final int presentModeCount = intOutput.get(0);
-            deviceInfo.presentModes = new int[presentModeCount];
-            int[] arrayForSignatureReasons = new int[] {presentModeCount};
-            checkError(
-                    vkGetPhysicalDeviceSurfacePresentModesKHR(
-                            deviceInfo.physicalDevice,
-                            surfaceHandle,
-                            arrayForSignatureReasons,
-                            deviceInfo.presentModes));
+                vkGetPhysicalDeviceQueueFamilyProperties(
+                        deviceInfo.physicalDevice, intOutput, null);
+                // NOTE(ches) it's important that we use a buffer that doesn't need manual freeing
+                deviceInfo.queueFamilyProperties = VkQueueFamilyProperties.create(intOutput.get(0));
+                vkGetPhysicalDeviceQueueFamilyProperties(
+                        deviceInfo.physicalDevice, intOutput, deviceInfo.queueFamilyProperties);
+
+                state.physicalDevices.add(deviceInfo);
+            }
         }
     }
 
     @Override
-    public void cleanup() {
-        // TODO(ches) complete this
-    }
-
-    /**
-     * Look up the queue family indices for the specified device, update tracking info for the
-     * device.
-     *
-     * @param deviceInfo The device we are interested in.
-     * @param surfaceHandle The surface handle, for checking support.
-     */
-    private void updateQueueFamilies(
-            @NonNull VulkanState.PhysicalDeviceInfo deviceInfo, final long surfaceHandle) {
-        int graphicsFamily = QueueFamilyIndices.MISSING;
-        int presentFamily = QueueFamilyIndices.MISSING;
-
-        try {
-            for (int i = 0; i < deviceInfo.queueFamilyProperties.limit(); ++i) {
-                var family = deviceInfo.queueFamilyProperties.get(i);
-
-                if ((family.queueFlags() & VK_QUEUE_GRAPHICS_BIT) != 0) {
-                    graphicsFamily = i;
-                }
-
-                checkError(
-                        vkGetPhysicalDeviceSurfaceSupportKHR(
-                                deviceInfo.physicalDevice, i, surfaceHandle, intOutput));
-
-                if (intOutput.get(0) == VK_TRUE) {
-                    presentFamily = i;
-                }
-
-                if (graphicsFamily != QueueFamilyIndices.MISSING
-                        && presentFamily != QueueFamilyIndices.MISSING) {
-                    break;
-                }
-            }
-        } finally {
-            deviceInfo.queueFamilyIndices = new QueueFamilyIndices(graphicsFamily, presentFamily);
-            // NOTE(ches) it's important that we use a buffer that doesn't need manual freeing
-            deviceInfo.queueFamilyProperties = null;
-        }
-    }
-
-    @Override
-    public void processResources() {
-        // TODO(ches) complete this
+    public int getPipelineConfig() {
+        // TODO(ches) return config
+        return 0;
     }
 
     @Override
     public TextureLoader getTextureLoader() {
         return null;
+        // TODO(ches) complete this
+    }
+
+    @Override
+    public boolean initialize(@NonNull Window window) {
+        createVulkanInstance(window);
+        createSurface(window);
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VmaVulkanFunctions vkFunctions =
+                    VmaVulkanFunctions.calloc(stack).set(state.instance, state.device.logical);
+
+            VmaAllocatorCreateInfo vmaAllocatorCreateInfo =
+                    VmaAllocatorCreateInfo.calloc(stack)
+                            .flags(VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT)
+                            .physicalDevice(state.device.physical.physicalDevice)
+                            .device(state.device.logical)
+                            .pVulkanFunctions(vkFunctions)
+                            .instance(state.instance);
+            checkError(vmaCreateAllocator(vmaAllocatorCreateInfo, pointerOutput));
+            state.vmaAllocator = pointerOutput.get(0);
+        }
+
+        createSwapchain(window);
+
+        initializeGui(window);
+        return true;
+    }
+
+    /**
+     * Create an IkGui context and configure it.
+     *
+     * @param window The window to pull display info from.
+     */
+    private void initializeGui(@NonNull Window window) {
+        // TODO(ches) clear out ImGui
+        ImGui.createContext();
+
+        ImGuiIO imGuiIO = ImGui.getIO();
+        imGuiIO.setIniFilename(null);
+        imGuiIO.setDisplaySize(window.getWidth(), window.getHeight());
+
+        IkGui.createContext();
+
+        IkIO ikIO = IkGui.getIO();
+        ikIO.iniFilename = null;
+        ikIO.displaySize.set(window.getWidth(), window.getHeight());
+    }
+
+    @Override
+    public void initializeModel(@NonNull Model model) {
+        // TODO(ches) initialize model
+    }
+
+    @Override
+    public void processResources() {
         // TODO(ches) complete this
     }
 
@@ -867,6 +792,13 @@ public class VulkanInstance implements Instance {
         return bestChoice;
     }
 
+    @Override
+    public void setQuality(
+            @NonNull GraphicsSettings.Quality oldQuality,
+            @NonNull GraphicsSettings.Quality newQuality) {
+        // TODO(ches) set up or clean up as needed
+    }
+
     /**
      * Check if the specified device supports the required device extensions.
      *
@@ -893,21 +825,91 @@ public class VulkanInstance implements Instance {
     }
 
     @Override
-    public int getPipelineConfig() {
-        // TODO(ches) return config
-        return 0;
-    }
-
-    @Override
-    public void setQuality(
-            @NonNull GraphicsSettings.Quality oldQuality,
-            @NonNull GraphicsSettings.Quality newQuality) {
-        // TODO(ches) set up or clean up as needed
-    }
-
-    @Override
     public void swapPipeline(final int config) {
         // TODO(ches) complete this
         // TODO(ches) Can we eliminate pipelines as a concept?
+    }
+
+    /**
+     * Look up the queue family indices for the specified device, update tracking info for the
+     * device.
+     *
+     * @param deviceInfo The device we are interested in.
+     * @param surfaceHandle The surface handle, for checking support.
+     */
+    private void updateQueueFamilies(
+            @NonNull VulkanState.PhysicalDeviceInfo deviceInfo, final long surfaceHandle) {
+        int graphicsFamily = QueueFamilyIndices.MISSING;
+        int presentFamily = QueueFamilyIndices.MISSING;
+
+        try {
+            for (int i = 0; i < deviceInfo.queueFamilyProperties.limit(); ++i) {
+                var family = deviceInfo.queueFamilyProperties.get(i);
+
+                if ((family.queueFlags() & VK_QUEUE_GRAPHICS_BIT) != 0) {
+                    graphicsFamily = i;
+                }
+
+                checkError(
+                        vkGetPhysicalDeviceSurfaceSupportKHR(
+                                deviceInfo.physicalDevice, i, surfaceHandle, intOutput));
+
+                if (intOutput.get(0) == VK_TRUE) {
+                    presentFamily = i;
+                }
+
+                if (graphicsFamily != QueueFamilyIndices.MISSING
+                        && presentFamily != QueueFamilyIndices.MISSING) {
+                    break;
+                }
+            }
+        } finally {
+            deviceInfo.queueFamilyIndices = new QueueFamilyIndices(graphicsFamily, presentFamily);
+            // NOTE(ches) it's important that we use a buffer that doesn't need manual freeing
+            deviceInfo.queueFamilyProperties = null;
+        }
+    }
+
+    /**
+     * Check the swap chain support provided for the surface by the provided device.
+     *
+     * @param deviceInfo The device info to update.
+     */
+    private void updateSwapChainSupport(
+            @NonNull VulkanState.PhysicalDeviceInfo deviceInfo, long surfaceHandle) {
+        deviceInfo.capabilities = VkSurfaceCapabilitiesKHR.create();
+
+        checkError(
+                vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+                        deviceInfo.physicalDevice, surfaceHandle, deviceInfo.capabilities));
+
+        checkError(
+                vkGetPhysicalDeviceSurfaceFormatsKHR(
+                        deviceInfo.physicalDevice, surfaceHandle, intOutput, null));
+
+        if (intOutput.get(0) > 0) {
+            deviceInfo.formats = VkSurfaceFormatKHR.create(intOutput.get(0));
+            checkError(
+                    vkGetPhysicalDeviceSurfaceFormatsKHR(
+                            deviceInfo.physicalDevice,
+                            surfaceHandle,
+                            intOutput,
+                            deviceInfo.formats));
+        }
+
+        checkError(
+                vkGetPhysicalDeviceSurfacePresentModesKHR(
+                        deviceInfo.physicalDevice, surfaceHandle, intOutput, null));
+        if (intOutput.get(0) > 0) {
+            final int presentModeCount = intOutput.get(0);
+            deviceInfo.presentModes = new int[presentModeCount];
+            int[] arrayForSignatureReasons = new int[] {presentModeCount};
+            checkError(
+                    vkGetPhysicalDeviceSurfacePresentModesKHR(
+                            deviceInfo.physicalDevice,
+                            surfaceHandle,
+                            arrayForSignatureReasons,
+                            deviceInfo.presentModes));
+        }
     }
 }
