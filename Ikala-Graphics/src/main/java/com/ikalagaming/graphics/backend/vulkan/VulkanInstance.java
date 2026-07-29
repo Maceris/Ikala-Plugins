@@ -508,9 +508,11 @@ public class VulkanInstance implements Instance {
                     vkCreateImageView(state.device.logical, depthViewCreateInfo, null, longOutput));
             final long depthView = longOutput.get(0);
 
-            /*
-             * TODO(ches) store the depth handles somewhere rather than just leaking it all immediately
-             */
+            windowInfo.depthImage =
+                    new TextureInfo()
+                            .texture(depthImage)
+                            .textureAllocation(depthImageAllocation)
+                            .view(depthView);
         }
     }
 

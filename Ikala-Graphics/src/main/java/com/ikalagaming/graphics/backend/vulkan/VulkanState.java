@@ -81,5 +81,6 @@ public class VulkanState {
         public long surfaceHandle = VK_NULL_HANDLE;
         public long swapchainHandle = VK_NULL_HANDLE;
         public long[] swapchainImages = null;
+        public TextureInfo depthImage = null;
     }
 }
