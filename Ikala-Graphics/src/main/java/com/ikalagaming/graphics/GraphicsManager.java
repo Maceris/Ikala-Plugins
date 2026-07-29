@@ -60,6 +60,9 @@ public class GraphicsManager {
     private static double lastRenderTime;
     private static double lastUpdateTime;
 
+    /** The maximum number of frames in flight we have. */
+    public static final int MAX_FRAMES_IN_FLIGHT = 2;
+
     /** The target frames per second that we want to hit. */
     public static final int TARGET_FPS = 144;
 
