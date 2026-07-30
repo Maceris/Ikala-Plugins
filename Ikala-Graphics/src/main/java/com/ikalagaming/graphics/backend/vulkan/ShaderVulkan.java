@@ -34,6 +34,12 @@ public class ShaderVulkan implements Shader {
     /** It's always just main. */
     private static final String ENTRY_POINT = "main";
 
+    /** The VkShaderModule's. */
+    private final long[] shaderModules;
+
+    /** A reference to the state that was used during creation of the shader. */
+    @NonNull private final VulkanState state;
+
     /**
      * Compile a module to SPIR-V and return the VkShaderModule handle.
      *
@@ -152,6 +158,8 @@ public class ShaderVulkan implements Shader {
      */
     public ShaderVulkan(
             @NonNull List<ShaderModuleData> shaderModuleDataList, @NonNull VulkanState state) {
+        this.state = state;
+
         long compiler = shaderc_compiler_initialize();
         long options = shaderc_compiler_initialize();
 
@@ -161,11 +169,11 @@ public class ShaderVulkan implements Shader {
                 options, shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
 
         try {
-            long[] handles = new long[shaderModuleDataList.size()];
+            shaderModules = new long[shaderModuleDataList.size()];
             for (int i = 0; i < shaderModuleDataList.size(); i++) {
-                handles[i] = compileModule(shaderModuleDataList.get(i), state, compiler, options);
+                shaderModules[i] =
+                        compileModule(shaderModuleDataList.get(i), state, compiler, options);
             }
-            // TODO(ches) build pipelines
         } finally {
             shaderc_compile_options_release(options);
             shaderc_compiler_release(compiler);
@@ -174,6 +182,14 @@ public class ShaderVulkan implements Shader {
 
     @Override
     public void bind() {}
+
+    @Override
+    public void free() {
+        for (int i = 0; i < shaderModules.length; i++) {
+            vkDestroyShaderModule(state.device.logical, shaderModules[i], null);
+            shaderModules[i] = VK_NULL_HANDLE;
+        }
+    }
 
     @Override
     public int getProgramID() {

@@ -118,6 +118,11 @@ public class ShaderOpenGL implements Shader {
         glUseProgram(programID);
     }
 
+    @Override
+    public void free() {
+        glDeleteProgram(programID);
+    }
+
     /**
      * Create a shader from code.
      *

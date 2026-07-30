@@ -35,6 +35,12 @@ public interface Shader {
     void bind();
 
     /**
+     * Clean up resources for the shader once totally done with it. It is no longer valid to use the
+     * shader after this is called.
+     */
+    void free();
+
+    /**
      * Returns the unique ID for the program.
      *
      * @return The implementation-specific unique ID.
