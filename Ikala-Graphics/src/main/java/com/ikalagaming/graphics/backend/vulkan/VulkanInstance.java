@@ -71,7 +71,7 @@ public class VulkanInstance implements Instance {
      * @param errorCode The result from a Vulkan function.
      * @throws RenderException If the error code is not 0.
      */
-    private static void checkError(int errorCode) {
+    public static void checkError(int errorCode) {
         if (errorCode != 0) {
             final String errorName =
                     switch (errorCode) {
