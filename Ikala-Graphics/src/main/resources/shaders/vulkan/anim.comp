@@ -1,0 +1,84 @@
+#version 460
+
+const int MAX_WEIGHTS = 4;
+
+// The actual animation frames, for all bones
+layout(std430, binding = 0) readonly buffer AnimationData {
+    mat4 animationData[];
+};
+
+// The offset into animation data per-entity. Will be -1 if not animating right now.
+layout(std430, binding = 1) readonly buffer AnimationOffsets {
+    int animationOffsets[];
+};
+
+// Vertex data for the mesh
+layout(std430, binding = 2) readonly buffer ModelData {
+    float modelData[];
+};
+
+struct BoneWeight {
+    int boneIndex;
+    float weight;
+};
+// Bone weight data for the mesh
+layout(std430, binding = 3) readonly buffer WeightData {
+    BoneWeight boneWeightData[];
+};
+
+// Output of the animation for the mesh
+layout(std430, binding = 4) buffer AnimationTarget {
+    float animationTarget[];
+};
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+vec4 applyTransforms(vec4 value, mat4 transforms[MAX_WEIGHTS]) {
+    vec4 result = vec4(0);
+    for (int i = 0; i < MAX_WEIGHTS; ++i) {
+        result += transforms[i] * value;
+    }
+    return result;
+}
+
+void main()
+{
+    const int baseIdxVertex = int(gl_GlobalInvocationID.x) * 14;
+    const int baseIdxWeights = int(gl_GlobalInvocationID.x) * 8;
+    const int baseIdxAnimation = int(gl_GlobalInvocationID.y);
+    const int animationOffset = animationOffsets[baseIdxAnimation];
+    const int targetOffset = baseIdxAnimation * modelData.length() * 14;
+
+    int currentIndex = baseIdxVertex;
+    mat4 animationTransforms[MAX_WEIGHTS];
+
+    for (int i = 0; i < MAX_WEIGHTS; ++i) {
+        BoneWeight boneWeight = boneWeightData[baseIdxWeights + i];
+
+        if (animationOffset != -1) {
+            animationTransforms[i] = boneWeight.weight * animationData[animationOffset + boneWeight.boneIndex];
+        } else {
+            animationTransforms[i] = mat4(1.0);
+        }
+    }
+
+    vec4 position = vec4(modelData[currentIndex], modelData[currentIndex + 1], modelData[currentIndex + 2], 1);
+    position = applyTransforms(position, animationTransforms);
+    animationTarget[targetOffset + currentIndex] = position.x / position.w;
+    animationTarget[targetOffset + currentIndex + 1] = position.y / position.w;
+    animationTarget[targetOffset + currentIndex + 2] = position.z / position.w;
+
+    for (int i = 0; i < 3; ++i) {
+        // Normal, tangent, and bitangent respectively
+        currentIndex += 3;
+        vec4 value = vec4(modelData[currentIndex], modelData[currentIndex + 1], modelData[currentIndex + 2], 0);
+        value = applyTransforms(value, animationTransforms);
+        animationTarget[targetOffset + currentIndex] = value.x;
+        animationTarget[targetOffset + currentIndex + 1] = value.y;
+        animationTarget[targetOffset + currentIndex + 2] = value.z;
+    }
+
+    currentIndex += 3;
+    animationTarget[targetOffset + currentIndex] = modelData[currentIndex];
+    animationTarget[targetOffset + currentIndex + 1] = modelData[currentIndex + 1];
+}

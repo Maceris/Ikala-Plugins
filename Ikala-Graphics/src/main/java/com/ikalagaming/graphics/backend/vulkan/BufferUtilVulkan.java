@@ -81,7 +81,7 @@ public class BufferUtilVulkan implements BufferUtil {
     @Override
     public Buffer createBuffer(Buffer.@NonNull Type type) {
         // TODO(ches) implement this
-        return null;
+        return new Buffer(0, type);
     }
 
     @Override

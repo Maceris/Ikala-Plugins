@@ -12,14 +12,16 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.BufferHolder;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.backend.base.RenderStage;
+import com.ikalagaming.graphics.backend.base.ShaderMap;
 import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.exceptions.ShaderException;
-import com.ikalagaming.graphics.frontend.GraphicsSettings;
-import com.ikalagaming.graphics.frontend.Instance;
-import com.ikalagaming.graphics.frontend.TextureLoader;
+import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.data.IkIO;
+import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -217,6 +219,12 @@ public class VulkanInstance implements Instance {
 
     /** Tracks the state and handles. */
     private final VulkanState state = new VulkanState();
+
+    private int renderConfig;
+    private Pipeline pipeline;
+    private TextureLoader textureLoader;
+    private ShaderMap shaderMap;
+    private PipelineManagerVulkan pipelineManager;
 
     /**
      * Check that the specified layers are available, and throw an exception if any are not.
@@ -726,14 +734,12 @@ public class VulkanInstance implements Instance {
 
     @Override
     public int getPipelineConfig() {
-        // TODO(ches) return config
-        return 0;
+        return renderConfig;
     }
 
     @Override
     public TextureLoader getTextureLoader() {
-        return null;
-        // TODO(ches) complete this
+        return textureLoader;
     }
 
     @Override
@@ -759,7 +765,14 @@ public class VulkanInstance implements Instance {
         createSwapchain(window);
         createShaderData();
 
+        textureLoader = new TextureLoaderVulkan();
+        shaderMap = new ShaderMap();
         initializeShaders();
+        initializeGui(window);
+        pipelineManager = new PipelineManagerVulkan(window, shaderMap);
+        renderConfig = RenderConfig.builder().withGui().build();
+        pipeline = pipelineManager.getPipeline(renderConfig);
+        pipeline.initialize(window, shaderMap);
 
         createSynchronizationInfo();
 
@@ -769,7 +782,16 @@ public class VulkanInstance implements Instance {
 
     /** Set up the animation shader and uniforms. */
     private void initializeAnimationShader() {
-        // TODO(ches) set this up
+        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        shaderModuleDataList.add(
+                new Shader.ShaderModuleData(
+                        "shaders/vulkan/anim.comp", Shader.Type.COMPUTE, Shader.Location.BUNDLED));
+        var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
+
+        var uniformsMap = new UniformsMapVulkan(shaderProgram.getProgramID());
+        shaderProgram.setUniforms(uniformsMap);
+
+        shaderMap.addShader(RenderStage.Type.ANIMATION, shaderProgram);
     }
 
     /**
@@ -778,7 +800,24 @@ public class VulkanInstance implements Instance {
      * @throws ShaderException If the default filter could not be found or loaded properly.
      */
     private void initializeFilterShader() {
-        // TODO(ches) set this up
+        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        shaderModuleDataList.add(
+                new Shader.ShaderModuleData(
+                        "shaders/vulkan/filters/default.vert",
+                        Shader.Type.VERTEX,
+                        Shader.Location.BUNDLED));
+        shaderModuleDataList.add(
+                new Shader.ShaderModuleData(
+                        "shaders/vulkan/filters/default.frag",
+                        Shader.Type.FRAGMENT,
+                        Shader.Location.BUNDLED));
+        var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
+
+        var uniformsMap = new UniformsMapVulkan(shaderProgram.getProgramID());
+        uniformsMap.createUniform(ShaderUniforms.Filter.SCREEN_TEXTURE);
+        shaderProgram.setUniforms(uniformsMap);
+
+        shaderMap.addShader(RenderStage.Type.FILTER, shaderProgram);
     }
 
     /**
@@ -803,12 +842,117 @@ public class VulkanInstance implements Instance {
 
     /** Set up the GUI shader and uniforms. */
     private void initializeGuiShader() {
-        // TODO(ches) set this up
+        // TODO(ches) remove the imgui part of this
+        {
+            List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+            shaderModuleDataList.add(
+                    new Shader.ShaderModuleData(
+                            "shaders/vulkan/imgui.vert",
+                            Shader.Type.VERTEX,
+                            Shader.Location.BUNDLED));
+            shaderModuleDataList.add(
+                    new Shader.ShaderModuleData(
+                            "shaders/vulkan/imgui.frag",
+                            Shader.Type.FRAGMENT,
+                            Shader.Location.BUNDLED));
+            var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
+
+            var uniformsMap = new UniformsMapVulkan(shaderProgram.getProgramID());
+            uniformsMap.createUniform(ShaderUniforms.GUI.SCALE);
+            shaderProgram.setUniforms(uniformsMap);
+
+            shaderMap.addShader(RenderStage.Type.GUI_LEGACY, shaderProgram);
+        }
+        {
+            List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+            shaderModuleDataList.add(
+                    new Shader.ShaderModuleData(
+                            "shaders/vulkan/ikgui.vert",
+                            Shader.Type.VERTEX,
+                            Shader.Location.BUNDLED));
+            shaderModuleDataList.add(
+                    new Shader.ShaderModuleData(
+                            "shaders/vulkan/ikgui.frag",
+                            Shader.Type.FRAGMENT,
+                            Shader.Location.BUNDLED));
+            var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
+
+            var uniformsMap = new UniformsMapVulkan(shaderProgram.getProgramID());
+            uniformsMap.createUniform(ShaderUniforms.GUI.SCALE);
+            shaderProgram.setUniforms(uniformsMap);
+
+            shaderMap.addShader(RenderStage.Type.GUI, shaderProgram);
+        }
     }
 
     /** Set up the light shader and uniforms. */
     private void initializeLightShader() {
-        // TODO(ches) set this up
+        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        shaderModuleDataList.add(
+                new Shader.ShaderModuleData(
+                        "shaders/vulkan/lights.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
+        shaderModuleDataList.add(
+                new Shader.ShaderModuleData(
+                        "shaders/vulkan/lights.frag",
+                        Shader.Type.FRAGMENT,
+                        Shader.Location.BUNDLED));
+        var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
+
+        var uniformsMap = new UniformsMapVulkan(shaderProgram.getProgramID());
+        uniformsMap.createUniform(ShaderUniforms.Light.BASE_COLOR_SAMPLER);
+        uniformsMap.createUniform(ShaderUniforms.Light.NORMAL_SAMPLER);
+        uniformsMap.createUniform(ShaderUniforms.Light.TANGENT_SAMPLER);
+        uniformsMap.createUniform(ShaderUniforms.Light.MATERIAL_SAMPLER);
+        uniformsMap.createUniform(ShaderUniforms.Light.DEPTH_SAMPLER);
+        uniformsMap.createUniform(ShaderUniforms.Light.INVERSE_PROJECTION_MATRIX);
+        uniformsMap.createUniform(ShaderUniforms.Light.INVERSE_VIEW_MATRIX);
+        uniformsMap.createUniform(
+                ShaderUniforms.Light.AMBIENT_LIGHT
+                        + "."
+                        + ShaderUniforms.Light.AmbientLight.INTENSITY);
+        uniformsMap.createUniform(
+                ShaderUniforms.Light.AMBIENT_LIGHT + "." + ShaderUniforms.Light.AmbientLight.COLOR);
+
+        uniformsMap.createUniform(
+                ShaderUniforms.Light.DIRECTIONAL_LIGHT
+                        + "."
+                        + ShaderUniforms.Light.DirectionalLight.COLOR);
+        uniformsMap.createUniform(
+                ShaderUniforms.Light.DIRECTIONAL_LIGHT
+                        + "."
+                        + ShaderUniforms.Light.DirectionalLight.DIRECTION);
+        uniformsMap.createUniform(
+                ShaderUniforms.Light.DIRECTIONAL_LIGHT
+                        + "."
+                        + ShaderUniforms.Light.DirectionalLight.INTENSITY);
+
+        uniformsMap.createUniform(ShaderUniforms.Light.POINT_LIGHT_COUNT);
+        uniformsMap.createUniform(ShaderUniforms.Light.SPOT_LIGHT_COUNT);
+
+        uniformsMap.createUniform(
+                ShaderUniforms.Light.FOG + "." + ShaderUniforms.Light.Fog.ENABLED);
+        uniformsMap.createUniform(ShaderUniforms.Light.FOG + "." + ShaderUniforms.Light.Fog.COLOR);
+        uniformsMap.createUniform(
+                ShaderUniforms.Light.FOG + "." + ShaderUniforms.Light.Fog.DENSITY);
+
+        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+            uniformsMap.createUniform(ShaderUniforms.Light.SHADOW_MAP_PREFIX + i);
+            uniformsMap.createUniform(
+                    ShaderUniforms.Light.CASCADE_SHADOWS
+                            + "["
+                            + i
+                            + "]."
+                            + ShaderUniforms.Light.CascadeShadow.PROJECTION_VIEW_MATRIX);
+            uniformsMap.createUniform(
+                    ShaderUniforms.Light.CASCADE_SHADOWS
+                            + "["
+                            + i
+                            + "]."
+                            + ShaderUniforms.Light.CascadeShadow.SPLIT_DISTANCE);
+        }
+        shaderProgram.setUniforms(uniformsMap);
+
+        shaderMap.addShader(RenderStage.Type.LIGHT, shaderProgram);
     }
 
     @Override
@@ -818,7 +962,28 @@ public class VulkanInstance implements Instance {
 
     /** Set up the scene shader and uniforms. */
     private void initializeSceneShader() {
-        // TODO(ches) set this up
+        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        shaderModuleDataList.add(
+                new Shader.ShaderModuleData(
+                        "shaders/vulkan/scene.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
+        shaderModuleDataList.add(
+                new Shader.ShaderModuleData(
+                        "shaders/vulkan/scene.frag",
+                        Shader.Type.FRAGMENT,
+                        Shader.Location.BUNDLED));
+        var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
+
+        var uniformsMap = new UniformsMapVulkan(shaderProgram.getProgramID());
+        uniformsMap.createUniform(ShaderUniforms.Scene.MATERIAL_INDEX);
+        uniformsMap.createUniform(ShaderUniforms.Scene.MESH_INDEX);
+        uniformsMap.createUniform(ShaderUniforms.Scene.PROJECTION_MATRIX);
+        uniformsMap.createUniform(ShaderUniforms.Scene.VIEW_MATRIX);
+        uniformsMap.createUniform(ShaderUniforms.Scene.BASE_COLOR_SAMPLER);
+        uniformsMap.createUniform(ShaderUniforms.Scene.NORMAL_SAMPLER);
+
+        shaderProgram.setUniforms(uniformsMap);
+
+        shaderMap.addShader(RenderStage.Type.SCENE, shaderProgram);
     }
 
     /**
@@ -838,12 +1003,41 @@ public class VulkanInstance implements Instance {
 
     /** Set up the shadow shader and uniforms. */
     private void initializeShadowShader() {
-        // TODO(ches) set this up
+        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        shaderModuleDataList.add(
+                new Shader.ShaderModuleData(
+                        "shaders/vulkan/shadow.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
+        var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
+
+        var uniformsMap = new UniformsMapVulkan(shaderProgram.getProgramID());
+        uniformsMap.createUniform(ShaderUniforms.Shadow.PROJECTION_VIEW_MATRIX);
+        shaderProgram.setUniforms(uniformsMap);
+
+        shaderMap.addShader(RenderStage.Type.SHADOW, shaderProgram);
     }
 
     /** Set up the skybox shader and uniforms. */
     private void initializeSkyboxShader() {
-        // TODO(ches) set this up
+        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        shaderModuleDataList.add(
+                new Shader.ShaderModuleData(
+                        "shaders/vulkan/skybox.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
+        shaderModuleDataList.add(
+                new Shader.ShaderModuleData(
+                        "shaders/vulkan/skybox.frag",
+                        Shader.Type.FRAGMENT,
+                        Shader.Location.BUNDLED));
+        var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
+
+        var uniformsMap = new UniformsMapVulkan(shaderProgram.getProgramID());
+        uniformsMap.createUniform(ShaderUniforms.Skybox.PROJECTION_MATRIX);
+        uniformsMap.createUniform(ShaderUniforms.Skybox.VIEW_MATRIX);
+        uniformsMap.createUniform(ShaderUniforms.Skybox.DIFFUSE);
+        uniformsMap.createUniform(ShaderUniforms.Skybox.TEXTURE_SAMPLER);
+        uniformsMap.createUniform(ShaderUniforms.Skybox.HAS_TEXTURE);
+        shaderProgram.setUniforms(uniformsMap);
+
+        shaderMap.addShader(RenderStage.Type.SKYBOX, shaderProgram);
     }
 
     @Override

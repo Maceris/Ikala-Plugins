@@ -6,7 +6,6 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
-import com.ikalagaming.graphics.backend.opengl.ShaderOpenGL;
 import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.frontend.Shader;
@@ -15,6 +14,7 @@ import com.ikalagaming.util.FileUtils;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkShaderModuleCreateInfo;
@@ -39,6 +39,9 @@ public class ShaderVulkan implements Shader {
 
     /** A reference to the state that was used during creation of the shader. */
     @NonNull private final VulkanState state;
+
+    /** The uniform map for this shader. */
+    @Setter private @NonNull UniformsMap uniforms;
 
     /**
      * Compile a module to SPIR-V and return the VkShaderModule handle.
@@ -128,7 +131,7 @@ public class ShaderVulkan implements Shader {
     private static String readModule(@NonNull ShaderModuleData module) {
         if (module.location() == Location.BUNDLED) {
             try (InputStream stream =
-                    ShaderOpenGL.class.getClassLoader().getResourceAsStream(module.shaderFile())) {
+                    ShaderVulkan.class.getClassLoader().getResourceAsStream(module.shaderFile())) {
                 if (stream == null) {
                     reportMissingModule(module);
                 } else {
@@ -160,8 +163,11 @@ public class ShaderVulkan implements Shader {
             @NonNull List<ShaderModuleData> shaderModuleDataList, @NonNull VulkanState state) {
         this.state = state;
 
+        // TODO(ches) do we need a program ID??
+        this.uniforms = new UniformsMapVulkan((int) VK_NULL_HANDLE);
+
         long compiler = shaderc_compiler_initialize();
-        long options = shaderc_compiler_initialize();
+        long options = shaderc_compile_options_initialize();
 
         shaderc_compile_options_set_optimization_level(
                 options, shaderc_optimization_level_performance);
@@ -198,7 +204,7 @@ public class ShaderVulkan implements Shader {
 
     @Override
     public UniformsMap getUniformMap() {
-        return null;
+        return uniforms;
     }
 
     @Override
