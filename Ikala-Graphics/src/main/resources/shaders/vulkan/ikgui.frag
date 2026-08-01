@@ -48,17 +48,17 @@ layout(set = 0, binding = 0) uniform Uniforms {
     vec2 scale;
 };
 
-layout(set = 0, binding = 0) uniform sampler2D txtSampler;
+layout(set = 0, binding = 1) uniform sampler2D txtSampler;
 
-layout(std430, binding = 0) buffer Commands {
+layout(std430, set = 0, binding = 2) buffer Commands {
 	Command commands[];
 };
 
-layout(std430, binding = 1) buffer Points {
+layout(std430, set = 0, binding = 3) buffer Points {
 	Point points[];
 };
 
-layout(std430, binding = 2) buffer PointDetails {
+layout(std430, set = 0, binding = 4) buffer PointDetails {
 	PointDetail pointDetails[];
 };
 

@@ -35,24 +35,24 @@ layout(location = 4) out vec4 outViewPosition;
 layout(location = 5) out vec4 outWorldPosition;
 layout(location = 6) flat out uint outMaterialIdx;
 
-layout(std430, set = 0, binding = 0) buffer Matrices {
-	mat4 modelMatrices[];
-};
-
-layout(std430, set = 0, binding = 1) readonly buffer Materials {
-    Material materials[];
-};
-
-layout(std430, set = 0, binding = 2) readonly buffer MaterialOverrides {
-    uint materialOverrides[];
-};
-
 //TODO(ches) now that these need to be in blocks, figure out the buffer layout again
 layout(set = 0, binding = 0) uniform Uniforms {
     uint materialIndex;
     mat4 projectionMatrix;
     mat4 viewMatrix;
     uint meshIndex;
+};
+
+layout(std430, set = 0, binding = 1) buffer Matrices {
+	mat4 modelMatrices[];
+};
+
+layout(std430, set = 0, binding = 2) readonly buffer Materials {
+    Material materials[];
+};
+
+layout(std430, set = 0, binding = 3) readonly buffer MaterialOverrides {
+    uint materialOverrides[];
 };
 
 void main()

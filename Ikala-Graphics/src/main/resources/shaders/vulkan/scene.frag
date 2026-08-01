@@ -29,16 +29,16 @@ layout(location = 4) in vec4 outViewPosition;
 layout(location = 5) in vec4 outWorldPosition;
 layout(location = 6) flat in uint outMaterialIdx;
 
-layout(std430, binding = 1) readonly buffer Materials {
-    Material materials[];
-};
-
-layout(set = 0, binding = 0) uniform sampler2D bindlessTextures[];
-
 layout(location = 0) out vec4 buffBaseColor;
 layout(location = 1) out vec4 buffNormal;
 layout(location = 2) out vec4 buffTangent;
 layout(location = 3) out uint buffMaterial;
+
+layout(set = 0, set = 0, binding = 0) uniform sampler2D bindlessTextures[];
+
+layout(std430, set = 0, binding = 1) readonly buffer Materials {
+    Material materials[];
+};
 
 void main() {
     Material material = materials[outMaterialIdx];

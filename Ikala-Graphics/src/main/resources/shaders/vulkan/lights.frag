@@ -68,15 +68,6 @@ struct Material
     int textureIndex;
 };
 
-layout(binding = 0) uniform sampler2D baseColorSampler;
-layout(binding = 1) uniform sampler2D normalSampler;
-layout(binding = 2) uniform sampler2D tangentSampler;
-layout(binding = 3) uniform usampler2D materialSampler;
-layout(binding = 4) uniform sampler2D depthSampler;
-layout(binding = 5) uniform sampler2D shadowMap_0;
-layout(binding = 6) uniform sampler2D shadowMap_1;
-layout(binding = 7) uniform sampler2D shadowMap_2;
-
 //TODO(ches) now that these need to be in blocks, figure out the buffer layout again
 layout(set = 0, binding = 0) uniform Uniforms {
     mat4 invProjectionMatrix;
@@ -90,15 +81,24 @@ layout(set = 0, binding = 0) uniform Uniforms {
     CascadeShadow cascadeShadows[NUM_CASCADES];
 };
 
-layout(std430, binding = 0) readonly buffer PointLights {
+layout(set = 0, binding = 1) uniform sampler2D baseColorSampler;
+layout(set = 0, binding = 2) uniform sampler2D normalSampler;
+layout(set = 0, binding = 3) uniform sampler2D tangentSampler;
+layout(set = 0, binding = 4) uniform usampler2D materialSampler;
+layout(set = 0, binding = 5) uniform sampler2D depthSampler;
+layout(set = 0, binding = 6) uniform sampler2D shadowMap_0;
+layout(set = 0, binding = 7) uniform sampler2D shadowMap_1;
+layout(set = 0, binding = 8) uniform sampler2D shadowMap_2;
+
+layout(std430, set = 0, binding = 9) readonly buffer PointLights {
     PointLight pointLights[];
 };
 
-layout(std430, binding = 1) readonly buffer SpotLights {
+layout(std430, set = 0, binding = 10) readonly buffer SpotLights {
     SpotLight spotLights[];
 };
 
-layout(std430, binding = 2) readonly buffer Materials {
+layout(std430, set = 0, binding = 11) readonly buffer Materials {
     Material materials[];
 };
 
