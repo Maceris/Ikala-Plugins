@@ -14,6 +14,7 @@ import com.ikalagaming.graphics.BufferHolder;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.exceptions.RenderException;
+import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.frontend.GraphicsSettings;
 import com.ikalagaming.graphics.frontend.Instance;
 import com.ikalagaming.graphics.frontend.TextureLoader;
@@ -758,12 +759,26 @@ public class VulkanInstance implements Instance {
         createSwapchain(window);
         createShaderData();
 
-        // TODO(ches) setup shaders
+        initializeShaders();
 
         createSynchronizationInfo();
 
         initializeGui(window);
         return true;
+    }
+
+    /** Set up the animation shader and uniforms. */
+    private void initializeAnimationShader() {
+        // TODO(ches) set this up
+    }
+
+    /**
+     * Set up the default filter shader.
+     *
+     * @throws ShaderException If the default filter could not be found or loaded properly.
+     */
+    private void initializeFilterShader() {
+        // TODO(ches) set this up
     }
 
     /**
@@ -786,9 +801,49 @@ public class VulkanInstance implements Instance {
         ikIO.displaySize.set(window.getWidth(), window.getHeight());
     }
 
+    /** Set up the GUI shader and uniforms. */
+    private void initializeGuiShader() {
+        // TODO(ches) set this up
+    }
+
+    /** Set up the light shader and uniforms. */
+    private void initializeLightShader() {
+        // TODO(ches) set this up
+    }
+
     @Override
     public void initializeModel(@NonNull Model model) {
         // TODO(ches) initialize model
+    }
+
+    /** Set up the scene shader and uniforms. */
+    private void initializeSceneShader() {
+        // TODO(ches) set this up
+    }
+
+    /**
+     * Set up the shaders for each stage.
+     *
+     * @throws ShaderException If there was a problem finding or loading shaders.
+     */
+    private void initializeShaders() {
+        initializeAnimationShader();
+        initializeShadowShader();
+        initializeSceneShader();
+        initializeLightShader();
+        initializeSkyboxShader();
+        initializeFilterShader();
+        initializeGuiShader();
+    }
+
+    /** Set up the shadow shader and uniforms. */
+    private void initializeShadowShader() {
+        // TODO(ches) set this up
+    }
+
+    /** Set up the skybox shader and uniforms. */
+    private void initializeSkyboxShader() {
+        // TODO(ches) set this up
     }
 
     @Override
