@@ -283,13 +283,37 @@ public class VulkanInstance implements Instance {
     }
 
     private void createShaderData() {
-        try (MemoryStack stack = MemoryStack.stackPush()) {
+        for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+            state.shaderDataBuffers[i] = new PerFrameData();
+
             // TODO(ches) figure out the shader data size
-            long shaderSize = 1;
+            final long figureOutSize = 1;
+
+            state.shaderDataBuffers[i].animation = createSharedBuffer(figureOutSize);
+            state.shaderDataBuffers[i].filter = createSharedBuffer(figureOutSize);
+            state.shaderDataBuffers[i].gui = createSharedBuffer(figureOutSize);
+            state.shaderDataBuffers[i].guiLegacy = createSharedBuffer(figureOutSize);
+            state.shaderDataBuffers[i].light = createSharedBuffer(figureOutSize);
+            state.shaderDataBuffers[i].scene = createSharedBuffer(figureOutSize);
+            state.shaderDataBuffers[i].shadow = createSharedBuffer(figureOutSize);
+            state.shaderDataBuffers[i].skybox = createSharedBuffer(figureOutSize);
+        }
+
+        // TODO(ches) setup command pools, and coommand buffers * MAX_FRAMES_IN_FLIGHT
+    }
+
+    /**
+     * Create a shared buffer with the given size.
+     *
+     * @param bufferSize The size of the buffer in bytes.
+     * @return The new buffer object.
+     */
+    private SharedBuffer createSharedBuffer(long bufferSize) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
             VkBufferCreateInfo bufferCreateInfo =
                     VkBufferCreateInfo.calloc(stack)
                             .sType$Default()
-                            .size(shaderSize)
+                            .size(bufferSize)
                             .usage(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
             VmaAllocationCreateInfo bufferAllocationCreateInfo =
                     VmaAllocationCreateInfo.calloc(stack)
@@ -301,28 +325,24 @@ public class VulkanInstance implements Instance {
             VkBufferDeviceAddressInfo bufferDeviceAddressInfo =
                     VkBufferDeviceAddressInfo.calloc(stack).sType$Default();
 
-            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
-                state.shaderDataBuffers[i] = new ShaderDataBuffer();
-                ShaderDataBuffer dataBuffer = state.shaderDataBuffers[i];
+            SharedBuffer result = new SharedBuffer();
 
-                checkError(
-                        vmaCreateBuffer(
-                                state.vmaAllocator,
-                                bufferCreateInfo,
-                                bufferAllocationCreateInfo,
-                                longOutput,
-                                pointerOutput,
-                                dataBuffer.allocationInfo));
-                dataBuffer.buffer = longOutput.get(0);
-                dataBuffer.allocation = pointerOutput.get(0);
+            checkError(
+                    vmaCreateBuffer(
+                            state.vmaAllocator,
+                            bufferCreateInfo,
+                            bufferAllocationCreateInfo,
+                            longOutput,
+                            pointerOutput,
+                            result.allocationInfo));
+            result.buffer = longOutput.get(0);
+            result.allocation = pointerOutput.get(0);
 
-                bufferDeviceAddressInfo.buffer(dataBuffer.buffer);
-                dataBuffer.deviceAddress =
-                        vkGetBufferDeviceAddress(state.device.logical, bufferDeviceAddressInfo);
-            }
+            bufferDeviceAddressInfo.buffer(result.buffer);
+            result.deviceAddress =
+                    vkGetBufferDeviceAddress(state.device.logical, bufferDeviceAddressInfo);
+            return result;
         }
-
-        // TODO(ches) setup command pools, and coommand buffers * MAX_FRAMES_IN_FLIGHT
     }
 
     /**
