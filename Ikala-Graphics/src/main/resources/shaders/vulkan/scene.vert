@@ -37,9 +37,10 @@ layout(location = 6) flat out uint outMaterialIdx;
 
 //TODO(ches) now that these need to be in blocks, figure out the buffer layout again
 layout(set = 0, binding = 0) uniform Uniforms {
-    uint materialIndex;
     mat4 projectionMatrix;
     mat4 viewMatrix;
+    //TODO(ches) Do we actually want material index to be a uniform?
+    uint materialIndex;
     uint meshIndex;
 };
 

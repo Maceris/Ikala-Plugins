@@ -32,15 +32,17 @@ struct SpotLight
 struct DirectionalLight
 {
     vec3 color;
+	float _padding;
     vec3 direction;
     float intensity;
 };
 
 struct Fog
 {
-    int enabled;
     vec3 color;
     float density;
+    int enabled;
+    vec3 _padding;
 };
 
 struct CascadeShadow {

@@ -34,9 +34,9 @@ layout(location = 1) out vec4 buffNormal;
 layout(location = 2) out vec4 buffTangent;
 layout(location = 3) out uint buffMaterial;
 
-layout(set = 0, set = 0, binding = 0) uniform sampler2D bindlessTextures[];
+layout(set = 0, binding = 4) uniform sampler2D bindlessTextures[];
 
-layout(std430, set = 0, binding = 1) readonly buffer Materials {
+layout(std430, set = 0, binding = 2) readonly buffer Materials {
     Material materials[];
 };
 

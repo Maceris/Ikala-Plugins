@@ -48,6 +48,7 @@ layout(set = 0, binding = 0) uniform Uniforms {
     vec2 scale;
 };
 
+//TODO(ches) these should be bindless
 layout(set = 0, binding = 1) uniform sampler2D txtSampler;
 
 layout(std430, set = 0, binding = 2) buffer Commands {

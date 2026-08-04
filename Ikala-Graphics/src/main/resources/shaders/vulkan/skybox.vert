@@ -9,6 +9,8 @@ layout(location = 0) out vec2 outTextCoord;
 layout(set = 0, binding = 0) uniform Uniforms {
     mat4 projectionMatrix;
     mat4 viewMatrix;
+    vec4 diffuse;
+    int hasTexture;
 };
 
 void main()
