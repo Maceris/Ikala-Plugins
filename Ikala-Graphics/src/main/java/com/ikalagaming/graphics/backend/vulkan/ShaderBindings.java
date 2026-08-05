@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.backend.vulkan;
 
 import com.ikalagaming.graphics.ShaderUniforms;
 
+/** Bindings and buffer positions for Vulkan shaders. */
 public class ShaderBindings {
 
     /**
@@ -280,6 +281,11 @@ public class ShaderBindings {
 
             /** Total size of the struct in bytes. */
             public static final int SIZEOF = (4 + 4 + 4 + 2) * Float.BYTES + 2 * Integer.BYTES;
+
+            /** Private constructor so this class is not instantiated. */
+            private Material() {
+                cutItOut();
+            }
         }
 
         /**
