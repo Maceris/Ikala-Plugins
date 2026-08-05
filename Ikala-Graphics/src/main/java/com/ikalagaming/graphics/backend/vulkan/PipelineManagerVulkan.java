@@ -62,9 +62,6 @@ public class PipelineManagerVulkan {
     /** A mesh for rendering onto. */
     private QuadMesh quadMesh;
 
-    /** The buffers for indirect drawing of models. */
-    private final RenderBuffers renderBuffers;
-
     /** The map from config value to the associated renderer. */
     private final Map<Integer, Pipeline> renderers;
 
@@ -103,8 +100,6 @@ public class PipelineManagerVulkan {
 
         renderers = new HashMap<>();
         gBuffer = generateGBuffer();
-        renderBuffers = new RenderBuffers();
-        renderBuffers.initialize();
         generateRenderBuffers();
         createGuiFont();
         shadowBuffers = createShadowBuffers();
@@ -115,11 +110,9 @@ public class PipelineManagerVulkan {
         guiMesh = GuiMesh.create();
 
         stageModelMatrixUpdate = new ModelMatrixUpdate();
-        stageSceneRender =
-                new SceneRender(shaders.getShader(RenderStage.Type.SCENE), renderBuffers, gBuffer);
+        stageSceneRender = new SceneRender(shaders.getShader(RenderStage.Type.SCENE), gBuffer);
         stageSceneRenderWireframe =
-                new SceneRenderWireframe(
-                        shaders.getShader(RenderStage.Type.SCENE), renderBuffers, gBuffer);
+                new SceneRenderWireframe(shaders.getShader(RenderStage.Type.SCENE), gBuffer);
         stageGuiRender =
                 new GuiRender(
                         shaders.getShader(RenderStage.Type.GUI_LEGACY),
@@ -130,10 +123,7 @@ public class PipelineManagerVulkan {
         stageSkyboxRender = new SkyboxRender(shaders.getShader(RenderStage.Type.SKYBOX), skybox);
         stageShadowRender =
                 new ShadowRender(
-                        shaders.getShader(RenderStage.Type.SHADOW),
-                        renderBuffers,
-                        cascadeShadows,
-                        shadowBuffers);
+                        shaders.getShader(RenderStage.Type.SHADOW), cascadeShadows, shadowBuffers);
         stageLightRender =
                 new LightRender(
                         shaders.getShader(RenderStage.Type.LIGHT),
@@ -220,7 +210,6 @@ public class PipelineManagerVulkan {
         gBuffer = null;
         GraphicsManager.getDeletionQueue().add(shadowBuffers);
         shadowBuffers = null;
-        renderBuffers.cleanup();
         deleteRenderBuffers();
     }
 

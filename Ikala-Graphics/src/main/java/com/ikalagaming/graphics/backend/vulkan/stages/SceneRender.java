@@ -5,7 +5,6 @@ import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.RenderStage;
-import com.ikalagaming.graphics.backend.vulkan.RenderBuffers;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -35,9 +34,6 @@ public class SceneRender implements RenderStage {
     /** The shader to use for rendering. */
     @NonNull @Setter private Shader shader;
 
-    /** The buffers for indirect drawing of models. */
-    private final RenderBuffers renderBuffers;
-
     /** The g-buffer for rendering geometry to. */
     @Setter @NonNull private Framebuffer gBuffer;
 
@@ -45,15 +41,10 @@ public class SceneRender implements RenderStage {
      * Set up the shadow render stage.
      *
      * @param shader The shader to use for rendering.
-     * @param renderBuffers The buffers for indirect drawing of models.
      * @param gBuffer The depth map buffers.
      */
-    public SceneRender(
-            final @NonNull Shader shader,
-            final @NonNull RenderBuffers renderBuffers,
-            final @NonNull Framebuffer gBuffer) {
+    public SceneRender(final @NonNull Shader shader, final @NonNull Framebuffer gBuffer) {
         this.shader = shader;
-        this.renderBuffers = renderBuffers;
         this.gBuffer = gBuffer;
     }
 
@@ -63,7 +54,7 @@ public class SceneRender implements RenderStage {
      * @param scene The scene we are rendering.
      */
     public void render(Scene scene) {
-        commonSceneRender(scene, shader, renderBuffers, gBuffer);
+        commonSceneRender(scene, shader, gBuffer);
     }
 
     /**
@@ -71,11 +62,9 @@ public class SceneRender implements RenderStage {
      *
      * @param scene The scene we are rendering.
      * @param shader The shader to use for rendering.
-     * @param renderBuffers The buffers for indirect drawing of models.
      * @param gBuffer The depth map buffers.
      */
-    static void commonSceneRender(
-            Scene scene, Shader shader, RenderBuffers renderBuffers, Framebuffer gBuffer) {
+    static void commonSceneRender(Scene scene, Shader shader, Framebuffer gBuffer) {
         var uniformsMap = shader.getUniformMap();
         // TODO(ches) clear the framebuffer
         shader.bind();
