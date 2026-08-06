@@ -923,6 +923,58 @@ public class VulkanInstance implements Instance {
         var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
 
         shaderMap.addShader(RenderStage.Type.SCENE, shaderProgram);
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkVertexInputAttributeDescription.Buffer vertexAttributes =
+                    VkVertexInputAttributeDescription.calloc(5, stack);
+
+            int offset = 0;
+            // Positions
+            vertexAttributes
+                    .get(0)
+                    .binding(0)
+                    .location(0)
+                    .format(VK_FORMAT_R32G32B32_SFLOAT)
+                    .offset(offset);
+            offset += 3 * Float.BYTES;
+
+            // Normals
+            vertexAttributes
+                    .get(0)
+                    .binding(0)
+                    .location(1)
+                    .format(VK_FORMAT_R32G32B32_SFLOAT)
+                    .offset(offset);
+            offset += 3 * Float.BYTES;
+
+            // Tangents
+            vertexAttributes
+                    .get(0)
+                    .binding(0)
+                    .location(2)
+                    .format(VK_FORMAT_R32G32B32_SFLOAT)
+                    .offset(offset);
+            offset += 3 * Float.BYTES;
+
+            // Bitangents
+            vertexAttributes
+                    .get(0)
+                    .binding(0)
+                    .location(3)
+                    .format(VK_FORMAT_R32G32B32_SFLOAT)
+                    .offset(offset);
+            offset += 3 * Float.BYTES;
+
+            // Texture coordinates
+            vertexAttributes
+                    .get(0)
+                    .binding(0)
+                    .location(4)
+                    .format(VK_FORMAT_R32G32_SFLOAT)
+                    .offset(offset);
+
+            // TODO(ches) actually do something with these
+        }
     }
 
     /**
