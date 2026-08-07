@@ -973,6 +973,26 @@ public class VulkanInstance implements Instance {
                     .format(VK_FORMAT_R32G32_SFLOAT)
                     .offset(offset);
 
+            VkPushConstantRange.Buffer pushConstantRanges = VkPushConstantRange.calloc(1, stack);
+            pushConstantRanges.get(0).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT).size(Long.BYTES);
+
+            // TODO(ches) descriptor set layout
+            long descriptorSetLayout = 0;
+
+            LongBuffer descriptorSetLayoutAddress = stack.longs(descriptorSetLayout);
+
+            VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo =
+                    VkPipelineLayoutCreateInfo.calloc(stack);
+            pipelineLayoutCreateInfo
+                    .sType$Default()
+                    .setLayoutCount(1)
+                    .pSetLayouts(descriptorSetLayoutAddress)
+                    .pPushConstantRanges(pushConstantRanges);
+            checkError(
+                    vkCreatePipelineLayout(
+                            state.device.logical, pipelineLayoutCreateInfo, null, longOutput));
+            final long pipelineLayout = longOutput.get(0);
+
             // TODO(ches) actually do something with these
         }
     }
