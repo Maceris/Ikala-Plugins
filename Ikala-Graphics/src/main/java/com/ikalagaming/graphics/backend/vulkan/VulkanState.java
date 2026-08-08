@@ -67,16 +67,30 @@ public class VulkanState {
 
     /** Information about the physical hardware devices. */
     public static class PhysicalDeviceInfo {
-        public VkPhysicalDevice physicalDevice = null;
-        public VkPhysicalDeviceProperties deviceProperties = VkPhysicalDeviceProperties.create();
+
+        /** The surface capability information. */
+        public VkSurfaceCapabilitiesKHR capabilities = null;
+
         public VkPhysicalDeviceFeatures deviceFeatures = VkPhysicalDeviceFeatures.create();
+        public VkPhysicalDeviceProperties deviceProperties = VkPhysicalDeviceProperties.create();
+
+        /** The formats, if any. Null if there are no supported formats. */
+        public VkSurfaceFormatKHR.Buffer formats = null;
 
         /**
-         * An intermediate list of queue family properties. Once we have a surface to work with,
-         * this is cleared out again and {@link #queueFamilyIndices} is populated with the indices
-         * we care about.
+         * The maximum number of sampled image descriptors we can support in descriptor set. We
+         * start off with as much as the engine can handle, and trim it down if the device doesn't
+         * support that many.
          */
-        public VkQueueFamilyProperties.Buffer queueFamilyProperties = null;
+        public int maxBindlessImages = VulkanInstance.MAX_BINDLESS_TEXTURE_COUNT;
+
+        public VkPhysicalDevice physicalDevice = null;
+
+        /**
+         * The present modes (VkPresentModeKHR), if any. Null if there are no supported present
+         * modes.
+         */
+        public int[] presentModes = null;
 
         /**
          * Used once we have a surface to check for graphics support, stores relevant queue family
@@ -85,17 +99,12 @@ public class VulkanState {
          */
         public QueueFamilyIndices queueFamilyIndices = null;
 
-        /** The surface capability information. */
-        public VkSurfaceCapabilitiesKHR capabilities = null;
-
-        /** The formats, if any. Null if there are no supported formats. */
-        public VkSurfaceFormatKHR.Buffer formats = null;
-
         /**
-         * The present modes (VkPresentModeKHR), if any. Null if there are no supported present
-         * modes.
+         * An intermediate list of queue family properties. Once we have a surface to work with,
+         * this is cleared out again and {@link #queueFamilyIndices} is populated with the indices
+         * we care about.
          */
-        public int[] presentModes = null;
+        public VkQueueFamilyProperties.Buffer queueFamilyProperties = null;
     }
 
     /** Info specific to a window. */

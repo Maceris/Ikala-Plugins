@@ -46,6 +46,12 @@ import java.util.List;
 @Slf4j
 public class VulkanInstance implements Instance {
 
+    /**
+     * The maximum number of bindless textures we could support. The actual number that is supported
+     * may be lower due to runtime physical GPU limits, but it will never be higher.
+     */
+    public static final int MAX_BINDLESS_TEXTURE_COUNT = 10_000;
+
     private static final List<String> REQUIRED_INSTANCE_EXTENSION_NAMES =
             List.of(VK_KHR_SURFACE_EXTENSION_NAME);
     private static final ByteBuffer[] REQUIRED_INSTANCE_EXTENSIONS =
@@ -374,11 +380,13 @@ public class VulkanInstance implements Instance {
                     VkPhysicalDeviceVulkan12Features.calloc(stack);
             enabledVk12Features
                     .sType$Default()
-                    .descriptorIndexing(true)
-                    .shaderSampledImageArrayNonUniformIndexing(true)
-                    .descriptorBindingVariableDescriptorCount(true)
-                    .runtimeDescriptorArray(true)
                     .bufferDeviceAddress(true)
+                    .descriptorBindingPartiallyBound(true)
+                    .descriptorBindingSampledImageUpdateAfterBind(true)
+                    .descriptorBindingVariableDescriptorCount(true)
+                    .descriptorIndexing(true)
+                    .runtimeDescriptorArray(true)
+                    .shaderSampledImageArrayNonUniformIndexing(true)
                     .pNext(enabledVk13Features.address());
 
             VkPhysicalDeviceFeatures enabledVkFeatures = VkPhysicalDeviceFeatures.calloc(stack);
@@ -738,6 +746,23 @@ public class VulkanInstance implements Instance {
                 vkGetPhysicalDeviceProperties(
                         deviceInfo.physicalDevice, deviceInfo.deviceProperties);
 
+                try (MemoryStack stack = MemoryStack.stackPush()) {
+                    VkPhysicalDeviceVulkan12Properties vk12Properties =
+                            VkPhysicalDeviceVulkan12Properties.calloc(stack).sType$Default();
+
+                    VkPhysicalDeviceProperties2 deviceProperties2 =
+                            VkPhysicalDeviceProperties2.calloc(stack)
+                                    .sType$Default()
+                                    .pNext(vk12Properties);
+
+                    vkGetPhysicalDeviceProperties2(deviceInfo.physicalDevice, deviceProperties2);
+
+                    deviceInfo.maxBindlessImages =
+                            Math.min(
+                                    deviceInfo.maxBindlessImages,
+                                    vk12Properties.maxDescriptorSetUpdateAfterBindSampledImages());
+                }
+
                 vkGetPhysicalDeviceQueueFamilyProperties(
                         deviceInfo.physicalDevice, intOutput, null);
                 // NOTE(ches) it's important that we use a buffer that doesn't need manual freeing
@@ -976,8 +1001,41 @@ public class VulkanInstance implements Instance {
             VkPushConstantRange.Buffer pushConstantRanges = VkPushConstantRange.calloc(1, stack);
             pushConstantRanges.get(0).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT).size(Long.BYTES);
 
-            // TODO(ches) descriptor set layout
-            long descriptorSetLayout = 0;
+            IntBuffer descriptorVariableFlags =
+                    stack.ints(
+                            /* We might have a varying number of textures */
+                            VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
+                                    /* Not every texture slot should need to be filled */
+                                    | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+                                    /* We will probably update the buffer while figuring out what to render */
+                                    | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT);
+
+            VkDescriptorSetLayoutBindingFlagsCreateInfo descriptorSetBindingFlags =
+                    VkDescriptorSetLayoutBindingFlagsCreateInfo.calloc(stack);
+            descriptorSetBindingFlags
+                    .sType$Default()
+                    .bindingCount(1)
+                    .pBindingFlags(descriptorVariableFlags);
+
+            VkDescriptorSetLayoutBinding.Buffer descriptorSetLayoutBindings =
+                    VkDescriptorSetLayoutBinding.calloc(1, stack);
+            descriptorSetLayoutBindings
+                    .binding(0)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                    .descriptorCount(state.device.physical.maxBindlessImages)
+                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
+
+            VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo =
+                    VkDescriptorSetLayoutCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .pNext(descriptorSetBindingFlags)
+                            .pBindings(descriptorSetLayoutBindings)
+                            .flags(VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT);
+
+            checkError(
+                    vkCreateDescriptorSetLayout(
+                            state.device.logical, descriptorSetLayoutCreateInfo, null, longOutput));
+            final long descriptorSetLayout = longOutput.get(0);
 
             LongBuffer descriptorSetLayoutAddress = stack.longs(descriptorSetLayout);
 
