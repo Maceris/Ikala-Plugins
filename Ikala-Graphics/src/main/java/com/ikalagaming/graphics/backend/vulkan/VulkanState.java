@@ -1,8 +1,10 @@
 package com.ikalagaming.graphics.backend.vulkan;
 
+import static org.lwjgl.vulkan.VK10.VK_FORMAT_UNDEFINED;
 import static org.lwjgl.vulkan.VK13.VK_NULL_HANDLE;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.backend.base.State;
 
 import org.lwjgl.vulkan.*;
 
@@ -10,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Global state for Vulkan. */
-public class VulkanState {
+public class VulkanState implements State {
 
     /** The Vulkan instance. */
     public VkInstance instance = null;
@@ -70,6 +72,9 @@ public class VulkanState {
 
         /** The surface capability information. */
         public VkSurfaceCapabilitiesKHR capabilities = null;
+
+        /** The depth format we selected from among the list that this device supports. */
+        public int depthFormat = VK_FORMAT_UNDEFINED;
 
         public VkPhysicalDeviceFeatures deviceFeatures = VkPhysicalDeviceFeatures.create();
         public VkPhysicalDeviceProperties deviceProperties = VkPhysicalDeviceProperties.create();

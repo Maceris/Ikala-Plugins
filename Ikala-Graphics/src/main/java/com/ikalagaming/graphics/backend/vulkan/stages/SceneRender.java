@@ -1,10 +1,16 @@
 package com.ikalagaming.graphics.backend.vulkan.stages;
 
 import static com.ikalagaming.graphics.ShaderUniforms.Scene.*;
-import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+import static com.ikalagaming.graphics.backend.vulkan.VulkanInstance.checkError;
+import static org.lwjgl.vulkan.VK10.*;
+import static org.lwjgl.vulkan.VK10.vkCreatePipelineLayout;
+import static org.lwjgl.vulkan.VK12.*;
+import static org.lwjgl.vulkan.VK12.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
 
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.RenderStage;
+import com.ikalagaming.graphics.backend.base.State;
+import com.ikalagaming.graphics.backend.vulkan.VulkanState;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -16,10 +22,13 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector4f;
+import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
+import org.lwjgl.vulkan.*;
 
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
+import java.nio.LongBuffer;
 
 /** Handles rendering of scene geometry to the g-buffer. */
 @Slf4j
@@ -37,6 +46,8 @@ public class SceneRender implements RenderStage {
     /** The g-buffer for rendering geometry to. */
     @Setter @NonNull private Framebuffer gBuffer;
 
+    private long pipelineLayout;
+
     /**
      * Set up the shadow render stage.
      *
@@ -46,6 +57,13 @@ public class SceneRender implements RenderStage {
     public SceneRender(final @NonNull Shader shader, final @NonNull Framebuffer gBuffer) {
         this.shader = shader;
         this.gBuffer = gBuffer;
+        this.pipelineLayout = 0;
+    }
+
+    @Override
+    public void initialize(@NonNull State state) {
+        VulkanState vulkanState = (VulkanState) state;
+        setupPipelineLayout(vulkanState);
     }
 
     /**
@@ -219,5 +237,169 @@ public class SceneRender implements RenderStage {
 
         MemoryUtil.memFree(materialData);
         scene.getMaterialCache().setDirty(false);
+    }
+
+    private void setupPipelineLayout(@NonNull VulkanState state) {
+
+        long descriptorSetLayout = VK_NULL_HANDLE;
+        long pipelineLayout = VK_NULL_HANDLE;
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            LongBuffer longOutput = stack.callocLong(1);
+
+            VkPushConstantRange.Buffer pushConstantRanges = VkPushConstantRange.calloc(1, stack);
+            pushConstantRanges.get(0).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT).size(Long.BYTES);
+
+            IntBuffer descriptorVariableFlags =
+                    stack.ints(
+                            /* We might have a varying number of textures */
+                            VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
+                                    /* Not every texture slot should need to be filled */
+                                    | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+                                    /* We will probably update the buffer while figuring out what to render */
+                                    | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT);
+
+            VkDescriptorSetLayoutBindingFlagsCreateInfo descriptorSetBindingFlags =
+                    VkDescriptorSetLayoutBindingFlagsCreateInfo.calloc(stack);
+            descriptorSetBindingFlags
+                    .sType$Default()
+                    .bindingCount(1)
+                    .pBindingFlags(descriptorVariableFlags);
+
+            VkDescriptorSetLayoutBinding.Buffer descriptorSetLayoutBindings =
+                    VkDescriptorSetLayoutBinding.calloc(1, stack);
+            descriptorSetLayoutBindings
+                    .binding(0)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                    .descriptorCount(state.device.physical.maxBindlessImages)
+                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
+
+            VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo =
+                    VkDescriptorSetLayoutCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .pNext(descriptorSetBindingFlags)
+                            .pBindings(descriptorSetLayoutBindings)
+                            .flags(VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT);
+
+            checkError(
+                    vkCreateDescriptorSetLayout(
+                            state.device.logical, descriptorSetLayoutCreateInfo, null, longOutput));
+            descriptorSetLayout = longOutput.get(0);
+
+            LongBuffer descriptorSetLayoutAddress = stack.longs(descriptorSetLayout);
+
+            VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo =
+                    VkPipelineLayoutCreateInfo.calloc(stack);
+            pipelineLayoutCreateInfo
+                    .sType$Default()
+                    .setLayoutCount(1)
+                    .pSetLayouts(descriptorSetLayoutAddress)
+                    .pPushConstantRanges(pushConstantRanges);
+            checkError(
+                    vkCreatePipelineLayout(
+                            state.device.logical, pipelineLayoutCreateInfo, null, longOutput));
+            pipelineLayout = longOutput.get(0);
+        }
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            LongBuffer longOutput = stack.callocLong(1);
+
+            VkVertexInputBindingDescription.Buffer vertexBindings =
+                    VkVertexInputBindingDescription.calloc(1, stack);
+            vertexBindings
+                    .get(0)
+                    .binding(0)
+                    .stride((3 * 4 + 2) * Float.BYTES)
+                    .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
+
+            VkVertexInputAttributeDescription.Buffer vertexAttributes =
+                    VkVertexInputAttributeDescription.calloc(5, stack);
+
+            int offset = 0;
+            // Positions
+            vertexAttributes
+                    .get(0)
+                    .binding(0)
+                    .location(0)
+                    .format(VK_FORMAT_R32G32B32_SFLOAT)
+                    .offset(offset);
+            offset += 3 * Float.BYTES;
+
+            // Normals
+            vertexAttributes
+                    .get(0)
+                    .binding(0)
+                    .location(1)
+                    .format(VK_FORMAT_R32G32B32_SFLOAT)
+                    .offset(offset);
+            offset += 3 * Float.BYTES;
+
+            // Tangents
+            vertexAttributes
+                    .get(0)
+                    .binding(0)
+                    .location(2)
+                    .format(VK_FORMAT_R32G32B32_SFLOAT)
+                    .offset(offset);
+            offset += 3 * Float.BYTES;
+
+            // Bitangents
+            vertexAttributes
+                    .get(0)
+                    .binding(0)
+                    .location(3)
+                    .format(VK_FORMAT_R32G32B32_SFLOAT)
+                    .offset(offset);
+            offset += 3 * Float.BYTES;
+
+            // Texture coordinates
+            vertexAttributes
+                    .get(0)
+                    .binding(0)
+                    .location(4)
+                    .format(VK_FORMAT_R32G32_SFLOAT)
+                    .offset(offset);
+
+            VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo =
+                    VkPipelineVertexInputStateCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .pVertexBindingDescriptions(vertexBindings)
+                            .pVertexAttributeDescriptions(vertexAttributes);
+
+            VkPipelineInputAssemblyStateCreateInfo inputAssemblyState =
+                    VkPipelineInputAssemblyStateCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+
+            VkPipelineViewportStateCreateInfo viewportState =
+                    VkPipelineViewportStateCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .viewportCount(1)
+                            .scissorCount(1);
+
+            IntBuffer dynamicStates =
+                    stack.ints(VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR);
+            VkPipelineDynamicStateCreateInfo dynamicState =
+                    VkPipelineDynamicStateCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .pDynamicStates(dynamicStates);
+
+            VkPipelineDepthStencilStateCreateInfo depthStencilState =
+                    VkPipelineDepthStencilStateCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .depthTestEnable(true)
+                            .depthWriteEnable(true)
+                            .depthCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
+
+            IntBuffer imageFormat = stack.ints(VK_FORMAT_R8G8B8A8_SRGB);
+
+            VkPipelineRenderingCreateInfo renderingCreateInfo =
+                    VkPipelineRenderingCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .colorAttachmentCount(1)
+                            .pColorAttachmentFormats(imageFormat)
+                            .depthAttachmentFormat(state.device.physical.depthFormat);
+        }
+        // TODO(ches) finish this
     }
 }

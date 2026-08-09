@@ -526,27 +526,6 @@ public class VulkanInstance implements Instance {
                 windowInfo.renderCompleteSemaphores[i] = longOutput.get(0);
             }
 
-            int depthFormat = VK_FORMAT_UNDEFINED;
-            final int[] depthFormatList =
-                    new int[] {VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT};
-            for (int format : depthFormatList) {
-                VkFormatProperties2 formatProperties =
-                        VkFormatProperties2.calloc(stack).sType$Default();
-                vkGetPhysicalDeviceFormatProperties2(
-                        state.device.physical.physicalDevice, format, formatProperties);
-                if ((formatProperties.formatProperties().optimalTilingFeatures()
-                                & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
-                        != 0) {
-                    depthFormat = format;
-                    break;
-                }
-            }
-            if (depthFormat == VK_FORMAT_UNDEFINED) {
-                // Can't happen (tm) unless the spec changes, log error and barrel forwards until
-                // something breaks
-                log.error("Couldn't find a desirable depth format");
-            }
-
             VkExtent3D depthExtent =
                     VkExtent3D.calloc(stack).set(window.getWidth(), window.getHeight(), 1);
 
@@ -554,7 +533,7 @@ public class VulkanInstance implements Instance {
                     VkImageCreateInfo.calloc(stack)
                             .sType$Default()
                             .imageType(VK_IMAGE_TYPE_2D)
-                            .format(depthFormat)
+                            .format(state.device.physical.depthFormat)
                             .extent(depthExtent)
                             .mipLevels(1)
                             .arrayLayers(1)
@@ -590,7 +569,7 @@ public class VulkanInstance implements Instance {
                             .sType$Default()
                             .image(depthImage)
                             .viewType(VK_IMAGE_VIEW_TYPE_2D)
-                            .format(depthFormat)
+                            .format(state.device.physical.depthFormat)
                             .subresourceRange(depthViewSubresourceRange);
 
             checkError(
@@ -761,6 +740,31 @@ public class VulkanInstance implements Instance {
                             Math.min(
                                     deviceInfo.maxBindlessImages,
                                     vk12Properties.maxDescriptorSetUpdateAfterBindSampledImages());
+                }
+
+                try (MemoryStack stack = MemoryStack.stackPush()) {
+                    int depthFormat = VK_FORMAT_UNDEFINED;
+                    final int[] depthFormatList =
+                            new int[] {VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT};
+                    for (int format : depthFormatList) {
+                        VkFormatProperties2 formatProperties =
+                                VkFormatProperties2.calloc(stack).sType$Default();
+                        vkGetPhysicalDeviceFormatProperties2(
+                                state.device.physical.physicalDevice, format, formatProperties);
+                        if ((formatProperties.formatProperties().optimalTilingFeatures()
+                                        & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+                                != 0) {
+                            depthFormat = format;
+                            break;
+                        }
+                    }
+                    if (depthFormat == VK_FORMAT_UNDEFINED) {
+                        // Can't happen (tm) unless the spec changes, log error and barrel forwards
+                        // until
+                        // something breaks
+                        log.error("Couldn't find a desirable depth format");
+                    }
+                    state.device.physical.depthFormat = depthFormat;
                 }
 
                 vkGetPhysicalDeviceQueueFamilyProperties(
@@ -948,111 +952,6 @@ public class VulkanInstance implements Instance {
         var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
 
         shaderMap.addShader(RenderStage.Type.SCENE, shaderProgram);
-
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            VkVertexInputAttributeDescription.Buffer vertexAttributes =
-                    VkVertexInputAttributeDescription.calloc(5, stack);
-
-            int offset = 0;
-            // Positions
-            vertexAttributes
-                    .get(0)
-                    .binding(0)
-                    .location(0)
-                    .format(VK_FORMAT_R32G32B32_SFLOAT)
-                    .offset(offset);
-            offset += 3 * Float.BYTES;
-
-            // Normals
-            vertexAttributes
-                    .get(0)
-                    .binding(0)
-                    .location(1)
-                    .format(VK_FORMAT_R32G32B32_SFLOAT)
-                    .offset(offset);
-            offset += 3 * Float.BYTES;
-
-            // Tangents
-            vertexAttributes
-                    .get(0)
-                    .binding(0)
-                    .location(2)
-                    .format(VK_FORMAT_R32G32B32_SFLOAT)
-                    .offset(offset);
-            offset += 3 * Float.BYTES;
-
-            // Bitangents
-            vertexAttributes
-                    .get(0)
-                    .binding(0)
-                    .location(3)
-                    .format(VK_FORMAT_R32G32B32_SFLOAT)
-                    .offset(offset);
-            offset += 3 * Float.BYTES;
-
-            // Texture coordinates
-            vertexAttributes
-                    .get(0)
-                    .binding(0)
-                    .location(4)
-                    .format(VK_FORMAT_R32G32_SFLOAT)
-                    .offset(offset);
-
-            VkPushConstantRange.Buffer pushConstantRanges = VkPushConstantRange.calloc(1, stack);
-            pushConstantRanges.get(0).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT).size(Long.BYTES);
-
-            IntBuffer descriptorVariableFlags =
-                    stack.ints(
-                            /* We might have a varying number of textures */
-                            VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
-                                    /* Not every texture slot should need to be filled */
-                                    | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
-                                    /* We will probably update the buffer while figuring out what to render */
-                                    | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT);
-
-            VkDescriptorSetLayoutBindingFlagsCreateInfo descriptorSetBindingFlags =
-                    VkDescriptorSetLayoutBindingFlagsCreateInfo.calloc(stack);
-            descriptorSetBindingFlags
-                    .sType$Default()
-                    .bindingCount(1)
-                    .pBindingFlags(descriptorVariableFlags);
-
-            VkDescriptorSetLayoutBinding.Buffer descriptorSetLayoutBindings =
-                    VkDescriptorSetLayoutBinding.calloc(1, stack);
-            descriptorSetLayoutBindings
-                    .binding(0)
-                    .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                    .descriptorCount(state.device.physical.maxBindlessImages)
-                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
-
-            VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo =
-                    VkDescriptorSetLayoutCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .pNext(descriptorSetBindingFlags)
-                            .pBindings(descriptorSetLayoutBindings)
-                            .flags(VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT);
-
-            checkError(
-                    vkCreateDescriptorSetLayout(
-                            state.device.logical, descriptorSetLayoutCreateInfo, null, longOutput));
-            final long descriptorSetLayout = longOutput.get(0);
-
-            LongBuffer descriptorSetLayoutAddress = stack.longs(descriptorSetLayout);
-
-            VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo =
-                    VkPipelineLayoutCreateInfo.calloc(stack);
-            pipelineLayoutCreateInfo
-                    .sType$Default()
-                    .setLayoutCount(1)
-                    .pSetLayouts(descriptorSetLayoutAddress)
-                    .pPushConstantRanges(pushConstantRanges);
-            checkError(
-                    vkCreatePipelineLayout(
-                            state.device.logical, pipelineLayoutCreateInfo, null, longOutput));
-            final long pipelineLayout = longOutput.get(0);
-
-            // TODO(ches) actually do something with these
-        }
     }
 
     /**
