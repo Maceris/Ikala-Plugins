@@ -110,7 +110,8 @@ public class PipelineManagerVulkan {
         guiMesh = GuiMesh.create();
 
         stageModelMatrixUpdate = new ModelMatrixUpdate();
-        stageSceneRender = new SceneRender(shaders.getShader(RenderStage.Type.SCENE), gBuffer);
+        stageSceneRender =
+                new SceneRender((ShaderVulkan) shaders.getShader(RenderStage.Type.SCENE), gBuffer);
         stageSceneRenderWireframe =
                 new SceneRenderWireframe(shaders.getShader(RenderStage.Type.SCENE), gBuffer);
         stageGuiRender =

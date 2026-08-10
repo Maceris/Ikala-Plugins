@@ -750,7 +750,7 @@ public class VulkanInstance implements Instance {
                         VkFormatProperties2 formatProperties =
                                 VkFormatProperties2.calloc(stack).sType$Default();
                         vkGetPhysicalDeviceFormatProperties2(
-                                state.device.physical.physicalDevice, format, formatProperties);
+                                deviceInfo.physicalDevice, format, formatProperties);
                         if ((formatProperties.formatProperties().optimalTilingFeatures()
                                         & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
                                 != 0) {
@@ -764,7 +764,7 @@ public class VulkanInstance implements Instance {
                         // something breaks
                         log.error("Couldn't find a desirable depth format");
                     }
-                    state.device.physical.depthFormat = depthFormat;
+                    deviceInfo.depthFormat = depthFormat;
                 }
 
                 vkGetPhysicalDeviceQueueFamilyProperties(

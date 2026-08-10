@@ -10,6 +10,7 @@ import static org.lwjgl.vulkan.VK12.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
+import com.ikalagaming.graphics.backend.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.backend.vulkan.VulkanState;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.MaterialCache;
@@ -41,12 +42,14 @@ public class SceneRender implements RenderStage {
     static final int MATERIAL_OVERRIDES_BINDING = 2;
 
     /** The shader to use for rendering. */
-    @NonNull @Setter private Shader shader;
+    @NonNull @Setter private ShaderVulkan shader;
 
     /** The g-buffer for rendering geometry to. */
     @Setter @NonNull private Framebuffer gBuffer;
 
-    private long pipelineLayout;
+    private long descriptorSetLayout = VK_NULL_HANDLE;
+    private long pipelineLayout = VK_NULL_HANDLE;
+    private long pipeline = VK_NULL_HANDLE;
 
     /**
      * Set up the shadow render stage.
@@ -54,7 +57,7 @@ public class SceneRender implements RenderStage {
      * @param shader The shader to use for rendering.
      * @param gBuffer The depth map buffers.
      */
-    public SceneRender(final @NonNull Shader shader, final @NonNull Framebuffer gBuffer) {
+    public SceneRender(final @NonNull ShaderVulkan shader, final @NonNull Framebuffer gBuffer) {
         this.shader = shader;
         this.gBuffer = gBuffer;
         this.pipelineLayout = 0;
@@ -63,7 +66,8 @@ public class SceneRender implements RenderStage {
     @Override
     public void initialize(@NonNull State state) {
         VulkanState vulkanState = (VulkanState) state;
-        setupPipelineLayout(vulkanState);
+        createPipelineLayout(vulkanState);
+        createPipeline(vulkanState);
     }
 
     /**
@@ -239,11 +243,8 @@ public class SceneRender implements RenderStage {
         scene.getMaterialCache().setDirty(false);
     }
 
-    private void setupPipelineLayout(@NonNull VulkanState state) {
-
-        long descriptorSetLayout = VK_NULL_HANDLE;
-        long pipelineLayout = VK_NULL_HANDLE;
-
+    private void createPipelineLayout(@NonNull VulkanState state) {
+        // TODO(ches) check over this and make sure it matches the layout
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
@@ -300,7 +301,10 @@ public class SceneRender implements RenderStage {
                             state.device.logical, pipelineLayoutCreateInfo, null, longOutput));
             pipelineLayout = longOutput.get(0);
         }
+    }
 
+    private void createPipeline(@NonNull VulkanState state) {
+        // TODO(ches) check over this and make sure it matches the actual shader
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
@@ -399,7 +403,51 @@ public class SceneRender implements RenderStage {
                             .colorAttachmentCount(1)
                             .pColorAttachmentFormats(imageFormat)
                             .depthAttachmentFormat(state.device.physical.depthFormat);
+
+            VkPipelineColorBlendAttachmentState.Buffer blendAttachments =
+                    VkPipelineColorBlendAttachmentState.calloc(1, stack);
+            blendAttachments.get(0).colorWriteMask(0xF);
+            VkPipelineColorBlendStateCreateInfo colorBlendState =
+                    VkPipelineColorBlendStateCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .attachmentCount(1)
+                            .pAttachments(blendAttachments);
+            VkPipelineRasterizationStateCreateInfo rasterizationState =
+                    VkPipelineRasterizationStateCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .lineWidth(1.0f);
+            VkPipelineMultisampleStateCreateInfo multisampleState =
+                    VkPipelineMultisampleStateCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .rasterizationSamples(VK_SAMPLE_COUNT_1_BIT);
+
+            VkGraphicsPipelineCreateInfo.Buffer pipelineCreateInfos =
+                    VkGraphicsPipelineCreateInfo.calloc(1, stack);
+            pipelineCreateInfos
+                    .get(0)
+                    .sType$Default()
+                    .pNext(renderingCreateInfo)
+                    .stageCount(shader.shaderModules.length)
+                    .pStages(shader.shaderStages)
+                    .pVertexInputState(vertexInputStateCreateInfo)
+                    .pInputAssemblyState(inputAssemblyState)
+                    .pViewportState(viewportState)
+                    .pRasterizationState(rasterizationState)
+                    .pMultisampleState(multisampleState)
+                    .pDepthStencilState(depthStencilState)
+                    .pColorBlendState(colorBlendState)
+                    .pDynamicState(dynamicState)
+                    .layout(pipelineLayout);
+
+            checkError(
+                    vkCreateGraphicsPipelines(
+                            state.device.logical,
+                            VK_NULL_HANDLE,
+                            pipelineCreateInfos,
+                            null,
+                            longOutput));
+
+            pipeline = longOutput.get(0);
         }
-        // TODO(ches) finish this
     }
 }

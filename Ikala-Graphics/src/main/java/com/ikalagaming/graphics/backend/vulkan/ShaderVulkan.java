@@ -16,6 +16,8 @@ import com.ikalagaming.util.SafeResourceLoader;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
+import org.lwjgl.vulkan.VkPipelineShaderStageCreateInfo;
 import org.lwjgl.vulkan.VkShaderModuleCreateInfo;
 
 import java.io.File;
@@ -33,8 +35,13 @@ public class ShaderVulkan implements Shader {
     /** It's always just main. */
     private static final String ENTRY_POINT = "main";
 
+    private static final ByteBuffer ENTRY_POINT_AS_BUFFER = MemoryUtil.memASCII(ENTRY_POINT);
+
     /** The VkShaderModule's. */
-    private final long[] shaderModules;
+    public final long[] shaderModules;
+
+    /** The create info for the shader stages. */
+    public VkPipelineShaderStageCreateInfo.Buffer shaderStages;
 
     /** A reference to the state that was used during creation of the shader. */
     @NonNull private final VulkanState state;
@@ -58,7 +65,7 @@ public class ShaderVulkan implements Shader {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             String sourceCode = readModule(moduleData);
 
-            int shaderType = mapShaderType(moduleData.shaderType());
+            int shaderType = mapShaderTypeToShaderc(moduleData.shaderType());
             String shaderName = Paths.get(moduleData.shaderFile()).getFileName().toString();
 
             result =
@@ -93,11 +100,25 @@ public class ShaderVulkan implements Shader {
      * @param type The type of shader.
      * @return The corresponding Shaderc type.
      */
-    private static int mapShaderType(@NonNull Shader.Type type) {
+    private static int mapShaderTypeToShaderc(@NonNull Shader.Type type) {
         return switch (type) {
             case VERTEX -> shaderc_vertex_shader;
             case FRAGMENT -> shaderc_fragment_shader;
             case COMPUTE -> shaderc_compute_shader;
+        };
+    }
+
+    /**
+     * Map the shader type to the Vulkan shader stage bit.
+     *
+     * @param type The type of shader.
+     * @return The corresponding Vulkan shader stage.
+     */
+    private static int mapShaderTypeToVulkanStage(@NonNull Shader.Type type) {
+        return switch (type) {
+            case VERTEX -> VK_SHADER_STAGE_VERTEX_BIT;
+            case FRAGMENT -> VK_SHADER_STAGE_FRAGMENT_BIT;
+            case COMPUTE -> VK_SHADER_STAGE_COMPUTE_BIT;
         };
     }
 
@@ -167,11 +188,19 @@ public class ShaderVulkan implements Shader {
         shaderc_compile_options_set_target_env(
                 options, shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
 
+        shaderStages = VkPipelineShaderStageCreateInfo.calloc(shaderModuleDataList.size());
+
         try {
             shaderModules = new long[shaderModuleDataList.size()];
             for (int i = 0; i < shaderModuleDataList.size(); i++) {
-                shaderModules[i] =
-                        compileModule(shaderModuleDataList.get(i), state, compiler, options);
+                ShaderModuleData data = shaderModuleDataList.get(i);
+                shaderModules[i] = compileModule(data, state, compiler, options);
+                shaderStages
+                        .get(i)
+                        .sType$Default()
+                        .stage(mapShaderTypeToVulkanStage(data.shaderType()))
+                        .module(shaderModules[i])
+                        .pName(ENTRY_POINT_AS_BUFFER);
             }
         } finally {
             shaderc_compile_options_release(options);
@@ -184,9 +213,15 @@ public class ShaderVulkan implements Shader {
 
     @Override
     public void free() {
-        for (int i = 0; i < shaderModules.length; i++) {
-            vkDestroyShaderModule(state.device.logical, shaderModules[i], null);
-            shaderModules[i] = VK_NULL_HANDLE;
+        if (shaderStages != null) {
+            shaderStages.free();
+            shaderStages = null;
+        }
+        if (shaderModules != null) {
+            for (int i = 0; i < shaderModules.length; i++) {
+                vkDestroyShaderModule(state.device.logical, shaderModules[i], null);
+                shaderModules[i] = VK_NULL_HANDLE;
+            }
         }
     }
 
