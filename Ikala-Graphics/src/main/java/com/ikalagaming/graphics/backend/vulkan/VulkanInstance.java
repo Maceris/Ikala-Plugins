@@ -593,10 +593,8 @@ public class VulkanInstance implements Instance {
                             .sType$Default()
                             .flags(VK_FENCE_CREATE_SIGNALED_BIT);
 
-            assert state.fences != null
-                    && state.fences.length == GraphicsManager.MAX_FRAMES_IN_FLIGHT;
-            assert state.imageAcquiredSemaphores != null
-                    && state.imageAcquiredSemaphores.length == GraphicsManager.MAX_FRAMES_IN_FLIGHT;
+            assert state.fences.length == GraphicsManager.MAX_FRAMES_IN_FLIGHT;
+            assert state.imageAcquiredSemaphores.length == GraphicsManager.MAX_FRAMES_IN_FLIGHT;
 
             for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
                 checkError(vkCreateFence(state.device.logical, fenceCreateInfo, null, longOutput));
@@ -759,9 +757,9 @@ public class VulkanInstance implements Instance {
                         }
                     }
                     if (depthFormat == VK_FORMAT_UNDEFINED) {
-                        // Can't happen (tm) unless the spec changes, log error and barrel forwards
-                        // until
-                        // something breaks
+                        /*
+                         * Can't happen (tm) unless the spec changes, log error and barrel forwards until something breaks
+                         */
                         log.error("Couldn't find a desirable depth format");
                     }
                     deviceInfo.depthFormat = depthFormat;

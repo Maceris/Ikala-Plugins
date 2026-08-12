@@ -315,6 +315,9 @@ public class ShaderBindings {
         /** The binding point for the textures buffer. */
         public static final int TEXTURES_BINDING = 4;
 
+        /** The binding point for the uniforms buffer. */
+        public static final int UNIFORMS_BINDING = 0;
+
         /** The offset into the uniforms for the cameras view matrix. */
         public static final int VIEW_MATRIX = 4 * 4 * Float.BYTES;
 

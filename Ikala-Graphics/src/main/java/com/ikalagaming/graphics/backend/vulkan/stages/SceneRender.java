@@ -10,6 +10,7 @@ import static org.lwjgl.vulkan.VK12.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
+import com.ikalagaming.graphics.backend.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.backend.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.backend.vulkan.VulkanState;
 import com.ikalagaming.graphics.frontend.*;
@@ -244,7 +245,6 @@ public class SceneRender implements RenderStage {
     }
 
     private void createPipelineLayout(@NonNull VulkanState state) {
-        // TODO(ches) check over this and make sure it matches the layout
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
@@ -264,13 +264,33 @@ public class SceneRender implements RenderStage {
                     VkDescriptorSetLayoutBindingFlagsCreateInfo.calloc(stack);
             descriptorSetBindingFlags
                     .sType$Default()
-                    .bindingCount(1)
+                    .bindingCount(5)
                     .pBindingFlags(descriptorVariableFlags);
 
             VkDescriptorSetLayoutBinding.Buffer descriptorSetLayoutBindings =
-                    VkDescriptorSetLayoutBinding.calloc(1, stack);
+                    VkDescriptorSetLayoutBinding.calloc(5, stack);
             descriptorSetLayoutBindings
-                    .binding(0)
+                    .binding(ShaderBindings.Scene.UNIFORMS_BINDING)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+                    .descriptorCount(1)
+                    .stageFlags(VK_SHADER_STAGE_VERTEX_BIT);
+            descriptorSetLayoutBindings
+                    .binding(ShaderBindings.Scene.MODEL_MATRICES_BINDING)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                    .descriptorCount(1)
+                    .stageFlags(VK_SHADER_STAGE_VERTEX_BIT);
+            descriptorSetLayoutBindings
+                    .binding(ShaderBindings.Scene.MATERIALS_BINDING)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                    .descriptorCount(1)
+                    .stageFlags(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+            descriptorSetLayoutBindings
+                    .binding(ShaderBindings.Scene.MATERIAL_OVERRIDES_BINDING)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                    .descriptorCount(1)
+                    .stageFlags(VK_SHADER_STAGE_VERTEX_BIT);
+            descriptorSetLayoutBindings
+                    .binding(ShaderBindings.Scene.TEXTURES_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
                     .descriptorCount(state.device.physical.maxBindlessImages)
                     .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -304,17 +324,8 @@ public class SceneRender implements RenderStage {
     }
 
     private void createPipeline(@NonNull VulkanState state) {
-        // TODO(ches) check over this and make sure it matches the actual shader
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
-
-            VkVertexInputBindingDescription.Buffer vertexBindings =
-                    VkVertexInputBindingDescription.calloc(1, stack);
-            vertexBindings
-                    .get(0)
-                    .binding(0)
-                    .stride((3 * 4 + 2) * Float.BYTES)
-                    .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
 
             VkVertexInputAttributeDescription.Buffer vertexAttributes =
                     VkVertexInputAttributeDescription.calloc(5, stack);
@@ -363,6 +374,11 @@ public class SceneRender implements RenderStage {
                     .location(4)
                     .format(VK_FORMAT_R32G32_SFLOAT)
                     .offset(offset);
+            offset += 2 * Integer.BYTES;
+
+            VkVertexInputBindingDescription.Buffer vertexBindings =
+                    VkVertexInputBindingDescription.calloc(1, stack);
+            vertexBindings.get(0).binding(0).stride(offset).inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
 
             VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo =
                     VkPipelineVertexInputStateCreateInfo.calloc(stack)
@@ -395,12 +411,21 @@ public class SceneRender implements RenderStage {
                             .depthWriteEnable(true)
                             .depthCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
 
-            IntBuffer imageFormat = stack.ints(VK_FORMAT_R8G8B8A8_SRGB);
+            IntBuffer imageFormat =
+                    stack.ints(
+                            /* Base color */
+                            VK_FORMAT_R8G8B8A8_SRGB,
+                            /* Normal */
+                            VK_FORMAT_R8G8B8A8_SRGB,
+                            /* Tangent */
+                            VK_FORMAT_R8G8B8A8_SRGB,
+                            /* Material */
+                            VK_FORMAT_R32_UINT);
 
             VkPipelineRenderingCreateInfo renderingCreateInfo =
                     VkPipelineRenderingCreateInfo.calloc(stack)
                             .sType$Default()
-                            .colorAttachmentCount(1)
+                            .colorAttachmentCount(4)
                             .pColorAttachmentFormats(imageFormat)
                             .depthAttachmentFormat(state.device.physical.depthFormat);
 
