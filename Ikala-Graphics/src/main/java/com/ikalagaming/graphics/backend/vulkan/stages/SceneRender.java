@@ -36,12 +36,6 @@ import java.nio.LongBuffer;
 @Slf4j
 public class SceneRender implements RenderStage {
 
-    /** The binding for the materials SSBO. */
-    static final int MATERIALS_BINDING = 1;
-
-    /** The binding for the material override SSBO. */
-    static final int MATERIAL_OVERRIDES_BINDING = 2;
-
     /** The shader to use for rendering. */
     @NonNull @Setter private ShaderVulkan shader;
 
@@ -69,6 +63,17 @@ public class SceneRender implements RenderStage {
         VulkanState vulkanState = (VulkanState) state;
         createPipelineLayout(vulkanState);
         createPipeline(vulkanState);
+    }
+
+    @Override
+    public void cleanup(@NonNull State state) {
+        VulkanState vulkanState = (VulkanState) state;
+        vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
+        pipeline = VK_NULL_HANDLE;
+        vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
+        pipelineLayout = VK_NULL_HANDLE;
+        vkDestroyDescriptorSetLayout(vulkanState.device.logical, descriptorSetLayout, null);
+        descriptorSetLayout = VK_NULL_HANDLE;
     }
 
     /**
@@ -112,9 +117,11 @@ public class SceneRender implements RenderStage {
             BufferUtil.INSTANCE.bindBuffer(
                     model.getModelMatricesBuffer(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
             BufferUtil.INSTANCE.bindBuffer(
-                    scene.getMaterialCache().getMaterialBuffer(), MATERIALS_BINDING);
+                    scene.getMaterialCache().getMaterialBuffer(),
+                    ShaderBindings.Scene.MATERIALS_BINDING);
             BufferUtil.INSTANCE.bindBuffer(
-                    model.getMaterialOverridesBuffer(), MATERIAL_OVERRIDES_BINDING);
+                    model.getMaterialOverridesBuffer(),
+                    ShaderBindings.Scene.MATERIAL_OVERRIDES_BINDING);
 
             int meshIndex = 0;
             for (MeshData mesh : model.getMeshDataList()) {
