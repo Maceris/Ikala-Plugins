@@ -5,6 +5,29 @@ import com.ikalagaming.graphics.ShaderUniforms;
 /** Bindings and buffer positions for Vulkan shaders. */
 public class ShaderBindings {
 
+    /** Animation shader variables. */
+    public static class Animation {
+        /** The binding point for the buffer of animation frames. */
+        public static final int ANIMATION_DATA_BINDING = 0;
+
+        /** The binding point for the buffer of animation offsets. */
+        public static final int ANIMATION_OFFSETS_BINDING = 1;
+
+        /** The binding point for the buffer of model data. */
+        public static final int MODEL_DATA_BINDING = 2;
+
+        /** The binding point for the buffer of bone weight data. */
+        public static final int BONE_WEIGHT_BINDING = 3;
+
+        /** The binding point for the buffer of animation target data. */
+        public static final int ANIMATION_TARGET_BINDING = 4;
+
+        /** Private constructor so this class is not instantiated. */
+        private Animation() {
+            cutItOut();
+        }
+    }
+
     /**
      * Post-processing filter variables.
      *

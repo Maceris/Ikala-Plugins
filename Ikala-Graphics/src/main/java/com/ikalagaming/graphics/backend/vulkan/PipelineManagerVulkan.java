@@ -89,7 +89,8 @@ public class PipelineManagerVulkan {
     private final ShadowRender stageShadowRender;
     private final SkyboxRender stageSkyboxRender;
 
-    public PipelineManagerVulkan(@NonNull Window window, @NonNull ShaderMap shaders) {
+    public PipelineManagerVulkan(
+            @NonNull Window window, @NonNull ShaderMap shaders, @NonNull VulkanState state) {
         cascadeShadows = new ArrayList<>();
         for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
             cascadeShadows.add(new CascadeShadow());
@@ -110,10 +111,13 @@ public class PipelineManagerVulkan {
         guiMesh = GuiMesh.create();
 
         stageModelMatrixUpdate = new ModelMatrixUpdate();
+        stageModelMatrixUpdate.initialize(state);
         stageSceneRender =
                 new SceneRender((ShaderVulkan) shaders.getShader(RenderStage.Type.SCENE), gBuffer);
+        stageSceneRender.initialize(state);
         stageSceneRenderWireframe =
                 new SceneRenderWireframe(shaders.getShader(RenderStage.Type.SCENE), gBuffer);
+        stageSceneRenderWireframe.initialize(state);
         stageGuiRender =
                 new GuiRender(
                         shaders.getShader(RenderStage.Type.GUI_LEGACY),
@@ -121,10 +125,13 @@ public class PipelineManagerVulkan {
                         imGuiMesh,
                         guiMesh,
                         fontAtlas);
+        stageGuiRender.initialize(state);
         stageSkyboxRender = new SkyboxRender(shaders.getShader(RenderStage.Type.SKYBOX), skybox);
+        stageSkyboxRender.initialize(state);
         stageShadowRender =
                 new ShadowRender(
                         shaders.getShader(RenderStage.Type.SHADOW), cascadeShadows, shadowBuffers);
+        stageShadowRender.initialize(state);
         stageLightRender =
                 new LightRender(
                         shaders.getShader(RenderStage.Type.LIGHT),
@@ -134,14 +141,20 @@ public class PipelineManagerVulkan {
                         shadowBuffers,
                         gBuffer,
                         quadMesh);
-        stageAnimationRender = new AnimationRender(shaders.getShader(RenderStage.Type.ANIMATION));
+        stageLightRender.initialize(state);
+        stageAnimationRender =
+                new AnimationRender((ShaderVulkan) shaders.getShader(RenderStage.Type.ANIMATION));
+        stageAnimationRender.initialize(state);
         stageFilterRender =
                 new FilterRender(
                         shaders.getShader(RenderStage.Type.FILTER), screenTexture, quadMesh);
+        stageFilterRender.initialize(state);
         stageScreenTextureBinding = new FramebufferTransition(screenTexture, 1, 1);
+        stageScreenTextureBinding.initialize(state);
         stageBackBufferBinding =
                 new FramebufferTransition(
                         new Framebuffer(0, cachedWidth, cachedHeight, new long[] {}), 1, 1);
+        stageBackBufferBinding.initialize(state);
     }
 
     private Pipeline buildPipeline(final int configuration) {
@@ -192,7 +205,18 @@ public class PipelineManagerVulkan {
     }
 
     /** Clean up all the rendering resources. */
-    public void cleanup() {
+    public void cleanup(@NonNull VulkanState state) {
+        stageAnimationRender.cleanup(state);
+        stageBackBufferBinding.cleanup(state);
+        stageFilterRender.cleanup(state);
+        stageGuiRender.cleanup(state);
+        stageLightRender.cleanup(state);
+        stageModelMatrixUpdate.cleanup(state);
+        stageSceneRender.cleanup(state);
+        stageSceneRenderWireframe.cleanup(state);
+        stageScreenTextureBinding.cleanup(state);
+        stageShadowRender.cleanup(state);
+        stageSkyboxRender.cleanup(state);
         GraphicsManager.getDeletionQueue().add(imguiFont);
         imguiFont = null;
         GraphicsManager.getDeletionQueue().add(fontAtlas);

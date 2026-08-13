@@ -42,9 +42,14 @@ public class SceneRender implements RenderStage {
     /** The g-buffer for rendering geometry to. */
     @Setter @NonNull private Framebuffer gBuffer;
 
-    private long descriptorSetLayout = VK_NULL_HANDLE;
-    private long pipelineLayout = VK_NULL_HANDLE;
-    private long pipeline = VK_NULL_HANDLE;
+    /** VkDescriptorSetLayout pointer, will be VK_NULL_HANDLE if not set up. */
+    private long descriptorSetLayout;
+
+    /** VkPipelineLayout pointer, will be VK_NULL_HANDLE if not set up. */
+    private long pipelineLayout;
+
+    /** VkPipeline pointer, will be VK_NULL_HANDLE if not set up. */
+    private long pipeline;
 
     /**
      * Set up the shadow render stage.
@@ -55,11 +60,14 @@ public class SceneRender implements RenderStage {
     public SceneRender(final @NonNull ShaderVulkan shader, final @NonNull Framebuffer gBuffer) {
         this.shader = shader;
         this.gBuffer = gBuffer;
-        this.pipelineLayout = 0;
+        this.descriptorSetLayout = VK_NULL_HANDLE;
+        this.pipelineLayout = VK_NULL_HANDLE;
+        this.pipeline = VK_NULL_HANDLE;
     }
 
     @Override
     public void initialize(@NonNull State state) {
+        log.debug("Initializing scene render");
         VulkanState vulkanState = (VulkanState) state;
         createPipelineLayout(vulkanState);
         createPipeline(vulkanState);
@@ -256,11 +264,17 @@ public class SceneRender implements RenderStage {
             LongBuffer longOutput = stack.callocLong(1);
 
             VkPushConstantRange.Buffer pushConstantRanges = VkPushConstantRange.calloc(1, stack);
-            pushConstantRanges.get(0).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT).size(Long.BYTES);
+            pushConstantRanges
+                    .get(0)
+                    .stageFlags(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+                    .size(Long.BYTES);
 
             IntBuffer descriptorVariableFlags =
                     stack.ints(
-                            /* We might have a varying number of textures */
+                            0,
+                            0,
+                            0,
+                            0,
                             VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
                                     /* Not every texture slot should need to be filled */
                                     | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
@@ -277,26 +291,31 @@ public class SceneRender implements RenderStage {
             VkDescriptorSetLayoutBinding.Buffer descriptorSetLayoutBindings =
                     VkDescriptorSetLayoutBinding.calloc(5, stack);
             descriptorSetLayoutBindings
+                    .get(ShaderBindings.Scene.UNIFORMS_BINDING)
                     .binding(ShaderBindings.Scene.UNIFORMS_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
                     .descriptorCount(1)
                     .stageFlags(VK_SHADER_STAGE_VERTEX_BIT);
             descriptorSetLayoutBindings
+                    .get(ShaderBindings.Scene.MODEL_MATRICES_BINDING)
                     .binding(ShaderBindings.Scene.MODEL_MATRICES_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1)
                     .stageFlags(VK_SHADER_STAGE_VERTEX_BIT);
             descriptorSetLayoutBindings
+                    .get(ShaderBindings.Scene.MATERIALS_BINDING)
                     .binding(ShaderBindings.Scene.MATERIALS_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1)
                     .stageFlags(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
             descriptorSetLayoutBindings
+                    .get(ShaderBindings.Scene.MATERIAL_OVERRIDES_BINDING)
                     .binding(ShaderBindings.Scene.MATERIAL_OVERRIDES_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1)
                     .stageFlags(VK_SHADER_STAGE_VERTEX_BIT);
             descriptorSetLayoutBindings
+                    .get(ShaderBindings.Scene.TEXTURES_BINDING)
                     .binding(ShaderBindings.Scene.TEXTURES_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
                     .descriptorCount(state.device.physical.maxBindlessImages)
@@ -349,7 +368,7 @@ public class SceneRender implements RenderStage {
 
             // Normals
             vertexAttributes
-                    .get(0)
+                    .get(1)
                     .binding(0)
                     .location(1)
                     .format(VK_FORMAT_R32G32B32_SFLOAT)
@@ -358,7 +377,7 @@ public class SceneRender implements RenderStage {
 
             // Tangents
             vertexAttributes
-                    .get(0)
+                    .get(2)
                     .binding(0)
                     .location(2)
                     .format(VK_FORMAT_R32G32B32_SFLOAT)
@@ -367,7 +386,7 @@ public class SceneRender implements RenderStage {
 
             // Bitangents
             vertexAttributes
-                    .get(0)
+                    .get(3)
                     .binding(0)
                     .location(3)
                     .format(VK_FORMAT_R32G32B32_SFLOAT)
@@ -376,7 +395,7 @@ public class SceneRender implements RenderStage {
 
             // Texture coordinates
             vertexAttributes
-                    .get(0)
+                    .get(4)
                     .binding(0)
                     .location(4)
                     .format(VK_FORMAT_R32G32_SFLOAT)
@@ -437,12 +456,39 @@ public class SceneRender implements RenderStage {
                             .depthAttachmentFormat(state.device.physical.depthFormat);
 
             VkPipelineColorBlendAttachmentState.Buffer blendAttachments =
-                    VkPipelineColorBlendAttachmentState.calloc(1, stack);
-            blendAttachments.get(0).colorWriteMask(0xF);
+                    VkPipelineColorBlendAttachmentState.calloc(4, stack);
+            blendAttachments
+                    .get(0)
+                    .colorWriteMask(
+                            VK_COLOR_COMPONENT_R_BIT
+                                    | VK_COLOR_COMPONENT_G_BIT
+                                    | VK_COLOR_COMPONENT_B_BIT
+                                    | VK_COLOR_COMPONENT_A_BIT);
+            blendAttachments
+                    .get(1)
+                    .colorWriteMask(
+                            VK_COLOR_COMPONENT_R_BIT
+                                    | VK_COLOR_COMPONENT_G_BIT
+                                    | VK_COLOR_COMPONENT_B_BIT
+                                    | VK_COLOR_COMPONENT_A_BIT);
+            blendAttachments
+                    .get(2)
+                    .colorWriteMask(
+                            VK_COLOR_COMPONENT_R_BIT
+                                    | VK_COLOR_COMPONENT_G_BIT
+                                    | VK_COLOR_COMPONENT_B_BIT
+                                    | VK_COLOR_COMPONENT_A_BIT);
+            blendAttachments
+                    .get(3)
+                    .colorWriteMask(
+                            VK_COLOR_COMPONENT_R_BIT
+                                    | VK_COLOR_COMPONENT_G_BIT
+                                    | VK_COLOR_COMPONENT_B_BIT
+                                    | VK_COLOR_COMPONENT_A_BIT);
             VkPipelineColorBlendStateCreateInfo colorBlendState =
                     VkPipelineColorBlendStateCreateInfo.calloc(stack)
                             .sType$Default()
-                            .attachmentCount(1)
+                            .attachmentCount(4)
                             .pAttachments(blendAttachments);
             VkPipelineRasterizationStateCreateInfo rasterizationState =
                     VkPipelineRasterizationStateCreateInfo.calloc(stack)
@@ -469,7 +515,8 @@ public class SceneRender implements RenderStage {
                     .pDepthStencilState(depthStencilState)
                     .pColorBlendState(colorBlendState)
                     .pDynamicState(dynamicState)
-                    .layout(pipelineLayout);
+                    .layout(pipelineLayout)
+                    .renderPass(VK_NULL_HANDLE);
 
             checkError(
                     vkCreateGraphicsPipelines(

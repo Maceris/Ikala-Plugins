@@ -284,6 +284,7 @@ public class VulkanInstance implements Instance {
     @Override
     public void cleanup() {
         // TODO(ches) complete this
+        pipelineManager.cleanup(state);
     }
 
     private void createShaderData() {
@@ -372,9 +373,9 @@ public class VulkanInstance implements Instance {
         }
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            VkPhysicalDeviceVulkan13Features enabledVk13Features =
-                    VkPhysicalDeviceVulkan13Features.calloc(stack);
-            enabledVk13Features.sType$Default().synchronization2(true).dynamicRendering(true);
+            VkPhysicalDeviceVulkan11Features enabledVk11Features =
+                    VkPhysicalDeviceVulkan11Features.calloc(stack);
+            enabledVk11Features.sType$Default().shaderDrawParameters(true).pNext(VK_NULL_HANDLE);
 
             VkPhysicalDeviceVulkan12Features enabledVk12Features =
                     VkPhysicalDeviceVulkan12Features.calloc(stack);
@@ -383,11 +384,21 @@ public class VulkanInstance implements Instance {
                     .bufferDeviceAddress(true)
                     .descriptorBindingPartiallyBound(true)
                     .descriptorBindingSampledImageUpdateAfterBind(true)
+                    .descriptorBindingStorageBufferUpdateAfterBind(true)
                     .descriptorBindingVariableDescriptorCount(true)
                     .descriptorIndexing(true)
                     .runtimeDescriptorArray(true)
                     .shaderSampledImageArrayNonUniformIndexing(true)
-                    .pNext(enabledVk13Features.address());
+                    .pNext(enabledVk11Features.address());
+
+            VkPhysicalDeviceVulkan13Features enabledVk13Features =
+                    VkPhysicalDeviceVulkan13Features.calloc(stack);
+            enabledVk13Features
+                    .sType$Default()
+                    .dynamicRendering(true)
+                    .shaderDemoteToHelperInvocation(true)
+                    .synchronization2(true)
+                    .pNext(enabledVk12Features.address());
 
             VkPhysicalDeviceFeatures enabledVkFeatures = VkPhysicalDeviceFeatures.calloc(stack);
             enabledVkFeatures.samplerAnisotropy(true);
@@ -420,7 +431,7 @@ public class VulkanInstance implements Instance {
             deviceCreateInfo
                     .sType$Default()
                     .pEnabledFeatures(enabledVkFeatures)
-                    .pNext(enabledVk12Features)
+                    .pNext(enabledVk13Features.address())
                     .pQueueCreateInfos(deviceQueueCreateInfos)
                     .ppEnabledExtensionNames(deviceExtensionNames);
 
@@ -814,7 +825,7 @@ public class VulkanInstance implements Instance {
         shaderMap = new ShaderMap();
         initializeShaders();
         initializeGui(window);
-        pipelineManager = new PipelineManagerVulkan(window, shaderMap);
+        pipelineManager = new PipelineManagerVulkan(window, shaderMap, state);
         renderConfig = RenderConfig.builder().withGui().build();
         pipeline = pipelineManager.getPipeline(renderConfig);
         pipeline.initialize(window, shaderMap);
