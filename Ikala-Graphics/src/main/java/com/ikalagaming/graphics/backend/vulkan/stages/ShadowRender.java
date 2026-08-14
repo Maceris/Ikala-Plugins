@@ -2,9 +2,9 @@ package com.ikalagaming.graphics.backend.vulkan.stages;
 
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.RenderStage;
+import com.ikalagaming.graphics.backend.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.frontend.Framebuffer;
-import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
@@ -24,7 +24,7 @@ public class ShadowRender implements RenderStage {
     static final int MODEL_MATRICES_BINDING = 0;
 
     /** The shader to use for rendering. */
-    @NonNull @Setter private Shader shader;
+    @NonNull @Setter private ShaderVulkan shader;
 
     /** Cascade shadow information. */
     @Setter @NonNull private List<CascadeShadow> cascadeShadows;
@@ -40,7 +40,7 @@ public class ShadowRender implements RenderStage {
      * @param depthMap The depth map buffers.
      */
     public ShadowRender(
-            final @NonNull Shader shader,
+            final @NonNull ShaderVulkan shader,
             final @NonNull List<CascadeShadow> cascadeShadows,
             final @NonNull Framebuffer depthMap) {
         this.shader = shader;

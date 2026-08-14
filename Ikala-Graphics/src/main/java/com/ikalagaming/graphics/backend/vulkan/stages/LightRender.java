@@ -5,10 +5,10 @@ import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.backend.vulkan.PipelineVulkan;
 import com.ikalagaming.graphics.backend.vulkan.QuadMesh;
+import com.ikalagaming.graphics.backend.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.frontend.Buffer;
 import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.frontend.Framebuffer;
-import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.scene.Fog;
 import com.ikalagaming.graphics.scene.Scene;
@@ -44,7 +44,7 @@ public class LightRender implements RenderStage {
     public static final int MATERIALS_BINDING = 2;
 
     /** The shader to use for rendering. */
-    @NonNull private Shader shader;
+    @NonNull private ShaderVulkan shader;
 
     /** The cascade shadows information. */
     @NonNull private List<CascadeShadow> cascadeShadows;

@@ -116,25 +116,29 @@ public class PipelineManagerVulkan {
                 new SceneRender((ShaderVulkan) shaders.getShader(RenderStage.Type.SCENE), gBuffer);
         stageSceneRender.initialize(state);
         stageSceneRenderWireframe =
-                new SceneRenderWireframe(shaders.getShader(RenderStage.Type.SCENE), gBuffer);
+                new SceneRenderWireframe(
+                        (ShaderVulkan) shaders.getShader(RenderStage.Type.SCENE), gBuffer);
         stageSceneRenderWireframe.initialize(state);
         stageGuiRender =
                 new GuiRender(
-                        shaders.getShader(RenderStage.Type.GUI_LEGACY),
-                        shaders.getShader(RenderStage.Type.GUI),
+                        (ShaderVulkan) shaders.getShader(RenderStage.Type.GUI_LEGACY),
+                        (ShaderVulkan) shaders.getShader(RenderStage.Type.GUI),
                         imGuiMesh,
                         guiMesh,
                         fontAtlas);
         stageGuiRender.initialize(state);
-        stageSkyboxRender = new SkyboxRender(shaders.getShader(RenderStage.Type.SKYBOX), skybox);
+        stageSkyboxRender =
+                new SkyboxRender((ShaderVulkan) shaders.getShader(RenderStage.Type.SKYBOX), skybox);
         stageSkyboxRender.initialize(state);
         stageShadowRender =
                 new ShadowRender(
-                        shaders.getShader(RenderStage.Type.SHADOW), cascadeShadows, shadowBuffers);
+                        (ShaderVulkan) shaders.getShader(RenderStage.Type.SHADOW),
+                        cascadeShadows,
+                        shadowBuffers);
         stageShadowRender.initialize(state);
         stageLightRender =
                 new LightRender(
-                        shaders.getShader(RenderStage.Type.LIGHT),
+                        (ShaderVulkan) shaders.getShader(RenderStage.Type.LIGHT),
                         cascadeShadows,
                         pointLights,
                         spotLights,
@@ -147,7 +151,9 @@ public class PipelineManagerVulkan {
         stageAnimationRender.initialize(state);
         stageFilterRender =
                 new FilterRender(
-                        shaders.getShader(RenderStage.Type.FILTER), screenTexture, quadMesh);
+                        (ShaderVulkan) shaders.getShader(RenderStage.Type.FILTER),
+                        screenTexture,
+                        quadMesh);
         stageFilterRender.initialize(state);
         stageScreenTextureBinding = new FramebufferTransition(screenTexture, 1, 1);
         stageScreenTextureBinding.initialize(state);

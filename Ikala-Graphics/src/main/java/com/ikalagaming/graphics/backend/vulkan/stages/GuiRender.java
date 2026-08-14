@@ -5,7 +5,7 @@ import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.vulkan.GuiMesh;
 import com.ikalagaming.graphics.backend.vulkan.ImGuiMesh;
-import com.ikalagaming.graphics.frontend.Shader;
+import com.ikalagaming.graphics.backend.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
@@ -38,10 +38,10 @@ public class GuiRender implements RenderStage {
     private final GuiMesh guiMesh;
 
     /** The shader to use for rendering ImGui. */
-    @Deprecated @NonNull @Setter private Shader imGuiShader;
+    @Deprecated @NonNull @Setter private ShaderVulkan imGuiShader;
 
     /** The shader to use for rendering. */
-    @NonNull @Setter private Shader shader;
+    @NonNull @Setter private ShaderVulkan shader;
 
     /** The font atlas texture. */
     private final Texture fontAtlas;
@@ -52,8 +52,8 @@ public class GuiRender implements RenderStage {
      * @param imGuiMesh The mesh information ImGui uses.
      */
     public GuiRender(
-            final @NonNull Shader imGuiShader,
-            final @NonNull Shader shader,
+            final @NonNull ShaderVulkan imGuiShader,
+            final @NonNull ShaderVulkan shader,
             final @NonNull ImGuiMesh imGuiMesh,
             final @NonNull GuiMesh guiMesh,
             final @NonNull Texture fontAtlas) {

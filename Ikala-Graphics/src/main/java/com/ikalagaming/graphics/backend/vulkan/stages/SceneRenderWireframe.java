@@ -1,8 +1,8 @@
 package com.ikalagaming.graphics.backend.vulkan.stages;
 
 import com.ikalagaming.graphics.backend.base.RenderStage;
+import com.ikalagaming.graphics.backend.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.frontend.Framebuffer;
-import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
@@ -12,7 +12,7 @@ import lombok.Setter;
 public class SceneRenderWireframe implements RenderStage {
 
     /** The shader to use for rendering. */
-    @NonNull @Setter private Shader shader;
+    @NonNull @Setter private ShaderVulkan shader;
 
     /** The g-buffer for rendering geometry to. */
     @Setter @NonNull private Framebuffer gBuffer;
@@ -23,7 +23,8 @@ public class SceneRenderWireframe implements RenderStage {
      * @param shader The shader to use for rendering.
      * @param gBuffer The depth map buffers.
      */
-    public SceneRenderWireframe(final @NonNull Shader shader, final @NonNull Framebuffer gBuffer) {
+    public SceneRenderWireframe(
+            final @NonNull ShaderVulkan shader, final @NonNull Framebuffer gBuffer) {
         this.shader = shader;
         this.gBuffer = gBuffer;
     }

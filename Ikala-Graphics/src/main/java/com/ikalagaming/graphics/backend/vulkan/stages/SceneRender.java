@@ -400,7 +400,7 @@ public class SceneRender implements RenderStage {
                     .location(4)
                     .format(VK_FORMAT_R32G32_SFLOAT)
                     .offset(offset);
-            offset += 2 * Integer.BYTES;
+            offset += 2 * Float.BYTES;
 
             VkVertexInputBindingDescription.Buffer vertexBindings =
                     VkVertexInputBindingDescription.calloc(1, stack);
