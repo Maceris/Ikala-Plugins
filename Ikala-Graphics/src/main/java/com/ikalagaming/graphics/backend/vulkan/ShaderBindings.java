@@ -49,23 +49,32 @@ public class ShaderBindings {
      * @author Ches Burks
      */
     public static class GUI {
-        /**
-         * The scaling of the UI. Used to convert from pixel coordinates to Normalized Device
-         * Coordinates of (-1, 1).
-         */
-        public static final int SCALE = 0;
-
-        /** Binding point for the texture sampler. */
-        public static final int TEXTURE_SAMPLER = 1;
 
         /** Binding point for the commands buffer. */
-        public static final int COMMANDS = 2;
+        public static final int COMMANDS_BINDING = 1;
+
+        /** Binding point for the bindless textures. */
+        public static final int TEXTURES_BINDING = 4;
+
+        @Deprecated public static final int TEXTURES_BINDING_LEGACY = 1;
 
         /** Binding point for the points buffer. */
-        public static final int POINTS = 3;
+        public static final int POINTS_BINDING = 2;
 
         /** Binding point for the point details buffer. */
-        public static final int POINT_DETAILS = 4;
+        public static final int POINT_DETAILS_BINDING = 3;
+
+        /** Binding point for the uniform buffer. */
+        public static final int UNIFORMS_BINDING = 0;
+
+        /** The offset in the uniform buffer for the font texture. */
+        public static final int UNIFORM_BUFFER_FONT_TEXTURE_OFFSET = 2 * Float.BYTES;
+
+        /**
+         * The offset in the uniform buffer for the scaling of the UI. Used to convert from pixel
+         * coordinates to Normalized Device Coordinates of (-1, 1).
+         */
+        public static final int UNIFORM_BUFFER_SCALE_OFFSET = 0;
 
         /** Private constructor so this class is not instantiated. */
         private GUI() {

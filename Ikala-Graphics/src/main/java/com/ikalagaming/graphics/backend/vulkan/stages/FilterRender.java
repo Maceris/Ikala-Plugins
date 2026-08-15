@@ -40,7 +40,7 @@ public class FilterRender implements RenderStage {
     /** VkDescriptorSetLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorSetLayout;
 
-    //TODO(ches) we can reuse this pipeline layout for all the filters
+    // TODO(ches) we can reuse this pipeline layout for all the filters
     /** VkPipelineLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long pipelineLayout;
 

@@ -1,4 +1,5 @@
 #version 460
+#extension GL_EXT_nonuniform_qualifier : enable
 
 const int ELEMENT_TYPE_CIRCLE = 0;
 const int ELEMENT_TYPE_LINE_ARC = 1;
@@ -42,26 +43,25 @@ struct Command
 layout(location = 0) flat in int quadID;
 layout(location = 0) out vec4 outColor;
 
-//TODO(ches) now that these need to be in blocks, figure out the buffer layout again
 layout(set = 0, binding = 0) uniform Uniforms {
     // Used to convert from pixel coordinates to Normalized Device Coordinates of (-1, 1)
     vec2 scale;
+    int fontTexture;
 };
 
-//TODO(ches) these should be bindless
-layout(set = 0, binding = 1) uniform sampler2D txtSampler;
-
-layout(std430, set = 0, binding = 2) buffer Commands {
+layout(std430, set = 0, binding = 1) buffer Commands {
 	Command commands[];
 };
 
-layout(std430, set = 0, binding = 3) buffer Points {
+layout(std430, set = 0, binding = 2) buffer Points {
 	Point points[];
 };
 
-layout(std430, set = 0, binding = 4) buffer PointDetails {
+layout(std430, set = 0, binding = 3) buffer PointDetails {
 	PointDetail pointDetails[];
 };
+
+layout(set = 0, binding = 4) uniform sampler2D bindlessTextures[];
 
 float hash11(uint n) {
     n = (n << 13u) ^ n;
@@ -239,7 +239,7 @@ void draw_text(Command command, vec2 fragPos) {
         (fragPos.y - quadPoint.pos.y) / (textSize.y)
     );
 
-    const vec2 textureSizeInt = textureSize(txtSampler, 0);
+    const vec2 textureSizeInt = textureSize(bindlessTextures[nonuniformEXT(fontTexture)], 0);
     const vec2 topLeftPosInTexture = vec2(textPos.x / textureSizeInt.x, textPos.y / textureSizeInt.y);
     const vec2 bottomRightPosInTexture = vec2(
         (textPos.x + textSize.x) / textureSizeInt.x,
@@ -248,7 +248,7 @@ void draw_text(Command command, vec2 fragPos) {
 
     const vec2 texturePos = mix(topLeftPosInTexture, bottomRightPosInTexture, posInQuad);
 
-    vec4 color = texture(txtSampler, texturePos) * intToColor(uint(detail.tint));
+    vec4 color = texture(bindlessTextures[nonuniformEXT(fontTexture)], texturePos) * intToColor(uint(detail.tint));
     outColor = clamp(color, 0.0f, 1.0f);
 }
 
