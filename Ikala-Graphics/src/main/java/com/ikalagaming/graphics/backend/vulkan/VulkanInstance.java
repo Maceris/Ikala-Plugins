@@ -401,7 +401,7 @@ public class VulkanInstance implements Instance {
                     .pNext(enabledVk12Features.address());
 
             VkPhysicalDeviceFeatures enabledVkFeatures = VkPhysicalDeviceFeatures.calloc(stack);
-            enabledVkFeatures.samplerAnisotropy(true);
+            enabledVkFeatures.samplerAnisotropy(true).fillModeNonSolid(true);
 
             VkDeviceQueueCreateInfo.Buffer deviceQueueCreateInfos =
                     VkDeviceQueueCreateInfo.calloc(queueCount, stack);
