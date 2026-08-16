@@ -52,10 +52,10 @@ public class SceneRender implements RenderStage {
     private long pipeline;
 
     /**
-     * Set up the shadow render stage.
+     * Set up the scene render stage.
      *
      * @param shader The shader to use for rendering.
-     * @param gBuffer The depth map buffers.
+     * @param gBuffer The gbuffer.
      */
     public SceneRender(final @NonNull ShaderVulkan shader, final @NonNull Framebuffer gBuffer) {
         this.shader = shader;

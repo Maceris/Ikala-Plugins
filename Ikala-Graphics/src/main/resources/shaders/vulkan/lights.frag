@@ -70,7 +70,6 @@ struct Material
     int textureIndex;
 };
 
-//TODO(ches) now that these need to be in blocks, figure out the buffer layout again
 layout(set = 0, binding = 0) uniform Uniforms {
     mat4 invProjectionMatrix;
     mat4 invViewMatrix;
@@ -83,6 +82,7 @@ layout(set = 0, binding = 0) uniform Uniforms {
     CascadeShadow cascadeShadows[NUM_CASCADES];
 };
 
+//TODO(ches) Should we just make these bindless?
 layout(set = 0, binding = 1) uniform sampler2D baseColorSampler;
 layout(set = 0, binding = 2) uniform sampler2D normalSampler;
 layout(set = 0, binding = 3) uniform sampler2D tangentSampler;

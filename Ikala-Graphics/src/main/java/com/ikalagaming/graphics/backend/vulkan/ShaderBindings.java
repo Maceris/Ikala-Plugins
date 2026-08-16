@@ -186,7 +186,7 @@ public class ShaderBindings {
         public static final int AMBIENT_LIGHT = 4 * 4 * 2 * Float.BYTES;
 
         /** Sampler for the base color of a material. */
-        public static final int BASE_COLOR_SAMPLER = 1;
+        public static final int BASE_COLOR_SAMPLER_BINDING = 1;
 
         /** The offset into the uniforms for the cascade shadows. */
         public static final int CASCADE_SHADOWS =
@@ -200,7 +200,7 @@ public class ShaderBindings {
          * Used to reconstruct the world position using the inverse projection matrix to help
          * calculate lighting.
          */
-        public static final int DEPTH_SAMPLER = 5;
+        public static final int DEPTH_SAMPLER_BINDING = 5;
 
         /**
          * The offset into the uniforms for the directional light.
@@ -227,10 +227,13 @@ public class ShaderBindings {
         public static final int INVERSE_VIEW_MATRIX = 4 * 4 * Float.BYTES;
 
         /** Sampler for material IDs. */
-        public static final int MATERIAL_SAMPLER = 4;
+        public static final int MATERIAL_SAMPLER_BINDING = 4;
+
+        /** Binding for the materials buffer. */
+        public static final int MATERIALS_BINDING = 11;
 
         /** A sampler for the normal values. */
-        public static final int NORMAL_SAMPLER = 2;
+        public static final int NORMAL_SAMPLER_BINDING = 2;
 
         /**
          * The offset into the uniforms for how many point lights we have in the point light SSBO.
@@ -238,14 +241,20 @@ public class ShaderBindings {
         public static final int POINT_LIGHT_COUNT =
                 4 * 4 * 2 * Float.BYTES + AmbientLight.SIZEOF + DirectionalLight.SIZEOF;
 
+        /** The point light buffer binding. */
+        public static final int POINT_LIGHT_BINDING = 9;
+
+        /** The spotlight buffer binding. */
+        public static final int SPOT_LIGHT_BINDING = 10;
+
         /** The first shadow map texture binding. */
-        public static final int SHADOW_MAP_0 = 6;
+        public static final int SHADOW_MAP_0_BINDING = 6;
 
         /** The second shadow map texture binding. */
-        public static final int SHADOW_MAP_1 = 7;
+        public static final int SHADOW_MAP_1_BINDING = 7;
 
         /** The third shadow map texture binding. */
-        public static final int SHADOW_MAP_2 = 8;
+        public static final int SHADOW_MAP_2_BINDING = 8;
 
         /** The offset into the uniforms for how many spotlights we have in the spotlight SSBO. */
         public static final int SPOT_LIGHT_COUNT =
@@ -255,7 +264,10 @@ public class ShaderBindings {
                         + Integer.BYTES;
 
         /** Sampler for the tangent values. */
-        public static final int TANGENT_SAMPLER = 3;
+        public static final int TANGENT_SAMPLER_BINDING = 3;
+
+        /** Uniforms buffer binding. */
+        public static final int UNIFORMS_BINDING = 0;
 
         /** Private constructor so this class is not instantiated. */
         private Light() {
