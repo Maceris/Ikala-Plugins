@@ -168,14 +168,14 @@ public class ShadowRender implements RenderStage {
             VkDescriptorSetLayoutBinding.Buffer descriptorSetLayoutBindings =
                     VkDescriptorSetLayoutBinding.calloc(2, stack);
             descriptorSetLayoutBindings
-                    .get(ShaderBindings.Scene.UNIFORMS_BINDING)
-                    .binding(ShaderBindings.Scene.UNIFORMS_BINDING)
+                    .get(ShaderBindings.Shadow.UNIFORMS_BINDING)
+                    .binding(ShaderBindings.Shadow.UNIFORMS_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
                     .descriptorCount(1)
                     .stageFlags(VK_SHADER_STAGE_VERTEX_BIT);
             descriptorSetLayoutBindings
-                    .get(ShaderBindings.Scene.MODEL_MATRICES_BINDING)
-                    .binding(ShaderBindings.Scene.MODEL_MATRICES_BINDING)
+                    .get(ShaderBindings.Shadow.MODEL_MATRICES_BINDING)
+                    .binding(ShaderBindings.Shadow.MODEL_MATRICES_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1)
                     .stageFlags(VK_SHADER_STAGE_VERTEX_BIT);

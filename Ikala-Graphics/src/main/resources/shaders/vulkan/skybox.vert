@@ -5,12 +5,12 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 outTextCoord;
 
-//TODO(ches) now that these need to be in blocks, figure out the buffer layout again
 layout(set = 0, binding = 0) uniform Uniforms {
     mat4 projectionMatrix;
     mat4 viewMatrix;
     vec4 diffuse;
     int hasTexture;
+    int textureIndex;
 };
 
 void main()

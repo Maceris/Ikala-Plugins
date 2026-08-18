@@ -336,16 +336,16 @@ public class ShaderBindings {
          * The offset into the uniforms for the index of the current material, for the vertex
          * shader.
          */
-        public static final int MATERIAL_INDEX = 4 * 4 * 2 * Float.BYTES;
+        public static final int MATERIAL_INDEX_OFFSET = 4 * 4 * 2 * Float.BYTES;
 
         /**
          * The offset into the uniforms for the index of the current mesh, for the vertex shader,
          * used to pick out a material override.
          */
-        public static final int MESH_INDEX = 4 * 4 * 2 * Float.BYTES + Integer.BYTES;
+        public static final int MESH_INDEX_OFFSET = 4 * 4 * 2 * Float.BYTES + Integer.BYTES;
 
         /** The offset into the uniforms for the position when projected onto the screen space. */
-        public static final int PROJECTION_MATRIX = 0;
+        public static final int PROJECTION_MATRIX_OFFSET = 0;
 
         /** The binding point for the model matrices buffer. */
         public static final int MODEL_MATRICES_BINDING = 1;
@@ -363,7 +363,7 @@ public class ShaderBindings {
         public static final int UNIFORMS_BINDING = 0;
 
         /** The offset into the uniforms for the cameras view matrix. */
-        public static final int VIEW_MATRIX = 4 * 4 * Float.BYTES;
+        public static final int VIEW_MATRIX_OFFSET = 4 * 4 * Float.BYTES;
 
         /** Private constructor so this class is not instantiated. */
         private Scene() {
@@ -378,7 +378,10 @@ public class ShaderBindings {
      */
     public static class Shadow {
         /** The offset into the uniforms buffer for the combined projection and view matrix. */
-        public static final int PROJECTION_VIEW_MATRIX = 0;
+        public static final int PROJECTION_VIEW_MATRIX_OFFSET = 0;
+
+        /** The binding point for the uniforms buffer. */
+        public static final int UNIFORMS_BINDING = 0;
 
         /** The binding point for the model matrices buffer. */
         public static final int MODEL_MATRICES_BINDING = 1;
@@ -396,19 +399,26 @@ public class ShaderBindings {
      */
     public static class Skybox {
         /** Offset in the uniform buffer in bytes for the color used for the diffuse component. */
-        public static final int DIFFUSE = 4 * 4 * 2 * Float.BYTES;
+        public static final int DIFFUSE_OFFSET = 4 * 4 * 2 * Float.BYTES;
 
         /** Offset in the uniform buffer in bytes for whether there is a texture, 1 if enabled. */
-        public static final int HAS_TEXTURE = (4 * 4 * 2 + 4) * Float.BYTES;
+        public static final int HAS_TEXTURE_OFFSET = (4 * 4 * 2 + 4) * Float.BYTES;
 
         /** Offset in the uniform buffer in bytes for the projection matrix. */
-        public static final int PROJECTION_MATRIX = 0;
+        public static final int PROJECTION_MATRIX_OFFSET = 0;
 
-        /** Binding point for the texture sampler. */
-        public static final int TEXTURE_SAMPLER = 1;
+        /** Offset in the uniform buffer in bytes for the projection matrix. */
+        public static final int TEXTURE_INDEX_OFFSET =
+                (4 * 4 * 2 + 4) * Float.BYTES + Integer.BYTES;
+
+        /** Binding point for the bindless textures array. */
+        public static final int TEXTURES_BINDING = 1;
+
+        /** The binding point for the uniforms buffer. */
+        public static final int UNIFORMS_BINDING = 0;
 
         /** Offset in the uniform buffer in bytes for the cameras view matrix. */
-        public static final int VIEW_MATRIX = 4 * 4 * Float.BYTES;
+        public static final int VIEW_MATRIX_OFFSET = 4 * 4 * Float.BYTES;
 
         /** Private constructor so this class is not instantiated. */
         private Skybox() {
