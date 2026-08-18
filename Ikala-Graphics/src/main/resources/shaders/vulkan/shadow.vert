@@ -6,7 +6,6 @@ layout(location = 2) in vec3 tangent;
 layout(location = 3) in vec3 bitangent;
 layout(location = 4) in vec2 texCoord;
 
-//TODO(ches) now that these need to be in blocks, figure out the buffer layout again
 layout(set = 0, binding = 0) uniform Uniforms {
     mat4 projViewMatrix;
 };

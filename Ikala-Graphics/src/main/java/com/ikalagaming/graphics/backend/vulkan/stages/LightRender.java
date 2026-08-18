@@ -114,7 +114,7 @@ public class LightRender implements RenderStage {
 
     @Override
     public void initialize(@NonNull State state) {
-        log.debug("Initializing scene render");
+        log.debug("Initializing light render");
         VulkanState vulkanState = (VulkanState) state;
         createPipelineLayout(vulkanState);
         createPipeline(vulkanState);
