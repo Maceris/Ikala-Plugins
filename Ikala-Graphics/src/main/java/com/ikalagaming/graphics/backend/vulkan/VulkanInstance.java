@@ -281,6 +281,13 @@ public class VulkanInstance implements Instance {
         }
     }
 
+    private void checkSwapchain(int errorCode) {
+        // TODO(ches) complete this
+        if (errorCode == VK_ERROR_OUT_OF_DATE_KHR) {
+            // TODO(ches) refresh swapchain
+        }
+    }
+
     @Override
     public void cleanup() {
         // TODO(ches) complete this
@@ -1012,14 +1019,27 @@ public class VulkanInstance implements Instance {
 
     @Override
     public void render(@NonNull Scene scene) {
-        if (false) {
-            // TODO(ches) actually run this once we have fences being signaled from shaders
-            longOutput.put(0, state.fences[state.frameIndex]);
-            checkError(vkWaitForFences(state.device.logical, longOutput, true, Integer.MAX_VALUE));
-            longOutput.put(0, state.fences[state.frameIndex]);
-            checkError(vkResetFences(state.device.logical, longOutput));
+        if (true) {
+            // TODO(ches) turn this back on when we have it ready
+            return;
         }
-        // TODO(ches) acquire next image
+        longOutput.put(0, state.fences[state.frameIndex]);
+        checkError(vkWaitForFences(state.device.logical, longOutput, true, Integer.MAX_VALUE));
+        longOutput.put(0, state.fences[state.frameIndex]);
+        checkError(vkResetFences(state.device.logical, longOutput));
+        // TODO(ches) pass in which window we are rendering to
+        final long swapchain = state.windows.getFirst().swapchainHandle;
+
+        checkSwapchain(
+                vkAcquireNextImageKHR(
+                        state.device.logical,
+                        swapchain,
+                        Long.MAX_VALUE,
+                        state.imageAcquiredSemaphores[state.frameIndex],
+                        VK_NULL_HANDLE,
+                        intOutput));
+        final int nextImage = intOutput.get(0);
+
         // TODO(ches) recreate swapchain if necessary
         // TODO(ches) update shader data
         // TODO(ches) record command buffer
