@@ -826,6 +826,33 @@ public class VulkanInstance implements Instance {
         }
 
         createSwapchain(window);
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkCommandPoolCreateInfo commandPoolCreateInfo =
+                    VkCommandPoolCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .flags(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
+                            .queueFamilyIndex(state.device.physical.queueFamilyIndices.graphics());
+            checkError(
+                    vkCreateCommandPool(
+                            state.device.logical, commandPoolCreateInfo, null, longOutput));
+            state.commandPool = longOutput.get(0);
+
+            VkCommandBufferAllocateInfo commandBufferAllocateInfo =
+                    VkCommandBufferAllocateInfo.calloc(stack)
+                            .sType$Default()
+                            .commandPool(state.commandPool)
+                            .commandBufferCount(GraphicsManager.MAX_FRAMES_IN_FLIGHT);
+
+            PointerBuffer commandBuffers =
+                    stack.callocPointer(GraphicsManager.MAX_FRAMES_IN_FLIGHT);
+            checkError(
+                    vkAllocateCommandBuffers(
+                            state.device.logical, commandBufferAllocateInfo, commandBuffers));
+            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+                state.commandBuffers[i] =
+                        new VkCommandBuffer(commandBuffers.get(i), state.device.logical);
+            }
+        }
         createShaderData();
 
         textureLoader = new TextureLoaderVulkan();
@@ -1038,10 +1065,21 @@ public class VulkanInstance implements Instance {
                         state.imageAcquiredSemaphores[state.frameIndex],
                         VK_NULL_HANDLE,
                         intOutput));
+        // TODO(ches) recreate swapchain if necessary
         final int nextImage = intOutput.get(0);
 
-        // TODO(ches) recreate swapchain if necessary
         // TODO(ches) update shader data
+        final VkCommandBuffer commandBuffer = state.commandBuffers[state.frameIndex];
+        checkError(vkResetCommandBuffer(commandBuffer, 0));
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkCommandBufferBeginInfo commandBufferBeginInfo =
+                    VkCommandBufferBeginInfo.calloc(stack)
+                            .sType$Default()
+                            .flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+            checkError(vkBeginCommandBuffer(commandBuffer, commandBufferBeginInfo));
+        }
+
         // TODO(ches) record command buffer
         // TODO(ches) submit command buffer
         // TODO(ches) present image

@@ -17,8 +17,12 @@ public class VulkanState implements State {
     /** The Vulkan instance. */
     public VkInstance instance = null;
 
+    /** The command pool to allocate command buffers from. */
+    public long commandPool = VK_NULL_HANDLE;
+
     /** Command buffers for each frame. */
-    public final long[] commandBuffers = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+    public final VkCommandBuffer[] commandBuffers =
+            new VkCommandBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
     /** Device information. */
     public final Device device = new Device();
