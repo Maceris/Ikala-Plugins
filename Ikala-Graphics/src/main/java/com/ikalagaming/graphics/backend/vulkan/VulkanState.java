@@ -4,8 +4,10 @@ import static org.lwjgl.vulkan.VK10.VK_FORMAT_UNDEFINED;
 import static org.lwjgl.vulkan.VK13.VK_NULL_HANDLE;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.State;
 
+import lombok.NonNull;
 import org.lwjgl.vulkan.*;
 
 import java.util.ArrayList;
@@ -118,12 +120,30 @@ public class VulkanState implements State {
 
     /** Info specific to a window. */
     public static class WindowInfo {
-        public long surfaceHandle = VK_NULL_HANDLE;
-        public long swapchainHandle = VK_NULL_HANDLE;
-        public long[] swapchainImages = null;
-        public TextureInfo depthImage = null;
+        public TextureInfo depthImage;
 
         /** Semaphores for signaling presentation. One per swapchain image. */
         public long[] renderCompleteSemaphores;
+
+        public long surfaceHandle;
+        public long swapchainHandle;
+        public long[] swapchainImages;
+        public long[] swapchainImageViews;
+        public final @NonNull Window window;
+
+        /**
+         * Create a struct for the specified window.
+         *
+         * @param window The window this is related to.
+         */
+        public WindowInfo(@NonNull Window window) {
+            this.depthImage = null;
+            this.renderCompleteSemaphores = null;
+            this.surfaceHandle = VK_NULL_HANDLE;
+            this.swapchainHandle = VK_NULL_HANDLE;
+            this.swapchainImages = null;
+            this.swapchainImageViews = null;
+            this.window = window;
+        }
     }
 }

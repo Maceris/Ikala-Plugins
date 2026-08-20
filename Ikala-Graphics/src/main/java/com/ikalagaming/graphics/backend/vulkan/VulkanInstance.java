@@ -363,7 +363,7 @@ public class VulkanInstance implements Instance {
      * @param window The window.
      */
     private void createSurface(@NonNull Window window) {
-        VulkanState.WindowInfo windowInfo = new VulkanState.WindowInfo();
+        VulkanState.WindowInfo windowInfo = new VulkanState.WindowInfo(window);
         state.windows.add(windowInfo);
 
         checkError(
@@ -533,6 +533,23 @@ public class VulkanInstance implements Instance {
 
             windowInfo.swapchainImages = new long[imageCount];
             images.get(0, windowInfo.swapchainImages);
+            windowInfo.swapchainImageViews = new long[imageCount];
+            for (int i = 0; i < imageCount; i++) {
+                VkImageViewCreateInfo viewCreateInfo =
+                        VkImageViewCreateInfo.calloc(stack)
+                                .sType$Default()
+                                .image(windowInfo.swapchainImages[i])
+                                .viewType(VK_IMAGE_VIEW_TYPE_2D)
+                                .format(VK_FORMAT_B8G8R8A8_SRGB)
+                                .subresourceRange(
+                                        VkImageSubresourceRange.calloc(stack)
+                                                .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                                .levelCount(1)
+                                                .layerCount(1));
+                checkError(
+                        vkCreateImageView(state.device.logical, viewCreateInfo, null, longOutput));
+                windowInfo.swapchainImageViews[i] = longOutput.get(0);
+            }
 
             windowInfo.renderCompleteSemaphores = new long[imageCount];
             VkSemaphoreCreateInfo semaphoreCreateInfo =
@@ -1050,10 +1067,13 @@ public class VulkanInstance implements Instance {
             // TODO(ches) turn this back on when we have it ready
             return;
         }
+        VulkanState.WindowInfo windowInfo = state.windows.getFirst();
+
         longOutput.put(0, state.fences[state.frameIndex]);
         checkError(vkWaitForFences(state.device.logical, longOutput, true, Integer.MAX_VALUE));
         longOutput.put(0, state.fences[state.frameIndex]);
         checkError(vkResetFences(state.device.logical, longOutput));
+
         // TODO(ches) pass in which window we are rendering to
         final long swapchain = state.windows.getFirst().swapchainHandle;
 
@@ -1067,8 +1087,8 @@ public class VulkanInstance implements Instance {
                         intOutput));
         // TODO(ches) recreate swapchain if necessary
         final int nextImage = intOutput.get(0);
-        final long swapchainImage = state.windows.getFirst().swapchainImages[nextImage];
-        final long depthImage = state.windows.getFirst().depthImage.texture;
+        final long swapchainImage = windowInfo.swapchainImages[nextImage];
+        final long depthImage = windowInfo.depthImage.texture;
 
         // TODO(ches) update shader data
         final VkCommandBuffer commandBuffer = state.commandBuffers[state.frameIndex];
@@ -1122,6 +1142,52 @@ public class VulkanInstance implements Instance {
                             .sType$Default()
                             .pImageMemoryBarriers(outputBarriers);
             vkCmdPipelineBarrier2(commandBuffer, barrierDependencyInfo);
+
+            VkRenderingAttachmentInfo.Buffer colorAttachmentInfos =
+                    VkRenderingAttachmentInfo.calloc(1, stack);
+            colorAttachmentInfos
+                    .get(0)
+                    .sType$Default()
+                    .imageView(windowInfo.swapchainImageViews[nextImage])
+                    .imageLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
+                    .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
+                    .storeOp(VK_ATTACHMENT_STORE_OP_STORE)
+                    .clearValue(
+                            VkClearValue.calloc(stack)
+                                    .color(
+                                            VkClearColorValue.calloc(stack)
+                                                    .float32(0, 0.0f)
+                                                    .float32(1, 0.0f)
+                                                    .float32(2, 0.0f)
+                                                    .float32(3, 1.0f)));
+            VkRenderingAttachmentInfo depthAttachmentInfo =
+                    VkRenderingAttachmentInfo.calloc(stack)
+                            .sType$Default()
+                            .imageView(windowInfo.depthImage.view)
+                            .imageLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
+                            .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
+                            .storeOp(VK_ATTACHMENT_STORE_OP_DONT_CARE)
+                            .clearValue(
+                                    VkClearValue.calloc(stack)
+                                            .depthStencil(
+                                                    VkClearDepthStencilValue.calloc(stack)
+                                                            .set(1.0f, 0)));
+
+            VkRenderingInfo renderingInfo =
+                    VkRenderingInfo.calloc(stack)
+                            .sType$Default()
+                            .renderArea(
+                                    VkRect2D.calloc(stack)
+                                            .extent(
+                                                    VkExtent2D.calloc(stack)
+                                                            .width(windowInfo.window.getWidth())
+                                                            .height(windowInfo.window.getHeight())))
+                            .layerCount(1)
+                            .pColorAttachments(colorAttachmentInfos)
+                            .pDepthAttachment(depthAttachmentInfo);
+
+            // TODO(ches) we'll need to start way earlier in the stages
+            vkCmdBeginRendering(commandBuffer, renderingInfo);
         }
 
         // TODO(ches) record command buffer
