@@ -1067,6 +1067,8 @@ public class VulkanInstance implements Instance {
                         intOutput));
         // TODO(ches) recreate swapchain if necessary
         final int nextImage = intOutput.get(0);
+        final long swapchainImage = state.windows.getFirst().swapchainImages[nextImage];
+        final long depthImage = state.windows.getFirst().depthImage.texture;
 
         // TODO(ches) update shader data
         final VkCommandBuffer commandBuffer = state.commandBuffers[state.frameIndex];
@@ -1078,6 +1080,48 @@ public class VulkanInstance implements Instance {
                             .sType$Default()
                             .flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
             checkError(vkBeginCommandBuffer(commandBuffer, commandBufferBeginInfo));
+
+            // TODO(ches) we're going to need a set per stage, or at least more than just the final
+            // ones
+            VkImageMemoryBarrier2.Buffer outputBarriers = VkImageMemoryBarrier2.calloc(2);
+            outputBarriers
+                    .get(0)
+                    .sType$Default()
+                    .srcStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
+                    .srcAccessMask(0)
+                    .dstStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
+                    .dstAccessMask(
+                            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
+                                    | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
+                    .oldLayout(VK_IMAGE_LAYOUT_UNDEFINED)
+                    .newLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
+                    .image(swapchainImage)
+                    .subresourceRange(
+                            VkImageSubresourceRange.calloc(stack)
+                                    .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                    .levelCount(1)
+                                    .layerCount(1));
+            outputBarriers
+                    .get(1)
+                    .sType$Default()
+                    .srcStageMask(VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT)
+                    .srcAccessMask(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
+                    .dstStageMask(VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT)
+                    .dstAccessMask(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
+                    .oldLayout(VK_IMAGE_LAYOUT_UNDEFINED)
+                    .newLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
+                    .image(depthImage)
+                    .subresourceRange(
+                            VkImageSubresourceRange.calloc(stack)
+                                    .aspectMask(
+                                            VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
+                                    .levelCount(1)
+                                    .layerCount(1));
+            VkDependencyInfo barrierDependencyInfo =
+                    VkDependencyInfo.calloc(stack)
+                            .sType$Default()
+                            .pImageMemoryBarriers(outputBarriers);
+            vkCmdPipelineBarrier2(commandBuffer, barrierDependencyInfo);
         }
 
         // TODO(ches) record command buffer
