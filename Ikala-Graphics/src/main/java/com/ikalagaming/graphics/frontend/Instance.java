@@ -32,12 +32,15 @@ public interface Instance {
      */
     TextureLoader getTextureLoader();
 
+    /*
+     * TODO(ches) have this render to any relevant windows, rather than pass one in, once the instance owns windows
+     */
     /**
      * Render a scene on the window.
      *
      * @param scene The scene to render.
      */
-    void render(@NonNull Scene scene);
+    void render(@NonNull Scene scene, @NonNull Window window);
 
     /**
      * Update the buffers and GUI when we resize the screen.

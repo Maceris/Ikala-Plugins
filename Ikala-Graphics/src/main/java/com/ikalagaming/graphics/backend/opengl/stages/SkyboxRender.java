@@ -6,7 +6,9 @@ import static org.lwjgl.opengl.GL13.glActiveTexture;
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
 
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.opengl.SkyboxModel;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
@@ -39,7 +41,8 @@ public class SkyboxRender implements RenderStage {
         this.skybox = skybox;
     }
 
-    public void render(Scene scene) {
+    @Override
+    public void render(Scene scene, @NonNull Window window, State state) {
         shader.bind();
         var uniformsMap = shader.getUniformMap();
 

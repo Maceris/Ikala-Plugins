@@ -2,7 +2,9 @@ package com.ikalagaming.graphics.backend.opengl.stages;
 
 import static org.lwjgl.opengl.GL43.*;
 
+import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.scene.Scene;
@@ -43,7 +45,8 @@ public class SceneRenderWireframe implements RenderStage {
      *
      * @param scene The scene we are rendering.
      */
-    public void render(Scene scene) {
+    @Override
+    public void render(Scene scene, @NonNull Window window, State state) {
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
         SceneRender.commonSceneRender(scene, shader, renderBuffers, gBuffer);

@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.frontend;
 
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.ShaderMap;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
@@ -26,5 +27,6 @@ public interface Pipeline {
      * @param scene The scene to render.
      * @param shaders The shaders to use for rendering.
      */
-    void render(Scene scene, ShaderMap shaders);
+    // TODO(ches) clean this up once we remove OpenGL
+    void render(Scene scene, ShaderMap shaders, @NonNull Window window, State state);
 }

@@ -52,6 +52,7 @@ public interface Shader {
      *
      * @return The uniform map.
      */
+    @Deprecated
     UniformsMap getUniformMap();
 
     /** Stop using this program. */

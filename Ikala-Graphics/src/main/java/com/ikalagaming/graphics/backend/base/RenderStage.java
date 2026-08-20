@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.backend.base;
 
+import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
@@ -23,5 +24,6 @@ public interface RenderStage {
     /** Clean up any resources for the stage. Calling render is not valid after this point. */
     default void cleanup(@NonNull State state) {}
 
-    void render(Scene scene);
+    // TODO(ches) fix this once we throw away OpenGL
+    void render(Scene scene, @NonNull Window window, State state);
 }

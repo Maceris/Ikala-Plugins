@@ -6,7 +6,9 @@ import static org.lwjgl.opengl.GL13.glActiveTexture;
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
 
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.opengl.QuadMesh;
 import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.frontend.Shader;
@@ -42,7 +44,8 @@ public class FilterRender implements RenderStage {
         this.quadMesh = quadMesh;
     }
 
-    public void render(Scene scene) {
+    @Override
+    public void render(Scene scene, @NonNull Window window, State state) {
         glDepthMask(false);
 
         shader.bind();

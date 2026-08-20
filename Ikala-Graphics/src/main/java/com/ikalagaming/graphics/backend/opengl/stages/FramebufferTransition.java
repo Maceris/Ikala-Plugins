@@ -8,13 +8,16 @@ import static org.lwjgl.opengl.GL11.glViewport;
 import static org.lwjgl.opengl.GL14.glBlendEquation;
 import static org.lwjgl.opengl.GL30.*;
 
+import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.scene.Scene;
 
 import imgui.ImGui;
 import imgui.ImGuiIO;
 import lombok.AllArgsConstructor;
+import lombok.NonNull;
 import lombok.Setter;
 
 /** Binds and clears (color+depth) a framebuffer. */
@@ -36,7 +39,7 @@ public class FramebufferTransition implements RenderStage {
     private final int blendDFactor;
 
     @Override
-    public void render(Scene scene) {
+    public void render(Scene scene, @NonNull Window window, State state) {
         glBindFramebuffer(GL_FRAMEBUFFER, (int) framebuffer.id());
 
         ImGuiIO io = ImGui.getIO();

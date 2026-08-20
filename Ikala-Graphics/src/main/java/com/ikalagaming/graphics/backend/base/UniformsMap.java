@@ -10,6 +10,7 @@ import org.joml.Vector3f;
 import org.joml.Vector4f;
 
 /** Allows for creation and usage of uniforms for a shader program. */
+@Deprecated
 public interface UniformsMap {
     /**
      * Create a new uniform, which should match the one defined in the shader code.

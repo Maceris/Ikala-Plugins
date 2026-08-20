@@ -6,6 +6,7 @@ import static org.lwjgl.opengl.GL13.GL_MULTISAMPLE;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.ShaderMap;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.scene.Scene;
 
@@ -34,9 +35,9 @@ public class PipelineOpenGL implements Pipeline {
     }
 
     @Override
-    public void render(Scene scene, ShaderMap shaders) {
+    public void render(Scene scene, ShaderMap shaders, @NonNull Window window, State state) {
         for (RenderStage stage : renderStages) {
-            stage.render(scene);
+            stage.render(scene, window, state);
         }
     }
 }

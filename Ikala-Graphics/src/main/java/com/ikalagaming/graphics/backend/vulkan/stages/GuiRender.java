@@ -8,6 +8,7 @@ import static org.lwjgl.vulkan.VK12.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.vulkan.*;
@@ -131,7 +132,7 @@ public class GuiRender implements RenderStage {
     }
 
     @Override
-    public void render(Scene scene) {
+    public void render(Scene scene, @NonNull Window window, State state) {
         ImGuiIO io = ImGui.getIO();
 
         final int width = (int) io.getDisplaySizeX();

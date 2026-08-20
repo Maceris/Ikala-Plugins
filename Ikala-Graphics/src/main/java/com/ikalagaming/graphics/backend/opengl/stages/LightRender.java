@@ -9,7 +9,9 @@ import static org.lwjgl.opengl.GL30.glBindVertexArray;
 import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.backend.opengl.PipelineOpenGL;
 import com.ikalagaming.graphics.backend.opengl.QuadMesh;
@@ -70,7 +72,7 @@ public class LightRender implements RenderStage {
     @NonNull private QuadMesh quadMesh;
 
     @Override
-    public void render(Scene scene) {
+    public void render(Scene scene, @NonNull Window window, State state) {
         shader.bind();
         var uniformsMap = shader.getUniformMap();
 

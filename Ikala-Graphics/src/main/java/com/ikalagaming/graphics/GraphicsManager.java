@@ -208,7 +208,7 @@ public class GraphicsManager {
 
     /** Render to the screen. */
     private static void render() {
-        renderInstance.render(scene);
+        renderInstance.render(scene, window);
 
         window.update();
         ++framesSinceLastCalculation;

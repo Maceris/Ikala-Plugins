@@ -1062,7 +1062,7 @@ public class VulkanInstance implements Instance {
     }
 
     @Override
-    public void render(@NonNull Scene scene) {
+    public void render(@NonNull Scene scene, @NonNull Window window) {
         if (true) {
             // TODO(ches) turn this back on when we have it ready
             return;
@@ -1190,7 +1190,36 @@ public class VulkanInstance implements Instance {
             vkCmdBeginRendering(commandBuffer, renderingInfo);
         }
 
-        // TODO(ches) record command buffer
+        // This will record the command buffer
+        pipeline.render(scene, shaderMap, windowInfo.window, state);
+
+        vkCmdEndRendering(commandBuffer);
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkImageMemoryBarrier2.Buffer barrierPresents = VkImageMemoryBarrier2.calloc(1, stack);
+            barrierPresents
+                    .get(0)
+                    .sType$Default()
+                    .srcStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
+                    .srcAccessMask(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
+                    .dstStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
+                    .dstAccessMask(0)
+                    .oldLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
+                    .newLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+                    .image(swapchainImage)
+                    .subresourceRange(
+                            VkImageSubresourceRange.calloc(stack)
+                                    .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                    .levelCount(1)
+                                    .layerCount(1));
+            VkDependencyInfo barrierPresentDependencyInfo =
+                    VkDependencyInfo.calloc(stack)
+                            .sType$Default()
+                            .pImageMemoryBarriers(barrierPresents);
+            vkCmdPipelineBarrier2(commandBuffer, barrierPresentDependencyInfo);
+        }
+        vkEndCommandBuffer(commandBuffer);
+
         // TODO(ches) submit command buffer
         // TODO(ches) present image
 

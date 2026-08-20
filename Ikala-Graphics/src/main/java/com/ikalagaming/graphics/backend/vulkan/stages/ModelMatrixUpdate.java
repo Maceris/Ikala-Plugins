@@ -3,7 +3,9 @@ package com.ikalagaming.graphics.backend.vulkan.stages;
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
 import static org.lwjgl.vulkan.VK13.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
+import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.vulkan.PipelineManagerVulkan;
 import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -28,7 +30,7 @@ import java.util.List;
 public class ModelMatrixUpdate implements RenderStage {
 
     @Override
-    public void render(Scene scene) {
+    public void render(Scene scene, @NonNull Window window, State state) {
         scene.getModelMap().values().forEach(this::updateModelBuffer);
         // TODO(ches) barrier
     }

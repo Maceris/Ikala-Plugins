@@ -6,7 +6,9 @@ import static org.lwjgl.opengl.ARBBindlessTexture.glMakeImageHandleResidentARB;
 import static org.lwjgl.opengl.GL43.*;
 
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.MaterialCache;
@@ -64,7 +66,8 @@ public class SceneRender implements RenderStage {
      *
      * @param scene The scene we are rendering.
      */
-    public void render(Scene scene) {
+    @Override
+    public void render(Scene scene, @NonNull Window window, State state) {
         commonSceneRender(scene, shader, renderBuffers, gBuffer);
     }
 

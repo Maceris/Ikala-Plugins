@@ -392,8 +392,8 @@ public class OpenGLInstance implements Instance {
     }
 
     @Override
-    public void render(@NonNull Scene scene) {
-        pipeline.render(scene, shaderMap);
+    public void render(@NonNull Scene scene, @NonNull Window window) {
+        pipeline.render(scene, shaderMap, window, null);
     }
 
     @Override

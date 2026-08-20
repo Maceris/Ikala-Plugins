@@ -4,7 +4,9 @@ import static org.lwjgl.opengl.GL15.glBufferData;
 import static org.lwjgl.opengl.GL42.glMemoryBarrier;
 import static org.lwjgl.opengl.GL43.*;
 
+import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -92,7 +94,8 @@ public class AnimationRender implements RenderStage {
      *
      * @param scene The scene we are rendering.
      */
-    public void render(Scene scene) {
+    @Override
+    public void render(Scene scene, @NonNull Window window, State state) {
         shader.bind();
 
         for (Model model : scene.getModelMap().values()) {

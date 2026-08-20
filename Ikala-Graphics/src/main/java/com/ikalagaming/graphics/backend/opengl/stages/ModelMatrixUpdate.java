@@ -4,7 +4,9 @@ import static org.lwjgl.opengl.GL15.*;
 import static org.lwjgl.opengl.GL42.GL_COMMAND_BARRIER_BIT;
 import static org.lwjgl.opengl.GL42.glMemoryBarrier;
 
+import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.opengl.PipelineManager;
 import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -29,7 +31,7 @@ import java.util.List;
 public class ModelMatrixUpdate implements RenderStage {
 
     @Override
-    public void render(Scene scene) {
+    public void render(Scene scene, @NonNull Window window, State state) {
         scene.getModelMap().values().forEach(this::updateModelBuffer);
         glMemoryBarrier(GL_COMMAND_BARRIER_BIT);
     }

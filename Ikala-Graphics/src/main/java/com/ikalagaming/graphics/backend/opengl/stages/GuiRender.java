@@ -10,7 +10,9 @@ import static org.lwjgl.opengl.GL43.GL_SHADER_STORAGE_BUFFER;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.opengl.GuiMesh;
 import com.ikalagaming.graphics.backend.opengl.ImGuiMesh;
 import com.ikalagaming.graphics.frontend.Shader;
@@ -74,7 +76,7 @@ public class GuiRender implements RenderStage {
     }
 
     @Override
-    public void render(Scene scene) {
+    public void render(Scene scene, @NonNull Window window, State state) {
         ImGuiIO io = ImGui.getIO();
 
         final int width = (int) io.getDisplaySizeX();

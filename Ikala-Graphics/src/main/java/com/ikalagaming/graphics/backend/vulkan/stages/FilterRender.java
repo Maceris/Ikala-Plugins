@@ -6,6 +6,7 @@ import static org.lwjgl.vulkan.VK10.VK_NULL_HANDLE;
 import static org.lwjgl.vulkan.VK12.*;
 
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.vulkan.QuadMesh;
@@ -65,11 +66,35 @@ public class FilterRender implements RenderStage {
         this.pipeline = VK_NULL_HANDLE;
     }
 
-    public void render(Scene scene) {
+    @Override
+    public void render(Scene scene, @NonNull Window window, State state) {
         shader.bind();
         var uniformsMap = shader.getUniformMap();
 
+        // TODO(ches) remove this when we don't have the nothingburger state?
+        VulkanState vulkanState = (VulkanState) state;
+        final VkCommandBuffer commandBuffer = vulkanState.commandBuffers[vulkanState.frameIndex];
+
         uniformsMap.setUniform(ShaderUniforms.Filter.SCREEN_TEXTURE, 0);
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
+            viewports
+                    .get(0)
+                    .width(window.getWidth())
+                    .height(window.getHeight())
+                    .minDepth(0.0f)
+                    .maxDepth(1.0f);
+
+            vkCmdSetViewport(commandBuffer, 0, viewports);
+            VkRect2D.Buffer scissors = VkRect2D.calloc(1, stack);
+            scissors.get(0)
+                    .extent(
+                            VkExtent2D.calloc(stack)
+                                    .width(window.getWidth())
+                                    .height(window.getHeight()));
+            vkCmdSetScissor(commandBuffer, 0, scissors);
+        }
         // TODO(ches) render
 
         shader.unbind();
