@@ -1086,8 +1086,8 @@ public class VulkanInstance implements Instance {
                         VK_NULL_HANDLE,
                         intOutput));
         // TODO(ches) recreate swapchain if necessary
-        final int nextImage = intOutput.get(0);
-        final long swapchainImage = windowInfo.swapchainImages[nextImage];
+        final int imageIndex = intOutput.get(0);
+        final long swapchainImage = windowInfo.swapchainImages[imageIndex];
         final long depthImage = windowInfo.depthImage.texture;
 
         // TODO(ches) update shader data
@@ -1148,7 +1148,7 @@ public class VulkanInstance implements Instance {
             colorAttachmentInfos
                     .get(0)
                     .sType$Default()
-                    .imageView(windowInfo.swapchainImageViews[nextImage])
+                    .imageView(windowInfo.swapchainImageViews[imageIndex])
                     .imageLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
                     .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
                     .storeOp(VK_ATTACHMENT_STORE_OP_STORE)
@@ -1220,9 +1220,54 @@ public class VulkanInstance implements Instance {
         }
         vkEndCommandBuffer(commandBuffer);
 
-        // TODO(ches) submit command buffer
-        // TODO(ches) present image
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkSemaphoreSubmitInfo.Buffer waitSemaphoreInfos =
+                    VkSemaphoreSubmitInfo.calloc(1, stack);
+            waitSemaphoreInfos
+                    .get(0)
+                    .sType$Default()
+                    .semaphore(state.imageAcquiredSemaphores[state.frameIndex])
+                    .stageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
+            VkCommandBufferSubmitInfo.Buffer commandBufferSubmitInfos =
+                    VkCommandBufferSubmitInfo.calloc(1, stack);
+            commandBufferSubmitInfos.get(0).sType$Default().commandBuffer(commandBuffer);
+            VkSemaphoreSubmitInfo.Buffer signalSemaphoreInfos =
+                    VkSemaphoreSubmitInfo.calloc(1, stack);
+            signalSemaphoreInfos
+                    .get(0)
+                    .sType$Default()
+                    .semaphore(windowInfo.renderCompleteSemaphores[imageIndex])
+                    .stageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+
+            VkSubmitInfo2.Buffer submitInfos = VkSubmitInfo2.calloc(1, stack);
+            submitInfos
+                    .get(0)
+                    .sType$Default()
+                    .pWaitSemaphoreInfos(waitSemaphoreInfos)
+                    .pCommandBufferInfos(commandBufferSubmitInfos)
+                    .pSignalSemaphoreInfos(signalSemaphoreInfos);
+            checkError(
+                    vkQueueSubmit2(
+                            state.device.graphicsQueue,
+                            submitInfos,
+                            state.fences[state.frameIndex]));
+
+            LongBuffer waitSemaphores =
+                    stack.longs(windowInfo.renderCompleteSemaphores[imageIndex]);
+            LongBuffer swapchains = stack.longs(windowInfo.swapchainHandle);
+            IntBuffer imageIndices = stack.ints(imageIndex);
+
+            VkPresentInfoKHR presentInfo =
+                    VkPresentInfoKHR.calloc(stack)
+                            .sType$Default()
+                            .pWaitSemaphores(waitSemaphores)
+                            .pSwapchains(swapchains)
+                            .pImageIndices(imageIndices);
+            checkSwapchain(vkQueuePresentKHR(state.device.presentQueue, presentInfo));
+        }
+
+        state.frameIndex = (state.frameIndex + 1) % GraphicsManager.MAX_FRAMES_IN_FLIGHT;
     }
 
     @Override

@@ -51,6 +51,7 @@ public class VulkanState implements State {
     /** The Vulkan Memory Allocator handle. */
     public long vmaAllocator = VK_NULL_HANDLE;
 
+    // TODO(ches) this should probably be a map or something
     /** Info specific to windows. */
     public final List<WindowInfo> windows = new ArrayList<>();
 
