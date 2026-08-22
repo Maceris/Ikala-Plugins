@@ -281,10 +281,167 @@ public class VulkanInstance implements Instance {
         }
     }
 
-    private void checkSwapchain(int errorCode) {
-        // TODO(ches) complete this
-        if (errorCode == VK_ERROR_OUT_OF_DATE_KHR) {
-            // TODO(ches) refresh swapchain
+    /**
+     * Check if we need to update the swapchain.
+     *
+     * @param errorCode The error code from a vulkan function that might be
+     *     VK_ERROR_OUT_OF_DATE_KHR.
+     * @param windowInfo The window we are interested in.
+     */
+    private void checkSwapchain(int errorCode, @NonNull VulkanState.WindowInfo windowInfo) {
+        if (errorCode == VK_ERROR_OUT_OF_DATE_KHR || windowInfo.updateSwapchain) {
+            windowInfo.updateSwapchain = false;
+            checkError(vkDeviceWaitIdle(state.device.logical));
+            checkError(
+                    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+                            state.device.physical.physicalDevice,
+                            windowInfo.surfaceHandle,
+                            state.device.physical.capabilities));
+
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                VkExtent2D swapchainExtent = VkExtent2D.calloc(stack);
+                if (state.device.physical.capabilities.currentExtent().width() == 0xFFFF_FFFF) {
+                    swapchainExtent.set(
+                            windowInfo.window.getWidth(), windowInfo.window.getHeight());
+                } else {
+                    swapchainExtent.set(state.device.physical.capabilities.currentExtent());
+                }
+
+                VkSwapchainCreateInfoKHR swapchainCreateInfo =
+                        VkSwapchainCreateInfoKHR.calloc(stack)
+                                .sType$Default()
+                                .surface(windowInfo.surfaceHandle)
+                                .minImageCount(state.device.physical.capabilities.minImageCount())
+                                .imageFormat(VK_FORMAT_B8G8R8A8_SRGB)
+                                .imageColorSpace(VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+                                .imageExtent(swapchainExtent)
+                                .imageArrayLayers(1)
+                                .imageUsage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+                                .preTransform(VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+                                .compositeAlpha(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
+                                .presentMode(VK_PRESENT_MODE_FIFO_KHR)
+                                .oldSwapchain(windowInfo.swapchainHandle);
+                checkError(
+                        vkCreateSwapchainKHR(
+                                state.device.logical, swapchainCreateInfo, null, longOutput));
+                windowInfo.swapchainHandle = longOutput.get(0);
+
+                for (int i = 0; i < windowInfo.swapchainImageViews.length; i++) {
+                    vkDestroyImageView(
+                            state.device.logical, windowInfo.swapchainImageViews[i], null);
+                }
+
+                checkError(
+                        vkGetSwapchainImagesKHR(
+                                state.device.logical, windowInfo.swapchainHandle, intOutput, null));
+                final int imageCount = intOutput.get(0);
+                LongBuffer images = stack.callocLong(imageCount);
+                checkError(
+                        vkGetSwapchainImagesKHR(
+                                state.device.logical,
+                                windowInfo.swapchainHandle,
+                                intOutput,
+                                images));
+                windowInfo.swapchainImages = new long[imageCount];
+                images.get(0, windowInfo.swapchainImages);
+
+                windowInfo.swapchainImageViews = new long[imageCount];
+                for (int i = 0; i < imageCount; i++) {
+                    VkImageViewCreateInfo viewCreateInfo =
+                            VkImageViewCreateInfo.calloc(stack)
+                                    .sType$Default()
+                                    .image(windowInfo.swapchainImages[i])
+                                    .viewType(VK_IMAGE_VIEW_TYPE_2D)
+                                    .format(VK_FORMAT_B8G8R8A8_SRGB)
+                                    .subresourceRange(
+                                            VkImageSubresourceRange.calloc(stack)
+                                                    .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                                    .levelCount(1)
+                                                    .layerCount(1));
+                    checkError(
+                            vkCreateImageView(
+                                    state.device.logical, viewCreateInfo, null, longOutput));
+                    windowInfo.swapchainImageViews[i] = longOutput.get(0);
+                }
+
+                for (long handle : windowInfo.renderCompleteSemaphores) {
+                    vkDestroySemaphore(state.device.logical, handle, null);
+                }
+                windowInfo.renderCompleteSemaphores = new long[imageCount];
+                VkSemaphoreCreateInfo semaphoreCreateInfo =
+                        VkSemaphoreCreateInfo.calloc(stack).sType$Default();
+                for (int i = 0; i < imageCount; i++) {
+                    checkError(
+                            vkCreateSemaphore(
+                                    state.device.logical, semaphoreCreateInfo, null, longOutput));
+                    windowInfo.renderCompleteSemaphores[i] = longOutput.get(0);
+                }
+                vkDestroySwapchainKHR(
+                        state.device.logical, swapchainCreateInfo.oldSwapchain(), null);
+                vmaDestroyImage(
+                        state.vmaAllocator,
+                        windowInfo.depthImage.texture,
+                        windowInfo.depthImage.textureAllocation);
+                vkDestroyImageView(state.device.logical, windowInfo.depthImage.view, null);
+
+                VkExtent3D depthExtent =
+                        VkExtent3D.calloc(stack)
+                                .set(swapchainExtent.width(), swapchainExtent.height(), 1);
+
+                VkImageCreateInfo depthImageCreateInfo =
+                        VkImageCreateInfo.calloc(stack)
+                                .sType$Default()
+                                .imageType(VK_IMAGE_TYPE_2D)
+                                .format(state.device.physical.depthFormat)
+                                .extent(depthExtent)
+                                .mipLevels(1)
+                                .arrayLayers(1)
+                                .samples(VK_SAMPLE_COUNT_1_BIT)
+                                .tiling(VK_IMAGE_TILING_OPTIMAL)
+                                .usage(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+                                .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED);
+
+                VmaAllocationCreateInfo depthImageAlloc =
+                        VmaAllocationCreateInfo.calloc(stack)
+                                .flags(VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT)
+                                .usage(VMA_MEMORY_USAGE_AUTO);
+
+                checkError(
+                        vmaCreateImage(
+                                state.vmaAllocator,
+                                depthImageCreateInfo,
+                                depthImageAlloc,
+                                longOutput,
+                                pointerOutput,
+                                null));
+                final long depthImage = longOutput.get(0);
+                final long depthImageAllocation = pointerOutput.get(0);
+
+                VkImageSubresourceRange depthViewSubresourceRange =
+                        VkImageSubresourceRange.calloc(stack)
+                                .aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT)
+                                .levelCount(1)
+                                .layerCount(1);
+
+                VkImageViewCreateInfo depthViewCreateInfo =
+                        VkImageViewCreateInfo.calloc(stack)
+                                .sType$Default()
+                                .image(depthImage)
+                                .viewType(VK_IMAGE_VIEW_TYPE_2D)
+                                .format(state.device.physical.depthFormat)
+                                .subresourceRange(depthViewSubresourceRange);
+
+                checkError(
+                        vkCreateImageView(
+                                state.device.logical, depthViewCreateInfo, null, longOutput));
+                final long depthView = longOutput.get(0);
+
+                windowInfo.depthImage.texture = depthImage;
+                windowInfo.depthImage.textureAllocation = depthImageAllocation;
+                windowInfo.depthImage.view = depthView;
+            }
+        } else {
+            checkError(errorCode);
         }
     }
 
@@ -1084,7 +1241,8 @@ public class VulkanInstance implements Instance {
                         Long.MAX_VALUE,
                         state.imageAcquiredSemaphores[state.frameIndex],
                         VK_NULL_HANDLE,
-                        intOutput));
+                        intOutput),
+                windowInfo);
         // TODO(ches) recreate swapchain if necessary
         final int imageIndex = intOutput.get(0);
         final long swapchainImage = windowInfo.swapchainImages[imageIndex];
@@ -1264,7 +1422,7 @@ public class VulkanInstance implements Instance {
                             .pWaitSemaphores(waitSemaphores)
                             .pSwapchains(swapchains)
                             .pImageIndices(imageIndices);
-            checkSwapchain(vkQueuePresentKHR(state.device.presentQueue, presentInfo));
+            checkSwapchain(vkQueuePresentKHR(state.device.presentQueue, presentInfo), windowInfo);
         }
 
         state.frameIndex = (state.frameIndex + 1) % GraphicsManager.MAX_FRAMES_IN_FLIGHT;

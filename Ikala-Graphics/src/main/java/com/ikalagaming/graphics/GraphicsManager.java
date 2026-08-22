@@ -225,6 +225,7 @@ public class GraphicsManager {
         int width = window.getWidth();
         int height = window.getHeight();
         scene.resize(width, height);
+        // TODO(ches) mark the window's swapchain in need of updating
         renderInstance.resize(width, height);
     }
 

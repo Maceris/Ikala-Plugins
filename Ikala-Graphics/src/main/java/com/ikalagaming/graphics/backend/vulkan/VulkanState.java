@@ -130,6 +130,10 @@ public class VulkanState implements State {
         public long swapchainHandle;
         public long[] swapchainImages;
         public long[] swapchainImageViews;
+
+        /** If we need to update the swapchain. */
+        public boolean updateSwapchain;
+
         public final @NonNull Window window;
 
         /**
@@ -144,6 +148,7 @@ public class VulkanState implements State {
             this.swapchainHandle = VK_NULL_HANDLE;
             this.swapchainImages = null;
             this.swapchainImageViews = null;
+            this.updateSwapchain = false;
             this.window = window;
         }
     }
