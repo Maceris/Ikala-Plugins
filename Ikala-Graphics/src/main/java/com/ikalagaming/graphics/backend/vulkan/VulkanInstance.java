@@ -447,8 +447,57 @@ public class VulkanInstance implements Instance {
 
     @Override
     public void cleanup() {
-        // TODO(ches) complete this
+        checkError(vkDeviceWaitIdle(state.device.logical));
+
         pipelineManager.cleanup(state);
+
+        for (VulkanState.WindowInfo windowInfo : state.windows) {
+            cleanupWindow(windowInfo);
+        }
+        state.windows.clear();
+
+        vkDestroyCommandPool(state.device.logical, state.commandPool, null);
+        state.commandPool = VK_NULL_HANDLE;
+        vmaDestroyAllocator(state.vmaAllocator);
+        state.vmaAllocator = VK_NULL_HANDLE;
+        vkDestroyDevice(state.device.logical, null);
+        cleanupPhysicalDeviceInfo(state.device.physical);
+        state.device.physical = null;
+        vkDestroyInstance(state.instance, null);
+    }
+
+    /**
+     * Clean up any memory owned by the struct.
+     *
+     * @param deviceInfo The struct to clean up.
+     */
+    private void cleanupPhysicalDeviceInfo(@NonNull VulkanState.PhysicalDeviceInfo deviceInfo) {
+        if (deviceInfo.formats != null) {
+            deviceInfo.formats.free();
+            deviceInfo.formats = null;
+        }
+        if (deviceInfo.queueFamilyProperties != null) {
+            deviceInfo.queueFamilyProperties.free();
+            deviceInfo.queueFamilyProperties = null;
+        }
+    }
+
+    private void cleanupWindow(VulkanState.WindowInfo windowInfo) {
+        for (int i = 0; i < windowInfo.swapchainImageViews.length; i++) {
+            vkDestroyImageView(state.device.logical, windowInfo.swapchainImageViews[i], null);
+        }
+
+        for (long handle : windowInfo.renderCompleteSemaphores) {
+            vkDestroySemaphore(state.device.logical, handle, null);
+        }
+        vkDestroyImageView(state.device.logical, windowInfo.depthImage.view, null);
+        vmaDestroyImage(
+                state.vmaAllocator,
+                windowInfo.depthImage.texture,
+                windowInfo.depthImage.textureAllocation);
+        vkDestroySwapchainKHR(state.device.logical, windowInfo.swapchainHandle, null);
+
+        vkDestroySurfaceKHR(state.instance, windowInfo.surfaceHandle, null);
     }
 
     private void createShaderData() {
@@ -529,6 +578,9 @@ public class VulkanInstance implements Instance {
         windowInfo.surfaceHandle = longOutput.get(0);
 
         state.device.physical = selectPhysicalDevice(windowInfo.surfaceHandle);
+        state.physicalDevices.remove(state.device.physical);
+        state.physicalDevices.forEach(this::cleanupPhysicalDeviceInfo);
+        state.physicalDevices.clear();
 
         int queueCount = 1;
         if (state.device.physical.queueFamilyIndices.graphics()
