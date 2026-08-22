@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.backend.vulkan;
 
 import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.graph.CascadeShadow;
 
 /** Bindings and buffer positions for Vulkan shaders. */
 public class ShaderBindings {
@@ -75,6 +76,9 @@ public class ShaderBindings {
          * coordinates to Normalized Device Coordinates of (-1, 1).
          */
         public static final int UNIFORM_BUFFER_SCALE_OFFSET = 0;
+
+        /** The size of the uniforms buffer. */
+        public static final int UNIFORMS_BUFFER_SIZE = 2 * Float.BYTES + Integer.BYTES;
 
         /** Private constructor so this class is not instantiated. */
         private GUI() {
@@ -269,6 +273,16 @@ public class ShaderBindings {
         /** Uniforms buffer binding. */
         public static final int UNIFORMS_BINDING = 0;
 
+        /** The size of the uniforms buffer. */
+        public static final int UNIFORMS_BUFFER_SIZE =
+                4 * 4 * 2 * Float.BYTES
+                        + AmbientLight.SIZEOF
+                        + DirectionalLight.SIZEOF
+                        + 2 * Integer.BYTES
+                        + Fog.SIZEOF
+                        + com.ikalagaming.graphics.graph.CascadeShadow.SHADOW_MAP_CASCADE_COUNT
+                                * CascadeShadow.SIZEOF;
+
         /** Private constructor so this class is not instantiated. */
         private Light() {
             cutItOut();
@@ -362,6 +376,10 @@ public class ShaderBindings {
         /** The binding point for the uniforms buffer. */
         public static final int UNIFORMS_BINDING = 0;
 
+        /** The size of the uniforms buffer. */
+        public static final int UNIFORMS_BUFFER_SIZE =
+                2 * (4 * 4 * Float.BYTES) + 2 * Integer.BYTES;
+
         /** The offset into the uniforms for the cameras view matrix. */
         public static final int VIEW_MATRIX_OFFSET = 4 * 4 * Float.BYTES;
 
@@ -380,11 +398,14 @@ public class ShaderBindings {
         /** The offset into the uniforms buffer for the combined projection and view matrix. */
         public static final int PROJECTION_VIEW_MATRIX_OFFSET = 0;
 
+        /** The binding point for the model matrices buffer. */
+        public static final int MODEL_MATRICES_BINDING = 1;
+
         /** The binding point for the uniforms buffer. */
         public static final int UNIFORMS_BINDING = 0;
 
-        /** The binding point for the model matrices buffer. */
-        public static final int MODEL_MATRICES_BINDING = 1;
+        /** The size of the uniforms buffer. */
+        public static final int UNIFORMS_BUFFER_SIZE = 4 * 4 * Float.BYTES;
 
         /** Private constructor so this class is not instantiated. */
         private Shadow() {
@@ -416,6 +437,10 @@ public class ShaderBindings {
 
         /** The binding point for the uniforms buffer. */
         public static final int UNIFORMS_BINDING = 0;
+
+        /** The size of the uniforms buffer. */
+        public static final int UNIFORMS_BUFFER_SIZE =
+                (4 * 4 * 2 + 4) * Float.BYTES + 2 * Integer.BYTES;
 
         /** Offset in the uniform buffer in bytes for the cameras view matrix. */
         public static final int VIEW_MATRIX_OFFSET = 4 * 4 * Float.BYTES;

@@ -504,20 +504,35 @@ public class VulkanInstance implements Instance {
         for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
             state.shaderDataBuffers[i] = new PerFrameData();
 
-            // TODO(ches) figure out the shader data size
-            final long figureOutSize = 1;
-
-            state.shaderDataBuffers[i].animation = createSharedBuffer(figureOutSize);
-            state.shaderDataBuffers[i].filter = createSharedBuffer(figureOutSize);
-            state.shaderDataBuffers[i].gui = createSharedBuffer(figureOutSize);
-            state.shaderDataBuffers[i].guiLegacy = createSharedBuffer(figureOutSize);
-            state.shaderDataBuffers[i].light = createSharedBuffer(figureOutSize);
-            state.shaderDataBuffers[i].scene = createSharedBuffer(figureOutSize);
-            state.shaderDataBuffers[i].shadow = createSharedBuffer(figureOutSize);
-            state.shaderDataBuffers[i].skybox = createSharedBuffer(figureOutSize);
+            final long DYNAMIC = 0;
+            state.shaderDataBuffers[i].animationData = createSharedBuffer(DYNAMIC);
+            state.shaderDataBuffers[i].animationOffsets = createSharedBuffer(DYNAMIC);
+            state.shaderDataBuffers[i].animationModelData = createSharedBuffer(DYNAMIC);
+            state.shaderDataBuffers[i].animationBoneWeight = createSharedBuffer(DYNAMIC);
+            state.shaderDataBuffers[i].animationTarget = createSharedBuffer(DYNAMIC);
+            state.shaderDataBuffers[i].guiUniforms =
+                    createSharedBuffer(ShaderBindings.GUI.UNIFORMS_BUFFER_SIZE);
+            state.shaderDataBuffers[i].guiCommands = createSharedBuffer(DYNAMIC);
+            state.shaderDataBuffers[i].guiPoints = createSharedBuffer(DYNAMIC);
+            state.shaderDataBuffers[i].guiPointDetails = createSharedBuffer(DYNAMIC);
+            state.shaderDataBuffers[i].lightUniforms =
+                    createSharedBuffer(ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
+            state.shaderDataBuffers[i].lightPointLights = createSharedBuffer(DYNAMIC);
+            state.shaderDataBuffers[i].lightSpotLights = createSharedBuffer(DYNAMIC);
+            state.shaderDataBuffers[i].lightMaterials = createSharedBuffer(DYNAMIC);
+            state.shaderDataBuffers[i].sceneUniforms =
+                    createSharedBuffer(ShaderBindings.Scene.UNIFORMS_BUFFER_SIZE);
+            state.shaderDataBuffers[i].sceneModelMatrices = createSharedBuffer(DYNAMIC);
+            state.shaderDataBuffers[i].sceneMaterials = createSharedBuffer(DYNAMIC);
+            state.shaderDataBuffers[i].sceneMaterialOverrides = createSharedBuffer(DYNAMIC);
+            state.shaderDataBuffers[i].shadowUniforms =
+                    createSharedBuffer(ShaderBindings.Shadow.UNIFORMS_BUFFER_SIZE);
+            state.shaderDataBuffers[i].shadowModelMatrices = createSharedBuffer(DYNAMIC);
+            state.shaderDataBuffers[i].skyboxUniforms =
+                    createSharedBuffer(ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE);
         }
 
-        // TODO(ches) setup command pools, and coommand buffers * MAX_FRAMES_IN_FLIGHT
+        // TODO(ches) setup command pools, and command buffers * MAX_FRAMES_IN_FLIGHT
     }
 
     /**
@@ -527,6 +542,10 @@ public class VulkanInstance implements Instance {
      * @return The new buffer object.
      */
     private SharedBuffer createSharedBuffer(long bufferSize) {
+        if (bufferSize <= 0) {
+            return new SharedBuffer();
+        }
+
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkBufferCreateInfo bufferCreateInfo =
                     VkBufferCreateInfo.calloc(stack)
