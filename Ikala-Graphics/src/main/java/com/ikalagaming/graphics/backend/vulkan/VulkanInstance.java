@@ -531,8 +531,6 @@ public class VulkanInstance implements Instance {
             state.shaderDataBuffers[i].skyboxUniforms =
                     createSharedBuffer(ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE);
         }
-
-        // TODO(ches) setup command pools, and command buffers * MAX_FRAMES_IN_FLIGHT
     }
 
     /**
@@ -1291,10 +1289,6 @@ public class VulkanInstance implements Instance {
 
     @Override
     public void render(@NonNull Scene scene, @NonNull Window window) {
-        if (true) {
-            // TODO(ches) turn this back on when we have it ready
-            return;
-        }
         VulkanState.WindowInfo windowInfo = state.windows.getFirst();
 
         longOutput.put(0, state.fences[state.frameIndex]);
@@ -1492,6 +1486,7 @@ public class VulkanInstance implements Instance {
                             .sType$Default()
                             .pWaitSemaphores(waitSemaphores)
                             .pSwapchains(swapchains)
+                            .swapchainCount(1)
                             .pImageIndices(imageIndices);
             checkSwapchain(vkQueuePresentKHR(state.device.presentQueue, presentInfo), windowInfo);
         }

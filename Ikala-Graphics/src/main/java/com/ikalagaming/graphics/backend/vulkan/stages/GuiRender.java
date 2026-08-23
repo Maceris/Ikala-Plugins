@@ -7,7 +7,6 @@ import static org.lwjgl.vulkan.VK12.*;
 import static org.lwjgl.vulkan.VK12.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
 
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
@@ -154,8 +153,7 @@ public class GuiRender implements RenderStage {
 
         scale.x = 2.0f / width;
         scale.y = -2.0f / height;
-        var uniformsMap = imGuiShader.getUniformMap();
-        uniformsMap.setUniform(ShaderUniforms.GUI.SCALE, scale);
+        // TODO(ches) set scale
 
         ImDrawData drawData = ImGui.getDrawData();
         ImVec2 bufferScale = drawData.getFramebufferScale();
@@ -191,8 +189,7 @@ public class GuiRender implements RenderStage {
 
         scale.x = 2.0f / width;
         scale.y = -2.0f / height;
-        var uniformsMap = shader.getUniformMap();
-        uniformsMap.setUniform(ShaderUniforms.GUI.SCALE, scale);
+        // TODO(ches) set scale
 
         if (!IkGui.getIO().fonts.stagedBitmaps.isEmpty()) {
             for (FontAtlas.StagedBitmap letter : IkGui.getIO().fonts.stagedBitmaps) {
