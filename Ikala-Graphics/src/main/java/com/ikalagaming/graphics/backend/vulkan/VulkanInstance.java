@@ -1574,7 +1574,15 @@ public class VulkanInstance implements Instance {
             @NonNull VulkanState.PhysicalDeviceInfo deviceInfo, final long surfaceHandle) {
         updateQueueFamilies(deviceInfo, surfaceHandle);
 
-        if (!deviceInfo.queueFamilyIndices.hasAllValues()) {
+        /* Quick checks to rule out the device entirely. */
+
+        if (deviceInfo.queueFamilyIndices.graphics() == QueueFamilyIndices.MISSING
+                || deviceInfo.queueFamilyIndices.present() == QueueFamilyIndices.MISSING) {
+            /*
+             * We either can't deal with graphics at all, or can't present them with this device. We don't really
+             * need to check transfer support, because it can always use the transfer queue as a backup. Though,
+             * we'll reward having a separate queue lower down.
+             */
             return 0;
         }
 
@@ -1597,10 +1605,17 @@ public class VulkanInstance implements Instance {
         }
         int score = 0;
 
-        if (deviceInfo.deviceProperties.deviceType() == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+        if (deviceInfo.queueFamilyIndices.transfer() != deviceInfo.queueFamilyIndices.graphics()) {
             score += 1_000_000;
+        } else if (deviceInfo.queueFamilyIndices.roomForSeparateTransferQueue()) {
+            score += 500_000;
         }
 
+        if (deviceInfo.deviceProperties.deviceType() == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+            score += 10_000_000;
+        }
+
+        /* I expect these values to be ~8-16K */
         score += deviceInfo.deviceProperties.limits().maxImageDimension2D();
 
         return score;
@@ -1732,8 +1747,9 @@ public class VulkanInstance implements Instance {
         } finally {
             if (transferFamilyIdeal != QueueFamilyIndices.MISSING
                     && transferFamilyIdeal != transferFamily) {
-                // We found a family with no graphics or compute that's different from any ole
-                // transferFamily
+                /*
+                 * We found a family with no graphics or compute that's different from any ole transferFamily
+                 */
                 transferFamily = transferFamilyIdeal;
             }
             if (transferFamily == QueueFamilyIndices.MISSING

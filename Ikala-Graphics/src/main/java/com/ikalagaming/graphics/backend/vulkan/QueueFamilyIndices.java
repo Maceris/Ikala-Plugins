@@ -41,13 +41,4 @@ public record QueueFamilyIndices(
                 + graphics
                 + '}';
     }
-
-    /**
-     * Checks if all the indices are valid values.
-     *
-     * @return If all indices have values.
-     */
-    public boolean hasAllValues() {
-        return graphics != MISSING && present != MISSING && transfer != MISSING;
-    }
 }
