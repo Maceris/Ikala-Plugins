@@ -19,12 +19,24 @@ public class VulkanState implements State {
     /** The Vulkan instance. */
     public VkInstance instance = null;
 
-    /** The command pool to allocate command buffers from. */
-    public long commandPool = VK_NULL_HANDLE;
+    /** The command pool for graphics commands. */
+    public long commandPoolGraphics = VK_NULL_HANDLE;
 
-    /** Command buffers for each frame. */
-    public final VkCommandBuffer[] commandBuffers =
+    /**
+     * The command pool for transfer commands, may be the same as {@link #commandBuffersGraphics}.
+     */
+    public long commandPoolTransfer = VK_NULL_HANDLE;
+
+    /** Per-frame graphics command buffers, each index should be a different buffer. */
+    public final VkCommandBuffer[] commandBuffersGraphics =
             new VkCommandBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /**
+     * Command buffer for transfer commands. If we don't have a dedicated queue for transfers
+     * ({@link #hasSeparateTransferQueue}), this will be null, and we'll be forced to transfer
+     * buffers at the start of the next graphics command buffer.
+     */
+    public VkCommandBuffer commandBufferTransfer = null;
 
     /** Device information. */
     public final Device device = new Device();
@@ -37,6 +49,14 @@ public class VulkanState implements State {
      * com.ikalagaming.graphics.GraphicsManager#MAX_FRAMES_IN_FLIGHT}).
      */
     public int frameIndex = 0;
+
+    /**
+     * Whether we have a dedicated command queue for transfers. We try to have a separate queue,
+     * preferably on a separate queue family corresponding to DMA hardware, but could be forced to
+     * use the graphics queue. If this is true we can transfer data in the background, if false data
+     * must be transferred synchronously at the start of the next frame.
+     */
+    public boolean hasSeparateTransferQueue = false;
 
     /** Semaphores for signaling presentation. One per frame in flight. */
     public final long[] imageAcquiredSemaphores = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
@@ -61,17 +81,14 @@ public class VulkanState implements State {
 
         public VkDevice logical = null;
 
-        /**
-         * The queue for graphics commands. This might or might not be the same as the present
-         * queue. If using the same queue, these will share the same Java object.
-         */
+        /** The queue for graphics commands. */
         public VkQueue graphicsQueue = null;
 
         /**
-         * The queue for presentation commands. This might or might not be the same as the graphics
-         * queue. If using the same queue, these will share the same Java object.
+         * Used for transferring data to the GPU. This might or might not be the same as the
+         * graphics queue. If using the same queue, these will share the same Java object.
          */
-        public VkQueue presentQueue = null;
+        public VkQueue transferQueue = null;
     }
 
     /** Information about the physical hardware devices. */

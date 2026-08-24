@@ -456,8 +456,12 @@ public class VulkanInstance implements Instance {
         }
         state.windows.clear();
 
-        vkDestroyCommandPool(state.device.logical, state.commandPool, null);
-        state.commandPool = VK_NULL_HANDLE;
+        vkDestroyCommandPool(state.device.logical, state.commandPoolGraphics, null);
+        state.commandPoolGraphics = VK_NULL_HANDLE;
+        if (state.hasSeparateTransferQueue) {
+            vkDestroyCommandPool(state.device.logical, state.commandPoolTransfer, null);
+            state.commandPoolTransfer = VK_NULL_HANDLE;
+        }
         vmaDestroyAllocator(state.vmaAllocator);
         state.vmaAllocator = VK_NULL_HANDLE;
         vkDestroyDevice(state.device.logical, null);
@@ -599,11 +603,8 @@ public class VulkanInstance implements Instance {
         state.physicalDevices.forEach(this::cleanupPhysicalDeviceInfo);
         state.physicalDevices.clear();
 
-        int queueCount = 1;
-        if (state.device.physical.queueFamilyIndices.graphics()
-                != state.device.physical.queueFamilyIndices.present()) {
-            queueCount = 2;
-        }
+        state.hasSeparateTransferQueue =
+                state.device.physical.queueFamilyIndices.roomForSeparateTransferQueue();
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkPhysicalDeviceVulkan11Features enabledVk11Features =
@@ -636,22 +637,48 @@ public class VulkanInstance implements Instance {
             VkPhysicalDeviceFeatures enabledVkFeatures = VkPhysicalDeviceFeatures.calloc(stack);
             enabledVkFeatures.samplerAnisotropy(true).fillModeNonSolid(true);
 
-            VkDeviceQueueCreateInfo.Buffer deviceQueueCreateInfos =
-                    VkDeviceQueueCreateInfo.calloc(queueCount, stack);
+            VkDeviceQueueCreateInfo.Buffer deviceQueueCreateInfos;
 
-            for (int i = 0; i < queueCount; i++) {
-                final int index =
-                        switch (i) {
-                            case 0 -> state.device.physical.queueFamilyIndices.graphics();
-                            case 1 -> state.device.physical.queueFamilyIndices.present();
-                            default -> 0;
-                        };
+            if (!state.hasSeparateTransferQueue) {
+                deviceQueueCreateInfos = VkDeviceQueueCreateInfo.calloc(1, stack);
+
                 deviceQueueCreateInfos
-                        .get(i)
+                        .get(0)
                         .sType$Default()
                         .pNext(NULL)
                         .flags(0)
-                        .queueFamilyIndex(index)
+                        .queueFamilyIndex(state.device.physical.queueFamilyIndices.graphics())
+                        .pQueuePriorities(stack.floats(1.0f));
+            } else if (state.device.physical.queueFamilyIndices.transfer()
+                    == state.device.physical.queueFamilyIndices.graphics()) {
+                // We have 1 queue family, with 2 queues
+                deviceQueueCreateInfos = VkDeviceQueueCreateInfo.calloc(2, stack);
+
+                deviceQueueCreateInfos
+                        .get(0)
+                        .sType$Default()
+                        .pNext(NULL)
+                        .flags(0)
+                        .queueFamilyIndex(state.device.physical.queueFamilyIndices.graphics())
+                        .pQueuePriorities(stack.floats(1.0f, 0.5f));
+            } else {
+                // We have 2 queue families with 1 queue each
+                deviceQueueCreateInfos = VkDeviceQueueCreateInfo.calloc(2, stack);
+
+                deviceQueueCreateInfos
+                        .get(0)
+                        .sType$Default()
+                        .pNext(NULL)
+                        .flags(0)
+                        .queueFamilyIndex(state.device.physical.queueFamilyIndices.graphics())
+                        .pQueuePriorities(stack.floats(1.0f));
+
+                deviceQueueCreateInfos
+                        .get(1)
+                        .sType$Default()
+                        .pNext(NULL)
+                        .flags(0)
+                        .queueFamilyIndex(state.device.physical.queueFamilyIndices.transfer())
                         .pQueuePriorities(stack.floats(1.0f));
             }
 
@@ -687,17 +714,26 @@ public class VulkanInstance implements Instance {
                 state.device.physical.queueFamilyIndices.graphics(),
                 0,
                 pointerOutput);
-        final long graphicsQueueIndex = pointerOutput.get(0);
-        state.device.graphicsQueue = new VkQueue(graphicsQueueIndex, state.device.logical);
-        if (queueCount == 1) {
-            state.device.presentQueue = state.device.graphicsQueue;
-        } else {
+        final long graphicsQueueHandle = pointerOutput.get(0);
+        state.device.graphicsQueue = new VkQueue(graphicsQueueHandle, state.device.logical);
+
+        if (state.hasSeparateTransferQueue) {
+            int queueIndex = 0;
+            if (state.device.physical.queueFamilyIndices.transfer()
+                    == state.device.physical.queueFamilyIndices.graphics()) {
+                // We are stuck sharing a queue family with graphics, even though there's room for 2
+                // queues
+                queueIndex = 1;
+            }
             vkGetDeviceQueue(
                     state.device.logical,
-                    state.device.physical.queueFamilyIndices.present(),
-                    0,
+                    state.device.physical.queueFamilyIndices.transfer(),
+                    queueIndex,
                     pointerOutput);
-            state.device.presentQueue = new VkQueue(pointerOutput.get(0), state.device.logical);
+            final long queueHandle = pointerOutput.get(0);
+            state.device.transferQueue = new VkQueue(queueHandle, state.device.logical);
+        } else {
+            state.device.transferQueue = state.device.graphicsQueue;
         }
 
         checkError(
@@ -1078,12 +1114,12 @@ public class VulkanInstance implements Instance {
             checkError(
                     vkCreateCommandPool(
                             state.device.logical, commandPoolCreateInfo, null, longOutput));
-            state.commandPool = longOutput.get(0);
+            state.commandPoolGraphics = longOutput.get(0);
 
             VkCommandBufferAllocateInfo commandBufferAllocateInfo =
                     VkCommandBufferAllocateInfo.calloc(stack)
                             .sType$Default()
-                            .commandPool(state.commandPool)
+                            .commandPool(state.commandPoolGraphics)
                             .commandBufferCount(GraphicsManager.MAX_FRAMES_IN_FLIGHT);
 
             PointerBuffer commandBuffers =
@@ -1092,10 +1128,39 @@ public class VulkanInstance implements Instance {
                     vkAllocateCommandBuffers(
                             state.device.logical, commandBufferAllocateInfo, commandBuffers));
             for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
-                state.commandBuffers[i] =
+                state.commandBuffersGraphics[i] =
                         new VkCommandBuffer(commandBuffers.get(i), state.device.logical);
             }
         }
+
+        if (state.hasSeparateTransferQueue) {
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                VkCommandPoolCreateInfo commandPoolCreateInfo =
+                        VkCommandPoolCreateInfo.calloc(stack)
+                                .sType$Default()
+                                .flags(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
+                                .queueFamilyIndex(
+                                        state.device.physical.queueFamilyIndices.transfer());
+                checkError(
+                        vkCreateCommandPool(
+                                state.device.logical, commandPoolCreateInfo, null, longOutput));
+                state.commandPoolTransfer = longOutput.get(0);
+
+                VkCommandBufferAllocateInfo commandBufferAllocateInfo =
+                        VkCommandBufferAllocateInfo.calloc(stack)
+                                .sType$Default()
+                                .commandPool(state.commandPoolTransfer)
+                                .commandBufferCount(1);
+
+                PointerBuffer commandBuffers = stack.callocPointer(1);
+                checkError(
+                        vkAllocateCommandBuffers(
+                                state.device.logical, commandBufferAllocateInfo, commandBuffers));
+                state.commandBufferTransfer =
+                        new VkCommandBuffer(commandBuffers.get(0), state.device.logical);
+            }
+        }
+
         createShaderData();
 
         textureLoader = new TextureLoaderVulkan();
@@ -1314,7 +1379,7 @@ public class VulkanInstance implements Instance {
         final long depthImage = windowInfo.depthImage.texture;
 
         // TODO(ches) update shader data
-        final VkCommandBuffer commandBuffer = state.commandBuffers[state.frameIndex];
+        final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
         checkError(vkResetCommandBuffer(commandBuffer, 0));
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -1488,7 +1553,7 @@ public class VulkanInstance implements Instance {
                             .pSwapchains(swapchains)
                             .swapchainCount(1)
                             .pImageIndices(imageIndices);
-            checkSwapchain(vkQueuePresentKHR(state.device.presentQueue, presentInfo), windowInfo);
+            checkSwapchain(vkQueuePresentKHR(state.device.graphicsQueue, presentInfo), windowInfo);
         }
 
         state.frameIndex = (state.frameIndex + 1) % GraphicsManager.MAX_FRAMES_IN_FLIGHT;
@@ -1617,31 +1682,77 @@ public class VulkanInstance implements Instance {
     private void updateQueueFamilies(
             @NonNull VulkanState.PhysicalDeviceInfo deviceInfo, final long surfaceHandle) {
         int graphicsFamily = QueueFamilyIndices.MISSING;
+        int graphicsQueueCount = 0;
         int presentFamily = QueueFamilyIndices.MISSING;
+        int transferFamily = QueueFamilyIndices.MISSING;
+        int transferFamilyIdeal = QueueFamilyIndices.MISSING;
 
         try {
+            /* There are probably less than a dozen of these, we'll just look through all of them per device */
             for (int i = 0; i < deviceInfo.queueFamilyProperties.limit(); ++i) {
                 var family = deviceInfo.queueFamilyProperties.get(i);
 
-                if ((family.queueFlags() & VK_QUEUE_GRAPHICS_BIT) != 0) {
+                if ((family.queueFlags() & VK_QUEUE_GRAPHICS_BIT) != 0
+                        && (graphicsFamily == QueueFamilyIndices.MISSING
+                                || graphicsQueueCount <= 1 && family.queueCount() > 1)) {
                     graphicsFamily = i;
+                    graphicsQueueCount = family.queueCount();
+                }
+                if (transferFamilyIdeal == QueueFamilyIndices.MISSING
+                        && (family.queueFlags() & VK_QUEUE_TRANSFER_BIT) != 0) {
+                    /*
+                     * I don't care if we overwrite transfer family, in fact it's preferable to be a different queue
+                     * from the graphics, but once we find a dedicated transfer queue we can stop looking.
+                     */
+                    transferFamily = i;
+                    if ((family.queueFlags() & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT))
+                            == 0) {
+                        transferFamilyIdeal = i;
+                    }
                 }
 
-                checkError(
-                        vkGetPhysicalDeviceSurfaceSupportKHR(
-                                deviceInfo.physicalDevice, i, surfaceHandle, intOutput));
-
-                if (intOutput.get(0) == VK_TRUE) {
-                    presentFamily = i;
-                }
-
-                if (graphicsFamily != QueueFamilyIndices.MISSING
-                        && presentFamily != QueueFamilyIndices.MISSING) {
-                    break;
+                if (presentFamily == QueueFamilyIndices.MISSING
+                        || presentFamily != graphicsFamily) {
+                    checkError(
+                            vkGetPhysicalDeviceSurfaceSupportKHR(
+                                    deviceInfo.physicalDevice, i, surfaceHandle, intOutput));
+                    if (intOutput.get(0) == VK_TRUE) {
+                        presentFamily = i;
+                        if (graphicsFamily != i
+                                && (family.queueFlags() & VK_QUEUE_GRAPHICS_BIT) != 0) {
+                            /* We really prefer a graphics family that has both graphics and present,
+                             * so if we find a present family that also supports graphics we'll use that instead.
+                             */
+                            graphicsFamily = i;
+                            graphicsQueueCount = family.queueCount();
+                        }
+                    }
                 }
             }
         } finally {
-            deviceInfo.queueFamilyIndices = new QueueFamilyIndices(graphicsFamily, presentFamily);
+            if (transferFamilyIdeal != QueueFamilyIndices.MISSING
+                    && transferFamilyIdeal != transferFamily) {
+                // We found a family with no graphics or compute that's different from any ole
+                // transferFamily
+                transferFamily = transferFamilyIdeal;
+            }
+            if (transferFamily == QueueFamilyIndices.MISSING
+                    && graphicsFamily != QueueFamilyIndices.MISSING) {
+                /*
+                 * Queue families that expose VK_QUEUE_GRAPHICS_BIT automatically support transfer commands
+                 * even if the flag is listed. So if we couldn't find any with VK_QUEUE_TRANSFER_BIT, might as well
+                 * just use a queue family that does support transfer commands.
+                 */
+                transferFamily = graphicsFamily;
+            }
+            boolean roomForSeparateTransferQueue =
+                    transferFamily != graphicsFamily || graphicsQueueCount > 1;
+            deviceInfo.queueFamilyIndices =
+                    new QueueFamilyIndices(
+                            graphicsFamily,
+                            presentFamily,
+                            transferFamily,
+                            roomForSeparateTransferQueue);
             // NOTE(ches) it's important that we use a buffer that doesn't need manual freeing
             deviceInfo.queueFamilyProperties = null;
         }

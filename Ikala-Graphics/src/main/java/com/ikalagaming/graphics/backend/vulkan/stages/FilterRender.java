@@ -73,7 +73,8 @@ public class FilterRender implements RenderStage {
 
         // TODO(ches) remove this when we don't have the nothingburger state?
         VulkanState vulkanState = (VulkanState) state;
-        final VkCommandBuffer commandBuffer = vulkanState.commandBuffers[vulkanState.frameIndex];
+        final VkCommandBuffer commandBuffer =
+                vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
 
         uniformsMap.setUniform(ShaderUniforms.Filter.SCREEN_TEXTURE, 0);
 
