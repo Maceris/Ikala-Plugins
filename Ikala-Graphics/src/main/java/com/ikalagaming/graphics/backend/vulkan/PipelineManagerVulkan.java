@@ -105,7 +105,7 @@ public class PipelineManagerVulkan {
         createGuiFont();
         shadowBuffers = createShadowBuffers();
         skybox = new SkyboxModel();
-        quadMesh = QuadMesh.getInstance();
+        quadMesh = QuadMesh.getInstance(state);
         createLightBuffers();
         imGuiMesh = ImGuiMesh.create();
         guiMesh = GuiMesh.create();
@@ -231,7 +231,7 @@ public class PipelineManagerVulkan {
         guiMesh.cleanup();
         skybox.cleanup();
         skybox = null;
-        quadMesh.cleanup();
+        quadMesh.cleanup(state);
         quadMesh = null;
         GraphicsManager.getDeletionQueue().add(pointLights);
         pointLights = null;

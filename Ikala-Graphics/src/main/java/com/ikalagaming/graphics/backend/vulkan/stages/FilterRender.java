@@ -1,9 +1,7 @@
 package com.ikalagaming.graphics.backend.vulkan.stages;
 
 import static com.ikalagaming.graphics.backend.vulkan.VulkanInstance.checkError;
-import static org.lwjgl.vulkan.VK10.*;
-import static org.lwjgl.vulkan.VK10.VK_NULL_HANDLE;
-import static org.lwjgl.vulkan.VK12.*;
+import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
@@ -48,6 +46,8 @@ public class FilterRender implements RenderStage {
     /** VkPipeline pointer, will be VK_NULL_HANDLE if not set up. */
     private long pipeline;
 
+    private LongBuffer texture;
+
     /**
      * Set up the skybox render stage.
      *
@@ -60,6 +60,7 @@ public class FilterRender implements RenderStage {
             @NonNull final QuadMesh quadMesh) {
         this.shader = shader;
         this.sceneTexture = sceneTexture;
+        texture = LongBuffer.allocate(1);
         this.quadMesh = quadMesh;
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
@@ -95,6 +96,23 @@ public class FilterRender implements RenderStage {
                                     .width(window.getWidth())
                                     .height(window.getHeight()));
             vkCmdSetScissor(commandBuffer, 0, scissors);
+
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+
+            vkCmdBindDescriptorSets(
+                    commandBuffer,
+                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    pipelineLayout,
+                    0,
+                    texture,
+                    null);
+            LongBuffer vertices = stack.longs(quadMesh.vertexBuffer().buffer);
+            LongBuffer offsets = stack.longs(0);
+            vkCmdBindVertexBuffers(commandBuffer, 0, vertices, offsets);
+            vkCmdBindIndexBuffer(
+                    commandBuffer, quadMesh.indexBuffer().buffer, 0, VK_INDEX_TYPE_UINT32);
+
+            vkCmdDrawIndexed(commandBuffer, QuadMesh.INDEX_COUNT, 1, 0, 0, 0);
         }
         // TODO(ches) render
 
@@ -107,6 +125,7 @@ public class FilterRender implements RenderStage {
         VulkanState vulkanState = (VulkanState) state;
         createPipelineLayout(vulkanState);
         createPipeline(vulkanState);
+        texture.put(0, sceneTexture.textures()[0]);
     }
 
     @Override
