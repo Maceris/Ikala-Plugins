@@ -3,14 +3,10 @@ package com.ikalagaming.graphics.backend.vulkan.stages;
 import static com.ikalagaming.graphics.backend.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
-import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
-import com.ikalagaming.graphics.backend.vulkan.QuadMesh;
-import com.ikalagaming.graphics.backend.vulkan.ShaderBindings;
-import com.ikalagaming.graphics.backend.vulkan.ShaderVulkan;
-import com.ikalagaming.graphics.backend.vulkan.VulkanState;
+import com.ikalagaming.graphics.backend.vulkan.*;
 import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.scene.Scene;
 
@@ -31,6 +27,7 @@ public class FilterRender implements RenderStage {
     @NonNull @Setter private ShaderVulkan shader;
 
     /** The source texture for the filter. */
+    // TODO(ches) get rid of this, it's per-frame
     @Setter @NonNull private Framebuffer sceneTexture;
 
     /** A mesh for rendering onto. */
@@ -46,7 +43,7 @@ public class FilterRender implements RenderStage {
     /** VkPipeline pointer, will be VK_NULL_HANDLE if not set up. */
     private long pipeline;
 
-    private LongBuffer texture;
+    private final LongBuffer texture;
 
     /**
      * Set up the skybox render stage.
@@ -70,14 +67,11 @@ public class FilterRender implements RenderStage {
     @Override
     public void render(Scene scene, @NonNull Window window, State state) {
         shader.bind();
-        var uniformsMap = shader.getUniformMap();
 
         // TODO(ches) remove this when we don't have the nothingburger state?
         VulkanState vulkanState = (VulkanState) state;
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
-
-        uniformsMap.setUniform(ShaderUniforms.Filter.SCREEN_TEXTURE, 0);
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkViewport.Buffer viewports = VkViewport.calloc(1, stack);

@@ -48,6 +48,7 @@ public class PipelineManagerVulkan {
     private Texture fontAtlas;
 
     /** Geometry buffer. */
+    // TODO(ches) get rid of this, it's per-frame
     private Framebuffer gBuffer;
 
     /** The mesh to render. */
@@ -66,6 +67,7 @@ public class PipelineManagerVulkan {
     private final Map<Integer, Pipeline> renderers;
 
     /** The buffer to render the scene to before post-processing. */
+    // TODO(ches) get rid of this, it's per-frame
     private Framebuffer screenTexture;
 
     /** The depth map for shadows. */

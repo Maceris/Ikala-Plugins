@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.backend.vulkan;
 
+import com.ikalagaming.graphics.frontend.Framebuffer;
+
 /** Data buffers for a frame, only the data that the CPU cares about. */
 public class PerFrameData {
     public SharedBuffer animationData;
@@ -22,4 +24,9 @@ public class PerFrameData {
     public SharedBuffer shadowUniforms;
     public SharedBuffer shadowModelMatrices;
     public SharedBuffer skyboxUniforms;
+
+    /** Base color, normal, tangent, material, and depth. */
+    public Framebuffer gBuffer;
+
+    public Framebuffer sceneTexture;
 }
