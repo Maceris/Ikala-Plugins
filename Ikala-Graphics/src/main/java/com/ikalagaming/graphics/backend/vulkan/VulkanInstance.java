@@ -451,7 +451,7 @@ public class VulkanInstance implements Instance {
 
         pipelineManager.cleanup(state);
 
-        for (VulkanState.WindowInfo windowInfo : state.windows) {
+        for (VulkanState.WindowInfo windowInfo : state.windows.values()) {
             cleanupWindow(windowInfo);
         }
         state.windows.clear();
@@ -591,7 +591,10 @@ public class VulkanInstance implements Instance {
      */
     private void createSurface(@NonNull Window window) {
         VulkanState.WindowInfo windowInfo = new VulkanState.WindowInfo(window);
-        state.windows.add(windowInfo);
+        if (state.windows.containsKey(window)) {
+            log.error("Trying to create a surface for a window twice");
+        }
+        state.windows.put(window, windowInfo);
 
         checkError(
                 glfwCreateWindowSurface(
@@ -743,8 +746,7 @@ public class VulkanInstance implements Instance {
     }
 
     private void createSwapchain(@NonNull Window window) {
-        // TODO(ches) this should be associated with the window, rather than just having one
-        VulkanState.WindowInfo windowInfo = state.windows.getFirst();
+        VulkanState.WindowInfo windowInfo = state.windows.get(window);
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkSurfaceCapabilitiesKHR surfaceCapabilities = VkSurfaceCapabilitiesKHR.calloc(stack);
@@ -1354,15 +1356,14 @@ public class VulkanInstance implements Instance {
 
     @Override
     public void render(@NonNull Scene scene, @NonNull Window window) {
-        VulkanState.WindowInfo windowInfo = state.windows.getFirst();
+        VulkanState.WindowInfo windowInfo = state.windows.get(window);
 
         longOutput.put(0, state.fences[state.frameIndex]);
         checkError(vkWaitForFences(state.device.logical, longOutput, true, Integer.MAX_VALUE));
         longOutput.put(0, state.fences[state.frameIndex]);
         checkError(vkResetFences(state.device.logical, longOutput));
 
-        // TODO(ches) pass in which window we are rendering to
-        final long swapchain = state.windows.getFirst().swapchainHandle;
+        final long swapchain = windowInfo.swapchainHandle;
 
         checkSwapchain(
                 vkAcquireNextImageKHR(
@@ -1373,7 +1374,6 @@ public class VulkanInstance implements Instance {
                         VK_NULL_HANDLE,
                         intOutput),
                 windowInfo);
-        // TODO(ches) recreate swapchain if necessary
         final int imageIndex = intOutput.get(0);
         final long swapchainImage = windowInfo.swapchainImages[imageIndex];
         final long depthImage = windowInfo.depthImage.texture;

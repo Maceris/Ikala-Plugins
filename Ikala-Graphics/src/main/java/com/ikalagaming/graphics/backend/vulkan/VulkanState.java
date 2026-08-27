@@ -11,7 +11,9 @@ import lombok.NonNull;
 import org.lwjgl.vulkan.*;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Global state for Vulkan. */
 public class VulkanState implements State {
@@ -71,9 +73,8 @@ public class VulkanState implements State {
     /** The Vulkan Memory Allocator handle. */
     public long vmaAllocator = VK_NULL_HANDLE;
 
-    // TODO(ches) this should probably be a map or something
     /** Info specific to windows. */
-    public final List<WindowInfo> windows = new ArrayList<>();
+    public final Map<Window, WindowInfo> windows = new HashMap<>();
 
     public static class Device {
         /** The physical device this corresponds to, for reference. */

@@ -8,6 +8,7 @@ import lombok.NonNull;
 import java.nio.*;
 
 public class BufferUtilVulkan implements BufferUtil {
+    // TODO(ches) probably just get rid of this
     @Override
     public void bindBuffer(@NonNull Buffer buffer) {
         // TODO(ches) implement this
