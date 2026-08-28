@@ -13,7 +13,6 @@ import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.backend.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.backend.vulkan.VulkanState;
-import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -131,7 +130,7 @@ public class ShadowRender implements RenderStage {
 
             final int commandCount = model.isAnimated() ? entityCount : 1;
 
-            BufferUtil.INSTANCE.bindBuffer(model.getModelMatricesBuffer(), MODEL_MATRICES_BINDING);
+            // TODO(ches) bind model matrices buffers
 
             for (MeshData mesh : model.getMeshDataList()) {
                 if (model.isAnimated()) {
@@ -140,13 +139,11 @@ public class ShadowRender implements RenderStage {
                 } else {
                     // TODO(ches) ... don't bind mesh.getAnimationTargetBuffer().id()
                 }
-                BufferUtil.INSTANCE.bindBuffer(mesh.getIndexBuffer());
-                BufferUtil.INSTANCE.bindBuffer(mesh.getDrawIndirectBuffer());
+                // TODO(ches) bind index, draw indirect buffer
                 // TODO(chs) draw indirect
             }
 
-            BufferUtil.INSTANCE.unbindBuffer(
-                    model.getModelMatricesBuffer(), MODEL_MATRICES_BINDING);
+            // TODO(ches) unbind model matrices?
         }
     }
 

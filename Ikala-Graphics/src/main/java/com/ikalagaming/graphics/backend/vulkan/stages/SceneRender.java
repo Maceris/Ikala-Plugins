@@ -1,6 +1,5 @@
 package com.ikalagaming.graphics.backend.vulkan.stages;
 
-import static com.ikalagaming.graphics.ShaderUniforms.Scene.*;
 import static com.ikalagaming.graphics.backend.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK10.*;
 import static org.lwjgl.vulkan.VK10.vkCreatePipelineLayout;
@@ -123,15 +122,7 @@ public class SceneRender implements RenderStage {
 
             final int commandCount = model.isAnimated() ? entityCount : 1;
 
-            // TODO(ches) figure out right buffer usage or redesign BufferUtil API
-            BufferUtil.INSTANCE.bindBuffer(
-                    model.getModelMatricesBuffer(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-            BufferUtil.INSTANCE.bindBuffer(
-                    scene.getMaterialCache().getMaterialBuffer(),
-                    ShaderBindings.Scene.MATERIALS_BINDING);
-            BufferUtil.INSTANCE.bindBuffer(
-                    model.getMaterialOverridesBuffer(),
-                    ShaderBindings.Scene.MATERIAL_OVERRIDES_BINDING);
+            // TODO(ches) bind buffers
 
             int meshIndex = 0;
             for (MeshData mesh : model.getMeshDataList()) {
@@ -139,8 +130,7 @@ public class SceneRender implements RenderStage {
                 Material assignedOrDefaultMaterial =
                         scene.getMaterialCache().getMaterial(indexOrFallback);
 
-                uniformsMap.setUniformUnsigned(MATERIAL_INDEX, indexOrFallback);
-                uniformsMap.setUniformUnsigned(MESH_INDEX, meshIndex);
+                // TODO(ches) set material index, mesh index
 
                 if (assignedOrDefaultMaterial.getTexture() != null) {
                     // TODO(ches) make sure image is resident
@@ -148,8 +138,7 @@ public class SceneRender implements RenderStage {
                 if (assignedOrDefaultMaterial.getNormalMap() != null) {
                     // TODO(ches) make sure image is resident
                 }
-                uniformsMap.setUniform(BASE_COLOR_SAMPLER, assignedOrDefaultMaterial.getTexture());
-                uniformsMap.setUniform(NORMAL_SAMPLER, assignedOrDefaultMaterial.getNormalMap());
+                // TODO(ches) set color sampler, normal sampler
 
                 if (model.isAnimated()) {
                     // TODO(ches) bind mesh.getAnimationTargetBuffer().id()
@@ -157,8 +146,9 @@ public class SceneRender implements RenderStage {
                 } else {
                     // TODO(ches) ... don't bind mesh.getAnimationTargetBuffer().id()
                 }
-                BufferUtil.INSTANCE.bindBuffer(mesh.getIndexBuffer());
-                BufferUtil.INSTANCE.bindBuffer(mesh.getDrawIndirectBuffer());
+
+                // TODO(ches) bind index buffer, draw indirect buffer
+
                 // TODO(ches) draw indirect
                 meshIndex += 1;
             }
@@ -191,11 +181,7 @@ public class SceneRender implements RenderStage {
 
             buffer.flip();
 
-            BufferUtil.INSTANCE.bindBuffer(model.getMaterialOverridesBuffer());
-            // TODO(ches) figure out right buffer usage or redesign BufferUtil API
-            BufferUtil.INSTANCE.bufferData(
-                    model.getMaterialOverridesBuffer(), buffer, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-            BufferUtil.INSTANCE.unbindBuffer(model.getMaterialOverridesBuffer());
+            // TODO(ches) bind material override buffer, update it
 
             MemoryUtil.memFree(buffer);
             model.setMaterialOverridesDirty(false);
@@ -253,9 +239,7 @@ public class SceneRender implements RenderStage {
         materialData.flip();
 
         Buffer materialBuffer = scene.getMaterialCache().getMaterialBuffer();
-        BufferUtil.INSTANCE.bindBuffer(materialBuffer);
-        // TODO(ches) upload data
-        BufferUtil.INSTANCE.unbindBuffer(materialBuffer);
+        // TODO(ches) upload material data
 
         MemoryUtil.memFree(materialData);
         scene.getMaterialCache().setDirty(false);

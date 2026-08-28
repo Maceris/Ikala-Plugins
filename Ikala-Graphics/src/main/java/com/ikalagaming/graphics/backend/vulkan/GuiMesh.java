@@ -1,7 +1,8 @@
 package com.ikalagaming.graphics.backend.vulkan;
 
+import static org.lwjgl.vulkan.VK13.VK_NULL_HANDLE;
+
 import com.ikalagaming.graphics.frontend.Buffer;
-import com.ikalagaming.graphics.frontend.BufferUtil;
 
 import lombok.NonNull;
 
@@ -34,17 +35,15 @@ public record GuiMesh(
         int vertices = 0;
         // TODO(ches) create
 
-        Buffer commands = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
-        Buffer points = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
-        Buffer pointDetails = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
+        // TODO(ches) create SSBOs for commands, points, point details
+        Buffer commands = new Buffer(VK_NULL_HANDLE, Buffer.Type.SHADER_STORAGE);
+        Buffer points = new Buffer(VK_NULL_HANDLE, Buffer.Type.SHADER_STORAGE);
+        Buffer pointDetails = new Buffer(VK_NULL_HANDLE, Buffer.Type.SHADER_STORAGE);
         return new GuiMesh(vaoID, vertices, commands, points, pointDetails);
     }
 
     /** Clean up the resources for this mesh. */
     public void cleanup() {
         // TODO(ches) clean up
-        BufferUtil.INSTANCE.deleteBuffer(commands);
-        BufferUtil.INSTANCE.deleteBuffer(points);
-        BufferUtil.INSTANCE.deleteBuffer(pointDetails);
     }
 }

@@ -2,7 +2,6 @@ package com.ikalagaming.graphics.frontend;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.backend.opengl.BufferUtilOpenGL;
-import com.ikalagaming.graphics.backend.vulkan.BufferUtilVulkan;
 
 import lombok.NonNull;
 
@@ -10,10 +9,11 @@ import java.nio.*;
 
 public interface BufferUtil {
     /** A static instance based on the backend type. */
+    // TODO(ches) get rid of this
     BufferUtil INSTANCE =
             switch (GraphicsManager.getBackendType()) {
                 case OPENGL -> new BufferUtilOpenGL();
-                case VULKAN -> new BufferUtilVulkan();
+                case VULKAN -> null;
             };
 
     /**

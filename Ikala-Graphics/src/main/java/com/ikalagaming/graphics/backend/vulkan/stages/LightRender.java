@@ -13,7 +13,6 @@ import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.backend.vulkan.*;
 import com.ikalagaming.graphics.frontend.Buffer;
-import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.scene.Fog;
@@ -193,9 +192,7 @@ public class LightRender implements RenderStage {
         uniformsMap.setUniform(
                 ShaderUniforms.Light.INVERSE_VIEW_MATRIX, scene.getCamera().getInvViewMatrix());
 
-        BufferUtil.INSTANCE.bindBuffer(
-                scene.getMaterialCache().getMaterialBuffer(), MATERIALS_BINDING);
-
+        // TODO(ches) bind materials buffer
         // TODO(ches) render things here
 
         shader.unbind();

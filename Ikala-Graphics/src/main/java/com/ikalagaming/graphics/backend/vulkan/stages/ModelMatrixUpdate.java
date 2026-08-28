@@ -1,13 +1,9 @@
 package com.ikalagaming.graphics.backend.vulkan.stages;
 
-import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-import static org.lwjgl.vulkan.VK13.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.vulkan.PipelineManagerVulkan;
-import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
@@ -54,12 +50,8 @@ public class ModelMatrixUpdate implements RenderStage {
             entityIndex++;
         }
 
-        BufferUtil.INSTANCE.bindBuffer(model.getModelMatricesBuffer());
-        // TODO(ches) figure out right buffer usage or redesign BufferUtil API
-        BufferUtil.INSTANCE.bufferData(
-                model.getModelMatricesBuffer(), modelMatrices, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+        // TODO(ches) update model matrices buffer
         MemoryUtil.memFree(modelMatrices);
-        BufferUtil.INSTANCE.unbindBuffer(model.getModelMatricesBuffer());
 
         if (model.getEntitiesLastFrame() != entities.size()) {
             updateCommandBuffers(model);
@@ -108,13 +100,7 @@ public class ModelMatrixUpdate implements RenderStage {
 
             commandBuffer.flip();
 
-            BufferUtil.INSTANCE.bindBuffer(mesh.getDrawIndirectBuffer());
-            // TODO(ches) figure out right buffer usage or redesign BufferUtil API
-            BufferUtil.INSTANCE.bufferData(
-                    mesh.getDrawIndirectBuffer(),
-                    commandBuffer,
-                    VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
-            BufferUtil.INSTANCE.unbindBuffer(mesh.getDrawIndirectBuffer());
+            // TODO(ches) upload draw indirect data to buffer
         }
 
         MemoryUtil.memFree(commandBuffer);

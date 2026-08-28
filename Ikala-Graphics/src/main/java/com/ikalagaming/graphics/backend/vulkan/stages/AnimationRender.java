@@ -1,10 +1,7 @@
 package com.ikalagaming.graphics.backend.vulkan.stages;
 
 import static com.ikalagaming.graphics.backend.vulkan.VulkanInstance.checkError;
-import static org.lwjgl.vulkan.VK10.*;
-import static org.lwjgl.vulkan.VK10.vkDestroyDescriptorSetLayout;
-import static org.lwjgl.vulkan.VK12.*;
-import static org.lwjgl.vulkan.VK12.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
@@ -12,7 +9,6 @@ import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.backend.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.backend.vulkan.VulkanState;
-import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
@@ -101,14 +97,7 @@ public class AnimationRender implements RenderStage {
 
             updateAnimationOffsets(model, entityCount);
 
-            BufferUtil.INSTANCE.bindBuffer(model.getAnimationBuffer(), 0);
-            BufferUtil.INSTANCE.bindBuffer(model.getEntityAnimationOffsetsBuffer(), 1);
-
             for (MeshData meshData : model.getMeshDataList()) {
-                BufferUtil.INSTANCE.bindBuffer(meshData.getVertexBuffer(), 2);
-                BufferUtil.INSTANCE.bindBuffer(meshData.getBoneWeightBuffer(), 3);
-                BufferUtil.INSTANCE.bindBuffer(meshData.getAnimationTargetBuffer(), 4);
-
                 final int vertexCount = meshData.getVertexCount();
                 // TODO(ches) render
             }
