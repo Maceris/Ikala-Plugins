@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.graph;
 
+import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.frontend.BackendType;
 import com.ikalagaming.graphics.frontend.Buffer;
 import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.frontend.Material;
@@ -39,7 +41,12 @@ public class MaterialCache {
         materialLookup = Collections.synchronizedMap(new HashMap<>());
         addMaterial(DEFAULT_MATERIAL);
         dirty = true;
-        materialBuffer = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
+        if (GraphicsManager.getBackendType() == BackendType.OPENGL) {
+            materialBuffer = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
+        } else {
+            // TODO(ches) deal with this
+            materialBuffer = new Buffer(0, Buffer.Type.SHADER_STORAGE);
+        }
     }
 
     /**
