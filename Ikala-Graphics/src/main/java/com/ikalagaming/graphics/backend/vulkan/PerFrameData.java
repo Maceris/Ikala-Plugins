@@ -28,5 +28,5 @@ public class PerFrameData {
     /** Base color, normal, tangent, material, and depth. */
     public Framebuffer gBuffer;
 
-    public Framebuffer sceneTexture;
+    public TextureInfo sceneTexture;
 }

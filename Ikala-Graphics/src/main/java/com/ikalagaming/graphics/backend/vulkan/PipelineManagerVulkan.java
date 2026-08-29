@@ -153,9 +153,7 @@ public class PipelineManagerVulkan {
         stageAnimationRender.initialize(state);
         stageFilterRender =
                 new FilterRender(
-                        (ShaderVulkan) shaders.getShader(RenderStage.Type.FILTER),
-                        screenTexture,
-                        quadMesh);
+                        (ShaderVulkan) shaders.getShader(RenderStage.Type.FILTER), quadMesh);
         stageFilterRender.initialize(state);
         stageScreenTextureBinding = new FramebufferTransition(screenTexture, 1, 1);
         stageScreenTextureBinding.initialize(state);
@@ -400,9 +398,6 @@ public class PipelineManagerVulkan {
         screenTexture = new Framebuffer(screenFBO, cachedWidth, cachedHeight, textureIds);
         if (stageScreenTextureBinding != null) {
             stageScreenTextureBinding.setFramebuffer(screenTexture);
-        }
-        if (stageFilterRender != null) {
-            stageFilterRender.setSceneTexture(screenTexture);
         }
     }
 

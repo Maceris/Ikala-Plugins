@@ -534,6 +534,9 @@ public class VulkanInstance implements Instance {
             state.shaderDataBuffers[i].shadowModelMatrices = createSharedBuffer(DYNAMIC);
             state.shaderDataBuffers[i].skyboxUniforms =
                     createSharedBuffer(ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE);
+            // TODO(ches) create sceneTexture, gBuffer
+            state.shaderDataBuffers[i].gBuffer = new Framebuffer(VK_NULL_HANDLE, 0, 0, new long[0]);
+            state.shaderDataBuffers[i].sceneTexture = new TextureInfo();
         }
     }
 

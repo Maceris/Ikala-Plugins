@@ -3,21 +3,23 @@ package com.ikalagaming.graphics.backend.vulkan.stages;
 import static com.ikalagaming.graphics.backend.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.vulkan.*;
-import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
 
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
+import java.util.Arrays;
 
 /** Handles post-processing filters. */
 @Slf4j
@@ -25,10 +27,6 @@ public class FilterRender implements RenderStage {
 
     /** The shader to use for rendering. */
     @NonNull @Setter private ShaderVulkan shader;
-
-    /** The source texture for the filter. */
-    // TODO(ches) get rid of this, it's per-frame
-    @Setter @NonNull private Framebuffer sceneTexture;
 
     /** A mesh for rendering onto. */
     @NonNull private final QuadMesh quadMesh;
@@ -43,25 +41,29 @@ public class FilterRender implements RenderStage {
     /** VkPipeline pointer, will be VK_NULL_HANDLE if not set up. */
     private long pipeline;
 
-    private final LongBuffer texture;
+    /** VkDescriptorPool pointer, will be VK_NULL_HANDLE if not set up. */
+    private long descriptorPool;
+
+    /** VkDescriptorSet for the texture, will be VK_NULL_HANDLE if not set up. */
+    private long[] descriptorsTexture;
+
+    private LongBuffer texture;
 
     /**
      * Set up the skybox render stage.
      *
      * @param shader The shader to use for rendering.
-     * @param sceneTexture The destination framebuffer to render to.
      */
-    public FilterRender(
-            final @NonNull ShaderVulkan shader,
-            @NonNull final Framebuffer sceneTexture,
-            @NonNull final QuadMesh quadMesh) {
+    public FilterRender(final @NonNull ShaderVulkan shader, @NonNull final QuadMesh quadMesh) {
         this.shader = shader;
-        this.sceneTexture = sceneTexture;
-        texture = LongBuffer.allocate(1);
+        texture = MemoryUtil.memAllocLong(1);
         this.quadMesh = quadMesh;
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
         this.pipeline = VK_NULL_HANDLE;
+        this.descriptorPool = VK_NULL_HANDLE;
+        this.descriptorsTexture = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+        Arrays.fill(this.descriptorsTexture, VK_NULL_HANDLE);
     }
 
     @Override
@@ -119,7 +121,6 @@ public class FilterRender implements RenderStage {
         VulkanState vulkanState = (VulkanState) state;
         createPipelineLayout(vulkanState);
         createPipeline(vulkanState);
-        texture.put(0, sceneTexture.textures()[0]);
     }
 
     @Override
@@ -131,6 +132,10 @@ public class FilterRender implements RenderStage {
         pipelineLayout = VK_NULL_HANDLE;
         vkDestroyDescriptorSetLayout(vulkanState.device.logical, descriptorSetLayout, null);
         descriptorSetLayout = VK_NULL_HANDLE;
+        if (texture != null) {
+            MemoryUtil.memFree(texture);
+            texture = null;
+        }
     }
 
     private void createPipelineLayout(@NonNull VulkanState state) {
@@ -186,6 +191,68 @@ public class FilterRender implements RenderStage {
                     vkCreatePipelineLayout(
                             state.device.logical, pipelineLayoutCreateInfo, null, longOutput));
             pipelineLayout = longOutput.get(0);
+
+            VkDescriptorPoolSize.Buffer poolSizes =
+                    VkDescriptorPoolSize.calloc(GraphicsManager.MAX_FRAMES_IN_FLIGHT, stack);
+            poolSizes.type(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).descriptorCount(1);
+            VkDescriptorPoolCreateInfo descriptorPoolCreateInfo =
+                    VkDescriptorPoolCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .maxSets(GraphicsManager.MAX_FRAMES_IN_FLIGHT)
+                            .pPoolSizes(poolSizes);
+
+            checkError(
+                    vkCreateDescriptorPool(
+                            state.device.logical, descriptorPoolCreateInfo, null, longOutput));
+            descriptorPool = longOutput.get(0);
+
+            IntBuffer variableDescriptorCounts =
+                    stack.callocInt(GraphicsManager.MAX_FRAMES_IN_FLIGHT);
+            LongBuffer descriptorSetLayoutAddresses =
+                    stack.callocLong(GraphicsManager.MAX_FRAMES_IN_FLIGHT);
+            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+                variableDescriptorCounts.put(1);
+                descriptorSetLayoutAddresses.put(descriptorSetLayout);
+            }
+            VkDescriptorSetVariableDescriptorCountAllocateInfo variableDescriptorCountAllocateInfo =
+                    VkDescriptorSetVariableDescriptorCountAllocateInfo.calloc(stack)
+                            .sType$Default()
+                            .pDescriptorCounts(variableDescriptorCounts);
+            VkDescriptorSetAllocateInfo textureDescriptorSetAlloc =
+                    VkDescriptorSetAllocateInfo.calloc(stack)
+                            .sType$Default()
+                            .pNext(variableDescriptorCountAllocateInfo)
+                            .descriptorPool(descriptorPool)
+                            .pSetLayouts(descriptorSetLayoutAddresses);
+            LongBuffer setAddresses = stack.callocLong(GraphicsManager.MAX_FRAMES_IN_FLIGHT);
+            checkError(
+                    vkAllocateDescriptorSets(
+                            state.device.logical, textureDescriptorSetAlloc, setAddresses));
+            setAddresses.get(descriptorsTexture);
+
+            VkDescriptorImageInfo.Buffer textureInfo =
+                    VkDescriptorImageInfo.calloc(GraphicsManager.MAX_FRAMES_IN_FLIGHT, stack);
+            VkWriteDescriptorSet.Buffer writeDescriptorSets =
+                    VkWriteDescriptorSet.calloc(GraphicsManager.MAX_FRAMES_IN_FLIGHT, stack);
+
+            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+                TextureInfo texture = state.shaderDataBuffers[i].sceneTexture;
+                textureInfo
+                        .get(i)
+                        .imageLayout(VK_FORMAT_R8G8B8A8_SRGB)
+                        .sampler(texture.sampler)
+                        .imageView(texture.view);
+                writeDescriptorSets
+                        .get(i)
+                        .sType$Default()
+                        .dstSet(descriptorsTexture[i])
+                        .dstBinding(ShaderBindings.Filter.SCREEN_TEXTURE)
+                        .descriptorCount(1)
+                        .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                        .pImageInfo(textureInfo);
+            }
+            //TODO(ches) fix segfault
+            vkUpdateDescriptorSets(state.device.logical, writeDescriptorSets, null);
         }
     }
 
