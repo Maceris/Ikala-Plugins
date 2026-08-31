@@ -47,7 +47,7 @@ public record QuadMesh(@NonNull SharedBuffer vertexBuffer, SharedBuffer indexBuf
                     VkBufferCreateInfo.calloc(stack)
                             .sType$Default()
                             .size(vertexBufferSize)
-                            .usage(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
+                            .usage(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
             VmaAllocationCreateInfo bufferAllocCreateInfo =
                     VmaAllocationCreateInfo.calloc(stack)
                             .flags(
@@ -72,7 +72,7 @@ public record QuadMesh(@NonNull SharedBuffer vertexBuffer, SharedBuffer indexBuf
                             .size(
                                     (positions.length + textureCoordinates.length)
                                             * (long) Float.BYTES)
-                            .usage(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
+                            .usage(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
             checkError(
                     vmaCreateBuffer(
                             state.vmaAllocator,
