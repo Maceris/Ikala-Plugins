@@ -14,7 +14,6 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.system.MemoryStack;
-import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
 
 import java.nio.IntBuffer;
@@ -73,6 +72,71 @@ public class FilterRender implements RenderStage {
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
+
+            VkImageMemoryBarrier2.Buffer outputBarriers = VkImageMemoryBarrier2.calloc(1, stack);
+
+            outputBarriers
+                    .get(0)
+                    .sType$Default()
+                    .srcStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
+                    .srcAccessMask(0)
+                    .dstStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
+                    .dstAccessMask(
+                            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
+                                    | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
+                    .oldLayout(VK_IMAGE_LAYOUT_UNDEFINED)
+                    .newLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
+                    .image(
+                            vulkanState
+                                    .shaderDataBuffers[vulkanState.frameIndex]
+                                    .sceneTexture
+                                    .texture)
+                    .subresourceRange(
+                            VkImageSubresourceRange.calloc(stack)
+                                    .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                    .levelCount(1)
+                                    .layerCount(1));
+
+            VkDependencyInfo barrierDependencyInfo =
+                    VkDependencyInfo.calloc(stack)
+                            .sType$Default()
+                            .pImageMemoryBarriers(outputBarriers);
+            vkCmdPipelineBarrier2(commandBuffer, barrierDependencyInfo);
+
+            VkRenderingAttachmentInfo.Buffer colorAttachmentInfos =
+                    VkRenderingAttachmentInfo.calloc(1, stack);
+            colorAttachmentInfos
+                    .get(0)
+                    .sType$Default()
+                    .imageView(
+                            vulkanState.shaderDataBuffers[vulkanState.frameIndex].sceneTexture.view)
+                    .imageLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
+                    .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
+                    .storeOp(VK_ATTACHMENT_STORE_OP_STORE)
+                    .clearValue(
+                            VkClearValue.calloc(stack)
+                                    .color(
+                                            VkClearColorValue.calloc(stack)
+                                                    .float32(0, 0.0f)
+                                                    .float32(1, 0.0f)
+                                                    .float32(2, 0.0f)
+                                                    .float32(3, 1.0f)));
+
+            VkRenderingInfo renderingInfo =
+                    VkRenderingInfo.calloc(stack)
+                            .sType$Default()
+                            .renderArea(
+                                    VkRect2D.calloc(stack)
+                                            .extent(
+                                                    VkExtent2D.calloc(stack)
+                                                            .width(window.getWidth())
+                                                            .height(window.getHeight())))
+                            .layerCount(1)
+                            .pColorAttachments(colorAttachmentInfos)
+                            .pDepthAttachment(null);
+
+            vkCmdBeginRendering(commandBuffer, renderingInfo);
+
             VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
             viewports
                     .get(0)
@@ -108,9 +172,8 @@ public class FilterRender implements RenderStage {
                     commandBuffer, quadMesh.indexBuffer().buffer, 0, VK_INDEX_TYPE_UINT32);
 
             vkCmdDrawIndexed(commandBuffer, QuadMesh.INDEX_COUNT, 1, 0, 0, 0);
+            vkCmdEndRendering(commandBuffer);
         }
-        // TODO(ches) render
-
         shader.unbind();
     }
 
@@ -125,7 +188,7 @@ public class FilterRender implements RenderStage {
     @Override
     public void cleanup(@NonNull State state) {
         VulkanState vulkanState = (VulkanState) state;
-        //TODO(ches) clean up descriptors
+        // TODO(ches) clean up descriptors
         vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);

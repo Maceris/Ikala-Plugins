@@ -1482,10 +1482,14 @@ public class VulkanInstance implements Instance {
                             .sType$Default()
                             .flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
             checkError(vkBeginCommandBuffer(commandBuffer, commandBufferBeginInfo));
+        }
 
-            // TODO(ches) we're going to need a set per stage, or at least more than just the final
-            // ones
-            VkImageMemoryBarrier2.Buffer outputBarriers = VkImageMemoryBarrier2.calloc(2);
+        // This will record the command buffer
+        pipeline.render(scene, shaderMap, windowInfo.window, state);
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            // TODO(ches) move this to a dedicated pipeline to dump to swapchain
+            VkImageMemoryBarrier2.Buffer outputBarriers = VkImageMemoryBarrier2.calloc(2, stack);
             outputBarriers
                     .get(0)
                     .sType$Default()
@@ -1519,65 +1523,13 @@ public class VulkanInstance implements Instance {
                                             VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
                                     .levelCount(1)
                                     .layerCount(1));
+
             VkDependencyInfo barrierDependencyInfo =
                     VkDependencyInfo.calloc(stack)
                             .sType$Default()
                             .pImageMemoryBarriers(outputBarriers);
             vkCmdPipelineBarrier2(commandBuffer, barrierDependencyInfo);
 
-            VkRenderingAttachmentInfo.Buffer colorAttachmentInfos =
-                    VkRenderingAttachmentInfo.calloc(1, stack);
-            colorAttachmentInfos
-                    .get(0)
-                    .sType$Default()
-                    .imageView(windowInfo.swapchainImageViews[imageIndex])
-                    .imageLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
-                    .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
-                    .storeOp(VK_ATTACHMENT_STORE_OP_STORE)
-                    .clearValue(
-                            VkClearValue.calloc(stack)
-                                    .color(
-                                            VkClearColorValue.calloc(stack)
-                                                    .float32(0, 0.0f)
-                                                    .float32(1, 0.0f)
-                                                    .float32(2, 0.0f)
-                                                    .float32(3, 1.0f)));
-            VkRenderingAttachmentInfo depthAttachmentInfo =
-                    VkRenderingAttachmentInfo.calloc(stack)
-                            .sType$Default()
-                            .imageView(windowInfo.depthImage.view)
-                            .imageLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
-                            .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
-                            .storeOp(VK_ATTACHMENT_STORE_OP_DONT_CARE)
-                            .clearValue(
-                                    VkClearValue.calloc(stack)
-                                            .depthStencil(
-                                                    VkClearDepthStencilValue.calloc(stack)
-                                                            .set(1.0f, 0)));
-
-            VkRenderingInfo renderingInfo =
-                    VkRenderingInfo.calloc(stack)
-                            .sType$Default()
-                            .renderArea(
-                                    VkRect2D.calloc(stack)
-                                            .extent(
-                                                    VkExtent2D.calloc(stack)
-                                                            .width(windowInfo.window.getWidth())
-                                                            .height(windowInfo.window.getHeight())))
-                            .layerCount(1)
-                            .pColorAttachments(colorAttachmentInfos)
-                            .pDepthAttachment(depthAttachmentInfo);
-
-            // TODO(ches) we'll need to start way earlier in the stages
-            vkCmdBeginRendering(commandBuffer, renderingInfo);
-        }
-
-        // This will record the command buffer
-        pipeline.render(scene, shaderMap, windowInfo.window, state);
-
-        vkCmdEndRendering(commandBuffer);
-
-        try (MemoryStack stack = MemoryStack.stackPush()) {
             VkImageMemoryBarrier2.Buffer barrierPresents = VkImageMemoryBarrier2.calloc(1, stack);
             barrierPresents
                     .get(0)
