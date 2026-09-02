@@ -139,6 +139,15 @@ public class VulkanState implements State {
 
     /** Info specific to a window. */
     public static class WindowInfo {
+        /** Placeholder when we know we should not be touching swapchain images. */
+        public static final int INVALID_SWAPCHAIN_INDEX = -1;
+
+        /**
+         * The index of the swapchain images (/views/semaphores) for the current frame, from
+         * vkAcquireNextImageKHR. Only valid during the actual frame rendering.
+         */
+        public int currentSwapchainIndex;
+
         public TextureInfo depthImage;
 
         /** Semaphores for signaling presentation. One per swapchain image. */
@@ -160,6 +169,7 @@ public class VulkanState implements State {
          * @param window The window this is related to.
          */
         public WindowInfo(@NonNull Window window) {
+            this.currentSwapchainIndex = INVALID_SWAPCHAIN_INDEX;
             this.depthImage = null;
             this.renderCompleteSemaphores = null;
             this.surfaceHandle = VK_NULL_HANDLE;

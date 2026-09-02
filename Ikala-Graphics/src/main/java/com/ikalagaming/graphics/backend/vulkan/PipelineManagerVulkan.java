@@ -80,16 +80,15 @@ public class PipelineManagerVulkan {
     private Buffer spotLights;
 
     private final AnimationRender stageAnimationRender;
-    private final FramebufferTransition stageBackBufferBinding;
     private final FilterRender stageFilterRender;
     private final GuiRender stageGuiRender;
     private final LightRender stageLightRender;
     private final ModelMatrixUpdate stageModelMatrixUpdate;
     private final SceneRender stageSceneRender;
     private final SceneRenderWireframe stageSceneRenderWireframe;
-    private final FramebufferTransition stageScreenTextureBinding;
     private final ShadowRender stageShadowRender;
     private final SkyboxRender stageSkyboxRender;
+    private final SwapchainPresent stageSwapchainPresent;
 
     public PipelineManagerVulkan(
             @NonNull Window window, @NonNull ShaderMap shaders, @NonNull VulkanState state) {
@@ -155,12 +154,8 @@ public class PipelineManagerVulkan {
                 new FilterRender(
                         (ShaderVulkan) shaders.getShader(RenderStage.Type.FILTER), quadMesh);
         stageFilterRender.initialize(state);
-        stageScreenTextureBinding = new FramebufferTransition(screenTexture, 1, 1);
-        stageScreenTextureBinding.initialize(state);
-        stageBackBufferBinding =
-                new FramebufferTransition(
-                        new Framebuffer(0, cachedWidth, cachedHeight, new long[] {}), 1, 1);
-        stageBackBufferBinding.initialize(state);
+        stageSwapchainPresent = new SwapchainPresent();
+        stageSwapchainPresent.initialize(state);
     }
 
     private Pipeline buildPipeline(final int configuration) {
@@ -186,13 +181,6 @@ public class PipelineManagerVulkan {
                 stages.add(stageSceneRender);
             }
         }
-        if (RenderConfig.hasFilterStage(configuration)) {
-            // NOTE(ches) for post-processing we will need to render to a texture instead of the
-            // back buffer
-            stages.add(stageScreenTextureBinding);
-        } else {
-            stages.add(stageBackBufferBinding);
-        }
         if (RenderConfig.hasSceneStage(configuration)) {
             stages.add(stageLightRender);
         }
@@ -200,12 +188,12 @@ public class PipelineManagerVulkan {
             stages.add(stageSkyboxRender);
         }
         if (RenderConfig.hasFilterStage(configuration)) {
-            stages.add(stageBackBufferBinding);
             stages.add(stageFilterRender);
         }
         if (RenderConfig.hasGuiStage(configuration)) {
             stages.add(stageGuiRender);
         }
+        stages.add(stageSwapchainPresent);
 
         return new PipelineVulkan(stages.toArray(new RenderStage[0]));
     }
@@ -213,14 +201,12 @@ public class PipelineManagerVulkan {
     /** Clean up all the rendering resources. */
     public void cleanup(@NonNull VulkanState state) {
         stageAnimationRender.cleanup(state);
-        stageBackBufferBinding.cleanup(state);
         stageFilterRender.cleanup(state);
         stageGuiRender.cleanup(state);
         stageLightRender.cleanup(state);
         stageModelMatrixUpdate.cleanup(state);
         stageSceneRender.cleanup(state);
         stageSceneRenderWireframe.cleanup(state);
-        stageScreenTextureBinding.cleanup(state);
         stageShadowRender.cleanup(state);
         stageSkyboxRender.cleanup(state);
         GraphicsManager.getDeletionQueue().add(imguiFont);
@@ -396,9 +382,6 @@ public class PipelineManagerVulkan {
 
         long[] textureIds = Arrays.stream(textures).mapToLong(i -> (long) i).toArray();
         screenTexture = new Framebuffer(screenFBO, cachedWidth, cachedHeight, textureIds);
-        if (stageScreenTextureBinding != null) {
-            stageScreenTextureBinding.setFramebuffer(screenTexture);
-        }
     }
 
     public Pipeline getPipeline(final int configuration) {

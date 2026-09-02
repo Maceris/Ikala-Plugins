@@ -870,7 +870,8 @@ public class VulkanInstance implements Instance {
                     .imageColorSpace(VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
                     .imageExtent(swapchainExtent)
                     .imageArrayLayers(1)
-                    .imageUsage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+                    .imageUsage(
+                            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
                     .preTransform(VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
                     .compositeAlpha(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
                     .presentMode(VK_PRESENT_MODE_FIFO_KHR);
@@ -1468,9 +1469,7 @@ public class VulkanInstance implements Instance {
                         VK_NULL_HANDLE,
                         intOutput),
                 windowInfo);
-        final int imageIndex = intOutput.get(0);
-        final long swapchainImage = windowInfo.swapchainImages[imageIndex];
-        final long depthImage = windowInfo.depthImage.texture;
+        windowInfo.currentSwapchainIndex = intOutput.get(0);
 
         // TODO(ches) update shader data
         final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
@@ -1487,71 +1486,6 @@ public class VulkanInstance implements Instance {
         // This will record the command buffer
         pipeline.render(scene, shaderMap, windowInfo.window, state);
 
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            // TODO(ches) move this to a dedicated pipeline to dump to swapchain
-            VkImageMemoryBarrier2.Buffer outputBarriers = VkImageMemoryBarrier2.calloc(2, stack);
-            outputBarriers
-                    .get(0)
-                    .sType$Default()
-                    .srcStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
-                    .srcAccessMask(0)
-                    .dstStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
-                    .dstAccessMask(
-                            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
-                                    | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
-                    .oldLayout(VK_IMAGE_LAYOUT_UNDEFINED)
-                    .newLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
-                    .image(swapchainImage)
-                    .subresourceRange(
-                            VkImageSubresourceRange.calloc(stack)
-                                    .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
-                                    .levelCount(1)
-                                    .layerCount(1));
-            outputBarriers
-                    .get(1)
-                    .sType$Default()
-                    .srcStageMask(VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT)
-                    .srcAccessMask(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
-                    .dstStageMask(VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT)
-                    .dstAccessMask(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
-                    .oldLayout(VK_IMAGE_LAYOUT_UNDEFINED)
-                    .newLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
-                    .image(depthImage)
-                    .subresourceRange(
-                            VkImageSubresourceRange.calloc(stack)
-                                    .aspectMask(
-                                            VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
-                                    .levelCount(1)
-                                    .layerCount(1));
-
-            VkDependencyInfo barrierDependencyInfo =
-                    VkDependencyInfo.calloc(stack)
-                            .sType$Default()
-                            .pImageMemoryBarriers(outputBarriers);
-            vkCmdPipelineBarrier2(commandBuffer, barrierDependencyInfo);
-
-            VkImageMemoryBarrier2.Buffer barrierPresents = VkImageMemoryBarrier2.calloc(1, stack);
-            barrierPresents
-                    .get(0)
-                    .sType$Default()
-                    .srcStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
-                    .srcAccessMask(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
-                    .dstStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
-                    .dstAccessMask(0)
-                    .oldLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
-                    .newLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
-                    .image(swapchainImage)
-                    .subresourceRange(
-                            VkImageSubresourceRange.calloc(stack)
-                                    .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
-                                    .levelCount(1)
-                                    .layerCount(1));
-            VkDependencyInfo barrierPresentDependencyInfo =
-                    VkDependencyInfo.calloc(stack)
-                            .sType$Default()
-                            .pImageMemoryBarriers(barrierPresents);
-            vkCmdPipelineBarrier2(commandBuffer, barrierPresentDependencyInfo);
-        }
         vkEndCommandBuffer(commandBuffer);
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -1571,7 +1505,8 @@ public class VulkanInstance implements Instance {
             signalSemaphoreInfos
                     .get(0)
                     .sType$Default()
-                    .semaphore(windowInfo.renderCompleteSemaphores[imageIndex])
+                    .semaphore(
+                            windowInfo.renderCompleteSemaphores[windowInfo.currentSwapchainIndex])
                     .stageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
             VkSubmitInfo2.Buffer submitInfos = VkSubmitInfo2.calloc(1, stack);
@@ -1588,9 +1523,10 @@ public class VulkanInstance implements Instance {
                             state.fences[state.frameIndex]));
 
             LongBuffer waitSemaphores =
-                    stack.longs(windowInfo.renderCompleteSemaphores[imageIndex]);
+                    stack.longs(
+                            windowInfo.renderCompleteSemaphores[windowInfo.currentSwapchainIndex]);
             LongBuffer swapchains = stack.longs(windowInfo.swapchainHandle);
-            IntBuffer imageIndices = stack.ints(imageIndex);
+            IntBuffer imageIndices = stack.ints(windowInfo.currentSwapchainIndex);
 
             VkPresentInfoKHR presentInfo =
                     VkPresentInfoKHR.calloc(stack)
@@ -1603,6 +1539,7 @@ public class VulkanInstance implements Instance {
         }
 
         state.frameIndex = (state.frameIndex + 1) % GraphicsManager.MAX_FRAMES_IN_FLIGHT;
+        windowInfo.currentSwapchainIndex = VulkanState.WindowInfo.INVALID_SWAPCHAIN_INDEX;
     }
 
     @Override
