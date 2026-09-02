@@ -5,6 +5,7 @@ import static org.lwjgl.util.vma.Vma.*;
 import static org.lwjgl.vulkan.VK13.*;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
@@ -16,6 +17,7 @@ import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 
 /** Defines a quad that is used to render in the lighting pass. */
+@Slf4j
 public record QuadMesh(@NonNull SharedBuffer vertexBuffer, SharedBuffer indexBuffer) {
     /** The number of vertices in the mesh. */
     public static final int INDEX_COUNT = 6;
@@ -38,6 +40,8 @@ public record QuadMesh(@NonNull SharedBuffer vertexBuffer, SharedBuffer indexBuf
 
             final int vertexBufferSize =
                     (positions.length + textureCoordinates.length) * Float.BYTES;
+            final int indexBufferSize = indices.length * Integer.BYTES;
+
             PointerBuffer allocation = MemoryUtil.memAllocPointer(1);
             LongBuffer bufferAddress = MemoryUtil.memAllocLong(1);
             SharedBuffer vertexBuffer = new SharedBuffer();
@@ -71,9 +75,7 @@ public record QuadMesh(@NonNull SharedBuffer vertexBuffer, SharedBuffer indexBuf
             VkBufferCreateInfo indexBufferCreateInfo =
                     VkBufferCreateInfo.calloc(stack)
                             .sType$Default()
-                            .size(
-                                    (positions.length + textureCoordinates.length)
-                                            * (long) Float.BYTES)
+                            .size(indexBufferSize)
                             .usage(
                                     VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
                                             | VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
@@ -99,6 +101,7 @@ public record QuadMesh(@NonNull SharedBuffer vertexBuffer, SharedBuffer indexBuf
                 vertexStaging.put(textureCoordinates[i * 2]);
                 vertexStaging.put(textureCoordinates[i * 2 + 1]);
             }
+            vertexStaging.flip();
             MemoryUtil.memCopy(
                     MemoryUtil.memAddress(vertexStaging),
                     vertexBuffer.allocationInfo.pMappedData(),
@@ -109,10 +112,11 @@ public record QuadMesh(@NonNull SharedBuffer vertexBuffer, SharedBuffer indexBuf
             for (int i : indices) {
                 indexStaging.put(i);
             }
+            indexStaging.flip();
             MemoryUtil.memCopy(
                     MemoryUtil.memAddress(indexStaging),
                     indexBuffer.allocationInfo.pMappedData(),
-                    vertexBufferSize);
+                    indexBufferSize);
             MemoryUtil.memFree(indexStaging);
 
             return new QuadMesh(vertexBuffer, indexBuffer);

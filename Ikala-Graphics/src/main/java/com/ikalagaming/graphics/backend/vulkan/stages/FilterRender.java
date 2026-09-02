@@ -72,9 +72,7 @@ public class FilterRender implements RenderStage {
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
-
             VkImageMemoryBarrier2.Buffer outputBarriers = VkImageMemoryBarrier2.calloc(1, stack);
-
             outputBarriers
                     .get(0)
                     .sType$Default()
