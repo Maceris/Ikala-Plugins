@@ -13,7 +13,6 @@ import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.backend.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.backend.vulkan.VulkanState;
-import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
@@ -33,17 +32,11 @@ import java.util.List;
 @Slf4j
 public class ShadowRender implements RenderStage {
 
-    /** The binding for the model matrices buffer SSBO. */
-    static final int MODEL_MATRICES_BINDING = 0;
-
     /** The shader to use for rendering. */
     @NonNull @Setter private ShaderVulkan shader;
 
     /** Cascade shadow information. */
     @Setter @NonNull private List<CascadeShadow> cascadeShadows;
-
-    /** The buffers to render to. */
-    @Setter @NonNull private Framebuffer depthMap;
 
     /** VkDescriptorSetLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorSetLayout;
@@ -59,15 +52,11 @@ public class ShadowRender implements RenderStage {
      *
      * @param shader The shader to use for rendering.
      * @param cascadeShadows Cascade shadow information.
-     * @param depthMap The depth map buffers.
      */
     public ShadowRender(
-            final @NonNull ShaderVulkan shader,
-            final @NonNull List<CascadeShadow> cascadeShadows,
-            final @NonNull Framebuffer depthMap) {
+            final @NonNull ShaderVulkan shader, final @NonNull List<CascadeShadow> cascadeShadows) {
         this.shader = shader;
         this.cascadeShadows = cascadeShadows;
-        this.depthMap = depthMap;
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
         this.pipeline = VK_NULL_HANDLE;

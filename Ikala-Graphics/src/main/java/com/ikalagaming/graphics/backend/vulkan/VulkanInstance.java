@@ -213,9 +213,7 @@ public class VulkanInstance implements Instance {
     }
 
     private final IntBuffer intOutput = MemoryUtil.memAllocInt(1);
-
     private final LongBuffer longOutput = MemoryUtil.memAllocLong(1);
-
     private final PointerBuffer pointerOutput = MemoryUtil.memAllocPointer(1);
 
     private final VkDebugUtilsMessengerCallbackEXT debugLogger =
@@ -502,180 +500,6 @@ public class VulkanInstance implements Instance {
         vkDestroySwapchainKHR(state.device.logical, windowInfo.swapchainHandle, null);
 
         vkDestroySurfaceKHR(state.instance, windowInfo.surfaceHandle, null);
-    }
-
-    private TextureInfo createSceneTexture(@NonNull Window window) {
-        VulkanState.WindowInfo windowInfo = state.windows.get(window);
-
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            VkSurfaceCapabilitiesKHR surfaceCapabilities = VkSurfaceCapabilitiesKHR.calloc(stack);
-            checkError(
-                    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-                            state.device.physical.physicalDevice,
-                            windowInfo.surfaceHandle,
-                            surfaceCapabilities));
-            VkExtent3D imageExtent = VkExtent3D.calloc(stack);
-
-            if (surfaceCapabilities.currentExtent().width() == 0xFFFF_FFFF) {
-                imageExtent.set(window.getWidth(), window.getHeight(), 1);
-            } else {
-                imageExtent.set(
-                        surfaceCapabilities.currentExtent().width(),
-                        surfaceCapabilities.currentExtent().height(),
-                        1);
-            }
-
-            VkImageCreateInfo imageCreateInfo =
-                    VkImageCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .imageType(VK_IMAGE_TYPE_2D)
-                            .format(VK_FORMAT_R8G8B8A8_SRGB)
-                            .extent(imageExtent)
-                            .mipLevels(1)
-                            .arrayLayers(1)
-                            .samples(VK_SAMPLE_COUNT_1_BIT)
-                            .tiling(VK_IMAGE_TILING_OPTIMAL)
-                            .usage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
-                            .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED);
-
-            VmaAllocationCreateInfo imageAlloc =
-                    VmaAllocationCreateInfo.calloc(stack)
-                            .flags(VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT)
-                            .usage(VMA_MEMORY_USAGE_AUTO);
-
-            checkError(
-                    vmaCreateImage(
-                            state.vmaAllocator,
-                            imageCreateInfo,
-                            imageAlloc,
-                            longOutput,
-                            pointerOutput,
-                            null));
-            final long image = longOutput.get(0);
-            final long imageAllocation = pointerOutput.get(0);
-
-            VkImageViewCreateInfo viewCreateInfo =
-                    VkImageViewCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .image(image)
-                            .viewType(VK_IMAGE_VIEW_TYPE_2D)
-                            .format(VK_FORMAT_R8G8B8A8_SRGB)
-                            .subresourceRange(
-                                    VkImageSubresourceRange.calloc(stack)
-                                            .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
-                                            .levelCount(1)
-                                            .layerCount(1));
-            checkError(vkCreateImageView(state.device.logical, viewCreateInfo, null, longOutput));
-            final long imageView = longOutput.get(0);
-
-            VkSamplerCreateInfo samplerCreateInfo = VkSamplerCreateInfo.calloc(stack);
-            samplerCreateInfo
-                    .sType$Default()
-                    .magFilter(VK_FILTER_LINEAR)
-                    .minFilter(VK_FILTER_LINEAR)
-                    .addressModeU(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
-                    .addressModeV(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
-                    .addressModeW(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
-                    .anisotropyEnable(false)
-                    .compareEnable(false)
-                    .compareOp(VK_COMPARE_OP_ALWAYS)
-                    .mipmapMode(VK_SAMPLER_MIPMAP_MODE_LINEAR)
-                    .mipLodBias(0.0f)
-                    .minLod(0.0f)
-                    .maxLod(0.0f);
-
-            checkError(vkCreateSampler(state.device.logical, samplerCreateInfo, null, longOutput));
-            final long imageSampler = longOutput.get(0);
-
-            return new TextureInfo()
-                    .texture(image)
-                    .textureAllocation(imageAllocation)
-                    .view(imageView)
-                    .sampler(imageSampler);
-        }
-    }
-
-    private void createShaderData(@NonNull Window window) {
-        for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
-            state.shaderDataBuffers[i] = new PerFrameData();
-
-            final long DYNAMIC = 0;
-            state.shaderDataBuffers[i].animationData = createSharedBuffer(DYNAMIC);
-            state.shaderDataBuffers[i].animationOffsets = createSharedBuffer(DYNAMIC);
-            state.shaderDataBuffers[i].animationModelData = createSharedBuffer(DYNAMIC);
-            state.shaderDataBuffers[i].animationBoneWeight = createSharedBuffer(DYNAMIC);
-            state.shaderDataBuffers[i].animationTarget = createSharedBuffer(DYNAMIC);
-            state.shaderDataBuffers[i].guiUniforms =
-                    createSharedBuffer(ShaderBindings.GUI.UNIFORMS_BUFFER_SIZE);
-            state.shaderDataBuffers[i].guiCommands = createSharedBuffer(DYNAMIC);
-            state.shaderDataBuffers[i].guiPoints = createSharedBuffer(DYNAMIC);
-            state.shaderDataBuffers[i].guiPointDetails = createSharedBuffer(DYNAMIC);
-            state.shaderDataBuffers[i].lightUniforms =
-                    createSharedBuffer(ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
-            state.shaderDataBuffers[i].lightPointLights = createSharedBuffer(DYNAMIC);
-            state.shaderDataBuffers[i].lightSpotLights = createSharedBuffer(DYNAMIC);
-            state.shaderDataBuffers[i].lightMaterials = createSharedBuffer(DYNAMIC);
-            state.shaderDataBuffers[i].sceneUniforms =
-                    createSharedBuffer(ShaderBindings.Scene.UNIFORMS_BUFFER_SIZE);
-            state.shaderDataBuffers[i].sceneModelMatrices = createSharedBuffer(DYNAMIC);
-            state.shaderDataBuffers[i].sceneMaterials = createSharedBuffer(DYNAMIC);
-            state.shaderDataBuffers[i].sceneMaterialOverrides = createSharedBuffer(DYNAMIC);
-            state.shaderDataBuffers[i].shadowUniforms =
-                    createSharedBuffer(ShaderBindings.Shadow.UNIFORMS_BUFFER_SIZE);
-            state.shaderDataBuffers[i].shadowModelMatrices = createSharedBuffer(DYNAMIC);
-            state.shaderDataBuffers[i].skyboxUniforms =
-                    createSharedBuffer(ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE);
-            // TODO(ches) create sceneTexture, gBuffer
-            state.shaderDataBuffers[i].gBuffer = new Framebuffer(VK_NULL_HANDLE, 0, 0, new long[0]);
-            state.shaderDataBuffers[i].sceneTexture = createSceneTexture(window);
-        }
-    }
-
-    /**
-     * Create a shared buffer with the given size.
-     *
-     * @param bufferSize The size of the buffer in bytes.
-     * @return The new buffer object.
-     */
-    private SharedBuffer createSharedBuffer(long bufferSize) {
-        if (bufferSize <= 0) {
-            return new SharedBuffer();
-        }
-
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            VkBufferCreateInfo bufferCreateInfo =
-                    VkBufferCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .size(bufferSize)
-                            .usage(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
-            VmaAllocationCreateInfo bufferAllocationCreateInfo =
-                    VmaAllocationCreateInfo.calloc(stack)
-                            .flags(
-                                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
-                                            | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT
-                                            | VMA_ALLOCATION_CREATE_MAPPED_BIT)
-                            .usage(VMA_MEMORY_USAGE_AUTO);
-            VkBufferDeviceAddressInfo bufferDeviceAddressInfo =
-                    VkBufferDeviceAddressInfo.calloc(stack).sType$Default();
-
-            SharedBuffer result = new SharedBuffer();
-
-            checkError(
-                    vmaCreateBuffer(
-                            state.vmaAllocator,
-                            bufferCreateInfo,
-                            bufferAllocationCreateInfo,
-                            longOutput,
-                            pointerOutput,
-                            result.allocationInfo));
-            result.buffer = longOutput.get(0);
-            result.allocation = pointerOutput.get(0);
-
-            bufferDeviceAddressInfo.buffer(result.buffer);
-            result.deviceAddress =
-                    vkGetBufferDeviceAddress(state.device.logical, bufferDeviceAddressInfo);
-            return result;
-        }
     }
 
     /**
@@ -1257,8 +1081,6 @@ public class VulkanInstance implements Instance {
                         new VkCommandBuffer(commandBuffers.get(0), state.device.logical);
             }
         }
-
-        createShaderData(window);
 
         textureLoader = new TextureLoaderVulkan();
         shaderMap = new ShaderMap();

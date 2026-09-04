@@ -1,5 +1,12 @@
 package com.ikalagaming.graphics.backend.vulkan;
 
+import static com.ikalagaming.graphics.backend.vulkan.VulkanInstance.checkError;
+import static org.lwjgl.util.vma.Vma.*;
+import static org.lwjgl.vulkan.KHRSurface.vkGetPhysicalDeviceSurfaceCapabilitiesKHR;
+import static org.lwjgl.vulkan.VK10.*;
+import static org.lwjgl.vulkan.VK12.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+import static org.lwjgl.vulkan.VK12.vkGetBufferDeviceAddress;
+
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
@@ -15,12 +22,16 @@ import imgui.ImGui;
 import imgui.type.ImInt;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
+import org.lwjgl.util.vma.VmaAllocationCreateInfo;
+import org.lwjgl.vulkan.*;
 
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
+import java.nio.LongBuffer;
 import java.util.*;
 
 @Slf4j
@@ -47,10 +58,6 @@ public class PipelineManagerVulkan {
     /** The texture we store the font atlas on. */
     private Texture fontAtlas;
 
-    /** Geometry buffer. */
-    // TODO(ches) get rid of this, it's per-frame
-    private Framebuffer gBuffer;
-
     /** The mesh to render. */
     private ImGuiMesh imGuiMesh;
 
@@ -65,13 +72,6 @@ public class PipelineManagerVulkan {
 
     /** The map from config value to the associated renderer. */
     private final Map<Integer, Pipeline> renderers;
-
-    /** The buffer to render the scene to before post-processing. */
-    // TODO(ches) get rid of this, it's per-frame
-    private Framebuffer screenTexture;
-
-    /** The depth map for shadows. */
-    private Framebuffer shadowBuffers;
 
     /** Model used for rendering the skybox. */
     private SkyboxModel skybox;
@@ -90,6 +90,9 @@ public class PipelineManagerVulkan {
     private final SkyboxRender stageSkyboxRender;
     private final SwapchainPresent stageSwapchainPresent;
 
+    private final LongBuffer longOutput = MemoryUtil.memAllocLong(1);
+    private final PointerBuffer pointerOutput = MemoryUtil.memAllocPointer(1);
+
     public PipelineManagerVulkan(
             @NonNull Window window, @NonNull ShaderMap shaders, @NonNull VulkanState state) {
         cascadeShadows = new ArrayList<>();
@@ -101,10 +104,8 @@ public class PipelineManagerVulkan {
         cachedHeight = window.getHeight();
 
         renderers = new HashMap<>();
-        gBuffer = generateGBuffer();
-        generateRenderBuffers();
+        createShaderData(window, state);
         createGuiFont();
-        shadowBuffers = createShadowBuffers();
         skybox = new SkyboxModel();
         quadMesh = QuadMesh.getInstance(state);
         createLightBuffers();
@@ -114,11 +115,10 @@ public class PipelineManagerVulkan {
         stageModelMatrixUpdate = new ModelMatrixUpdate();
         stageModelMatrixUpdate.initialize(state);
         stageSceneRender =
-                new SceneRender((ShaderVulkan) shaders.getShader(RenderStage.Type.SCENE), gBuffer);
+                new SceneRender((ShaderVulkan) shaders.getShader(RenderStage.Type.SCENE));
         stageSceneRender.initialize(state);
         stageSceneRenderWireframe =
-                new SceneRenderWireframe(
-                        (ShaderVulkan) shaders.getShader(RenderStage.Type.SCENE), gBuffer);
+                new SceneRenderWireframe((ShaderVulkan) shaders.getShader(RenderStage.Type.SCENE));
         stageSceneRenderWireframe.initialize(state);
         stageGuiRender =
                 new GuiRender(
@@ -133,9 +133,7 @@ public class PipelineManagerVulkan {
         stageSkyboxRender.initialize(state);
         stageShadowRender =
                 new ShadowRender(
-                        (ShaderVulkan) shaders.getShader(RenderStage.Type.SHADOW),
-                        cascadeShadows,
-                        shadowBuffers);
+                        (ShaderVulkan) shaders.getShader(RenderStage.Type.SHADOW), cascadeShadows);
         stageShadowRender.initialize(state);
         stageLightRender =
                 new LightRender(
@@ -143,8 +141,6 @@ public class PipelineManagerVulkan {
                         cascadeShadows,
                         pointLights,
                         spotLights,
-                        shadowBuffers,
-                        gBuffer,
                         quadMesh);
         stageLightRender.initialize(state);
         stageAnimationRender =
@@ -198,6 +194,179 @@ public class PipelineManagerVulkan {
         return new PipelineVulkan(stages.toArray(new RenderStage[0]));
     }
 
+    private TextureInfo createSceneTexture(@NonNull Window window, @NonNull VulkanState state) {
+        VulkanState.WindowInfo windowInfo = state.windows.get(window);
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkSurfaceCapabilitiesKHR surfaceCapabilities = VkSurfaceCapabilitiesKHR.calloc(stack);
+            checkError(
+                    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+                            state.device.physical.physicalDevice,
+                            windowInfo.surfaceHandle,
+                            surfaceCapabilities));
+            VkExtent3D imageExtent = VkExtent3D.calloc(stack);
+
+            if (surfaceCapabilities.currentExtent().width() == 0xFFFF_FFFF) {
+                imageExtent.set(window.getWidth(), window.getHeight(), 1);
+            } else {
+                imageExtent.set(
+                        surfaceCapabilities.currentExtent().width(),
+                        surfaceCapabilities.currentExtent().height(),
+                        1);
+            }
+
+            VkImageCreateInfo imageCreateInfo =
+                    VkImageCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .imageType(VK_IMAGE_TYPE_2D)
+                            .format(VK_FORMAT_R8G8B8A8_SRGB)
+                            .extent(imageExtent)
+                            .mipLevels(1)
+                            .arrayLayers(1)
+                            .samples(VK_SAMPLE_COUNT_1_BIT)
+                            .tiling(VK_IMAGE_TILING_OPTIMAL)
+                            .usage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+                            .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED);
+
+            VmaAllocationCreateInfo imageAlloc =
+                    VmaAllocationCreateInfo.calloc(stack)
+                            .flags(VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT)
+                            .usage(VMA_MEMORY_USAGE_AUTO);
+
+            checkError(
+                    vmaCreateImage(
+                            state.vmaAllocator,
+                            imageCreateInfo,
+                            imageAlloc,
+                            longOutput,
+                            pointerOutput,
+                            null));
+            final long image = longOutput.get(0);
+            final long imageAllocation = pointerOutput.get(0);
+
+            VkImageViewCreateInfo viewCreateInfo =
+                    VkImageViewCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .image(image)
+                            .viewType(VK_IMAGE_VIEW_TYPE_2D)
+                            .format(VK_FORMAT_R8G8B8A8_SRGB)
+                            .subresourceRange(
+                                    VkImageSubresourceRange.calloc(stack)
+                                            .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                            .levelCount(1)
+                                            .layerCount(1));
+            checkError(vkCreateImageView(state.device.logical, viewCreateInfo, null, longOutput));
+            final long imageView = longOutput.get(0);
+
+            VkSamplerCreateInfo samplerCreateInfo = VkSamplerCreateInfo.calloc(stack);
+            samplerCreateInfo
+                    .sType$Default()
+                    .magFilter(VK_FILTER_LINEAR)
+                    .minFilter(VK_FILTER_LINEAR)
+                    .addressModeU(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
+                    .addressModeV(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
+                    .addressModeW(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
+                    .anisotropyEnable(false)
+                    .compareEnable(false)
+                    .compareOp(VK_COMPARE_OP_ALWAYS)
+                    .mipmapMode(VK_SAMPLER_MIPMAP_MODE_LINEAR)
+                    .mipLodBias(0.0f)
+                    .minLod(0.0f)
+                    .maxLod(0.0f);
+
+            checkError(vkCreateSampler(state.device.logical, samplerCreateInfo, null, longOutput));
+            final long imageSampler = longOutput.get(0);
+
+            return new TextureInfo()
+                    .texture(image)
+                    .textureAllocation(imageAllocation)
+                    .view(imageView)
+                    .sampler(imageSampler);
+        }
+    }
+
+    private void createShaderData(@NonNull Window window, @NonNull VulkanState state) {
+        for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+            state.shaderDataBuffers[i] = new PerFrameData();
+
+            final long DYNAMIC = 0;
+            state.shaderDataBuffers[i].animationData = createSharedBuffer(DYNAMIC, state);
+            state.shaderDataBuffers[i].animationOffsets = createSharedBuffer(DYNAMIC, state);
+            state.shaderDataBuffers[i].animationModelData = createSharedBuffer(DYNAMIC, state);
+            state.shaderDataBuffers[i].animationBoneWeight = createSharedBuffer(DYNAMIC, state);
+            state.shaderDataBuffers[i].animationTarget = createSharedBuffer(DYNAMIC, state);
+            state.shaderDataBuffers[i].guiUniforms =
+                    createSharedBuffer(ShaderBindings.GUI.UNIFORMS_BUFFER_SIZE, state);
+            state.shaderDataBuffers[i].guiCommands = createSharedBuffer(DYNAMIC, state);
+            state.shaderDataBuffers[i].guiPoints = createSharedBuffer(DYNAMIC, state);
+            state.shaderDataBuffers[i].guiPointDetails = createSharedBuffer(DYNAMIC, state);
+            state.shaderDataBuffers[i].lightUniforms =
+                    createSharedBuffer(ShaderBindings.Light.UNIFORMS_BUFFER_SIZE, state);
+            state.shaderDataBuffers[i].lightPointLights = createSharedBuffer(DYNAMIC, state);
+            state.shaderDataBuffers[i].lightSpotLights = createSharedBuffer(DYNAMIC, state);
+            state.shaderDataBuffers[i].lightMaterials = createSharedBuffer(DYNAMIC, state);
+            state.shaderDataBuffers[i].sceneUniforms =
+                    createSharedBuffer(ShaderBindings.Scene.UNIFORMS_BUFFER_SIZE, state);
+            state.shaderDataBuffers[i].sceneModelMatrices = createSharedBuffer(DYNAMIC, state);
+            state.shaderDataBuffers[i].sceneMaterials = createSharedBuffer(DYNAMIC, state);
+            state.shaderDataBuffers[i].sceneMaterialOverrides = createSharedBuffer(DYNAMIC, state);
+            state.shaderDataBuffers[i].shadowUniforms =
+                    createSharedBuffer(ShaderBindings.Shadow.UNIFORMS_BUFFER_SIZE, state);
+            state.shaderDataBuffers[i].shadowModelMatrices = createSharedBuffer(DYNAMIC, state);
+            state.shaderDataBuffers[i].skyboxUniforms =
+                    createSharedBuffer(ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE, state);
+            state.shaderDataBuffers[i].gBuffer = generateGBuffer();
+            state.shaderDataBuffers[i].sceneTexture = createSceneTexture(window, state);
+        }
+    }
+
+    /**
+     * Create a shared buffer with the given size.
+     *
+     * @param bufferSize The size of the buffer in bytes.
+     * @return The new buffer object.
+     */
+    private SharedBuffer createSharedBuffer(long bufferSize, @NonNull VulkanState state) {
+        if (bufferSize <= 0) {
+            return new SharedBuffer();
+        }
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkBufferCreateInfo bufferCreateInfo =
+                    VkBufferCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .size(bufferSize)
+                            .usage(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
+            VmaAllocationCreateInfo bufferAllocationCreateInfo =
+                    VmaAllocationCreateInfo.calloc(stack)
+                            .flags(
+                                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+                                            | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT
+                                            | VMA_ALLOCATION_CREATE_MAPPED_BIT)
+                            .usage(VMA_MEMORY_USAGE_AUTO);
+            VkBufferDeviceAddressInfo bufferDeviceAddressInfo =
+                    VkBufferDeviceAddressInfo.calloc(stack).sType$Default();
+
+            SharedBuffer result = new SharedBuffer();
+
+            checkError(
+                    vmaCreateBuffer(
+                            state.vmaAllocator,
+                            bufferCreateInfo,
+                            bufferAllocationCreateInfo,
+                            longOutput,
+                            pointerOutput,
+                            result.allocationInfo));
+            result.buffer = longOutput.get(0);
+            result.allocation = pointerOutput.get(0);
+
+            bufferDeviceAddressInfo.buffer(result.buffer);
+            result.deviceAddress =
+                    vkGetBufferDeviceAddress(state.device.logical, bufferDeviceAddressInfo);
+            return result;
+        }
+    }
+
     /** Clean up all the rendering resources. */
     public void cleanup(@NonNull VulkanState state) {
         stageAnimationRender.cleanup(state);
@@ -223,11 +392,6 @@ public class PipelineManagerVulkan {
         pointLights = null;
         GraphicsManager.getDeletionQueue().add(spotLights);
         spotLights = null;
-        GraphicsManager.getDeletionQueue().add(gBuffer);
-        gBuffer = null;
-        GraphicsManager.getDeletionQueue().add(shadowBuffers);
-        shadowBuffers = null;
-        deleteRenderBuffers();
     }
 
     private void createGuiFont() {
@@ -323,11 +487,6 @@ public class PipelineManagerVulkan {
                 textureIds);
     }
 
-    /** Free up the current render buffers. */
-    void deleteRenderBuffers() {
-        GraphicsManager.getDeletionQueue().add(screenTexture);
-    }
-
     /**
      * Generate the geometry buffer.
      *
@@ -365,25 +524,6 @@ public class PipelineManagerVulkan {
         return new Framebuffer(gBufferId, cachedWidth, cachedHeight, textureIds);
     }
 
-    /**
-     * Generate new render buffers. {@link #deleteRenderBuffers()} should be called before doing
-     * this if they already exist.
-     */
-    private void generateRenderBuffers() {
-        int[] textures = new int[2];
-        // TODO(ches) create textures
-
-        // TODO(ches) set up textures
-
-        int screenFBO = 0;
-        // TODO(ches) create buffer
-
-        // TODO(ches) set up render buffers
-
-        long[] textureIds = Arrays.stream(textures).mapToLong(i -> (long) i).toArray();
-        screenTexture = new Framebuffer(screenFBO, cachedWidth, cachedHeight, textureIds);
-    }
-
     public Pipeline getPipeline(final int configuration) {
         return renderers.computeIfAbsent(configuration, this::buildPipeline);
     }
@@ -397,7 +537,5 @@ public class PipelineManagerVulkan {
     public void resize(final int width, final int height) {
         cachedWidth = width;
         cachedHeight = height;
-        deleteRenderBuffers();
-        generateRenderBuffers();
     }
 }

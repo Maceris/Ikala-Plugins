@@ -13,7 +13,6 @@ import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.backend.vulkan.*;
 import com.ikalagaming.graphics.frontend.Buffer;
-import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.graph.CascadeShadow;
 import com.ikalagaming.graphics.scene.Fog;
 import com.ikalagaming.graphics.scene.Scene;
@@ -62,12 +61,6 @@ public class LightRender implements RenderStage {
     /** The buffer to use for storing spotlight info. */
     @NonNull private Buffer spotLightsBuffer;
 
-    /** The buffer for reading shadow info from. */
-    @NonNull private Framebuffer shadowBuffers;
-
-    /** The g-buffer for reading scene info from. */
-    @NonNull private Framebuffer gBuffer;
-
     /** A mesh for rendering onto. */
     @NonNull private QuadMesh quadMesh;
 
@@ -87,8 +80,6 @@ public class LightRender implements RenderStage {
      * @param cascadeShadows Cascade shadows information.
      * @param pointLightsBuffer Buffer to use for storing point light info.
      * @param spotLightsBuffer Buffer to use for storing spotlight info.
-     * @param shadowBuffers Buffer for reading shadow info from.
-     * @param gBuffer g-buffer for reading scene info from.
      * @param quadMesh Mesh for rendering onto.
      */
     public LightRender(
@@ -96,15 +87,11 @@ public class LightRender implements RenderStage {
             final @NonNull List<CascadeShadow> cascadeShadows,
             final @NonNull Buffer pointLightsBuffer,
             final @NonNull Buffer spotLightsBuffer,
-            final @NonNull Framebuffer shadowBuffers,
-            final @NonNull Framebuffer gBuffer,
             final @NonNull QuadMesh quadMesh) {
         this.shader = shader;
         this.cascadeShadows = cascadeShadows;
         this.pointLightsBuffer = pointLightsBuffer;
         this.spotLightsBuffer = spotLightsBuffer;
-        this.shadowBuffers = shadowBuffers;
-        this.gBuffer = gBuffer;
         this.quadMesh = quadMesh;
 
         this.descriptorSetLayout = VK_NULL_HANDLE;
@@ -139,7 +126,7 @@ public class LightRender implements RenderStage {
         updateLights(scene, pointLightsBuffer, spotLightsBuffer, uniformsMap);
 
         int nextTexture = 0;
-        long[] textureIds = gBuffer.textures();
+        long[] textureIds = new long[] {};
         if (textureIds != null) {
             for (long textureId : textureIds) {
                 // TODO(ches) opengl bound things here

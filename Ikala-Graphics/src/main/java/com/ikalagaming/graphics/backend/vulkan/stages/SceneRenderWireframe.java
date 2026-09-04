@@ -12,7 +12,6 @@ import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.backend.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.backend.vulkan.VulkanState;
-import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
@@ -31,9 +30,6 @@ public class SceneRenderWireframe implements RenderStage {
     /** The shader to use for rendering. */
     @NonNull @Setter private ShaderVulkan shader;
 
-    /** The g-buffer for rendering geometry to. */
-    @Setter @NonNull private Framebuffer gBuffer;
-
     /** VkDescriptorSetLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorSetLayout;
 
@@ -47,12 +43,9 @@ public class SceneRenderWireframe implements RenderStage {
      * Set up the shadow render stage.
      *
      * @param shader The shader to use for rendering.
-     * @param gBuffer The depth map buffers.
      */
-    public SceneRenderWireframe(
-            final @NonNull ShaderVulkan shader, final @NonNull Framebuffer gBuffer) {
+    public SceneRenderWireframe(final @NonNull ShaderVulkan shader) {
         this.shader = shader;
-        this.gBuffer = gBuffer;
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
         this.pipeline = VK_NULL_HANDLE;
@@ -85,7 +78,7 @@ public class SceneRenderWireframe implements RenderStage {
     @Override
     public void render(Scene scene, @NonNull Window window, State state) {
         // TODO(ches) pretty sure this is going to need to change quite a bit
-        SceneRender.commonSceneRender(scene, shader, gBuffer);
+        SceneRender.commonSceneRender(scene, shader, state);
     }
 
     private void createPipelineLayout(@NonNull VulkanState state) {

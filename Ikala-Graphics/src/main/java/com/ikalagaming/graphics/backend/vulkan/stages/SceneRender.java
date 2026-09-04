@@ -39,9 +39,6 @@ public class SceneRender implements RenderStage {
     /** The shader to use for rendering. */
     @NonNull @Setter private ShaderVulkan shader;
 
-    /** The g-buffer for rendering geometry to. */
-    @Setter @NonNull private Framebuffer gBuffer;
-
     /** VkDescriptorSetLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorSetLayout;
 
@@ -55,11 +52,9 @@ public class SceneRender implements RenderStage {
      * Set up the scene render stage.
      *
      * @param shader The shader to use for rendering.
-     * @param gBuffer The gbuffer.
      */
-    public SceneRender(final @NonNull ShaderVulkan shader, final @NonNull Framebuffer gBuffer) {
+    public SceneRender(final @NonNull ShaderVulkan shader) {
         this.shader = shader;
-        this.gBuffer = gBuffer;
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
         this.pipeline = VK_NULL_HANDLE;
@@ -88,10 +83,12 @@ public class SceneRender implements RenderStage {
      * Compute animation transformations for all animated models in the scene.
      *
      * @param scene The scene we are rendering.
+     * @param window The window we are rendering the scene to.
+     * @param state The Vulkan state.
      */
     @Override
     public void render(Scene scene, @NonNull Window window, State state) {
-        commonSceneRender(scene, shader, gBuffer);
+        commonSceneRender(scene, shader, state);
     }
 
     /**
@@ -99,9 +96,9 @@ public class SceneRender implements RenderStage {
      *
      * @param scene The scene we are rendering.
      * @param shader The shader to use for rendering.
-     * @param gBuffer The depth map buffers.
+     * @param state The Vulkan state.
      */
-    static void commonSceneRender(Scene scene, Shader shader, Framebuffer gBuffer) {
+    static void commonSceneRender(Scene scene, Shader shader, State state) {
         var uniformsMap = shader.getUniformMap();
         // TODO(ches) clear the framebuffer
         shader.bind();
