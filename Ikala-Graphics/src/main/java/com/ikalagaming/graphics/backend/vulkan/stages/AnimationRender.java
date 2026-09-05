@@ -78,13 +78,8 @@ public class AnimationRender implements RenderStage {
         descriptorSetLayout = VK_NULL_HANDLE;
     }
 
-    /**
-     * Compute animation transformations for all animated models in the scene.
-     *
-     * @param scene The scene we are rendering.
-     */
     @Override
-    public void render(Scene scene, @NonNull Window window, State state) {
+    public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
         shader.bind();
 
         for (Model model : scene.getModelMap().values()) {

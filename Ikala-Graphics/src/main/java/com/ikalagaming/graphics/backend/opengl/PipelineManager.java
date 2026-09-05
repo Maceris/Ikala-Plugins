@@ -38,7 +38,8 @@ public class PipelineManager {
     public static final int MODEL_MATRIX_SIZE = 4 * 4;
 
     /** Fallback pipeline that does nothing. */
-    private static final Pipeline ERROR_PIPELINE = new PipelineOpenGL(new RenderStage[0]);
+    private static final Pipeline ERROR_PIPELINE =
+            new PipelineOpenGL(new RenderStage[0], RenderConfig.ERROR_MASK);
 
     /** The width of the drawable area in pixels. */
     private int cachedHeight;
@@ -207,7 +208,7 @@ public class PipelineManager {
             stages.add(stageGuiRender);
         }
 
-        return new PipelineOpenGL(stages.toArray(new RenderStage[0]));
+        return new PipelineOpenGL(stages.toArray(new RenderStage[0]), configuration);
     }
 
     /** Clean up all the rendering resources. */

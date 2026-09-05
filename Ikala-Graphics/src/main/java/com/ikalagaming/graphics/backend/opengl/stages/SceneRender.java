@@ -67,7 +67,7 @@ public class SceneRender implements RenderStage {
      * @param scene The scene we are rendering.
      */
     @Override
-    public void render(Scene scene, @NonNull Window window, State state) {
+    public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
         commonSceneRender(scene, shader, renderBuffers, gBuffer);
     }
 

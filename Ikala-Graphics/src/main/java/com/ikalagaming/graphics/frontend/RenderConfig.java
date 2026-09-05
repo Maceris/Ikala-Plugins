@@ -19,15 +19,15 @@ package com.ikalagaming.graphics.frontend;
  */
 public class RenderConfig {
 
-    private static final int ERROR_MASK = 0b1000_0000_0000_0000_0000_0000_0000_0000;
-    private static final int ANIMATION_ENABLED_MASK = 0b0100_0000_0000_0000_0000_0000_0000_0000;
-    private static final int SHADOW_ENABLED_MASK = 0b0010_0000_0000_0000_0000_0000_0000_0000;
-    private static final int SCENE_ENABLED_MASK = 0b0001_0000_0000_0000_0000_0000_0000_0000;
-    private static final int SKYBOX_ENABLED_MASK = 0b0000_1000_0000_0000_0000_0000_0000_0000;
-    private static final int FILTER_ENABLED_MASK = 0b0000_0100_0000_0000_0000_0000_0000_0000;
-    private static final int GUI_ENABLED_MASK = 0b0000_0010_0000_0000_0000_0000_0000_0000;
-    private static final int TRANSPARENCY_PASS_MASK = 0b0000_0000_0000_1000_0000_0000_0000_0000;
-    private static final int SCENE_WIREFRAME_MASK = 0b0000_0000_0000_0000_1000_0000_0000_0000;
+    public static final int ERROR_MASK = 0b1000_0000_0000_0000_0000_0000_0000_0000;
+    public static final int ANIMATION_ENABLED_MASK = 0b0100_0000_0000_0000_0000_0000_0000_0000;
+    public static final int SHADOW_ENABLED_MASK = 0b0010_0000_0000_0000_0000_0000_0000_0000;
+    public static final int SCENE_ENABLED_MASK = 0b0001_0000_0000_0000_0000_0000_0000_0000;
+    public static final int SKYBOX_ENABLED_MASK = 0b0000_1000_0000_0000_0000_0000_0000_0000;
+    public static final int FILTER_ENABLED_MASK = 0b0000_0100_0000_0000_0000_0000_0000_0000;
+    public static final int GUI_ENABLED_MASK = 0b0000_0010_0000_0000_0000_0000_0000_0000;
+    public static final int TRANSPARENCY_PASS_MASK = 0b0000_0000_0000_1000_0000_0000_0000_0000;
+    public static final int SCENE_WIREFRAME_MASK = 0b0000_0000_0000_0000_1000_0000_0000_0000;
 
     /** Used for constructing render config from scratch. */
     public static class ConfigBuilder {

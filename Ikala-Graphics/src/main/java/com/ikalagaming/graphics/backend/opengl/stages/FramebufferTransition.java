@@ -39,7 +39,7 @@ public class FramebufferTransition implements RenderStage {
     private final int blendDFactor;
 
     @Override
-    public void render(Scene scene, @NonNull Window window, State state) {
+    public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
         glBindFramebuffer(GL_FRAMEBUFFER, (int) framebuffer.id());
 
         ImGuiIO io = ImGui.getIO();

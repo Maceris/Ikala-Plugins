@@ -76,7 +76,7 @@ public class GuiRender implements RenderStage {
     }
 
     @Override
-    public void render(Scene scene, @NonNull Window window, State state) {
+    public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
         ImGuiIO io = ImGui.getIO();
 
         final int width = (int) io.getDisplaySizeX();

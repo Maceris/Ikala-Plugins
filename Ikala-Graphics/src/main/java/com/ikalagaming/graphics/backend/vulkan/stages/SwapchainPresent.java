@@ -30,7 +30,7 @@ public class SwapchainPresent implements RenderStage {
     }
 
     @Override
-    public void render(Scene scene, @NonNull Window window, State state) {
+    public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
         // TODO(ches) remove this when we don't have the nothingburger state?
         VulkanState vulkanState = (VulkanState) state;
         final VkCommandBuffer commandBuffer =

@@ -45,7 +45,7 @@ public class FilterRender implements RenderStage {
     }
 
     @Override
-    public void render(Scene scene, @NonNull Window window, State state) {
+    public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
         glDepthMask(false);
 
         shader.bind();

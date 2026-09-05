@@ -48,6 +48,9 @@ public class SceneRender implements RenderStage {
     /** VkPipeline pointer, will be VK_NULL_HANDLE if not set up. */
     private long pipeline;
 
+    /** VkPipeline pointer, will be VK_NULL_HANDLE if not set up. */
+    private long pipelineWireframe;
+
     /**
      * Set up the scene render stage.
      *
@@ -58,6 +61,7 @@ public class SceneRender implements RenderStage {
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
         this.pipeline = VK_NULL_HANDLE;
+        this.pipelineWireframe = VK_NULL_HANDLE;
     }
 
     @Override
@@ -65,12 +69,15 @@ public class SceneRender implements RenderStage {
         log.debug("Initializing scene render");
         VulkanState vulkanState = (VulkanState) state;
         createPipelineLayout(vulkanState);
-        createPipeline(vulkanState);
+        this.pipeline = createPipeline(vulkanState, false);
+        this.pipelineWireframe = createPipeline(vulkanState, true);
     }
 
     @Override
     public void cleanup(@NonNull State state) {
         VulkanState vulkanState = (VulkanState) state;
+        vkDestroyPipeline(vulkanState.device.logical, pipelineWireframe, null);
+        pipelineWireframe = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
@@ -79,26 +86,8 @@ public class SceneRender implements RenderStage {
         descriptorSetLayout = VK_NULL_HANDLE;
     }
 
-    /**
-     * Compute animation transformations for all animated models in the scene.
-     *
-     * @param scene The scene we are rendering.
-     * @param window The window we are rendering the scene to.
-     * @param state The Vulkan state.
-     */
     @Override
-    public void render(Scene scene, @NonNull Window window, State state) {
-        commonSceneRender(scene, shader, state);
-    }
-
-    /**
-     * Common rendering code for the scene, shared between stages.
-     *
-     * @param scene The scene we are rendering.
-     * @param shader The shader to use for rendering.
-     * @param state The Vulkan state.
-     */
-    static void commonSceneRender(Scene scene, Shader shader, State state) {
+    public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
         var uniformsMap = shader.getUniformMap();
         // TODO(ches) clear the framebuffer
         shader.bind();
@@ -152,6 +141,7 @@ public class SceneRender implements RenderStage {
 
             // TODO(ches) unbind model matrices (?)
         }
+        // TODO(ches) decide on which pipeline to use based on render config
 
         shader.unbind();
     }
@@ -332,7 +322,7 @@ public class SceneRender implements RenderStage {
         }
     }
 
-    private void createPipeline(@NonNull VulkanState state) {
+    private long createPipeline(@NonNull VulkanState state, boolean wireframe) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
@@ -477,6 +467,9 @@ public class SceneRender implements RenderStage {
                     VkPipelineRasterizationStateCreateInfo.calloc(stack)
                             .sType$Default()
                             .lineWidth(1.0f);
+            if (wireframe) {
+                rasterizationState.polygonMode(VK_POLYGON_MODE_LINE);
+            }
             VkPipelineMultisampleStateCreateInfo multisampleState =
                     VkPipelineMultisampleStateCreateInfo.calloc(stack)
                             .sType$Default()
@@ -509,7 +502,7 @@ public class SceneRender implements RenderStage {
                             null,
                             longOutput));
 
-            pipeline = longOutput.get(0);
+            return longOutput.get(0);
         }
     }
 }

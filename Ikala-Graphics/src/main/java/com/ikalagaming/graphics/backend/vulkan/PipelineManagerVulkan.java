@@ -41,7 +41,8 @@ public class PipelineManagerVulkan {
     public static final int MODEL_MATRIX_SIZE = 4 * 4;
 
     /** Fallback pipeline that does nothing. */
-    private static final Pipeline ERROR_PIPELINE = new PipelineVulkan(new RenderStage[0]);
+    private static final Pipeline ERROR_PIPELINE =
+            new PipelineVulkan(new RenderStage[0], RenderConfig.ERROR_MASK);
 
     /** The width of the drawable area in pixels. */
     private int cachedHeight;
@@ -85,7 +86,6 @@ public class PipelineManagerVulkan {
     private final LightRender stageLightRender;
     private final ModelMatrixUpdate stageModelMatrixUpdate;
     private final SceneRender stageSceneRender;
-    private final SceneRenderWireframe stageSceneRenderWireframe;
     private final ShadowRender stageShadowRender;
     private final SkyboxRender stageSkyboxRender;
     private final SwapchainPresent stageSwapchainPresent;
@@ -117,9 +117,6 @@ public class PipelineManagerVulkan {
         stageSceneRender =
                 new SceneRender((ShaderVulkan) shaders.getShader(RenderStage.Type.SCENE));
         stageSceneRender.initialize(state);
-        stageSceneRenderWireframe =
-                new SceneRenderWireframe((ShaderVulkan) shaders.getShader(RenderStage.Type.SCENE));
-        stageSceneRenderWireframe.initialize(state);
         stageGuiRender =
                 new GuiRender(
                         (ShaderVulkan) shaders.getShader(RenderStage.Type.GUI_LEGACY),
@@ -171,13 +168,7 @@ public class PipelineManagerVulkan {
             stages.add(stageShadowRender);
         }
         if (RenderConfig.hasSceneStage(configuration)) {
-            if (RenderConfig.sceneIsWireframe(configuration)) {
-                stages.add(stageSceneRenderWireframe);
-            } else {
-                stages.add(stageSceneRender);
-            }
-        }
-        if (RenderConfig.hasSceneStage(configuration)) {
+            stages.add(stageSceneRender);
             stages.add(stageLightRender);
         }
         if (RenderConfig.hasSkyboxStage(configuration)) {
@@ -191,7 +182,7 @@ public class PipelineManagerVulkan {
         }
         stages.add(stageSwapchainPresent);
 
-        return new PipelineVulkan(stages.toArray(new RenderStage[0]));
+        return new PipelineVulkan(stages.toArray(new RenderStage[0]), configuration);
     }
 
     private TextureInfo createSceneTexture(@NonNull Window window, @NonNull VulkanState state) {
@@ -375,7 +366,6 @@ public class PipelineManagerVulkan {
         stageLightRender.cleanup(state);
         stageModelMatrixUpdate.cleanup(state);
         stageSceneRender.cleanup(state);
-        stageSceneRenderWireframe.cleanup(state);
         stageShadowRender.cleanup(state);
         stageSkyboxRender.cleanup(state);
         GraphicsManager.getDeletionQueue().add(imguiFont);

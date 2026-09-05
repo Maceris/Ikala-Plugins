@@ -46,7 +46,7 @@ public class SceneRenderWireframe implements RenderStage {
      * @param scene The scene we are rendering.
      */
     @Override
-    public void render(Scene scene, @NonNull Window window, State state) {
+    public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
         SceneRender.commonSceneRender(scene, shader, renderBuffers, gBuffer);

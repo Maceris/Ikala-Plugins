@@ -25,5 +25,5 @@ public interface RenderStage {
     default void cleanup(@NonNull State state) {}
 
     // TODO(ches) fix this once we throw away OpenGL
-    void render(Scene scene, @NonNull Window window, State state);
+    void render(Scene scene, @NonNull Window window, State state, int renderConfig);
 }

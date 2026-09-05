@@ -23,6 +23,9 @@ public class PipelineOpenGL implements Pipeline {
     /** The list of render stages that this renderer uses. */
     private final RenderStage[] renderStages;
 
+    /** The render config that was used to build this pipeline. */
+    private final int renderConfig;
+
     @Override
     public void initialize(@NonNull Window window, @NonNull ShaderMap shaders) {
         glEnable(GL_MULTISAMPLE);
@@ -37,7 +40,7 @@ public class PipelineOpenGL implements Pipeline {
     @Override
     public void render(Scene scene, ShaderMap shaders, @NonNull Window window, State state) {
         for (RenderStage stage : renderStages) {
-            stage.render(scene, window, state);
+            stage.render(scene, window, state, renderConfig);
         }
     }
 }
