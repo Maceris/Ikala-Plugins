@@ -16,7 +16,7 @@ import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.backend.opengl.PipelineOpenGL;
 import com.ikalagaming.graphics.backend.opengl.QuadMesh;
 import com.ikalagaming.graphics.frontend.*;
-import com.ikalagaming.graphics.graph.CascadeShadow;
+import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.scene.Fog;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.*;
@@ -54,7 +54,7 @@ public class LightRender implements RenderStage {
     @NonNull private Shader shader;
 
     /** The cascade shadows information. */
-    @NonNull private List<CascadeShadow> cascadeShadows;
+    @NonNull private CascadeShadowSplit[] cascadeShadowSplits;
 
     /** The buffer to use for storing point light info. */
     @NonNull private Buffer pointLightsBuffer;
@@ -104,26 +104,26 @@ public class LightRender implements RenderStage {
                 ShaderUniforms.Light.FOG + "." + ShaderUniforms.Light.Fog.DENSITY,
                 fog.getDensity());
 
-        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+        for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
             uniformsMap.setUniform(ShaderUniforms.Light.SHADOW_MAP_PREFIX + i, nextTexture + i);
-            CascadeShadow cascadeShadow = cascadeShadows.get(i);
+            CascadeShadowSplit cascadeShadowSplit = cascadeShadowSplits[i];
             uniformsMap.setUniform(
                     ShaderUniforms.Light.CASCADE_SHADOWS
                             + "["
                             + i
                             + "]."
                             + ShaderUniforms.Light.CascadeShadow.PROJECTION_VIEW_MATRIX,
-                    cascadeShadow.getProjViewMatrix());
+                    cascadeShadowSplit.getProjViewMatrix());
             uniformsMap.setUniform(
                     ShaderUniforms.Light.CASCADE_SHADOWS
                             + "["
                             + i
                             + "]."
                             + ShaderUniforms.Light.CascadeShadow.SPLIT_DISTANCE,
-                    cascadeShadow.getSplitDistance());
+                    cascadeShadowSplit.getSplitDistance());
         }
 
-        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+        for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
             glActiveTexture(GL_TEXTURE0 + nextTexture + i);
             glBindTexture(GL_TEXTURE_2D, (int) shadowBuffers.textures()[i]);
         }

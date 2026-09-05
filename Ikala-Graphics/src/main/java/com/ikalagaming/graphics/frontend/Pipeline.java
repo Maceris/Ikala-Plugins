@@ -19,6 +19,7 @@ public interface Pipeline {
      * @param window The window we will be rendering to.
      * @param shaders The shaders to use for rendering.
      */
+    // TODO(ches) we can discard this, only opengl needs it
     void initialize(@NonNull Window window, @NonNull ShaderMap shaders);
 
     /**

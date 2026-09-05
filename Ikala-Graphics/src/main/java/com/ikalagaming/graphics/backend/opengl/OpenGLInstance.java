@@ -18,7 +18,7 @@ import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.data.IkIO;
-import com.ikalagaming.graphics.graph.CascadeShadow;
+import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
@@ -251,7 +251,7 @@ public class OpenGLInstance implements Instance {
         uniformsMap.createUniform(
                 ShaderUniforms.Light.FOG + "." + ShaderUniforms.Light.Fog.DENSITY);
 
-        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+        for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
             uniformsMap.createUniform(ShaderUniforms.Light.SHADOW_MAP_PREFIX + i);
             uniformsMap.createUniform(
                     ShaderUniforms.Light.CASCADE_SHADOWS

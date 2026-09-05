@@ -9,11 +9,9 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
-import java.util.List;
-
 /** Used for cascaded shadow mapping to balance quality and performance. */
 @Getter
-public class CascadeShadow {
+public class CascadeShadowSplit {
     /** The number of partitions that we split the camera frustum into. */
     public static final int SHADOW_MAP_CASCADE_COUNT = 3;
 
@@ -27,7 +25,8 @@ public class CascadeShadow {
      * We calculate the splits once, and use the same values every time we calculate the cascade
      * shadows.
      */
-    private static final float[] cachedSplits = new float[CascadeShadow.SHADOW_MAP_CASCADE_COUNT];
+    private static final float[] cachedSplits =
+            new float[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
 
     static {
         final float nearClip = Projection.Z_NEAR;
@@ -43,8 +42,8 @@ public class CascadeShadow {
          * presented in
          * https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch10.html
          */
-        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
-            float power = (i + 1) / (float) (CascadeShadow.SHADOW_MAP_CASCADE_COUNT);
+        for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
+            float power = (i + 1) / (float) (CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT);
             float logPart = (float) (nearClip * Math.pow(ratio, power));
             float uniform = nearClip + clipRange * power;
             float d = cascadeSplitLambda * (logPart - uniform) + uniform;
@@ -60,11 +59,11 @@ public class CascadeShadow {
      * which are based on
      * https://johanmedestrom.wordpress.com/2016/03/18/opengl-cascaded-shadow-maps/
      *
-     * @param cascadeShadows The cascade shadows.
+     * @param cascadeShadowSplits The cascade shadows.
      * @param scene The scene.
      */
     public static void updateCascadeShadows(
-            @NonNull List<CascadeShadow> cascadeShadows, @NonNull Scene scene) {
+            @NonNull CascadeShadowSplit @NonNull [] cascadeShadowSplits, @NonNull Scene scene) {
         final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
         final Matrix4f projectionMatrix = scene.getProjection().getProjectionMatrix();
         final Vector3f lightDir = scene.getSceneLights().getDirLight().getDirection();
@@ -75,7 +74,7 @@ public class CascadeShadow {
 
         // Calculate orthographic projection matrix for each cascade
         float lastSplitDistance = 0.0f;
-        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+        for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
             float splitDistance = cachedSplits[i];
 
             Vector3f[] frustumCorners = { //
@@ -128,9 +127,9 @@ public class CascadeShadow {
                     new Matrix4f().ortho(-radius, radius, -radius, radius, 0, 2 * radius, true);
 
             // Store split distance and matrix in cascade
-            CascadeShadow cascadeShadow = cascadeShadows.get(i);
-            cascadeShadow.splitDistance = (nearClip + splitDistance * clipRange) * -1.0f;
-            cascadeShadow.projViewMatrix = lightOrthoMatrix.mul(lightViewMatrix);
+            CascadeShadowSplit cascadeShadowSplit = cascadeShadowSplits[i];
+            cascadeShadowSplit.splitDistance = (nearClip + splitDistance * clipRange) * -1.0f;
+            cascadeShadowSplit.projViewMatrix = lightOrthoMatrix.mul(lightViewMatrix);
 
             lastSplitDistance = cachedSplits[i];
         }
@@ -151,7 +150,7 @@ public class CascadeShadow {
     private float splitDistance;
 
     /** Create a new cascade shadow. */
-    public CascadeShadow() {
+    public CascadeShadowSplit() {
         projViewMatrix = new Matrix4f();
     }
 }

@@ -1,7 +1,7 @@
 package com.ikalagaming.graphics.backend.vulkan;
 
 import com.ikalagaming.graphics.ShaderUniforms;
-import com.ikalagaming.graphics.graph.CascadeShadow;
+import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 
 /** Bindings and buffer positions for Vulkan shaders. */
 public class ShaderBindings {
@@ -280,8 +280,7 @@ public class ShaderBindings {
                         + DirectionalLight.SIZEOF
                         + 2 * Integer.BYTES
                         + Fog.SIZEOF
-                        + com.ikalagaming.graphics.graph.CascadeShadow.SHADOW_MAP_CASCADE_COUNT
-                                * CascadeShadow.SIZEOF;
+                        + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT * CascadeShadow.SIZEOF;
 
         /** Private constructor so this class is not instantiated. */
         private Light() {

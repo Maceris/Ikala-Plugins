@@ -84,11 +84,7 @@ public class FilterRender implements RenderStage {
                                     | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
                     .oldLayout(VK_IMAGE_LAYOUT_UNDEFINED)
                     .newLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
-                    .image(
-                            vulkanState
-                                    .shaderDataBuffers[vulkanState.frameIndex]
-                                    .sceneTexture
-                                    .texture)
+                    .image(vulkanState.perFrameData[vulkanState.frameIndex].sceneTexture.texture)
                     .subresourceRange(
                             VkImageSubresourceRange.calloc(stack)
                                     .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
@@ -106,8 +102,7 @@ public class FilterRender implements RenderStage {
             colorAttachmentInfos
                     .get(0)
                     .sType$Default()
-                    .imageView(
-                            vulkanState.shaderDataBuffers[vulkanState.frameIndex].sceneTexture.view)
+                    .imageView(vulkanState.perFrameData[vulkanState.frameIndex].sceneTexture.view)
                     .imageLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
                     .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
                     .storeOp(VK_ATTACHMENT_STORE_OP_STORE)
@@ -293,7 +288,7 @@ public class FilterRender implements RenderStage {
                     VkWriteDescriptorSet.calloc(GraphicsManager.MAX_FRAMES_IN_FLIGHT, stack);
 
             for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
-                TextureInfo texture = state.shaderDataBuffers[i].sceneTexture;
+                TextureInfo texture = state.perFrameData[i].sceneTexture;
                 VkDescriptorImageInfo.Buffer textureInfo = VkDescriptorImageInfo.calloc(1, stack);
                 textureInfo
                         .get(0)

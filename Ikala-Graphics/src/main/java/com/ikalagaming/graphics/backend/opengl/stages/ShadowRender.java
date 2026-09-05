@@ -10,7 +10,7 @@ import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
 import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.frontend.Shader;
-import com.ikalagaming.graphics.graph.CascadeShadow;
+import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
@@ -18,8 +18,6 @@ import com.ikalagaming.graphics.scene.Scene;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.List;
 
 /** Handles rendering of cascade shadows. */
 @Slf4j
@@ -35,7 +33,7 @@ public class ShadowRender implements RenderStage {
     private final RenderBuffers renderBuffers;
 
     /** Cascade shadow information. */
-    @Setter @NonNull private List<CascadeShadow> cascadeShadows;
+    @Setter @NonNull private CascadeShadowSplit[] cascadeShadowSplits;
 
     /** The buffers to render to. */
     @Setter @NonNull private Framebuffer depthMap;
@@ -45,17 +43,17 @@ public class ShadowRender implements RenderStage {
      *
      * @param shader The shader to use for rendering.
      * @param renderBuffers The buffers for indirect drawing of models.
-     * @param cascadeShadows Cascade shadow information.
+     * @param cascadeShadowSplits Cascade shadow information.
      * @param depthMap The depth map buffers.
      */
     public ShadowRender(
             final @NonNull Shader shader,
             final @NonNull RenderBuffers renderBuffers,
-            final @NonNull List<CascadeShadow> cascadeShadows,
+            final @NonNull CascadeShadowSplit[] cascadeShadowSplits,
             final @NonNull Framebuffer depthMap) {
         this.shader = shader;
         this.renderBuffers = renderBuffers;
-        this.cascadeShadows = cascadeShadows;
+        this.cascadeShadowSplits = cascadeShadowSplits;
         this.depthMap = depthMap;
     }
 
@@ -67,16 +65,16 @@ public class ShadowRender implements RenderStage {
     @Override
     public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
         var uniformsMap = shader.getUniformMap();
-        CascadeShadow.updateCascadeShadows(cascadeShadows, scene);
+        CascadeShadowSplit.updateCascadeShadows(cascadeShadowSplits, scene);
 
         glBindFramebuffer(GL_FRAMEBUFFER, (int) depthMap.id());
-        glViewport(0, 0, CascadeShadow.SHADOW_MAP_WIDTH, CascadeShadow.SHADOW_MAP_HEIGHT);
+        glViewport(0, 0, CascadeShadowSplit.SHADOW_MAP_WIDTH, CascadeShadowSplit.SHADOW_MAP_HEIGHT);
 
         shader.bind();
 
         glBindVertexArray(renderBuffers.getVao());
 
-        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+        for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
             glFramebufferTexture2D(
                     GL_FRAMEBUFFER,
                     GL_DEPTH_ATTACHMENT,
@@ -85,7 +83,7 @@ public class ShadowRender implements RenderStage {
                     0);
             glClear(GL_DEPTH_BUFFER_BIT);
 
-            CascadeShadow shadowCascade = cascadeShadows.get(i);
+            CascadeShadowSplit shadowCascade = cascadeShadowSplits[i];
             uniformsMap.setUniform(
                     ShaderUniforms.Shadow.PROJECTION_VIEW_MATRIX,
                     shadowCascade.getProjViewMatrix());

@@ -12,8 +12,7 @@ import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
 import com.ikalagaming.graphics.backend.vulkan.*;
-import com.ikalagaming.graphics.frontend.Buffer;
-import com.ikalagaming.graphics.graph.CascadeShadow;
+import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.scene.Fog;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.*;
@@ -40,26 +39,8 @@ import java.util.List;
 @Slf4j
 public class LightRender implements RenderStage {
 
-    /** The binding for the point light SSBO. */
-    public static final int POINT_LIGHT_BINDING = 0;
-
-    /** The binding for the spotlight SSBO. */
-    public static final int SPOT_LIGHT_BINDING = 1;
-
-    /** The binding for the materials SSBO. */
-    public static final int MATERIALS_BINDING = 2;
-
     /** The shader to use for rendering. */
     @NonNull private ShaderVulkan shader;
-
-    /** The cascade shadows information. */
-    @NonNull private List<CascadeShadow> cascadeShadows;
-
-    /** The buffer to use for storing point light info. */
-    @NonNull private Buffer pointLightsBuffer;
-
-    /** The buffer to use for storing spotlight info. */
-    @NonNull private Buffer spotLightsBuffer;
 
     /** A mesh for rendering onto. */
     @NonNull private QuadMesh quadMesh;
@@ -77,21 +58,10 @@ public class LightRender implements RenderStage {
      * Set up the light render.
      *
      * @param shader Shader to use for rendering.
-     * @param cascadeShadows Cascade shadows information.
-     * @param pointLightsBuffer Buffer to use for storing point light info.
-     * @param spotLightsBuffer Buffer to use for storing spotlight info.
      * @param quadMesh Mesh for rendering onto.
      */
-    public LightRender(
-            final @NonNull ShaderVulkan shader,
-            final @NonNull List<CascadeShadow> cascadeShadows,
-            final @NonNull Buffer pointLightsBuffer,
-            final @NonNull Buffer spotLightsBuffer,
-            final @NonNull QuadMesh quadMesh) {
+    public LightRender(final @NonNull ShaderVulkan shader, final @NonNull QuadMesh quadMesh) {
         this.shader = shader;
-        this.cascadeShadows = cascadeShadows;
-        this.pointLightsBuffer = pointLightsBuffer;
-        this.spotLightsBuffer = spotLightsBuffer;
         this.quadMesh = quadMesh;
 
         this.descriptorSetLayout = VK_NULL_HANDLE;
@@ -123,7 +93,13 @@ public class LightRender implements RenderStage {
         shader.bind();
         var uniformsMap = shader.getUniformMap();
 
-        updateLights(scene, pointLightsBuffer, spotLightsBuffer, uniformsMap);
+        VulkanState vulkanState = (VulkanState) state;
+
+        updateLights(
+                scene,
+                vulkanState.perFrameData[vulkanState.frameIndex].lightPointLights,
+                vulkanState.perFrameData[vulkanState.frameIndex].lightSpotLights,
+                uniformsMap);
 
         int nextTexture = 0;
         long[] textureIds = new long[] {};
@@ -134,6 +110,7 @@ public class LightRender implements RenderStage {
             }
         }
 
+        // TODO(ches) none of the uniforms work like this for vulkan, just update the buffer
         uniformsMap.setUniform(ShaderUniforms.Light.BASE_COLOR_SAMPLER, 0);
         uniformsMap.setUniform(ShaderUniforms.Light.NORMAL_SAMPLER, 1);
         uniformsMap.setUniform(ShaderUniforms.Light.TANGENT_SAMPLER, 2);
@@ -150,26 +127,28 @@ public class LightRender implements RenderStage {
                 ShaderUniforms.Light.FOG + "." + ShaderUniforms.Light.Fog.DENSITY,
                 fog.getDensity());
 
-        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+        CascadeShadowSplit[] cascadeShadowSplits =
+                vulkanState.perFrameData[vulkanState.frameIndex].cascadeShadowSplits;
+        for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
             uniformsMap.setUniform(ShaderUniforms.Light.SHADOW_MAP_PREFIX + i, nextTexture + i);
-            CascadeShadow cascadeShadow = cascadeShadows.get(i);
+            CascadeShadowSplit cascadeShadowSplit = cascadeShadowSplits[i];
             uniformsMap.setUniform(
                     ShaderUniforms.Light.CASCADE_SHADOWS
                             + "["
                             + i
                             + "]."
                             + ShaderUniforms.Light.CascadeShadow.PROJECTION_VIEW_MATRIX,
-                    cascadeShadow.getProjViewMatrix());
+                    cascadeShadowSplit.getProjViewMatrix());
             uniformsMap.setUniform(
                     ShaderUniforms.Light.CASCADE_SHADOWS
                             + "["
                             + i
                             + "]."
                             + ShaderUniforms.Light.CascadeShadow.SPLIT_DISTANCE,
-                    cascadeShadow.getSplitDistance());
+                    cascadeShadowSplit.getSplitDistance());
         }
 
-        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+        for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
             // TODO(ches) opengl bound things here
         }
 
@@ -191,7 +170,7 @@ public class LightRender implements RenderStage {
      * @param scene The scene to fetch lights from.
      */
     private void setupPointLightBuffer(
-            @NonNull Scene scene, int pointLightBuffer, @NonNull UniformsMap uniformsMap) {
+            @NonNull Scene scene, SharedBuffer pointLightBuffer, @NonNull UniformsMap uniformsMap) {
         List<PointLight> pointLights = scene.getSceneLights().getPointLights();
         final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
 
@@ -242,7 +221,7 @@ public class LightRender implements RenderStage {
      * @param scene The scene to fetch lights from.
      */
     private void setupSpotLightBuffer(
-            @NonNull Scene scene, int spotLightBuffer, @NonNull UniformsMap uniformsMap) {
+            @NonNull Scene scene, SharedBuffer spotLightBuffer, @NonNull UniformsMap uniformsMap) {
         List<SpotLight> spotLights = scene.getSceneLights().getSpotLights();
         final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
 
@@ -299,7 +278,10 @@ public class LightRender implements RenderStage {
      * @param scene The scene we are updating.
      */
     private void updateLights(
-            Scene scene, Buffer pointLights, Buffer spotLights, UniformsMap uniformsMap) {
+            Scene scene,
+            SharedBuffer pointLights,
+            SharedBuffer spotLights,
+            UniformsMap uniformsMap) {
         Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
 
         SceneLights sceneLights = scene.getSceneLights();
@@ -333,8 +315,8 @@ public class LightRender implements RenderStage {
                         + ShaderUniforms.Light.DirectionalLight.INTENSITY,
                 dirLight.getIntensity());
 
-        setupPointLightBuffer(scene, (int) pointLights.id(), uniformsMap);
-        setupSpotLightBuffer(scene, (int) spotLights.id(), uniformsMap);
+        setupPointLightBuffer(scene, pointLights, uniformsMap);
+        setupSpotLightBuffer(scene, spotLights, uniformsMap);
     }
 
     private void createPipelineLayout(@NonNull VulkanState state) {

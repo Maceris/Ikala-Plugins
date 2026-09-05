@@ -122,7 +122,7 @@ public class ShaderUniforms {
         public static final String BASE_COLOR_SAMPLER = "baseColorSampler";
 
         /** The cascade shadows. */
-        public static final String CASCADE_SHADOWS = "cascadeShadows";
+        public static final String CASCADE_SHADOWS = "cascadeShadowSplits";
 
         /**
          * Used to reconstruct the world position using the inverse projection matrix to help

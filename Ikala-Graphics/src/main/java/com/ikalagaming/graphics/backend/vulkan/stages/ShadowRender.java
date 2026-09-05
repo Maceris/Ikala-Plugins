@@ -13,7 +13,7 @@ import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.backend.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.backend.vulkan.VulkanState;
-import com.ikalagaming.graphics.graph.CascadeShadow;
+import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
@@ -26,7 +26,6 @@ import org.lwjgl.vulkan.*;
 
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
-import java.util.List;
 
 /** Handles rendering of cascade shadows. */
 @Slf4j
@@ -34,9 +33,6 @@ public class ShadowRender implements RenderStage {
 
     /** The shader to use for rendering. */
     @NonNull @Setter private ShaderVulkan shader;
-
-    /** Cascade shadow information. */
-    @Setter @NonNull private List<CascadeShadow> cascadeShadows;
 
     /** VkDescriptorSetLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorSetLayout;
@@ -51,12 +47,9 @@ public class ShadowRender implements RenderStage {
      * Set up the shadow render stage.
      *
      * @param shader The shader to use for rendering.
-     * @param cascadeShadows Cascade shadow information.
      */
-    public ShadowRender(
-            final @NonNull ShaderVulkan shader, final @NonNull List<CascadeShadow> cascadeShadows) {
+    public ShadowRender(final @NonNull ShaderVulkan shader) {
         this.shader = shader;
-        this.cascadeShadows = cascadeShadows;
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
         this.pipeline = VK_NULL_HANDLE;
@@ -84,16 +77,21 @@ public class ShadowRender implements RenderStage {
     @Override
     public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
         var uniformsMap = shader.getUniformMap();
-        CascadeShadow.updateCascadeShadows(cascadeShadows, scene);
+
+        VulkanState vulkanState = (VulkanState) state;
+
+        CascadeShadowSplit[] cascadeShadowSplits =
+                vulkanState.perFrameData[vulkanState.frameIndex].cascadeShadowSplits;
+        CascadeShadowSplit.updateCascadeShadows(cascadeShadowSplits, scene);
 
         // TODO(ches) bind depth map
 
         shader.bind();
 
-        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+        for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
             // TODO(ches) clear all the depth map textures
 
-            CascadeShadow shadowCascade = cascadeShadows.get(i);
+            CascadeShadowSplit shadowCascade = cascadeShadowSplits[i];
             uniformsMap.setUniform(
                     ShaderUniforms.Shadow.PROJECTION_VIEW_MATRIX,
                     shadowCascade.getProjViewMatrix());

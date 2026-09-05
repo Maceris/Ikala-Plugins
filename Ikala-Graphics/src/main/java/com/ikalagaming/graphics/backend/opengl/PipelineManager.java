@@ -16,7 +16,7 @@ import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.data.FontAtlas;
-import com.ikalagaming.graphics.graph.CascadeShadow;
+import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 
 import imgui.ImFontAtlas;
 import imgui.ImGui;
@@ -48,7 +48,7 @@ public class PipelineManager {
     private int cachedWidth;
 
     /** The cascade shadow map. */
-    private final ArrayList<CascadeShadow> cascadeShadows;
+    private final CascadeShadowSplit[] cascadeShadowSplits;
 
     /** The texture we store font atlas on. */
     @Deprecated private Texture imguiFont;
@@ -102,9 +102,9 @@ public class PipelineManager {
     private final SkyboxRender stageSkyboxRender;
 
     public PipelineManager(@NonNull Window window, @NonNull ShaderMap shaders) {
-        cascadeShadows = new ArrayList<>();
-        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
-            cascadeShadows.add(new CascadeShadow());
+        cascadeShadowSplits = new CascadeShadowSplit[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
+        for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
+            cascadeShadowSplits[i] = new CascadeShadowSplit();
         }
 
         cachedWidth = window.getWidth();
@@ -141,12 +141,12 @@ public class PipelineManager {
                 new ShadowRender(
                         shaders.getShader(RenderStage.Type.SHADOW),
                         renderBuffers,
-                        cascadeShadows,
+                        cascadeShadowSplits,
                         shadowBuffers);
         stageLightRender =
                 new LightRender(
                         shaders.getShader(RenderStage.Type.LIGHT),
-                        cascadeShadows,
+                        cascadeShadowSplits,
                         pointLights,
                         spotLights,
                         shadowBuffers,
@@ -311,18 +311,18 @@ public class PipelineManager {
     private Framebuffer createShadowBuffers() {
         int depthMapFBO = glGenFramebuffers();
 
-        int[] shadowTextures = new int[CascadeShadow.SHADOW_MAP_CASCADE_COUNT];
+        int[] shadowTextures = new int[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
 
         glGenTextures(shadowTextures);
 
-        for (int i = 0; i < CascadeShadow.SHADOW_MAP_CASCADE_COUNT; ++i) {
+        for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
             glBindTexture(GL_TEXTURE_2D, shadowTextures[i]);
             glTexImage2D(
                     GL_TEXTURE_2D,
                     0,
                     GL_DEPTH_COMPONENT,
-                    CascadeShadow.SHADOW_MAP_WIDTH,
-                    CascadeShadow.SHADOW_MAP_HEIGHT,
+                    CascadeShadowSplit.SHADOW_MAP_WIDTH,
+                    CascadeShadowSplit.SHADOW_MAP_HEIGHT,
                     0,
                     GL_DEPTH_COMPONENT,
                     GL_FLOAT,
@@ -351,8 +351,8 @@ public class PipelineManager {
         long[] textureIds = Arrays.stream(shadowTextures).mapToLong(i -> (long) i).toArray();
         return new Framebuffer(
                 depthMapFBO,
-                CascadeShadow.SHADOW_MAP_WIDTH,
-                CascadeShadow.SHADOW_MAP_HEIGHT,
+                CascadeShadowSplit.SHADOW_MAP_WIDTH,
+                CascadeShadowSplit.SHADOW_MAP_HEIGHT,
                 textureIds);
     }
 

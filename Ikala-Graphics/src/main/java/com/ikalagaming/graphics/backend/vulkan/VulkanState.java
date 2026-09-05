@@ -67,7 +67,7 @@ public class VulkanState implements State {
     public final List<PhysicalDeviceInfo> physicalDevices = new ArrayList<>();
 
     /** Shader data buffers per frame. */
-    public final PerFrameData[] shaderDataBuffers =
+    public final PerFrameData[] perFrameData =
             new PerFrameData[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
     /** The Vulkan Memory Allocator handle. */

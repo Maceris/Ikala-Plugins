@@ -79,7 +79,7 @@ layout(set = 0, binding = 0) uniform Uniforms {
     int pointLightCount;
     int spotLightCount;
     Fog fog;
-    CascadeShadow cascadeShadows[NUM_CASCADES];
+    CascadeShadow cascadeShadowSplits[NUM_CASCADES];
 };
 
 //TODO(ches) Should we just make these bindless?
@@ -282,7 +282,7 @@ float textureProj(vec4 shadowCoord, vec2 offset, int idx) {
 }
 
 float calcShadow(vec4 worldPosition, int idx) {
-    vec4 shadowMapPosition = cascadeShadows[idx].projViewMatrix * worldPosition;
+    vec4 shadowMapPosition = cascadeShadowSplits[idx].projViewMatrix * worldPosition;
     float shadow = 1.0;
     vec4 shadowCoord = (shadowMapPosition / shadowMapPosition.w) * 0.5 + 0.5;
     shadow = textureProj(shadowCoord, vec2(0, 0), idx);
@@ -312,7 +312,7 @@ void main()
 
     int cascadeIndex;
     for (int i=0; i < NUM_CASCADES - 1; i++) {
-        if (viewPosition.z < cascadeShadows[i].splitDistance) {
+        if (viewPosition.z < cascadeShadowSplits[i].splitDistance) {
             cascadeIndex = i + 1;
             break;
         }

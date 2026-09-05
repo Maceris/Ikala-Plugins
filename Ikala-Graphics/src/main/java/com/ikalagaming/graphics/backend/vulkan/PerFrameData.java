@@ -1,6 +1,6 @@
 package com.ikalagaming.graphics.backend.vulkan;
 
-import com.ikalagaming.graphics.frontend.Framebuffer;
+import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 
 /** Data buffers for a frame, only the data that the CPU cares about. */
 public class PerFrameData {
@@ -25,8 +25,11 @@ public class PerFrameData {
     public SharedBuffer shadowModelMatrices;
     public SharedBuffer skyboxUniforms;
 
+    public CascadeShadowSplit[] cascadeShadowSplits;
+    public TextureInfo[] cascadeShadows;
+
     /** Base color, normal, tangent, material, and depth. */
-    public Framebuffer gBuffer;
+    public GBuffer gBuffer;
 
     public TextureInfo sceneTexture;
 }
