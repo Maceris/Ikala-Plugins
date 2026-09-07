@@ -29,7 +29,6 @@ import org.lwjgl.util.vma.VmaAllocationCreateInfo;
 import org.lwjgl.vulkan.*;
 
 import java.nio.ByteBuffer;
-import java.nio.FloatBuffer;
 import java.nio.LongBuffer;
 import java.util.*;
 
@@ -85,7 +84,6 @@ public class PipelineManagerVulkan {
         createGuiFont();
         skybox = new SkyboxModel();
         quadMesh = QuadMesh.getInstance(state);
-        createLightBuffers();
         imGuiMesh = ImGuiMesh.create();
         guiMesh = GuiMesh.create();
 
@@ -469,67 +467,6 @@ public class PipelineManagerVulkan {
                                 Format.R8G8B8A8_UINT,
                                 FontAtlas.FONT_ATLAS_IMAGE_WIDTH,
                                 FontAtlas.FONT_ATLAS_IMAGE_HEIGHT);
-    }
-
-    /** Initialize the lighting SSBOs and fill them with zeroes. */
-    private void createLightBuffers() {
-        int pointLightBuffer = 0;
-        // TODO(ches) create buffer
-
-        /*
-         * Position (vec3 + ignored), color (vec3), intensity (1), Attenuation
-         * (3 + ignored), in that order.
-         */
-        final int POINT_LIGHT_SIZE = 4 + 3 + 1 + 4;
-        FloatBuffer pointLightFloatBuffer =
-                MemoryUtil.memAllocFloat(PipelineVulkan.MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE);
-
-        pointLightFloatBuffer
-                .put(new float[PipelineVulkan.MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE])
-                .flip();
-
-        // TODO(ches) buffer data
-
-        MemoryUtil.memFree(pointLightFloatBuffer);
-
-        int spotLightBuffer = 0;
-        // TODO(ches) create buffer
-
-        /*
-         * Position (vec3 + ignored), color (vec3), intensity (1), Attenuation
-         * (3 + ignored), cone direction (vec3), cutoff (1) in that order.
-         */
-        final int SPOT_LIGHT_SIZE = 4 + 3 + 1 + 4 + 3 + 1;
-        FloatBuffer spotLightFloatBuffer =
-                MemoryUtil.memAllocFloat(PipelineVulkan.MAX_LIGHTS_SUPPORTED * SPOT_LIGHT_SIZE);
-
-        spotLightFloatBuffer
-                .put(new float[PipelineVulkan.MAX_LIGHTS_SUPPORTED * POINT_LIGHT_SIZE])
-                .flip();
-
-        // TODO(ches) buffer data
-
-        MemoryUtil.memFree(spotLightFloatBuffer);
-    }
-
-    private Framebuffer createShadowBuffers() {
-        int depthMapFBO = 0;
-        // TODO(ches) create buffer
-
-        int[] shadowTextures = new int[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
-
-        // TODO(ches) create textures
-
-        for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
-            // TODO(ches) create all the textures
-        }
-
-        long[] textureIds = Arrays.stream(shadowTextures).mapToLong(i -> (long) i).toArray();
-        return new Framebuffer(
-                depthMapFBO,
-                CascadeShadowSplit.SHADOW_MAP_WIDTH,
-                CascadeShadowSplit.SHADOW_MAP_HEIGHT,
-                textureIds);
     }
 
     private GBuffer generateGBuffer(@NonNull VulkanState state, @NonNull VkExtent3D imageExtent) {
