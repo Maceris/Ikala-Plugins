@@ -292,7 +292,8 @@ public class PipelineManagerVulkan {
                             createDepthTexture(state, imageExtent);
                 }
                 state.perFrameData[i].gBuffer = generateGBuffer(state, imageExtent);
-                state.perFrameData[i].sceneTexture = createTexture(state, imageExtent);
+                state.perFrameData[i].preFilterTexture = createTexture(state, imageExtent);
+                state.perFrameData[i].finalTexture = createTexture(state, imageExtent);
             }
         }
     }
@@ -419,6 +420,7 @@ public class PipelineManagerVulkan {
 
     /** Clean up all the rendering resources. */
     public void cleanup(@NonNull VulkanState state) {
+        // TODO(ches) clean up per-frame data
         stageAnimationRender.cleanup(state);
         stageFilterRender.cleanup(state);
         stageGuiRender.cleanup(state);

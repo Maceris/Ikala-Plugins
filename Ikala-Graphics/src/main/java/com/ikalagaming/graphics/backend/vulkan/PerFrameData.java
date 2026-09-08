@@ -31,5 +31,16 @@ public class PerFrameData {
     /** Base color, normal, tangent, material, and depth. */
     public GBuffer gBuffer;
 
-    public TextureInfo sceneTexture;
+    /**
+     * A texture that is rendered to before the filter stage, if there is a filter stage. Unused if
+     * there's no filter, as we can just bind the final texture directly.
+     */
+    public TextureInfo preFilterTexture;
+
+    /**
+     * The texture we render to just before moving over to the swapchain. The filter stage renders
+     * here if present, otherwise the scene can be rendered here directly. The GUI is rendered on
+     * top of here as well at the end.
+     */
+    public TextureInfo finalTexture;
 }
