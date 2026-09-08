@@ -420,7 +420,9 @@ public class PipelineManagerVulkan {
 
     /** Clean up all the rendering resources. */
     public void cleanup(@NonNull VulkanState state) {
-        // TODO(ches) clean up per-frame data
+        for (PerFrameData frameData : state.perFrameData) {
+            cleanupPerFrameData(state, frameData);
+        }
         stageAnimationRender.cleanup(state);
         stageFilterRender.cleanup(state);
         stageGuiRender.cleanup(state);
@@ -439,6 +441,112 @@ public class PipelineManagerVulkan {
         skybox = null;
         quadMesh.cleanup(state);
         quadMesh = null;
+    }
+
+    private void cleanupPerFrameData(@NonNull VulkanState state, @NonNull PerFrameData data) {
+        vmaDestroyBuffer(
+                state.vmaAllocator, data.animationData.buffer, data.animationData.allocation);
+        data.animationData = null;
+        vmaDestroyBuffer(
+                state.vmaAllocator, data.animationOffsets.buffer, data.animationOffsets.allocation);
+        data.animationOffsets = null;
+        vmaDestroyBuffer(
+                state.vmaAllocator,
+                data.animationModelData.buffer,
+                data.animationModelData.allocation);
+        data.animationModelData = null;
+        vmaDestroyBuffer(
+                state.vmaAllocator,
+                data.animationBoneWeight.buffer,
+                data.animationBoneWeight.allocation);
+        data.animationBoneWeight = null;
+        vmaDestroyBuffer(
+                state.vmaAllocator, data.animationTarget.buffer, data.animationTarget.allocation);
+        data.animationTarget = null;
+        vmaDestroyBuffer(state.vmaAllocator, data.guiUniforms.buffer, data.guiUniforms.allocation);
+        data.guiUniforms = null;
+        vmaDestroyBuffer(state.vmaAllocator, data.guiCommands.buffer, data.guiCommands.allocation);
+        data.guiCommands = null;
+        vmaDestroyBuffer(state.vmaAllocator, data.guiPoints.buffer, data.guiPoints.allocation);
+        data.guiPoints = null;
+        vmaDestroyBuffer(
+                state.vmaAllocator, data.guiPointDetails.buffer, data.guiPointDetails.allocation);
+        data.guiPointDetails = null;
+        vmaDestroyBuffer(
+                state.vmaAllocator, data.lightUniforms.buffer, data.lightUniforms.allocation);
+        data.lightUniforms = null;
+        vmaDestroyBuffer(
+                state.vmaAllocator, data.lightPointLights.buffer, data.lightPointLights.allocation);
+        data.lightPointLights = null;
+        vmaDestroyBuffer(
+                state.vmaAllocator, data.lightSpotLights.buffer, data.lightSpotLights.allocation);
+        data.lightSpotLights = null;
+        vmaDestroyBuffer(
+                state.vmaAllocator, data.lightMaterials.buffer, data.lightMaterials.allocation);
+        data.lightMaterials = null;
+        vmaDestroyBuffer(
+                state.vmaAllocator, data.sceneUniforms.buffer, data.sceneUniforms.allocation);
+        data.sceneUniforms = null;
+        vmaDestroyBuffer(
+                state.vmaAllocator,
+                data.sceneModelMatrices.buffer,
+                data.sceneModelMatrices.allocation);
+        data.sceneModelMatrices = null;
+        vmaDestroyBuffer(
+                state.vmaAllocator, data.sceneMaterials.buffer, data.sceneMaterials.allocation);
+        data.sceneMaterials = null;
+        vmaDestroyBuffer(
+                state.vmaAllocator,
+                data.sceneMaterialOverrides.buffer,
+                data.sceneMaterialOverrides.allocation);
+        data.sceneMaterialOverrides = null;
+        vmaDestroyBuffer(
+                state.vmaAllocator, data.shadowUniforms.buffer, data.shadowUniforms.allocation);
+        data.shadowUniforms = null;
+        vmaDestroyBuffer(
+                state.vmaAllocator,
+                data.shadowModelMatrices.buffer,
+                data.shadowModelMatrices.allocation);
+        data.shadowModelMatrices = null;
+        vmaDestroyBuffer(
+                state.vmaAllocator, data.skyboxUniforms.buffer, data.skyboxUniforms.allocation);
+        data.skyboxUniforms = null;
+
+        data.cascadeShadowSplits = null;
+
+        for (int shadow = 0; shadow < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; shadow++) {
+            vmaDestroyImage(
+                    state.vmaAllocator,
+                    data.cascadeShadows[shadow].texture,
+                    data.cascadeShadows[shadow].textureAllocation);
+        }
+        data.cascadeShadows = null;
+
+        for (TextureInfo info : data.gBuffer.textures()) {
+            vmaDestroyImage(state.vmaAllocator, info.texture, info.textureAllocation);
+        }
+        vmaDestroyImage(
+                state.vmaAllocator,
+                data.gBuffer.depth().texture,
+                data.gBuffer.depth().textureAllocation);
+        data.gBuffer = null;
+        vmaDestroyImage(
+                state.vmaAllocator,
+                data.gBuffer.depth().texture,
+                data.gBuffer.depth().textureAllocation);
+        vmaDestroyImage(
+                state.vmaAllocator,
+                data.gBuffer.depth().texture,
+                data.gBuffer.depth().textureAllocation);
+
+        vmaDestroyBuffer(
+                state.vmaAllocator,
+                data.preFilterTexture.texture,
+                data.preFilterTexture.textureAllocation);
+        data.preFilterTexture = null;
+        vmaDestroyBuffer(
+                state.vmaAllocator, data.finalTexture.texture, data.finalTexture.textureAllocation);
+        data.finalTexture = null;
     }
 
     private void createGuiFont() {
