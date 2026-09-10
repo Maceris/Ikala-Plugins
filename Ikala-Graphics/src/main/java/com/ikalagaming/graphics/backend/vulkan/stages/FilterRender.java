@@ -43,7 +43,10 @@ public class FilterRender implements RenderStage {
     /** VkDescriptorPool pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorPool;
 
-    /** VkDescriptorSet for the texture, will be VK_NULL_HANDLE if not set up. */
+    /**
+     * VkDescriptorSet for the texture we are rendering to ({@link PerFrameData#finalTexture}), will
+     * be VK_NULL_HANDLE if not set up. One per frame in flight.
+     */
     private long[] descriptorsTexture;
 
     /**

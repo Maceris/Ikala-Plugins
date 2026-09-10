@@ -6,6 +6,7 @@ import static org.lwjgl.vulkan.VK10.VK_NULL_HANDLE;
 import static org.lwjgl.vulkan.VK12.*;
 import static org.lwjgl.vulkan.VK12.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
 
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
@@ -39,6 +40,25 @@ import java.util.List;
 @Slf4j
 public class LightRender implements RenderStage {
 
+    /** VkDescriptorSet's for a frame, will be VK_NULL_HANDLE if not set up. */
+    private static class Descriptors {
+        /** The total number of descriptors to create, not how many actually get bound per frame. */
+        public static final int COUNT = 12;
+
+        public long uniforms = VK_NULL_HANDLE;
+        public long baseColorSampler = VK_NULL_HANDLE;
+        public long normalSampler = VK_NULL_HANDLE;
+        public long tangentSampler = VK_NULL_HANDLE;
+        public long materialSampler = VK_NULL_HANDLE;
+        public long depthSampler = VK_NULL_HANDLE;
+        public long shadowMap0 = VK_NULL_HANDLE;
+        public long shadowMap1 = VK_NULL_HANDLE;
+        public long shadowMap2 = VK_NULL_HANDLE;
+        public long pointLights = VK_NULL_HANDLE;
+        public long spotLights = VK_NULL_HANDLE;
+        public long materials = VK_NULL_HANDLE;
+    }
+
     /** The shader to use for rendering. */
     @NonNull private ShaderVulkan shader;
 
@@ -54,6 +74,12 @@ public class LightRender implements RenderStage {
     /** VkPipeline pointer, will be VK_NULL_HANDLE if not set up. */
     private long pipeline;
 
+    /** VkDescriptorPool pointer, will be VK_NULL_HANDLE if not set up. */
+    private long descriptorPool;
+
+    /** All the descriptors, one per frame in flight. */
+    private Descriptors[] descriptors;
+
     /**
      * Set up the light render.
      *
@@ -67,6 +93,12 @@ public class LightRender implements RenderStage {
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
         this.pipeline = VK_NULL_HANDLE;
+        this.descriptorPool = VK_NULL_HANDLE;
+
+        this.descriptors = new Descriptors[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+        for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+            this.descriptors[i] = new Descriptors();
+        }
     }
 
     @Override
@@ -80,6 +112,7 @@ public class LightRender implements RenderStage {
     @Override
     public void cleanup(@NonNull State state) {
         VulkanState vulkanState = (VulkanState) state;
+        //TODO(ches) cleanup descriptors, pools
         vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
@@ -463,6 +496,98 @@ public class LightRender implements RenderStage {
                     vkCreatePipelineLayout(
                             state.device.logical, pipelineLayoutCreateInfo, null, longOutput));
             pipelineLayout = longOutput.get(0);
+
+            final int TYPES_OF_DESCRIPTORS = 3;
+            VkDescriptorPoolSize.Buffer poolSizes =
+                    VkDescriptorPoolSize.calloc(
+                            GraphicsManager.MAX_FRAMES_IN_FLIGHT * TYPES_OF_DESCRIPTORS, stack);
+            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+                poolSizes
+                        .get(i * TYPES_OF_DESCRIPTORS)
+                        .type(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+                        .descriptorCount(1);
+                poolSizes
+                        .get(i * TYPES_OF_DESCRIPTORS + 1)
+                        .type(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                        .descriptorCount(8);
+                poolSizes
+                        .get(i * TYPES_OF_DESCRIPTORS + 2)
+                        .type(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                        .descriptorCount(3);
+            }
+            VkDescriptorPoolCreateInfo descriptorPoolCreateInfo =
+                    VkDescriptorPoolCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .maxSets(GraphicsManager.MAX_FRAMES_IN_FLIGHT * Descriptors.COUNT)
+                            .flags(VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT)
+                            .pPoolSizes(poolSizes);
+
+            checkError(
+                    vkCreateDescriptorPool(
+                            state.device.logical, descriptorPoolCreateInfo, null, longOutput));
+            descriptorPool = longOutput.get(0);
+
+            LongBuffer descriptorSetLayoutAddresses =
+                    stack.callocLong(GraphicsManager.MAX_FRAMES_IN_FLIGHT);
+            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+                descriptorSetLayoutAddresses.put(i, descriptorSetLayout);
+            }
+
+            VkDescriptorSetAllocateInfo descriptorSetAlloc =
+                    VkDescriptorSetAllocateInfo.calloc(stack)
+                            .sType$Default()
+                            .pNext(VK_NULL_HANDLE)
+                            .descriptorPool(descriptorPool)
+                            .pSetLayouts(descriptorSetLayoutAddresses);
+            LongBuffer setAddresses =
+                    stack.callocLong(GraphicsManager.MAX_FRAMES_IN_FLIGHT * Descriptors.COUNT);
+            checkError(
+                    vkAllocateDescriptorSets(
+                            state.device.logical, descriptorSetAlloc, setAddresses));
+            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+                descriptors[i].uniforms =
+                        setAddresses.get(
+                                i * Descriptors.COUNT + ShaderBindings.Light.UNIFORMS_BINDING);
+                descriptors[i].baseColorSampler =
+                        setAddresses.get(
+                                i * Descriptors.COUNT
+                                        + ShaderBindings.Light.BASE_COLOR_SAMPLER_BINDING);
+                descriptors[i].normalSampler =
+                        setAddresses.get(
+                                i * Descriptors.COUNT
+                                        + ShaderBindings.Light.NORMAL_SAMPLER_BINDING);
+                descriptors[i].tangentSampler =
+                        setAddresses.get(
+                                i * Descriptors.COUNT
+                                        + ShaderBindings.Light.TANGENT_SAMPLER_BINDING);
+                descriptors[i].materialSampler =
+                        setAddresses.get(
+                                i * Descriptors.COUNT
+                                        + ShaderBindings.Light.MATERIAL_SAMPLER_BINDING);
+                descriptors[i].depthSampler =
+                        setAddresses.get(
+                                i * Descriptors.COUNT + ShaderBindings.Light.DEPTH_SAMPLER_BINDING);
+                descriptors[i].shadowMap0 =
+                        setAddresses.get(
+                                i * Descriptors.COUNT + ShaderBindings.Light.SHADOW_MAP_0_BINDING);
+                descriptors[i].shadowMap1 =
+                        setAddresses.get(
+                                i * Descriptors.COUNT + ShaderBindings.Light.SHADOW_MAP_1_BINDING);
+                descriptors[i].shadowMap2 =
+                        setAddresses.get(
+                                i * Descriptors.COUNT + ShaderBindings.Light.SHADOW_MAP_2_BINDING);
+                descriptors[i].pointLights =
+                        setAddresses.get(
+                                i * Descriptors.COUNT + ShaderBindings.Light.POINT_LIGHT_BINDING);
+                descriptors[i].spotLights =
+                        setAddresses.get(
+                                i * Descriptors.COUNT + ShaderBindings.Light.SPOT_LIGHT_BINDING);
+                descriptors[i].materials =
+                        setAddresses.get(
+                                i * Descriptors.COUNT + ShaderBindings.Light.MATERIALS_BINDING);
+            }
+            // TODO(ches) let's make the textures bindless, and chuck some indices in the uniform
+            // buffer
         }
     }
 
