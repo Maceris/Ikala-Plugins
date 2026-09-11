@@ -32,7 +32,7 @@ layout(location = 6) flat in uint outMaterialIdx;
 layout(location = 0) out vec4 buffBaseColor;
 layout(location = 1) out vec4 buffNormal;
 layout(location = 2) out vec4 buffTangent;
-layout(location = 3) out uint buffMaterial;
+layout(location = 3) out vec4 buffMaterial;
 
 layout(set = 0, binding = 4) uniform sampler2D bindlessTextures[];
 
@@ -62,5 +62,11 @@ void main() {
     buffBaseColor = baseColor;
     buffNormal = vec4(normal, 1.0);
     buffTangent = vec4(normalize(outTangent), 1.0);
-    buffMaterial = outMaterialIdx;
+
+    uint r = (outMaterialIdx >> 24) & 0xFFu;
+    uint g = (outMaterialIdx >> 16) & 0xFFu;
+    uint b = (outMaterialIdx >> 8)  & 0xFFu;
+    uint a =  outMaterialIdx        & 0xFFu;
+
+    buffMaterial = vec4(float(r), float(g), float(b), float(a));
 }

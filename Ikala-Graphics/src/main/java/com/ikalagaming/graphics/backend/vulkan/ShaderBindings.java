@@ -187,13 +187,19 @@ public class ShaderBindings {
          *
          * @see ShaderUniforms.Light.AmbientLight
          */
-        public static final int AMBIENT_LIGHT = 4 * 4 * 2 * Float.BYTES;
+        public static final int AMBIENT_LIGHT_OFFSET = 4 * 4 * 2 * Float.BYTES;
 
-        /** Sampler for the base color of a material. */
-        public static final int BASE_COLOR_SAMPLER_BINDING = 1;
+        /** The offset into the uniforms for the sampler for the base color of a material. */
+        public static final int BASE_COLOR_SAMPLER_INDEX_OFFSET =
+                4 * 4 * 2 * Float.BYTES
+                        + AmbientLight.SIZEOF
+                        + DirectionalLight.SIZEOF
+                        + 2 * Integer.BYTES
+                        + Fog.SIZEOF
+                        + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT * CascadeShadow.SIZEOF;
 
         /** The offset into the uniforms for the cascade shadows. */
-        public static final int CASCADE_SHADOWS =
+        public static final int CASCADE_SHADOWS_OFFSET =
                 4 * 4 * 2 * Float.BYTES
                         + AmbientLight.SIZEOF
                         + DirectionalLight.SIZEOF
@@ -201,74 +207,127 @@ public class ShaderBindings {
                         + Fog.SIZEOF;
 
         /**
-         * Used to reconstruct the world position using the inverse projection matrix to help
-         * calculate lighting.
+         * The offset into the uniforms for the texture for to reconstruct the world position using
+         * the inverse projection matrix to help calculate lighting.
          */
-        public static final int DEPTH_SAMPLER_BINDING = 5;
+        public static final int DEPTH_SAMPLER_INDEX_OFFSET =
+                4 * 4 * 2 * Float.BYTES
+                        + AmbientLight.SIZEOF
+                        + DirectionalLight.SIZEOF
+                        + 2 * Integer.BYTES
+                        + Fog.SIZEOF
+                        + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT * CascadeShadow.SIZEOF
+                        + 4 * Integer.BYTES;
 
         /**
          * The offset into the uniforms for the directional light.
          *
          * @see ShaderUniforms.Light.DirectionalLight
          */
-        public static final int DIRECTIONAL_LIGHT = 4 * 4 * 2 * Float.BYTES + AmbientLight.SIZEOF;
+        public static final int DIRECTIONAL_LIGHT_OFFSET =
+                4 * 4 * 2 * Float.BYTES + AmbientLight.SIZEOF;
 
         /**
          * The offset into the uniforms for the environmental fog.
          *
          * @see ShaderUniforms.Light.Fog
          */
-        public static final int FOG =
+        public static final int FOG_OFFSET =
                 4 * 4 * 2 * Float.BYTES
                         + AmbientLight.SIZEOF
                         + DirectionalLight.SIZEOF
                         + 2 * Integer.BYTES;
 
         /** The offset into the uniforms for the inverse of the projection matrix. */
-        public static final int INVERSE_PROJECTION_MATRIX = 0;
+        public static final int INVERSE_PROJECTION_MATRIX_OFFSET = 0;
 
         /** The offset into the uniforms for the inverse of the view matrix. */
-        public static final int INVERSE_VIEW_MATRIX = 4 * 4 * Float.BYTES;
+        public static final int INVERSE_VIEW_MATRIX_OFFSET = 4 * 4 * Float.BYTES;
 
-        /** Sampler for material IDs. */
-        public static final int MATERIAL_SAMPLER_BINDING = 4;
+        /** The offset into the uniforms for the sampler for material IDs. */
+        public static final int MATERIAL_SAMPLER_INDEX_OFFSET =
+                4 * 4 * 2 * Float.BYTES
+                        + AmbientLight.SIZEOF
+                        + DirectionalLight.SIZEOF
+                        + 2 * Integer.BYTES
+                        + Fog.SIZEOF
+                        + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT * CascadeShadow.SIZEOF
+                        + 3 * Integer.BYTES;
 
         /** Binding for the materials buffer. */
-        public static final int MATERIALS_BINDING = 11;
+        public static final int MATERIALS_BINDING = 3;
 
-        /** A sampler for the normal values. */
-        public static final int NORMAL_SAMPLER_BINDING = 2;
+        /** The offset into the uniforms for the sampler for the normal values. */
+        public static final int NORMAL_SAMPLER_INDEX_OFFSET =
+                4 * 4 * 2 * Float.BYTES
+                        + AmbientLight.SIZEOF
+                        + DirectionalLight.SIZEOF
+                        + 2 * Integer.BYTES
+                        + Fog.SIZEOF
+                        + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT * CascadeShadow.SIZEOF
+                        + Integer.BYTES;
 
         /**
          * The offset into the uniforms for how many point lights we have in the point light SSBO.
          */
-        public static final int POINT_LIGHT_COUNT =
+        public static final int POINT_LIGHT_COUNT_OFFSET =
                 4 * 4 * 2 * Float.BYTES + AmbientLight.SIZEOF + DirectionalLight.SIZEOF;
 
         /** The point light buffer binding. */
-        public static final int POINT_LIGHT_BINDING = 9;
+        public static final int POINT_LIGHT_BINDING = 1;
 
         /** The spotlight buffer binding. */
-        public static final int SPOT_LIGHT_BINDING = 10;
+        public static final int SPOT_LIGHT_BINDING = 2;
 
-        /** The first shadow map texture binding. */
-        public static final int SHADOW_MAP_0_BINDING = 6;
+        /** The offset into the uniforms for the first shadow map texture binding. */
+        public static final int SHADOW_MAP_0_INDEX_OFFSET =
+                4 * 4 * 2 * Float.BYTES
+                        + AmbientLight.SIZEOF
+                        + DirectionalLight.SIZEOF
+                        + 2 * Integer.BYTES
+                        + Fog.SIZEOF
+                        + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT * CascadeShadow.SIZEOF
+                        + 5 * Integer.BYTES;
 
-        /** The second shadow map texture binding. */
-        public static final int SHADOW_MAP_1_BINDING = 7;
+        /** The offset into the uniforms for the second shadow map texture binding. */
+        public static final int SHADOW_MAP_1_INDEX_OFFSET =
+                4 * 4 * 2 * Float.BYTES
+                        + AmbientLight.SIZEOF
+                        + DirectionalLight.SIZEOF
+                        + 2 * Integer.BYTES
+                        + Fog.SIZEOF
+                        + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT * CascadeShadow.SIZEOF
+                        + 6 * Integer.BYTES;
 
-        /** The third shadow map texture binding. */
-        public static final int SHADOW_MAP_2_BINDING = 8;
+        /** The offset into the uniforms for the third shadow map texture binding. */
+        public static final int SHADOW_MAP_2_INDEX_OFFSET =
+                4 * 4 * 2 * Float.BYTES
+                        + AmbientLight.SIZEOF
+                        + DirectionalLight.SIZEOF
+                        + 2 * Integer.BYTES
+                        + Fog.SIZEOF
+                        + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT * CascadeShadow.SIZEOF
+                        + 7 * Integer.BYTES;
 
         /** The offset into the uniforms for how many spotlights we have in the spotlight SSBO. */
-        public static final int SPOT_LIGHT_COUNT =
+        public static final int SPOT_LIGHT_COUNT_OFFSET =
                 4 * 4 * 2 * Float.BYTES
                         + AmbientLight.SIZEOF
                         + DirectionalLight.SIZEOF
                         + Integer.BYTES;
 
-        /** Sampler for the tangent values. */
-        public static final int TANGENT_SAMPLER_BINDING = 3;
+        /** The offset into the uniforms for the sampler for the tangent values. */
+        public static final int TANGENT_SAMPLER_INDEX_OFFSET =
+                4 * 4 * 2 * Float.BYTES
+                        + AmbientLight.SIZEOF
+                        + DirectionalLight.SIZEOF
+                        + 2 * Integer.BYTES
+                        + Fog.SIZEOF
+                        + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT * CascadeShadow.SIZEOF
+                        + 2 * Integer.BYTES;
+
+        /** Binding point for the bindless textures. */
+        public static final int TEXTURES_BINDING = 4;
 
         /** Uniforms buffer binding. */
         public static final int UNIFORMS_BINDING = 0;
@@ -280,7 +339,8 @@ public class ShaderBindings {
                         + DirectionalLight.SIZEOF
                         + 2 * Integer.BYTES
                         + Fog.SIZEOF
-                        + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT * CascadeShadow.SIZEOF;
+                        + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT * CascadeShadow.SIZEOF
+                        + 8 * Integer.BYTES;
 
         /** Private constructor so this class is not instantiated. */
         private Light() {

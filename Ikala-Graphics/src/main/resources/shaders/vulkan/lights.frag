@@ -1,4 +1,5 @@
 #version 460
+#extension GL_EXT_nonuniform_qualifier : enable
 
 const int NUM_CASCADES = 3;
 const float MAX_LIGHT_DISTANCE = 10;
@@ -80,29 +81,30 @@ layout(set = 0, binding = 0) uniform Uniforms {
     int spotLightCount;
     Fog fog;
     CascadeShadow cascadeShadowSplits[NUM_CASCADES];
+
+    int baseColorSamplerIndex;
+    int normalSamplerIndex;
+    int tangentSamplerIndex;
+    int materialSamplerIndex;
+    int depthSamplerIndex;
+    int shadowMap0Index;
+    int shadowMap1Index;
+    int shadowMap2Index;
 };
 
-//TODO(ches) Should we just make these bindless?
-layout(set = 0, binding = 1) uniform sampler2D baseColorSampler;
-layout(set = 0, binding = 2) uniform sampler2D normalSampler;
-layout(set = 0, binding = 3) uniform sampler2D tangentSampler;
-layout(set = 0, binding = 4) uniform usampler2D materialSampler;
-layout(set = 0, binding = 5) uniform sampler2D depthSampler;
-layout(set = 0, binding = 6) uniform sampler2D shadowMap_0;
-layout(set = 0, binding = 7) uniform sampler2D shadowMap_1;
-layout(set = 0, binding = 8) uniform sampler2D shadowMap_2;
-
-layout(std430, set = 0, binding = 9) readonly buffer PointLights {
+layout(std430, set = 0, binding = 1) readonly buffer PointLights {
     PointLight pointLights[];
 };
 
-layout(std430, set = 0, binding = 10) readonly buffer SpotLights {
+layout(std430, set = 0, binding = 2) readonly buffer SpotLights {
     SpotLight spotLights[];
 };
 
-layout(std430, set = 0, binding = 11) readonly buffer Materials {
+layout(std430, set = 0, binding = 3) readonly buffer Materials {
     Material materials[];
 };
+
+layout(set = 0, binding = 4) uniform sampler2D bindlessTextures[];
 
 float sqr(float x) {
     return x * x;
@@ -268,11 +270,11 @@ float textureProj(vec4 shadowCoord, vec2 offset, int idx) {
     if (shadowCoord.z > -1.0 && shadowCoord.z < 1.0) {
         float dist = 0.0;
         if (idx == 0) {
-            dist = texture(shadowMap_0, vec2(shadowCoord.xy + offset)).r;
+            dist = texture(bindlessTextures[nonuniformEXT(shadowMap0Index)], vec2(shadowCoord.xy + offset)).r;
         } else if (idx == 1) {
-            dist = texture(shadowMap_1, vec2(shadowCoord.xy + offset)).r;
+            dist = texture(bindlessTextures[nonuniformEXT(shadowMap1Index)], vec2(shadowCoord.xy + offset)).r;
         } else {
-            dist = texture(shadowMap_2, vec2(shadowCoord.xy + offset)).r;
+            dist = texture(bindlessTextures[nonuniformEXT(shadowMap2Index)], vec2(shadowCoord.xy + offset)).r;
         }
         if (shadowCoord.w > 0 && dist < shadowCoord.z - BIAS) {
             shadow = SHADOW_FACTOR;
@@ -291,15 +293,21 @@ float calcShadow(vec4 worldPosition, int idx) {
 
 void main()
 {
-    vec4 baseColor = texture(baseColorSampler, outTextCoord);
-    vec3 normal = texture(normalSampler, outTextCoord).rgb;
-    vec3 tangent = texture(tangentSampler, outTextCoord).rgb;
+    vec4 baseColor = texture(bindlessTextures[nonuniformEXT(baseColorSamplerIndex)], outTextCoord);
+    vec3 normal = texture(bindlessTextures[nonuniformEXT(normalSamplerIndex)], outTextCoord).rgb;
+    vec3 tangent = texture(bindlessTextures[nonuniformEXT(tangentSamplerIndex)], outTextCoord).rgb;
     vec3 bitangent = cross(normal, tangent);// Hopefully close enough, normal isn't the "real" normal
-    uint materialIndex = texture(materialSampler, outTextCoord).r;
+    vec4 materialPacked = texture(bindlessTextures[nonuniformEXT(materialSamplerIndex)], outTextCoord);
+    uint materialIndex =
+        uint(materialPacked.r) << 24 |
+        uint(materialPacked.g) << 16 |
+        uint(materialPacked.b) << 8 |
+        uint(materialPacked.a);
+
     Material material = materials[materialIndex];
 
     // Retrieve position from depth
-    float depth = texture(depthSampler, outTextCoord).x * 2.0 - 1.0;
+    float depth = texture(bindlessTextures[nonuniformEXT(depthSamplerIndex)], outTextCoord).x * 2.0 - 1.0;
     if (depth == 1) {
         discard;
     }

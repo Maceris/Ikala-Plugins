@@ -43,20 +43,13 @@ public class LightRender implements RenderStage {
     /** VkDescriptorSet's for a frame, will be VK_NULL_HANDLE if not set up. */
     private static class Descriptors {
         /** The total number of descriptors to create, not how many actually get bound per frame. */
-        public static final int COUNT = 12;
+        public static final int COUNT = 5;
 
         public long uniforms = VK_NULL_HANDLE;
-        public long baseColorSampler = VK_NULL_HANDLE;
-        public long normalSampler = VK_NULL_HANDLE;
-        public long tangentSampler = VK_NULL_HANDLE;
-        public long materialSampler = VK_NULL_HANDLE;
-        public long depthSampler = VK_NULL_HANDLE;
-        public long shadowMap0 = VK_NULL_HANDLE;
-        public long shadowMap1 = VK_NULL_HANDLE;
-        public long shadowMap2 = VK_NULL_HANDLE;
         public long pointLights = VK_NULL_HANDLE;
         public long spotLights = VK_NULL_HANDLE;
         public long materials = VK_NULL_HANDLE;
+        public long textures = VK_NULL_HANDLE;
     }
 
     /** The shader to use for rendering. */
@@ -112,7 +105,7 @@ public class LightRender implements RenderStage {
     @Override
     public void cleanup(@NonNull State state) {
         VulkanState vulkanState = (VulkanState) state;
-        //TODO(ches) cleanup descriptors, pools
+        // TODO(ches) cleanup descriptors, pools
         vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
@@ -366,90 +359,30 @@ public class LightRender implements RenderStage {
                     stack.ints(
                             /* Uniforms */
                             0,
-                            /* Base color sampler */
-                            0,
-                            /* Normal sampler */
-                            0,
-                            /* Tangent sampler */
-                            0,
-                            /* Material sampler */
-                            0,
-                            /* Depth sampler */
-                            0,
-                            /* Shadow map 0 */
-                            0,
-                            /* Shadow map 1 */
-                            0,
-                            /* Shadow map 2 */
-                            0,
                             /* Point lights */
                             VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
                             /* Spotlights */
                             VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
                             /* Materials */
-                            VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT);
+                            VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
+                            /* Textures */
+                            VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
+                                    | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+                                    | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT);
 
             VkDescriptorSetLayoutBindingFlagsCreateInfo descriptorSetBindingFlags =
                     VkDescriptorSetLayoutBindingFlagsCreateInfo.calloc(stack);
             descriptorSetBindingFlags
                     .sType$Default()
-                    .bindingCount(12)
+                    .bindingCount(5)
                     .pBindingFlags(descriptorVariableFlags);
 
             VkDescriptorSetLayoutBinding.Buffer descriptorSetLayoutBindings =
-                    VkDescriptorSetLayoutBinding.calloc(12, stack);
+                    VkDescriptorSetLayoutBinding.calloc(5, stack);
             descriptorSetLayoutBindings
                     .get(ShaderBindings.Light.UNIFORMS_BINDING)
                     .binding(ShaderBindings.Light.UNIFORMS_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-                    .descriptorCount(1)
-                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
-            descriptorSetLayoutBindings
-                    .get(ShaderBindings.Light.BASE_COLOR_SAMPLER_BINDING)
-                    .binding(ShaderBindings.Light.BASE_COLOR_SAMPLER_BINDING)
-                    .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                    .descriptorCount(1)
-                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
-            descriptorSetLayoutBindings
-                    .get(ShaderBindings.Light.NORMAL_SAMPLER_BINDING)
-                    .binding(ShaderBindings.Light.NORMAL_SAMPLER_BINDING)
-                    .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                    .descriptorCount(1)
-                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
-            descriptorSetLayoutBindings
-                    .get(ShaderBindings.Light.TANGENT_SAMPLER_BINDING)
-                    .binding(ShaderBindings.Light.TANGENT_SAMPLER_BINDING)
-                    .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                    .descriptorCount(1)
-                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
-            descriptorSetLayoutBindings
-                    .get(ShaderBindings.Light.MATERIAL_SAMPLER_BINDING)
-                    .binding(ShaderBindings.Light.MATERIAL_SAMPLER_BINDING)
-                    .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                    .descriptorCount(1)
-                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
-            descriptorSetLayoutBindings
-                    .get(ShaderBindings.Light.DEPTH_SAMPLER_BINDING)
-                    .binding(ShaderBindings.Light.DEPTH_SAMPLER_BINDING)
-                    .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                    .descriptorCount(1)
-                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
-            descriptorSetLayoutBindings
-                    .get(ShaderBindings.Light.SHADOW_MAP_0_BINDING)
-                    .binding(ShaderBindings.Light.SHADOW_MAP_0_BINDING)
-                    .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                    .descriptorCount(1)
-                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
-            descriptorSetLayoutBindings
-                    .get(ShaderBindings.Light.SHADOW_MAP_1_BINDING)
-                    .binding(ShaderBindings.Light.SHADOW_MAP_1_BINDING)
-                    .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                    .descriptorCount(1)
-                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
-            descriptorSetLayoutBindings
-                    .get(ShaderBindings.Light.SHADOW_MAP_2_BINDING)
-                    .binding(ShaderBindings.Light.SHADOW_MAP_2_BINDING)
-                    .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
                     .descriptorCount(1)
                     .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
             descriptorSetLayoutBindings
@@ -469,6 +402,12 @@ public class LightRender implements RenderStage {
                     .binding(ShaderBindings.Light.MATERIALS_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1)
+                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
+            descriptorSetLayoutBindings
+                    .get(ShaderBindings.Light.TEXTURES_BINDING)
+                    .binding(ShaderBindings.Light.TEXTURES_BINDING)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                    .descriptorCount(state.device.physical.maxBindlessImages)
                     .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
 
             VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo =
@@ -548,34 +487,6 @@ public class LightRender implements RenderStage {
                 descriptors[i].uniforms =
                         setAddresses.get(
                                 i * Descriptors.COUNT + ShaderBindings.Light.UNIFORMS_BINDING);
-                descriptors[i].baseColorSampler =
-                        setAddresses.get(
-                                i * Descriptors.COUNT
-                                        + ShaderBindings.Light.BASE_COLOR_SAMPLER_BINDING);
-                descriptors[i].normalSampler =
-                        setAddresses.get(
-                                i * Descriptors.COUNT
-                                        + ShaderBindings.Light.NORMAL_SAMPLER_BINDING);
-                descriptors[i].tangentSampler =
-                        setAddresses.get(
-                                i * Descriptors.COUNT
-                                        + ShaderBindings.Light.TANGENT_SAMPLER_BINDING);
-                descriptors[i].materialSampler =
-                        setAddresses.get(
-                                i * Descriptors.COUNT
-                                        + ShaderBindings.Light.MATERIAL_SAMPLER_BINDING);
-                descriptors[i].depthSampler =
-                        setAddresses.get(
-                                i * Descriptors.COUNT + ShaderBindings.Light.DEPTH_SAMPLER_BINDING);
-                descriptors[i].shadowMap0 =
-                        setAddresses.get(
-                                i * Descriptors.COUNT + ShaderBindings.Light.SHADOW_MAP_0_BINDING);
-                descriptors[i].shadowMap1 =
-                        setAddresses.get(
-                                i * Descriptors.COUNT + ShaderBindings.Light.SHADOW_MAP_1_BINDING);
-                descriptors[i].shadowMap2 =
-                        setAddresses.get(
-                                i * Descriptors.COUNT + ShaderBindings.Light.SHADOW_MAP_2_BINDING);
                 descriptors[i].pointLights =
                         setAddresses.get(
                                 i * Descriptors.COUNT + ShaderBindings.Light.POINT_LIGHT_BINDING);
@@ -585,9 +496,10 @@ public class LightRender implements RenderStage {
                 descriptors[i].materials =
                         setAddresses.get(
                                 i * Descriptors.COUNT + ShaderBindings.Light.MATERIALS_BINDING);
+                descriptors[i].textures =
+                        setAddresses.get(
+                                i * Descriptors.COUNT + ShaderBindings.Light.TEXTURES_BINDING);
             }
-            // TODO(ches) let's make the textures bindless, and chuck some indices in the uniform
-            // buffer
         }
     }
 
