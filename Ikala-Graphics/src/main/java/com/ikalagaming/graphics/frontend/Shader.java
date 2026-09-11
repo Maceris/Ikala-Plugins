@@ -32,6 +32,7 @@ public interface Shader {
     }
 
     /** Install this program as part of the current rendering state. */
+    @Deprecated
     void bind();
 
     /**
@@ -56,5 +57,6 @@ public interface Shader {
     UniformsMap getUniformMap();
 
     /** Stop using this program. */
+    @Deprecated
     void unbind();
 }

@@ -47,7 +47,7 @@ public class FilterRender implements RenderStage {
      * VkDescriptorSet for the texture we are rendering to ({@link PerFrameData#finalTexture}), will
      * be VK_NULL_HANDLE if not set up. One per frame in flight.
      */
-    private long[] descriptorsTexture;
+    private final long[] descriptorsTexture;
 
     /**
      * Set up the skybox render stage.
@@ -67,8 +67,6 @@ public class FilterRender implements RenderStage {
 
     @Override
     public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
-        shader.bind();
-
         // TODO(ches) remove this when we don't have the nothingburger state?
         VulkanState vulkanState = (VulkanState) state;
         final VkCommandBuffer commandBuffer =
@@ -170,7 +168,6 @@ public class FilterRender implements RenderStage {
             vkCmdDrawIndexed(commandBuffer, QuadMesh.INDEX_COUNT, 1, 0, 0, 0);
             vkCmdEndRendering(commandBuffer);
         }
-        shader.unbind();
     }
 
     @Override
@@ -184,7 +181,9 @@ public class FilterRender implements RenderStage {
     @Override
     public void cleanup(@NonNull State state) {
         VulkanState vulkanState = (VulkanState) state;
-        // TODO(ches) clean up descriptors
+        Arrays.fill(this.descriptorsTexture, VK_NULL_HANDLE);
+        vkDestroyDescriptorPool(vulkanState.device.logical, descriptorPool, null);
+        vkDestroyDescriptorSetLayout(vulkanState.device.logical, descriptorSetLayout, null);
         vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);

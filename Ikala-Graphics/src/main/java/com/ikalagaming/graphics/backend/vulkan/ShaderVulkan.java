@@ -209,7 +209,9 @@ public class ShaderVulkan implements Shader {
     }
 
     @Override
-    public void bind() {}
+    public void bind() {
+        // TODO(ches) get rid of this
+    }
 
     @Override
     public void free() {
@@ -237,5 +239,7 @@ public class ShaderVulkan implements Shader {
     }
 
     @Override
-    public void unbind() {}
+    public void unbind() {
+        // TODO(ches) get rid of this
+    }
 }
