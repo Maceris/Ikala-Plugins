@@ -945,10 +945,15 @@ public class VulkanInstance implements Instance {
                     VkPhysicalDeviceVulkan12Properties vk12Properties =
                             VkPhysicalDeviceVulkan12Properties.calloc(stack).sType$Default();
 
+                    VkPhysicalDeviceDescriptorBufferPropertiesEXT bufferProperties =
+                            VkPhysicalDeviceDescriptorBufferPropertiesEXT.calloc(stack)
+                                    .sType$Default();
+
                     VkPhysicalDeviceProperties2 deviceProperties2 =
                             VkPhysicalDeviceProperties2.calloc(stack)
                                     .sType$Default()
-                                    .pNext(vk12Properties);
+                                    .pNext(vk12Properties)
+                                    .pNext(bufferProperties);
 
                     vkGetPhysicalDeviceProperties2(deviceInfo.physicalDevice, deviceProperties2);
 
@@ -956,6 +961,10 @@ public class VulkanInstance implements Instance {
                             Math.min(
                                     deviceInfo.maxBindlessImages,
                                     vk12Properties.maxDescriptorSetUpdateAfterBindSampledImages());
+
+                    long samplerSize = bufferProperties.combinedImageSamplerDescriptorSize();
+                    deviceInfo.bindlessTextureDescriptorBufferSize =
+                            deviceInfo.maxBindlessImages * samplerSize;
                 }
 
                 try (MemoryStack stack = MemoryStack.stackPush()) {

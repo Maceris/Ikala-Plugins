@@ -16,14 +16,18 @@ public class PerFrameData {
     public SharedBuffer lightUniforms;
     public SharedBuffer lightPointLights;
     public SharedBuffer lightSpotLights;
-    public SharedBuffer lightMaterials;
     public SharedBuffer sceneUniforms;
     public SharedBuffer sceneModelMatrices;
-    public SharedBuffer sceneMaterials;
     public SharedBuffer sceneMaterialOverrides;
     public SharedBuffer shadowUniforms;
     public SharedBuffer shadowModelMatrices;
     public SharedBuffer skyboxUniforms;
+
+    /** Materials used by the light and scene render phases. */
+    public SharedBuffer materials;
+
+    /** The bindless texture array. Used by the scene, light, skybox, and GUI stages. */
+    public SharedBuffer textures;
 
     public CascadeShadowSplit[] cascadeShadowSplits;
     public TextureInfo[] cascadeShadows;

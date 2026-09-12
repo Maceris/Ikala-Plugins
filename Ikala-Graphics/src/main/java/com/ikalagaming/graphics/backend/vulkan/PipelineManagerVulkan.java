@@ -4,8 +4,6 @@ import static com.ikalagaming.graphics.backend.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.util.vma.Vma.*;
 import static org.lwjgl.vulkan.KHRSurface.vkGetPhysicalDeviceSurfaceCapabilitiesKHR;
 import static org.lwjgl.vulkan.VK10.*;
-import static org.lwjgl.vulkan.VK12.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-import static org.lwjgl.vulkan.VK12.vkGetBufferDeviceAddress;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
@@ -254,32 +252,48 @@ public class PipelineManagerVulkan {
             for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
                 state.perFrameData[i] = new PerFrameData();
 
-                final long DYNAMIC = 0;
-                state.perFrameData[i].animationData = createSharedBuffer(DYNAMIC, state);
-                state.perFrameData[i].animationOffsets = createSharedBuffer(DYNAMIC, state);
-                state.perFrameData[i].animationModelData = createSharedBuffer(DYNAMIC, state);
-                state.perFrameData[i].animationBoneWeight = createSharedBuffer(DYNAMIC, state);
-                state.perFrameData[i].animationTarget = createSharedBuffer(DYNAMIC, state);
+                final long DEFERRED_UNTIL_LATER = 0;
+                state.perFrameData[i].animationData =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state);
+                state.perFrameData[i].animationOffsets =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state);
+                state.perFrameData[i].animationModelData =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state);
+                state.perFrameData[i].animationBoneWeight =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state);
+                state.perFrameData[i].animationTarget =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state);
                 state.perFrameData[i].guiUniforms =
-                        createSharedBuffer(ShaderBindings.GUI.UNIFORMS_BUFFER_SIZE, state);
-                state.perFrameData[i].guiCommands = createSharedBuffer(DYNAMIC, state);
-                state.perFrameData[i].guiPoints = createSharedBuffer(DYNAMIC, state);
-                state.perFrameData[i].guiPointDetails = createSharedBuffer(DYNAMIC, state);
+                        SharedBuffer.allocate(ShaderBindings.GUI.UNIFORMS_BUFFER_SIZE, state);
+                state.perFrameData[i].guiCommands =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state);
+                state.perFrameData[i].guiPoints =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state);
+                state.perFrameData[i].guiPointDetails =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state);
                 state.perFrameData[i].lightUniforms =
-                        createSharedBuffer(ShaderBindings.Light.UNIFORMS_BUFFER_SIZE, state);
-                state.perFrameData[i].lightPointLights = createSharedBuffer(DYNAMIC, state);
-                state.perFrameData[i].lightSpotLights = createSharedBuffer(DYNAMIC, state);
-                state.perFrameData[i].lightMaterials = createSharedBuffer(DYNAMIC, state);
+                        SharedBuffer.allocate(ShaderBindings.Light.UNIFORMS_BUFFER_SIZE, state);
+                state.perFrameData[i].lightPointLights =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state);
+                state.perFrameData[i].lightSpotLights =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state);
                 state.perFrameData[i].sceneUniforms =
-                        createSharedBuffer(ShaderBindings.Scene.UNIFORMS_BUFFER_SIZE, state);
-                state.perFrameData[i].sceneModelMatrices = createSharedBuffer(DYNAMIC, state);
-                state.perFrameData[i].sceneMaterials = createSharedBuffer(DYNAMIC, state);
-                state.perFrameData[i].sceneMaterialOverrides = createSharedBuffer(DYNAMIC, state);
+                        SharedBuffer.allocate(ShaderBindings.Scene.UNIFORMS_BUFFER_SIZE, state);
+                state.perFrameData[i].sceneModelMatrices =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state);
+                state.perFrameData[i].sceneMaterialOverrides =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state);
                 state.perFrameData[i].shadowUniforms =
-                        createSharedBuffer(ShaderBindings.Shadow.UNIFORMS_BUFFER_SIZE, state);
-                state.perFrameData[i].shadowModelMatrices = createSharedBuffer(DYNAMIC, state);
+                        SharedBuffer.allocate(ShaderBindings.Shadow.UNIFORMS_BUFFER_SIZE, state);
+                state.perFrameData[i].shadowModelMatrices =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state);
                 state.perFrameData[i].skyboxUniforms =
-                        createSharedBuffer(ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE, state);
+                        SharedBuffer.allocate(ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE, state);
+                state.perFrameData[i].materials =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state);
+                state.perFrameData[i].textures =
+                        SharedBuffer.allocate(
+                                state.device.physical.bindlessTextureDescriptorBufferSize, state);
                 state.perFrameData[i].cascadeShadowSplits =
                         new CascadeShadowSplit[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
                 state.perFrameData[i].cascadeShadows =
@@ -295,53 +309,6 @@ public class PipelineManagerVulkan {
                 state.perFrameData[i].preFilterTexture = createTexture(state, imageExtent);
                 state.perFrameData[i].finalTexture = createTexture(state, imageExtent);
             }
-        }
-    }
-
-    /**
-     * Create a shared buffer with the given size.
-     *
-     * @param bufferSize The size of the buffer in bytes.
-     * @return The new buffer object.
-     */
-    private SharedBuffer createSharedBuffer(long bufferSize, @NonNull VulkanState state) {
-        if (bufferSize <= 0) {
-            return new SharedBuffer();
-        }
-
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            VkBufferCreateInfo bufferCreateInfo =
-                    VkBufferCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .size(bufferSize)
-                            .usage(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
-            VmaAllocationCreateInfo bufferAllocationCreateInfo =
-                    VmaAllocationCreateInfo.calloc(stack)
-                            .flags(
-                                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
-                                            | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT
-                                            | VMA_ALLOCATION_CREATE_MAPPED_BIT)
-                            .usage(VMA_MEMORY_USAGE_AUTO);
-            VkBufferDeviceAddressInfo bufferDeviceAddressInfo =
-                    VkBufferDeviceAddressInfo.calloc(stack).sType$Default();
-
-            SharedBuffer result = new SharedBuffer();
-
-            checkError(
-                    vmaCreateBuffer(
-                            state.vmaAllocator,
-                            bufferCreateInfo,
-                            bufferAllocationCreateInfo,
-                            longOutput,
-                            pointerOutput,
-                            result.allocationInfo));
-            result.buffer = longOutput.get(0);
-            result.allocation = pointerOutput.get(0);
-
-            bufferDeviceAddressInfo.buffer(result.buffer);
-            result.deviceAddress =
-                    vkGetBufferDeviceAddress(state.device.logical, bufferDeviceAddressInfo);
-            return result;
         }
     }
 
@@ -444,73 +411,46 @@ public class PipelineManagerVulkan {
     }
 
     private void cleanupPerFrameData(@NonNull VulkanState state, @NonNull PerFrameData data) {
-        vmaDestroyBuffer(
-                state.vmaAllocator, data.animationData.buffer, data.animationData.allocation);
+        SharedBuffer.free(data.animationData, state);
         data.animationData = null;
-        vmaDestroyBuffer(
-                state.vmaAllocator, data.animationOffsets.buffer, data.animationOffsets.allocation);
+        SharedBuffer.free(data.animationOffsets, state);
         data.animationOffsets = null;
-        vmaDestroyBuffer(
-                state.vmaAllocator,
-                data.animationModelData.buffer,
-                data.animationModelData.allocation);
+        SharedBuffer.free(data.animationModelData, state);
         data.animationModelData = null;
-        vmaDestroyBuffer(
-                state.vmaAllocator,
-                data.animationBoneWeight.buffer,
-                data.animationBoneWeight.allocation);
+        SharedBuffer.free(data.animationBoneWeight, state);
         data.animationBoneWeight = null;
-        vmaDestroyBuffer(
-                state.vmaAllocator, data.animationTarget.buffer, data.animationTarget.allocation);
+        SharedBuffer.free(data.animationTarget, state);
         data.animationTarget = null;
-        vmaDestroyBuffer(state.vmaAllocator, data.guiUniforms.buffer, data.guiUniforms.allocation);
+        SharedBuffer.free(data.guiUniforms, state);
         data.guiUniforms = null;
-        vmaDestroyBuffer(state.vmaAllocator, data.guiCommands.buffer, data.guiCommands.allocation);
+        SharedBuffer.free(data.guiCommands, state);
         data.guiCommands = null;
-        vmaDestroyBuffer(state.vmaAllocator, data.guiPoints.buffer, data.guiPoints.allocation);
+        SharedBuffer.free(data.guiPoints, state);
         data.guiPoints = null;
-        vmaDestroyBuffer(
-                state.vmaAllocator, data.guiPointDetails.buffer, data.guiPointDetails.allocation);
+        SharedBuffer.free(data.guiPointDetails, state);
         data.guiPointDetails = null;
-        vmaDestroyBuffer(
-                state.vmaAllocator, data.lightUniforms.buffer, data.lightUniforms.allocation);
+        SharedBuffer.free(data.lightUniforms, state);
         data.lightUniforms = null;
-        vmaDestroyBuffer(
-                state.vmaAllocator, data.lightPointLights.buffer, data.lightPointLights.allocation);
+        SharedBuffer.free(data.lightPointLights, state);
         data.lightPointLights = null;
-        vmaDestroyBuffer(
-                state.vmaAllocator, data.lightSpotLights.buffer, data.lightSpotLights.allocation);
+        SharedBuffer.free(data.lightSpotLights, state);
         data.lightSpotLights = null;
-        vmaDestroyBuffer(
-                state.vmaAllocator, data.lightMaterials.buffer, data.lightMaterials.allocation);
-        data.lightMaterials = null;
-        vmaDestroyBuffer(
-                state.vmaAllocator, data.sceneUniforms.buffer, data.sceneUniforms.allocation);
+        SharedBuffer.free(data.sceneUniforms, state);
         data.sceneUniforms = null;
-        vmaDestroyBuffer(
-                state.vmaAllocator,
-                data.sceneModelMatrices.buffer,
-                data.sceneModelMatrices.allocation);
+        SharedBuffer.free(data.sceneModelMatrices, state);
         data.sceneModelMatrices = null;
-        vmaDestroyBuffer(
-                state.vmaAllocator, data.sceneMaterials.buffer, data.sceneMaterials.allocation);
-        data.sceneMaterials = null;
-        vmaDestroyBuffer(
-                state.vmaAllocator,
-                data.sceneMaterialOverrides.buffer,
-                data.sceneMaterialOverrides.allocation);
+        SharedBuffer.free(data.sceneMaterialOverrides, state);
         data.sceneMaterialOverrides = null;
-        vmaDestroyBuffer(
-                state.vmaAllocator, data.shadowUniforms.buffer, data.shadowUniforms.allocation);
+        SharedBuffer.free(data.shadowUniforms, state);
         data.shadowUniforms = null;
-        vmaDestroyBuffer(
-                state.vmaAllocator,
-                data.shadowModelMatrices.buffer,
-                data.shadowModelMatrices.allocation);
+        SharedBuffer.free(data.shadowModelMatrices, state);
         data.shadowModelMatrices = null;
-        vmaDestroyBuffer(
-                state.vmaAllocator, data.skyboxUniforms.buffer, data.skyboxUniforms.allocation);
+        SharedBuffer.free(data.skyboxUniforms, state);
         data.skyboxUniforms = null;
+        SharedBuffer.free(data.materials, state);
+        data.materials = null;
+        SharedBuffer.free(data.textures, state);
+        data.textures = null;
 
         data.cascadeShadowSplits = null;
 

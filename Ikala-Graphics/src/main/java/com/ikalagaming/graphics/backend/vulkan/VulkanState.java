@@ -95,6 +95,11 @@ public class VulkanState implements State {
     /** Information about the physical hardware devices. */
     public static class PhysicalDeviceInfo {
 
+        /**
+         * The number of bytes that we need to store the descriptors for {@link #maxBindlessImages}.
+         */
+        public long bindlessTextureDescriptorBufferSize;
+
         /** The surface capability information. */
         public VkSurfaceCapabilitiesKHR capabilities = null;
 
