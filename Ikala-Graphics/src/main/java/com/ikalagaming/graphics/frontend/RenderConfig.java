@@ -233,6 +233,13 @@ public class RenderConfig {
         private void checkError() {
             if ((currentValue & SCENE_ENABLED_MASK) == 0
                     && (currentValue & (ANIMATION_ENABLED_MASK | SHADOW_ENABLED_MASK)) != 0) {
+                // Shadows and animation don't make sense without a scene
+                currentValue |= ERROR_MASK;
+            }
+            if ((currentValue & FILTER_ENABLED_MASK) != 0
+                    && (currentValue & SCENE_ENABLED_MASK) == 0
+                    && (currentValue & SKYBOX_ENABLED_MASK) == 0) {
+                // We have to render something (scene or skybox) to apply a filter to it
                 currentValue |= ERROR_MASK;
             }
         }

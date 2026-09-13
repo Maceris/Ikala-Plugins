@@ -72,20 +72,23 @@ public class FilterRender implements RenderStage {
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
 
+        final TextureInfo targetImage =
+                vulkanState.perFrameData[vulkanState.frameIndex].finalTexture;
+
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkImageMemoryBarrier2.Buffer outputBarriers = VkImageMemoryBarrier2.calloc(1, stack);
             outputBarriers
                     .get(0)
                     .sType$Default()
-                    .srcStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
-                    .srcAccessMask(0)
+                    .srcStageMask(VK_PIPELINE_STAGE_2_TRANSFER_BIT)
+                    .srcAccessMask(VK_ACCESS_TRANSFER_READ_BIT)
                     .dstStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
                     .dstAccessMask(
                             VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
                                     | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
                     .oldLayout(VK_IMAGE_LAYOUT_UNDEFINED)
-                    .newLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
-                    .image(vulkanState.perFrameData[vulkanState.frameIndex].finalTexture.texture)
+                    .newLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+                    .image(targetImage.texture)
                     .subresourceRange(
                             VkImageSubresourceRange.calloc(stack)
                                     .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
@@ -103,7 +106,7 @@ public class FilterRender implements RenderStage {
             colorAttachmentInfos
                     .get(0)
                     .sType$Default()
-                    .imageView(vulkanState.perFrameData[vulkanState.frameIndex].finalTexture.view)
+                    .imageView(targetImage.view)
                     .imageLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
                     .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
                     .storeOp(VK_ATTACHMENT_STORE_OP_STORE)

@@ -5,12 +5,14 @@ import static org.lwjgl.vulkan.VK10.*;
 import static org.lwjgl.vulkan.VK10.VK_NULL_HANDLE;
 import static org.lwjgl.vulkan.VK12.*;
 import static org.lwjgl.vulkan.VK12.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.vulkan.*;
+import com.ikalagaming.graphics.frontend.RenderConfig;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
@@ -144,7 +146,7 @@ public class GuiRender implements RenderStage {
 
         windowManager.drawGui(width, height);
 
-        renderIkGui(width, height);
+        renderIkGui(width, height, window, (VulkanState) state, renderConfig);
     }
 
     private void renderImGui(int width, int height) {
@@ -181,9 +183,48 @@ public class GuiRender implements RenderStage {
         imGuiShader.unbind();
     }
 
-    private void renderIkGui(int width, int height) {
+    private void renderIkGui(
+            int width,
+            int height,
+            @NonNull Window window,
+            VulkanState vulkanState,
+            int renderConfig) {
         // TODO(ches) render
-        shader.bind();
+        final VkCommandBuffer commandBuffer =
+                vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
+        final TextureInfo targetImage =
+                vulkanState.perFrameData[vulkanState.frameIndex].finalTexture;
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            if (!RenderConfig.hasSceneStage(renderConfig)
+                    && !RenderConfig.hasSkyboxStage(renderConfig)) {
+                VkImageMemoryBarrier2.Buffer outputBarriers =
+                        VkImageMemoryBarrier2.calloc(1, stack);
+                outputBarriers
+                        .get(0)
+                        .sType$Default()
+                        .srcStageMask(VK_PIPELINE_STAGE_2_TRANSFER_BIT)
+                        .srcAccessMask(VK_ACCESS_TRANSFER_READ_BIT)
+                        .dstStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
+                        .dstAccessMask(
+                                VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
+                                        | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
+                        .oldLayout(VK_IMAGE_LAYOUT_UNDEFINED)
+                        .newLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+                        .image(targetImage.texture)
+                        .subresourceRange(
+                                VkImageSubresourceRange.calloc(stack)
+                                        .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                        .levelCount(1)
+                                        .layerCount(1));
+
+                VkDependencyInfo barrierDependencyInfo =
+                        VkDependencyInfo.calloc(stack)
+                                .sType$Default()
+                                .pImageMemoryBarriers(outputBarriers);
+                vkCmdPipelineBarrier2(commandBuffer, barrierDependencyInfo);
+            }
+        }
 
         // TODO(ches) opengl buffered stuff here
 
@@ -206,8 +247,6 @@ public class GuiRender implements RenderStage {
             // TODO(ches) opengl buffered and rendered stuff here
 
         }
-
-        shader.unbind();
     }
 
     private void createPipelineLayout(@NonNull VulkanState state) {

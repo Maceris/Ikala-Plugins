@@ -5,6 +5,7 @@ import static org.lwjgl.vulkan.VK10.*;
 import static org.lwjgl.vulkan.VK10.vkCreatePipelineLayout;
 import static org.lwjgl.vulkan.VK12.*;
 import static org.lwjgl.vulkan.VK12.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
@@ -12,6 +13,7 @@ import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.backend.vulkan.ShaderVulkan;
+import com.ikalagaming.graphics.backend.vulkan.TextureInfo;
 import com.ikalagaming.graphics.backend.vulkan.VulkanState;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.MaterialCache;
@@ -90,59 +92,95 @@ public class SceneRender implements RenderStage {
     public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
         var uniformsMap = shader.getUniformMap();
         // TODO(ches) clear the framebuffer
-        shader.bind();
+        VulkanState vulkanState = (VulkanState) state;
+        final VkCommandBuffer commandBuffer =
+                vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
 
-        updateMaterialBuffers(scene);
-        updateMaterialOverrides(scene);
+        final boolean hasFilter = RenderConfig.hasFilterStage(renderConfig);
 
-        uniformsMap.setUniform(
-                ShaderUniforms.Scene.PROJECTION_MATRIX,
-                scene.getProjection().getProjectionMatrix());
-        uniformsMap.setUniform(ShaderUniforms.Scene.VIEW_MATRIX, scene.getCamera().getViewMatrix());
+        final TextureInfo targetImage =
+                hasFilter
+                        ? vulkanState.perFrameData[vulkanState.frameIndex].preFilterTexture
+                        : vulkanState.perFrameData[vulkanState.frameIndex].finalTexture;
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkImageMemoryBarrier2.Buffer outputBarriers = VkImageMemoryBarrier2.calloc(1, stack);
+            outputBarriers
+                    .get(0)
+                    .sType$Default()
+                    .srcStageMask(VK_PIPELINE_STAGE_2_TRANSFER_BIT)
+                    .srcAccessMask(VK_ACCESS_TRANSFER_READ_BIT)
+                    .dstStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
+                    .dstAccessMask(
+                            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
+                                    | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
+                    .oldLayout(VK_IMAGE_LAYOUT_UNDEFINED)
+                    .newLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+                    .image(targetImage.texture)
+                    .subresourceRange(
+                            VkImageSubresourceRange.calloc(stack)
+                                    .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                    .levelCount(1)
+                                    .layerCount(1));
 
-        for (Model model : scene.getModelMap().values()) {
-            final int entityCount = model.getEntitiesList().size();
-            if (entityCount == 0) {
-                continue;
+            VkDependencyInfo barrierDependencyInfo =
+                    VkDependencyInfo.calloc(stack)
+                            .sType$Default()
+                            .pImageMemoryBarriers(outputBarriers);
+            vkCmdPipelineBarrier2(commandBuffer, barrierDependencyInfo);
+
+            updateMaterialBuffers(scene);
+            updateMaterialOverrides(scene);
+
+            uniformsMap.setUniform(
+                    ShaderUniforms.Scene.PROJECTION_MATRIX,
+                    scene.getProjection().getProjectionMatrix());
+            uniformsMap.setUniform(
+                    ShaderUniforms.Scene.VIEW_MATRIX, scene.getCamera().getViewMatrix());
+
+            for (Model model : scene.getModelMap().values()) {
+                final int entityCount = model.getEntitiesList().size();
+                if (entityCount == 0) {
+                    continue;
+                }
+
+                final int commandCount = model.isAnimated() ? entityCount : 1;
+
+                // TODO(ches) bind buffers
+
+                int meshIndex = 0;
+                for (MeshData mesh : model.getMeshDataList()) {
+                    int indexOrFallback =
+                            scene.getMaterialCache().getMaterialIndex(mesh.getMaterial());
+                    Material assignedOrDefaultMaterial =
+                            scene.getMaterialCache().getMaterial(indexOrFallback);
+
+                    // TODO(ches) set material index, mesh index
+
+                    if (assignedOrDefaultMaterial.getTexture() != null) {
+                        // TODO(ches) make sure image is resident
+                    }
+                    if (assignedOrDefaultMaterial.getNormalMap() != null) {
+                        // TODO(ches) make sure image is resident
+                    }
+                    // TODO(ches) set color sampler, normal sampler
+
+                    if (model.isAnimated()) {
+                        // TODO(ches) bind mesh.getAnimationTargetBuffer().id()
+
+                    } else {
+                        // TODO(ches) ... don't bind mesh.getAnimationTargetBuffer().id()
+                    }
+
+                    // TODO(ches) bind index buffer, draw indirect buffer
+
+                    // TODO(ches) draw indirect
+                    meshIndex += 1;
+                }
+
+                // TODO(ches) unbind model matrices (?)
             }
-
-            final int commandCount = model.isAnimated() ? entityCount : 1;
-
-            // TODO(ches) bind buffers
-
-            int meshIndex = 0;
-            for (MeshData mesh : model.getMeshDataList()) {
-                int indexOrFallback = scene.getMaterialCache().getMaterialIndex(mesh.getMaterial());
-                Material assignedOrDefaultMaterial =
-                        scene.getMaterialCache().getMaterial(indexOrFallback);
-
-                // TODO(ches) set material index, mesh index
-
-                if (assignedOrDefaultMaterial.getTexture() != null) {
-                    // TODO(ches) make sure image is resident
-                }
-                if (assignedOrDefaultMaterial.getNormalMap() != null) {
-                    // TODO(ches) make sure image is resident
-                }
-                // TODO(ches) set color sampler, normal sampler
-
-                if (model.isAnimated()) {
-                    // TODO(ches) bind mesh.getAnimationTargetBuffer().id()
-
-                } else {
-                    // TODO(ches) ... don't bind mesh.getAnimationTargetBuffer().id()
-                }
-
-                // TODO(ches) bind index buffer, draw indirect buffer
-
-                // TODO(ches) draw indirect
-                meshIndex += 1;
-            }
-
-            // TODO(ches) unbind model matrices (?)
+            // TODO(ches) decide on which pipeline to use based on render config
         }
-        // TODO(ches) decide on which pipeline to use based on render config
-
         shader.unbind();
     }
 

@@ -12,10 +12,7 @@ import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
 import org.lwjgl.system.MemoryStack;
-import org.lwjgl.vulkan.VkCommandBuffer;
-import org.lwjgl.vulkan.VkDependencyInfo;
-import org.lwjgl.vulkan.VkImageMemoryBarrier2;
-import org.lwjgl.vulkan.VkImageSubresourceRange;
+import org.lwjgl.vulkan.*;
 
 public class SwapchainPresent implements RenderStage {
 
@@ -39,7 +36,8 @@ public class SwapchainPresent implements RenderStage {
         VulkanState.WindowInfo windowInfo = vulkanState.windows.get(window);
 
         final long swapchainImage = windowInfo.swapchainImages[windowInfo.currentSwapchainIndex];
-        final long depthImage = windowInfo.depthImage.texture;
+        final long sourceImage =
+                vulkanState.perFrameData[vulkanState.frameIndex].finalTexture.texture;
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkImageMemoryBarrier2.Buffer outputBarriers = VkImageMemoryBarrier2.calloc(2, stack);
@@ -58,30 +56,19 @@ public class SwapchainPresent implements RenderStage {
                                     .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
                                     .levelCount(1)
                                     .layerCount(1));
-            // TODO(ches) transfer the texture a state where we can read it:
-            /*
-             * .srcStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
-             * .srcAccessMask(0)
-             * .dstStageMask(VK_PIPELINE_STAGE_2_TRANSFER_BIT)
-             * .dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT)
-             * .oldLayout(VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL)
-             * .newLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
-             */
-            // TODO(ches) why do we even have the depth here?
             outputBarriers
                     .get(1)
                     .sType$Default()
-                    .srcStageMask(VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT)
-                    .srcAccessMask(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
-                    .dstStageMask(VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT)
-                    .dstAccessMask(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
-                    .oldLayout(VK_IMAGE_LAYOUT_UNDEFINED)
-                    .newLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
-                    .image(depthImage)
+                    .srcStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
+                    .srcAccessMask(0)
+                    .dstStageMask(VK_PIPELINE_STAGE_2_TRANSFER_BIT)
+                    .dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT)
+                    .oldLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+                    .newLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+                    .image(sourceImage)
                     .subresourceRange(
                             VkImageSubresourceRange.calloc(stack)
-                                    .aspectMask(
-                                            VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
+                                    .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
                                     .levelCount(1)
                                     .layerCount(1));
 
@@ -90,7 +77,41 @@ public class SwapchainPresent implements RenderStage {
                             .sType$Default()
                             .pImageMemoryBarriers(outputBarriers);
             vkCmdPipelineBarrier2(commandBuffer, barrierDependencyInfo);
-            // TODO(ches) vkCmdBlitImage
+
+            VkImageSubresourceLayers sourceLayers =
+                    VkImageSubresourceLayers.calloc(stack)
+                            .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                            .layerCount(1)
+                            .mipLevel(0);
+            VkOffset3D.Buffer sourceOffsets = VkOffset3D.calloc(2, stack);
+            sourceOffsets.get(0).set(0, 0, 0);
+            sourceOffsets.get(1).set(window.getWidth(), window.getHeight(), 1);
+
+            VkImageSubresourceLayers destLayers =
+                    VkImageSubresourceLayers.calloc(stack)
+                            .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                            .layerCount(1)
+                            .mipLevel(0);
+            VkOffset3D.Buffer destOffsets = VkOffset3D.calloc(2, stack);
+            destOffsets.get(0).set(0, 0, 0);
+            destOffsets.get(1).set(window.getWidth(), window.getHeight(), 1);
+
+            VkImageBlit.Buffer blitRegions = VkImageBlit.calloc(1, stack);
+            blitRegions
+                    .get(0)
+                    .srcOffsets(sourceOffsets)
+                    .dstOffsets(destOffsets)
+                    .srcSubresource(sourceLayers)
+                    .dstSubresource(destLayers);
+
+            vkCmdBlitImage(
+                    commandBuffer,
+                    sourceImage,
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    swapchainImage,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    blitRegions,
+                    VK_FILTER_LINEAR);
 
             VkImageMemoryBarrier2.Buffer barrierPresents = VkImageMemoryBarrier2.calloc(1, stack);
             barrierPresents

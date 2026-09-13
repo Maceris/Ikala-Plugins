@@ -306,13 +306,24 @@ public class PipelineManagerVulkan {
                             createDepthTexture(state, imageExtent);
                 }
                 state.perFrameData[i].gBuffer = generateGBuffer(state, imageExtent);
-                state.perFrameData[i].preFilterTexture = createTexture(state, imageExtent);
-                state.perFrameData[i].finalTexture = createTexture(state, imageExtent);
+                state.perFrameData[i].preFilterTexture =
+                        createTexture(
+                                state,
+                                imageExtent,
+                                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+                state.perFrameData[i].finalTexture =
+                        createTexture(
+                                state,
+                                imageExtent,
+                                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+                                        | VK_IMAGE_USAGE_SAMPLED_BIT
+                                        | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
             }
         }
     }
 
-    private TextureInfo createTexture(@NonNull VulkanState state, @NonNull VkExtent3D imageExtent) {
+    private TextureInfo createTexture(
+            @NonNull VulkanState state, @NonNull VkExtent3D imageExtent, int imageUsage) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
 
             VkImageCreateInfo imageCreateInfo =
@@ -325,7 +336,7 @@ public class PipelineManagerVulkan {
                             .arrayLayers(1)
                             .samples(VK_SAMPLE_COUNT_1_BIT)
                             .tiling(VK_IMAGE_TILING_OPTIMAL)
-                            .usage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+                            .usage(imageUsage)
                             .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED);
 
             VmaAllocationCreateInfo imageAlloc =
@@ -522,7 +533,11 @@ public class PipelineManagerVulkan {
     private GBuffer generateGBuffer(@NonNull VulkanState state, @NonNull VkExtent3D imageExtent) {
         TextureInfo[] textures = new TextureInfo[5];
         for (int i = 0; i < textures.length; i++) {
-            textures[i] = createTexture(state, imageExtent);
+            textures[i] =
+                    createTexture(
+                            state,
+                            imageExtent,
+                            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
         }
         TextureInfo depth = createDepthTexture(state, imageExtent);
 

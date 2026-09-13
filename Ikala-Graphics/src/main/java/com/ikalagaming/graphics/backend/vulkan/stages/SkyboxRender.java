@@ -107,6 +107,8 @@ public class SkyboxRender implements RenderStage {
         shader.bind();
         var uniformsMap = shader.getUniformMap();
 
+        // TODO(ches) handle the case (barriers) where we don't have a scene
+
         uniformsMap.setUniform(
                 ShaderUniforms.Skybox.PROJECTION_MATRIX,
                 scene.getProjection().getProjectionMatrix());
