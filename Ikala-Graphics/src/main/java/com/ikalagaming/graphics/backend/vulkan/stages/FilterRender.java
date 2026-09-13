@@ -249,11 +249,12 @@ public class FilterRender implements RenderStage {
                             state.device.logical, pipelineLayoutCreateInfo, null, longOutput));
             pipelineLayout = longOutput.get(0);
 
-            VkDescriptorPoolSize.Buffer poolSizes =
-                    VkDescriptorPoolSize.calloc(GraphicsManager.MAX_FRAMES_IN_FLIGHT, stack);
-            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
-                poolSizes.get(i).type(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER).descriptorCount(1);
-            }
+            VkDescriptorPoolSize.Buffer poolSizes = VkDescriptorPoolSize.calloc(1, stack);
+            poolSizes
+                    .get(0)
+                    .type(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                    .descriptorCount(GraphicsManager.MAX_FRAMES_IN_FLIGHT);
+
             VkDescriptorPoolCreateInfo descriptorPoolCreateInfo =
                     VkDescriptorPoolCreateInfo.calloc(stack)
                             .sType$Default()

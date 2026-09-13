@@ -28,20 +28,33 @@ import org.joml.Vector2f;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 
+import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 
 @Slf4j
 public class GuiRender implements RenderStage {
 
-    /** The binding for the commands SSBO. */
-    static final int COMMANDS_BINDING = 0;
+    /** VkDescriptorSet's for a frame, will be VK_NULL_HANDLE if not set up. */
+    private static class Descriptors {
+        /** The total number of descriptors to create, not how many actually get bound per frame. */
+        public static final int COUNT = 5;
 
-    /** The binding for the points SSBO. */
-    static final int POINTS_BINDING = 1;
+        public long uniforms = VK_NULL_HANDLE;
+        public long commands = VK_NULL_HANDLE;
+        public long points = VK_NULL_HANDLE;
+        public long pointDetails = VK_NULL_HANDLE;
+        public long textures = VK_NULL_HANDLE;
 
-    /** The binding for the point details SSBO. */
-    static final int POINT_DETAILS_BINDING = 2;
+        /** Clear values so we don't refer to junk descriptor handles. */
+        public void reset() {
+            uniforms = VK_NULL_HANDLE;
+            commands = VK_NULL_HANDLE;
+            points = VK_NULL_HANDLE;
+            pointDetails = VK_NULL_HANDLE;
+            textures = VK_NULL_HANDLE;
+        }
+    }
 
     /** The scale of the GUI, kept here to prevent reallocation. */
     private final Vector2f scale;
@@ -61,7 +74,7 @@ public class GuiRender implements RenderStage {
     private final Texture fontAtlas;
 
     /** VkDescriptorSetLayout pointer, will be VK_NULL_HANDLE if not set up. */
-    private long descriptorSetLayoutLegacy;
+    @Deprecated private long descriptorSetLayoutLegacy;
 
     /** VkPipelineLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long pipelineLayoutLegacy;
@@ -77,6 +90,12 @@ public class GuiRender implements RenderStage {
 
     /** VkPipeline pointer, will be VK_NULL_HANDLE if not set up. */
     private long pipeline;
+
+    /** VkDescriptorPool pointer, will be VK_NULL_HANDLE if not set up. */
+    private long descriptorPool;
+
+    /** All the descriptors, one per frame in flight. */
+    private Descriptors[] descriptors;
 
     /**
      * Set up the GUI render stage.
@@ -101,6 +120,12 @@ public class GuiRender implements RenderStage {
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
         this.pipeline = VK_NULL_HANDLE;
+        this.descriptorPool = VK_NULL_HANDLE;
+
+        this.descriptors = new Descriptors[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+        for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+            this.descriptors[i] = new Descriptors();
+        }
     }
 
     @Override
@@ -117,6 +142,11 @@ public class GuiRender implements RenderStage {
     @Override
     public void cleanup(@NonNull State state) {
         VulkanState vulkanState = (VulkanState) state;
+        for (Descriptors descriptorSet : this.descriptors) {
+            descriptorSet.reset();
+        }
+        vkDestroyDescriptorPool(vulkanState.device.logical, descriptorPool, null);
+        descriptorPool = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
@@ -146,49 +176,98 @@ public class GuiRender implements RenderStage {
 
         windowManager.drawGui(width, height);
 
-        renderIkGui(width, height, window, (VulkanState) state, renderConfig);
-    }
+        VulkanState vulkanState = (VulkanState) state;
+        final VkCommandBuffer commandBuffer =
+                vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
+        final TextureInfo targetImage =
+                vulkanState.perFrameData[vulkanState.frameIndex].finalTexture;
 
-    private void renderImGui(int width, int height) {
-        // TODO(ches) render
-        imGuiShader.bind();
+        updateBindings(vulkanState);
 
-        scale.x = 2.0f / width;
-        scale.y = -2.0f / height;
-        // TODO(ches) set scale
+        if (!RenderConfig.hasSceneStage(renderConfig)
+                && !RenderConfig.hasSkyboxStage(renderConfig)) {
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                VkImageMemoryBarrier2.Buffer outputBarriers =
+                        VkImageMemoryBarrier2.calloc(1, stack);
+                outputBarriers
+                        .get(0)
+                        .sType$Default()
+                        .srcStageMask(VK_PIPELINE_STAGE_2_TRANSFER_BIT)
+                        .srcAccessMask(VK_ACCESS_TRANSFER_READ_BIT)
+                        .dstStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
+                        .dstAccessMask(
+                                VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
+                                        | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
+                        .oldLayout(VK_IMAGE_LAYOUT_UNDEFINED)
+                        .newLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+                        .image(targetImage.texture)
+                        .subresourceRange(
+                                VkImageSubresourceRange.calloc(stack)
+                                        .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                        .levelCount(1)
+                                        .layerCount(1));
 
-        ImDrawData drawData = ImGui.getDrawData();
-        ImVec2 bufferScale = drawData.getFramebufferScale();
-        ImVec2 displaySize = drawData.getDisplaySize();
-
-        int framebufferHeight = (int) (displaySize.y * bufferScale.y);
-
-        int commandListCount = drawData.getCmdListsCount();
-        for (int i = 0; i < commandListCount; ++i) {
-            // TODO(ches) opengl buffered stuff here
-
-            int commandCount = drawData.getCmdListCmdBufferSize(i);
-            for (int j = 0; j < commandCount; j++) {
-                final int elementCount = drawData.getCmdListCmdBufferElemCount(i, j);
-                final int indexBufferOffset = drawData.getCmdListCmdBufferIdxOffset(i, j);
-                final int indices = indexBufferOffset * ImDrawData.sizeOfImDrawIdx();
-
-                long id = drawData.getCmdListCmdBufferTextureId(i, j);
-
-                ImVec4 clipRect = drawData.getCmdListCmdBufferClipRect(i, j);
-                // TODO(ches) opengl bound and rendered stuff here
+                VkDependencyInfo barrierDependencyInfo =
+                        VkDependencyInfo.calloc(stack)
+                                .sType$Default()
+                                .pImageMemoryBarriers(outputBarriers);
+                vkCmdPipelineBarrier2(commandBuffer, barrierDependencyInfo);
             }
         }
 
-        imGuiShader.unbind();
+        renderImGui(width, height, vulkanState, renderConfig);
+        renderIkGui(width, height, vulkanState, renderConfig);
     }
 
-    private void renderIkGui(
-            int width,
-            int height,
-            @NonNull Window window,
-            VulkanState vulkanState,
-            int renderConfig) {
+    private void renderImGui(int width, int height, VulkanState vulkanState, int renderConfig) {
+        // TODO(ches) render
+        final VkCommandBuffer commandBuffer =
+                vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
+        final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
+        final TextureInfo targetImage = frameData.finalTexture;
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+
+            scale.x = 2.0f / width;
+            scale.y = -2.0f / height;
+            // TODO(ches) set scale
+
+            int offset = ShaderBindings.GUI.UNIFORM_BUFFER_SCALE_OFFSET;
+            ByteBuffer uniformData = stack.calloc(ShaderBindings.GUI.UNIFORMS_BUFFER_SIZE);
+            uniformData.putFloat(offset, scale.x);
+            offset += Float.BYTES;
+            uniformData.putFloat(offset, scale.y);
+            offset = ShaderBindings.GUI.UNIFORM_BUFFER_FONT_TEXTURE_OFFSET;
+            // TODO(ches) figure out the texture offset
+            uniformData.putFloat(offset, 0);
+
+            vkCmdUpdateBuffer(commandBuffer, frameData.guiUniforms.buffer, 0, uniformData);
+
+            ImDrawData drawData = ImGui.getDrawData();
+            ImVec2 bufferScale = drawData.getFramebufferScale();
+            ImVec2 displaySize = drawData.getDisplaySize();
+
+            int framebufferHeight = (int) (displaySize.y * bufferScale.y);
+
+            int commandListCount = drawData.getCmdListsCount();
+            for (int i = 0; i < commandListCount; ++i) {
+                // TODO(ches) opengl buffered stuff here
+
+                int commandCount = drawData.getCmdListCmdBufferSize(i);
+                for (int j = 0; j < commandCount; j++) {
+                    final int elementCount = drawData.getCmdListCmdBufferElemCount(i, j);
+                    final int indexBufferOffset = drawData.getCmdListCmdBufferIdxOffset(i, j);
+                    final int indices = indexBufferOffset * ImDrawData.sizeOfImDrawIdx();
+
+                    long id = drawData.getCmdListCmdBufferTextureId(i, j);
+
+                    ImVec4 clipRect = drawData.getCmdListCmdBufferClipRect(i, j);
+                    // TODO(ches) opengl bound and rendered stuff here
+                }
+            }
+        }
+    }
+
+    private void renderIkGui(int width, int height, VulkanState vulkanState, int renderConfig) {
         // TODO(ches) render
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
@@ -339,6 +418,84 @@ public class GuiRender implements RenderStage {
                     vkCreatePipelineLayout(
                             state.device.logical, pipelineLayoutCreateInfo, null, longOutput));
             pipelineLayout = longOutput.get(0);
+
+            VkDescriptorPoolSize.Buffer poolSizes = VkDescriptorPoolSize.calloc(3, stack);
+            poolSizes
+                    .get(0)
+                    .type(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+                    .descriptorCount(GraphicsManager.MAX_FRAMES_IN_FLIGHT);
+            poolSizes
+                    .get(1)
+                    .type(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                    .descriptorCount(3 * GraphicsManager.MAX_FRAMES_IN_FLIGHT);
+            poolSizes
+                    .get(2)
+                    .type(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                    .descriptorCount(GraphicsManager.MAX_FRAMES_IN_FLIGHT);
+
+            VkDescriptorPoolCreateInfo descriptorPoolCreateInfo =
+                    VkDescriptorPoolCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .maxSets(GraphicsManager.MAX_FRAMES_IN_FLIGHT * Descriptors.COUNT)
+                            .flags(VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT)
+                            .pPoolSizes(poolSizes);
+
+            checkError(
+                    vkCreateDescriptorPool(
+                            state.device.logical, descriptorPoolCreateInfo, null, longOutput));
+            descriptorPool = longOutput.get(0);
+
+            final int UPDATE_COUNT = Descriptors.COUNT - 1;
+
+            LongBuffer descriptorSetLayoutAddresses =
+                    stack.callocLong(GraphicsManager.MAX_FRAMES_IN_FLIGHT * UPDATE_COUNT);
+            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT * UPDATE_COUNT; i++) {
+                descriptorSetLayoutAddresses.put(i, descriptorSetLayoutLegacy);
+            }
+
+            VkDescriptorSetAllocateInfo descriptorSetAlloc =
+                    VkDescriptorSetAllocateInfo.calloc(stack)
+                            .sType$Default()
+                            .pNext(VK_NULL_HANDLE)
+                            .descriptorPool(descriptorPool)
+                            .pSetLayouts(descriptorSetLayoutAddresses);
+            LongBuffer setAddresses =
+                    stack.callocLong(GraphicsManager.MAX_FRAMES_IN_FLIGHT * UPDATE_COUNT);
+            checkError(
+                    vkAllocateDescriptorSets(
+                            state.device.logical, descriptorSetAlloc, setAddresses));
+            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+                descriptors[i].uniforms =
+                        setAddresses.get(i * UPDATE_COUNT + ShaderBindings.GUI.UNIFORMS_BINDING);
+                descriptors[i].commands =
+                        setAddresses.get(i * UPDATE_COUNT + ShaderBindings.GUI.COMMANDS_BINDING);
+                descriptors[i].points =
+                        setAddresses.get(i * UPDATE_COUNT + ShaderBindings.GUI.POINTS_BINDING);
+                descriptors[i].pointDetails =
+                        setAddresses.get(
+                                i * UPDATE_COUNT + ShaderBindings.GUI.POINT_DETAILS_BINDING);
+            }
+
+            VkWriteDescriptorSet.Buffer writeDescriptorSets =
+                    VkWriteDescriptorSet.calloc(GraphicsManager.MAX_FRAMES_IN_FLIGHT, stack);
+            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+                VkDescriptorBufferInfo.Buffer uniformBufferInfo =
+                        VkDescriptorBufferInfo.calloc(1, stack);
+                uniformBufferInfo
+                        .get(0)
+                        .buffer(state.perFrameData[i].guiUniforms.buffer)
+                        .offset(0)
+                        .range(VK_WHOLE_SIZE);
+                writeDescriptorSets
+                        .get(i)
+                        .sType$Default()
+                        .dstSet(descriptors[i].uniforms)
+                        .dstBinding(ShaderBindings.GUI.UNIFORMS_BINDING)
+                        .pBufferInfo(uniformBufferInfo)
+                        .descriptorCount(1)
+                        .descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+            }
+            vkUpdateDescriptorSets(state.device.logical, writeDescriptorSets, null);
         }
     }
 
@@ -654,6 +811,91 @@ public class GuiRender implements RenderStage {
                             longOutput));
 
             pipelineLegacy = longOutput.get(0);
+        }
+    }
+
+    private void updateBindings(@NonNull VulkanState state) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            final PerFrameData frameData = state.perFrameData[state.frameIndex];
+
+            int updateCount = 0;
+            if (frameData.guiCommands.updated && frameData.guiCommands.buffer != VK_NULL_HANDLE) {
+                updateCount += 1;
+            }
+            if (frameData.guiPoints.updated && frameData.guiPoints.buffer != VK_NULL_HANDLE) {
+                updateCount += 1;
+            }
+            if (frameData.guiPointDetails.updated
+                    && frameData.guiPointDetails.buffer != VK_NULL_HANDLE) {
+                updateCount += 1;
+            }
+            if (updateCount == 0) {
+                return;
+            }
+            final Descriptors currentDescriptors = descriptors[state.frameIndex];
+
+            VkWriteDescriptorSet.Buffer writeDescriptorSets =
+                    VkWriteDescriptorSet.calloc(updateCount, stack);
+
+            int index = 0;
+            if (frameData.guiCommands.updated && frameData.guiCommands.buffer != VK_NULL_HANDLE) {
+                VkDescriptorBufferInfo.Buffer commandsBufferInfo =
+                        VkDescriptorBufferInfo.calloc(1, stack);
+                commandsBufferInfo
+                        .get(0)
+                        .buffer(frameData.guiCommands.buffer)
+                        .offset(0)
+                        .range(VK_WHOLE_SIZE);
+                writeDescriptorSets
+                        .get(index)
+                        .sType$Default()
+                        .dstSet(currentDescriptors.commands)
+                        .dstBinding(ShaderBindings.GUI.COMMANDS_BINDING)
+                        .pBufferInfo(commandsBufferInfo)
+                        .descriptorCount(1)
+                        .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+                index += 1;
+                frameData.guiCommands.updated = false;
+            }
+            if (frameData.guiPoints.updated && frameData.guiPoints.buffer != VK_NULL_HANDLE) {
+                VkDescriptorBufferInfo.Buffer pointsBufferInfo =
+                        VkDescriptorBufferInfo.calloc(1, stack);
+                pointsBufferInfo
+                        .get(0)
+                        .buffer(frameData.guiPoints.buffer)
+                        .offset(0)
+                        .range(VK_WHOLE_SIZE);
+                writeDescriptorSets
+                        .get(index)
+                        .sType$Default()
+                        .dstSet(currentDescriptors.points)
+                        .dstBinding(ShaderBindings.GUI.POINTS_BINDING)
+                        .pBufferInfo(pointsBufferInfo)
+                        .descriptorCount(1)
+                        .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+                index += 1;
+                frameData.guiPoints.updated = false;
+            }
+            if (frameData.guiPointDetails.updated
+                    && frameData.guiPointDetails.buffer != VK_NULL_HANDLE) {
+                VkDescriptorBufferInfo.Buffer pointDetailsBuffer =
+                        VkDescriptorBufferInfo.calloc(1, stack);
+                pointDetailsBuffer
+                        .get(0)
+                        .buffer(frameData.guiPointDetails.buffer)
+                        .offset(0)
+                        .range(VK_WHOLE_SIZE);
+                writeDescriptorSets
+                        .get(index)
+                        .sType$Default()
+                        .dstSet(currentDescriptors.pointDetails)
+                        .dstBinding(ShaderBindings.GUI.POINT_DETAILS_BINDING)
+                        .pBufferInfo(pointDetailsBuffer)
+                        .descriptorCount(1)
+                        .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+                frameData.guiPointDetails.updated = false;
+            }
+            vkUpdateDescriptorSets(state.device.logical, writeDescriptorSets, null);
         }
     }
 }

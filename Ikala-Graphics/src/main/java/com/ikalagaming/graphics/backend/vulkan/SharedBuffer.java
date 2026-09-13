@@ -33,6 +33,9 @@ public class SharedBuffer {
     /** The device address on the GPU side. */
     public long deviceAddress = VK_NULL_HANDLE;
 
+    /** Whether the buffer has been updated, and would need bindings updated. */
+    public boolean updated = false;
+
     /**
      * Free and recreate a buffer with a new size, discarding the old contents.
      *
@@ -119,6 +122,7 @@ public class SharedBuffer {
             bufferDeviceAddressInfo.buffer(buffer.buffer);
             buffer.deviceAddress =
                     vkGetBufferDeviceAddress(state.device.logical, bufferDeviceAddressInfo);
+            buffer.updated = true;
         }
     }
 
@@ -130,17 +134,14 @@ public class SharedBuffer {
      * @param state The Vulkan state.
      * @return The new shared buffer.
      */
-    public static SharedBuffer allocate(long bufferSize, @NonNull VulkanState state) {
+    public static SharedBuffer allocate(long bufferSize, @NonNull VulkanState state, int usage) {
         if (bufferSize <= 0) {
             return new SharedBuffer();
         }
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkBufferCreateInfo bufferCreateInfo =
-                    VkBufferCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .size(bufferSize)
-                            .usage(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
+                    VkBufferCreateInfo.calloc(stack).sType$Default().size(bufferSize).usage(usage);
             VmaAllocationCreateInfo bufferAllocationCreateInfo =
                     VmaAllocationCreateInfo.calloc(stack)
                             .flags(

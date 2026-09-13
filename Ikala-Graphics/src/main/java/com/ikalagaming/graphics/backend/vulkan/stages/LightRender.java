@@ -116,7 +116,7 @@ public class LightRender implements RenderStage {
             descriptorSet.reset();
         }
         vkDestroyDescriptorPool(vulkanState.device.logical, descriptorPool, null);
-        vkDestroyDescriptorSetLayout(vulkanState.device.logical, descriptorSetLayout, null);
+        descriptorPool = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
