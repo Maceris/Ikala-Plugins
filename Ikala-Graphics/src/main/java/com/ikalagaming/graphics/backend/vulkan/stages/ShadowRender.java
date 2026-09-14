@@ -6,7 +6,6 @@ import static org.lwjgl.vulkan.VK10.vkDestroyDescriptorSetLayout;
 import static org.lwjgl.vulkan.VK12.*;
 import static org.lwjgl.vulkan.VK12.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
 
-import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
@@ -76,8 +75,6 @@ public class ShadowRender implements RenderStage {
 
     @Override
     public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
-        var uniformsMap = shader.getUniformMap();
-
         VulkanState vulkanState = (VulkanState) state;
 
         CascadeShadowSplit[] cascadeShadowSplits =
@@ -86,21 +83,14 @@ public class ShadowRender implements RenderStage {
 
         // TODO(ches) bind depth map
 
-        shader.bind();
-
         for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
             // TODO(ches) clear all the depth map textures
 
             CascadeShadowSplit shadowCascade = cascadeShadowSplits[i];
-            uniformsMap.setUniform(
-                    ShaderUniforms.Shadow.PROJECTION_VIEW_MATRIX,
-                    shadowCascade.getProjViewMatrix());
 
             // TODO(ches) frustum culling, this is pretty excessive
             renderScene(scene);
         }
-
-        shader.unbind();
     }
 
     private void renderScene(Scene scene) {

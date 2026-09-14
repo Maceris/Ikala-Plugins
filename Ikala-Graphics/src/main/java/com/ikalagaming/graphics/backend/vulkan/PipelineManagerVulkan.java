@@ -37,7 +37,7 @@ public class PipelineManagerVulkan {
     public static final int MODEL_MATRIX_SIZE = 4 * 4;
 
     /** Fallback pipeline that does nothing. */
-    private static final Pipeline ERROR_PIPELINE =
+    public static final Pipeline ERROR_PIPELINE =
             new PipelineVulkan(new RenderStage[0], RenderConfig.ERROR_MASK);
 
     /** The texture we store font atlas on. */
@@ -431,6 +431,7 @@ public class PipelineManagerVulkan {
         stageSceneRender.cleanup(state);
         stageShadowRender.cleanup(state);
         stageSkyboxRender.cleanup(state);
+        stageSwapchainPresent.cleanup(state);
         GraphicsManager.getDeletionQueue().add(imguiFont);
         imguiFont = null;
         GraphicsManager.getDeletionQueue().add(fontAtlas);

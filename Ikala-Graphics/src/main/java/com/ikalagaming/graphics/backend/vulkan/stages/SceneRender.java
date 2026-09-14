@@ -7,7 +7,6 @@ import static org.lwjgl.vulkan.VK12.*;
 import static org.lwjgl.vulkan.VK12.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
 import static org.lwjgl.vulkan.VK13.*;
 
-import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
@@ -90,7 +89,6 @@ public class SceneRender implements RenderStage {
 
     @Override
     public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
-        var uniformsMap = shader.getUniformMap();
         // TODO(ches) clear the framebuffer
         VulkanState vulkanState = (VulkanState) state;
         final VkCommandBuffer commandBuffer =
@@ -130,12 +128,6 @@ public class SceneRender implements RenderStage {
 
             updateMaterialBuffers(scene);
             updateMaterialOverrides(scene);
-
-            uniformsMap.setUniform(
-                    ShaderUniforms.Scene.PROJECTION_MATRIX,
-                    scene.getProjection().getProjectionMatrix());
-            uniformsMap.setUniform(
-                    ShaderUniforms.Scene.VIEW_MATRIX, scene.getCamera().getViewMatrix());
 
             for (Model model : scene.getModelMap().values()) {
                 final int entityCount = model.getEntitiesList().size();
@@ -181,7 +173,6 @@ public class SceneRender implements RenderStage {
             }
             // TODO(ches) decide on which pipeline to use based on render config
         }
-        shader.unbind();
     }
 
     private static void updateMaterialOverrides(Scene scene) {

@@ -130,11 +130,9 @@ public class LightRender implements RenderStage {
         VulkanState vulkanState = (VulkanState) state;
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
+        final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
 
-        updateLights(
-                scene,
-                vulkanState.perFrameData[vulkanState.frameIndex].lightPointLights,
-                vulkanState.perFrameData[vulkanState.frameIndex].lightSpotLights);
+        updateLights(scene, frameData.lightPointLights, frameData.lightSpotLights);
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             ByteBuffer uniformData = stack.calloc(ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
@@ -178,8 +176,7 @@ public class LightRender implements RenderStage {
 
             offset = ShaderBindings.Light.CASCADE_SHADOWS_OFFSET;
 
-            CascadeShadowSplit[] cascadeShadowSplits =
-                    vulkanState.perFrameData[vulkanState.frameIndex].cascadeShadowSplits;
+            CascadeShadowSplit[] cascadeShadowSplits = frameData.cascadeShadowSplits;
             for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
                 CascadeShadowSplit cascadeShadowSplit = cascadeShadowSplits[i];
 
@@ -191,11 +188,10 @@ public class LightRender implements RenderStage {
 
             offset = ShaderBindings.Light.BASE_COLOR_SAMPLER_INDEX_OFFSET;
 
-            GBuffer gBuffer = vulkanState.perFrameData[vulkanState.frameIndex].gBuffer;
+            GBuffer gBuffer = frameData.gBuffer;
             // TODO(ches) figure out the texture indices
 
-            vkCmdUpdateBuffer(
-                    commandBuffer, descriptors[vulkanState.frameIndex].uniforms, 0, uniformData);
+            vkCmdUpdateBuffer(commandBuffer, frameData.lightUniforms.buffer, 0, uniformData);
         }
 
         // TODO(ches) render things here

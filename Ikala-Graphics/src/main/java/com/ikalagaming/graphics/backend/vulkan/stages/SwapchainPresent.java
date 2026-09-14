@@ -11,19 +11,21 @@ import com.ikalagaming.graphics.backend.vulkan.VulkanState;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 
+@Slf4j
 public class SwapchainPresent implements RenderStage {
 
     @Override
     public void initialize(@NonNull State state) {
-        RenderStage.super.initialize(state);
+        log.debug("Initializing swapchain render");
     }
 
     @Override
     public void cleanup(@NonNull State state) {
-        RenderStage.super.cleanup(state);
+        // not needed
     }
 
     @Override
@@ -46,7 +48,7 @@ public class SwapchainPresent implements RenderStage {
                     .sType$Default()
                     .srcStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
                     .srcAccessMask(0)
-                    .dstStageMask(VK_PIPELINE_STAGE_2_TRANSFER_BIT)
+                    .dstStageMask(VK_PIPELINE_STAGE_2_BLIT_BIT)
                     .dstAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
                     .oldLayout(VK_IMAGE_LAYOUT_UNDEFINED)
                     .newLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
@@ -117,9 +119,9 @@ public class SwapchainPresent implements RenderStage {
             barrierPresents
                     .get(0)
                     .sType$Default()
-                    .srcStageMask(VK_PIPELINE_STAGE_2_TRANSFER_BIT)
+                    .srcStageMask(VK_PIPELINE_STAGE_2_BLIT_BIT)
                     .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
-                    .dstStageMask(VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT)
+                    .dstStageMask(VK_PIPELINE_STAGE_2_NONE)
                     .dstAccessMask(0)
                     .oldLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
                     .newLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)

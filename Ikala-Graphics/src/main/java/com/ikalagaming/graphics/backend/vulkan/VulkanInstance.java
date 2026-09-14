@@ -1282,6 +1282,9 @@ public class VulkanInstance implements Instance {
 
     @Override
     public void render(@NonNull Scene scene, @NonNull Window window) {
+        if (pipeline == PipelineManagerVulkan.ERROR_PIPELINE) {
+            return;
+        }
         VulkanState.WindowInfo windowInfo = state.windows.get(window);
 
         longOutput.put(0, state.fences[state.frameIndex]);

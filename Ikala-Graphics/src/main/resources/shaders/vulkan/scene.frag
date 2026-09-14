@@ -31,6 +31,7 @@ layout(location = 6) flat in uint outMaterialIdx;
 
 layout(location = 0) out vec4 buffBaseColor;
 layout(location = 1) out vec4 buffNormal;
+//TODO(ches) experiment to see if it's fine (and/or better) to use the micro-geometry tangent
 layout(location = 2) out vec4 buffTangent;
 layout(location = 3) out vec4 buffMaterial;
 

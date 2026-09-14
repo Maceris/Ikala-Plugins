@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.frontend;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * Specifies a format for unique handles that specify a particular configuration of the rendering
  * pipeline.
@@ -17,6 +19,7 @@ package com.ikalagaming.graphics.frontend;
  * t - 1 if forward rendering for transparency is enabled<br>
  * w - 1 if the scene should render in wireframe<br>
  */
+@Slf4j
 public class RenderConfig {
 
     public static final int ERROR_MASK = 0b1000_0000_0000_0000_0000_0000_0000_0000;
@@ -233,13 +236,14 @@ public class RenderConfig {
         private void checkError() {
             if ((currentValue & SCENE_ENABLED_MASK) == 0
                     && (currentValue & (ANIMATION_ENABLED_MASK | SHADOW_ENABLED_MASK)) != 0) {
-                // Shadows and animation don't make sense without a scene
+                log.error("Animation or shadows are enabled, but scene rendering isn't");
                 currentValue |= ERROR_MASK;
             }
             if ((currentValue & FILTER_ENABLED_MASK) != 0
                     && (currentValue & SCENE_ENABLED_MASK) == 0
                     && (currentValue & SKYBOX_ENABLED_MASK) == 0) {
-                // We have to render something (scene or skybox) to apply a filter to it
+                log.error(
+                        "Filter is enabled, but no scene and skybox are not, so we have nothing to put a filter on");
                 currentValue |= ERROR_MASK;
             }
         }
