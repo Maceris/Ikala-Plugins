@@ -153,8 +153,6 @@ public class VulkanState implements State {
          */
         public int currentSwapchainIndex;
 
-        public TextureInfo depthImage;
-
         /** Semaphores for signaling presentation. One per swapchain image. */
         public long[] renderCompleteSemaphores;
 
@@ -166,6 +164,9 @@ public class VulkanState implements State {
         /** If we need to update the swapchain. */
         public boolean updateSwapchain;
 
+        /** The time (in millis) when the swapchain was last regenerated. */
+        public long lastSwapchainGeneration;
+
         public final @NonNull Window window;
 
         /**
@@ -175,13 +176,13 @@ public class VulkanState implements State {
          */
         public WindowInfo(@NonNull Window window) {
             this.currentSwapchainIndex = INVALID_SWAPCHAIN_INDEX;
-            this.depthImage = null;
             this.renderCompleteSemaphores = null;
             this.surfaceHandle = VK_NULL_HANDLE;
             this.swapchainHandle = VK_NULL_HANDLE;
             this.swapchainImages = null;
             this.swapchainImageViews = null;
             this.updateSwapchain = false;
+            this.lastSwapchainGeneration = 0;
             this.window = window;
         }
     }

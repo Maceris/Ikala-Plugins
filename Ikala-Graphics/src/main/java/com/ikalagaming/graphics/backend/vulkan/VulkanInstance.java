@@ -31,7 +31,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
-import org.lwjgl.util.vma.VmaAllocationCreateInfo;
 import org.lwjgl.util.vma.VmaAllocatorCreateInfo;
 import org.lwjgl.util.vma.VmaVulkanFunctions;
 import org.lwjgl.vulkan.*;
@@ -380,67 +379,7 @@ public class VulkanInstance implements Instance {
                 }
                 vkDestroySwapchainKHR(
                         state.device.logical, swapchainCreateInfo.oldSwapchain(), null);
-                vmaDestroyImage(
-                        state.vmaAllocator,
-                        windowInfo.depthImage.texture,
-                        windowInfo.depthImage.textureAllocation);
-                vkDestroyImageView(state.device.logical, windowInfo.depthImage.view, null);
-
-                VkExtent3D depthExtent =
-                        VkExtent3D.calloc(stack)
-                                .set(swapchainExtent.width(), swapchainExtent.height(), 1);
-
-                VkImageCreateInfo depthImageCreateInfo =
-                        VkImageCreateInfo.calloc(stack)
-                                .sType$Default()
-                                .imageType(VK_IMAGE_TYPE_2D)
-                                .format(state.device.physical.depthFormat)
-                                .extent(depthExtent)
-                                .mipLevels(1)
-                                .arrayLayers(1)
-                                .samples(VK_SAMPLE_COUNT_1_BIT)
-                                .tiling(VK_IMAGE_TILING_OPTIMAL)
-                                .usage(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
-                                .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED);
-
-                VmaAllocationCreateInfo depthImageAlloc =
-                        VmaAllocationCreateInfo.calloc(stack)
-                                .flags(VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT)
-                                .usage(VMA_MEMORY_USAGE_AUTO);
-
-                checkError(
-                        vmaCreateImage(
-                                state.vmaAllocator,
-                                depthImageCreateInfo,
-                                depthImageAlloc,
-                                longOutput,
-                                pointerOutput,
-                                null));
-                final long depthImage = longOutput.get(0);
-                final long depthImageAllocation = pointerOutput.get(0);
-
-                VkImageSubresourceRange depthViewSubresourceRange =
-                        VkImageSubresourceRange.calloc(stack)
-                                .aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT)
-                                .levelCount(1)
-                                .layerCount(1);
-
-                VkImageViewCreateInfo depthViewCreateInfo =
-                        VkImageViewCreateInfo.calloc(stack)
-                                .sType$Default()
-                                .image(depthImage)
-                                .viewType(VK_IMAGE_VIEW_TYPE_2D)
-                                .format(state.device.physical.depthFormat)
-                                .subresourceRange(depthViewSubresourceRange);
-
-                checkError(
-                        vkCreateImageView(
-                                state.device.logical, depthViewCreateInfo, null, longOutput));
-                final long depthView = longOutput.get(0);
-
-                windowInfo.depthImage.texture = depthImage;
-                windowInfo.depthImage.textureAllocation = depthImageAllocation;
-                windowInfo.depthImage.view = depthView;
+                windowInfo.lastSwapchainGeneration = System.currentTimeMillis();
                 return true;
             }
         } else {
@@ -498,12 +437,6 @@ public class VulkanInstance implements Instance {
         for (long handle : windowInfo.renderCompleteSemaphores) {
             vkDestroySemaphore(state.device.logical, handle, null);
         }
-        vkDestroyImageView(state.device.logical, windowInfo.depthImage.view, null);
-        vmaDestroyImage(
-                state.vmaAllocator,
-                windowInfo.depthImage.texture,
-                windowInfo.depthImage.textureAllocation);
-        vkDestroySwapchainKHR(state.device.logical, windowInfo.swapchainHandle, null);
 
         vkDestroySurfaceKHR(state.instance, windowInfo.surfaceHandle, null);
     }
@@ -740,6 +673,8 @@ public class VulkanInstance implements Instance {
                 windowInfo.swapchainImageViews[i] = longOutput.get(0);
             }
 
+            windowInfo.lastSwapchainGeneration = System.currentTimeMillis();
+
             windowInfo.renderCompleteSemaphores = new long[imageCount];
             VkSemaphoreCreateInfo semaphoreCreateInfo =
                     VkSemaphoreCreateInfo.calloc(stack).sType$Default();
@@ -749,62 +684,6 @@ public class VulkanInstance implements Instance {
                                 state.device.logical, semaphoreCreateInfo, null, longOutput));
                 windowInfo.renderCompleteSemaphores[i] = longOutput.get(0);
             }
-
-            VkExtent3D depthExtent =
-                    VkExtent3D.calloc(stack).set(window.getWidth(), window.getHeight(), 1);
-
-            VkImageCreateInfo depthImageCreateInfo =
-                    VkImageCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .imageType(VK_IMAGE_TYPE_2D)
-                            .format(state.device.physical.depthFormat)
-                            .extent(depthExtent)
-                            .mipLevels(1)
-                            .arrayLayers(1)
-                            .samples(VK_SAMPLE_COUNT_1_BIT)
-                            .tiling(VK_IMAGE_TILING_OPTIMAL)
-                            .usage(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
-                            .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED);
-
-            VmaAllocationCreateInfo depthImageAlloc =
-                    VmaAllocationCreateInfo.calloc(stack)
-                            .flags(VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT)
-                            .usage(VMA_MEMORY_USAGE_AUTO);
-
-            checkError(
-                    vmaCreateImage(
-                            state.vmaAllocator,
-                            depthImageCreateInfo,
-                            depthImageAlloc,
-                            longOutput,
-                            pointerOutput,
-                            null));
-            final long depthImage = longOutput.get(0);
-            final long depthImageAllocation = pointerOutput.get(0);
-
-            VkImageSubresourceRange depthViewSubresourceRange =
-                    VkImageSubresourceRange.calloc(stack)
-                            .aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT)
-                            .levelCount(1)
-                            .layerCount(1);
-
-            VkImageViewCreateInfo depthViewCreateInfo =
-                    VkImageViewCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .image(depthImage)
-                            .viewType(VK_IMAGE_VIEW_TYPE_2D)
-                            .format(state.device.physical.depthFormat)
-                            .subresourceRange(depthViewSubresourceRange);
-
-            checkError(
-                    vkCreateImageView(state.device.logical, depthViewCreateInfo, null, longOutput));
-            final long depthView = longOutput.get(0);
-
-            windowInfo.depthImage =
-                    new TextureInfo()
-                            .texture(depthImage)
-                            .textureAllocation(depthImageAllocation)
-                            .view(depthView);
         }
     }
 
