@@ -201,10 +201,11 @@ vec3 disneyBRDF(vec3 baseColor, Material material, vec3 toViewDirection, vec3 to
 }
 
 float scaleIntensity(float distance) {
-    float ratio = distance / MAX_LIGHT_DISTANCE;
-    float r2 = sqr(ratio);
-    float clamped = max(1 - sqr(r2), 0);
-    return sqr(clamped);
+    float attenuation = 1.0f / sqr(distance);
+        float ratio = distance / MAX_LIGHT_DISTANCE;
+        float r2 = sqr(ratio);
+        float cutoff = clamp(1 - sqr(r2), 0.0, 1.0);
+        return attenuation * cutoff;
 }
 
 vec3 calcLightColor(vec3 baseColor, Material material, vec3 lightColor, float lightIntensity, vec3 viewPosition,
@@ -216,26 +217,26 @@ vec3 calcLightColor(vec3 baseColor, Material material, vec3 lightColor, float li
     return brdf * lightColor * lightScaling * lightIntensity;
 }
 
-vec3 calcPointLight(vec3 baseColor, Material material, PointLight light, vec3 viewPosition, vec3 normal, vec3 tangent,
-    vec3 bitangent)
+vec3 calcPointLight(vec3 baseColor, Material material, PointLight light, vec3 viewPosition, vec3 worldPosition,
+    vec3 normal, vec3 tangent, vec3 bitangent)
 {
-    vec3 directionToLight = light.position - viewPosition;
+    vec3 directionToLight = light.position - worldPosition;
     vec3 toLightDirection  = normalize(directionToLight);
-    float intensity = scaleIntensity(light.intensity);
+    float intensity = scaleIntensity(length(directionToLight)) * light.intensity;
 
     return calcLightColor(baseColor, material, light.color, intensity, viewPosition, toLightDirection,
                    normal, tangent, bitangent);
 }
 
-vec3 calcSpotLight(vec3 baseColor, Material material, SpotLight light, vec3 viewPosition, vec3 normal, vec3 tangent,
-    vec3 bitangent)
+vec3 calcSpotLight(vec3 baseColor, Material material, SpotLight light, vec3 viewPosition, vec3 worldPosition,
+    vec3 normal, vec3 tangent, vec3 bitangent)
 {
-    vec3 directionToLight = light.pointLight.position - viewPosition;
+    vec3 directionToLight = light.pointLight.position - worldPosition;
     vec3 toLightDirection  = normalize(directionToLight);
     vec3 fromLightDirection  = -toLightDirection;
     float spotAlpha = dot(fromLightDirection, normalize(light.coneDirection));
 
-    float intensity = scaleIntensity(light.pointLight.intensity);
+    float intensity = scaleIntensity(length(directionToLight)) * light.pointLight.intensity;
     if (spotAlpha > light.cutoff) {
         intensity *= (1.0 - (1.0 - spotAlpha)/(1.0 - light.cutoff));
     }
@@ -329,14 +330,14 @@ void main()
 
     for (int i = 0; i < pointLightCount; ++i) {
         if (pointLights[i].intensity > 0) {
-            color += calcPointLight(baseColor.xyz, material, pointLights[i], viewPosition, normal,
+            color += calcPointLight(baseColor.xyz, material, pointLights[i], viewPosition, worldPosition.xyz, normal,
                 tangent, bitangent);
         }
     }
 
     for (int i = 0; i < spotLightCount; ++i) {
         if (spotLights[i].pointLight.intensity > 0) {
-            color += calcSpotLight(baseColor.xyz, material, spotLights[i], viewPosition, normal,
+            color += calcSpotLight(baseColor.xyz, material, spotLights[i], viewPosition, worldPosition.xyz, normal,
                 tangent, bitangent);
         }
     }
