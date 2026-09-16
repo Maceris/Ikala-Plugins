@@ -16,6 +16,7 @@ import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
+import com.ikalagaming.graphics.scene.lights.PointLight;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -270,8 +271,26 @@ public class MainMenu extends GuiWindow {
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(1.0f, 1.0f, 1.0f, 1.0f);
-            customMaterial.setSubsurface(0.1f * i);
             customMaterial.setRoughness(0.40f);
+            scene.getMaterialCache().addMaterial(customMaterial);
+
+            scene.addEntity(ball);
+            ball.setMaterialOverride(customMaterial, 0);
+        }
+        zPos += 1;
+
+        //TODO(ches) remove this once we figure out the tangent thing
+        for (int i = 0; i <= 10; ++i) {
+            String name = String.format(ballNameFormatString, "anisotropic2", i);
+            Entity ball = new Entity(name, ballModel);
+            ball.setScale(0.003f);
+            ball.setPosition(i, 0, zPos);
+            ball.updateModelMatrix();
+
+            Material customMaterial = new Material();
+            customMaterial.getBaseColor().set(0.60f, 0.90f, 0.0f, 1.0f);
+            customMaterial.setAnisotropic(1.0f);
+            customMaterial.setRoughness(0.1f * i);
             scene.getMaterialCache().addMaterial(customMaterial);
 
             scene.addEntity(ball);
@@ -283,6 +302,21 @@ public class MainMenu extends GuiWindow {
                         new DirectionalLight(
                                 new Vector3f(1.0f, 1.0f, 1.0f),
                                 new Vector3f(0.247f, -0.848f, 0.785f),
+                                4f));
+
+        scene.getSceneLights()
+                .getPointLights()
+                .add(
+                        new PointLight(
+                                new Vector3f(1.0f, 0.1f, 0.1f),
+                                new Vector3f(8.5f, 2.0f, 7.5f),
+                                4f));
+        scene.getSceneLights()
+                .getPointLights()
+                .add(
+                        new PointLight(
+                                new Vector3f(0.1f, 0.1f, 1.0f),
+                                new Vector3f(1.7f, 2.0f, 7.5f),
                                 4f));
 
         var pipeline =
