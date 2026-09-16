@@ -1,22 +1,24 @@
 package com.ikalagaming.factory.kvt;
 
-// Generated from KVTLexer.g4 by ANTLR 4.12.0
-
+// Generated from KVTLexer.g4 by ANTLR 4.13.2
+import org.antlr.v4.runtime.*;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.Lexer;
-import org.antlr.v4.runtime.RuntimeMetaData;
-import org.antlr.v4.runtime.Vocabulary;
-import org.antlr.v4.runtime.VocabularyImpl;
-import org.antlr.v4.runtime.atn.ATN;
-import org.antlr.v4.runtime.atn.ATNDeserializer;
-import org.antlr.v4.runtime.atn.LexerATNSimulator;
-import org.antlr.v4.runtime.atn.PredictionContextCache;
+import org.antlr.v4.runtime.atn.*;
 import org.antlr.v4.runtime.dfa.DFA;
 
-@SuppressWarnings({"all", "warnings", "unchecked", "unused", "cast", "CheckReturnValue"})
-class KVTLexer extends Lexer {
+@SuppressWarnings({
+    "all",
+    "warnings",
+    "unchecked",
+    "unused",
+    "cast",
+    "CheckReturnValue",
+    "this-escape"
+})
+public class KVTLexer extends Lexer {
     static {
-        RuntimeMetaData.checkVersion("4.12.0", RuntimeMetaData.VERSION);
+        RuntimeMetaData.checkVersion("4.13.2", RuntimeMetaData.VERSION);
     }
 
     protected static final DFA[] _decisionToDFA;
@@ -39,14 +41,66 @@ class KVTLexer extends Lexer {
 
     public static String[] modeNames = {"DEFAULT_MODE"};
 
-    public static final String[] ruleNames = KVTLexer.makeRuleNames();
+    private static String[] makeRuleNames() {
+        return new String[] {
+            "Digits",
+            "ExponentPart",
+            "Sign",
+            "ExponentIndicator",
+            "FloatTypeSuffix",
+            "IntegerTypeSuffix",
+            "SignedInteger",
+            "StringLiteral",
+            "StringCharacters",
+            "StringCharacter",
+            "EscapeSequence",
+            "FloatingPointLiteral",
+            "IntegerLiteral",
+            "BooleanLiteral",
+            "Identifier",
+            "ArrayPrefixLetter",
+            "ArrayPrefix",
+            "LBRACE",
+            "RBRACE",
+            "LBRACK",
+            "RBRACK",
+            "COMMA",
+            "COLON",
+            "WS"
+        };
+    }
 
-    private static final String[] _LITERAL_NAMES = KVTLexer.makeLiteralNames();
+    public static final String[] ruleNames = makeRuleNames();
 
-    private static final String[] _SYMBOLIC_NAMES = KVTLexer.makeSymbolicNames();
+    private static String[] makeLiteralNames() {
+        return new String[] {
+            null, null, null, null, null, null, null, "'{'", "'}'", "'['", "']'", "','", "':'"
+        };
+    }
 
-    public static final Vocabulary VOCABULARY =
-            new VocabularyImpl(KVTLexer._LITERAL_NAMES, KVTLexer._SYMBOLIC_NAMES);
+    private static final String[] _LITERAL_NAMES = makeLiteralNames();
+
+    private static String[] makeSymbolicNames() {
+        return new String[] {
+            null,
+            "StringLiteral",
+            "FloatingPointLiteral",
+            "IntegerLiteral",
+            "BooleanLiteral",
+            "Identifier",
+            "ArrayPrefix",
+            "LBRACE",
+            "RBRACE",
+            "LBRACK",
+            "RBRACK",
+            "COMMA",
+            "COLON",
+            "WS"
+        };
+    }
+
+    private static final String[] _SYMBOLIC_NAMES = makeSymbolicNames();
+    public static final Vocabulary VOCABULARY = new VocabularyImpl(_LITERAL_NAMES, _SYMBOLIC_NAMES);
 
     /**
      * @deprecated Use {@link #VOCABULARY} instead.
@@ -54,17 +108,63 @@ class KVTLexer extends Lexer {
     @Deprecated public static final String[] tokenNames;
 
     static {
-        tokenNames = new String[KVTLexer._SYMBOLIC_NAMES.length];
-        for (int i = 0; i < KVTLexer.tokenNames.length; i++) {
-            KVTLexer.tokenNames[i] = KVTLexer.VOCABULARY.getLiteralName(i);
-            if (KVTLexer.tokenNames[i] == null) {
-                KVTLexer.tokenNames[i] = KVTLexer.VOCABULARY.getSymbolicName(i);
+        tokenNames = new String[_SYMBOLIC_NAMES.length];
+        for (int i = 0; i < tokenNames.length; i++) {
+            tokenNames[i] = VOCABULARY.getLiteralName(i);
+            if (tokenNames[i] == null) {
+                tokenNames[i] = VOCABULARY.getSymbolicName(i);
             }
 
-            if (KVTLexer.tokenNames[i] == null) {
-                KVTLexer.tokenNames[i] = "<INVALID>";
+            if (tokenNames[i] == null) {
+                tokenNames[i] = "<INVALID>";
             }
         }
+    }
+
+    @Override
+    @Deprecated
+    public String[] getTokenNames() {
+        return tokenNames;
+    }
+
+    @Override
+    public Vocabulary getVocabulary() {
+        return VOCABULARY;
+    }
+
+    public KVTLexer(CharStream input) {
+        super(input);
+        _interp = new LexerATNSimulator(this, _ATN, _decisionToDFA, _sharedContextCache);
+    }
+
+    @Override
+    public String getGrammarFileName() {
+        return "KVTLexer.g4";
+    }
+
+    @Override
+    public String[] getRuleNames() {
+        return ruleNames;
+    }
+
+    @Override
+    public String getSerializedATN() {
+        return _serializedATN;
+    }
+
+    @Override
+    public String[] getChannelNames() {
+        return channelNames;
+    }
+
+    @Override
+    public String[] getModeNames() {
+        return modeNames;
+    }
+
+    @Override
+    public ATN getATN() {
+        return _ATN;
     }
 
     public static final String _serializedATN =
@@ -170,116 +270,12 @@ class KVTLexer extends Lexer {
                     + "\u0001\u0000\u0000\u0000\u00a2\u00a3\u0006\u0017\u0000\u0000\u00a30\u0001"
                     + "\u0000\u0000\u0000\u0012\u00004BHOS[^adilqvz\u0085\u008a\u00a0\u0001\u0006"
                     + "\u0000\u0000";
-
-    public static final ATN _ATN =
-            new ATNDeserializer().deserialize(KVTLexer._serializedATN.toCharArray());
+    public static final ATN _ATN = new ATNDeserializer().deserialize(_serializedATN.toCharArray());
 
     static {
-        _decisionToDFA = new DFA[KVTLexer._ATN.getNumberOfDecisions()];
-        for (int i = 0; i < KVTLexer._ATN.getNumberOfDecisions(); i++) {
-            KVTLexer._decisionToDFA[i] = new DFA(KVTLexer._ATN.getDecisionState(i), i);
+        _decisionToDFA = new DFA[_ATN.getNumberOfDecisions()];
+        for (int i = 0; i < _ATN.getNumberOfDecisions(); i++) {
+            _decisionToDFA[i] = new DFA(_ATN.getDecisionState(i), i);
         }
-    }
-
-    private static String[] makeLiteralNames() {
-        return new String[] {
-            null, null, null, null, null, null, null, "'{'", "'}'", "'['", "']'", "','", "':'"
-        };
-    }
-
-    private static String[] makeRuleNames() {
-        return new String[] {
-            "Digits",
-            "ExponentPart",
-            "Sign",
-            "ExponentIndicator",
-            "FloatTypeSuffix",
-            "IntegerTypeSuffix",
-            "SignedInteger",
-            "StringLiteral",
-            "StringCharacters",
-            "StringCharacter",
-            "EscapeSequence",
-            "FloatingPointLiteral",
-            "IntegerLiteral",
-            "BooleanLiteral",
-            "Identifier",
-            "ArrayPrefixLetter",
-            "ArrayPrefix",
-            "LBRACE",
-            "RBRACE",
-            "LBRACK",
-            "RBRACK",
-            "COMMA",
-            "COLON",
-            "WS"
-        };
-    }
-
-    private static String[] makeSymbolicNames() {
-        return new String[] {
-            null,
-            "StringLiteral",
-            "FloatingPointLiteral",
-            "IntegerLiteral",
-            "BooleanLiteral",
-            "Identifier",
-            "ArrayPrefix",
-            "LBRACE",
-            "RBRACE",
-            "LBRACK",
-            "RBRACK",
-            "COMMA",
-            "COLON",
-            "WS"
-        };
-    }
-
-    public KVTLexer(CharStream input) {
-        super(input);
-        _interp =
-                new LexerATNSimulator(
-                        this, KVTLexer._ATN, KVTLexer._decisionToDFA, KVTLexer._sharedContextCache);
-    }
-
-    @Override
-    public ATN getATN() {
-        return KVTLexer._ATN;
-    }
-
-    @Override
-    public String[] getChannelNames() {
-        return KVTLexer.channelNames;
-    }
-
-    @Override
-    public String getGrammarFileName() {
-        return "KVTLexer.g4";
-    }
-
-    @Override
-    public String[] getModeNames() {
-        return KVTLexer.modeNames;
-    }
-
-    @Override
-    public String[] getRuleNames() {
-        return KVTLexer.ruleNames;
-    }
-
-    @Override
-    public String getSerializedATN() {
-        return KVTLexer._serializedATN;
-    }
-
-    @Override
-    @Deprecated
-    public String[] getTokenNames() {
-        return KVTLexer.tokenNames;
-    }
-
-    @Override
-    public Vocabulary getVocabulary() {
-        return KVTLexer.VOCABULARY;
     }
 }
