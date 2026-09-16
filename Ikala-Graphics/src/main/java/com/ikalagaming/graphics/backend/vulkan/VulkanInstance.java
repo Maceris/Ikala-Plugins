@@ -285,8 +285,10 @@ public class VulkanInstance implements Instance {
      * @param errorCode The error code from a vulkan function that might be
      *     VK_ERROR_OUT_OF_DATE_KHR.
      * @param windowInfo The window we are interested in.
+     * @return if we updated the swapchain.
      */
-    private void checkSwapchain(int errorCode, @NonNull VulkanState.WindowInfo windowInfo) {
+    private boolean checkSwapchain(int errorCode, @NonNull VulkanState.WindowInfo windowInfo) {
+        // TODO(ches) only recreate if it's been like 100ms since they last resized the window
         if (errorCode == VK_ERROR_OUT_OF_DATE_KHR || windowInfo.updateSwapchain) {
             windowInfo.updateSwapchain = false;
             checkError(vkDeviceWaitIdle(state.device.logical));
@@ -314,7 +316,9 @@ public class VulkanInstance implements Instance {
                                 .imageColorSpace(VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
                                 .imageExtent(swapchainExtent)
                                 .imageArrayLayers(1)
-                                .imageUsage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+                                .imageUsage(
+                                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+                                                | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
                                 .preTransform(VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
                                 .compositeAlpha(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
                                 .presentMode(VK_PRESENT_MODE_FIFO_KHR)
@@ -437,10 +441,12 @@ public class VulkanInstance implements Instance {
                 windowInfo.depthImage.texture = depthImage;
                 windowInfo.depthImage.textureAllocation = depthImageAllocation;
                 windowInfo.depthImage.view = depthView;
+                return true;
             }
         } else {
             checkError(errorCode);
         }
+        return false;
     }
 
     @Override
@@ -1294,7 +1300,8 @@ public class VulkanInstance implements Instance {
 
         final long swapchain = windowInfo.swapchainHandle;
 
-        checkSwapchain(
+        // TODO(ches) skip rendering if it's been less than like 100ms since they resized the window
+        if (!checkSwapchain(
                 vkAcquireNextImageKHR(
                         state.device.logical,
                         swapchain,
@@ -1302,74 +1309,79 @@ public class VulkanInstance implements Instance {
                         state.imageAcquiredSemaphores[state.frameIndex],
                         VK_NULL_HANDLE,
                         intOutput),
-                windowInfo);
-        windowInfo.currentSwapchainIndex = intOutput.get(0);
+                windowInfo)) {
+            windowInfo.currentSwapchainIndex = intOutput.get(0);
 
-        // TODO(ches) update shader data
-        final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
-        checkError(vkResetCommandBuffer(commandBuffer, 0));
+            // TODO(ches) update shader data
+            final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
+            checkError(vkResetCommandBuffer(commandBuffer, 0));
 
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            VkCommandBufferBeginInfo commandBufferBeginInfo =
-                    VkCommandBufferBeginInfo.calloc(stack)
-                            .sType$Default()
-                            .flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-            checkError(vkBeginCommandBuffer(commandBuffer, commandBufferBeginInfo));
-        }
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                VkCommandBufferBeginInfo commandBufferBeginInfo =
+                        VkCommandBufferBeginInfo.calloc(stack)
+                                .sType$Default()
+                                .flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+                checkError(vkBeginCommandBuffer(commandBuffer, commandBufferBeginInfo));
+            }
 
-        // This will record the command buffer
-        pipeline.render(scene, shaderMap, windowInfo.window, state);
+            // This will record the command buffer
+            pipeline.render(scene, shaderMap, windowInfo.window, state);
 
-        vkEndCommandBuffer(commandBuffer);
+            vkEndCommandBuffer(commandBuffer);
 
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            VkSemaphoreSubmitInfo.Buffer waitSemaphoreInfos =
-                    VkSemaphoreSubmitInfo.calloc(1, stack);
-            waitSemaphoreInfos
-                    .get(0)
-                    .sType$Default()
-                    .semaphore(state.imageAcquiredSemaphores[state.frameIndex])
-                    .stageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                VkSemaphoreSubmitInfo.Buffer waitSemaphoreInfos =
+                        VkSemaphoreSubmitInfo.calloc(1, stack);
+                waitSemaphoreInfos
+                        .get(0)
+                        .sType$Default()
+                        .semaphore(state.imageAcquiredSemaphores[state.frameIndex])
+                        .stageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
-            VkCommandBufferSubmitInfo.Buffer commandBufferSubmitInfos =
-                    VkCommandBufferSubmitInfo.calloc(1, stack);
-            commandBufferSubmitInfos.get(0).sType$Default().commandBuffer(commandBuffer);
-            VkSemaphoreSubmitInfo.Buffer signalSemaphoreInfos =
-                    VkSemaphoreSubmitInfo.calloc(1, stack);
-            signalSemaphoreInfos
-                    .get(0)
-                    .sType$Default()
-                    .semaphore(
-                            windowInfo.renderCompleteSemaphores[windowInfo.currentSwapchainIndex])
-                    .stageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+                VkCommandBufferSubmitInfo.Buffer commandBufferSubmitInfos =
+                        VkCommandBufferSubmitInfo.calloc(1, stack);
+                commandBufferSubmitInfos.get(0).sType$Default().commandBuffer(commandBuffer);
+                VkSemaphoreSubmitInfo.Buffer signalSemaphoreInfos =
+                        VkSemaphoreSubmitInfo.calloc(1, stack);
+                signalSemaphoreInfos
+                        .get(0)
+                        .sType$Default()
+                        .semaphore(
+                                windowInfo
+                                        .renderCompleteSemaphores[windowInfo.currentSwapchainIndex])
+                        .stageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
 
-            VkSubmitInfo2.Buffer submitInfos = VkSubmitInfo2.calloc(1, stack);
-            submitInfos
-                    .get(0)
-                    .sType$Default()
-                    .pWaitSemaphoreInfos(waitSemaphoreInfos)
-                    .pCommandBufferInfos(commandBufferSubmitInfos)
-                    .pSignalSemaphoreInfos(signalSemaphoreInfos);
-            checkError(
-                    vkQueueSubmit2(
-                            state.device.graphicsQueue,
-                            submitInfos,
-                            state.fences[state.frameIndex]));
+                VkSubmitInfo2.Buffer submitInfos = VkSubmitInfo2.calloc(1, stack);
+                submitInfos
+                        .get(0)
+                        .sType$Default()
+                        .pWaitSemaphoreInfos(waitSemaphoreInfos)
+                        .pCommandBufferInfos(commandBufferSubmitInfos)
+                        .pSignalSemaphoreInfos(signalSemaphoreInfos);
+                checkError(
+                        vkQueueSubmit2(
+                                state.device.graphicsQueue,
+                                submitInfos,
+                                state.fences[state.frameIndex]));
 
-            LongBuffer waitSemaphores =
-                    stack.longs(
-                            windowInfo.renderCompleteSemaphores[windowInfo.currentSwapchainIndex]);
-            LongBuffer swapchains = stack.longs(windowInfo.swapchainHandle);
-            IntBuffer imageIndices = stack.ints(windowInfo.currentSwapchainIndex);
+                LongBuffer waitSemaphores =
+                        stack.longs(
+                                windowInfo
+                                        .renderCompleteSemaphores[
+                                        windowInfo.currentSwapchainIndex]);
+                LongBuffer swapchains = stack.longs(windowInfo.swapchainHandle);
+                IntBuffer imageIndices = stack.ints(windowInfo.currentSwapchainIndex);
 
-            VkPresentInfoKHR presentInfo =
-                    VkPresentInfoKHR.calloc(stack)
-                            .sType$Default()
-                            .pWaitSemaphores(waitSemaphores)
-                            .pSwapchains(swapchains)
-                            .swapchainCount(1)
-                            .pImageIndices(imageIndices);
-            checkSwapchain(vkQueuePresentKHR(state.device.graphicsQueue, presentInfo), windowInfo);
+                VkPresentInfoKHR presentInfo =
+                        VkPresentInfoKHR.calloc(stack)
+                                .sType$Default()
+                                .pWaitSemaphores(waitSemaphores)
+                                .pSwapchains(swapchains)
+                                .swapchainCount(1)
+                                .pImageIndices(imageIndices);
+                checkSwapchain(
+                        vkQueuePresentKHR(state.device.graphicsQueue, presentInfo), windowInfo);
+            }
         }
 
         state.frameIndex = (state.frameIndex + 1) % GraphicsManager.MAX_FRAMES_IN_FLIGHT;
@@ -1377,8 +1389,9 @@ public class VulkanInstance implements Instance {
     }
 
     @Override
-    public void resize(int width, int height) {
+    public void resize(@NonNull Window window, int width, int height) {
         // TODO(ches) complete this
+        state.windows.get(window).updateSwapchain = true;
     }
 
     /**

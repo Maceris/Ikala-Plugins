@@ -155,14 +155,7 @@ public class GraphicsManager {
          * created and destroyed, besides things like swapchains.
          */
 
-        window =
-                new Window(
-                        "Ikala Gaming",
-                        settings,
-                        () -> {
-                            resize();
-                            return null;
-                        });
+        window = new Window("Ikala Gaming", settings, GraphicsManager::resize);
 
         log.debug("Window created");
         new WindowCreated(window.getWindowHandle()).fire();
@@ -221,12 +214,11 @@ public class GraphicsManager {
         }
     }
 
-    private static void resize() {
+    private static void resize(@NonNull Window window) {
         int width = window.getWidth();
         int height = window.getHeight();
         scene.resize(width, height);
-        // TODO(ches) mark the window's swapchain in need of updating
-        renderInstance.resize(width, height);
+        renderInstance.resize(window, width, height);
     }
 
     /**

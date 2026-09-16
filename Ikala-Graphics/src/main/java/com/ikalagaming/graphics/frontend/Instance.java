@@ -48,7 +48,7 @@ public interface Instance {
      * @param width The new screen width in pixels.
      * @param height The new screen height in pixels.
      */
-    void resize(int width, int height);
+    void resize(@NonNull Window window, int width, int height);
 
     /**
      * Set up a model before rendering for the first time. For example, creating buffers. This must

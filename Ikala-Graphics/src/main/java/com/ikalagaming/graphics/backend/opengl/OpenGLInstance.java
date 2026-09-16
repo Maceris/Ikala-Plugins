@@ -397,7 +397,7 @@ public class OpenGLInstance implements Instance {
     }
 
     @Override
-    public void resize(int width, int height) {
+    public void resize(@NonNull Window window, int width, int height) {
         // TODO(ches) move this out of the render pass itself
         pipelineManager.resize(width, height);
         ImGuiIO imGuiIO = ImGui.getIO();

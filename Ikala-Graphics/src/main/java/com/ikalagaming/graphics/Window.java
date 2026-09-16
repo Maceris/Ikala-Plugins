@@ -31,7 +31,7 @@ import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.util.Map;
-import java.util.concurrent.Callable;
+import java.util.function.Consumer;
 
 /** Provides convenience methods for an OpenGL window. */
 @Slf4j
@@ -91,7 +91,7 @@ public class Window {
     private int height;
 
     /** The resize function to call. */
-    private final Callable<Void> resizeFunc;
+    private final Consumer<Window> resizeFunc;
 
     /** The title that was provided for the window. */
     @Getter private final String title;
@@ -106,7 +106,7 @@ public class Window {
     public Window(
             @NonNull String title,
             @NonNull GraphicsSettings settings,
-            @NonNull Callable<Void> resizeFunc) {
+            @NonNull Consumer<Window> resizeFunc) {
         this.resizeFunc = resizeFunc;
 
         glfwInitHint(GLFW_COCOA_CHDIR_RESOURCES, GLFW_TRUE);
@@ -316,7 +316,7 @@ public class Window {
         this.width = width;
         this.height = height;
         try {
-            resizeFunc.call();
+            resizeFunc.accept(this);
         } catch (Exception e) {
             log.warn("Error calling resize callback", e);
         }

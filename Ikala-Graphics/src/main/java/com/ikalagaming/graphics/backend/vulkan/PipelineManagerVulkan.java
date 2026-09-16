@@ -240,6 +240,8 @@ public class PipelineManagerVulkan {
                             surfaceCapabilities));
             VkExtent3D imageExtent = VkExtent3D.calloc(stack);
 
+            // TODO(ches) make the gBuffer like 2560 × 1440, just use viewport+scissor if smaller
+            // than that
             if (surfaceCapabilities.currentExtent().width() == 0xFFFF_FFFF) {
                 imageExtent.set(window.getWidth(), window.getHeight(), 1);
             } else {
