@@ -21,13 +21,9 @@ class TestStringSerialization {
 
     private static FactoryPlugin plugin;
 
-    /**
-     * Set up before all the tests.
-     *
-     * @throws Exception If something goes wrong.
-     */
+    /** Set up before all the tests. */
     @BeforeAll
-    static void setUpBeforeClass() throws Exception {
+    static void setUpBeforeClass() {
         EventManager.getInstance();
         PluginManager.getInstance();
         TestStringSerialization.plugin = new FactoryPlugin();
@@ -35,13 +31,9 @@ class TestStringSerialization {
         TestStringSerialization.plugin.onEnable();
     }
 
-    /**
-     * Tear down after all the tests.
-     *
-     * @throws Exception If something goes wrong.
-     */
+    /** Tear down after all the tests. */
     @AfterAll
-    static void tearDownAfterClass() throws Exception {
+    static void tearDownAfterClass() {
         TestStringSerialization.plugin.onDisable();
         TestStringSerialization.plugin.onUnload();
         TestStringSerialization.plugin = null;

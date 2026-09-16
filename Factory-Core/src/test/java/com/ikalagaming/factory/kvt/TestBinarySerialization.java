@@ -23,13 +23,9 @@ class TestBinarySerialization {
 
     private static FactoryPlugin plugin;
 
-    /**
-     * Set up before all the tests.
-     *
-     * @throws Exception If something goes wrong.
-     */
+    /** Set up before all the tests. */
     @BeforeAll
-    static void setUpBeforeClass() throws Exception {
+    static void setUpBeforeClass() {
         EventManager.getInstance();
         PluginManager.getInstance();
         TestBinarySerialization.plugin = new FactoryPlugin();
@@ -37,13 +33,9 @@ class TestBinarySerialization {
         TestBinarySerialization.plugin.onEnable();
     }
 
-    /**
-     * Tear down after all the tests.
-     *
-     * @throws Exception If something goes wrong.
-     */
+    /** Tear down after all the tests. */
     @AfterAll
-    static void tearDownAfterClass() throws Exception {
+    static void tearDownAfterClass() {
         TestBinarySerialization.plugin.onDisable();
         TestBinarySerialization.plugin.onUnload();
         TestBinarySerialization.plugin = null;

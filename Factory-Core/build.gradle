@@ -49,6 +49,7 @@ idea {
 }
 
 configurations {
+	mockitoAgent { transitive = false }
 	provided
 	// Make compile extend from our provided configuration so that things added to bundled end up on the compile classpath
 	implementation.extendsFrom(provided)
@@ -67,7 +68,9 @@ dependencies {
 	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 	testImplementation "org.mockito:mockito-core:${mockitoVersion}"
 	testImplementation "org.mockito:mockito-junit-jupiter:${mockitoVersion}"
-	
+
+	mockitoAgent "org.mockito:mockito-core:${mockitoVersion}"
+
 	// lombok
 	compileOnly "org.projectlombok:lombok:${lombokVersion}"
 	annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
@@ -90,6 +93,7 @@ tasks.register('delombok', DelombokTask) {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	jvmArgs += "-javaagent:${configurations.mockitoAgent.asPath}"
 	testLogging {
 		exceptionFormat = 'full'
 		events = ['skipped', 'failed']

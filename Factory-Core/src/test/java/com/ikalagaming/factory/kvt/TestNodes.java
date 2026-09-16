@@ -58,14 +58,14 @@ class TestNodes {
         tree.addShortArray("short", List.of((short) 5));
         tree.addStringArray("string", List.of("test"));
 
-        assertTrue(((List<Boolean>) tree.get("bool")).get(0));
-        assertEquals(1, (byte) ((List<Byte>) tree.get("byte")).get(0));
-        assertEquals(1.02, ((List<Double>) tree.get("double")).get(0));
-        assertEquals(2.34f, (float) ((List<Float>) tree.get("float")).get(0));
-        assertEquals(3, (int) ((List<Integer>) tree.get("int")).get(0));
-        assertEquals(4L, (long) ((List<Long>) tree.get("long")).get(0));
-        assertEquals(5, (short) ((List<Short>) tree.get("short")).get(0));
-        assertEquals("test", ((List<String>) tree.get("string")).get(0));
+        assertTrue(((List<Boolean>) tree.get("bool")).getFirst());
+        assertEquals(1, (byte) ((List<Byte>) tree.get("byte")).getFirst());
+        assertEquals(1.02, ((List<Double>) tree.get("double")).getFirst());
+        assertEquals(2.34f, (float) ((List<Float>) tree.get("float")).getFirst());
+        assertEquals(3, (int) ((List<Integer>) tree.get("int")).getFirst());
+        assertEquals(4L, (long) ((List<Long>) tree.get("long")).getFirst());
+        assertEquals(5, (short) ((List<Short>) tree.get("short")).getFirst());
+        assertEquals("test", ((List<String>) tree.get("string")).getFirst());
     }
 
     @Test
@@ -183,7 +183,7 @@ class TestNodes {
         assertNull(tree.getString("several.up.invalid"));
 
         tree.addDoubleArray("multiple.nodes.values", List.of(3.4, 1.2));
-        assertEquals(3.4, tree.getDoubleArray("multiple.nodes.values").get(0));
+        assertEquals(3.4, tree.getDoubleArray("multiple.nodes.values").getFirst());
     }
 
     /** Check that the toString functionality works. */
