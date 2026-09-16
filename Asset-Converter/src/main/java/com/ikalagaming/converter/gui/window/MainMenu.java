@@ -277,25 +277,6 @@ public class MainMenu extends GuiWindow {
             scene.addEntity(ball);
             ball.setMaterialOverride(customMaterial, 0);
         }
-        zPos += 1;
-
-        //TODO(ches) remove this once we figure out the tangent thing
-        for (int i = 0; i <= 10; ++i) {
-            String name = String.format(ballNameFormatString, "anisotropic2", i);
-            Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.003f);
-            ball.setPosition(i, 0, zPos);
-            ball.updateModelMatrix();
-
-            Material customMaterial = new Material();
-            customMaterial.getBaseColor().set(0.60f, 0.90f, 0.0f, 1.0f);
-            customMaterial.setAnisotropic(1.0f);
-            customMaterial.setRoughness(0.1f * i);
-            scene.getMaterialCache().addMaterial(customMaterial);
-
-            scene.addEntity(ball);
-            ball.setMaterialOverride(customMaterial, 0);
-        }
 
         scene.getSceneLights()
                 .setDirLight(
