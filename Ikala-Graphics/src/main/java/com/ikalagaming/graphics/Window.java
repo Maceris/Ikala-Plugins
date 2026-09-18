@@ -21,6 +21,7 @@ import imgui.flag.ImGuiKey;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.*;
 import org.lwjgl.stb.STBImage;
 import org.lwjgl.system.APIUtil;
@@ -68,6 +69,12 @@ public class Window {
             glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         }
     }
+
+    /** The width of the largest monitor we could find, in pixels. */
+    private static int largestMonitorWidth = 0;
+
+    /** The height of the largest monitor we could find, in pixels. */
+    private static int largestMonitorHeight = 0;
 
     /**
      * The GLFW window handle.
@@ -147,6 +154,36 @@ public class Window {
             }
             width = vidMode.width();
             height = vidMode.height();
+        }
+
+        if (largestMonitorWidth == 0 || largestMonitorHeight == 0) {
+            PointerBuffer monitors = glfwGetMonitors();
+            if (monitors == null) {
+                final String error = "Can't find monitor info";
+                log.warn(error);
+                throw new WindowCreationException(error);
+            }
+            int maxWidth = 0;
+            int maxHeight = 0;
+            int maxArea = 0;
+            for (int i = 0; i < monitors.limit(); i++) {
+                final GLFWVidMode.Buffer modes = glfwGetVideoModes(monitors.get(i));
+                for (int j = 0; j < modes.limit(); j++) {
+                    final GLFWVidMode mode = modes.get(j);
+                    final int area = mode.width() * mode.height();
+                    if (area > maxArea) {
+                        maxWidth = mode.width();
+                        maxHeight = mode.height();
+                        maxArea = area;
+                    }
+                }
+            }
+            largestMonitorWidth = maxWidth;
+            largestMonitorHeight = maxHeight;
+            log.debug(
+                    "We found a monitor that is {}x{}, using that as the max size for rendering targets",
+                    maxWidth,
+                    maxHeight);
         }
 
         this.title = title;
