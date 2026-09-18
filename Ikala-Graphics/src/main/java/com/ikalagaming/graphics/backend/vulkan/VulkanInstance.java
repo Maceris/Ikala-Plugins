@@ -51,6 +51,13 @@ public class VulkanInstance implements Instance {
      */
     public static final int MAX_BINDLESS_TEXTURE_COUNT = 10_000;
 
+    /**
+     * How many milliseconds between swapchain updates we should wait between swapchain
+     * regenerations while resizing the window. We delay a while so that we don't get spammed with
+     * updates.
+     */
+    public static final long MILLIS_BETWEEN_SWAPCHAIN_REGENERATION_WHILE_RESIZING = 50;
+
     private static final List<String> REQUIRED_INSTANCE_EXTENSION_NAMES =
             List.of(VK_KHR_SURFACE_EXTENSION_NAME);
     private static final ByteBuffer[] REQUIRED_INSTANCE_EXTENSIONS =
@@ -211,6 +218,20 @@ public class VulkanInstance implements Instance {
         }
     }
 
+    /**
+     * Checks if we need to update the swapchain, and if it's been long enough since we last
+     * regenerated the swapchain or resized that it's worth regenerating right now.
+     *
+     * @param windowInfo The info about the window we are interested in.
+     * @return If we should regenerate the swapchain right now.
+     */
+    private static boolean shouldRegenerateSwapchain(@NonNull VulkanState.WindowInfo windowInfo) {
+        return windowInfo.updateSwapchain
+                && Math.max(windowInfo.lastResize, windowInfo.lastSwapchainGeneration)
+                                + MILLIS_BETWEEN_SWAPCHAIN_REGENERATION_WHILE_RESIZING
+                        < System.currentTimeMillis();
+    }
+
     private final IntBuffer intOutput = MemoryUtil.memAllocInt(1);
     private final LongBuffer longOutput = MemoryUtil.memAllocLong(1);
     private final PointerBuffer pointerOutput = MemoryUtil.memAllocPointer(1);
@@ -286,106 +307,12 @@ public class VulkanInstance implements Instance {
      * @param windowInfo The window we are interested in.
      * @return if we updated the swapchain.
      */
-    private boolean checkSwapchain(int errorCode, @NonNull VulkanState.WindowInfo windowInfo) {
-        // TODO(ches) only recreate if it's been like 100ms since they last resized the window
-        if (errorCode == VK_ERROR_OUT_OF_DATE_KHR || windowInfo.updateSwapchain) {
-            windowInfo.updateSwapchain = false;
-            checkError(vkDeviceWaitIdle(state.device.logical));
-            checkError(
-                    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-                            state.device.physical.physicalDevice,
-                            windowInfo.surfaceHandle,
-                            state.device.physical.capabilities));
-
-            try (MemoryStack stack = MemoryStack.stackPush()) {
-                VkExtent2D swapchainExtent = VkExtent2D.calloc(stack);
-                if (state.device.physical.capabilities.currentExtent().width() == 0xFFFF_FFFF) {
-                    swapchainExtent.set(
-                            windowInfo.window.getWidth(), windowInfo.window.getHeight());
-                } else {
-                    swapchainExtent.set(state.device.physical.capabilities.currentExtent());
-                }
-
-                VkSwapchainCreateInfoKHR swapchainCreateInfo =
-                        VkSwapchainCreateInfoKHR.calloc(stack)
-                                .sType$Default()
-                                .surface(windowInfo.surfaceHandle)
-                                .minImageCount(state.device.physical.capabilities.minImageCount())
-                                .imageFormat(VK_FORMAT_B8G8R8A8_SRGB)
-                                .imageColorSpace(VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-                                .imageExtent(swapchainExtent)
-                                .imageArrayLayers(1)
-                                .imageUsage(
-                                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
-                                                | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-                                .preTransform(VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
-                                .compositeAlpha(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
-                                .presentMode(VK_PRESENT_MODE_FIFO_KHR)
-                                .oldSwapchain(windowInfo.swapchainHandle);
-                checkError(
-                        vkCreateSwapchainKHR(
-                                state.device.logical, swapchainCreateInfo, null, longOutput));
-                windowInfo.swapchainHandle = longOutput.get(0);
-
-                for (int i = 0; i < windowInfo.swapchainImageViews.length; i++) {
-                    vkDestroyImageView(
-                            state.device.logical, windowInfo.swapchainImageViews[i], null);
-                }
-
-                checkError(
-                        vkGetSwapchainImagesKHR(
-                                state.device.logical, windowInfo.swapchainHandle, intOutput, null));
-                final int imageCount = intOutput.get(0);
-                LongBuffer images = stack.callocLong(imageCount);
-                checkError(
-                        vkGetSwapchainImagesKHR(
-                                state.device.logical,
-                                windowInfo.swapchainHandle,
-                                intOutput,
-                                images));
-                windowInfo.swapchainImages = new long[imageCount];
-                images.get(0, windowInfo.swapchainImages);
-
-                windowInfo.swapchainImageViews = new long[imageCount];
-                for (int i = 0; i < imageCount; i++) {
-                    VkImageViewCreateInfo viewCreateInfo =
-                            VkImageViewCreateInfo.calloc(stack)
-                                    .sType$Default()
-                                    .image(windowInfo.swapchainImages[i])
-                                    .viewType(VK_IMAGE_VIEW_TYPE_2D)
-                                    .format(VK_FORMAT_B8G8R8A8_SRGB)
-                                    .subresourceRange(
-                                            VkImageSubresourceRange.calloc(stack)
-                                                    .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
-                                                    .levelCount(1)
-                                                    .layerCount(1));
-                    checkError(
-                            vkCreateImageView(
-                                    state.device.logical, viewCreateInfo, null, longOutput));
-                    windowInfo.swapchainImageViews[i] = longOutput.get(0);
-                }
-
-                for (long handle : windowInfo.renderCompleteSemaphores) {
-                    vkDestroySemaphore(state.device.logical, handle, null);
-                }
-                windowInfo.renderCompleteSemaphores = new long[imageCount];
-                VkSemaphoreCreateInfo semaphoreCreateInfo =
-                        VkSemaphoreCreateInfo.calloc(stack).sType$Default();
-                for (int i = 0; i < imageCount; i++) {
-                    checkError(
-                            vkCreateSemaphore(
-                                    state.device.logical, semaphoreCreateInfo, null, longOutput));
-                    windowInfo.renderCompleteSemaphores[i] = longOutput.get(0);
-                }
-                vkDestroySwapchainKHR(
-                        state.device.logical, swapchainCreateInfo.oldSwapchain(), null);
-                windowInfo.lastSwapchainGeneration = System.currentTimeMillis();
-                return true;
-            }
+    private void checkSwapchain(int errorCode, @NonNull VulkanState.WindowInfo windowInfo) {
+        if (errorCode == VK_ERROR_OUT_OF_DATE_KHR) {
+            windowInfo.updateSwapchain = true;
         } else {
             checkError(errorCode);
         }
-        return false;
     }
 
     @Override
@@ -606,38 +533,39 @@ public class VulkanInstance implements Instance {
         VulkanState.WindowInfo windowInfo = state.windows.get(window);
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            VkSurfaceCapabilitiesKHR surfaceCapabilities = VkSurfaceCapabilitiesKHR.calloc(stack);
             checkError(
                     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
                             state.device.physical.physicalDevice,
                             windowInfo.surfaceHandle,
-                            surfaceCapabilities));
+                            state.device.physical.capabilities));
             VkExtent2D swapchainExtent = VkExtent2D.calloc(stack);
 
-            if (surfaceCapabilities.currentExtent().width() == 0xFFFF_FFFF) {
+            if (state.device.physical.capabilities.currentExtent().width() == 0xFFFF_FFFF) {
                 swapchainExtent.set(window.getWidth(), window.getHeight());
             } else {
-                swapchainExtent.set(surfaceCapabilities.currentExtent());
+                swapchainExtent.set(state.device.physical.capabilities.currentExtent());
             }
 
-            VkSwapchainCreateInfoKHR swapchainCreateInfo = VkSwapchainCreateInfoKHR.calloc(stack);
             /*
-             * NOTE(ches) The swapchain is BGRA as that's guaranteed to be everywhere, though our app generally operates in RGBA. We'll just swizzle at the
-             * last possible second. VK_PRESENT_MODE_FIFO_KHR is a v-synced mode and the only mode guaranteed to be available everywhere.
+             * NOTE(ches) The swapchain is BGRA as that's guaranteed to be everywhere, though our app generally operates
+             * in RGBA. We'll just swizzle at the last possible second. VK_PRESENT_MODE_FIFO_KHR is a v-synced mode
+             * and the only mode guaranteed to be available everywhere.
              */
-            swapchainCreateInfo
-                    .sType$Default()
-                    .surface(windowInfo.surfaceHandle)
-                    .minImageCount(surfaceCapabilities.minImageCount())
-                    .imageFormat(VK_FORMAT_B8G8R8A8_SRGB)
-                    .imageColorSpace(VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-                    .imageExtent(swapchainExtent)
-                    .imageArrayLayers(1)
-                    .imageUsage(
-                            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-                    .preTransform(VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
-                    .compositeAlpha(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
-                    .presentMode(VK_PRESENT_MODE_FIFO_KHR);
+            VkSwapchainCreateInfoKHR swapchainCreateInfo =
+                    VkSwapchainCreateInfoKHR.calloc(stack)
+                            .sType$Default()
+                            .surface(windowInfo.surfaceHandle)
+                            .minImageCount(state.device.physical.capabilities.minImageCount())
+                            .imageFormat(VK_FORMAT_B8G8R8A8_SRGB)
+                            .imageColorSpace(VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+                            .imageExtent(swapchainExtent)
+                            .imageArrayLayers(1)
+                            .imageUsage(
+                                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+                                            | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+                            .preTransform(VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+                            .compositeAlpha(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
+                            .presentMode(VK_PRESENT_MODE_FIFO_KHR);
 
             checkError(
                     vkCreateSwapchainKHR(
@@ -1165,6 +1093,99 @@ public class VulkanInstance implements Instance {
         // TODO(ches) complete this
     }
 
+    private void regenerateSwapchain(@NonNull VulkanState.WindowInfo windowInfo) {
+        checkError(vkDeviceWaitIdle(state.device.logical));
+        // TODO(ches) regenerate gbuffer
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            // TODO(ches) be more generous about the sizing?
+            checkError(
+                    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+                            state.device.physical.physicalDevice,
+                            windowInfo.surfaceHandle,
+                            state.device.physical.capabilities));
+            VkExtent2D swapchainExtent = VkExtent2D.calloc(stack);
+
+            if (state.device.physical.capabilities.currentExtent().width() == 0xFFFF_FFFF) {
+                swapchainExtent.set(windowInfo.window.getWidth(), windowInfo.window.getHeight());
+            } else {
+                swapchainExtent.set(state.device.physical.capabilities.currentExtent());
+            }
+
+            VkSwapchainCreateInfoKHR swapchainCreateInfo =
+                    VkSwapchainCreateInfoKHR.calloc(stack)
+                            .sType$Default()
+                            .surface(windowInfo.surfaceHandle)
+                            .minImageCount(state.device.physical.capabilities.minImageCount())
+                            .imageFormat(VK_FORMAT_B8G8R8A8_SRGB)
+                            .imageColorSpace(VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+                            .imageExtent(swapchainExtent)
+                            .imageArrayLayers(1)
+                            .imageUsage(
+                                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+                                            | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+                            .preTransform(VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+                            .compositeAlpha(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
+                            .presentMode(VK_PRESENT_MODE_FIFO_KHR)
+                            .oldSwapchain(windowInfo.swapchainHandle);
+            checkError(
+                    vkCreateSwapchainKHR(
+                            state.device.logical, swapchainCreateInfo, null, longOutput));
+            windowInfo.swapchainHandle = longOutput.get(0);
+
+            for (int i = 0; i < windowInfo.swapchainImageViews.length; i++) {
+                vkDestroyImageView(state.device.logical, windowInfo.swapchainImageViews[i], null);
+            }
+
+            checkError(
+                    vkGetSwapchainImagesKHR(
+                            state.device.logical, windowInfo.swapchainHandle, intOutput, null));
+            final int imageCount = intOutput.get(0);
+            LongBuffer images = stack.callocLong(imageCount);
+            checkError(
+                    vkGetSwapchainImagesKHR(
+                            state.device.logical, windowInfo.swapchainHandle, intOutput, images));
+            windowInfo.swapchainImages = new long[imageCount];
+            images.get(0, windowInfo.swapchainImages);
+
+            windowInfo.swapchainImageViews = new long[imageCount];
+            for (int i = 0; i < imageCount; i++) {
+                VkImageViewCreateInfo viewCreateInfo =
+                        VkImageViewCreateInfo.calloc(stack)
+                                .sType$Default()
+                                .image(windowInfo.swapchainImages[i])
+                                .viewType(VK_IMAGE_VIEW_TYPE_2D)
+                                .format(VK_FORMAT_B8G8R8A8_SRGB)
+                                .subresourceRange(
+                                        VkImageSubresourceRange.calloc(stack)
+                                                .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                                .levelCount(1)
+                                                .layerCount(1));
+                checkError(
+                        vkCreateImageView(state.device.logical, viewCreateInfo, null, longOutput));
+                windowInfo.swapchainImageViews[i] = longOutput.get(0);
+            }
+
+            for (long handle : windowInfo.renderCompleteSemaphores) {
+                vkDestroySemaphore(state.device.logical, handle, null);
+            }
+            windowInfo.renderCompleteSemaphores = new long[imageCount];
+            VkSemaphoreCreateInfo semaphoreCreateInfo =
+                    VkSemaphoreCreateInfo.calloc(stack).sType$Default();
+            for (int i = 0; i < imageCount; i++) {
+                checkError(
+                        vkCreateSemaphore(
+                                state.device.logical, semaphoreCreateInfo, null, longOutput));
+                windowInfo.renderCompleteSemaphores[i] = longOutput.get(0);
+            }
+            vkDestroySwapchainKHR(state.device.logical, swapchainCreateInfo.oldSwapchain(), null);
+            windowInfo.lastSwapchainGeneration = System.currentTimeMillis();
+            windowInfo.updateSwapchain = false;
+        }
+
+        pipelineManager.resize(state, windowInfo.window.getWidth(), windowInfo.window.getHeight());
+    }
+
     @Override
     public void render(@NonNull Scene scene, @NonNull Window window) {
         if (pipeline == PipelineManagerVulkan.ERROR_PIPELINE) {
@@ -1172,23 +1193,26 @@ public class VulkanInstance implements Instance {
         }
         VulkanState.WindowInfo windowInfo = state.windows.get(window);
 
-        longOutput.put(0, state.fences[state.frameIndex]);
-        checkError(vkWaitForFences(state.device.logical, longOutput, true, Integer.MAX_VALUE));
-        longOutput.put(0, state.fences[state.frameIndex]);
-        checkError(vkResetFences(state.device.logical, longOutput));
+        if (!windowInfo.updateSwapchain) {
+            longOutput.put(0, state.fences[state.frameIndex]);
+            checkError(vkWaitForFences(state.device.logical, longOutput, true, Integer.MAX_VALUE));
+            longOutput.put(0, state.fences[state.frameIndex]);
+            checkError(vkResetFences(state.device.logical, longOutput));
 
-        final long swapchain = windowInfo.swapchainHandle;
+            final long swapchain = windowInfo.swapchainHandle;
 
-        // TODO(ches) skip rendering if it's been less than like 100ms since they resized the window
-        if (!checkSwapchain(
-                vkAcquireNextImageKHR(
-                        state.device.logical,
-                        swapchain,
-                        Long.MAX_VALUE,
-                        state.imageAcquiredSemaphores[state.frameIndex],
-                        VK_NULL_HANDLE,
-                        intOutput),
-                windowInfo)) {
+            // Not worth even checking if we have to update the swapchain
+            checkSwapchain(
+                    vkAcquireNextImageKHR(
+                            state.device.logical,
+                            swapchain,
+                            Long.MAX_VALUE,
+                            state.imageAcquiredSemaphores[state.frameIndex],
+                            VK_NULL_HANDLE,
+                            intOutput),
+                    windowInfo);
+        }
+        if (!windowInfo.updateSwapchain) {
             windowInfo.currentSwapchainIndex = intOutput.get(0);
 
             // TODO(ches) update shader data
@@ -1263,14 +1287,19 @@ public class VulkanInstance implements Instance {
             }
         }
 
+        if (shouldRegenerateSwapchain(windowInfo)) {
+            regenerateSwapchain(windowInfo);
+        }
+
         state.frameIndex = (state.frameIndex + 1) % GraphicsManager.MAX_FRAMES_IN_FLIGHT;
         windowInfo.currentSwapchainIndex = VulkanState.WindowInfo.INVALID_SWAPCHAIN_INDEX;
     }
 
     @Override
     public void resize(@NonNull Window window, int width, int height) {
-        // TODO(ches) complete this
-        state.windows.get(window).updateSwapchain = true;
+        VulkanState.WindowInfo windowInfo = state.windows.get(window);
+        windowInfo.updateSwapchain = true;
+        windowInfo.lastResize = System.currentTimeMillis();
     }
 
     /**

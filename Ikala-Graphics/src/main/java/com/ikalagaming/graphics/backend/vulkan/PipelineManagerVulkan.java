@@ -2,7 +2,6 @@ package com.ikalagaming.graphics.backend.vulkan;
 
 import static com.ikalagaming.graphics.backend.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.util.vma.Vma.*;
-import static org.lwjgl.vulkan.KHRSurface.vkGetPhysicalDeviceSurfaceCapabilitiesKHR;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
@@ -229,27 +228,11 @@ public class PipelineManagerVulkan {
     }
 
     private void createShaderData(@NonNull Window window, @NonNull VulkanState state) {
-        VulkanState.WindowInfo windowInfo = state.windows.get(window);
-
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            VkSurfaceCapabilitiesKHR surfaceCapabilities = VkSurfaceCapabilitiesKHR.calloc(stack);
-            checkError(
-                    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-                            state.device.physical.physicalDevice,
-                            windowInfo.surfaceHandle,
-                            surfaceCapabilities));
-            VkExtent3D imageExtent = VkExtent3D.calloc(stack);
-
             // TODO(ches) make the gBuffer like 2560 × 1440, just use viewport+scissor if smaller
             // than that
-            if (surfaceCapabilities.currentExtent().width() == 0xFFFF_FFFF) {
-                imageExtent.set(window.getWidth(), window.getHeight(), 1);
-            } else {
-                imageExtent.set(
-                        surfaceCapabilities.currentExtent().width(),
-                        surfaceCapabilities.currentExtent().height(),
-                        1);
-            }
+            VkExtent3D imageExtent = VkExtent3D.calloc(stack);
+            imageExtent.set(window.getWidth(), window.getHeight(), 1);
 
             final int NORMAL_USAGE =
                     VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -320,30 +303,33 @@ public class PipelineManagerVulkan {
                                 NORMAL_USAGE);
                 state.perFrameData[i].cascadeShadowSplits =
                         new CascadeShadowSplit[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
-                state.perFrameData[i].cascadeShadows =
-                        new TextureInfo[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
-                for (int shadow = 0;
-                        shadow < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT;
-                        shadow++) {
-                    state.perFrameData[i].cascadeShadowSplits[shadow] = new CascadeShadowSplit();
-                    state.perFrameData[i].cascadeShadows[shadow] =
-                            createDepthTexture(state, imageExtent);
-                }
-                state.perFrameData[i].gBuffer = generateGBuffer(state, imageExtent);
-                state.perFrameData[i].preFilterTexture =
-                        createTexture(
-                                state,
-                                imageExtent,
-                                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-                state.perFrameData[i].finalTexture =
-                        createTexture(
-                                state,
-                                imageExtent,
-                                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
-                                        | VK_IMAGE_USAGE_SAMPLED_BIT
-                                        | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+                createIntermediaryTextures(state, state.perFrameData[i], imageExtent);
             }
         }
+    }
+
+    private void createIntermediaryTextures(
+            @NonNull VulkanState state,
+            @NonNull PerFrameData data,
+            @NonNull VkExtent3D imageExtent) {
+        data.cascadeShadows = new TextureInfo[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
+        for (int shadow = 0; shadow < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; shadow++) {
+            data.cascadeShadowSplits[shadow] = new CascadeShadowSplit();
+            data.cascadeShadows[shadow] = createDepthTexture(state, imageExtent);
+        }
+        data.gBuffer = generateGBuffer(state, imageExtent);
+        data.preFilterTexture =
+                createTexture(
+                        state,
+                        imageExtent,
+                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+        data.finalTexture =
+                createTexture(
+                        state,
+                        imageExtent,
+                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+                                | VK_IMAGE_USAGE_SAMPLED_BIT
+                                | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
     }
 
     private TextureInfo createTexture(
@@ -446,6 +432,51 @@ public class PipelineManagerVulkan {
         quadMesh = null;
     }
 
+    /**
+     * Clean up any textures that are tied to the screen size.
+     *
+     * @param state The state.
+     * @param data The frame data we are cleaning up.
+     */
+    private void cleanupIntermediaryTextures(
+            @NonNull VulkanState state, @NonNull PerFrameData data) {
+        if (data.cascadeShadows != null) {
+            for (int shadow = 0; shadow < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; shadow++) {
+                vmaDestroyImage(
+                        state.vmaAllocator,
+                        data.cascadeShadows[shadow].texture,
+                        data.cascadeShadows[shadow].textureAllocation);
+            }
+            data.cascadeShadows = null;
+        }
+
+        if (data.gBuffer != null) {
+            for (TextureInfo info : data.gBuffer.textures()) {
+                vmaDestroyImage(state.vmaAllocator, info.texture, info.textureAllocation);
+            }
+            vmaDestroyImage(
+                    state.vmaAllocator,
+                    data.gBuffer.depth().texture,
+                    data.gBuffer.depth().textureAllocation);
+            data.gBuffer = null;
+        }
+
+        if (data.preFilterTexture != null) {
+            vmaDestroyImage(
+                    state.vmaAllocator,
+                    data.preFilterTexture.texture,
+                    data.preFilterTexture.textureAllocation);
+            data.preFilterTexture = null;
+        }
+        if (data.finalTexture != null) {
+            vmaDestroyImage(
+                    state.vmaAllocator,
+                    data.finalTexture.texture,
+                    data.finalTexture.textureAllocation);
+            data.finalTexture = null;
+        }
+    }
+
     private void cleanupPerFrameData(@NonNull VulkanState state, @NonNull PerFrameData data) {
         SharedBuffer.free(data.animationData, state);
         data.animationData = null;
@@ -490,39 +521,7 @@ public class PipelineManagerVulkan {
 
         data.cascadeShadowSplits = null;
 
-        for (int shadow = 0; shadow < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; shadow++) {
-            vmaDestroyImage(
-                    state.vmaAllocator,
-                    data.cascadeShadows[shadow].texture,
-                    data.cascadeShadows[shadow].textureAllocation);
-        }
-        data.cascadeShadows = null;
-
-        for (TextureInfo info : data.gBuffer.textures()) {
-            vmaDestroyImage(state.vmaAllocator, info.texture, info.textureAllocation);
-        }
-        vmaDestroyImage(
-                state.vmaAllocator,
-                data.gBuffer.depth().texture,
-                data.gBuffer.depth().textureAllocation);
-        data.gBuffer = null;
-        vmaDestroyImage(
-                state.vmaAllocator,
-                data.gBuffer.depth().texture,
-                data.gBuffer.depth().textureAllocation);
-        vmaDestroyImage(
-                state.vmaAllocator,
-                data.gBuffer.depth().texture,
-                data.gBuffer.depth().textureAllocation);
-
-        vmaDestroyBuffer(
-                state.vmaAllocator,
-                data.preFilterTexture.texture,
-                data.preFilterTexture.textureAllocation);
-        data.preFilterTexture = null;
-        vmaDestroyBuffer(
-                state.vmaAllocator, data.finalTexture.texture, data.finalTexture.textureAllocation);
-        data.finalTexture = null;
+        cleanupIntermediaryTextures(state, data);
     }
 
     private void createGuiFont() {
@@ -579,7 +578,18 @@ public class PipelineManagerVulkan {
      * @param width The new screen width in pixels.
      * @param height The new screen height in pixels.
      */
-    public void resize(final int width, final int height) {
+    public void resize(@NonNull VulkanState state, final int width, final int height) {
         // TODO(ches) resize
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            // TODO(ches) make the gBuffer like 2560 × 1440, just use viewport+scissor if smaller
+            // than that
+            VkExtent3D imageExtent = VkExtent3D.calloc(stack);
+            imageExtent.set(width, height, 1);
+
+            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+                cleanupIntermediaryTextures(state, state.perFrameData[i]);
+                createIntermediaryTextures(state, state.perFrameData[i], imageExtent);
+            }
+        }
     }
 }

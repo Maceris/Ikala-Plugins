@@ -90,11 +90,14 @@ public class Window {
      */
     private int height;
 
+    /** Whether we are currently fullscreen (borderless). */
+    private boolean fullscreen;
+
     /** The resize function to call. */
     private final Consumer<Window> resizeFunc;
 
     /** The title that was provided for the window. */
-    @Getter private final String title;
+    private final String title;
 
     /**
      * Create a new window.
@@ -108,6 +111,7 @@ public class Window {
             @NonNull GraphicsSettings settings,
             @NonNull Consumer<Window> resizeFunc) {
         this.resizeFunc = resizeFunc;
+        this.fullscreen = false;
 
         glfwInitHint(GLFW_COCOA_CHDIR_RESOURCES, GLFW_TRUE);
         if (!glfwInit()) {

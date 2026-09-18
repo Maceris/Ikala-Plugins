@@ -164,6 +164,9 @@ public class VulkanState implements State {
         /** If we need to update the swapchain. */
         public boolean updateSwapchain;
 
+        /** The time (in millis) when the window was last resized. */
+        public long lastResize;
+
         /** The time (in millis) when the swapchain was last regenerated. */
         public long lastSwapchainGeneration;
 
