@@ -1098,7 +1098,6 @@ public class VulkanInstance implements Instance {
         // TODO(ches) regenerate gbuffer
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            // TODO(ches) be more generous about the sizing?
             checkError(
                     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
                             state.device.physical.physicalDevice,

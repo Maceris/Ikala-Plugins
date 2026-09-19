@@ -70,6 +70,12 @@ public class VulkanState implements State {
     public final PerFrameData[] perFrameData =
             new PerFrameData[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
+    /**
+     * The actual size of the intermediary textures. Distinct from the window/swapchain size, since
+     * we can keep larger textures and just use a smaller region of the image.
+     */
+    public final VkExtent3D realSize = VkExtent3D.create();
+
     /** The Vulkan Memory Allocator handle. */
     public long vmaAllocator = VK_NULL_HANDLE;
 

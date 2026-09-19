@@ -233,6 +233,7 @@ public class PipelineManagerVulkan {
             // than that
             VkExtent3D imageExtent = VkExtent3D.calloc(stack);
             imageExtent.set(window.getWidth(), window.getHeight(), 1);
+            state.realSize.set(window.getWidth(), window.getHeight(), 1);
 
             final int NORMAL_USAGE =
                     VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -579,12 +580,29 @@ public class PipelineManagerVulkan {
      * @param height The new screen height in pixels.
      */
     public void resize(@NonNull VulkanState state, final int width, final int height) {
-        // TODO(ches) resize
+        if (width <= state.realSize.width() && height <= state.realSize.height()) {
+            // We are getting smaller, I don't care
+            return;
+        }
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            // TODO(ches) make the gBuffer like 2560 × 1440, just use viewport+scissor if smaller
-            // than that
+            // Just keep doubling the image until we get to the full screen size
+            final int newWidth =
+                    width < Window.getLargestMonitorWidth()
+                            ? Math.min(
+                                    Math.max(state.realSize.width(), width) * 2,
+                                    Window.getLargestMonitorWidth())
+                            : Window.getLargestMonitorWidth();
+            final int newHeight =
+                    height < Window.getLargestMonitorHeight()
+                            ? Math.min(
+                                    Math.max(state.realSize.height(), height) * 2,
+                                    Window.getLargestMonitorHeight())
+                            : Window.getLargestMonitorHeight();
+
             VkExtent3D imageExtent = VkExtent3D.calloc(stack);
-            imageExtent.set(width, height, 1);
+            imageExtent.set(newWidth, newHeight, 1);
+
+            state.realSize.set(newWidth, newHeight, 1);
 
             for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
                 cleanupIntermediaryTextures(state, state.perFrameData[i]);

@@ -71,10 +71,10 @@ public class Window {
     }
 
     /** The width of the largest monitor we could find, in pixels. */
-    private static int largestMonitorWidth = 0;
+    @Getter private static int largestMonitorWidth = 0;
 
     /** The height of the largest monitor we could find, in pixels. */
-    private static int largestMonitorHeight = 0;
+    @Getter private static int largestMonitorHeight = 0;
 
     /**
      * The GLFW window handle.
