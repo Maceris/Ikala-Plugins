@@ -6,8 +6,9 @@ import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
+import com.ikalagaming.graphics.backend.opengl.BufferOpenGL;
+import com.ikalagaming.graphics.backend.opengl.BufferUtilOpenGL;
 import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
-import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.frontend.Framebuffer;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
@@ -105,26 +106,30 @@ public class ShadowRender implements RenderStage {
 
             final int commandCount = model.isAnimated() ? entityCount : 1;
 
-            BufferUtil.INSTANCE.bindBuffer(model.getModelMatricesBuffer(), MODEL_MATRICES_BINDING);
+            BufferUtilOpenGL.bindBuffer(
+                    (BufferOpenGL) model.getModelMatricesBuffer(), MODEL_MATRICES_BINDING);
 
             for (MeshData mesh : model.getMeshDataList()) {
                 if (model.isAnimated()) {
                     glBindVertexBuffer(
                             0,
-                            (int) mesh.getAnimationTargetBuffer().id(),
+                            (int) ((BufferOpenGL) mesh.getAnimationTargetBuffer()).id(),
                             0,
                             MeshData.VERTEX_SIZE_IN_BYTES);
                 } else {
                     glBindVertexBuffer(
-                            0, (int) mesh.getVertexBuffer().id(), 0, MeshData.VERTEX_SIZE_IN_BYTES);
+                            0,
+                            (int) ((BufferOpenGL) mesh.getVertexBuffer()).id(),
+                            0,
+                            MeshData.VERTEX_SIZE_IN_BYTES);
                 }
-                BufferUtil.INSTANCE.bindBuffer(mesh.getIndexBuffer());
-                BufferUtil.INSTANCE.bindBuffer(mesh.getDrawIndirectBuffer());
+                BufferUtilOpenGL.bindBuffer((BufferOpenGL) mesh.getIndexBuffer());
+                BufferUtilOpenGL.bindBuffer((BufferOpenGL) mesh.getDrawIndirectBuffer());
                 glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0, commandCount, 0);
             }
 
-            BufferUtil.INSTANCE.unbindBuffer(
-                    model.getModelMatricesBuffer(), MODEL_MATRICES_BINDING);
+            BufferUtilOpenGL.unbindBuffer(
+                    (BufferOpenGL) model.getModelMatricesBuffer(), MODEL_MATRICES_BINDING);
         }
     }
 }

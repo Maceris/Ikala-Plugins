@@ -82,7 +82,7 @@ public class PipelineManagerVulkan {
         skybox = new SkyboxModel();
         quadMesh = QuadMesh.getInstance(state);
         imGuiMesh = ImGuiMesh.create();
-        guiMesh = GuiMesh.create();
+        guiMesh = GuiMesh.create(state);
 
         stageModelMatrixUpdate = new ModelMatrixUpdate();
         stageModelMatrixUpdate.initialize(state);

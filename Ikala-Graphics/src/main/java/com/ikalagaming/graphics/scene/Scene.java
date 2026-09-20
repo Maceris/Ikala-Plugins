@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.scene;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.Model;
@@ -74,10 +75,10 @@ public class Scene {
      * @param width The screen width, in pixels.
      * @param height The screen height, in pixels.
      */
-    public Scene(int width, int height) {
+    public Scene(@NonNull State state, int width, int height) {
         modelMap = new ConcurrentHashMap<>();
         projection = new Projection(width, height);
-        materialCache = new MaterialCache();
+        materialCache = new MaterialCache(state);
         sceneLights = new SceneLights();
         camera = new Camera();
         fog = new Fog();

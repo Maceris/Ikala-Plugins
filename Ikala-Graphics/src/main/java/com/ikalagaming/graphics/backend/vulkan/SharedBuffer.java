@@ -6,6 +6,8 @@ import static org.lwjgl.vulkan.VK12.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 import static org.lwjgl.vulkan.VK12.vkGetBufferDeviceAddress;
 import static org.lwjgl.vulkan.VK13.VK_NULL_HANDLE;
 
+import com.ikalagaming.graphics.frontend.Buffer;
+
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.PointerBuffer;
@@ -20,7 +22,7 @@ import java.nio.LongBuffer;
 
 /** Buffer that is shared between the CPU and the GPU. */
 @Slf4j
-public class SharedBuffer {
+public class SharedBuffer implements Buffer {
     /** VMA handle for the allocation. */
     public long allocation = VK_NULL_HANDLE;
 

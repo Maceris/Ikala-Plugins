@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.frontend;
 
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
 
@@ -24,6 +25,13 @@ public interface Instance {
      * resource queue.
      */
     void processResources();
+
+    /**
+     * Fetch the instance state information.
+     *
+     * @return The state.
+     */
+    State getState();
 
     /**
      * Return the texture loader for this instance.

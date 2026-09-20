@@ -14,6 +14,7 @@ import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.ShaderMap;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
@@ -46,6 +47,7 @@ public class OpenGLInstance implements Instance {
     private TextureLoader textureLoader;
     private ShaderMap shaderMap;
     private PipelineManager pipelineManager;
+    private static final State state = new State() {};
 
     @Override
     public boolean initialize(@NonNull Window window) {
@@ -387,6 +389,11 @@ public class OpenGLInstance implements Instance {
     }
 
     @Override
+    public State getState() {
+        return state;
+    }
+
+    @Override
     public TextureLoader getTextureLoader() {
         return textureLoader;
     }
@@ -411,10 +418,11 @@ public class OpenGLInstance implements Instance {
         if (model.isAnimated()) {
             // Filled out later
             model.setEntityAnimationOffsetsBuffer(
-                    new Buffer(glGenBuffers(), Buffer.Type.SHADER_STORAGE));
+                    new BufferOpenGL(glGenBuffers(), BufferOpenGL.Type.SHADER_STORAGE));
 
             int animationBuffer = glGenBuffers();
-            model.setAnimationBuffer(new Buffer(animationBuffer, Buffer.Type.SHADER_STORAGE));
+            model.setAnimationBuffer(
+                    new BufferOpenGL(animationBuffer, BufferOpenGL.Type.SHADER_STORAGE));
             int totalSize = 0;
             for (Model.Animation animation : model.getAnimationList()) {
                 totalSize += animation.frameData().length;
@@ -430,20 +438,21 @@ public class OpenGLInstance implements Instance {
             for (MeshData meshData : model.getMeshDataList()) {
                 // Filled out later
                 meshData.setAnimationTargetBuffer(
-                        new Buffer(glGenBuffers(), Buffer.Type.SHADER_STORAGE));
+                        new BufferOpenGL(glGenBuffers(), BufferOpenGL.Type.SHADER_STORAGE));
 
                 int boneWeightBuffer = glGenBuffers();
-                meshData.setBoneWeightBuffer(new Buffer(boneWeightBuffer, Buffer.Type.UNIFORM));
+                meshData.setBoneWeightBuffer(
+                        new BufferOpenGL(boneWeightBuffer, BufferOpenGL.Type.UNIFORM));
                 glBindBuffer(GL_UNIFORM_BUFFER, boneWeightBuffer);
                 glBufferStorage(
                         GL_UNIFORM_BUFFER, ByteBuffer.wrap(meshData.getBoneWeightData()), 0);
             }
         }
         for (MeshData meshData : model.getMeshDataList()) {
-            BufferUtil.INSTANCE.bindBuffer(meshData.getVertexBuffer());
+            BufferUtilOpenGL.bindBuffer((BufferOpenGL) meshData.getVertexBuffer());
             glBufferStorage(GL_UNIFORM_BUFFER, meshData.getVertexData(), 0);
 
-            BufferUtil.INSTANCE.bindBuffer(meshData.getIndexBuffer());
+            BufferUtilOpenGL.bindBuffer((BufferOpenGL) meshData.getIndexBuffer());
             glBufferStorage(GL_ELEMENT_ARRAY_BUFFER, meshData.getIndices(), 0);
         }
         // Unbind buffers
@@ -478,7 +487,7 @@ public class OpenGLInstance implements Instance {
     private void deleteResource(@NonNull DeletionQueue.Entry entry) {
         switch (entry.type()) {
             case BUFFER -> {
-                var buffer = (Buffer) entry.resource();
+                var buffer = (BufferOpenGL) entry.resource();
                 glDeleteBuffers((int) buffer.id());
             }
             case FRAME_BUFFER -> {

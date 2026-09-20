@@ -1,7 +1,8 @@
 package com.ikalagaming.graphics.graph;
 
+import com.ikalagaming.graphics.backend.opengl.BufferOpenGL;
+import com.ikalagaming.graphics.backend.opengl.BufferUtilOpenGL;
 import com.ikalagaming.graphics.frontend.Buffer;
-import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.frontend.Material;
 
 import lombok.Getter;
@@ -127,9 +128,10 @@ public class MeshData {
         this.boneCount = boneCount;
         this.boneWeightData = boneWeightData;
         this.boneWeightBuffer = null;
-        this.vertexBuffer = BufferUtil.INSTANCE.createBuffer(Buffer.Type.UNIFORM);
+        // TODO(ches) use Vulkan, figure out how to abstract away buffers probably
+        this.vertexBuffer = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.UNIFORM);
         this.animationTargetBuffer = null;
-        this.indexBuffer = BufferUtil.INSTANCE.createBuffer(Buffer.Type.INDEXES);
-        this.drawIndirectBuffer = BufferUtil.INSTANCE.createBuffer(Buffer.Type.DRAW_INDIRECT);
+        this.indexBuffer = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.INDEXES);
+        this.drawIndirectBuffer = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.DRAW_INDIRECT);
     }
 }

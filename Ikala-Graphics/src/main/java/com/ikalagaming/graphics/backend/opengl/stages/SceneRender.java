@@ -9,6 +9,8 @@ import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
+import com.ikalagaming.graphics.backend.opengl.BufferOpenGL;
+import com.ikalagaming.graphics.backend.opengl.BufferUtilOpenGL;
 import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.MaterialCache;
@@ -106,11 +108,12 @@ public class SceneRender implements RenderStage {
 
             glBindVertexArray(renderBuffers.getVao());
 
-            BufferUtil.INSTANCE.bindBuffer(model.getModelMatricesBuffer(), MODEL_MATRICES_BINDING);
-            BufferUtil.INSTANCE.bindBuffer(
-                    scene.getMaterialCache().getMaterialBuffer(), MATERIALS_BINDING);
-            BufferUtil.INSTANCE.bindBuffer(
-                    model.getMaterialOverridesBuffer(), MATERIAL_OVERRIDES_BINDING);
+            BufferUtilOpenGL.bindBuffer(
+                    (BufferOpenGL) model.getModelMatricesBuffer(), MODEL_MATRICES_BINDING);
+            BufferUtilOpenGL.bindBuffer(
+                    (BufferOpenGL) scene.getMaterialCache().getMaterialBuffer(), MATERIALS_BINDING);
+            BufferUtilOpenGL.bindBuffer(
+                    (BufferOpenGL) model.getMaterialOverridesBuffer(), MATERIAL_OVERRIDES_BINDING);
 
             int meshIndex = 0;
             for (MeshData mesh : model.getMeshDataList()) {
@@ -135,21 +138,24 @@ public class SceneRender implements RenderStage {
                 if (model.isAnimated()) {
                     glBindVertexBuffer(
                             0,
-                            (int) mesh.getAnimationTargetBuffer().id(),
+                            (int) ((BufferOpenGL) mesh.getAnimationTargetBuffer()).id(),
                             0,
                             MeshData.VERTEX_SIZE_IN_BYTES);
                 } else {
                     glBindVertexBuffer(
-                            0, (int) mesh.getVertexBuffer().id(), 0, MeshData.VERTEX_SIZE_IN_BYTES);
+                            0,
+                            (int) ((BufferOpenGL) mesh.getVertexBuffer()).id(),
+                            0,
+                            MeshData.VERTEX_SIZE_IN_BYTES);
                 }
-                BufferUtil.INSTANCE.bindBuffer(mesh.getIndexBuffer());
-                BufferUtil.INSTANCE.bindBuffer(mesh.getDrawIndirectBuffer());
+                BufferUtilOpenGL.bindBuffer((BufferOpenGL) mesh.getIndexBuffer());
+                BufferUtilOpenGL.bindBuffer((BufferOpenGL) mesh.getDrawIndirectBuffer());
                 glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0, commandCount, 0);
                 meshIndex += 1;
             }
 
-            BufferUtil.INSTANCE.unbindBuffer(
-                    model.getModelMatricesBuffer(), MODEL_MATRICES_BINDING);
+            BufferUtilOpenGL.unbindBuffer(
+                    (BufferOpenGL) model.getModelMatricesBuffer(), MODEL_MATRICES_BINDING);
         }
 
         glBindVertexArray(0);
@@ -179,10 +185,10 @@ public class SceneRender implements RenderStage {
 
             buffer.flip();
 
-            BufferUtil.INSTANCE.bindBuffer(model.getMaterialOverridesBuffer());
-            BufferUtil.INSTANCE.bufferData(
-                    model.getMaterialOverridesBuffer(), buffer, GL_STATIC_DRAW);
-            BufferUtil.INSTANCE.unbindBuffer(model.getMaterialOverridesBuffer());
+            BufferUtilOpenGL.bindBuffer((BufferOpenGL) model.getMaterialOverridesBuffer());
+            BufferUtilOpenGL.bufferData(
+                    (BufferOpenGL) model.getMaterialOverridesBuffer(), buffer, GL_STATIC_DRAW);
+            BufferUtilOpenGL.unbindBuffer((BufferOpenGL) model.getMaterialOverridesBuffer());
 
             MemoryUtil.memFree(buffer);
             model.setMaterialOverridesDirty(false);
@@ -240,9 +246,9 @@ public class SceneRender implements RenderStage {
         materialData.flip();
 
         Buffer materialBuffer = scene.getMaterialCache().getMaterialBuffer();
-        BufferUtil.INSTANCE.bindBuffer(materialBuffer);
+        BufferUtilOpenGL.bindBuffer((BufferOpenGL) materialBuffer);
         glBufferData(GL_SHADER_STORAGE_BUFFER, materialData, GL_STATIC_DRAW);
-        BufferUtil.INSTANCE.unbindBuffer(materialBuffer);
+        BufferUtilOpenGL.unbindBuffer((BufferOpenGL) materialBuffer);
 
         MemoryUtil.memFree(materialData);
         scene.getMaterialCache().setDirty(false);

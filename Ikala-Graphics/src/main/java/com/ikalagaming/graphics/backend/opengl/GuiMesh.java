@@ -3,9 +3,6 @@ package com.ikalagaming.graphics.backend.opengl;
 import static org.lwjgl.opengl.GL15.*;
 import static org.lwjgl.opengl.GL30.*;
 
-import com.ikalagaming.graphics.frontend.Buffer;
-import com.ikalagaming.graphics.frontend.BufferUtil;
-
 import lombok.NonNull;
 
 /**
@@ -21,9 +18,9 @@ import lombok.NonNull;
 public record GuiMesh(
         int vaoID,
         int vertices,
-        @NonNull Buffer commands,
-        @NonNull Buffer points,
-        @NonNull Buffer pointDetails) {
+        @NonNull BufferOpenGL commands,
+        @NonNull BufferOpenGL points,
+        @NonNull BufferOpenGL pointDetails) {
 
     /**
      * Create a new GUI mesh, and set it up with OpenGL. This should be called instead of a
@@ -43,18 +40,18 @@ public record GuiMesh(
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindVertexArray(0);
 
-        Buffer commands = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
-        Buffer points = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
-        Buffer pointDetails = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
+        BufferOpenGL commands = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.SHADER_STORAGE);
+        BufferOpenGL points = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.SHADER_STORAGE);
+        BufferOpenGL pointDetails = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.SHADER_STORAGE);
         return new GuiMesh(vaoID, vertices, commands, points, pointDetails);
     }
 
     /** Clean up the resources for this mesh. */
     public void cleanup() {
         glDeleteBuffers(vertices);
-        BufferUtil.INSTANCE.deleteBuffer(commands);
-        BufferUtil.INSTANCE.deleteBuffer(points);
-        BufferUtil.INSTANCE.deleteBuffer(pointDetails);
+        BufferUtilOpenGL.deleteBuffer(commands);
+        BufferUtilOpenGL.deleteBuffer(points);
+        BufferUtilOpenGL.deleteBuffer(pointDetails);
         glDeleteVertexArrays(vaoID);
     }
 }

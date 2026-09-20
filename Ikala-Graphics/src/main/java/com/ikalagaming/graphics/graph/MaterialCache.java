@@ -1,9 +1,16 @@
 package com.ikalagaming.graphics.graph;
 
+import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+import static org.lwjgl.vulkan.VK12.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.backend.base.State;
+import com.ikalagaming.graphics.backend.opengl.BufferOpenGL;
+import com.ikalagaming.graphics.backend.opengl.BufferUtilOpenGL;
+import com.ikalagaming.graphics.backend.vulkan.SharedBuffer;
+import com.ikalagaming.graphics.backend.vulkan.VulkanState;
 import com.ikalagaming.graphics.frontend.BackendType;
 import com.ikalagaming.graphics.frontend.Buffer;
-import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.frontend.Material;
 
 import lombok.Getter;
@@ -36,16 +43,21 @@ public class MaterialCache {
     @Getter private final Buffer materialBuffer;
 
     /** Set up a new cache with a default material. */
-    public MaterialCache() {
+    public MaterialCache(@NonNull State state) {
         materialsList = Collections.synchronizedList(new ArrayList<>());
         materialLookup = Collections.synchronizedMap(new HashMap<>());
         addMaterial(DEFAULT_MATERIAL);
         dirty = true;
         if (GraphicsManager.getBackendType() == BackendType.OPENGL) {
-            materialBuffer = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
+            materialBuffer = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.SHADER_STORAGE);
         } else {
             // TODO(ches) deal with this
-            materialBuffer = new Buffer(0, Buffer.Type.SHADER_STORAGE);
+            materialBuffer =
+                    SharedBuffer.allocate(
+                            0,
+                            (VulkanState) state,
+                            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+                                    | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
         }
     }
 

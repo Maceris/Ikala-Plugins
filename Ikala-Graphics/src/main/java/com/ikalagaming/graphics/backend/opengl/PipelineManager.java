@@ -66,7 +66,7 @@ public class PipelineManager {
     private GuiMesh guiMesh;
 
     /** The buffer to use for storing point light info. */
-    private Buffer pointLights;
+    private BufferOpenGL pointLights;
 
     /** A mesh for rendering onto. */
     private QuadMesh quadMesh;
@@ -87,7 +87,7 @@ public class PipelineManager {
     private SkyboxModel skybox;
 
     /** The buffer to use for storing spotlight info. */
-    private Buffer spotLights;
+    private BufferOpenGL spotLights;
 
     private final AnimationRender stageAnimationRender;
     private final FramebufferTransition stageBackBufferBinding;
@@ -286,7 +286,7 @@ public class PipelineManager {
         glBufferData(GL_SHADER_STORAGE_BUFFER, pointLightFloatBuffer, GL_STATIC_DRAW);
 
         MemoryUtil.memFree(pointLightFloatBuffer);
-        pointLights = new Buffer(pointLightBuffer, Buffer.Type.SHADER_STORAGE);
+        pointLights = new BufferOpenGL(pointLightBuffer, BufferOpenGL.Type.SHADER_STORAGE);
 
         int spotLightBuffer = glGenBuffers();
         /*
@@ -305,7 +305,7 @@ public class PipelineManager {
         glBufferData(GL_SHADER_STORAGE_BUFFER, spotLightFloatBuffer, GL_STATIC_DRAW);
 
         MemoryUtil.memFree(spotLightFloatBuffer);
-        spotLights = new Buffer(spotLightBuffer, Buffer.Type.SHADER_STORAGE);
+        spotLights = new BufferOpenGL(spotLightBuffer, BufferOpenGL.Type.SHADER_STORAGE);
     }
 
     private Framebuffer createShadowBuffers() {

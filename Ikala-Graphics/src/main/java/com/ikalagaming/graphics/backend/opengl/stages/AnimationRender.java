@@ -7,7 +7,8 @@ import static org.lwjgl.opengl.GL43.*;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
-import com.ikalagaming.graphics.frontend.BufferUtil;
+import com.ikalagaming.graphics.backend.opengl.BufferOpenGL;
+import com.ikalagaming.graphics.backend.opengl.BufferUtilOpenGL;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
@@ -25,7 +26,9 @@ import java.nio.IntBuffer;
 public class AnimationRender implements RenderStage {
 
     private static void updateAnimationOffsets(Model model, int entityCount) {
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) model.getEntityAnimationOffsetsBuffer().id());
+        glBindBuffer(
+                GL_SHADER_STORAGE_BUFFER,
+                (int) ((BufferOpenGL) model.getEntityAnimationOffsetsBuffer()).id());
         IntBuffer animationOffsets = MemoryUtil.memAllocInt(entityCount);
         for (int i = 0; i < entityCount; ++i) {
             Entity entity = model.getEntitiesList().get(i);
@@ -61,13 +64,15 @@ public class AnimationRender implements RenderStage {
             model.setMaxAnimatedBufferCapacity(entityCap);
 
             glBindBuffer(
-                    GL_SHADER_STORAGE_BUFFER, (int) model.getEntityAnimationOffsetsBuffer().id());
+                    GL_SHADER_STORAGE_BUFFER,
+                    (int) ((BufferOpenGL) model.getEntityAnimationOffsetsBuffer()).id());
             glBufferData(GL_SHADER_STORAGE_BUFFER, entityCap, GL_STATIC_DRAW);
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
             for (MeshData meshData : model.getMeshDataList()) {
                 glBindBuffer(
-                        GL_SHADER_STORAGE_BUFFER, (int) meshData.getAnimationTargetBuffer().id());
+                        GL_SHADER_STORAGE_BUFFER,
+                        (int) ((BufferOpenGL) meshData.getAnimationTargetBuffer()).id());
                 glBufferData(
                         GL_SHADER_STORAGE_BUFFER,
                         (long) entityCap * meshData.getVertexCount() * 14 * 4,
@@ -108,13 +113,13 @@ public class AnimationRender implements RenderStage {
 
             updateAnimationOffsets(model, entityCount);
 
-            BufferUtil.INSTANCE.bindBuffer(model.getAnimationBuffer(), 0);
-            BufferUtil.INSTANCE.bindBuffer(model.getEntityAnimationOffsetsBuffer(), 1);
+            BufferUtilOpenGL.bindBuffer((BufferOpenGL) model.getAnimationBuffer(), 0);
+            BufferUtilOpenGL.bindBuffer((BufferOpenGL) model.getEntityAnimationOffsetsBuffer(), 1);
 
             for (MeshData meshData : model.getMeshDataList()) {
-                BufferUtil.INSTANCE.bindBuffer(meshData.getVertexBuffer(), 2);
-                BufferUtil.INSTANCE.bindBuffer(meshData.getBoneWeightBuffer(), 3);
-                BufferUtil.INSTANCE.bindBuffer(meshData.getAnimationTargetBuffer(), 4);
+                BufferUtilOpenGL.bindBuffer((BufferOpenGL) meshData.getVertexBuffer(), 2);
+                BufferUtilOpenGL.bindBuffer((BufferOpenGL) meshData.getBoneWeightBuffer(), 3);
+                BufferUtilOpenGL.bindBuffer((BufferOpenGL) meshData.getAnimationTargetBuffer(), 4);
 
                 final int vertexCount = meshData.getVertexCount();
                 glDispatchCompute(vertexCount, entityCount, 1);

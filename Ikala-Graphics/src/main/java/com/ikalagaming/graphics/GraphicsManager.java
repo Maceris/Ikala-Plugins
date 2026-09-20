@@ -176,7 +176,7 @@ public class GraphicsManager {
 
         log.debug("Renderer created");
 
-        scene = new Scene(window.getWidth(), window.getHeight());
+        scene = new Scene(renderInstance.getState(), window.getWidth(), window.getHeight());
 
         cameraManager = new CameraManager(scene.getCamera(), window);
 

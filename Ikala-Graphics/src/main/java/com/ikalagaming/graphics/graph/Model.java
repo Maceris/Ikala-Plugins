@@ -1,7 +1,8 @@
 package com.ikalagaming.graphics.graph;
 
+import com.ikalagaming.graphics.backend.opengl.BufferOpenGL;
+import com.ikalagaming.graphics.backend.opengl.BufferUtilOpenGL;
 import com.ikalagaming.graphics.frontend.Buffer;
-import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.scene.Entity;
 
 import lombok.Getter;
@@ -142,9 +143,10 @@ public class Model {
         this.animationList = new ArrayList<>();
         this.entityAnimationOffsetsBuffer = null;
         this.maxAnimatedBufferCapacity = 0;
-        this.modelMatricesBuffer = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
+        this.modelMatricesBuffer = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.SHADER_STORAGE);
         this.entitiesLastFrame = 0;
-        this.materialOverridesBuffer = BufferUtil.INSTANCE.createBuffer(Buffer.Type.SHADER_STORAGE);
+        this.materialOverridesBuffer =
+                BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.SHADER_STORAGE);
         this.materialOverridesDirty = true;
     }
 

@@ -7,8 +7,9 @@ import static org.lwjgl.opengl.GL42.glMemoryBarrier;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
+import com.ikalagaming.graphics.backend.opengl.BufferOpenGL;
+import com.ikalagaming.graphics.backend.opengl.BufferUtilOpenGL;
 import com.ikalagaming.graphics.backend.opengl.PipelineManager;
-import com.ikalagaming.graphics.frontend.BufferUtil;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
@@ -55,11 +56,11 @@ public class ModelMatrixUpdate implements RenderStage {
             entityIndex++;
         }
 
-        BufferUtil.INSTANCE.bindBuffer(model.getModelMatricesBuffer());
-        BufferUtil.INSTANCE.bufferData(
-                model.getModelMatricesBuffer(), modelMatrices, GL_DYNAMIC_DRAW);
+        BufferUtilOpenGL.bindBuffer((BufferOpenGL) model.getModelMatricesBuffer());
+        BufferUtilOpenGL.bufferData(
+                (BufferOpenGL) model.getModelMatricesBuffer(), modelMatrices, GL_DYNAMIC_DRAW);
         MemoryUtil.memFree(modelMatrices);
-        BufferUtil.INSTANCE.unbindBuffer(model.getModelMatricesBuffer());
+        BufferUtilOpenGL.unbindBuffer((BufferOpenGL) model.getModelMatricesBuffer());
 
         if (model.getEntitiesLastFrame() != entities.size()) {
             updateCommandBuffers(model);
@@ -108,10 +109,10 @@ public class ModelMatrixUpdate implements RenderStage {
 
             commandBuffer.flip();
 
-            BufferUtil.INSTANCE.bindBuffer(mesh.getDrawIndirectBuffer());
-            BufferUtil.INSTANCE.bufferData(
-                    mesh.getDrawIndirectBuffer(), commandBuffer, GL_DYNAMIC_DRAW);
-            BufferUtil.INSTANCE.unbindBuffer(mesh.getDrawIndirectBuffer());
+            BufferUtilOpenGL.bindBuffer((BufferOpenGL) mesh.getDrawIndirectBuffer());
+            BufferUtilOpenGL.bufferData(
+                    (BufferOpenGL) mesh.getDrawIndirectBuffer(), commandBuffer, GL_DYNAMIC_DRAW);
+            BufferUtilOpenGL.unbindBuffer((BufferOpenGL) mesh.getDrawIndirectBuffer());
         }
 
         MemoryUtil.memFree(commandBuffer);

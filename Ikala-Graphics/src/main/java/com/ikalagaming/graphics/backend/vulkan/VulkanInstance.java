@@ -15,6 +15,7 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.ShaderMap;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.frontend.*;
@@ -1091,6 +1092,11 @@ public class VulkanInstance implements Instance {
     @Override
     public void processResources() {
         // TODO(ches) complete this
+    }
+
+    @Override
+    public State getState() {
+        return state;
     }
 
     private void regenerateSwapchain(@NonNull VulkanState.WindowInfo windowInfo) {

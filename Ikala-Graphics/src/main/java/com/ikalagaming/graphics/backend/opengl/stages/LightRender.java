@@ -13,6 +13,8 @@ import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.base.UniformsMap;
+import com.ikalagaming.graphics.backend.opengl.BufferOpenGL;
+import com.ikalagaming.graphics.backend.opengl.BufferUtilOpenGL;
 import com.ikalagaming.graphics.backend.opengl.PipelineOpenGL;
 import com.ikalagaming.graphics.backend.opengl.QuadMesh;
 import com.ikalagaming.graphics.frontend.*;
@@ -57,10 +59,10 @@ public class LightRender implements RenderStage {
     @NonNull private CascadeShadowSplit[] cascadeShadowSplits;
 
     /** The buffer to use for storing point light info. */
-    @NonNull private Buffer pointLightsBuffer;
+    @NonNull private BufferOpenGL pointLightsBuffer;
 
     /** The buffer to use for storing spotlight info. */
-    @NonNull private Buffer spotLightsBuffer;
+    @NonNull private BufferOpenGL spotLightsBuffer;
 
     /** The buffer for reading shadow info from. */
     @NonNull private Framebuffer shadowBuffers;
@@ -134,8 +136,8 @@ public class LightRender implements RenderStage {
         uniformsMap.setUniform(
                 ShaderUniforms.Light.INVERSE_VIEW_MATRIX, scene.getCamera().getInvViewMatrix());
 
-        BufferUtil.INSTANCE.bindBuffer(
-                scene.getMaterialCache().getMaterialBuffer(), MATERIALS_BINDING);
+        BufferUtilOpenGL.bindBuffer(
+                (BufferOpenGL) scene.getMaterialCache().getMaterialBuffer(), MATERIALS_BINDING);
 
         glBindVertexArray(quadMesh.vao());
         glDrawElements(GL_TRIANGLES, QuadMesh.VERTEX_COUNT, GL_UNSIGNED_INT, 0);
@@ -259,7 +261,10 @@ public class LightRender implements RenderStage {
      * @param scene The scene we are updating.
      */
     private void updateLights(
-            Scene scene, Buffer pointLights, Buffer spotLights, UniformsMap uniformsMap) {
+            Scene scene,
+            BufferOpenGL pointLights,
+            BufferOpenGL spotLights,
+            UniformsMap uniformsMap) {
         Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
 
         SceneLights sceneLights = scene.getSceneLights();
