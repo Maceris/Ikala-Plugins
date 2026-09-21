@@ -1,7 +1,15 @@
 package com.ikalagaming.graphics.graph;
 
+import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+import static org.lwjgl.vulkan.VK12.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+
+import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.opengl.BufferOpenGL;
 import com.ikalagaming.graphics.backend.opengl.BufferUtilOpenGL;
+import com.ikalagaming.graphics.backend.vulkan.SharedBuffer;
+import com.ikalagaming.graphics.backend.vulkan.VulkanState;
+import com.ikalagaming.graphics.frontend.BackendType;
 import com.ikalagaming.graphics.frontend.Buffer;
 import com.ikalagaming.graphics.scene.Entity;
 
@@ -105,7 +113,7 @@ public class Model {
     @Setter private Buffer entityAnimationOffsetsBuffer;
 
     /** Used to store model matrices for rendering entities. */
-    private final Buffer modelMatricesBuffer;
+    @Setter private Buffer modelMatricesBuffer;
 
     /**
      * The highest buffer size (measured in entity count), for animation state and destination
@@ -123,7 +131,7 @@ public class Model {
      * Used to store material overrides. Organized by entity, where each entity will have N integer
      * values, where N is the number of meshes that the model has.
      */
-    private final Buffer materialOverridesBuffer;
+    @Setter private Buffer materialOverridesBuffer;
 
     /**
      * Used to signal that material overrides have changed and need to be computed and uploaded
@@ -143,10 +151,28 @@ public class Model {
         this.animationList = new ArrayList<>();
         this.entityAnimationOffsetsBuffer = null;
         this.maxAnimatedBufferCapacity = 0;
-        this.modelMatricesBuffer = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.SHADER_STORAGE);
         this.entitiesLastFrame = 0;
-        this.materialOverridesBuffer =
-                BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.SHADER_STORAGE);
+        if (GraphicsManager.getBackendType() == BackendType.OPENGL) {
+            this.modelMatricesBuffer =
+                    BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.SHADER_STORAGE);
+            this.materialOverridesBuffer =
+                    BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.SHADER_STORAGE);
+        } else {
+            //TODO(ches) handle these buffers better
+            State state = GraphicsManager.getRenderInstance().getState();
+            this.modelMatricesBuffer =
+                    SharedBuffer.allocate(
+                            0,
+                            (VulkanState) state,
+                            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+                                    | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+            this.materialOverridesBuffer =
+                    SharedBuffer.allocate(
+                            0,
+                            (VulkanState) state,
+                            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+                                    | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+        }
         this.materialOverridesDirty = true;
     }
 
