@@ -1,7 +1,15 @@
 package com.ikalagaming.graphics.graph;
 
+import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+import static org.lwjgl.vulkan.VK12.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+
+import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.opengl.BufferOpenGL;
 import com.ikalagaming.graphics.backend.opengl.BufferUtilOpenGL;
+import com.ikalagaming.graphics.backend.vulkan.SharedBuffer;
+import com.ikalagaming.graphics.backend.vulkan.VulkanState;
+import com.ikalagaming.graphics.frontend.BackendType;
 import com.ikalagaming.graphics.frontend.Buffer;
 import com.ikalagaming.graphics.frontend.Material;
 
@@ -128,10 +136,35 @@ public class MeshData {
         this.boneCount = boneCount;
         this.boneWeightData = boneWeightData;
         this.boneWeightBuffer = null;
-        // TODO(ches) use Vulkan, figure out how to abstract away buffers probably
-        this.vertexBuffer = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.UNIFORM);
         this.animationTargetBuffer = null;
-        this.indexBuffer = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.INDEXES);
-        this.drawIndirectBuffer = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.DRAW_INDIRECT);
+
+        // TODO(ches) handle these buffers better
+        if (GraphicsManager.getBackendType() == BackendType.OPENGL) {
+            this.vertexBuffer = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.UNIFORM);
+            this.indexBuffer = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.INDEXES);
+            this.drawIndirectBuffer =
+                    BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.DRAW_INDIRECT);
+        } else {
+            State state = GraphicsManager.getRenderInstance().getState();
+
+            this.vertexBuffer =
+                    SharedBuffer.allocate(
+                            (long) vertexData.length * Float.BYTES,
+                            (VulkanState) state,
+                            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+                                    | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+            this.indexBuffer =
+                    SharedBuffer.allocate(
+                            (long) indices.length * Integer.BYTES,
+                            (VulkanState) state,
+                            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+                                    | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+            this.drawIndirectBuffer =
+                    SharedBuffer.allocate(
+                            0,
+                            (VulkanState) state,
+                            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+                                    | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+        }
     }
 }

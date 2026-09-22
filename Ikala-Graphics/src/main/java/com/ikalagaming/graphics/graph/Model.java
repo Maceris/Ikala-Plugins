@@ -158,7 +158,7 @@ public class Model {
             this.materialOverridesBuffer =
                     BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.SHADER_STORAGE);
         } else {
-            //TODO(ches) handle these buffers better
+            // TODO(ches) handle these buffers better
             State state = GraphicsManager.getRenderInstance().getState();
             this.modelMatricesBuffer =
                     SharedBuffer.allocate(

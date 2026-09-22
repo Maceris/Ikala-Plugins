@@ -71,6 +71,9 @@ public class SharedBuffer implements Buffer {
                     "Allocating a buffer of size {}, which is too big to update in a command buffer",
                     bufferSize);
         }
+        if (buffer.buffer == VK_NULL_HANDLE) {
+            keepContents = false;
+        }
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VmaAllocationInfo newAllocationInfo;
             if (!keepContents || bufferSize <= 0) {

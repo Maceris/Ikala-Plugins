@@ -21,6 +21,7 @@ import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.data.IkIO;
+import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -1028,7 +1029,87 @@ public class VulkanInstance implements Instance {
 
     @Override
     public void initializeModel(@NonNull Model model) {
-        // TODO(ches) initialize model
+        if (model.isAnimated()) {
+            // Filled out later
+            model.setEntityAnimationOffsetsBuffer(
+                    SharedBuffer.allocate(
+                            0,
+                            state,
+                            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+                                    | VK_BUFFER_USAGE_TRANSFER_DST_BIT));
+
+            int totalSize = 0;
+            for (Model.Animation animation : model.getAnimationList()) {
+                totalSize += animation.frameData().length;
+            }
+            ByteBuffer animations = MemoryUtil.memAlloc(totalSize);
+            for (Model.Animation animation : model.getAnimationList()) {
+                animations.put(animation.frameData());
+            }
+            SharedBuffer animationBuffer =
+                    SharedBuffer.allocate(
+                            totalSize,
+                            state,
+                            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+                                    | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+            model.setAnimationBuffer(animationBuffer);
+
+            MemoryUtil.memCopy(
+                    MemoryUtil.memAddress(animations),
+                    animationBuffer.allocationInfo.pMappedData(),
+                    totalSize);
+            MemoryUtil.memFree(animations);
+
+            for (MeshData meshData : model.getMeshDataList()) {
+                // Filled out later
+                meshData.setAnimationTargetBuffer(
+                        SharedBuffer.allocate(
+                                0,
+                                state,
+                                VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+                                        | VK_BUFFER_USAGE_TRANSFER_DST_BIT));
+                SharedBuffer boneWeightData =
+                        SharedBuffer.allocate(
+                                0,
+                                state,
+                                VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+                                        | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+                meshData.setBoneWeightBuffer(boneWeightData);
+                // NOTE(ches) we have to stage the data somewhere more accessible for the final
+                // memCopy
+                ByteBuffer boneData = MemoryUtil.memAlloc(meshData.getBoneWeightData().length);
+                MemoryUtil.memCopy(meshData.getBoneWeightData(), boneData);
+                MemoryUtil.memCopy(
+                        MemoryUtil.memAddress(boneData),
+                        boneWeightData.allocationInfo.pMappedData(),
+                        totalSize);
+                MemoryUtil.memFree(boneData);
+            }
+
+            for (MeshData meshData : model.getMeshDataList()) {
+                final int vertexSize = meshData.getVertexData().length * Float.BYTES;
+                final int indexSize = meshData.getIndices().length * Integer.BYTES;
+
+                ByteBuffer vertexData = MemoryUtil.memAlloc(vertexSize);
+                ByteBuffer indexData = MemoryUtil.memAlloc(indexSize);
+
+                MemoryUtil.memCopy(meshData.getVertexData(), vertexData);
+                MemoryUtil.memCopy(meshData.getIndices(), indexData);
+
+                MemoryUtil.memCopy(
+                        MemoryUtil.memAddress(vertexData),
+                        ((SharedBuffer) meshData.getVertexBuffer()).allocationInfo.pMappedData(),
+                        vertexSize);
+                MemoryUtil.memCopy(
+                        MemoryUtil.memAddress(indexData),
+                        ((SharedBuffer) meshData.getIndexBuffer()).allocationInfo.pMappedData(),
+                        indexSize);
+
+                MemoryUtil.memFree(indexData);
+                MemoryUtil.memFree(vertexData);
+            }
+        }
     }
 
     /** Set up the scene shader and uniforms. */
