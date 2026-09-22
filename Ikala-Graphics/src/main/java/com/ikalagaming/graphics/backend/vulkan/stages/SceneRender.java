@@ -12,7 +12,7 @@ import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.backend.vulkan.ShaderVulkan;
-import com.ikalagaming.graphics.backend.vulkan.TextureInfo;
+import com.ikalagaming.graphics.backend.vulkan.TextureInfoVulkan;
 import com.ikalagaming.graphics.backend.vulkan.VulkanState;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.MaterialCache;
@@ -96,7 +96,7 @@ public class SceneRender implements RenderStage {
 
         final boolean hasFilter = RenderConfig.hasFilterStage(renderConfig);
 
-        final TextureInfo targetImage =
+        final TextureInfoVulkan targetImage =
                 hasFilter
                         ? vulkanState.perFrameData[vulkanState.frameIndex].preFilterTexture
                         : vulkanState.perFrameData[vulkanState.frameIndex].finalTexture;
@@ -223,11 +223,14 @@ public class SceneRender implements RenderStage {
             int normalMapID = 0;
             int textureID = 0;
 
+            // TODO(ches) fix these to be... indices?
             if (material.getNormalMap() != null) {
-                normalMapID = (int) material.getNormalMap().id();
+                var info = (TextureInfoVulkan) material.getNormalMap().info();
+                normalMapID = (int) info.texture;
             }
             if (material.getTexture() != null) {
-                textureID = (int) material.getTexture().id();
+                var info = (TextureInfoVulkan) material.getTexture().info();
+                textureID = (int) info.texture;
             }
 
             Vector4f baseColor = material.getBaseColor();

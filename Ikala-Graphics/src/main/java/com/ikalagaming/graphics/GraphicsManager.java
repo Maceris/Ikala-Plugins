@@ -269,6 +269,7 @@ public class GraphicsManager {
      * Terminate GLFW and free the error callback. If any windows still remain, they are destroyed.
      */
     public static void terminate() {
+        // TODO(ches) unload all the models, scene
         renderInstance.cleanup();
 
         if (null != window) {

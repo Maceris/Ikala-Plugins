@@ -179,7 +179,7 @@ public class GuiRender implements RenderStage {
         VulkanState vulkanState = (VulkanState) state;
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
-        final TextureInfo targetImage =
+        final TextureInfoVulkan targetImage =
                 vulkanState.perFrameData[vulkanState.frameIndex].finalTexture;
 
         updateBindings(vulkanState);
@@ -224,7 +224,7 @@ public class GuiRender implements RenderStage {
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
         final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
-        final TextureInfo targetImage = frameData.finalTexture;
+        final TextureInfoVulkan targetImage = frameData.finalTexture;
         try (MemoryStack stack = MemoryStack.stackPush()) {
 
             scale.x = 2.0f / width;
@@ -271,7 +271,7 @@ public class GuiRender implements RenderStage {
         // TODO(ches) render
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
-        final TextureInfo targetImage =
+        final TextureInfoVulkan targetImage =
                 vulkanState.perFrameData[vulkanState.frameIndex].finalTexture;
 
         try (MemoryStack stack = MemoryStack.stackPush()) {

@@ -12,6 +12,7 @@ import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.opengl.BufferOpenGL;
 import com.ikalagaming.graphics.backend.opengl.BufferUtilOpenGL;
 import com.ikalagaming.graphics.backend.opengl.RenderBuffers;
+import com.ikalagaming.graphics.backend.opengl.TextureInfoOpenGL;
 import com.ikalagaming.graphics.frontend.*;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -125,12 +126,12 @@ public class SceneRender implements RenderStage {
                 uniformsMap.setUniformUnsigned(MESH_INDEX, meshIndex);
 
                 if (assignedOrDefaultMaterial.getTexture() != null) {
-                    glMakeImageHandleResidentARB(
-                            assignedOrDefaultMaterial.getTexture().handle(), GL_READ_ONLY);
+                    var info = (TextureInfoOpenGL) assignedOrDefaultMaterial.getTexture().info();
+                    glMakeImageHandleResidentARB(info.bindlessHandle, GL_READ_ONLY);
                 }
                 if (assignedOrDefaultMaterial.getNormalMap() != null) {
-                    glMakeImageHandleResidentARB(
-                            assignedOrDefaultMaterial.getNormalMap().handle(), GL_READ_ONLY);
+                    var info = (TextureInfoOpenGL) assignedOrDefaultMaterial.getNormalMap().info();
+                    glMakeImageHandleResidentARB(info.bindlessHandle, GL_READ_ONLY);
                 }
                 uniformsMap.setUniform(BASE_COLOR_SAMPLER, assignedOrDefaultMaterial.getTexture());
                 uniformsMap.setUniform(NORMAL_SAMPLER, assignedOrDefaultMaterial.getNormalMap());
@@ -215,10 +216,12 @@ public class SceneRender implements RenderStage {
             int textureID = 0;
 
             if (material.getNormalMap() != null) {
-                normalMapID = (int) material.getNormalMap().id();
+                var info = (TextureInfoOpenGL) material.getNormalMap().info();
+                normalMapID = (int) info.id;
             }
             if (material.getTexture() != null) {
-                textureID = (int) material.getTexture().id();
+                var info = (TextureInfoOpenGL) material.getTexture().info();
+                textureID = (int) info.id;
             }
 
             Vector4f baseColor = material.getBaseColor();

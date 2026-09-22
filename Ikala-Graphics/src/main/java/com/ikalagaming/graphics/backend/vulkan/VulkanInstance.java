@@ -323,6 +323,12 @@ public class VulkanInstance implements Instance {
 
         pipelineManager.cleanup(state);
 
+        DeletionQueue.Entry nextEntry = GraphicsManager.getDeletionQueue().pop();
+        while (nextEntry != null) {
+            deleteResource(nextEntry);
+            nextEntry = GraphicsManager.getDeletionQueue().pop();
+        }
+
         for (VulkanState.WindowInfo windowInfo : state.windows.values()) {
             cleanupWindow(windowInfo);
         }
@@ -819,6 +825,31 @@ public class VulkanInstance implements Instance {
         }
     }
 
+    /**
+     * Process resource deletion.
+     *
+     * @param entry The deletion queue entry to handle.
+     */
+    private void deleteResource(@NonNull DeletionQueue.Entry entry) {
+        switch (entry.type()) {
+            case BUFFER -> {
+                var buffer = (SharedBuffer) entry.resource();
+                SharedBuffer.free(buffer, state);
+            }
+            case FRAME_BUFFER -> {}
+            case SHADER -> {
+                var shader = (ShaderVulkan) entry.resource();
+                shader.free();
+            }
+            case TEXTURE -> {
+                var texture = (Texture) entry.resource();
+                var textureInfo = (TextureInfoVulkan) texture.info();
+                vmaDestroyImage(
+                        state.vmaAllocator, textureInfo.texture, textureInfo.textureAllocation);
+            }
+        }
+    }
+
     @Override
     public int getPipelineConfig() {
         return renderConfig;
@@ -1086,29 +1117,29 @@ public class VulkanInstance implements Instance {
                         totalSize);
                 MemoryUtil.memFree(boneData);
             }
+        }
 
-            for (MeshData meshData : model.getMeshDataList()) {
-                final int vertexSize = meshData.getVertexData().length * Float.BYTES;
-                final int indexSize = meshData.getIndices().length * Integer.BYTES;
+        for (MeshData meshData : model.getMeshDataList()) {
+            final int vertexSize = meshData.getVertexData().length * Float.BYTES;
+            final int indexSize = meshData.getIndices().length * Integer.BYTES;
 
-                ByteBuffer vertexData = MemoryUtil.memAlloc(vertexSize);
-                ByteBuffer indexData = MemoryUtil.memAlloc(indexSize);
+            ByteBuffer vertexData = MemoryUtil.memAlloc(vertexSize);
+            ByteBuffer indexData = MemoryUtil.memAlloc(indexSize);
 
-                MemoryUtil.memCopy(meshData.getVertexData(), vertexData);
-                MemoryUtil.memCopy(meshData.getIndices(), indexData);
+            MemoryUtil.memCopy(meshData.getVertexData(), vertexData);
+            MemoryUtil.memCopy(meshData.getIndices(), indexData);
 
-                MemoryUtil.memCopy(
-                        MemoryUtil.memAddress(vertexData),
-                        ((SharedBuffer) meshData.getVertexBuffer()).allocationInfo.pMappedData(),
-                        vertexSize);
-                MemoryUtil.memCopy(
-                        MemoryUtil.memAddress(indexData),
-                        ((SharedBuffer) meshData.getIndexBuffer()).allocationInfo.pMappedData(),
-                        indexSize);
+            MemoryUtil.memCopy(
+                    MemoryUtil.memAddress(vertexData),
+                    ((SharedBuffer) meshData.getVertexBuffer()).allocationInfo.pMappedData(),
+                    vertexSize);
+            MemoryUtil.memCopy(
+                    MemoryUtil.memAddress(indexData),
+                    ((SharedBuffer) meshData.getIndexBuffer()).allocationInfo.pMappedData(),
+                    indexSize);
 
-                MemoryUtil.memFree(indexData);
-                MemoryUtil.memFree(vertexData);
-            }
+            MemoryUtil.memFree(indexData);
+            MemoryUtil.memFree(vertexData);
         }
     }
 
@@ -1172,7 +1203,10 @@ public class VulkanInstance implements Instance {
 
     @Override
     public void processResources() {
-        // TODO(ches) complete this
+        DeletionQueue.Entry toDelete = GraphicsManager.getDeletionQueue().pop();
+        if (toDelete != null) {
+            deleteResource(toDelete);
+        }
     }
 
     @Override

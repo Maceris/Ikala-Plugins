@@ -11,6 +11,7 @@ public class DeletionQueue {
     /** The types of resources that the queue supports deleting. */
     public enum ResourceType {
         BUFFER,
+        // TODO(ches) remove this
         FRAME_BUFFER,
         SHADER,
         TEXTURE

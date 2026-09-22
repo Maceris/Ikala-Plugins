@@ -67,7 +67,11 @@ public class TextureLoaderOpenGL implements TextureLoader {
             bindlessHandle = glGetTextureHandleARB(textureID);
         }
 
-        return new Texture(textureID, bindlessHandle, width, height);
+        TextureInfoOpenGL info = new TextureInfoOpenGL();
+        info.id = textureID;
+        info.bindlessHandle = bindlessHandle;
+
+        return new Texture(width, height, info);
     }
 
     @Override

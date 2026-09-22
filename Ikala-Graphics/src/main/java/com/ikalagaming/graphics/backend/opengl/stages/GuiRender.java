@@ -15,6 +15,7 @@ import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.opengl.GuiMesh;
 import com.ikalagaming.graphics.backend.opengl.ImGuiMesh;
+import com.ikalagaming.graphics.backend.opengl.TextureInfoOpenGL;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
@@ -173,7 +174,8 @@ public class GuiRender implements RenderStage {
         var uniformsMap = shader.getUniformMap();
         uniformsMap.setUniform(ShaderUniforms.GUI.SCALE, scale);
 
-        glBindTexture(GL_TEXTURE_2D, (int) fontAtlas.id());
+        var atlasInfo = (TextureInfoOpenGL) fontAtlas.info();
+        glBindTexture(GL_TEXTURE_2D, (int) atlasInfo.id);
 
         if (!IkGui.getIO().fonts.stagedBitmaps.isEmpty()) {
             for (FontAtlas.StagedBitmap letter : IkGui.getIO().fonts.stagedBitmaps) {

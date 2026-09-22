@@ -244,7 +244,8 @@ public class PipelineManager {
                 GraphicsManager.getRenderInstance()
                         .getTextureLoader()
                         .load(buf, Format.R8G8B8A8_UINT, width.get(), height.get());
-        fontAtlas.setTexID((int) imguiFont.id());
+        var imguiFontInfo = (TextureInfoOpenGL) imguiFont.info();
+        fontAtlas.setTexID(imguiFontInfo.id);
 
         FontAtlas fontAtlas1 = IkGui.getIO().fonts;
         final String notoSans = "fonts/NotoSans.ttf";

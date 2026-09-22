@@ -498,7 +498,8 @@ public class OpenGLInstance implements Instance {
             }
             case TEXTURE -> {
                 var texture = (Texture) entry.resource();
-                glDeleteTextures((int) texture.id());
+                var textureInfo = (TextureInfoOpenGL) texture.info();
+                glDeleteTextures((int) textureInfo.id);
             }
             case SHADER -> {
                 var shader = (Shader) entry.resource();

@@ -2,8 +2,10 @@ package com.ikalagaming.graphics.backend.vulkan;
 
 import static org.lwjgl.vulkan.VK13.VK_NULL_HANDLE;
 
+import com.ikalagaming.graphics.frontend.TextureInfo;
+
 /** Tracks handles for a texture, but does not handle the lifetimes. */
-public class TextureInfo {
+public class TextureInfoVulkan implements TextureInfo {
 
     /** Image sampler handle. 0 if unused. */
     public long sampler = VK_NULL_HANDLE;
@@ -23,7 +25,7 @@ public class TextureInfo {
      * @param sampler Image sampler handle.
      * @return This object.
      */
-    public TextureInfo sampler(long sampler) {
+    public TextureInfoVulkan sampler(long sampler) {
         this.sampler = sampler;
         return this;
     }
@@ -34,7 +36,7 @@ public class TextureInfo {
      * @param texture The texture handle.
      * @return This object.
      */
-    public TextureInfo texture(long texture) {
+    public TextureInfoVulkan texture(long texture) {
         this.texture = texture;
         return this;
     }
@@ -45,7 +47,7 @@ public class TextureInfo {
      * @param textureAllocation VMA handle for the texture allocation.
      * @return This object.
      */
-    public TextureInfo textureAllocation(long textureAllocation) {
+    public TextureInfoVulkan textureAllocation(long textureAllocation) {
         this.textureAllocation = textureAllocation;
         return this;
     }
@@ -56,7 +58,7 @@ public class TextureInfo {
      * @param view The image view handle.
      * @return This object.
      */
-    public TextureInfo view(long view) {
+    public TextureInfoVulkan view(long view) {
         this.view = view;
         return this;
     }

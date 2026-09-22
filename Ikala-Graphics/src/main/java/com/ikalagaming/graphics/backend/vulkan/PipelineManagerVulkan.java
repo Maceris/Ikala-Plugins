@@ -151,7 +151,7 @@ public class PipelineManagerVulkan {
         return new PipelineVulkan(stages.toArray(new RenderStage[0]), configuration);
     }
 
-    private TextureInfo createDepthTexture(
+    private TextureInfoVulkan createDepthTexture(
             @NonNull VulkanState state, @NonNull VkExtent3D imageExtent) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
 
@@ -219,7 +219,7 @@ public class PipelineManagerVulkan {
             checkError(vkCreateSampler(state.device.logical, samplerCreateInfo, null, longOutput));
             final long imageSampler = longOutput.get(0);
 
-            return new TextureInfo()
+            return new TextureInfoVulkan()
                     .texture(image)
                     .textureAllocation(imageAllocation)
                     .view(imageView)
@@ -313,7 +313,7 @@ public class PipelineManagerVulkan {
             @NonNull VulkanState state,
             @NonNull PerFrameData data,
             @NonNull VkExtent3D imageExtent) {
-        data.cascadeShadows = new TextureInfo[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
+        data.cascadeShadows = new TextureInfoVulkan[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
         for (int shadow = 0; shadow < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; shadow++) {
             data.cascadeShadowSplits[shadow] = new CascadeShadowSplit();
             data.cascadeShadows[shadow] = createDepthTexture(state, imageExtent);
@@ -333,7 +333,7 @@ public class PipelineManagerVulkan {
                                 | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
     }
 
-    private TextureInfo createTexture(
+    private TextureInfoVulkan createTexture(
             @NonNull VulkanState state, @NonNull VkExtent3D imageExtent, int imageUsage) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
 
@@ -399,7 +399,7 @@ public class PipelineManagerVulkan {
             checkError(vkCreateSampler(state.device.logical, samplerCreateInfo, null, longOutput));
             final long imageSampler = longOutput.get(0);
 
-            return new TextureInfo()
+            return new TextureInfoVulkan()
                     .texture(image)
                     .textureAllocation(imageAllocation)
                     .view(imageView)
@@ -452,7 +452,7 @@ public class PipelineManagerVulkan {
         }
 
         if (data.gBuffer != null) {
-            for (TextureInfo info : data.gBuffer.textures()) {
+            for (TextureInfoVulkan info : data.gBuffer.textures()) {
                 vmaDestroyImage(state.vmaAllocator, info.texture, info.textureAllocation);
             }
             vmaDestroyImage(
@@ -534,7 +534,8 @@ public class PipelineManagerVulkan {
                 GraphicsManager.getRenderInstance()
                         .getTextureLoader()
                         .load(buf, Format.R8G8B8A8_UINT, width.get(), height.get());
-        fontAtlas.setTexID((int) imguiFont.id());
+        var imguiFontInfo = (TextureInfoVulkan) imguiFont.info();
+        fontAtlas.setTexID(imguiFontInfo.texture);
 
         FontAtlas fontAtlas1 = IkGui.getIO().fonts;
         final String notoSans = "fonts/NotoSans.ttf";
@@ -556,7 +557,7 @@ public class PipelineManagerVulkan {
     }
 
     private GBuffer generateGBuffer(@NonNull VulkanState state, @NonNull VkExtent3D imageExtent) {
-        TextureInfo[] textures = new TextureInfo[5];
+        TextureInfoVulkan[] textures = new TextureInfoVulkan[5];
         for (int i = 0; i < textures.length; i++) {
             textures[i] =
                     createTexture(
@@ -564,7 +565,7 @@ public class PipelineManagerVulkan {
                             imageExtent,
                             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
         }
-        TextureInfo depth = createDepthTexture(state, imageExtent);
+        TextureInfoVulkan depth = createDepthTexture(state, imageExtent);
 
         return new GBuffer(textures, depth, imageExtent.width(), imageExtent.height());
     }

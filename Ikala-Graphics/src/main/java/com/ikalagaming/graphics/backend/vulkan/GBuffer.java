@@ -14,8 +14,8 @@ import java.util.Objects;
  * @param height Height of the buffers.
  */
 public record GBuffer(
-        @NonNull TextureInfo @NonNull [] textures,
-        @NonNull TextureInfo depth,
+        @NonNull TextureInfoVulkan @NonNull [] textures,
+        @NonNull TextureInfoVulkan depth,
         int width,
         int height) {
 

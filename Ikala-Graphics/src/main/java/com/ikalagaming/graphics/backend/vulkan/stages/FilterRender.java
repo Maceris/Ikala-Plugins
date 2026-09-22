@@ -72,7 +72,7 @@ public class FilterRender implements RenderStage {
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
 
-        final TextureInfo targetImage =
+        final TextureInfoVulkan targetImage =
                 vulkanState.perFrameData[vulkanState.frameIndex].finalTexture;
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -294,7 +294,7 @@ public class FilterRender implements RenderStage {
                     VkWriteDescriptorSet.calloc(GraphicsManager.MAX_FRAMES_IN_FLIGHT, stack);
 
             for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
-                TextureInfo texture = state.perFrameData[i].finalTexture;
+                TextureInfoVulkan texture = state.perFrameData[i].finalTexture;
                 VkDescriptorImageInfo.Buffer textureInfo = VkDescriptorImageInfo.calloc(1, stack);
                 textureInfo
                         .get(0)

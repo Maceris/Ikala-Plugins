@@ -139,6 +139,8 @@ public class ModelLoader {
         ModelLoader.loadQueue.add(request);
     }
 
+    // TODO(ches) unload model
+
     /** Private constructor to prevent instantiation. */
     private ModelLoader() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");

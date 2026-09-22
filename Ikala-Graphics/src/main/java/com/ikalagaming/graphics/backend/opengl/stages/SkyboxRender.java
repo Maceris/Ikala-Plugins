@@ -10,6 +10,7 @@ import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.backend.opengl.SkyboxModel;
+import com.ikalagaming.graphics.backend.opengl.TextureInfoOpenGL;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.scene.Scene;
@@ -62,7 +63,8 @@ public class SkyboxRender implements RenderStage {
         boolean hasTexture = false;
         if (texture != null) {
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, (int) texture.id());
+            var info = (TextureInfoOpenGL) texture.info();
+            glBindTexture(GL_TEXTURE_2D, (int) info.id);
             hasTexture = true;
         }
 
