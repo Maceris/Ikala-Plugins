@@ -304,6 +304,16 @@ public class PipelineManagerVulkan {
                                 NORMAL_USAGE);
                 state.perFrameData[i].cascadeShadowSplits =
                         new CascadeShadowSplit[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
+
+                state.perFrameData[i].animationDataAllocator =
+                        new BufferAllocator(state.perFrameData[i].animationData, 16);
+                state.perFrameData[i].animationOffsetsAllocator =
+                        new BufferAllocator(state.perFrameData[i].animationOffsets, 16);
+                state.perFrameData[i].animationModelDataAllocator =
+                        new BufferAllocator(state.perFrameData[i].animationModelData, 16);
+                state.perFrameData[i].animationBoneWeightAllocator =
+                        new BufferAllocator(state.perFrameData[i].animationBoneWeight, 16);
+
                 createIntermediaryTextures(state, state.perFrameData[i], imageExtent);
             }
         }

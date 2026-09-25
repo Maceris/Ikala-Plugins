@@ -23,6 +23,11 @@ public class PerFrameData {
     public SharedBuffer shadowModelMatrices;
     public SharedBuffer skyboxUniforms;
 
+    public BufferAllocator animationDataAllocator;
+    public BufferAllocator animationOffsetsAllocator;
+    public BufferAllocator animationModelDataAllocator;
+    public BufferAllocator animationBoneWeightAllocator;
+
     /** Materials used by the light and scene render phases. */
     public SharedBuffer materials;
 
