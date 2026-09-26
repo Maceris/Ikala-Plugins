@@ -1216,7 +1216,6 @@ public class VulkanInstance implements Instance {
 
     private void regenerateSwapchain(@NonNull VulkanState.WindowInfo windowInfo) {
         checkError(vkDeviceWaitIdle(state.device.logical));
-        // TODO(ches) regenerate gbuffer
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             checkError(
@@ -1335,7 +1334,6 @@ public class VulkanInstance implements Instance {
         if (!windowInfo.updateSwapchain) {
             windowInfo.currentSwapchainIndex = intOutput.get(0);
 
-            // TODO(ches) update shader data
             final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
             checkError(vkResetCommandBuffer(commandBuffer, 0));
 
@@ -1511,6 +1509,7 @@ public class VulkanInstance implements Instance {
     public void setQuality(
             @NonNull GraphicsSettings.Quality oldQuality,
             @NonNull GraphicsSettings.Quality newQuality) {
+        checkError(vkDeviceWaitIdle(state.device.logical));
         // TODO(ches) set up or clean up as needed
     }
 
@@ -1541,8 +1540,9 @@ public class VulkanInstance implements Instance {
 
     @Override
     public void swapPipeline(final int config) {
-        // TODO(ches) complete this
-        // TODO(ches) Can we eliminate pipelines as a concept?
+        checkError(vkDeviceWaitIdle(state.device.logical));
+        renderConfig = config;
+        pipeline = pipelineManager.getPipeline(config);
     }
 
     /**

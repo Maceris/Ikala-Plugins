@@ -1,6 +1,10 @@
 package com.ikalagaming.graphics.backend.vulkan;
 
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
+import com.ikalagaming.graphics.graph.MeshData;
+import com.ikalagaming.graphics.graph.Model;
+
+import java.util.Map;
 
 /** Data buffers for a frame, only the data that the CPU cares about. */
 public class PerFrameData {
@@ -27,6 +31,13 @@ public class PerFrameData {
     public BufferAllocator animationOffsetsAllocator;
     public BufferAllocator animationModelDataAllocator;
     public BufferAllocator animationBoneWeightAllocator;
+    public BufferAllocator animationTargetAllocator;
+
+    public Map<Model, Integer> animationDataAllocations;
+    public Map<Model, Integer> animationOffsetAllocations;
+    public Map<MeshData, Integer> animationModelAllocations;
+    public Map<MeshData, Integer> animationBoneWeightAllocations;
+    public Map<MeshData, Integer> animationTargetAllocations;
 
     /** Materials used by the light and scene render phases. */
     public SharedBuffer materials;

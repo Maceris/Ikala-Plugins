@@ -313,6 +313,14 @@ public class PipelineManagerVulkan {
                         new BufferAllocator(state.perFrameData[i].animationModelData, 16);
                 state.perFrameData[i].animationBoneWeightAllocator =
                         new BufferAllocator(state.perFrameData[i].animationBoneWeight, 16);
+                state.perFrameData[i].animationTargetAllocator =
+                        new BufferAllocator(state.perFrameData[i].animationTarget, 16);
+
+                state.perFrameData[i].animationDataAllocations = new HashMap<>();
+                state.perFrameData[i].animationOffsetAllocations = new HashMap<>();
+                state.perFrameData[i].animationModelAllocations = new HashMap<>();
+                state.perFrameData[i].animationBoneWeightAllocations = new HashMap<>();
+                state.perFrameData[i].animationTargetAllocations = new HashMap<>();
 
                 createIntermediaryTextures(state, state.perFrameData[i], imageExtent);
             }
@@ -529,6 +537,28 @@ public class PipelineManagerVulkan {
         data.materials = null;
         SharedBuffer.free(data.textures, state);
         data.textures = null;
+
+        data.animationDataAllocator.clear();
+        data.animationDataAllocator = null;
+        data.animationOffsetsAllocator.clear();
+        data.animationOffsetsAllocator = null;
+        data.animationModelDataAllocator.clear();
+        data.animationModelDataAllocator = null;
+        data.animationBoneWeightAllocator.clear();
+        data.animationBoneWeightAllocator = null;
+        data.animationTargetAllocator.clear();
+        data.animationTargetAllocator = null;
+
+        data.animationDataAllocations.clear();
+        data.animationDataAllocations = null;
+        data.animationOffsetAllocations.clear();
+        data.animationOffsetAllocations = null;
+        data.animationModelAllocations.clear();
+        data.animationModelAllocations = null;
+        data.animationBoneWeightAllocations.clear();
+        data.animationBoneWeightAllocations = null;
+        data.animationTargetAllocations.clear();
+        data.animationTargetAllocations = null;
 
         data.cascadeShadowSplits = null;
 

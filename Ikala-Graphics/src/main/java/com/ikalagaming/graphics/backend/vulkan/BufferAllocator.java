@@ -158,6 +158,14 @@ public class BufferAllocator {
         return blockAddress;
     }
 
+    /** Clear out all the data about allocations, leaves the buffer alone. */
+    public void clear() {
+        this.freeLists.forEach(Set::clear);
+        this.allocatedBlocks.clear();
+        this.freeLists.get(this.maxOrder).add(0);
+        this.memoryFree = (int) buffer.allocationInfo.size();
+    }
+
     /**
      * Free up an allocation. The underlying buffer is unaffected.
      *
