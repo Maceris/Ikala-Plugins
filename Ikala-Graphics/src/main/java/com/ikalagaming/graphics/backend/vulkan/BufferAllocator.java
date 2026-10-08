@@ -11,7 +11,9 @@ import java.util.*;
 
 /**
  * A buddy allocator for a shared buffer, used to maintain large sparse buffers of the same kind of
- * elements.
+ * elements. Blocks are handed out from a virtual address space of {@link #MAX_BUFFER_SIZE} bytes,
+ * preferring the lowest free address, and the real buffer grows as needed to cover every allocated
+ * block.
  */
 @Slf4j
 public class BufferAllocator {
@@ -33,14 +35,12 @@ public class BufferAllocator {
      */
     private final int maxOrder;
 
-    /** How much memory is free for use. */
-    private int memoryFree;
-
     /**
      * A list of free lists, where the index in the list is the order, and the set contains all the
-     * free block addresses of that size.
+     * free block addresses of that size. Sorted so that we can hand out the lowest address first,
+     * which keeps the real buffer as small as possible.
      */
-    private final List<Set<Integer>> freeLists;
+    private final List<TreeSet<Integer>> freeLists;
 
     /** A map from address to order (size) for all allocated blocks. */
     private final Map<Integer, Integer> allocatedBlocks;
@@ -70,11 +70,11 @@ public class BufferAllocator {
             throw new IllegalArgumentException(
                     "We cannot handle a buffer of size " + buffer.allocationInfo.size());
         }
-        this.memoryFree = (int) buffer.allocationInfo.size();
         this.maxOrder = log2(MAX_BUFFER_SIZE / minBlockSize);
         this.freeLists = new ArrayList<>();
-        for (int i = 0; i < this.maxOrder; i++) {
-            this.freeLists.add(new HashSet<>());
+        // Orders 0 through maxOrder inclusive
+        for (int i = 0; i <= this.maxOrder; i++) {
+            this.freeLists.add(new TreeSet<>());
         }
         this.allocatedBlocks = new HashMap<>();
         this.freeLists.get(this.maxOrder).add(0);
@@ -109,27 +109,17 @@ public class BufferAllocator {
         final int targetSize = Math.max(minBlockSize, nextPowerOf2(size));
         final int targetOrder = log2(targetSize / minBlockSize);
 
-        if (targetSize > memoryFree) {
-            final long oldSize = buffer.allocationInfo.size();
-            long sizeToRequest = oldSize * 2;
-            // In case we need to allocate something huge, just resize the array once
-            while (sizeToRequest < targetSize && sizeToRequest < MAX_BUFFER_SIZE) {
-                sizeToRequest *= 2;
-            }
-            buffer.ensureFits(
-                    SharedBuffer.align(sizeToRequest),
-                    (VulkanState) GraphicsManager.getRenderInstance().getState(),
-                    true);
-            final long newSize = buffer.allocationInfo.size();
-            memoryFree += (int) (newSize - oldSize);
-        }
-
         int currentOrder = targetOrder;
-        while (currentOrder < maxOrder && freeLists.get(currentOrder).isEmpty()) {
+        Integer freeAddress = null;
+        while (currentOrder <= maxOrder) {
+            freeAddress = freeLists.get(currentOrder).pollFirst();
+            if (freeAddress != null) {
+                break;
+            }
             currentOrder += 1;
         }
 
-        if (currentOrder > maxOrder) {
+        if (freeAddress == null) {
             log.warn(
                     "Ran out of memory in allocator for buffer {}, trying to allocate {} bytes",
                     buffer.deviceAddress,
@@ -137,8 +127,7 @@ public class BufferAllocator {
             return -1;
         }
 
-        int blockAddress = freeLists.get(currentOrder).iterator().next();
-        freeLists.get(currentOrder).remove(blockAddress);
+        int blockAddress = freeAddress;
         while (currentOrder > targetOrder) {
             currentOrder -= 1;
             int currentBlockSize = (1 << currentOrder) * minBlockSize;
@@ -148,14 +137,33 @@ public class BufferAllocator {
         }
 
         allocatedBlocks.put(blockAddress, targetOrder);
-        memoryFree -= targetSize;
+
+        ensureCovered((long) blockAddress + targetSize);
 
         if (clear) {
             final int ZERO = 0;
-            MemoryUtil.memSet(buffer.allocationInfo.pMappedData(), ZERO, targetSize);
+            MemoryUtil.memSet(buffer.allocationInfo.pMappedData() + blockAddress, ZERO, targetSize);
         }
 
         return blockAddress;
+    }
+
+    /**
+     * Grow the buffer if needed so that it covers the given number of bytes, keeping the existing
+     * contents. Grows to at least double the current size to avoid frequent reallocation.
+     *
+     * @param requiredSize The number of bytes the buffer must be able to hold.
+     */
+    private void ensureCovered(long requiredSize) {
+        final long oldSize = buffer.allocationInfo.size();
+        if (requiredSize <= oldSize) {
+            return;
+        }
+        final long nextPowerOf2 = Math.max(requiredSize, Long.highestOneBit(requiredSize - 1) << 1);
+        // Blocks never extend past MAX_BUFFER_SIZE, so nextPowerOf2 <= MAX_BUFFER_SIZE here
+        final long newSize = Math.clamp(oldSize * 2, nextPowerOf2, MAX_BUFFER_SIZE);
+        buffer.ensureFits(
+                newSize, (VulkanState) GraphicsManager.getRenderInstance().getState(), true);
     }
 
     /** Clear out all the data about allocations, leaves the buffer alone. */
@@ -163,7 +171,6 @@ public class BufferAllocator {
         this.freeLists.forEach(Set::clear);
         this.allocatedBlocks.clear();
         this.freeLists.get(this.maxOrder).add(0);
-        this.memoryFree = (int) buffer.allocationInfo.size();
     }
 
     /**
@@ -199,9 +206,6 @@ public class BufferAllocator {
         }
 
         freeLists.get(order).add(currentAddress);
-
-        int blockSize = (1 << order) * minBlockSize;
-        memoryFree += blockSize;
         return true;
     }
 
@@ -260,8 +264,10 @@ public class BufferAllocator {
         }
 
         MemoryUtil.memCopy(
-                MemoryUtil.memAddress(data), buffer.allocationInfo.pMappedData(), data.limit());
+                MemoryUtil.memAddress(data),
+                buffer.allocationInfo.pMappedData() + address,
+                dataSize);
 
-        return false;
+        return true;
     }
 }

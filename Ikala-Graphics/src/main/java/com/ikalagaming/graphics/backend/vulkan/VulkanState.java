@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.backend.vulkan;
 
+import static org.lwjgl.util.vma.Vma.vmaDestroyBuffer;
 import static org.lwjgl.vulkan.VK10.VK_FORMAT_UNDEFINED;
 import static org.lwjgl.vulkan.VK13.VK_NULL_HANDLE;
 
@@ -81,6 +82,49 @@ public class VulkanState implements State {
 
     /** Info specific to windows. */
     public final Map<Window, WindowInfo> windows = new HashMap<>();
+
+    /**
+     * Buffers that were replaced while frames in flight might still be using them, one list per
+     * frame in flight. A list is freed once the fence for that frame index has been waited on.
+     */
+    public final List<List<SharedBuffer.RetiredBuffer>> retiredBuffers = createRetiredBufferLists();
+
+    /**
+     * Create the per-frame lists of retired buffers.
+     *
+     * @return One empty list per frame in flight.
+     */
+    private static List<List<SharedBuffer.RetiredBuffer>> createRetiredBufferLists() {
+        List<List<SharedBuffer.RetiredBuffer>> result = new ArrayList<>();
+        for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+            result.add(new ArrayList<>());
+        }
+        return result;
+    }
+
+    /**
+     * Queue a buffer to be freed once the current frame index comes around again, by which point no
+     * frame in flight can still be using it.
+     *
+     * @param buffer The buffer to free later.
+     */
+    public void retireBuffer(@NonNull SharedBuffer.RetiredBuffer buffer) {
+        retiredBuffers.get(frameIndex).add(buffer);
+    }
+
+    /**
+     * Free the retired buffers for a frame index. Only call this once the GPU is done with that
+     * frame, such as after waiting on its fence.
+     *
+     * @param index The frame index to free buffers for.
+     */
+    public void freeRetiredBuffers(int index) {
+        List<SharedBuffer.RetiredBuffer> retired = retiredBuffers.get(index);
+        for (SharedBuffer.RetiredBuffer buffer : retired) {
+            vmaDestroyBuffer(vmaAllocator, buffer.buffer(), buffer.allocation());
+        }
+        retired.clear();
+    }
 
     public static class Device {
         /** The physical device this corresponds to, for reference. */

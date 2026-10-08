@@ -1,7 +1,6 @@
 package com.ikalagaming.graphics.graph;
 
-import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-import static org.lwjgl.vulkan.VK12.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+import static org.lwjgl.vulkan.VK10.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.backend.base.State;
@@ -147,24 +146,20 @@ public class MeshData {
         } else {
             State state = GraphicsManager.getRenderInstance().getState();
 
+            // Vertices are also read as storage by the animation compute shader
             this.vertexBuffer =
                     SharedBuffer.allocate(
                             (long) vertexData.length * Float.BYTES,
                             (VulkanState) state,
-                            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
-                                    | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+                            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
             this.indexBuffer =
                     SharedBuffer.allocate(
                             (long) indices.length * Integer.BYTES,
                             (VulkanState) state,
-                            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
-                                    | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+                            VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
             this.drawIndirectBuffer =
                     SharedBuffer.allocate(
-                            0,
-                            (VulkanState) state,
-                            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
-                                    | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+                            0, (VulkanState) state, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
         }
     }
 }

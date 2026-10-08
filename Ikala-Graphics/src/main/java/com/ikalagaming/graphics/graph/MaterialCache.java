@@ -1,7 +1,6 @@
 package com.ikalagaming.graphics.graph;
 
-import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-import static org.lwjgl.vulkan.VK12.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.backend.base.State;
@@ -54,10 +53,7 @@ public class MaterialCache {
             // TODO(ches) deal with this
             materialBuffer =
                     SharedBuffer.allocate(
-                            0,
-                            (VulkanState) state,
-                            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
-                                    | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+                            0, (VulkanState) state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
         }
     }
 

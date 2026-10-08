@@ -220,73 +220,67 @@ public class PipelineManagerVulkan {
             imageExtent.set(window.getWidth(), window.getHeight(), 1);
             state.realSize.set(window.getWidth(), window.getHeight(), 1);
 
-            final int NORMAL_USAGE =
-                    VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+            // SharedBuffer adds device address and transfer destination usage to all of these
+            final int STORAGE = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+            final int UNIFORM = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 
             for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
                 state.perFrameData[i] = new PerFrameData();
 
                 final long DEFERRED_UNTIL_LATER = 0;
                 state.perFrameData[i].animationData =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, NORMAL_USAGE);
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].animationOffsets =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, NORMAL_USAGE);
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].animationModelData =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, NORMAL_USAGE);
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].animationBoneWeight =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, NORMAL_USAGE);
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
+                // Written by the animation compute shader, read as vertices by later stages
                 state.perFrameData[i].animationTarget =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, NORMAL_USAGE);
+                        SharedBuffer.allocate(
+                                DEFERRED_UNTIL_LATER,
+                                state,
+                                STORAGE | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
                 state.perFrameData[i].guiUniforms =
                         SharedBuffer.allocate(
-                                ShaderBindings.GUI.UNIFORMS_BUFFER_SIZE,
-                                state,
-                                NORMAL_USAGE
-                                        | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
-                                        | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+                                ShaderBindings.GUI.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
                 state.perFrameData[i].guiCommands =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, NORMAL_USAGE);
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].guiPoints =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, NORMAL_USAGE);
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].guiPointDetails =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, NORMAL_USAGE);
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].lightUniforms =
                         SharedBuffer.allocate(
-                                ShaderBindings.Light.UNIFORMS_BUFFER_SIZE,
-                                state,
-                                NORMAL_USAGE | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+                                ShaderBindings.Light.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
                 state.perFrameData[i].lightPointLights =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, NORMAL_USAGE);
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].lightSpotLights =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, NORMAL_USAGE);
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].sceneUniforms =
                         SharedBuffer.allocate(
-                                ShaderBindings.Scene.UNIFORMS_BUFFER_SIZE,
-                                state,
-                                NORMAL_USAGE | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+                                ShaderBindings.Scene.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
                 state.perFrameData[i].sceneModelMatrices =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, NORMAL_USAGE);
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].sceneMaterialOverrides =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, NORMAL_USAGE);
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].shadowUniforms =
                         SharedBuffer.allocate(
-                                ShaderBindings.Shadow.UNIFORMS_BUFFER_SIZE,
-                                state,
-                                NORMAL_USAGE | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+                                ShaderBindings.Shadow.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
                 state.perFrameData[i].shadowModelMatrices =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, NORMAL_USAGE);
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].skyboxUniforms =
                         SharedBuffer.allocate(
-                                ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE,
-                                state,
-                                NORMAL_USAGE | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+                                ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
                 state.perFrameData[i].materials =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, NORMAL_USAGE);
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
+                // TODO(ches) replace this with update-after-bind descriptor sets for the textures
                 state.perFrameData[i].textures =
                         SharedBuffer.allocate(
                                 state.device.physical.bindlessTextureDescriptorBufferSize,
                                 state,
-                                NORMAL_USAGE);
+                                0);
                 state.perFrameData[i].cascadeShadowSplits =
                         new CascadeShadowSplit[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
 
