@@ -49,9 +49,8 @@ idea {
 }
 
 configurations {
-	provided
-	// Make compile extend from our provided configuration so that things added to bundled end up on the compile classpath
-	implementation.extendsFrom(provided)
+	// Shared libraries this plugin needs, see collectLibraries
+	library
 }
 
 dependencies {
@@ -61,13 +60,14 @@ dependencies {
 	implementation "org.joml:joml:${jomlVersion}"
 	implementation "org.lwjgl:lwjgl-stb:${lwjglVersion}"
 	implementation "org.lwjgl:lwjgl-assimp:${lwjglVersion}"
+	implementation "io.github.spair:imgui-java-binding:${imguiJavaVersion}"
 
 	runtimeOnly "org.lwjgl:lwjgl-assimp:${lwjglVersion}:natives-windows"
 	runtimeOnly "org.lwjgl:lwjgl-assimp:${lwjglVersion}:natives-macos"
 
-	provided "org.lwjgl:lwjgl-assimp:${lwjglVersion}"
-	provided "org.lwjgl:lwjgl-assimp:${lwjglVersion}:natives-windows"
-	provided "org.lwjgl:lwjgl-assimp:${lwjglVersion}:natives-macos-arm64"
+	library "org.lwjgl:lwjgl-assimp:${lwjglVersion}"
+	library "org.lwjgl:lwjgl-assimp:${lwjglVersion}:natives-windows"
+	library "org.lwjgl:lwjgl-assimp:${lwjglVersion}:natives-macos-arm64"
 
 	// Testing
 	testImplementation project(':Ikala-Core')
@@ -120,11 +120,11 @@ tasks.named('clean') {
 	delete 'logs'
 }
 
-tasks.named('jar') {
-    from {
-        configurations.provided.collect { it.isDirectory() ? it : zipTree(it) }
-    }
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+// Shared libraries go in the application's libs folder instead of the plugin jar, so they are only
+// ever loaded once, even if this plugin is reloaded
+tasks.register('collectLibraries', Copy) {
+	from configurations.library
+	into layout.buildDirectory.dir('libraries')
 }
 
 

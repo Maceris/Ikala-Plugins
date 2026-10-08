@@ -13,7 +13,8 @@ plugins {
 }
 
 configurations {
-	jarInclude
+	// Shared libraries this plugin needs, see collectLibraries
+	library
 }
 
 import io.franzbecker.gradle.lombok.task.DelombokTask
@@ -86,35 +87,35 @@ dependencies {
 	runtimeOnly "org.lwjgl:lwjgl-freetype:${lwjglVersion}:natives-macos-arm64"
 	runtimeOnly "io.github.spair:imgui-java-natives-macos:${imguiJavaVersion}"
 	
-	jarInclude "org.joml:joml:${jomlVersion}"
-	jarInclude "org.lwjgl:lwjgl:${lwjglVersion}"
-	jarInclude "org.lwjgl:lwjgl-glfw:${lwjglVersion}"
-	jarInclude "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
-	jarInclude "org.lwjgl:lwjgl-shaderc:${lwjglVersion}"
-	jarInclude "org.lwjgl:lwjgl-vma:${lwjglVersion}"
-	jarInclude "org.lwjgl:lwjgl-vulkan:${lwjglVersion}"
-	jarInclude "org.lwjgl:lwjgl-stb:${lwjglVersion}"
-	jarInclude "org.lwjgl:lwjgl-freetype:${lwjglVersion}"
-	jarInclude "io.github.spair:imgui-java-binding:${imguiJavaVersion}"
+	library "org.joml:joml:${jomlVersion}"
+	library "org.lwjgl:lwjgl:${lwjglVersion}"
+	library "org.lwjgl:lwjgl-glfw:${lwjglVersion}"
+	library "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
+	library "org.lwjgl:lwjgl-shaderc:${lwjglVersion}"
+	library "org.lwjgl:lwjgl-vma:${lwjglVersion}"
+	library "org.lwjgl:lwjgl-vulkan:${lwjglVersion}"
+	library "org.lwjgl:lwjgl-stb:${lwjglVersion}"
+	library "org.lwjgl:lwjgl-freetype:${lwjglVersion}"
+	library "io.github.spair:imgui-java-binding:${imguiJavaVersion}"
 
-	jarInclude "org.lwjgl:lwjgl:${lwjglVersion}:natives-windows"
-	jarInclude "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-windows"
-	jarInclude "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-windows"
-	jarInclude "org.lwjgl:lwjgl-shaderc:${lwjglVersion}:natives-windows"
-	jarInclude "org.lwjgl:lwjgl-vma:${lwjglVersion}:natives-windows"
-	jarInclude "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-windows"
-	jarInclude "org.lwjgl:lwjgl-freetype:${lwjglVersion}:natives-windows"
-	jarInclude "io.github.spair:imgui-java-natives-windows:${imguiJavaVersion}"
+	library "org.lwjgl:lwjgl:${lwjglVersion}:natives-windows"
+	library "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-windows"
+	library "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-windows"
+	library "org.lwjgl:lwjgl-shaderc:${lwjglVersion}:natives-windows"
+	library "org.lwjgl:lwjgl-vma:${lwjglVersion}:natives-windows"
+	library "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-windows"
+	library "org.lwjgl:lwjgl-freetype:${lwjglVersion}:natives-windows"
+	library "io.github.spair:imgui-java-natives-windows:${imguiJavaVersion}"
 
-	jarInclude "org.lwjgl:lwjgl:${lwjglVersion}:natives-macos-arm64"
-	jarInclude "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-macos-arm64"
-	jarInclude "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-macos-arm64"
-	jarInclude "org.lwjgl:lwjgl-shaderc:${lwjglVersion}:natives-macos-arm64"
-	jarInclude "org.lwjgl:lwjgl-vma:${lwjglVersion}:natives-macos-arm64"
-	jarInclude "org.lwjgl:lwjgl-vulkan:${lwjglVersion}:natives-macos-arm64"
-	jarInclude "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-macos-arm64"
-	jarInclude "org.lwjgl:lwjgl-freetype:${lwjglVersion}:natives-macos-arm64"
-	jarInclude "io.github.spair:imgui-java-natives-macos:${imguiJavaVersion}"
+	library "org.lwjgl:lwjgl:${lwjglVersion}:natives-macos-arm64"
+	library "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-macos-arm64"
+	library "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-macos-arm64"
+	library "org.lwjgl:lwjgl-shaderc:${lwjglVersion}:natives-macos-arm64"
+	library "org.lwjgl:lwjgl-vma:${lwjglVersion}:natives-macos-arm64"
+	library "org.lwjgl:lwjgl-vulkan:${lwjglVersion}:natives-macos-arm64"
+	library "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-macos-arm64"
+	library "org.lwjgl:lwjgl-freetype:${lwjglVersion}:natives-macos-arm64"
+	library "io.github.spair:imgui-java-natives-macos:${imguiJavaVersion}"
 
 	// Testing
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
@@ -166,11 +167,11 @@ tasks.named('clean') {
 	delete 'logs'
 }
 
-tasks.named('jar') {
-    from {
-        configurations.jarInclude.collect { it.isDirectory() ? it : zipTree(it) }
-    }
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+// Shared libraries go in the application's libs folder instead of the plugin jar, so they are only
+// ever loaded once, even if this plugin is reloaded
+tasks.register('collectLibraries', Copy) {
+	from configurations.library
+	into layout.buildDirectory.dir('libraries')
 }
 
 tasks.named('check') {

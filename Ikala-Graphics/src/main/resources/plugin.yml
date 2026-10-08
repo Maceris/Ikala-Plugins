@@ -5,3 +5,4 @@ description: A graphics plugin
 authors: [maceris]
 main-class: com.ikalagaming.graphics.GraphicsPlugin
 dependencies: [Random]
+libraries: [joml, lwjgl, lwjgl-glfw, lwjgl-opengl, lwjgl-shaderc, lwjgl-vma, lwjgl-vulkan, lwjgl-stb, lwjgl-freetype, imgui-java-binding]
