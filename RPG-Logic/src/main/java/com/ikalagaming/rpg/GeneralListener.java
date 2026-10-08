@@ -3,7 +3,7 @@ package com.ikalagaming.rpg;
 import com.ikalagaming.event.EventHandler;
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.frontend.Renderer;
+import com.ikalagaming.graphics.frontend.RenderConfig;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.ModelLoader;
@@ -142,35 +142,39 @@ public class GeneralListener implements Listener {
      */
     private void addTile(int id, int x, int y, int z, float rotation) {
         if (id == 0) {
-            Entity tile = new Entity("floor_001_" + Entity.NEXT_ID.getAndIncrement(), "floor_001");
+            Entity tile =
+                    new Entity(
+                            "floor_001_" + Entity.NEXT_ID.getAndIncrement(), getModel("floor_001"));
             updateDungeonTileEntity(tile, x, y, z, rotation);
         } else if (id == 1) {
             Entity tile =
-                    new Entity("brick_wall_" + Entity.NEXT_ID.getAndIncrement(), "brick_wall");
+                    new Entity(
+                            "brick_wall_" + Entity.NEXT_ID.getAndIncrement(),
+                            getModel("brick_wall"));
             updateDungeonTileEntity(tile, x, y, z, rotation);
         } else if (id == 2) {
             Entity tile =
                     new Entity(
                             "brick_wall_corner_" + Entity.NEXT_ID.getAndIncrement(),
-                            "brick_wall_corner");
+                            getModel("brick_wall_corner"));
             updateDungeonTileEntity(tile, x, y, z, rotation);
         } else if (id == 3) {
             Entity tile =
                     new Entity(
                             "brick_wall_three_sides_" + Entity.NEXT_ID.getAndIncrement(),
-                            "brick_wall_three_sides");
+                            getModel("brick_wall_three_sides"));
             updateDungeonTileEntity(tile, x, y, z, rotation);
         } else if (id == 4) {
             Entity tile =
                     new Entity(
                             "brick_wall_opposite_sides_" + Entity.NEXT_ID.getAndIncrement(),
-                            "brick_wall_opposite_sides");
+                            getModel("brick_wall_opposite_sides"));
             updateDungeonTileEntity(tile, x, y, z, rotation);
         } else if (id == 5) {
             Entity tile =
                     new Entity(
                             "brick_wall_all_sides_" + Entity.NEXT_ID.getAndIncrement(),
-                            "brick_wall_all_sides");
+                            getModel("brick_wall_all_sides"));
             updateDungeonTileEntity(tile, x, y, z, rotation);
         }
     }
@@ -376,8 +380,6 @@ public class GeneralListener implements Listener {
                         true));
 
         modelsLoaded = true;
-
-        GraphicsManager.refreshRenderData();
     }
 
     /**
@@ -460,7 +462,9 @@ public class GeneralListener implements Listener {
                     } else if ("Spawn".equals(object.getName())) {
                         Vector3f position = extractPosition(object.getProperties());
                         Entity player =
-                                new Entity("player_" + Entity.NEXT_ID.getAndIncrement(), "player");
+                                new Entity(
+                                        "player_" + Entity.NEXT_ID.getAndIncrement(),
+                                        getModel("player"));
                         player.setScale(0.4f);
                         player.setPosition(position.x, position.y, position.z);
                         player.updateModelMatrix();
@@ -479,8 +483,24 @@ public class GeneralListener implements Listener {
                 loadTileLayer(map, tileLayer, z);
             }
         }
-        GraphicsManager.refreshRenderData();
-        Renderer.configuration.setRenderingScene(true);
+        var pipeline =
+                RenderConfig.builder().withAnimation().withScene().withSkybox().withGui().build();
+        GraphicsManager.swapPipeline(pipeline);
+    }
+
+    /**
+     * Fetch a model that was loaded into the scene.
+     *
+     * @param modelID The ID of the model.
+     * @return The model.
+     * @throws IllegalStateException If the model was not loaded.
+     */
+    private static Model getModel(@NonNull String modelID) {
+        Model model = GraphicsManager.getScene().getModelMap().get(modelID);
+        if (model == null) {
+            throw new IllegalStateException("Model " + modelID + " has not been loaded");
+        }
+        return model;
     }
 
     /**

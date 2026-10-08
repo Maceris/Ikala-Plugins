@@ -4,19 +4,18 @@ import static com.ikalagaming.factory.gui.DefaultWindows.*;
 
 import com.ikalagaming.factory.FactoryClientPlugin;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.frontend.gui.component.Checkbox;
 import com.ikalagaming.graphics.frontend.gui.component.MainToolbar;
+import com.ikalagaming.graphics.frontend.gui.enums.ColorType;
+import com.ikalagaming.graphics.frontend.gui.util.Color;
 import com.ikalagaming.graphics.frontend.gui.windows.GraphicsDebug;
 import com.ikalagaming.graphics.frontend.gui.windows.IkGuiDemo;
-import com.ikalagaming.graphics.frontend.gui.windows.ImGuiDemo;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.events.Shutdown;
 import com.ikalagaming.util.SafeResourceLoader;
 
-import imgui.ImColor;
-import imgui.ImGui;
-import imgui.flag.ImGuiCol;
 import lombok.NonNull;
 
 /** A menu bar at the top of the screen for debugging. */
@@ -25,7 +24,6 @@ public class DebugToolbar extends MainToolbar {
     private final Checkbox biomeDebug;
     private final Checkbox debug;
     private final Checkbox demoIkGuiWindow;
-    private final Checkbox demoImGuiWindow;
     private final Checkbox graphicsWindow;
 
     public DebugToolbar(@NonNull WindowManager windowManager) {
@@ -39,12 +37,6 @@ public class DebugToolbar extends MainToolbar {
                 SafeResourceLoader.getString(
                         "TOOLBAR_DEBUG_DEBUG", FactoryClientPlugin.getResourceBundle());
         debug = new Checkbox(textDebug, windowManager.isVisible(DEBUG.getName()));
-
-        var textImGuiDemo =
-                SafeResourceLoader.getString(
-                        "TOOLBAR_DEBUG_IMGUI_DEMO", FactoryClientPlugin.getResourceBundle());
-        demoImGuiWindow =
-                new Checkbox(textImGuiDemo, windowManager.isVisible(ImGuiDemo.WINDOW_NAME));
 
         var textIkGuiDemo =
                 SafeResourceLoader.getString(
@@ -61,22 +53,21 @@ public class DebugToolbar extends MainToolbar {
 
     @Override
     public void draw(final int width, final int height) {
-        if (ImGui.beginMainMenuBar()) {
-            if (ImGui.beginMenu("Windows")) {
+        if (IkGui.beginMainMenuBar()) {
+            if (IkGui.beginMenu("Windows")) {
                 biomeDebug.draw(width, height);
                 debug.draw(width, height);
-                demoImGuiWindow.draw(width, height);
                 demoIkGuiWindow.draw(width, height);
                 graphicsWindow.draw(width, height);
-                ImGui.endMenu();
+                IkGui.endMenu();
             }
-            ImGui.pushStyleColor(ImGuiCol.Text, ImColor.rgba(1f, 0.1f, 0.1f, 1.0f));
-            if (ImGui.menuItem("Quit Game")) {
+            IkGui.pushStyleColor(ColorType.TEXT, Color.rgba(1f, 0.1f, 0.1f, 1.0f));
+            if (IkGui.menuItem("Quit Game")) {
                 new Shutdown().fire();
             }
-            ImGui.popStyleColor();
+            IkGui.popStyleColor();
 
-            ImGui.endMainMenuBar();
+            IkGui.endMainMenuBar();
         }
     }
 
@@ -88,10 +79,6 @@ public class DebugToolbar extends MainToolbar {
         }
         if (debug.checkResult()) {
             windowManager.setVisible(DEBUG.getName(), debug.getState());
-            return true;
-        }
-        if (demoImGuiWindow.checkResult()) {
-            windowManager.setVisible(ImGuiDemo.WINDOW_NAME, demoImGuiWindow.getState());
             return true;
         }
         if (demoIkGuiWindow.checkResult()) {

@@ -1,15 +1,15 @@
 package com.ikalagaming.rpg.windows;
 
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.data.IkBoolean;
+import com.ikalagaming.graphics.frontend.gui.enums.Condition;
 import com.ikalagaming.graphics.scene.Fog;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
 
-import imgui.ImGui;
-import imgui.flag.ImGuiCond;
-import imgui.type.ImBoolean;
 import lombok.NonNull;
 import org.joml.Vector3f;
 
@@ -24,7 +24,7 @@ public class SceneControls implements GUIWindow {
     private float[] dirLightColor;
 
     private float[] fogColor;
-    private ImBoolean fogEnabled;
+    private IkBoolean fogEnabled;
     private float[] fogDensity;
 
     private float[] dirLightIntensity;
@@ -35,30 +35,30 @@ public class SceneControls implements GUIWindow {
 
     @Override
     public void draw() {
-        ImGui.setNextWindowPos(200, 200, ImGuiCond.Once);
-        ImGui.setNextWindowSize(450, 400, ImGuiCond.Once);
-        ImGui.begin("Scene Controls");
-        if (ImGui.treeNode("Ambient Light")) {
-            ImGui.sliderFloat("Ambient factor", ambientFactor, 0.0f, 1.0f, "%.2f");
-            ImGui.colorEdit3("Ambient color", ambientColor);
-            ImGui.treePop();
+        IkGui.setNextWindowPos(200, 200, Condition.ONCE);
+        IkGui.setNextWindowSize(450, 400, Condition.ONCE);
+        IkGui.begin("Scene Controls");
+        if (IkGui.treeNode("Ambient Light")) {
+            IkGui.sliderFloat("Ambient factor", ambientFactor, 0.0f, 1.0f, "%.2f");
+            IkGui.colorEdit3("Ambient color", ambientColor);
+            IkGui.treePop();
         }
-        if (ImGui.treeNode("Dir Light")) {
-            ImGui.sliderFloat("Dir Light - x", dirLightX, -1.0f, 1.0f, "%.2f");
-            ImGui.sliderFloat("Dir Light - y", dirLightY, -1.0f, 1.0f, "%.2f");
-            ImGui.sliderFloat("Dir Light - z", dirLightZ, -1.0f, 1.0f, "%.2f");
-            ImGui.colorEdit3("Dir Light color", dirLightColor);
-            ImGui.sliderFloat("Dir Light Intensity", dirLightIntensity, 0.0f, 1.0f, "%.2f");
-            ImGui.treePop();
+        if (IkGui.treeNode("Dir Light")) {
+            IkGui.sliderFloat("Dir Light - x", dirLightX, -1.0f, 1.0f, "%.2f");
+            IkGui.sliderFloat("Dir Light - y", dirLightY, -1.0f, 1.0f, "%.2f");
+            IkGui.sliderFloat("Dir Light - z", dirLightZ, -1.0f, 1.0f, "%.2f");
+            IkGui.colorEdit3("Dir Light color", dirLightColor);
+            IkGui.sliderFloat("Dir Light Intensity", dirLightIntensity, 0.0f, 1.0f, "%.2f");
+            IkGui.treePop();
         }
-        if (ImGui.treeNode("Fog")) {
-            ImGui.checkbox("Fog Enabled", fogEnabled);
-            ImGui.colorEdit3("Fog Color", fogColor);
-            ImGui.sliderFloat("Fog Density", fogDensity, 0f, 1.0f, "%.2f");
-            ImGui.treePop();
+        if (IkGui.treeNode("Fog")) {
+            IkGui.checkbox("Fog Enabled", fogEnabled);
+            IkGui.colorEdit3("Fog Color", fogColor);
+            IkGui.sliderFloat("Fog Density", fogDensity, 0f, 1.0f, "%.2f");
+            IkGui.treePop();
         }
 
-        ImGui.end();
+        IkGui.end();
     }
 
     @Override
@@ -70,16 +70,16 @@ public class SceneControls implements GUIWindow {
             return;
         }
         ambientLight.setIntensity(ambientFactor[0]);
-        ambientLight.setColor(ambientColor[0], ambientColor[1], ambientColor[2]);
+        ambientLight.getColor().set(ambientColor[0], ambientColor[1], ambientColor[2]);
 
         DirectionalLight dirLight = sceneLights.getDirLight();
-        dirLight.setDirection(dirLightX[0], dirLightY[0], dirLightZ[0]);
-        dirLight.setColor(dirLightColor[0], dirLightColor[1], dirLightColor[2]);
+        dirLight.getDirection().set(dirLightX[0], dirLightY[0], dirLightZ[0]);
+        dirLight.getColor().set(dirLightColor[0], dirLightColor[1], dirLightColor[2]);
         dirLight.setIntensity(dirLightIntensity[0]);
 
         Fog fog = scene.getFog();
         fog.setActive(fogEnabled.get());
-        fog.setColor(fogColor[0], fogColor[1], fogColor[2]);
+        fog.getColor().set(fogColor[0], fogColor[1], fogColor[2]);
         fog.setDensity(fogDensity[0]);
     }
 
@@ -103,7 +103,7 @@ public class SceneControls implements GUIWindow {
 
         Fog fog = scene.getFog();
         fogColor = new float[] {fog.getColor().x, fog.getColor().y, fog.getColor().z};
-        fogEnabled = new ImBoolean(fog.isActive());
+        fogEnabled = new IkBoolean(fog.isActive());
         fogDensity = new float[] {fog.getDensity()};
     }
 }

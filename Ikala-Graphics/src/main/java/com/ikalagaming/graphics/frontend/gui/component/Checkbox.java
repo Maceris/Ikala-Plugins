@@ -1,7 +1,8 @@
 package com.ikalagaming.graphics.frontend.gui.component;
 
-import imgui.ImGui;
-import imgui.type.ImBoolean;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.data.IkBoolean;
+
 import lombok.RequiredArgsConstructor;
 
 /** A checkbox with text. */
@@ -12,7 +13,7 @@ public class Checkbox extends Component implements Interactive {
     private final String text;
 
     /** The checkbox state. */
-    private final ImBoolean state;
+    private final IkBoolean state;
 
     /** Whether the user interacted with the checkbox. */
     private boolean changed;
@@ -25,7 +26,7 @@ public class Checkbox extends Component implements Interactive {
      */
     public Checkbox(String text, boolean initialState) {
         this.text = text;
-        this.state = new ImBoolean(initialState);
+        this.state = new IkBoolean(initialState);
     }
 
     @Override
@@ -37,7 +38,7 @@ public class Checkbox extends Component implements Interactive {
 
     @Override
     public void draw(final int width, final int height) {
-        if (ImGui.checkbox(text, state)) {
+        if (IkGui.checkbox(text, state)) {
             changed = true;
         }
     }

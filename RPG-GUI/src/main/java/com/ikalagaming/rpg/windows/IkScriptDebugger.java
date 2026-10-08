@@ -1,8 +1,12 @@
 package com.ikalagaming.rpg.windows;
 
-import static org.lwjgl.glfw.GLFW.*;
-
-import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.data.IkString;
+import com.ikalagaming.graphics.frontend.gui.enums.ColorType;
+import com.ikalagaming.graphics.frontend.gui.enums.Condition;
+import com.ikalagaming.graphics.frontend.gui.enums.StyleVariable;
+import com.ikalagaming.graphics.frontend.gui.flags.ChildFlags;
+import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.scripting.IkalaScriptLexer;
 import com.ikalagaming.scripting.IkalaScriptParser;
@@ -23,15 +27,6 @@ import com.ikalagaming.scripting.interpreter.MemLocation;
 import com.ikalagaming.scripting.interpreter.MemoryItem;
 import com.ikalagaming.scripting.interpreter.ScriptRuntime;
 
-import imgui.ImGui;
-import imgui.ImGuiIO;
-import imgui.callback.ImStrConsumer;
-import imgui.callback.ImStrSupplier;
-import imgui.flag.ImGuiCol;
-import imgui.flag.ImGuiCond;
-import imgui.flag.ImGuiStyleVar;
-import imgui.flag.ImGuiWindowFlags;
-import imgui.type.ImString;
 import lombok.NonNull;
 import org.antlr.v4.runtime.BufferedTokenStream;
 import org.antlr.v4.runtime.CharStream;
@@ -116,8 +111,8 @@ public class IkScriptDebugger implements GUIWindow {
         return String.format("%s %s", item.type().getSimpleName(), item.value().toString());
     }
 
-    private ImString scriptContents;
-    private ImString ast;
+    private IkString scriptContents;
+    private IkString ast;
     private ScriptRuntime runtime;
     private TreeValidator validator;
 
@@ -128,106 +123,107 @@ public class IkScriptDebugger implements GUIWindow {
 
     @Override
     public void draw() {
-        ImGui.setNextWindowPos(477, 30, ImGuiCond.Once);
-        ImGui.setNextWindowSize(1260, 590, ImGuiCond.Once);
-        ImGui.begin(
+        IkGui.setNextWindowPos(477, 30, Condition.ONCE);
+        IkGui.setNextWindowSize(1260, 590, Condition.ONCE);
+        IkGui.begin(
                 "Ikala Script Console",
-                ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+                WindowFlags.NO_SCROLLBAR | WindowFlags.NO_SCROLL_WITH_MOUSE);
 
         drawCompilerHalf();
-        ImGui.sameLine();
+        IkGui.sameLine();
         drawRuntimeHalf();
 
-        ImGui.end();
+        IkGui.end();
     }
 
     /** Draw the compiler debugger half. */
     private void drawCompilerHalf() {
-        ImGui.beginChild(
+        IkGui.beginChild(
                 "Compiler Half",
-                ImGui.getWindowWidth() / 3,
-                ImGui.getWindowHeight(),
-                false,
-                ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
-        ImGui.inputTextMultiline("Script input", scriptContents);
+                IkGui.getWindowWidth() / 3,
+                IkGui.getWindowHeight(),
+                ChildFlags.NONE,
+                WindowFlags.NO_SCROLLBAR | WindowFlags.NO_SCROLL_WITH_MOUSE);
+        IkGui.inputTextMultiline("Script input", scriptContents);
 
-        if (ImGui.button("Parse")) {
+        if (IkGui.button("Parse")) {
             parse();
         }
-        ImGui.sameLine();
-        if (ImGui.button("Execute in background")) {
+        IkGui.sameLine();
+        if (IkGui.button("Execute in background")) {
             ScriptManager.runScript(scriptContents.get());
         }
-        ImGui.sameLine();
-        if (ImGui.button("Copy AST to clipboard")) {
-            ImGui.setClipboardText(ast.get());
+        IkGui.sameLine();
+        if (IkGui.button("Copy AST to clipboard")) {
+            IkGui.setClipboardText(ast.get());
         }
 
         if (ast.isNotEmpty()) {
-            ImGui.separator();
-            ImGui.beginChild("Abstract Syntax Tree");
-            ImGui.textWrapped(ast.get());
-            ImGui.endChild();
-            ImGui.separator();
+            IkGui.separator();
+            IkGui.beginChild("Abstract Syntax Tree");
+            IkGui.textWrapped(ast.get());
+            IkGui.endChild();
+            IkGui.separator();
         }
 
-        ImGui.endChild();
+        IkGui.endChild();
     }
 
     /** Draw the script runtime half. */
     private void drawRuntimeHalf() {
-        ImGui.beginChild(
+        IkGui.beginChild(
                 "Runtime Half",
                 0,
-                ImGui.getWindowHeight(),
-                false,
-                ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+                IkGui.getWindowHeight(),
+                ChildFlags.NONE,
+                WindowFlags.NO_SCROLLBAR | WindowFlags.NO_SCROLL_WITH_MOUSE);
         if (runtime == null) {
-            ImGui.endChild();
+            IkGui.endChild();
             return;
         }
 
-        ImGui.text("Program Counter: " + runtime.getProgramCounter());
-        ImGui.sameLine();
-        if (ImGui.button("Step")) {
+        IkGui.text("Program Counter: " + runtime.getProgramCounter());
+        IkGui.sameLine();
+        if (IkGui.button("Step")) {
             runtime.step();
         }
-        ImGui.text("Last comparison: " + runtime.getLastComparison());
+        IkGui.text("Last comparison: " + runtime.getLastComparison());
 
-        ImGui.pushStyleVar(ImGuiStyleVar.ItemSpacing, 0, ImGui.getStyle().getItemSpacingY());
+        IkGui.pushStyleVarFloat2(
+                StyleVariable.ITEM_SPACING, 0, IkGui.getStyle().variable.itemSpacing.y);
 
         final float height =
-                ImGui.getContentRegionAvailY() - ImGui.getTextLineHeightWithSpacing() * 2;
-        ImGui.beginChild("Instructions", ImGui.getWindowWidth() / 3, height, true);
+                IkGui.getContentRegionAvailableY() - IkGui.getTextLineHeightWithSpacing() * 2;
+        IkGui.beginChild("Instructions", IkGui.getWindowWidth() / 3, height, ChildFlags.BORDERS);
         for (int i = 0; i < instructionStrings.size(); ++i) {
             if (i == runtime.getProgramCounter()) {
-                ImGui.pushStyleColor(ImGuiCol.Text, 0.15f, 0.47f, 1f, 1f);
+                IkGui.pushStyleColor(ColorType.TEXT, 0.15f, 0.47f, 1f, 1f);
             }
-            ImGui.textWrapped(instructionStrings.get(i));
+            IkGui.textWrapped(instructionStrings.get(i));
             if (i == runtime.getProgramCounter()) {
-                ImGui.popStyleColor();
+                IkGui.popStyleColor();
             }
         }
         // end Instructions
-        ImGui.endChild();
-        ImGui.sameLine();
-        ImGui.beginChild("Registers", ImGui.getWindowWidth() / 3, height, true);
+        IkGui.endChild();
+        IkGui.sameLine();
+        IkGui.beginChild("Registers", IkGui.getWindowWidth() / 3, height, ChildFlags.BORDERS);
         for (var entry : runtime.getSymbolTable().entrySet()) {
-            ImGui.textWrapped(String.format("%s: %s", entry.getKey(), entry.getValue().toString()));
+            IkGui.textWrapped(String.format("%s: %s", entry.getKey(), entry.getValue().toString()));
         }
         // end Registers
-        ImGui.endChild();
-        ImGui.sameLine();
-        ImGui.beginChild("Stack", ImGui.getWindowWidth() / 3, height, true);
+        IkGui.endChild();
+        IkGui.sameLine();
+        IkGui.beginChild("Stack", IkGui.getWindowWidth() / 3, height, ChildFlags.BORDERS);
         for (var entry : runtime.getStack()) {
-            ImGui.textWrapped(IkScriptDebugger.format(entry));
+            IkGui.textWrapped(IkScriptDebugger.format(entry));
         }
         // end Stack
-        ImGui.endChild();
-        ImGui.popStyleVar();
+        IkGui.endChild();
+        IkGui.popStyleVar();
 
         // Runtime half
-        ImGui.endChild();
+        IkGui.endChild();
     }
 
     /** Parse the input and put the resulting string tree in the output. */
@@ -287,8 +283,8 @@ public class IkScriptDebugger implements GUIWindow {
 
     @Override
     public void setup(@NonNull Scene scene) {
-        scriptContents = new ImString(5000);
-        ast = new ImString(2000);
+        scriptContents = new IkString(5000);
+        ast = new IkString(2000);
 
         String contents =
                 """
@@ -329,24 +325,5 @@ public class IkScriptDebugger implements GUIWindow {
         scriptContents.set(contents);
         validator = new TreeValidator();
         generator = new InstructionGenerator();
-
-        long windowHandle = GraphicsManager.getWindow().getWindowHandle();
-        ImGuiIO io = ImGui.getIO();
-        io.setGetClipboardTextFn(
-                new ImStrSupplier() {
-                    @Override
-                    public String get() {
-                        final String clipboardString = glfwGetClipboardString(windowHandle);
-                        return clipboardString != null ? clipboardString : "";
-                    }
-                });
-
-        io.setSetClipboardTextFn(
-                new ImStrConsumer() {
-                    @Override
-                    public void accept(final String str) {
-                        glfwSetClipboardString(windowHandle, str);
-                    }
-                });
     }
 }

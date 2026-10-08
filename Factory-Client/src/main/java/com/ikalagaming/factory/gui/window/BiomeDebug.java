@@ -9,11 +9,11 @@ import com.ikalagaming.graphics.frontend.gui.component.Button;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
 import com.ikalagaming.graphics.frontend.gui.component.Image;
 import com.ikalagaming.graphics.frontend.gui.component.Text;
+import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.random.RandomGen;
 
-import imgui.flag.ImGuiWindowFlags;
 import lombok.NonNull;
 
 import java.awt.image.BufferedImage;
@@ -22,7 +22,7 @@ import java.nio.ByteBuffer;
 public class BiomeDebug extends GuiWindow {
 
     public BiomeDebug() {
-        super(DefaultWindows.BIOME_DEBUG.getName(), ImGuiWindowFlags.None);
+        super(DefaultWindows.BIOME_DEBUG.getName(), WindowFlags.NONE);
         setScale(0.70f, 0.90f);
         setDisplacement(0.01f, 0.05f);
         setAlignment(Alignment.NORTH_WEST);

@@ -67,7 +67,6 @@ dependencies {
 	implementation "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
 	implementation "org.lwjgl:lwjgl-stb:${lwjglVersion}"
 	implementation "org.lwjgl:lwjgl-assimp:${lwjglVersion}"
-	implementation "io.github.spair:imgui-java-binding:${imguiJavaVersion}"
 
 	// Testing
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"

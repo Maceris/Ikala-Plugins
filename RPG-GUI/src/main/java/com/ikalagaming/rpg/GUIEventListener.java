@@ -26,7 +26,7 @@ public class GUIEventListener implements Listener {
     /** Attach the GUI to the scene. */
     public void attachGUI() {
         gui = new GUIControls(GraphicsManager.getScene());
-        GraphicsManager.setGUI(gui);
+        GraphicsManager.getWindowManager().setToolbar(gui);
         log.debug(SafeResourceLoader.getString("GUI_ATTACHED", GUIPlugin.getResourceBundle()));
     }
 

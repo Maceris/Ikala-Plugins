@@ -1,5 +1,8 @@
 package com.ikalagaming.rpg.windows;
 
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.enums.Condition;
+import com.ikalagaming.graphics.frontend.gui.enums.Direction;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.rpg.inventory.Inventory;
 import com.ikalagaming.rpg.item.Affix;
@@ -15,8 +18,6 @@ import com.ikalagaming.rpg.item.template.WeaponTemplate;
 import com.ikalagaming.rpg.item.testing.ItemGenerator;
 import com.ikalagaming.rpg.utils.ItemRendering;
 
-import imgui.ImGui;
-import imgui.flag.ImGuiCond;
 import lombok.NonNull;
 import lombok.Setter;
 
@@ -30,12 +31,12 @@ import java.util.List;
 public class ItemCatalogWindow implements GUIWindow {
     /** Show inventory full pop-up. */
     private static void showInventoryFullPopup() {
-        if (ImGui.beginPopupModal("Full Inventory")) {
-            ImGui.text("Inventory Full!");
-            if (ImGui.button("I'm sorry")) {
-                ImGui.closeCurrentPopup();
+        if (IkGui.beginPopupModal("Full Inventory")) {
+            IkGui.text("Inventory Full!");
+            if (IkGui.button("I'm sorry")) {
+                IkGui.closeCurrentPopup();
             }
-            ImGui.endPopup();
+            IkGui.endPopup();
         }
     }
 
@@ -52,120 +53,120 @@ public class ItemCatalogWindow implements GUIWindow {
 
     @Override
     public void draw() {
-        ImGui.setNextWindowPos(650, 10, ImGuiCond.Once);
-        ImGui.setNextWindowSize(700, 800, ImGuiCond.Once);
-        ImGui.begin("Item Catalog");
+        IkGui.setNextWindowPos(650, 10, Condition.ONCE);
+        IkGui.setNextWindowSize(700, 800, Condition.ONCE);
+        IkGui.begin("Item Catalog");
 
-        if (ImGui.beginTabBar("Catalog Bar")) {
-            if (ImGui.beginTabItem("Accessory Template")) {
-                if (ImGui.isItemClicked()) {
+        if (IkGui.beginTabBar("Catalog Bar")) {
+            if (IkGui.beginTabItem("Accessory Template")) {
+                if (IkGui.isItemClicked()) {
                     currentIndex = 0;
                 }
                 AccessoryTemplate template = catalog.getAccessoryTemplates().get(currentIndex);
                 this.drawRollable(
                         catalog.getAccessoryTemplates(), ItemRoller.rollAccessory(template));
                 ItemRendering.drawAccessoryTemplateInfo(template);
-                ImGui.endTabItem();
+                IkGui.endTabItem();
             }
-            if (ImGui.isItemClicked()) {
+            if (IkGui.isItemClicked()) {
                 currentIndex = 0;
             }
-            if (ImGui.beginTabItem("Affix")) {
-                if (ImGui.isItemClicked()) {
+            if (IkGui.beginTabItem("Affix")) {
+                if (IkGui.isItemClicked()) {
                     currentIndex = 0;
                 }
                 List<Affix> affixes = catalog.getAffixes();
                 this.drawListButtons(affixes);
-                ImGui.sameLine();
+                IkGui.sameLine();
                 ItemRendering.drawAffix(affixes.get(currentIndex));
-                ImGui.endTabItem();
+                IkGui.endTabItem();
             }
-            if (ImGui.isItemClicked()) {
+            if (IkGui.isItemClicked()) {
                 currentIndex = 0;
             }
-            if (ImGui.beginTabItem("Armor Template")) {
-                if (ImGui.isItemClicked()) {
+            if (IkGui.beginTabItem("Armor Template")) {
+                if (IkGui.isItemClicked()) {
                     currentIndex = 0;
                 }
                 ArmorTemplate template = catalog.getArmorTemplates().get(currentIndex);
                 this.drawRollable(catalog.getArmorTemplates(), ItemRoller.rollArmor(template));
                 ItemRendering.drawArmorTemplateInfo(template);
-                ImGui.endTabItem();
+                IkGui.endTabItem();
             }
-            if (ImGui.isItemClicked()) {
+            if (IkGui.isItemClicked()) {
                 currentIndex = 0;
             }
-            if (ImGui.beginTabItem("Component")) {
-                if (ImGui.isItemClicked()) {
+            if (IkGui.beginTabItem("Component")) {
+                if (IkGui.isItemClicked()) {
                     currentIndex = 0;
                 }
                 this.drawStatic(catalog.getComponents());
                 ItemRendering.drawComponentInfo(catalog.getComponents().get(currentIndex));
-                ImGui.endTabItem();
+                IkGui.endTabItem();
             }
-            if (ImGui.isItemClicked()) {
+            if (IkGui.isItemClicked()) {
                 currentIndex = 0;
             }
-            if (ImGui.beginTabItem("Consumable")) {
-                if (ImGui.isItemClicked()) {
+            if (IkGui.beginTabItem("Consumable")) {
+                if (IkGui.isItemClicked()) {
                     currentIndex = 0;
                 }
                 this.drawStatic(catalog.getConsumables());
                 ItemRendering.drawConsumableInfo(catalog.getConsumables().get(currentIndex));
-                ImGui.endTabItem();
+                IkGui.endTabItem();
             }
-            if (ImGui.isItemClicked()) {
+            if (IkGui.isItemClicked()) {
                 currentIndex = 0;
             }
-            if (ImGui.beginTabItem("Junk")) {
-                if (ImGui.isItemClicked()) {
+            if (IkGui.beginTabItem("Junk")) {
+                if (IkGui.isItemClicked()) {
                     currentIndex = 0;
                 }
                 this.drawStatic(catalog.getJunk());
                 ItemRendering.drawJunkInfo(catalog.getJunk().get(currentIndex));
-                ImGui.endTabItem();
+                IkGui.endTabItem();
             }
-            if (ImGui.isItemClicked()) {
+            if (IkGui.isItemClicked()) {
                 currentIndex = 0;
             }
-            if (ImGui.beginTabItem("Material")) {
-                if (ImGui.isItemClicked()) {
+            if (IkGui.beginTabItem("Material")) {
+                if (IkGui.isItemClicked()) {
                     currentIndex = 0;
                 }
                 this.drawStatic(catalog.getMaterials());
                 ItemRendering.drawMaterialInfo(catalog.getMaterials().get(currentIndex));
-                ImGui.endTabItem();
+                IkGui.endTabItem();
             }
-            if (ImGui.isItemClicked()) {
+            if (IkGui.isItemClicked()) {
                 currentIndex = 0;
             }
-            if (ImGui.beginTabItem("Quest")) {
-                if (ImGui.isItemClicked()) {
+            if (IkGui.beginTabItem("Quest")) {
+                if (IkGui.isItemClicked()) {
                     currentIndex = 0;
                 }
                 this.drawStatic(catalog.getQuests());
                 ItemRendering.drawQuestInfo(catalog.getQuests().get(currentIndex));
-                ImGui.endTabItem();
+                IkGui.endTabItem();
             }
-            if (ImGui.isItemClicked()) {
+            if (IkGui.isItemClicked()) {
                 currentIndex = 0;
             }
-            if (ImGui.beginTabItem("Weapon Template")) {
-                if (ImGui.isItemClicked()) {
+            if (IkGui.beginTabItem("Weapon Template")) {
+                if (IkGui.isItemClicked()) {
                     currentIndex = 0;
                 }
                 WeaponTemplate template = catalog.getWeaponTemplates().get(currentIndex);
                 this.drawRollable(catalog.getArmorTemplates(), ItemRoller.rollWeapon(template));
                 ItemRendering.drawWeaponTemplateInfo(template);
-                ImGui.endTabItem();
+                IkGui.endTabItem();
             }
-            if (ImGui.isItemClicked()) {
+            if (IkGui.isItemClicked()) {
                 currentIndex = 0;
             }
-            ImGui.endTabBar();
+            IkGui.endTabBar();
         }
 
-        ImGui.end();
+        IkGui.end();
     }
 
     /**
@@ -179,28 +180,28 @@ public class ItemCatalogWindow implements GUIWindow {
 
         final boolean decreaseDisabled = currentIndex <= 0;
         if (decreaseDisabled) {
-            ImGui.beginDisabled();
+            IkGui.beginDisabled();
         }
-        if (ImGui.arrowButton("Decr ID", 0)) {
+        if (IkGui.arrowButton("Decr ID", Direction.LEFT)) {
             --currentIndex;
         }
         if (decreaseDisabled) {
-            ImGui.endDisabled();
+            IkGui.endDisabled();
         }
 
-        ImGui.sameLine();
-        ImGui.text(currentIndex + "/" + maxIndex);
-        ImGui.sameLine();
+        IkGui.sameLine();
+        IkGui.text(currentIndex + "/" + maxIndex);
+        IkGui.sameLine();
 
         final boolean increaseDisabled = currentIndex >= maxIndex;
         if (increaseDisabled) {
-            ImGui.beginDisabled();
+            IkGui.beginDisabled();
         }
-        if (ImGui.arrowButton("Incr ID", 1)) {
+        if (IkGui.arrowButton("Incr ID", Direction.RIGHT)) {
             ++currentIndex;
         }
         if (increaseDisabled) {
-            ImGui.endDisabled();
+            IkGui.endDisabled();
         }
     }
 
@@ -215,8 +216,8 @@ public class ItemCatalogWindow implements GUIWindow {
     private <T extends EquipmentTemplate, Q extends Equipment> void drawRollable(
             List<T> items, Q rolled) {
         this.drawListButtons(items);
-        ImGui.sameLine();
-        if (ImGui.button("Roll")) {
+        IkGui.sameLine();
+        if (IkGui.button("Roll")) {
             tryAddingItem(rolled);
         }
         ItemCatalogWindow.showInventoryFullPopup();
@@ -230,8 +231,8 @@ public class ItemCatalogWindow implements GUIWindow {
      */
     private <T extends Item> void drawStatic(List<T> items) {
         this.drawListButtons(items);
-        ImGui.sameLine();
-        if (ImGui.button("Add")) {
+        IkGui.sameLine();
+        if (IkGui.button("Add")) {
             tryAddingItem(items.get(currentIndex));
         }
         ItemCatalogWindow.showInventoryFullPopup();
@@ -266,7 +267,7 @@ public class ItemCatalogWindow implements GUIWindow {
      */
     private void tryAddingItem(Item item) {
         if (!inventory.addItem(item)) {
-            ImGui.openPopup("Full Inventory");
+            IkGui.openPopup("Full Inventory");
         }
     }
 }

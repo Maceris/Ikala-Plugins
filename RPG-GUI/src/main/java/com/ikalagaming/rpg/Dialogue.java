@@ -1,16 +1,16 @@
 package com.ikalagaming.rpg;
 
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.data.IkBoolean;
+import com.ikalagaming.graphics.frontend.gui.enums.ColorType;
+import com.ikalagaming.graphics.frontend.gui.enums.Condition;
+import com.ikalagaming.graphics.frontend.gui.enums.StyleVariable;
+import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import com.ikalagaming.scripting.ScriptManager;
 
-import imgui.ImGui;
-import imgui.ImVec2;
-import imgui.flag.ImGuiCol;
-import imgui.flag.ImGuiCond;
-import imgui.flag.ImGuiStyleVar;
-import imgui.flag.ImGuiWindowFlags;
-import imgui.type.ImBoolean;
 import lombok.Getter;
 import lombok.NonNull;
+import org.joml.Vector2f;
 
 import java.util.Collections;
 import java.util.LinkedList;
@@ -49,7 +49,7 @@ public class Dialogue {
      * @param type The type of text.
      * @param text The associated text.
      */
-    private static record ChatLine(@NonNull TextType type, @NonNull String text) {}
+    private record ChatLine(@NonNull TextType type, @NonNull String text) {}
 
     /** Lines of text to show in the window. We only ever have one set up at a time. */
     private static List<ChatLine> lines = Collections.synchronizedList(new LinkedList<>());
@@ -58,7 +58,7 @@ public class Dialogue {
     private static List<String> options = Collections.synchronizedList(new LinkedList<>());
 
     /** Whether the window is open. */
-    static ImBoolean windowOpen = new ImBoolean(false);
+    static IkBoolean windowOpen = new IkBoolean(false);
 
     /**
      * The last selection that was made.
@@ -115,71 +115,70 @@ public class Dialogue {
         options.add(text);
     }
 
-    /** Draw the window using ImGui. */
+    /** Draw the window using IkGui. */
     public static void renderWindow() {
-        ImGui.setNextWindowPos(470, 30, ImGuiCond.Once);
-        ImGui.setNextWindowSize(600, 500, ImGuiCond.Once);
-        ImGui.begin(
-                "Dialogue", windowOpen, ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize);
-        ImVec2 textSize = new ImVec2();
+        IkGui.setNextWindowPos(470, 30, Condition.ONCE);
+        IkGui.setNextWindowSize(600, 500, Condition.ONCE);
+        IkGui.begin("Dialogue", windowOpen, WindowFlags.NO_TITLE_BAR | WindowFlags.NO_RESIZE);
+        Vector2f textSize = new Vector2f();
         float width;
-        ImGui.beginChild(
+        IkGui.beginChild(
                 "DialogueText",
                 0,
-                ImGui.getContentRegionMaxY()
-                        - ImGui.getTextLineHeightWithSpacing() * (options.size() + 1));
-        ImGui.pushStyleVar(ImGuiStyleVar.FrameRounding, 10f);
-        ImGui.pushStyleVar(ImGuiStyleVar.DisabledAlpha, 1f);
-        ImGui.beginDisabled();
+                IkGui.getContentRegionAvailableY()
+                        - IkGui.getTextLineHeightWithSpacing() * (options.size() + 1));
+        IkGui.pushStyleVarFloat(StyleVariable.FRAME_ROUNDING, 10f);
+        IkGui.pushStyleVarFloat(StyleVariable.DISABLED_ALPHA, 1f);
+        IkGui.beginDisabled();
         synchronized (lines) {
             for (ChatLine line : lines) {
                 switch (line.type) {
                     case CENTER:
-                        width = ImGui.getContentRegionMaxX();
-                        ImGui.calcTextSize(textSize, line.text);
-                        ImGui.setCursorPosX((width - textSize.x) * 0.5f);
-                        ImGui.text(line.text);
+                        width = IkGui.getContentRegionAvailableX();
+                        IkGui.calcTextSize(textSize, line.text);
+                        IkGui.setCursorPosX((width - textSize.x) * 0.5f);
+                        IkGui.text(line.text);
                         break;
                     case CHAT_LEFT:
-                        ImGui.pushStyleColor(ImGuiCol.Button, 1f, 0.2f, 0.2f, 1f);
+                        IkGui.pushStyleColor(ColorType.BUTTON, 1f, 0.2f, 0.2f, 1f);
 
-                        ImGui.button(line.text);
-                        ImGui.popStyleColor();
+                        IkGui.button(line.text);
+                        IkGui.popStyleColor();
                         break;
                     case CHAT_RIGHT:
-                        width = ImGui.getContentRegionMaxX();
-                        ImGui.calcTextSize(textSize, line.text);
-                        ImGui.setCursorPosX(Math.max(width - (textSize.x + 8), 0));
-                        ImGui.pushStyleColor(ImGuiCol.Button, 0.2f, 0.2f, 1f, 1f);
-                        ImGui.button(line.text);
-                        ImGui.popStyleColor();
+                        width = IkGui.getContentRegionAvailableX();
+                        IkGui.calcTextSize(textSize, line.text);
+                        IkGui.setCursorPosX(Math.max(width - (textSize.x + 8), 0));
+                        IkGui.pushStyleColor(ColorType.BUTTON, 0.2f, 0.2f, 1f, 1f);
+                        IkGui.button(line.text);
+                        IkGui.popStyleColor();
                         break;
                     case DIVIDER:
-                        ImGui.separator();
+                        IkGui.separator();
                         break;
                     case TEXT:
                     default:
-                        ImGui.textWrapped(line.text);
+                        IkGui.textWrapped(line.text);
                         break;
                 }
             }
         }
-        ImGui.endDisabled();
-        ImGui.popStyleVar();
-        ImGui.popStyleVar();
-        ImGui.endChild();
+        IkGui.endDisabled();
+        IkGui.popStyleVar();
+        IkGui.popStyleVar();
+        IkGui.endChild();
 
-        ImGui.separator();
+        IkGui.separator();
         synchronized (options) {
             for (int i = 0; i < options.size(); ++i) {
-                if (ImGui.selectable(String.format("%s", options.get(i)))) {
+                if (IkGui.selectable(String.format("%s", options.get(i)))) {
                     lastDialogueSelection = i;
                     ScriptManager.resume("Dialogue");
                 }
             }
         }
 
-        ImGui.end();
+        IkGui.end();
     }
 
     /**

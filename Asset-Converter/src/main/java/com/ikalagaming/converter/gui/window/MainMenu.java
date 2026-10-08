@@ -11,6 +11,7 @@ import com.ikalagaming.graphics.frontend.RenderConfig;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.frontend.gui.component.Button;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
+import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
@@ -20,7 +21,6 @@ import com.ikalagaming.graphics.scene.lights.PointLight;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.util.SafeResourceLoader;
 
-import imgui.flag.ImGuiWindowFlags;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector3f;
@@ -37,11 +37,11 @@ public class MainMenu extends GuiWindow {
     public MainMenu(@NonNull WindowManager windowManager) {
         super(
                 MAIN_MENU.getName(),
-                ImGuiWindowFlags.NoScrollbar
-                        | ImGuiWindowFlags.NoScrollWithMouse
-                        | ImGuiWindowFlags.NoResize
-                        | ImGuiWindowFlags.NoTitleBar
-                        | ImGuiWindowFlags.NoDecoration);
+                WindowFlags.NO_SCROLLBAR
+                        | WindowFlags.NO_SCROLL_WITH_MOUSE
+                        | WindowFlags.NO_RESIZE
+                        | WindowFlags.NO_TITLE_BAR
+                        | WindowFlags.NO_DECORATION);
         this.windowManager = windowManager;
         setScale(1.0f, 0.98f);
         setDisplacement(0.0f, 0.02f);

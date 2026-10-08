@@ -14,9 +14,6 @@ import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.data.FontAtlas;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 
-import imgui.ImFontAtlas;
-import imgui.ImGui;
-import imgui.type.ImInt;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.PointerBuffer;
@@ -25,7 +22,6 @@ import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.util.vma.VmaAllocationCreateInfo;
 import org.lwjgl.vulkan.*;
 
-import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
 import java.util.*;
 
@@ -39,14 +35,8 @@ public class PipelineManagerVulkan {
     public static final Pipeline ERROR_PIPELINE =
             new PipelineVulkan(new RenderStage[0], RenderConfig.ERROR_MASK);
 
-    /** The texture we store font atlas on. */
-    @Deprecated private Texture imguiFont;
-
     /** The texture we store the font atlas on. */
     private Texture fontAtlas;
-
-    /** The mesh to render. */
-    private ImGuiMesh imGuiMesh;
 
     /** The GUI mesh to render. */
     private GuiMesh guiMesh;
@@ -81,7 +71,6 @@ public class PipelineManagerVulkan {
         createGuiFont();
         skybox = new SkyboxModel();
         quadMesh = QuadMesh.getInstance(state);
-        imGuiMesh = ImGuiMesh.create();
         guiMesh = GuiMesh.create(state);
 
         stageModelMatrixUpdate = new ModelMatrixUpdate();
@@ -91,11 +80,7 @@ public class PipelineManagerVulkan {
         stageSceneRender.initialize(state);
         stageGuiRender =
                 new GuiRender(
-                        (ShaderVulkan) shaders.getShader(RenderStage.Type.GUI_LEGACY),
-                        (ShaderVulkan) shaders.getShader(RenderStage.Type.GUI),
-                        imGuiMesh,
-                        guiMesh,
-                        fontAtlas);
+                        (ShaderVulkan) shaders.getShader(RenderStage.Type.GUI), guiMesh, fontAtlas);
         stageGuiRender.initialize(state);
         stageSkyboxRender =
                 new SkyboxRender((ShaderVulkan) shaders.getShader(RenderStage.Type.SKYBOX), skybox);
@@ -439,11 +424,8 @@ public class PipelineManagerVulkan {
         stageShadowRender.cleanup(state);
         stageSkyboxRender.cleanup(state);
         stageSwapchainPresent.cleanup(state);
-        GraphicsManager.getDeletionQueue().add(imguiFont);
-        imguiFont = null;
         GraphicsManager.getDeletionQueue().add(fontAtlas);
         fontAtlas = null;
-        imGuiMesh.cleanup();
         guiMesh.cleanup();
         skybox.cleanup();
         skybox = null;
@@ -566,17 +548,6 @@ public class PipelineManagerVulkan {
     }
 
     private void createGuiFont() {
-        ImFontAtlas fontAtlas = ImGui.getIO().getFonts();
-        ImInt width = new ImInt();
-        ImInt height = new ImInt();
-        ByteBuffer buf = fontAtlas.getTexDataAsRGBA32(width, height);
-        imguiFont =
-                GraphicsManager.getRenderInstance()
-                        .getTextureLoader()
-                        .load(buf, Format.R8G8B8A8_UINT, width.get(), height.get());
-        var imguiFontInfo = (TextureInfoVulkan) imguiFont.info();
-        fontAtlas.setTexID(imguiFontInfo.texture);
-
         FontAtlas fontAtlas1 = IkGui.getIO().fonts;
         final String notoSans = "fonts/NotoSans.ttf";
         if (!fontAtlas1.loadFont(notoSans)) {

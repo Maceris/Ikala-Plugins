@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.frontend.gui.component;
 
-import imgui.ImGui;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+
 import lombok.RequiredArgsConstructor;
 
 /** Any regular text that we need to position on the GUI. */
@@ -12,10 +13,10 @@ public class Text extends Component {
 
     @Override
     public void draw(final int width, final int height) {
-        ImGui.setCursorPosX(getActualDisplaceX() * width - ImGui.getWindowPosX());
-        ImGui.setCursorPosY(getActualDisplaceY() * height - ImGui.getWindowPosY());
+        IkGui.setCursorPosX(getActualDisplaceX() * width - IkGui.getWindowPosX());
+        IkGui.setCursorPosY(getActualDisplaceY() * height - IkGui.getWindowPosY());
 
-        ImGui.text(contents);
+        IkGui.text(contents);
     }
 
     public void drawFormatted(final int width, final int height, Object... args) {}

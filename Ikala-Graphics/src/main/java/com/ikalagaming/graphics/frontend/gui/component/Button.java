@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.frontend.gui.component;
 
-import imgui.ImGui;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+
 import lombok.RequiredArgsConstructor;
 
 /** A button, which may have text. */
@@ -22,10 +23,10 @@ public class Button extends Component implements Interactive {
 
     @Override
     public void draw(final int width, final int height) {
-        ImGui.setCursorPosX(getActualDisplaceX() * width - ImGui.getWindowPosX());
-        ImGui.setCursorPosY(getActualDisplaceY() * height - ImGui.getWindowPosY());
+        IkGui.setCursorPosX(getActualDisplaceX() * width - IkGui.getWindowPosX());
+        IkGui.setCursorPosY(getActualDisplaceY() * height - IkGui.getWindowPosY());
 
-        if (ImGui.button(text, getActualWidth() * width, getActualHeight() * height)) {
+        if (IkGui.button(text, getActualWidth() * width, getActualHeight() * height)) {
             pressed = true;
         }
     }

@@ -24,8 +24,6 @@ import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
 
-import imgui.ImGui;
-import imgui.ImGuiIO;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.logging.log4j.util.Strings;
@@ -119,13 +117,6 @@ public class OpenGLInstance implements Instance {
      * @param window The window to pull display info from.
      */
     private void initializeGui(@NonNull Window window) {
-        // TODO(ches) clear out ImGui
-        ImGui.createContext();
-
-        ImGuiIO imGuiIO = ImGui.getIO();
-        imGuiIO.setIniFilename(null);
-        imGuiIO.setDisplaySize(window.getWidth(), window.getHeight());
-
         IkGui.createContext();
 
         IkIO ikIO = IkGui.getIO();
@@ -326,48 +317,23 @@ public class OpenGLInstance implements Instance {
 
     /** Set up the GUI shader and uniforms. */
     private void initializeGuiShader() {
-        // TODO(ches) remove the imgui part of this
-        {
-            List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
-            shaderModuleDataList.add(
-                    new Shader.ShaderModuleData(
-                            "shaders/opengl/imgui.vert",
-                            Shader.Type.VERTEX,
-                            Shader.Location.BUNDLED));
-            shaderModuleDataList.add(
-                    new Shader.ShaderModuleData(
-                            "shaders/opengl/imgui.frag",
-                            Shader.Type.FRAGMENT,
-                            Shader.Location.BUNDLED));
-            var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
+        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        shaderModuleDataList.add(
+                new Shader.ShaderModuleData(
+                        "shaders/opengl/ikgui.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
+        shaderModuleDataList.add(
+                new Shader.ShaderModuleData(
+                        "shaders/opengl/ikgui.frag",
+                        Shader.Type.FRAGMENT,
+                        Shader.Location.BUNDLED));
+        var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
 
-            var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
-            uniformsMap.createUniform(ShaderUniforms.GUI.SCALE);
-            shaderProgram.setUniforms(uniformsMap);
+        var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
+        uniformsMap.createUniform(ShaderUniforms.GUI.SCALE);
+        uniformsMap.createUniform(ShaderUniforms.GUI.DISPLAY_POSITION);
+        shaderProgram.setUniforms(uniformsMap);
 
-            shaderMap.addShader(RenderStage.Type.GUI_LEGACY, shaderProgram);
-        }
-        {
-            List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
-            shaderModuleDataList.add(
-                    new Shader.ShaderModuleData(
-                            "shaders/opengl/ikgui.vert",
-                            Shader.Type.VERTEX,
-                            Shader.Location.BUNDLED));
-            shaderModuleDataList.add(
-                    new Shader.ShaderModuleData(
-                            "shaders/opengl/ikgui.frag",
-                            Shader.Type.FRAGMENT,
-                            Shader.Location.BUNDLED));
-            var shaderProgram = new ShaderOpenGL(shaderModuleDataList);
-
-            var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
-            uniformsMap.createUniform(ShaderUniforms.GUI.SCALE);
-            uniformsMap.createUniform(ShaderUniforms.GUI.DISPLAY_POSITION);
-            shaderProgram.setUniforms(uniformsMap);
-
-            shaderMap.addShader(RenderStage.Type.GUI, shaderProgram);
-        }
+        shaderMap.addShader(RenderStage.Type.GUI, shaderProgram);
     }
 
     @Override
@@ -411,8 +377,6 @@ public class OpenGLInstance implements Instance {
     public void resize(@NonNull Window window, int width, int height) {
         // TODO(ches) move this out of the render pass itself
         pipelineManager.resize(width, height);
-        ImGuiIO imGuiIO = ImGui.getIO();
-        imGuiIO.setDisplaySize(width, height);
         IkIO ikIO = IkGui.getIO();
         ikIO.displaySize.set(width, height);
     }

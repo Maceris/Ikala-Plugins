@@ -3,18 +3,18 @@ package com.ikalagaming.graphics.frontend.gui.windows;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.frontend.RenderConfig;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.component.Checkbox;
 import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
 import com.ikalagaming.graphics.frontend.gui.component.Slider;
+import com.ikalagaming.graphics.frontend.gui.enums.Condition;
+import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.frontend.gui.util.Alignment;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 
-import imgui.ImGui;
-import imgui.flag.ImGuiCond;
-import imgui.flag.ImGuiWindowFlags;
 import lombok.NonNull;
 import org.joml.Vector3f;
 
@@ -31,7 +31,7 @@ public class GraphicsDebug extends GuiWindow {
     private final Slider directionalLightIntensity;
 
     public GraphicsDebug() {
-        super(WINDOW_NAME, ImGuiWindowFlags.None);
+        super(WINDOW_NAME, WindowFlags.NONE);
         setScale(0.34f, 0.45f);
         setDisplacement(0.01f, 0.05f);
         setAlignment(Alignment.NORTH_EAST);
@@ -55,28 +55,28 @@ public class GraphicsDebug extends GuiWindow {
 
     @Override
     public void draw(int width, int height) {
-        ImGui.setNextWindowViewport(ImGui.getMainViewport().getID());
-        ImGui.setNextWindowPos(
-                getActualDisplaceX() * width, getActualDisplaceY() * height, ImGuiCond.Always);
-        ImGui.setNextWindowSize(
-                getActualWidth() * width, getActualHeight() * height, ImGuiCond.Always);
-        ImGui.begin(title, windowOpen, windowFlags);
+        IkGui.setNextWindowViewport(IkGui.getMainViewport().id);
+        IkGui.setNextWindowPos(
+                getActualDisplaceX() * width, getActualDisplaceY() * height, Condition.ONCE);
+        IkGui.setNextWindowSize(
+                getActualWidth() * width, getActualHeight() * height, Condition.ONCE);
+        IkGui.begin(title, windowOpen, windowFlags);
 
         if (isVisible()) {
             recalculate();
 
             Scene scene = GraphicsManager.getScene();
 
-            if (ImGui.collapsingHeader("Stats")) {
-                ImGui.text(String.format("FPS: %d", GraphicsManager.getLastFPS()));
-                ImGui.text(
+            if (IkGui.collapsingHeader("Stats")) {
+                IkGui.text(String.format("FPS: %d", GraphicsManager.getLastFPS()));
+                IkGui.text(
                         String.format(
                                 "Point lights: %,d",
                                 scene.getSceneLights().getPointLights().size()));
-                ImGui.text(
+                IkGui.text(
                         String.format(
                                 "Spot lights: %,d", scene.getSceneLights().getSpotLights().size()));
-                ImGui.text(
+                IkGui.text(
                         String.format(
                                 "Materials loaded - %,d",
                                 GraphicsManager.getScene().getMaterialCache().getMaterialCount()));
@@ -96,59 +96,59 @@ public class GraphicsDebug extends GuiWindow {
                     triangles += (long) meshTriangles * meshEntities;
                 }
 
-                ImGui.text(String.format("Models loaded: %,d", scene.getModelMap().size()));
-                ImGui.text(String.format("Meshes loaded: %,d", meshes));
-                ImGui.text(String.format("Entities: %,d", entities));
-                ImGui.text(String.format("Triangles: %,d", triangles));
+                IkGui.text(String.format("Models loaded: %,d", scene.getModelMap().size()));
+                IkGui.text(String.format("Meshes loaded: %,d", meshes));
+                IkGui.text(String.format("Entities: %,d", entities));
+                IkGui.text(String.format("Triangles: %,d", triangles));
             }
 
-            if (ImGui.collapsingHeader("Render Config Info")) {
+            if (IkGui.collapsingHeader("Render Config Info")) {
                 int config = GraphicsManager.getPipelineConfig();
                 final String flagString = "%12s - %s";
-                ImGui.text(String.format(flagString, "Error", RenderConfig.hasError(config)));
-                ImGui.text(
+                IkGui.text(String.format(flagString, "Error", RenderConfig.hasError(config)));
+                IkGui.text(
                         String.format(
                                 flagString, "Animation", RenderConfig.hasAnimationStage(config)));
-                ImGui.text(
+                IkGui.text(
                         String.format(flagString, "Shadow", RenderConfig.hasShadowStage(config)));
-                ImGui.text(String.format(flagString, "Scene", RenderConfig.hasSceneStage(config)));
-                ImGui.text(
+                IkGui.text(String.format(flagString, "Scene", RenderConfig.hasSceneStage(config)));
+                IkGui.text(
                         String.format(flagString, "Skybox", RenderConfig.hasSkyboxStage(config)));
-                ImGui.text(
+                IkGui.text(
                         String.format(flagString, "Filter", RenderConfig.hasFilterStage(config)));
-                ImGui.text(String.format(flagString, "Gui", RenderConfig.hasGuiStage(config)));
-                ImGui.text(
+                IkGui.text(String.format(flagString, "Gui", RenderConfig.hasGuiStage(config)));
+                IkGui.text(
                         String.format(
                                 flagString,
                                 "Transparency",
                                 RenderConfig.hasTransparencyPass(config)));
-                ImGui.text(
+                IkGui.text(
                         String.format(
                                 flagString, "Wireframe", RenderConfig.sceneIsWireframe(config)));
             }
 
-            if (ImGui.collapsingHeader("Camera")) {
+            if (IkGui.collapsingHeader("Camera")) {
                 var camera = GraphicsManager.getCameraManager().getCamera();
-                ImGui.text(
+                IkGui.text(
                         String.format(
                                 "Camera position: x:%.2f, y:%.2f, z:%.2f",
                                 camera.getPosition().x(),
                                 camera.getPosition().y(),
                                 camera.getPosition().z()));
 
-                ImGui.text(
+                IkGui.text(
                         String.format(
                                 "Camera rotation: x:%.2f, y:%.2f",
                                 camera.getRotation().x(), camera.getRotation().y()));
             }
 
-            if (ImGui.collapsingHeader("Scene Controls")) {
+            if (IkGui.collapsingHeader("Scene Controls")) {
                 boolean renderingScene =
                         RenderConfig.hasSceneStage(GraphicsManager.getPipelineConfig());
 
                 if (!renderingScene) {
-                    ImGui.beginDisabled();
-                    ImGui.text("(Not rendering scene, controls disabled)");
+                    IkGui.beginDisabled();
+                    IkGui.text("(Not rendering scene, controls disabled)");
                 }
                 fogEnabled.draw(width, height);
                 fogDensity.draw(width, height);
@@ -158,12 +158,12 @@ public class GraphicsDebug extends GuiWindow {
                 directionalLightZ.draw(width, height);
                 directionalLightIntensity.draw(width, height);
                 if (!renderingScene) {
-                    ImGui.endDisabled();
+                    IkGui.endDisabled();
                 }
             }
         }
 
-        ImGui.end();
+        IkGui.end();
     }
 
     @Override

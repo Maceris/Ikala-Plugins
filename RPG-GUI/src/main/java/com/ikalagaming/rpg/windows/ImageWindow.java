@@ -2,11 +2,13 @@ package com.ikalagaming.rpg.windows;
 
 import static org.lwjgl.opengl.GL11.*;
 
+import com.ikalagaming.graphics.backend.opengl.TextureInfoOpenGL;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.data.IkInt;
+import com.ikalagaming.graphics.frontend.gui.enums.Condition;
+import com.ikalagaming.graphics.frontend.gui.enums.Direction;
 import com.ikalagaming.graphics.scene.Scene;
 
-import imgui.ImGui;
-import imgui.flag.ImGuiCond;
-import imgui.type.ImInt;
 import lombok.NonNull;
 
 /**
@@ -15,36 +17,43 @@ import lombok.NonNull;
  * @author Ches Burks
  */
 public class ImageWindow implements GUIWindow {
-    private ImInt textureID;
+    private IkInt textureID;
+
+    /** The texture info for the texture ID being shown, reused between frames. */
+    private final TextureInfoOpenGL textureInfo = new TextureInfoOpenGL();
 
     @Override
     public void draw() {
-        ImGui.setNextWindowPos(410, 10, ImGuiCond.Once);
-        ImGui.setNextWindowSize(600, 500, ImGuiCond.Once);
-        ImGui.begin("Textures");
+        IkGui.setNextWindowPos(410, 10, Condition.ONCE);
+        IkGui.setNextWindowSize(600, 500, Condition.ONCE);
+        IkGui.begin("Textures");
 
-        if (ImGui.arrowButton("Decr ID", 0)) {
+        if (IkGui.arrowButton("Decr ID", Direction.LEFT)) {
             textureID.set(textureID.get() - 1);
         }
-        ImGui.sameLine();
-        ImGui.text("Texture ID: " + textureID.get());
-        ImGui.sameLine();
-        if (ImGui.arrowButton("Incr ID", 1)) {
+        IkGui.sameLine();
+        IkGui.text("Texture ID: " + textureID.get());
+        IkGui.sameLine();
+        if (IkGui.arrowButton("Incr ID", Direction.RIGHT)) {
             textureID.set(textureID.get() + 1);
         }
 
         final int id = textureID.get();
         if (glIsTexture(id)) {
-            ImGui.image(id, 500, 500);
+            if (textureInfo.id != id) {
+                textureInfo.id = id;
+                textureInfo.bindlessHandle = 0;
+            }
+            IkGui.image(textureInfo, 500, 500);
         } else {
-            ImGui.text("Not a texture!");
+            IkGui.text("Not a texture!");
         }
 
-        ImGui.end();
+        IkGui.end();
     }
 
     @Override
     public void setup(@NonNull Scene scene) {
-        textureID = new ImInt(0);
+        textureID = new IkInt(0);
     }
 }

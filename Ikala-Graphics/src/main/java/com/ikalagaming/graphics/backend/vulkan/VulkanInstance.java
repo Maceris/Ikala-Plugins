@@ -26,8 +26,6 @@ import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.SafeResourceLoader;
 
-import imgui.ImGui;
-import imgui.ImGuiIO;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.PointerBuffer;
@@ -993,55 +991,28 @@ public class VulkanInstance implements Instance {
      * @param window The window to pull display info from.
      */
     private void initializeGui(@NonNull Window window) {
-        // TODO(ches) clear out ImGui
-        ImGui.createContext();
-
-        ImGuiIO imGuiIO = ImGui.getIO();
-        imGuiIO.setIniFilename(null);
-        imGuiIO.setDisplaySize(window.getWidth(), window.getHeight());
-
         IkGui.createContext();
 
         IkIO ikIO = IkGui.getIO();
         ikIO.iniFilename = null;
         ikIO.displaySize.set(window.getWidth(), window.getHeight());
+        window.setupIkGuiPlatformIO();
     }
 
     /** Set up the GUI shader and uniforms. */
     private void initializeGuiShader() {
-        // TODO(ches) remove the imgui part of this
-        {
-            List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
-            shaderModuleDataList.add(
-                    new Shader.ShaderModuleData(
-                            "shaders/vulkan/imgui.vert",
-                            Shader.Type.VERTEX,
-                            Shader.Location.BUNDLED));
-            shaderModuleDataList.add(
-                    new Shader.ShaderModuleData(
-                            "shaders/vulkan/imgui.frag",
-                            Shader.Type.FRAGMENT,
-                            Shader.Location.BUNDLED));
-            var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
+        List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        shaderModuleDataList.add(
+                new Shader.ShaderModuleData(
+                        "shaders/vulkan/ikgui.vert", Shader.Type.VERTEX, Shader.Location.BUNDLED));
+        shaderModuleDataList.add(
+                new Shader.ShaderModuleData(
+                        "shaders/vulkan/ikgui.frag",
+                        Shader.Type.FRAGMENT,
+                        Shader.Location.BUNDLED));
+        var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
 
-            shaderMap.addShader(RenderStage.Type.GUI_LEGACY, shaderProgram);
-        }
-        {
-            List<Shader.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
-            shaderModuleDataList.add(
-                    new Shader.ShaderModuleData(
-                            "shaders/vulkan/ikgui.vert",
-                            Shader.Type.VERTEX,
-                            Shader.Location.BUNDLED));
-            shaderModuleDataList.add(
-                    new Shader.ShaderModuleData(
-                            "shaders/vulkan/ikgui.frag",
-                            Shader.Type.FRAGMENT,
-                            Shader.Location.BUNDLED));
-            var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
-
-            shaderMap.addShader(RenderStage.Type.GUI, shaderProgram);
-        }
+        shaderMap.addShader(RenderStage.Type.GUI, shaderProgram);
     }
 
     /** Set up the light shader and uniforms. */

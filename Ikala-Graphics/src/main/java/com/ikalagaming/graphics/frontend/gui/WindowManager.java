@@ -7,7 +7,6 @@ import com.ikalagaming.graphics.frontend.gui.component.MainToolbar;
 import com.ikalagaming.graphics.frontend.gui.windows.IkGuiDemo;
 import com.ikalagaming.graphics.scene.Scene;
 
-import imgui.ImGui;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -60,7 +59,6 @@ public class WindowManager {
      * @param height The width of the height, in pixels.
      */
     public void drawGui(final int width, final int height) {
-        ImGui.newFrame();
         IkGui.newFrame();
 
         windows.values().stream()
@@ -72,10 +70,9 @@ public class WindowManager {
         }
 
         // Defer this until right at the end
-        if (windows.get(IkGuiDemo.WINDOW_NAME).isVisible()) {
+        if (isVisible(IkGuiDemo.WINDOW_NAME)) {
             IkGui.showDemoWindow();
         }
-        ImGui.render();
         IkGui.render();
     }
 

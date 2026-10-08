@@ -12,10 +12,10 @@ import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
 import com.ikalagaming.graphics.frontend.Framebuffer;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.data.IkIO;
 import com.ikalagaming.graphics.scene.Scene;
 
-import imgui.ImGui;
-import imgui.ImGuiIO;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import lombok.Setter;
@@ -42,10 +42,10 @@ public class FramebufferTransition implements RenderStage {
     public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
         glBindFramebuffer(GL_FRAMEBUFFER, (int) framebuffer.id());
 
-        ImGuiIO io = ImGui.getIO();
+        final IkIO io = IkGui.getIO();
 
-        final int width = (int) io.getDisplaySizeX();
-        final int height = (int) io.getDisplaySizeY();
+        final int width = (int) io.displaySize.x;
+        final int height = (int) io.displaySize.y;
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glViewport(0, 0, width, height);

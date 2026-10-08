@@ -1,17 +1,18 @@
 package com.ikalagaming.rpg.windows;
 
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.data.IkBoolean;
+import com.ikalagaming.graphics.frontend.gui.data.IkString;
+import com.ikalagaming.graphics.frontend.gui.enums.ColorType;
+import com.ikalagaming.graphics.frontend.gui.enums.Condition;
+import com.ikalagaming.graphics.frontend.gui.enums.StyleVariable;
+import com.ikalagaming.graphics.frontend.gui.flags.ChildFlags;
+import com.ikalagaming.graphics.frontend.gui.flags.InputTextFlags;
+import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.scripting.Engine;
 
-import imgui.ImGui;
-import imgui.flag.ImGuiCol;
-import imgui.flag.ImGuiCond;
-import imgui.flag.ImGuiInputTextFlags;
-import imgui.flag.ImGuiStyleVar;
-import imgui.flag.ImGuiWindowFlags;
-import imgui.type.ImBoolean;
-import imgui.type.ImString;
 import lombok.NonNull;
 import org.luaj.vm2.LuaError;
 
@@ -29,7 +30,7 @@ import javax.script.ScriptException;
 public class LuaConsole implements GUIWindow {
 
     /** The input to the console. */
-    ImString input;
+    IkString input;
 
     /** The lines in the console. */
     List<String> logs;
@@ -46,10 +47,10 @@ public class LuaConsole implements GUIWindow {
     int historyPos;
 
     /** Whether we are automatically staying scrolled to the bottom when new text shows up. */
-    ImBoolean autoScroll;
+    IkBoolean autoScroll;
 
     /** If we want to scroll to the bottom. */
-    ImBoolean scrollToBottom;
+    IkBoolean scrollToBottom;
 
     /** We override the scripting context to write here instead of stdout. */
     StringWriter luaOutput;
@@ -71,69 +72,69 @@ public class LuaConsole implements GUIWindow {
 
     @Override
     public void draw() {
-        ImGui.setNextWindowPos(200, 200, ImGuiCond.Once);
-        ImGui.setNextWindowSize(450, 400, ImGuiCond.Once);
-        ImGui.begin("Lua Console");
+        IkGui.setNextWindowPos(200, 200, Condition.ONCE);
+        IkGui.setNextWindowSize(450, 400, Condition.ONCE);
+        IkGui.begin("Lua Console");
 
-        ImGui.textWrapped("This is a console for interacting with the lua engine.");
+        IkGui.textWrapped("This is a console for interacting with the lua engine.");
 
-        if (ImGui.smallButton("Clear")) {
+        if (IkGui.smallButton("Clear")) {
             clearLog();
         }
-        ImGui.sameLine();
-        boolean copyToClipboard = ImGui.smallButton("Copy to clipboard");
+        IkGui.sameLine();
+        boolean copyToClipboard = IkGui.smallButton("Copy to clipboard");
 
-        ImGui.separator();
+        IkGui.separator();
 
         // Options menu
-        if (ImGui.beginPopup("Options")) {
-            ImGui.checkbox("Auto-scroll", autoScroll);
-            ImGui.endPopup();
+        if (IkGui.beginPopup("Options")) {
+            IkGui.checkbox("Auto-scroll", autoScroll);
+            IkGui.endPopup();
         }
 
         // Options, Filter
-        if (ImGui.button("Options")) {
-            ImGui.openPopup("Options");
+        if (IkGui.button("Options")) {
+            IkGui.openPopup("Options");
         }
-        ImGui.separator();
+        IkGui.separator();
         // Reserve enough left-over height for 1 separator + 1 input text
         final float footerHeightToReserve =
-                ImGui.getStyle().getItemSpacingY() + ImGui.getFrameHeightWithSpacing();
-        if (ImGui.beginChild(
+                IkGui.getStyle().variable.itemSpacing.y + IkGui.getFrameHeightWithSpacing();
+        if (IkGui.beginChild(
                 "ScrollingRegion",
                 0,
                 -footerHeightToReserve,
-                false,
-                ImGuiWindowFlags.HorizontalScrollbar)) {
-            if (ImGui.beginPopupContextWindow()) {
-                if (ImGui.selectable("Clear")) {
+                ChildFlags.NONE,
+                WindowFlags.HORIZONTAL_SCROLLBAR)) {
+            if (IkGui.beginPopupContextWindow()) {
+                if (IkGui.selectable("Clear")) {
                     clearLog();
                 }
-                ImGui.endPopup();
+                IkGui.endPopup();
             }
             // Tighten spacing
-            ImGui.pushStyleVar(ImGuiStyleVar.ItemSpacing, 4, 1);
+            IkGui.pushStyleVarFloat2(StyleVariable.ITEM_SPACING, 4, 1);
             if (copyToClipboard) {
-                ImGui.logToClipboard();
+                IkGui.logToClipboard();
             }
             for (int i = 0; i < logs.size(); i++) {
                 String item = logs.get(i);
 
                 boolean hasColor = false;
                 if (item.startsWith("[error]")) {
-                    ImGui.pushStyleColor(ImGuiCol.Text, 1.0f, 0.4f, 0.4f, 1.0f);
+                    IkGui.pushStyleColor(ColorType.TEXT, 1.0f, 0.4f, 0.4f, 1.0f);
                     hasColor = true;
                 } else if (item.startsWith("-- ")) {
-                    ImGui.pushStyleColor(ImGuiCol.Text, 1.0f, 0.8f, 0.6f, 1.0f);
+                    IkGui.pushStyleColor(ColorType.TEXT, 1.0f, 0.8f, 0.6f, 1.0f);
                     hasColor = true;
                 }
-                ImGui.textUnformatted(item);
+                IkGui.textUnformatted(item);
                 if (hasColor) {
-                    ImGui.popStyleColor();
+                    IkGui.popStyleColor();
                 }
             }
             if (copyToClipboard) {
-                ImGui.logFinish();
+                IkGui.logFinish();
             }
 
             /*
@@ -142,23 +143,23 @@ public class LuaConsole implements GUIWindow {
              * mouse-wheel will take away from the bottom edge.
              */
             if (scrollToBottom.get()
-                    || (autoScroll.get() && ImGui.getScrollY() >= ImGui.getScrollMaxY())) {
-                ImGui.setScrollHereY(1.0f);
+                    || (autoScroll.get() && IkGui.getScrollY() >= IkGui.getScrollMaxY())) {
+                IkGui.setScrollHereY(1.0f);
             }
             scrollToBottom.set(false);
 
-            ImGui.popStyleVar();
+            IkGui.popStyleVar();
         }
-        ImGui.endChild();
-        ImGui.separator();
+        IkGui.endChild();
+        IkGui.separator();
 
         // Command-line
         boolean reclaimFocus = false;
         int inputTextFlags =
-                ImGuiInputTextFlags.EnterReturnsTrue
-                        | ImGuiInputTextFlags.CallbackCompletion
-                        | ImGuiInputTextFlags.CallbackHistory;
-        if (ImGui.inputText("Input", input, inputTextFlags)) {
+                InputTextFlags.ENTER_RETURNS_TRUE
+                        | InputTextFlags.CALLBACK_COMPLETION
+                        | InputTextFlags.CALLBACK_HISTORY;
+        if (IkGui.inputText("Input", input, inputTextFlags)) {
             String s = input.get().trim();
             input.clear();
             if (!s.trim().isEmpty()) {
@@ -168,12 +169,12 @@ public class LuaConsole implements GUIWindow {
         }
 
         // Auto-focus on window apparition
-        ImGui.setItemDefaultFocus();
+        IkGui.setItemDefaultFocus();
         if (reclaimFocus) {
-            ImGui.setKeyboardFocusHere(-1); // Auto focus previous widget
+            IkGui.setKeyboardFocusHere(-1); // Auto focus previous widget
         }
 
-        ImGui.end();
+        IkGui.end();
     }
 
     /**
@@ -210,9 +211,9 @@ public class LuaConsole implements GUIWindow {
 
     @Override
     public void setup(@NonNull Scene scene) {
-        input = new ImString(256);
-        autoScroll = new ImBoolean();
-        scrollToBottom = new ImBoolean();
+        input = new IkString(256);
+        autoScroll = new IkBoolean();
+        scrollToBottom = new IkBoolean();
         logs = new ArrayList<>();
         commands = new ArrayList<>();
         commands.add("HELP");

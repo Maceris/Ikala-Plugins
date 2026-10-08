@@ -18,9 +18,6 @@ import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.data.FontAtlas;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 
-import imgui.ImFontAtlas;
-import imgui.ImGui;
-import imgui.type.ImInt;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.system.MemoryStack;
@@ -50,17 +47,11 @@ public class PipelineManager {
     /** The cascade shadow map. */
     private final CascadeShadowSplit[] cascadeShadowSplits;
 
-    /** The texture we store font atlas on. */
-    @Deprecated private Texture imguiFont;
-
     /** The texture we store the font atlas on. */
     private Texture fontAtlas;
 
     /** Geometry buffer. */
     private Framebuffer gBuffer;
-
-    /** The mesh to render. */
-    private ImGuiMesh imGuiMesh;
 
     /** The GUI mesh to render. */
     private GuiMesh guiMesh;
@@ -120,7 +111,6 @@ public class PipelineManager {
         skybox = new SkyboxModel();
         quadMesh = QuadMesh.getInstance();
         createLightBuffers();
-        imGuiMesh = ImGuiMesh.create();
         guiMesh = GuiMesh.create();
 
         stageModelMatrixUpdate = new ModelMatrixUpdate();
@@ -129,13 +119,7 @@ public class PipelineManager {
         stageSceneRenderWireframe =
                 new SceneRenderWireframe(
                         shaders.getShader(RenderStage.Type.SCENE), renderBuffers, gBuffer);
-        stageGuiRender =
-                new GuiRender(
-                        shaders.getShader(RenderStage.Type.GUI_LEGACY),
-                        shaders.getShader(RenderStage.Type.GUI),
-                        imGuiMesh,
-                        guiMesh,
-                        fontAtlas);
+        stageGuiRender = new GuiRender(shaders.getShader(RenderStage.Type.GUI), guiMesh, fontAtlas);
         stageSkyboxRender = new SkyboxRender(shaders.getShader(RenderStage.Type.SKYBOX), skybox);
         stageShadowRender =
                 new ShadowRender(
@@ -213,14 +197,11 @@ public class PipelineManager {
 
     /** Clean up all the rendering resources. */
     public void cleanup() {
-        GraphicsManager.getDeletionQueue().add(imguiFont);
-        imguiFont = null;
         if (IkGui.getContext() != null) {
             IkGui.getIO().fonts.texture = null;
         }
         GraphicsManager.getDeletionQueue().add(fontAtlas);
         fontAtlas = null;
-        imGuiMesh.cleanup();
         guiMesh.cleanup();
         skybox.cleanup();
         skybox = null;
@@ -239,17 +220,6 @@ public class PipelineManager {
     }
 
     private void createGuiFont() {
-        ImFontAtlas fontAtlas = ImGui.getIO().getFonts();
-        ImInt width = new ImInt();
-        ImInt height = new ImInt();
-        ByteBuffer buf = fontAtlas.getTexDataAsRGBA32(width, height);
-        imguiFont =
-                GraphicsManager.getRenderInstance()
-                        .getTextureLoader()
-                        .load(buf, Format.R8G8B8A8_UINT, width.get(), height.get());
-        var imguiFontInfo = (TextureInfoOpenGL) imguiFont.info();
-        fontAtlas.setTexID(imguiFontInfo.id);
-
         FontAtlas fontAtlas1 = IkGui.getIO().fonts;
         final String notoSans = "fonts/NotoSans.ttf";
         if (!fontAtlas1.loadFont(notoSans)) {

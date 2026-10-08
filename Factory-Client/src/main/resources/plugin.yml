@@ -9,4 +9,4 @@ dependencies:
   - Factory-Server
   - Ikala-Graphics
   - Random
-libraries: [joml, imgui-java-binding]
+libraries: [joml]

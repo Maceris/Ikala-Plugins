@@ -1,12 +1,12 @@
 package com.ikalagaming.rpg.windows;
 
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.MouseInput;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.data.IkIO;
+import com.ikalagaming.graphics.frontend.gui.enums.Condition;
 import com.ikalagaming.graphics.scene.Scene;
 
-import imgui.ImGui;
-import imgui.flag.ImGuiCond;
 import lombok.NonNull;
 import org.joml.Vector2f;
 import org.joml.Vector3f;
@@ -20,36 +20,32 @@ public class DebugWindow implements GUIWindow {
 
     @Override
     public void draw() {
-        ImGui.setNextWindowPos(10, 30, ImGuiCond.Once);
-        ImGui.setNextWindowSize(450, 400, ImGuiCond.Once);
-        ImGui.begin("Debug");
+        IkGui.setNextWindowPos(10, 30, Condition.ONCE);
+        IkGui.setNextWindowSize(450, 400, Condition.ONCE);
+        IkGui.begin("Debug");
 
-        ImGui.text(String.format("FPS: %d", GraphicsManager.getLastFPS()));
+        IkGui.text(String.format("FPS: %.1f", IkGui.getIO().framerate));
 
         Vector3f position = GraphicsManager.getCameraManager().getCamera().getPosition();
-        ImGui.text(
+        IkGui.text(
                 String.format("Camera position: (%f, %f, %f)", position.x, position.y, position.z));
         Vector2f rotation = GraphicsManager.getCameraManager().getCamera().getRotation();
-        ImGui.text(String.format("Camera rotation: (%f, %f)", rotation.x, rotation.y));
-        MouseInput input = GraphicsManager.getWindow().getMouseInput();
-        ImGui.text(
-                String.format(
-                        "Mouse position: (%f, %f)",
-                        input.getCurrentPos().x, input.getCurrentPos().y));
-        ImGui.text(
-                String.format(
-                        "Displace vector: (%f, %f)", input.getDisplVec().x, input.getDisplVec().y));
+        IkGui.text(String.format("Camera rotation: (%f, %f)", rotation.x, rotation.y));
+        IkIO io = IkGui.getIO();
+        IkGui.text(
+                String.format("Mouse position: (%f, %f)", io.mousePosition.x, io.mousePosition.y));
+        IkGui.text(String.format("Mouse delta: (%f, %f)", io.mouseDelta.x, io.mouseDelta.y));
 
-        ImGui.text(
+        IkGui.text(
                 String.format(
                         "Current window position: (%f, %f)",
-                        ImGui.getWindowPosX(), ImGui.getWindowPosY()));
-        ImGui.text(
+                        IkGui.getWindowPosX(), IkGui.getWindowPosY()));
+        IkGui.text(
                 String.format(
                         "Current window size: (%f, %f)",
-                        ImGui.getWindowSizeX(), ImGui.getWindowSizeY()));
+                        IkGui.getWindowWidth(), IkGui.getWindowHeight()));
 
-        ImGui.end();
+        IkGui.end();
     }
 
     @Override

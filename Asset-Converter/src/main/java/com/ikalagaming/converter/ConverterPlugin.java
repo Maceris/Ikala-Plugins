@@ -11,7 +11,6 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.frontend.gui.windows.GraphicsDebug;
 import com.ikalagaming.graphics.frontend.gui.windows.IkGuiDemo;
-import com.ikalagaming.graphics.frontend.gui.windows.ImGuiDemo;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 
@@ -78,7 +77,6 @@ public class ConverterPlugin extends Plugin {
         guiManager.addWindow(MAIN_MENU.getName(), new MainMenu(guiManager));
         guiManager.addWindow(DEBUG.getName(), new Debug());
         guiManager.addWindow(IkGuiDemo.WINDOW_NAME, new IkGuiDemo());
-        guiManager.addWindow(ImGuiDemo.WINDOW_NAME, new ImGuiDemo());
         guiManager.addWindow(GraphicsDebug.WINDOW_NAME, new GraphicsDebug());
         Stream.of(MAIN_MENU).map(DefaultWindows::getName).forEach(guiManager::show);
 

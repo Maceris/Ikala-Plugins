@@ -57,8 +57,6 @@ public class ShaderBindings {
         /** Binding point for the bindless textures. */
         public static final int TEXTURES_BINDING = 4;
 
-        @Deprecated public static final int TEXTURES_BINDING_LEGACY = 1;
-
         /** Binding point for the points buffer. */
         public static final int POINTS_BINDING = 2;
 

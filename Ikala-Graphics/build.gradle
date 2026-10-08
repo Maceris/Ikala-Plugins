@@ -66,7 +66,6 @@ dependencies {
 	implementation "org.lwjgl:lwjgl-vulkan:${lwjglVersion}"
 	implementation "org.lwjgl:lwjgl-stb:${lwjglVersion}"
 	implementation "org.lwjgl:lwjgl-freetype:${lwjglVersion}"
-	implementation "io.github.spair:imgui-java-binding:${imguiJavaVersion}"
 
 	runtimeOnly "org.lwjgl:lwjgl:${lwjglVersion}:natives-windows"
 	runtimeOnly "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-windows"
@@ -75,8 +74,7 @@ dependencies {
 	runtimeOnly "org.lwjgl:lwjgl-vma:${lwjglVersion}:natives-windows"
 	runtimeOnly "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-windows"
 	runtimeOnly "org.lwjgl:lwjgl-freetype:${lwjglVersion}:natives-windows"
-	runtimeOnly "io.github.spair:imgui-java-natives-windows:${imguiJavaVersion}"
-	
+
 	runtimeOnly "org.lwjgl:lwjgl:${lwjglVersion}:natives-macos-arm64"
 	runtimeOnly "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-macos-arm64"
 	runtimeOnly "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-macos-arm64"
@@ -85,8 +83,7 @@ dependencies {
 	runtimeOnly "org.lwjgl:lwjgl-vulkan:${lwjglVersion}:natives-macos-arm64"
 	runtimeOnly "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-macos-arm64"
 	runtimeOnly "org.lwjgl:lwjgl-freetype:${lwjglVersion}:natives-macos-arm64"
-	runtimeOnly "io.github.spair:imgui-java-natives-macos:${imguiJavaVersion}"
-	
+
 	library "org.joml:joml:${jomlVersion}"
 	library "org.lwjgl:lwjgl:${lwjglVersion}"
 	library "org.lwjgl:lwjgl-glfw:${lwjglVersion}"
@@ -96,7 +93,6 @@ dependencies {
 	library "org.lwjgl:lwjgl-vulkan:${lwjglVersion}"
 	library "org.lwjgl:lwjgl-stb:${lwjglVersion}"
 	library "org.lwjgl:lwjgl-freetype:${lwjglVersion}"
-	library "io.github.spair:imgui-java-binding:${imguiJavaVersion}"
 
 	library "org.lwjgl:lwjgl:${lwjglVersion}:natives-windows"
 	library "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-windows"
@@ -105,7 +101,6 @@ dependencies {
 	library "org.lwjgl:lwjgl-vma:${lwjglVersion}:natives-windows"
 	library "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-windows"
 	library "org.lwjgl:lwjgl-freetype:${lwjglVersion}:natives-windows"
-	library "io.github.spair:imgui-java-natives-windows:${imguiJavaVersion}"
 
 	library "org.lwjgl:lwjgl:${lwjglVersion}:natives-macos-arm64"
 	library "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-macos-arm64"
@@ -115,7 +110,6 @@ dependencies {
 	library "org.lwjgl:lwjgl-vulkan:${lwjglVersion}:natives-macos-arm64"
 	library "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-macos-arm64"
 	library "org.lwjgl:lwjgl-freetype:${lwjglVersion}:natives-macos-arm64"
-	library "io.github.spair:imgui-java-natives-macos:${imguiJavaVersion}"
 
 	// Testing
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"

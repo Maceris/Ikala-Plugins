@@ -1,7 +1,7 @@
 package com.ikalagaming.graphics.frontend.gui.component;
 
-import imgui.ImGui;
-import imgui.flag.ImGuiWindowFlags;
+import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 
 /** A scrollable area that contains other components. */
 public class ScrollBox extends Component {
@@ -17,18 +17,17 @@ public class ScrollBox extends Component {
      */
     public ScrollBox(String title) {
         this.title = title;
-        this.windowFlags = ImGuiWindowFlags.None;
+        this.windowFlags = WindowFlags.NONE;
     }
 
     @Override
     public void draw(int width, int height) {
-        ImGui.setCursorPosX(getActualDisplaceX() * width - ImGui.getWindowPosX());
-        ImGui.setCursorPosY(getActualDisplaceY() * height - ImGui.getWindowPosY());
+        IkGui.setCursorPosX(getActualDisplaceX() * width - IkGui.getWindowPosX());
+        IkGui.setCursorPosY(getActualDisplaceY() * height - IkGui.getWindowPosY());
 
-        ImGui.beginChild(
-                title, getActualWidth() * width, getActualHeight() * height, true, windowFlags);
+        IkGui.beginChild(title, getActualWidth() * width, getActualHeight() * height, windowFlags);
 
         super.draw(width, height);
-        ImGui.endChild();
+        IkGui.endChild();
     }
 }

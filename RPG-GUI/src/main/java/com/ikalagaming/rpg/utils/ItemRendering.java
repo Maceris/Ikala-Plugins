@@ -1,5 +1,6 @@
 package com.ikalagaming.rpg.utils;
 
+import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.rpg.item.Accessory;
 import com.ikalagaming.rpg.item.Affix;
 import com.ikalagaming.rpg.item.Armor;
@@ -29,8 +30,6 @@ import com.ikalagaming.rpg.item.template.EquipmentTemplate;
 import com.ikalagaming.rpg.item.template.ItemStatsTemplate;
 import com.ikalagaming.rpg.item.template.WeaponTemplate;
 
-import imgui.ImGui;
-
 /**
  * Utilities for drawing item information on a GUI.
  *
@@ -38,22 +37,22 @@ import imgui.ImGui;
  */
 public class ItemRendering {
     /** The color to use for common items names or borders. */
-    private static final int COLOR_COMMON = ImGui.colorConvertFloat4ToU32(1f, 1f, 1f, 1f);
+    private static final int COLOR_COMMON = IkGui.colorConvertFloat4ToU32(1f, 1f, 1f, 1f);
 
     /** The color to use for epic items names or borders. */
-    private static final int COLOR_EPIC = ImGui.colorConvertFloat4ToU32(1f, 0.6f, 0f, 1f);
+    private static final int COLOR_EPIC = IkGui.colorConvertFloat4ToU32(1f, 0.6f, 0f, 1f);
 
     /** The color to use for legendary items names or borders. */
-    private static final int COLOR_LEGENDARY = ImGui.colorConvertFloat4ToU32(1f, 0f, 1f, 1f);
+    private static final int COLOR_LEGENDARY = IkGui.colorConvertFloat4ToU32(1f, 0f, 1f, 1f);
 
     /** The color to use for magic items names or borders. */
-    private static final int COLOR_MAGIC = ImGui.colorConvertFloat4ToU32(1f, 0.9f, 0f, 1f);
+    private static final int COLOR_MAGIC = IkGui.colorConvertFloat4ToU32(1f, 0.9f, 0f, 1f);
 
     /** The color to use for rare items names or borders. */
-    private static final int COLOR_RARE = ImGui.colorConvertFloat4ToU32(0.3f, 0.3f, 1f, 1f);
+    private static final int COLOR_RARE = IkGui.colorConvertFloat4ToU32(0.3f, 0.3f, 1f, 1f);
 
     /** The color to use for trash items names or borders. */
-    private static final int COLOR_TRASH = ImGui.colorConvertFloat4ToU32(0.3f, 0.3f, 0.3f, 1f);
+    private static final int COLOR_TRASH = IkGui.colorConvertFloat4ToU32(0.3f, 0.3f, 0.3f, 1f);
 
     /**
      * Draw details for an accessory.
@@ -62,7 +61,7 @@ public class ItemRendering {
      */
     public static void drawAccessoryInfo(Accessory accessory) {
         ItemRendering.drawEquipmentName(accessory);
-        ImGui.text("Accessory Type: " + accessory.getAccessoryType().toString());
+        IkGui.text("Accessory Type: " + accessory.getAccessoryType().toString());
         ItemRendering.drawEquipmentInfo(accessory);
     }
 
@@ -73,7 +72,7 @@ public class ItemRendering {
      */
     public static void drawAccessoryTemplateInfo(AccessoryTemplate accessory) {
         ItemRendering.drawEquipmentTemplateName(accessory);
-        ImGui.text("Accessory Type: " + accessory.getAccessoryType().toString());
+        IkGui.text("Accessory Type: " + accessory.getAccessoryType().toString());
         ItemRendering.drawEquipmentTemplateInfo(accessory);
     }
 
@@ -83,20 +82,20 @@ public class ItemRendering {
      * @param affix The affix to draw details for.
      */
     public static void drawAffix(Affix affix) {
-        ImGui.text("Name: ");
-        ImGui.sameLine();
-        ImGui.textColored(ItemRendering.getQualityColor(affix.getQuality()), affix.getID());
-        ImGui.text("Quality: ");
-        ImGui.sameLine();
+        IkGui.text("Name: ");
+        IkGui.sameLine();
+        IkGui.textColored(ItemRendering.getQualityColor(affix.getQuality()), affix.getID());
+        IkGui.text("Quality: ");
+        IkGui.sameLine();
         if (affix.getQuality() != null) {
-            ImGui.textColored(
+            IkGui.textColored(
                     ItemRendering.getQualityColor(affix.getQuality()),
                     affix.getQuality().toString());
         } else {
-            ImGui.text("(missing)");
+            IkGui.text("(missing)");
         }
-        ImGui.text("Affix Type: " + affix.getAffixType().toString());
-        ImGui.text("Level Requirement: " + affix.getLevelRequirement());
+        IkGui.text("Affix Type: " + affix.getAffixType().toString());
+        IkGui.text("Level Requirement: " + affix.getLevelRequirement());
         if (affix.getItemStats() != null) {
             ItemRendering.drawItemStats(affix.getItemStats());
         }
@@ -112,7 +111,7 @@ public class ItemRendering {
      */
     public static void drawArmorInfo(Armor armor) {
         ItemRendering.drawEquipmentName(armor);
-        ImGui.text("Armor Type: " + armor.getArmorType().toString());
+        IkGui.text("Armor Type: " + armor.getArmorType().toString());
         ItemRendering.drawEquipmentInfo(armor);
     }
 
@@ -123,7 +122,7 @@ public class ItemRendering {
      */
     public static void drawArmorTemplateInfo(ArmorTemplate armor) {
         ItemRendering.drawEquipmentTemplateName(armor);
-        ImGui.text("Armor Type: " + armor.getArmorType().toString());
+        IkGui.text("Armor Type: " + armor.getArmorType().toString());
         ItemRendering.drawEquipmentTemplateInfo(armor);
     }
 
@@ -134,31 +133,31 @@ public class ItemRendering {
      */
     public static void drawComponentInfo(Component component) {
         ItemRendering.drawName(component);
-        ImGui.text("Component Type: " + component.getComponentType().toString());
+        IkGui.text("Component Type: " + component.getComponentType().toString());
         ItemRendering.drawItemStats(component.getItemStats());
-        ImGui.text("Can be applied to: ");
+        IkGui.text("Can be applied to: ");
         for (ItemType type : component.getItemCriteria().getItemTypes()) {
-            ImGui.bulletText(type.toString());
+            IkGui.bulletText(type.toString());
             switch (type) {
                 case ACCESSORY:
                     for (AccessoryType subType : component.getItemCriteria().getAccessoryTypes()) {
-                        ImGui.setCursorPosX(
-                                ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing());
-                        ImGui.bulletText(subType.toString());
+                        IkGui.setCursorPosX(
+                                IkGui.getCursorPosX() + IkGui.getTreeNodeToLabelSpacing());
+                        IkGui.bulletText(subType.toString());
                     }
                     break;
                 case ARMOR:
                     for (ArmorType subType : component.getItemCriteria().getArmorTypes()) {
-                        ImGui.setCursorPosX(
-                                ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing());
-                        ImGui.bulletText(subType.toString());
+                        IkGui.setCursorPosX(
+                                IkGui.getCursorPosX() + IkGui.getTreeNodeToLabelSpacing());
+                        IkGui.bulletText(subType.toString());
                     }
                     break;
                 case WEAPON:
                     for (WeaponType subType : component.getItemCriteria().getWeaponTypes()) {
-                        ImGui.setCursorPosX(
-                                ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing());
-                        ImGui.bulletText(subType.toString());
+                        IkGui.setCursorPosX(
+                                IkGui.getCursorPosX() + IkGui.getTreeNodeToLabelSpacing());
+                        IkGui.bulletText(subType.toString());
                     }
                     break;
                 case COMPONENT:
@@ -180,7 +179,7 @@ public class ItemRendering {
      */
     public static void drawConsumableInfo(Consumable consumable) {
         ItemRendering.drawName(consumable);
-        ImGui.text("Consumable type: " + consumable.getConsumableType().toString());
+        IkGui.text("Consumable type: " + consumable.getConsumableType().toString());
     }
 
     /**
@@ -189,16 +188,16 @@ public class ItemRendering {
      * @param equipment The equipment to draw details for.
      */
     public static void drawEquipmentInfo(Equipment equipment) {
-        ImGui.text("Item Level: " + equipment.getItemLevel());
-        ImGui.text("Quality: ");
-        ImGui.sameLine();
-        ImGui.textColored(
+        IkGui.text("Item Level: " + equipment.getItemLevel());
+        IkGui.text("Quality: ");
+        IkGui.sameLine();
+        IkGui.textColored(
                 ItemRendering.getQualityColor(equipment.getQuality()),
                 equipment.getQuality().toString());
-        ImGui.text("Level Requirement: " + equipment.getLevelRequirement());
-        ImGui.text("Attribute Requirements:");
+        IkGui.text("Level Requirement: " + equipment.getLevelRequirement());
+        IkGui.text("Attribute Requirements:");
         for (AttributeModifier mod : equipment.getAttributeRequirements()) {
-            ImGui.bulletText(ItemRendering.modifierText(mod));
+            IkGui.bulletText(ItemRendering.modifierText(mod));
         }
         ItemStats combinedStats = equipment.getCombinedStats();
         ItemRendering.drawItemStats(combinedStats);
@@ -210,19 +209,19 @@ public class ItemRendering {
      * @param equipment The equipment to draw a name for.
      */
     private static void drawEquipmentName(Equipment equipment) {
-        ImGui.text("Name: ");
+        IkGui.text("Name: ");
         Affix prefix = equipment.getPrefix();
         if (prefix != null) {
-            ImGui.sameLine();
-            ImGui.textColored(
+            IkGui.sameLine();
+            IkGui.textColored(
                     ItemRendering.getQualityColor(prefix.getQuality()), prefix.getID() + " ");
         }
-        ImGui.sameLine();
-        ImGui.textColored(ItemRendering.getQualityColor(equipment.getQuality()), equipment.getID());
+        IkGui.sameLine();
+        IkGui.textColored(ItemRendering.getQualityColor(equipment.getQuality()), equipment.getID());
         Affix suffix = equipment.getSuffix();
         if (suffix != null) {
-            ImGui.sameLine();
-            ImGui.textColored(
+            IkGui.sameLine();
+            IkGui.textColored(
                     ItemRendering.getQualityColor(suffix.getQuality()), " " + suffix.getID());
         }
     }
@@ -233,16 +232,16 @@ public class ItemRendering {
      * @param equipment The equipment to draw details for.
      */
     public static void drawEquipmentTemplateInfo(EquipmentTemplate equipment) {
-        ImGui.text("Item Level: " + equipment.getItemLevel());
-        ImGui.text("Quality: ");
-        ImGui.sameLine();
-        ImGui.textColored(
+        IkGui.text("Item Level: " + equipment.getItemLevel());
+        IkGui.text("Quality: ");
+        IkGui.sameLine();
+        IkGui.textColored(
                 ItemRendering.getQualityColor(equipment.getQuality()),
                 equipment.getQuality().toString());
-        ImGui.text("Level Requirement: " + equipment.getLevelRequirement());
-        ImGui.text("Attribute Requirements:");
+        IkGui.text("Level Requirement: " + equipment.getLevelRequirement());
+        IkGui.text("Attribute Requirements:");
         for (AttributeModifierTemplate mod : equipment.getAttributeRequirements()) {
-            ImGui.bulletText(ItemRendering.modifierText(mod) + " +/- " + mod.getVariance());
+            IkGui.bulletText(ItemRendering.modifierText(mod) + " +/- " + mod.getVariance());
         }
         ItemRendering.drawItemStatsTemplate(equipment.getItemStatsTemplate());
     }
@@ -253,8 +252,8 @@ public class ItemRendering {
      * @param equipment The equipment template to draw a name for.
      */
     private static void drawEquipmentTemplateName(EquipmentTemplate equipment) {
-        ImGui.text("Name: ");
-        ImGui.textColored(ItemRendering.getQualityColor(equipment.getQuality()), equipment.getID());
+        IkGui.text("Name: ");
+        IkGui.textColored(ItemRendering.getQualityColor(equipment.getQuality()), equipment.getID());
     }
 
     /**
@@ -263,30 +262,30 @@ public class ItemRendering {
      * @param itemCriteria The item criteria to draw.
      */
     private static void drawItemCriteria(ItemCriteria itemCriteria) {
-        ImGui.text("Item Criteria");
+        IkGui.text("Item Criteria");
 
-        ImGui.bulletText("Item Types");
+        IkGui.bulletText("Item Types");
         for (ItemType type : itemCriteria.getItemTypes()) {
-            ImGui.setCursorPosX(ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing());
-            ImGui.bulletText(type.toString());
+            IkGui.setCursorPosX(IkGui.getCursorPosX() + IkGui.getTreeNodeToLabelSpacing());
+            IkGui.bulletText(type.toString());
 
             if (type == ItemType.ACCESSORY) {
                 for (AccessoryType accessory : itemCriteria.getAccessoryTypes()) {
-                    ImGui.setCursorPosX(
-                            ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing() * 2);
-                    ImGui.bulletText(accessory.toString());
+                    IkGui.setCursorPosX(
+                            IkGui.getCursorPosX() + IkGui.getTreeNodeToLabelSpacing() * 2);
+                    IkGui.bulletText(accessory.toString());
                 }
             } else if (type == ItemType.ARMOR) {
                 for (ArmorType armor : itemCriteria.getArmorTypes()) {
-                    ImGui.setCursorPosX(
-                            ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing() * 2);
-                    ImGui.bulletText(armor.toString());
+                    IkGui.setCursorPosX(
+                            IkGui.getCursorPosX() + IkGui.getTreeNodeToLabelSpacing() * 2);
+                    IkGui.bulletText(armor.toString());
                 }
             } else if (type == ItemType.WEAPON) {
                 for (WeaponType weapon : itemCriteria.getWeaponTypes()) {
-                    ImGui.setCursorPosX(
-                            ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing() * 2);
-                    ImGui.bulletText(weapon.toString());
+                    IkGui.setCursorPosX(
+                            IkGui.getCursorPosX() + IkGui.getTreeNodeToLabelSpacing() * 2);
+                    IkGui.bulletText(weapon.toString());
                 }
             }
         }
@@ -298,21 +297,21 @@ public class ItemRendering {
      * @param itemStats The item stats to draw.
      */
     public static void drawItemStats(ItemStats itemStats) {
-        ImGui.text("Item Stats");
-        ImGui.bulletText("Damage Buffs");
+        IkGui.text("Item Stats");
+        IkGui.bulletText("Damage Buffs");
         for (DamageModifier mod : itemStats.getDamageBuffs()) {
-            ImGui.setCursorPosX(ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing());
-            ImGui.bulletText(ItemRendering.modifierText(mod));
+            IkGui.setCursorPosX(IkGui.getCursorPosX() + IkGui.getTreeNodeToLabelSpacing());
+            IkGui.bulletText(ItemRendering.modifierText(mod));
         }
-        ImGui.bulletText("Resistance Buffs");
+        IkGui.bulletText("Resistance Buffs");
         for (DamageModifier mod : itemStats.getResistanceBuffs()) {
-            ImGui.setCursorPosX(ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing());
-            ImGui.bulletText(ItemRendering.modifierText(mod));
+            IkGui.setCursorPosX(IkGui.getCursorPosX() + IkGui.getTreeNodeToLabelSpacing());
+            IkGui.bulletText(ItemRendering.modifierText(mod));
         }
-        ImGui.bulletText("Attribute Buffs");
+        IkGui.bulletText("Attribute Buffs");
         for (AttributeModifier mod : itemStats.getAttributeBuffs()) {
-            ImGui.setCursorPosX(ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing());
-            ImGui.bulletText(ItemRendering.modifierText(mod));
+            IkGui.setCursorPosX(IkGui.getCursorPosX() + IkGui.getTreeNodeToLabelSpacing());
+            IkGui.bulletText(ItemRendering.modifierText(mod));
         }
     }
 
@@ -322,21 +321,21 @@ public class ItemRendering {
      * @param itemStats The item stats template to draw.
      */
     public static void drawItemStatsTemplate(ItemStatsTemplate itemStats) {
-        ImGui.text("Item Stats");
-        ImGui.bulletText("Damage Buffs");
+        IkGui.text("Item Stats");
+        IkGui.bulletText("Damage Buffs");
         for (DamageModifierTemplate mod : itemStats.getDamageBuffs()) {
-            ImGui.setCursorPosX(ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing());
-            ImGui.bulletText(ItemRendering.modifierText(mod) + " +/- " + mod.getVariance());
+            IkGui.setCursorPosX(IkGui.getCursorPosX() + IkGui.getTreeNodeToLabelSpacing());
+            IkGui.bulletText(ItemRendering.modifierText(mod) + " +/- " + mod.getVariance());
         }
-        ImGui.bulletText("Resistance Buffs");
+        IkGui.bulletText("Resistance Buffs");
         for (DamageModifierTemplate mod : itemStats.getResistanceBuffs()) {
-            ImGui.setCursorPosX(ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing());
-            ImGui.bulletText(ItemRendering.modifierText(mod) + " +/- " + mod.getVariance());
+            IkGui.setCursorPosX(IkGui.getCursorPosX() + IkGui.getTreeNodeToLabelSpacing());
+            IkGui.bulletText(ItemRendering.modifierText(mod) + " +/- " + mod.getVariance());
         }
-        ImGui.bulletText("Attribute Buffs");
+        IkGui.bulletText("Attribute Buffs");
         for (AttributeModifierTemplate mod : itemStats.getAttributeBuffs()) {
-            ImGui.setCursorPosX(ImGui.getCursorPosX() + ImGui.getTreeNodeToLabelSpacing());
-            ImGui.bulletText(ItemRendering.modifierText(mod) + " +/- " + mod.getVariance());
+            IkGui.setCursorPosX(IkGui.getCursorPosX() + IkGui.getTreeNodeToLabelSpacing());
+            IkGui.bulletText(ItemRendering.modifierText(mod) + " +/- " + mod.getVariance());
         }
     }
 
@@ -364,9 +363,9 @@ public class ItemRendering {
      * @param item The item to draw a name for.
      */
     private static void drawName(Item item) {
-        ImGui.text("Name: ");
-        ImGui.sameLine();
-        ImGui.textColored(ItemRendering.getQualityColor(item.getQuality()), item.getID());
+        IkGui.text("Name: ");
+        IkGui.sameLine();
+        IkGui.textColored(ItemRendering.getQualityColor(item.getQuality()), item.getID());
     }
 
     /**
@@ -385,8 +384,8 @@ public class ItemRendering {
      */
     public static void drawWeaponInfo(Weapon weapon) {
         ItemRendering.drawEquipmentName(weapon);
-        ImGui.text("Weapon Type: " + weapon.getWeaponType().toString());
-        ImGui.text("Damage: " + weapon.getMinDamage() + "-" + weapon.getMaxDamage());
+        IkGui.text("Weapon Type: " + weapon.getWeaponType().toString());
+        IkGui.text("Damage: " + weapon.getMinDamage() + "-" + weapon.getMaxDamage());
         ItemRendering.drawEquipmentInfo(weapon);
     }
 
@@ -397,8 +396,8 @@ public class ItemRendering {
      */
     public static void drawWeaponTemplateInfo(WeaponTemplate weapon) {
         ItemRendering.drawEquipmentTemplateName(weapon);
-        ImGui.text("Weapon Type: " + weapon.getWeaponType().toString());
-        ImGui.text("Damage: " + weapon.getMinDamage() + "-" + weapon.getMaxDamage());
+        IkGui.text("Weapon Type: " + weapon.getWeaponType().toString());
+        IkGui.text("Damage: " + weapon.getMinDamage() + "-" + weapon.getMaxDamage());
         ItemRendering.drawEquipmentTemplateInfo(weapon);
     }
 
