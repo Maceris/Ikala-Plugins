@@ -38,7 +38,7 @@ public class WindowManager {
      */
     public void addWindow(@NonNull String name, @NonNull GuiWindow component) {
         if (this.windows.containsKey(name)) {
-            log.error("Window with name {} already exists", name);
+            IkGuiImplDebugTools.reportError(log, "Window with name {} already exists", name);
         }
         this.windows.put(name, component);
     }

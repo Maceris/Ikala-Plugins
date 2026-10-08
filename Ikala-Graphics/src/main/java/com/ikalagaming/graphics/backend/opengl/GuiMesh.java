@@ -14,13 +14,15 @@ import lombok.NonNull;
  * @param commands GUI Render commands.
  * @param points SDF points.
  * @param pointDetails SDF point extra details.
+ * @param textureHandles Bindless handles for the textures used by the GUI.
  */
 public record GuiMesh(
         int vaoID,
         int vertices,
         @NonNull BufferOpenGL commands,
         @NonNull BufferOpenGL points,
-        @NonNull BufferOpenGL pointDetails) {
+        @NonNull BufferOpenGL pointDetails,
+        @NonNull BufferOpenGL textureHandles) {
 
     /**
      * Create a new GUI mesh, and set it up with OpenGL. This should be called instead of a
@@ -43,7 +45,9 @@ public record GuiMesh(
         BufferOpenGL commands = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.SHADER_STORAGE);
         BufferOpenGL points = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.SHADER_STORAGE);
         BufferOpenGL pointDetails = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.SHADER_STORAGE);
-        return new GuiMesh(vaoID, vertices, commands, points, pointDetails);
+        BufferOpenGL textureHandles =
+                BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.SHADER_STORAGE);
+        return new GuiMesh(vaoID, vertices, commands, points, pointDetails, textureHandles);
     }
 
     /** Clean up the resources for this mesh. */
@@ -52,6 +56,7 @@ public record GuiMesh(
         BufferUtilOpenGL.deleteBuffer(commands);
         BufferUtilOpenGL.deleteBuffer(points);
         BufferUtilOpenGL.deleteBuffer(pointDetails);
+        BufferUtilOpenGL.deleteBuffer(textureHandles);
         glDeleteVertexArrays(vaoID);
     }
 }

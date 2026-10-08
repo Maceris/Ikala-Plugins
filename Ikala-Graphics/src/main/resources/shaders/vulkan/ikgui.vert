@@ -8,10 +8,14 @@ layout(set = 0, binding = 0) uniform Uniforms {
     // Used to convert from pixel coordinates to Normalized Device Coordinates of (-1, 1)
     vec2 scale;
     int fontTexture;
+    // The top left of the viewport being rendered, since positions are absolute (desktop
+    // coordinates when using multiple viewports)
+    vec2 displayPosition;
 };
 
 void main()
 {
-    gl_Position = vec4(inPos.x * scale.x - 1, inPos.y * scale.y + 1, 0.0, 1.0);
+    vec2 pos = inPos - displayPosition;
+    gl_Position = vec4(pos.x * scale.x - 1, pos.y * scale.y + 1, 0.0, 1.0);
     quadID = gl_VertexIndex / 6;
 }

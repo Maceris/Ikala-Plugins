@@ -3,14 +3,19 @@ package com.ikalagaming.graphics.frontend.gui.data;
 import static org.lwjgl.util.freetype.FreeType.*;
 
 import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.IkGuiInternal;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.util.freetype.FT_Face;
+import org.lwjgl.util.freetype.FT_Size;
+import org.lwjgl.util.freetype.FT_Size_Metrics;
 import org.lwjgl.util.freetype.FT_Size_Request;
 
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 
 @Slf4j
@@ -37,6 +42,12 @@ public class Font {
 
     /** Temporary storage for size info. */
     FT_Size_Request sizeRequest;
+
+    /**
+     * The vertical metrics we have already calculated, keyed by {@link #metricsKey(int, int, int)}.
+     * Guarded by the lock.
+     */
+    private final Map<Long, FontMetrics> metrics = new HashMap<>();
 
     public Font(
             @NonNull String name,
@@ -76,7 +87,8 @@ public class Font {
                     dpiScreen);
             int error = FT_Request_Size(face, sizeRequest);
             if (error != FT_Err_Ok) {
-                log.error(
+                IkGuiInternal.reportError(
+                        log,
                         "Failed to request size {} for font {}: {} ({})",
                         fontSize,
                         name,
@@ -89,6 +101,56 @@ public class Font {
         } finally {
             this.lock.unlock();
         }
+    }
+
+    /**
+     * Fetch the vertical metrics of the font at a size, for the current DPI settings. These are
+     * cached, so only the first call for a size has to ask FreeType.
+     *
+     * @param fontSize The font size.
+     * @return The metrics, in pixels.
+     */
+    public FontMetrics getMetrics(int fontSize) {
+        final int dpiFont = IkGui.getContext().dpiScaleFont;
+        final int dpiScreen = IkGui.getContext().dpiScaleScreen;
+        final long key = metricsKey(fontSize, dpiFont, dpiScreen);
+        this.lock.lock();
+        try {
+            FontMetrics result = metrics.get(key);
+            if (result != null) {
+                return result;
+            }
+            // The size is skipped if it hasn't changed, which would miss DPI changes
+            size = 0;
+            setSize(fontSize);
+            final FT_Size faceSize = face.size();
+            if (faceSize == null) {
+                IkGuiInternal.reportError(log, "Font {} has no size to read metrics from", name);
+                return new FontMetrics(0, 0, 0);
+            }
+            final FT_Size_Metrics sizeMetrics = faceSize.metrics();
+            // These are in 26.6 pixel format (i.e. 1/64 of a pixel). Hence the dividing.
+            final float ascent = sizeMetrics.ascender() / 64.0f;
+            final float descent = sizeMetrics.descender() / 64.0f;
+            final float height = sizeMetrics.height() / 64.0f;
+            result = new FontMetrics(ascent, descent, Math.max(0.0f, height - (ascent - descent)));
+            metrics.put(key, result);
+            return result;
+        } finally {
+            this.lock.unlock();
+        }
+    }
+
+    /**
+     * Combine the things that affect the metrics into a single key.
+     *
+     * @param fontSize The font size.
+     * @param dpiFont The DPI that font sizes are specified in.
+     * @param dpiScreen The DPI of the screen.
+     * @return The key.
+     */
+    private static long metricsKey(int fontSize, int dpiFont, int dpiScreen) {
+        return ((long) fontSize << 32) | ((long) (dpiFont & 0xFFFF) << 16) | (dpiScreen & 0xFFFF);
     }
 
     /**
@@ -110,11 +172,16 @@ public class Font {
         if (freeTypeFont != null) {
             int error = nFT_Done_Face(freeTypeFont.get(0));
             if (error != FT_Err_Ok) {
-                log.error("Failed to create memory face: {}", FT_Error_String(error));
+                IkGuiInternal.reportError(
+                        log,
+                        "Failed to destroy face for font {}: {}",
+                        name,
+                        FT_Error_String(error));
             }
             freeTypeFont = null;
             fontData = null;
-            sizeRequest.free();
+            // Allocated with create(), so the garbage collector frees it, calling free() would
+            // corrupt the heap
             sizeRequest = null;
         }
     }

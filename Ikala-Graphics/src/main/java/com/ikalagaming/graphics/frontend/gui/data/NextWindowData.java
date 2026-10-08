@@ -8,8 +8,16 @@ import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.frontend.gui.util.RectFloat;
 
 import lombok.NonNull;
-import org.joml.Vector2i;
+import org.joml.Vector2f;
 
+import java.util.function.Consumer;
+
+/**
+ * Storage for setNextWindow*() calls, which are consumed by the next call to begin(). Only values
+ * with the corresponding flag set in {@link #fieldFlags} are valid.
+ *
+ * @see NextWindowFlags
+ */
 public class NextWindowData {
 
     /** Override background alpha. */
@@ -22,41 +30,53 @@ public class NextWindowData {
 
     public @NonNull Condition collapsedCondition;
     public boolean collapsedValue;
-    public final Vector2i contentSizeValue;
+    public final Vector2f contentSizeValue;
 
     public @NonNull Condition dockCondition;
     public int dockID;
 
     /**
-     * Which fields of the next window data are set.
+     * Which fields are set.
      *
-     * @see com.ikalagaming.graphics.frontend.gui.flags.NextWindowFlags
+     * @see NextWindowFlags
      */
     public int fieldFlags;
 
-    public final Vector2i menuBarOffsetMinValue;
-
+    public final Vector2f menuBarOffsetMinValue;
     public @NonNull Condition positionCondition;
-    public final Vector2i positionPivot;
+    public final Vector2f positionPivot;
     public boolean positionUndock;
-    public final Vector2i positionValue;
-    public final Vector2i scrollValue;
-    public @NonNull Condition sizeCondition;
-    public final RectFloat sizeConstraintRect;
-    public final Vector2i sizeValue;
+    public final Vector2f positionValue;
 
-    /** Only non-null if we specified the viewport for the next window. */
-    public Viewport viewport;
+    /** Scroll position, negative values on an axis mean "don't change". */
+    public final Vector2f scrollValue;
+
+    public @NonNull Condition sizeCondition;
 
     /**
-     * Only honored by beginTable.
-     *
-     * @see com.ikalagaming.graphics.frontend.gui.flags.WindowFlags
+     * Minimum (left, top) and maximum (right, bottom) size constraints. Negative values on an axis
+     * mean "keep the current size" on that axis.
+     */
+    public final RectFloat sizeConstraintRect;
+
+    /** An extra programmatic size constraint, may be null. Used with the size constraint flag. */
+    public Consumer<SizeCallbackData> sizeCallback;
+
+    public final Vector2f sizeValue;
+
+    /** The ID of the viewport to use, from setNextWindowViewport(). */
+    public int viewportID;
+
+    /** The window class to apply, copied from setNextWindowClass(). */
+    public final WindowClass windowClass;
+
+    /**
+     * @see WindowFlags
      */
     public int windowFlags;
 
     /**
-     * @see com.ikalagaming.graphics.frontend.gui.flags.RefreshFlags
+     * @see RefreshFlags
      */
     public int windowRefreshFlags;
 
@@ -65,21 +85,31 @@ public class NextWindowData {
         childFlags = ChildFlags.NONE;
         collapsedCondition = Condition.NONE;
         collapsedValue = false;
-        contentSizeValue = new Vector2i(0, 0);
+        contentSizeValue = new Vector2f(0, 0);
         dockCondition = Condition.NONE;
         dockID = 0;
         fieldFlags = NextWindowFlags.NONE;
-        menuBarOffsetMinValue = new Vector2i(0, 0);
+        menuBarOffsetMinValue = new Vector2f(0, 0);
         positionCondition = Condition.NONE;
-        positionPivot = new Vector2i(0, 0);
+        positionPivot = new Vector2f(0, 0);
         positionUndock = false;
-        positionValue = new Vector2i(0, 0);
-        scrollValue = new Vector2i(0, 0);
+        positionValue = new Vector2f(0, 0);
+        scrollValue = new Vector2f(0, 0);
         sizeCondition = Condition.NONE;
         sizeConstraintRect = new RectFloat(0, 0, 0, 0);
-        sizeValue = new Vector2i(0, 0);
-        viewport = null;
+        sizeCallback = null;
+        sizeValue = new Vector2f(0, 0);
+        viewportID = 0;
+        windowClass = new WindowClass();
         windowFlags = WindowFlags.NONE;
         windowRefreshFlags = RefreshFlags.NONE;
+    }
+
+    /**
+     * Mark all fields as unset, which is done once they've been consumed. Values are not reset, but
+     * they are not valid unless the relevant flag is set.
+     */
+    public void clearFlags() {
+        fieldFlags = NextWindowFlags.NONE;
     }
 }

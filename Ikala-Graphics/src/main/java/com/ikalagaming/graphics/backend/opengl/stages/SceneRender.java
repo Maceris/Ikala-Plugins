@@ -2,7 +2,6 @@ package com.ikalagaming.graphics.backend.opengl.stages;
 
 import static com.ikalagaming.graphics.ShaderUniforms.Scene.*;
 import static com.ikalagaming.graphics.backend.opengl.stages.ShadowRender.MODEL_MATRICES_BINDING;
-import static org.lwjgl.opengl.ARBBindlessTexture.glMakeImageHandleResidentARB;
 import static org.lwjgl.opengl.GL43.*;
 
 import com.ikalagaming.graphics.ShaderUniforms;
@@ -126,12 +125,12 @@ public class SceneRender implements RenderStage {
                 uniformsMap.setUniformUnsigned(MESH_INDEX, meshIndex);
 
                 if (assignedOrDefaultMaterial.getTexture() != null) {
-                    var info = (TextureInfoOpenGL) assignedOrDefaultMaterial.getTexture().info();
-                    glMakeImageHandleResidentARB(info.bindlessHandle, GL_READ_ONLY);
+                    ((TextureInfoOpenGL) assignedOrDefaultMaterial.getTexture().info())
+                            .makeResident();
                 }
                 if (assignedOrDefaultMaterial.getNormalMap() != null) {
-                    var info = (TextureInfoOpenGL) assignedOrDefaultMaterial.getNormalMap().info();
-                    glMakeImageHandleResidentARB(info.bindlessHandle, GL_READ_ONLY);
+                    ((TextureInfoOpenGL) assignedOrDefaultMaterial.getNormalMap().info())
+                            .makeResident();
                 }
                 uniformsMap.setUniform(BASE_COLOR_SAMPLER, assignedOrDefaultMaterial.getTexture());
                 uniformsMap.setUniform(NORMAL_SAMPLER, assignedOrDefaultMaterial.getNormalMap());

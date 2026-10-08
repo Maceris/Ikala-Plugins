@@ -18,6 +18,7 @@ import com.ikalagaming.graphics.backend.opengl.ImGuiMesh;
 import com.ikalagaming.graphics.backend.opengl.TextureInfoOpenGL;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.frontend.Texture;
+import com.ikalagaming.graphics.frontend.TextureInfo;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.WindowManager;
 import com.ikalagaming.graphics.frontend.gui.data.DrawData;
@@ -27,8 +28,13 @@ import com.ikalagaming.graphics.scene.Scene;
 import imgui.*;
 import lombok.NonNull;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
+import org.lwjgl.system.MemoryUtil;
 
+import java.nio.LongBuffer;
+
+@Slf4j
 public class GuiRender implements RenderStage {
 
     /** The binding for the commands SSBO. */
@@ -39,6 +45,9 @@ public class GuiRender implements RenderStage {
 
     /** The binding for the point details SSBO. */
     static final int POINT_DETAILS_BINDING = 2;
+
+    /** The binding for the texture handles SSBO. */
+    static final int TEXTURE_HANDLES_BINDING = 3;
 
     /** The scale of the GUI, kept here to prevent reallocation. */
     private final Vector2f scale;
@@ -168,6 +177,10 @@ public class GuiRender implements RenderStage {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, POINTS_BINDING, (int) guiMesh.points().id());
         glBindBufferBase(
                 GL_SHADER_STORAGE_BUFFER, POINT_DETAILS_BINDING, (int) guiMesh.pointDetails().id());
+        glBindBufferBase(
+                GL_SHADER_STORAGE_BUFFER,
+                TEXTURE_HANDLES_BINDING,
+                (int) guiMesh.textureHandles().id());
 
         scale.x = 2.0f / width;
         scale.y = -2.0f / height;
@@ -193,7 +206,16 @@ public class GuiRender implements RenderStage {
             IkGui.getIO().fonts.stagedBitmaps.clear();
         }
 
-        DrawData drawData = IkGui.getContext().drawData;
+        DrawData drawData = IkGui.getDrawData();
+        if (drawData == null) {
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            glBindVertexArray(0);
+            shader.unbind();
+            return;
+        }
+        uniformsMap.setUniform(ShaderUniforms.GUI.DISPLAY_POSITION, drawData.displayPosition);
+        uploadTextureHandles(drawData);
+
         int drawListCount = drawData.getDrawListCount();
         for (int i = 0; i < drawListCount; ++i) {
             int vertexCount = drawData.getDrawListVertexCount(i);
@@ -219,5 +241,43 @@ public class GuiRender implements RenderStage {
         glBindVertexArray(0);
 
         shader.unbind();
+    }
+
+    /**
+     * Upload the bindless handles for all the textures used by the GUI this frame, in the order of
+     * {@link DrawData#textures} so that draw commands can refer to them by index.
+     *
+     * @param drawData The draw data for the frame.
+     */
+    private void uploadTextureHandles(@NonNull DrawData drawData) {
+        // Always upload at least one handle, so the buffer is never empty
+        final int count = Math.max(1, drawData.textures.size());
+        LongBuffer handles = MemoryUtil.memAllocLong(count);
+        try {
+            final long fallback = getResidentHandle(fontAtlas.info());
+            handles.put(0, fallback);
+            for (int i = 0; i < drawData.textures.size(); ++i) {
+                long handle = getResidentHandle(drawData.textures.get(i));
+                handles.put(i, handle != 0 ? handle : fallback);
+            }
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, (int) guiMesh.textureHandles().id());
+            glBufferData(GL_SHADER_STORAGE_BUFFER, handles, GL_STREAM_DRAW);
+        } finally {
+            MemoryUtil.memFree(handles);
+        }
+    }
+
+    /**
+     * Fetch the bindless handle for a texture, creating it and making it resident as required.
+     *
+     * @param texture The texture.
+     * @return The bindless handle, or 0 if the texture is not an OpenGL texture.
+     */
+    private static long getResidentHandle(@NonNull TextureInfo texture) {
+        if (!(texture instanceof TextureInfoOpenGL info)) {
+            log.warn("Can't render non-OpenGL texture {} in the GUI", texture);
+            return 0;
+        }
+        return info.makeResident();
     }
 }

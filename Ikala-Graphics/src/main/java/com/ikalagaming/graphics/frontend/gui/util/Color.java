@@ -18,7 +18,7 @@ public class Color {
      */
     public static int addAlpha(int color, int alpha) {
         final int originalAlpha = color & 0xFF;
-        final int newAlpha = Math.clamp((long) originalAlpha + alpha, 0, 255);
+        final int newAlpha = MathUtil.clamp((long) originalAlpha + alpha, 0, 255);
         return (color & 0xFFFFFF00) | newAlpha;
     }
 
@@ -31,7 +31,7 @@ public class Color {
      */
     public static int multiplyAlpha(int color, float alpha) {
         final float originalAlpha = (color & 0xFF) / 255.0f;
-        final float newAlpha = Math.clamp(originalAlpha * alpha, 0.0f, 1.0f);
+        final float newAlpha = MathUtil.clamp(originalAlpha * alpha, 0.0f, 1.0f);
         final int newAlphaInt = (int) (newAlpha * 255);
 
         return (color & 0xFFFFFF00) | newAlphaInt;
@@ -137,10 +137,10 @@ public class Color {
     }
 
     private static int intToColor(int r, int g, int b, int a) {
-        return Math.clamp(r, 0, 255) << 24
-                | Math.clamp(g, 0, 255) << 16
-                | Math.clamp(b, 0, 255) << 8
-                | Math.clamp(a, 0, 255);
+        return MathUtil.clamp(r, 0, 255) << 24
+                | MathUtil.clamp(g, 0, 255) << 16
+                | MathUtil.clamp(b, 0, 255) << 8
+                | MathUtil.clamp(a, 0, 255);
     }
 
     private static int floatToColor(float r, float g, float b, float a) {
@@ -373,7 +373,7 @@ public class Color {
             g = temp;
             k = -1.0f;
         }
-        if (r < b) {
+        if (r < g) {
             float temp = g;
             g = r;
             r = temp;

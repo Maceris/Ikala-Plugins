@@ -4,7 +4,7 @@ public class ChildFlags {
     public static final int NONE = 0;
 
     /** Show an outer border and enable WindowPadding. */
-    public static final int BORDER = 1;
+    public static final int BORDERS = 1;
 
     /**
      * Pad with style window padding even if no border are drawn (no padding by default for

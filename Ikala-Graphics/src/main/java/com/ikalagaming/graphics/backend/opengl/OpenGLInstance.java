@@ -131,6 +131,7 @@ public class OpenGLInstance implements Instance {
         IkIO ikIO = IkGui.getIO();
         ikIO.iniFilename = null;
         ikIO.displaySize.set(window.getWidth(), window.getHeight());
+        window.setupIkGuiPlatformIO();
     }
 
     /**
@@ -362,6 +363,7 @@ public class OpenGLInstance implements Instance {
 
             var uniformsMap = new UniformsMapOpenGL(shaderProgram.getProgramID());
             uniformsMap.createUniform(ShaderUniforms.GUI.SCALE);
+            uniformsMap.createUniform(ShaderUniforms.GUI.DISPLAY_POSITION);
             shaderProgram.setUniforms(uniformsMap);
 
             shaderMap.addShader(RenderStage.Type.GUI, shaderProgram);
@@ -378,6 +380,8 @@ public class OpenGLInstance implements Instance {
             deleteResource(nextEntry);
             nextEntry = GraphicsManager.getDeletionQueue().pop();
         }
+        // Created in initializeGui()
+        IkGui.destroyContext();
     }
 
     @Override

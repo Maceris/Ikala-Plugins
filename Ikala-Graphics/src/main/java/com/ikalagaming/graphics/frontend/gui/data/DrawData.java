@@ -1,5 +1,9 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
+import com.ikalagaming.graphics.frontend.TextureInfo;
+import com.ikalagaming.graphics.frontend.gui.IkGuiInternal;
+
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 
@@ -7,6 +11,10 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * The draw lists for one viewport, in the order they should be rendered. Built by render(), and
+ * valid until the next call to newFrame().
+ */
 @Slf4j
 public class DrawData {
     public static final int SIZE_OF_POINT = 4 * Float.BYTES;
@@ -18,21 +26,56 @@ public class DrawData {
     static final int SIZE_OF_QUAD_VERTICES = 6 * SIZE_OF_VERTEX;
 
     public final List<DrawList> drawLists;
-    final Vector2f displayPosition;
-    final Vector2f displaySize;
-    final Vector2f framebufferScale;
 
-    public DrawData() {
+    /**
+     * Textures used by draw lists this frame. Draw commands refer to textures by their index in
+     * this list, and each rendering backend is responsible for mapping those indices to their own
+     * texture handles. This list is shared between the draw data of all viewports.
+     */
+    public final List<TextureInfo> textures;
+
+    /** The shared texture registry that {@link #textures} belongs to. */
+    private final DrawTextures sharedTextures;
+
+    /** Only valid after render() is called and before the next newFrame() is called. */
+    public boolean valid;
+
+    /**
+     * The top-left position of the viewport to render, which is the position of the viewport in
+     * desktop coordinates. Draw list coordinates are absolute, so renderers need to subtract this
+     * to get framebuffer coordinates. This is (0, 0) for the main viewport unless multiple
+     * viewports are enabled.
+     */
+    public final Vector2f displayPosition;
+
+    /** The size of the viewport to render, which is (0, 0) when the viewport is minimized. */
+    public final Vector2f displaySize;
+
+    /** The amount of pixels for each unit of display size, from the viewport framebuffer scale. */
+    public final Vector2f framebufferScale;
+
+    /** The viewport that owns this draw data. */
+    public Viewport ownerViewport;
+
+    /**
+     * Create draw data.
+     *
+     * @param sharedTextures The texture registry shared between all viewports.
+     */
+    public DrawData(@NonNull DrawTextures sharedTextures) {
         drawLists = new ArrayList<>();
-        // TODO(ches) set up reasonable values
+        this.sharedTextures = sharedTextures;
+        textures = sharedTextures.textures;
+        valid = false;
         displayPosition = new Vector2f();
         displaySize = new Vector2f();
-        framebufferScale = new Vector2f();
+        framebufferScale = new Vector2f(1, 1);
+        ownerViewport = null;
     }
 
     private DrawList getDrawList(int drawListIndex) {
-        if (drawListIndex < 0 || drawListIndex > drawLists.size()) {
-            log.error("Index {} out of bounds in getDrawList", drawListIndex);
+        if (drawListIndex < 0 || drawListIndex >= drawLists.size()) {
+            IkGuiInternal.reportError(log, "Index {} out of bounds in getDrawList", drawListIndex);
             return null;
         }
 
@@ -44,10 +87,15 @@ public class DrawData {
         return list == null ? null : list.commandBuffer;
     }
 
-    /** Clear out all the draw lists, then clear out the list of draw lists for a new frame. */
-    public void clear() {
-        drawLists.forEach(DrawList::clear);
-        drawLists.clear();
+    /**
+     * Fetch the index of a texture for this frame, adding it to the list of textures if it is not
+     * already there.
+     *
+     * @param texture The texture.
+     * @return The index of the texture in {@link #textures}.
+     */
+    public int registerTexture(@NonNull TextureInfo texture) {
+        return sharedTextures.register(texture);
     }
 
     public int getDrawListCommandCount(int drawListIndex) {

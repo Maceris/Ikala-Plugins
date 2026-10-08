@@ -23,7 +23,14 @@ public record GuiInputEvent(
     public record KeyPress(@NonNull Key key, boolean down, float analogValue)
             implements EventData {}
 
-    // TODO(ches) do we need this?
+    /**
+     * A typed character, like Dear ImGui's text input event. Characters go through the event queue
+     * so they keep their order relative to key and mouse events when trickling. This holds a UTF-16
+     * char, where upstream holds a whole code point, so a code point outside the basic plane is
+     * queued as two events, one per surrogate.
+     *
+     * @param character The UTF-16 character.
+     */
     public record Text(char character) implements EventData {}
 
     public record Focused(boolean focused) implements EventData {}

@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.frontend.gui.data;
 
 import org.joml.Vector2i;
 
+/** Window data that is saved to and loaded from the .ini file. */
 public class WindowSettings {
     /** ID of window class if specified. */
     public int classID;
@@ -25,6 +26,12 @@ public class WindowSettings {
 
     public boolean isChild;
 
+    /** The last date the window was used, as YYYYMMDD, or 0 if unknown. */
+    public int lastUsedDate;
+
+    /** The name of the window, as stored in the .ini file. */
+    public final String name;
+
     /** Stored relative to the viewport, as opposed to the runtime absolute positions. */
     public final Vector2i position;
 
@@ -41,17 +48,32 @@ public class WindowSettings {
     /** Set to invalidate/delete the settings entry. */
     public boolean wantDelete;
 
-    public WindowSettings() {
+    /**
+     * Create new settings.
+     *
+     * @param name The name of the window.
+     */
+    public WindowSettings(String name) {
+        this.name = name;
+        position = new Vector2i();
+        size = new Vector2i();
+        viewportPosition = new Vector2i();
+        clear();
+    }
+
+    /** Reset everything other than the name to defaults. */
+    public void clear() {
         classID = 0;
         collapsed = false;
         dockID = 0;
         dockOrder = -1;
         id = 0;
         isChild = false;
-        position = new Vector2i();
-        size = new Vector2i();
+        lastUsedDate = 0;
+        position.set(0, 0);
+        size.set(0, 0);
         viewportID = 0;
-        viewportPosition = new Vector2i();
+        viewportPosition.set(0, 0);
         wantApply = false;
         wantDelete = false;
     }

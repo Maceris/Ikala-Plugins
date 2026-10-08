@@ -2,6 +2,8 @@
 
 This plugin adds graphics functionality backed by LWJGL libraries.
 
+See src/main/resources/licenses for licenses.
+
 ## Graphics Manager
 
 The `GraphicsManager` class provides utilities for managing graphical 

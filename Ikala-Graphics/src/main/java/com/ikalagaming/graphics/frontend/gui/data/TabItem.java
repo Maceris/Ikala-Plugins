@@ -2,74 +2,73 @@ package com.ikalagaming.graphics.frontend.gui.data;
 
 import com.ikalagaming.graphics.frontend.gui.flags.TabItemFlags;
 
+/** Storage for one tab in a tab bar. */
 public class TabItem {
-
-    /** beginTabItem() order, used to re-order tabs after toggling TabBarFlags.REORDERABLE. */
-    public IkShort beginOrder;
-
-    public boolean closeRequested;
-
-    /**
-     * Width of label + padding, stored during beginTabItem() call (misnamed as "Content" would
-     * normally imply width of label only).
-     */
-    public float contentWidth;
+    public int id;
 
     /**
      * @see TabItemFlags
      */
     public int flags;
 
-    public int id;
+    /** When the tab is part of a dock node's tab bar, we hold on to a window. */
+    public Window window;
+
+    /** The frame the tab was last submitted on. */
+    public int lastFrameVisible;
 
     /**
-     * Index only used during tabBarLayout(). Tabs gets reordered so 'tabs.get(n).indexDuringLayout
-     * == n' but may mismatch during additions.
-     */
-    public IkShort indexDuringLayout;
-
-    public float labelWidth;
-
-    /**
-     * This allows us to infer an ordered list of the last activated tabs with little maintenance.
+     * The frame the tab was last selected on, which allows us to infer an ordered list of the last
+     * activated tabs with little maintenance.
      */
     public int lastFrameSelected;
 
-    public int lastFrameVisible;
-
-    /** When Window==NULL, offset to name within parent ImGuiTabBar::Tab. */
-    public IkInt nameOffset;
-
-    /** Position relative to beginning of tab bar. */
+    /** Position relative to the beginning of the tab bar. */
     public float offset;
-
-    /** Width optionally requested by caller, -1.0f is unused. */
-    public float requestedWidth;
-
-    /** Marked as closed by setTabItemClosed(). */
-    public boolean wantClose;
 
     /** Width currently displayed. */
     public float width;
 
-    /** When TabItem is part of a DockNode's TabBar, we hold on to a window. */
-    public Window window;
+    /**
+     * Width of the label + padding, stored during the beginTabItem() call (misnamed as "content"
+     * would normally imply the width of the label only).
+     */
+    public float contentWidth;
+
+    /** Width optionally requested by the caller, -1 if unused. */
+    public float requestedWidth;
+
+    /**
+     * The label of the tab, set when submitted. Null for docked window tabs, which use the window
+     * name instead.
+     */
+    public String name;
+
+    /** beginTabItem() order, used to re-order tabs after toggling TabBarFlags.REORDERABLE. */
+    public int beginOrder;
+
+    /**
+     * Index only used during tab bar layout. Tabs get reordered so that tabs.get(n)
+     * .indexDuringLayout == n, but may mismatch during additions.
+     */
+    public int indexDuringLayout;
+
+    /** Marked as closed by setTabItemClosed(). */
+    public boolean wantClose;
 
     public TabItem() {
-        beginOrder = new IkShort();
-        closeRequested = false;
-        contentWidth = 0.0f;
-        flags = TabItemFlags.NONE;
         id = 0;
-        indexDuringLayout = new IkShort();
-        labelWidth = 0.0f;
-        lastFrameSelected = 0;
-        lastFrameVisible = 0;
-        nameOffset = new IkInt();
-        offset = 0.0f;
-        requestedWidth = -1.0f;
-        wantClose = false;
-        width = 0.0f;
+        flags = TabItemFlags.NONE;
         window = null;
+        lastFrameVisible = -1;
+        lastFrameSelected = -1;
+        offset = 0.0f;
+        width = 0.0f;
+        contentWidth = 0.0f;
+        requestedWidth = -1.0f;
+        name = null;
+        beginOrder = -1;
+        indexDuringLayout = -1;
+        wantClose = false;
     }
 }

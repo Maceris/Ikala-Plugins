@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.frontend.gui.enums;
 
+import lombok.NonNull;
+
 public enum Key {
     NONE,
     // Letters
@@ -104,16 +106,19 @@ public enum Key {
     ESCAPE,
     HOME,
     INSERT,
+    LEFT_ALT,
     LEFT_CTRL,
     LEFT_SHIFT,
+    LEFT_SUPER,
     MENU,
+    PAUSE,
     PAGE_DOWN,
     PAGE_UP,
     RIGHT_ALT,
     RIGHT_CTRL,
     RIGHT_SHIFT,
+    RIGHT_SUPER,
     SPACE,
-    SUPER,
     TAB,
     // Function keys
     F1,
@@ -155,4 +160,75 @@ public enum Key {
     GAMEPAD_RSTICK_RIGHT,
     GAMEPAD_RSTICK_UP,
     GAMEPAD_START,
+    // Mouse buttons and wheel, which are aliases of the mouse state. They are set from the mouse
+    // events every frame, so backends must not submit them. They can be used with key ownership
+    // and the key functions, e.g. setItemKeyOwner(Key.MOUSE_WHEEL_Y) to stop the wheel from
+    // scrolling the window while an item is hovered.
+    MOUSE_LEFT,
+    MOUSE_RIGHT,
+    MOUSE_MIDDLE,
+    MOUSE_BACK,
+    MOUSE_FORWARD,
+    MOUSE_WHEEL_X,
+    MOUSE_WHEEL_Y,
+    // Storage for the merged state of modifiers (either left or right key held). These are used
+    // for key ownership of modifiers, and shortcuts that are only a modifier.
+    MOD_CTRL,
+    MOD_SHIFT,
+    MOD_ALT,
+    MOD_SUPER;
+
+    /**
+     * Whether this is a keyboard key, as opposed to a gamepad key, a mouse key or one of the merged
+     * modifier keys.
+     *
+     * @return True if this is a keyboard key.
+     */
+    public boolean isKeyboardKey() {
+        return this != NONE && ordinal() < GAMEPAD_BACK.ordinal();
+    }
+
+    /**
+     * Whether this is a gamepad key.
+     *
+     * @return True if this is a gamepad key.
+     */
+    public boolean isGamepadKey() {
+        return ordinal() >= GAMEPAD_BACK.ordinal() && ordinal() <= GAMEPAD_START.ordinal();
+    }
+
+    /**
+     * Whether this is one of the mouse keys, which are aliases of the mouse buttons and wheel.
+     *
+     * @return True if this is a mouse key.
+     */
+    public boolean isMouseKey() {
+        return ordinal() >= MOUSE_LEFT.ordinal() && ordinal() <= MOUSE_WHEEL_Y.ordinal();
+    }
+
+    /**
+     * The mouse key for a mouse button.
+     *
+     * @param button The mouse button, which must not be NONE.
+     * @return The key for the button.
+     */
+    public static Key fromMouseButton(@NonNull MouseButton button) {
+        return switch (button) {
+            case LEFT -> MOUSE_LEFT;
+            case RIGHT -> MOUSE_RIGHT;
+            case MIDDLE -> MOUSE_MIDDLE;
+            case BACK -> MOUSE_BACK;
+            case FORWARD -> MOUSE_FORWARD;
+            case NONE -> throw new IllegalArgumentException("There is no key for MouseButton.NONE");
+        };
+    }
+
+    /**
+     * Whether this is one of the merged modifier keys (MOD_CTRL etc).
+     *
+     * @return True if this is a merged modifier key.
+     */
+    public boolean isModKey() {
+        return ordinal() >= MOD_CTRL.ordinal();
+    }
 }

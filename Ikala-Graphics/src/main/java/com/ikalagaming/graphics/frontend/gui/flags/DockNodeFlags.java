@@ -2,13 +2,39 @@ package com.ikalagaming.graphics.frontend.gui.flags;
 
 public class DockNodeFlags {
     public static final int NONE = 0;
+
+    /**
+     * Don't display the dockspace node but keep it alive. Windows docked into this dockspace node
+     * won't be undocked.
+     */
     public static final int KEEP_ALIVE_ONLY = 1;
-    public static final int NO_CENTRAL_NODE = 1 << 1;
+
+    /** Disable docking over the central node, which will always be kept empty. */
     public static final int NO_DOCKING_OVER_CENTRAL_NODE = 1 << 2;
+
+    /**
+     * Enable passthrough dockspace: 1) dockSpace() will render a {@link
+     * com.ikalagaming.graphics.frontend.gui.enums.ColorType#WINDOW_BACKGROUND} background covering
+     * everything except the central node when it is empty, meaning the host window should probably
+     * use setNextWindowBgAlpha(0.0f) before begin() when using this. 2) When the central node is
+     * empty, let inputs pass through and don't display a docking empty background.
+     */
     public static final int PASSTHROUGH_CENTRAL_NODE = 1 << 3;
+
+    /** Disable other windows/nodes from splitting this node. */
     public static final int NO_DOCKING_SPLIT = 1 << 4;
+
+    /**
+     * Disable resizing nodes using the splitter/separators. Useful with programmatically set up
+     * dockspaces.
+     */
     public static final int NO_RESIZE = 1 << 5;
+
+    /** The tab bar will automatically hide when there is a single window in the dock node. */
     public static final int AUTO_HIDE_TAB_BAR = 1 << 6;
+
+    /** Disable undocking this node. */
+    public static final int NO_UNDOCKING = 1 << 7;
 
     /**
      * A dockspace is a node that occupy space within an existing user window. Otherwise, the node

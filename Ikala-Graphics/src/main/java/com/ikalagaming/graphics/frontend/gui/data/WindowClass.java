@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
+import lombok.NonNull;
+
 public class WindowClass {
     /**
      * User data. 0 is default class (unclassed). Windows of different classes cannot be docked with
@@ -59,6 +61,51 @@ public class WindowClass {
      */
     public boolean dockingAlwaysTabBar;
 
+    /** Set to true to allow windows of this class to be docked/merged with an unclassed window. */
+    public boolean dockingAllowUnclassed;
+
     /** Opaque data for platform backend to handle icons. */
     public Object platformIconData;
+
+    public WindowClass() {
+        classID = 0;
+        parentViewportID = -1;
+        focusRouteParentWindowID = 0;
+        viewportFlagsOverrideSet = 0;
+        viewportFlagsOverrideClear = 0;
+        tabItemFlagsOverrideSet = 0;
+        dockNodeFlagsOverrideSet = 0;
+        dockingAlwaysTabBar = false;
+        dockingAllowUnclassed = true;
+        platformIconData = null;
+    }
+
+    /**
+     * Copy all the values from another window class into this one.
+     *
+     * @param other The class to copy from.
+     * @return This class, for chaining.
+     */
+    public WindowClass set(@NonNull WindowClass other) {
+        classID = other.classID;
+        parentViewportID = other.parentViewportID;
+        focusRouteParentWindowID = other.focusRouteParentWindowID;
+        viewportFlagsOverrideSet = other.viewportFlagsOverrideSet;
+        viewportFlagsOverrideClear = other.viewportFlagsOverrideClear;
+        tabItemFlagsOverrideSet = other.tabItemFlagsOverrideSet;
+        dockNodeFlagsOverrideSet = other.dockNodeFlagsOverrideSet;
+        dockingAlwaysTabBar = other.dockingAlwaysTabBar;
+        dockingAllowUnclassed = other.dockingAllowUnclassed;
+        platformIconData = other.platformIconData;
+        return this;
+    }
+
+    /**
+     * Reset all values to their defaults.
+     *
+     * @return This class, for chaining.
+     */
+    public WindowClass reset() {
+        return set(new WindowClass());
+    }
 }

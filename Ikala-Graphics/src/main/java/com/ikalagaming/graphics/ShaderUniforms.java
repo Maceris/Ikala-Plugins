@@ -31,6 +31,13 @@ public class ShaderUniforms {
         /** The scaling of the UI. */
         public static final String SCALE = "scale";
 
+        /**
+         * The top left of the viewport being rendered. Draw lists use absolute coordinates, which
+         * are desktop coordinates when using multiple viewports, so this is subtracted to get
+         * framebuffer coordinates.
+         */
+        public static final String DISPLAY_POSITION = "displayPosition";
+
         /** Private constructor so this class is not instantiated. */
         private GUI() {}
     }

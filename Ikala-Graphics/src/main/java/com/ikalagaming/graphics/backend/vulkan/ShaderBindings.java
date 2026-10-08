@@ -77,8 +77,15 @@ public class ShaderBindings {
          */
         public static final int UNIFORM_BUFFER_SCALE_OFFSET = 0;
 
+        /**
+         * The offset in the uniform buffer for the top left of the viewport being rendered, which
+         * is subtracted from the absolute positions in the draw lists. Aligned to 8 bytes after the
+         * font texture, following std140 rules for a vec2.
+         */
+        public static final int UNIFORM_BUFFER_DISPLAY_POSITION_OFFSET = 4 * Float.BYTES;
+
         /** The size of the uniforms buffer. */
-        public static final int UNIFORMS_BUFFER_SIZE = 2 * Float.BYTES + Integer.BYTES;
+        public static final int UNIFORMS_BUFFER_SIZE = 6 * Float.BYTES;
 
         /** Private constructor so this class is not instantiated. */
         private GUI() {

@@ -4,6 +4,7 @@ import com.ikalagaming.graphics.frontend.gui.IkGui;
 import com.ikalagaming.graphics.frontend.gui.enums.*;
 import com.ikalagaming.graphics.frontend.gui.event.GuiInputEvent;
 import com.ikalagaming.graphics.frontend.gui.flags.BackendFlags;
+import com.ikalagaming.graphics.frontend.gui.flags.ColorEditFlags;
 import com.ikalagaming.graphics.frontend.gui.flags.ConfigFlags;
 import com.ikalagaming.graphics.frontend.gui.flags.KeyModFlags;
 
@@ -13,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 
 import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.Queue;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -36,6 +38,17 @@ public class IkIO {
     public int configFlags;
 
     /**
+     * Current settings for colorEdit/colorPicker widgets. Must have exactly one bit of each of
+     * {@link ColorEditFlags#DISPLAY_MASK}, {@link ColorEditFlags#DATA_TYPE_MASK}, {@link
+     * ColorEditFlags#PICKER_MASK}, and {@link ColorEditFlags#INPUT_MASK}. Defaults to {@link
+     * ColorEditFlags#DEFAULT_OPTIONS}. May be further edited by users through the options menu,
+     * unless you also use {@link ColorEditFlags#NO_OPTIONS}.
+     *
+     * @see ColorEditFlags
+     */
+    public int configColorEditFlags;
+
+    /**
      * Used to test begin/end and beginChild/endChild behaviors. Some calls to begin/beginChild will
      * return false, cycles through window depths.
      */
@@ -50,8 +63,58 @@ public class IkIO {
     /** Ignore focus loss, notably for avoiding the input data being cleared when focus is lost. */
     public boolean configDebugIgnoreFocusLoss;
 
+    /**
+     * Enable various debug tools showing buttons that will call debugBreak(), for when a debugger
+     * is attached. Put a breakpoint in IkGuiInternal.debugBreak() to stop in the code that
+     * submitted the item or window.
+     */
+    public boolean configDebugIsDebuggerPresent;
+
     /** Save extra information with the .ini data. */
     public boolean configDebugIniSettings;
+
+    /**
+     * Highlight and show an error message tooltip when multiple items have conflicting identifiers.
+     * Conflicts are found when hovering, as the hovered item is cheap to compare against.
+     */
+    public boolean configDebugHighlightIdConflicts;
+
+    /** Show an "Item Picker" button in the ID conflict tooltip. */
+    public boolean configDebugHighlightIdConflictsShowItemPicker;
+
+    /**
+     * Try to recover from incorrect API usage, such as a missing end() or popID(), so the
+     * application can keep running. Errors are reported according to the configErrorRecoveryEnable
+     * options. Recovery is not perfect nor guaranteed, it is a feature to ease development. Without
+     * recovery, mismatched calls leave the stacks broken for the following frames.
+     */
+    public boolean configErrorRecovery;
+
+    /**
+     * Throw an {@link com.ikalagaming.graphics.frontend.gui.IkGuiUserError} when incorrect API
+     * usage is detected, to stop at the misuse. Off by default, so errors are logged and recovered
+     * from.
+     */
+    public boolean configErrorRecoveryEnableAssert;
+
+    /** Log incorrect API usage to the logger and the debug log. */
+    public boolean configErrorRecoveryEnableDebugLog;
+
+    /** Show incorrect API usage in an error tooltip, and outline the window it happened in. */
+    public boolean configErrorRecoveryEnableTooltip;
+
+    /**
+     * Enable loading/saving the last used date (YYYYMMDD) in some .ini entries, making things
+     * easier to audit and allowing tools to clean up old data.
+     */
+    public boolean configIniSettingsSaveLastUsedDate;
+
+    /**
+     * Number of months after which unused .ini entries are discarded on load, 0 to disable.
+     * Requires platformIO.platformSessionDate to be set. Entries without a last used date are
+     * always discarded when this is enabled.
+     */
+    public int configIniSettingsAutoDiscardMonths;
 
     /** Force every floating window display within a docking node. */
     public boolean configDockingAlwaysTabBar;
@@ -61,8 +124,32 @@ public class IkIO {
      */
     public boolean configDockingNoSplit;
 
+    /** Disable window merging into the same tab bar, so docking is limited to splitting windows. */
+    public boolean configDockingNoDockingOver;
+
+    /**
+     * Enable docking only while holding shift, instead of disabling docking while holding shift.
+     * Reduces visual noise and allows dropping in a wider space.
+     */
+    public boolean configDockingWithShift;
+
+    /**
+     * Make windows transparent while they are being dragged for docking, so the docking preview on
+     * the target can be seen through them.
+     */
+    public boolean configDockingTransparentPayload;
+
+    /**
+     * Scale windows (position and size) when the DPI of their viewport changes, when using multiple
+     * viewports. This is a lossy operation.
+     */
+    public boolean configDpiScaleViewports;
+
     /** Enable blinking cursor. */
     public boolean configInputTextCursorBlink;
+
+    /** Pressing Enter will keep the item active and select its contents (single-line only). */
+    public boolean configInputTextEnterKeepActive;
 
     /**
      * Spread out some events (e.g. button down + up) in the queue over multiple frames, for
@@ -90,14 +177,72 @@ public class IkIO {
      */
     public float configMemoryCompactTimer;
 
-    /** Request that we draw a cursor instead of the platform. */
+    /**
+     * Request that IkGui draws a mouse cursor itself, instead of the platform. A cursor drawn with
+     * the GUI will feel more laggy than a hardware cursor, but will be more in sync with the other
+     * visuals. Some applications use both kinds of cursors, e.g. only drawing the cursor while
+     * resizing or dragging something. The platform backend hides its cursor while this is set.
+     */
     public boolean configMouseDrawCursor;
 
-    /** Whether navigation captures the keyboard. */
+    /** Sets io.wantCaptureKeyboard when io.navActive is set. */
     public boolean configNavCaptureKeyboard;
 
-    /** Whether navigation sets the mosue position. */
+    /**
+     * Swap the activate and cancel gamepad buttons (A and B), matching the typical
+     * "Nintendo/Japanese style" gamepad layout.
+     */
+    public boolean configNavSwapGamepadButtons;
+
+    /**
+     * [Beta] Turn drag widgets into a text input with a simple mouse click and release, without
+     * moving. Not desirable on devices without a keyboard.
+     */
+    public boolean configDragClickToInputText;
+
+    /**
+     * [Experimental] Ctrl+C copies the contents of the focused window to the clipboard. This is
+     * experimental because it has known issues with nested begin()/end() pairs, the text output
+     * quality varies, and the text is in submission order rather than spatial order.
+     */
+    public boolean configWindowsCopyContentsWithCtrlC;
+
+    /**
+     * Scroll page by page when clicking outside the scrollbar grab. When disabled, always scroll to
+     * the clicked location. When enabled, Shift+Click scrolls to the clicked location.
+     */
+    public boolean configScrollbarScrollByPage;
+
+    /**
+     * Directional/tabbing navigation teleports the mouse cursor. May be useful on TV/console
+     * systems where moving a virtual mouse is difficult. Will update io.mousePosition and set
+     * io.wantSetMousePosition.
+     */
     public boolean configNavMoveSetMousePosition;
+
+    /**
+     * Pressing Escape can clear the focused item and navigation ID/highlight. Set to false if you
+     * want to always keep the highlight on.
+     */
+    public boolean configNavEscapeClearFocusItem;
+
+    /** Pressing Escape can clear the focused window as well (superset of the item option). */
+    public boolean configNavEscapeClearFocusWindow;
+
+    /**
+     * Using directional navigation keys makes the cursor visible. Clicking the mouse hides the
+     * cursor.
+     */
+    public boolean configNavCursorVisibleAuto;
+
+    /** The navigation cursor is always visible. */
+    public boolean configNavCursorVisibleAlways;
+
+    /**
+     * The mouse position has been altered and the backend should reposition the mouse on the next
+     * frame. Set only when configNavMoveSetMousePosition is enabled.
+     */
+    public boolean wantSetMousePosition;
 
     /**
      * Makes all floating windows use their own viewports. Otherwise, they are merged into the main
@@ -152,6 +297,9 @@ public class IkIO {
     /** Minimum time between saving positions/sizes to .ini file, in milliseconds. */
     public long iniSavingRate;
 
+    /** Path to the log file, the default file for logToFile() when no file is specified. */
+    public String logFilename;
+
     /** Whether the alt key is down. */
     public boolean keyAlt;
 
@@ -164,11 +312,38 @@ public class IkIO {
      */
     public int keyMods;
 
-    /** When holding a key/button, time (in seconds) before it starts to repeat. */
-    public float keyRepeatDelay;
+    /** When holding a key/button, time (in milliseconds) before it starts to repeat. */
+    public long keyRepeatDelay;
 
-    /** When holding a key/button, the rate (in seconds) at which it repeats. */
-    public float keyRepeatRate;
+    /** When holding a key/button, the rate (in milliseconds) at which it repeats. */
+    public long keyRepeatRate;
+
+    /** Whether each key is currently down. Indexes correspond to {@link Key#ordinal()}. */
+    public final boolean[] keysDown;
+
+    /**
+     * The analog value of each key, 0 to 1, for gamepad keys. Indexes correspond to {@link
+     * Key#ordinal()}.
+     */
+    public final float[] keysAnalogValue;
+
+    /**
+     * Whether each modifier key (ctrl, shift, alt, super) is down from events for the modifier keys
+     * themselves, like {@link Key#MOD_CTRL}, as opposed to the left/right keys.
+     */
+    private final boolean[] modKeyEventsDown;
+
+    /**
+     * Duration each key has been down for, in milliseconds. 0 is just pressed, -1 is not pressed.
+     * Indexes correspond to {@link Key#ordinal()}.
+     */
+    public final long[] keysDownDuration;
+
+    /** {@link #keysDownDuration} for the previous frame. */
+    public final long[] keysDownDurationPrevious;
+
+    /** Characters that were input this frame, as text. Cleared at the end of each frame. */
+    public final StringBuilder inputQueueCharacters;
 
     /** Whether the shift key is down. */
     public boolean keyShift;
@@ -178,6 +353,12 @@ public class IkIO {
 
     /** Number of active windows. */
     public int metricsActiveWindows;
+
+    /**
+     * Estimate of the application framerate (rolling average over 60 frames), in frames per second.
+     * Solely for convenience.
+     */
+    public float framerate;
 
     /** Indices output during last call to render(). */
     public int metricsRenderIndices;
@@ -238,10 +419,19 @@ public class IkIO {
     public long mouseDoubleClickTime;
 
     /**
+     * Time for a delayed single click when using getItemClickedCountWithSingleClickDelay() or
+     * isMouseReleasedWithDelay(), in milliseconds. Must be larger than mouseDoubleClickTime.
+     */
+    public long mouseSingleClickDelay;
+
+    /**
      * Duration the mouse button has been down for, in milliseconds. Should probably not be modified
-     * directly. 0 is just clicked. Indexes correspond to {@link MouseButton#index}.
+     * directly. 0 is just clicked, -1 is not down. Indexes correspond to {@link MouseButton#index}.
      */
     public final long[] mouseDownDuration;
+
+    /** {@link #mouseDownDuration} for the previous frame. */
+    public final long[] mouseDownDurationPrevious;
 
     /**
      * If a mouse button is down. Should probably not be modified directly. Indexes correspond to
@@ -278,8 +468,15 @@ public class IkIO {
     /** Distance threshold before considering a mouse drag, in pixels. */
     public float mouseDragThreshold;
 
-    /** Viewport that the mouse is hovering over. */
-    public Viewport mouseHoveredViewport;
+    /**
+     * The ID of the viewport that the OS mouse is hovering over, when using multiple viewports. If
+     * possible, this should ignore viewports with {@link
+     * com.ikalagaming.graphics.frontend.gui.flags.ViewportFlags#NO_INPUTS} set. Set {@link
+     * BackendFlags#HAS_MOUSE_HOVERED_VIEWPORT} if you can provide this info, otherwise we infer it
+     * from the positions and last focused time of the viewports we know about (ignoring other OS
+     * windows). Modified with addMouseViewportEvent().
+     */
+    public int mouseHoveredViewport;
 
     /** The mouse is currently inside a (any) window. */
     public boolean mouseInsideWindow;
@@ -340,20 +537,8 @@ public class IkIO {
      */
     public boolean wantCaptureKeyboard;
 
-    /**
-     * Set when we will want to capture keyboard inputs next frame, and not dispatch them to the
-     * main application.
-     */
-    public boolean wantCaptureKeyboardNextFrame;
-
     /** Set when we want to capture mouse inputs and not dispatch them to the main application. */
     public boolean wantCaptureMouse;
-
-    /**
-     * Set when we will want to capture mouse inputs next frame, and not dispatch them to the main
-     * application.
-     */
-    public boolean wantCaptureMouseNextFrame;
 
     /**
      * Set when we want to capture mouse inputs when a click over an empty area is expected to close
@@ -371,30 +556,48 @@ public class IkIO {
     /** For mobile/console, we want to display an on-screen keyboard for textual inputs. */
     public boolean wantTextInput;
 
-    /**
-     * For mobile/console, we will want to display an on-screen keyboard for textual inputs next
-     * frame.
-     */
-    public boolean wantTextInputNextFrame;
-
     public IkIO() {
         appAcceptingEvents = true;
         appFocusLost = false;
         backendFlags = BackendFlags.NONE;
         configFlags = ConfigFlags.NONE;
+        configColorEditFlags = ColorEditFlags.DEFAULT_OPTIONS;
         configDebugBeginReturnValueLoop = false;
         configDebugBeginReturnValueOnce = false;
         configDebugIgnoreFocusLoss = false;
+        configDebugIsDebuggerPresent = false;
         configDebugIniSettings = false;
+        configDebugHighlightIdConflicts = true;
+        configDebugHighlightIdConflictsShowItemPicker = true;
+        configNavSwapGamepadButtons = false;
+        configDragClickToInputText = false;
+        configWindowsCopyContentsWithCtrlC = false;
+        configScrollbarScrollByPage = true;
+        configErrorRecovery = true;
+        configErrorRecoveryEnableAssert = false;
+        configErrorRecoveryEnableDebugLog = true;
+        configErrorRecoveryEnableTooltip = true;
+        configIniSettingsSaveLastUsedDate = true;
+        configIniSettingsAutoDiscardMonths = 0;
         configDockingAlwaysTabBar = false;
         configDockingNoSplit = false;
+        configDockingNoDockingOver = false;
+        configDockingWithShift = false;
+        configDockingTransparentPayload = false;
+        configDpiScaleViewports = false;
         configInputTextCursorBlink = true;
+        configInputTextEnterKeepActive = false;
         configInputTrickleEventQueue = true;
         configMacOSXBehaviors = false;
         configMemoryCompactTimer = 60.0f;
         configMouseDrawCursor = false;
-        configNavCaptureKeyboard = false;
+        configNavCaptureKeyboard = true;
         configNavMoveSetMousePosition = false;
+        configNavEscapeClearFocusItem = true;
+        configNavEscapeClearFocusWindow = false;
+        configNavCursorVisibleAuto = true;
+        configNavCursorVisibleAlways = false;
+        wantSetMousePosition = false;
         configViewportsNoAutoMerge = false;
         configViewportsNoDecoration = true;
         configViewportsNoDefaultParent = true;
@@ -410,14 +613,24 @@ public class IkIO {
         fonts = new FontAtlas();
         iniFilename = "ikgui.ini";
         iniSavingRate = 5000;
+        logFilename = "ikgui_log.txt";
         keyAlt = false;
         keyCtrl = false;
         keyMods = KeyModFlags.NONE;
-        keyRepeatDelay = 0.250f;
-        keyRepeatRate = 0.050f;
+        keyRepeatDelay = 275;
+        keyRepeatRate = 50;
+        keysDown = new boolean[Key.values().length];
+        keysAnalogValue = new float[Key.values().length];
+        modKeyEventsDown = new boolean[4];
+        keysDownDuration = new long[Key.values().length];
+        Arrays.fill(keysDownDuration, -1);
+        keysDownDurationPrevious = new long[Key.values().length];
+        Arrays.fill(keysDownDurationPrevious, -1);
+        inputQueueCharacters = new StringBuilder();
         keyShift = false;
         keySuper = false;
         metricsActiveWindows = 0;
+        framerate = 0.0f;
         metricsRenderIndices = 0;
         metricsRenderVertices = 0;
         metricsRenderWindows = 0;
@@ -433,7 +646,11 @@ public class IkIO {
         mouseDelta = new Vector2f(0, 0);
         mouseDoubleClickMaxDistance = 6.0f;
         mouseDoubleClickTime = 300;
+        mouseSingleClickDelay = 500;
         mouseDownDuration = new long[MouseButton.COUNT];
+        Arrays.fill(mouseDownDuration, -1);
+        mouseDownDurationPrevious = new long[MouseButton.COUNT];
+        Arrays.fill(mouseDownDurationPrevious, -1);
         mouseDown = new boolean[MouseButton.COUNT];
         mouseDownOwned = new boolean[MouseButton.COUNT];
         mouseDownOwnedUnlessPopupClose = new boolean[MouseButton.COUNT];
@@ -443,11 +660,13 @@ public class IkIO {
         }
         mouseDragMaxDistanceSquare = new float[MouseButton.COUNT];
         mouseDragThreshold = 6.0f;
-        mouseHoveredViewport = null;
+        mouseHoveredViewport = 0;
         mouseInsideWindow = false;
         mousePosition = new Vector2f(-Float.MAX_VALUE, -Float.MAX_VALUE);
         mouseReleased = new boolean[MouseButton.COUNT];
         mouseReleasedTime = new long[MouseButton.COUNT];
+        // Far in the past, so a delayed release isn't reported before the first release
+        Arrays.fill(mouseReleasedTime, Long.MIN_VALUE / 2);
         mousePositionPrevious = new Vector2f(-Float.MAX_VALUE, -Float.MAX_VALUE);
         mouseSource = MouseSource.MOUSE;
         mouseStationaryTimer = 0;
@@ -458,13 +677,10 @@ public class IkIO {
         navVisible = false;
         penPressure = 0.0f;
         wantCaptureKeyboard = false;
-        wantCaptureKeyboardNextFrame = false;
         wantCaptureMouse = false;
-        wantCaptureMouseNextFrame = false;
         wantCaptureMouseUnlessPopupClose = false;
         wantSaveIniSettings = false;
         wantTextInput = false;
-        wantTextInputNextFrame = false;
     }
 
     public void addConfigFlags(int flags) {
@@ -487,56 +703,130 @@ public class IkIO {
         backendFlags = backendFlags & ~flags;
     }
 
+    /**
+     * The number of input events waiting to be processed, for debugging.
+     *
+     * @return The number of queued events.
+     */
+    public int getEventQueueSize() {
+        eventQueueLock.lock();
+        try {
+            return eventQueue.size();
+        } finally {
+            eventQueueLock.unlock();
+        }
+    }
+
     public boolean hasBackendFlags(int flags) {
         return (backendFlags & flags) != 0;
+    }
+
+    /**
+     * Find the latest queued event of a type, to filter out duplicate events. Call while holding
+     * the event queue lock.
+     *
+     * @param type The event type.
+     * @param matches Checks the event data, for events of a specific key or button.
+     * @return The latest event, or null if there is none queued.
+     */
+    private GuiInputEvent findLatestEvent(
+            @NonNull GuiInputEventType type,
+            @NonNull java.util.function.Predicate<GuiInputEvent.EventData> matches) {
+        final var iterator = ((ArrayDeque<GuiInputEvent>) eventQueue).descendingIterator();
+        while (iterator.hasNext()) {
+            final GuiInputEvent event = iterator.next();
+            if (event.type() == type && matches.test(event.data())) {
+                return event;
+            }
+        }
+        return null;
     }
 
     public void addFocusEvent(boolean focused) {
         if (!appAcceptingEvents) {
             return;
         }
+        eventQueueLock.lock();
         try {
-            eventQueueLock.lock();
-            GuiInputEvent event =
+            // Filter duplicates
+            final GuiInputEvent latest = findLatestEvent(GuiInputEventType.FOCUS, data -> true);
+            final boolean latestFocused =
+                    latest != null
+                            ? ((GuiInputEvent.Focused) latest.data()).focused()
+                            : !appFocusLost;
+            if (latestFocused == focused || (configDebugIgnoreFocusLoss && !focused)) {
+                return;
+            }
+            eventQueue.add(
                     new GuiInputEvent(
                             GuiInputEventType.FOCUS,
                             GuiInputSource.NONE,
-                            new GuiInputEvent.Focused(focused));
-            eventQueue.add(event);
+                            new GuiInputEvent.Focused(focused)));
         } finally {
             eventQueueLock.unlock();
         }
     }
 
     public void addKeyEvent(Key key, boolean down) {
-        if (!appAcceptingEvents) {
-            return;
-        }
-        try {
-            eventQueueLock.lock();
-            GuiInputEvent event =
-                    new GuiInputEvent(
-                            GuiInputEventType.KEY,
-                            GuiInputSource.NONE,
-                            new GuiInputEvent.KeyPress(key, down, 0));
-            eventQueue.add(event);
-        } finally {
-            eventQueueLock.unlock();
-        }
+        addKeyAnalogEvent(key, down, down ? 1.0f : 0.0f);
     }
 
+    /**
+     * Queue a key event with an analog value, for gamepad keys.
+     *
+     * @param key The key.
+     * @param down Whether the key is down.
+     * @param analogValue The analog value, from 0 to 1.
+     */
     public void addKeyAnalogEvent(Key key, boolean down, float analogValue) {
-        if (!appAcceptingEvents) {
+        if (key == Key.NONE || !appAcceptingEvents) {
             return;
         }
+        if (key.isMouseKey()) {
+            log.error(
+                    "Can't submit {} as a key event, mouse keys are set from the mouse events",
+                    key);
+            return;
+        }
+
+        // macOS: swap Cmd (super) and Ctrl
+        if (configMacOSXBehaviors) {
+            key =
+                    switch (key) {
+                        case MOD_SUPER -> Key.MOD_CTRL;
+                        case MOD_CTRL -> Key.MOD_SUPER;
+                        case LEFT_SUPER -> Key.LEFT_CTRL;
+                        case RIGHT_SUPER -> Key.RIGHT_CTRL;
+                        case LEFT_CTRL -> Key.LEFT_SUPER;
+                        case RIGHT_CTRL -> Key.RIGHT_SUPER;
+                        default -> key;
+                    };
+        }
+
+        eventQueueLock.lock();
         try {
-            eventQueueLock.lock();
-            GuiInputEvent event =
+            // Filter duplicates, modifier keys and gamepad analog values are commonly spammed
+            final Key eventKey = key;
+            final GuiInputEvent latest =
+                    findLatestEvent(
+                            GuiInputEventType.KEY,
+                            data -> ((GuiInputEvent.KeyPress) data).key() == eventKey);
+            final boolean latestDown =
+                    latest != null
+                            ? ((GuiInputEvent.KeyPress) latest.data()).down()
+                            : keysDown[key.ordinal()];
+            final float latestAnalog =
+                    latest != null
+                            ? ((GuiInputEvent.KeyPress) latest.data()).analogValue()
+                            : keysAnalogValue[key.ordinal()];
+            if (latestDown == down && latestAnalog == analogValue) {
+                return;
+            }
+            eventQueue.add(
                     new GuiInputEvent(
                             GuiInputEventType.KEY,
-                            GuiInputSource.NONE,
-                            new GuiInputEvent.KeyPress(key, down, analogValue));
-            eventQueue.add(event);
+                            key.isGamepadKey() ? GuiInputSource.GAMEPAD : GuiInputSource.KEYBOARD,
+                            new GuiInputEvent.KeyPress(key, down, analogValue)));
         } finally {
             eventQueueLock.unlock();
         }
@@ -546,15 +836,30 @@ public class IkIO {
         if (!appAcceptingEvents) {
             return;
         }
-        // TODO(ches) we can probably ignore most of these to be honest
+        // The same flooring as updateMouseInputs()
+        final float posX = x > -Float.MAX_VALUE ? (float) Math.floor(x) : x;
+        final float posY = y > -Float.MAX_VALUE ? (float) Math.floor(y) : y;
+        eventQueueLock.lock();
         try {
-            eventQueueLock.lock();
-            GuiInputEvent event =
+            // Filter duplicates
+            final GuiInputEvent latest =
+                    findLatestEvent(GuiInputEventType.MOUSE_POSITION, data -> true);
+            final float latestX =
+                    latest != null
+                            ? ((GuiInputEvent.MousePosition) latest.data()).posX()
+                            : mousePosition.x;
+            final float latestY =
+                    latest != null
+                            ? ((GuiInputEvent.MousePosition) latest.data()).posY()
+                            : mousePosition.y;
+            if (latestX == posX && latestY == posY) {
+                return;
+            }
+            eventQueue.add(
                     new GuiInputEvent(
                             GuiInputEventType.MOUSE_POSITION,
-                            GuiInputSource.NONE,
-                            new GuiInputEvent.MousePosition(x, y, mouseSource));
-            eventQueue.add(event);
+                            GuiInputSource.MOUSE,
+                            new GuiInputEvent.MousePosition(posX, posY, mouseSource)));
         } finally {
             eventQueueLock.unlock();
         }
@@ -570,31 +875,79 @@ public class IkIO {
         if (!appAcceptingEvents) {
             return;
         }
+        // macOS: Ctrl (super) + left click is converted into a right click, handle the held button
+        if (configMacOSXBehaviors && button == MouseButton.LEFT && mouseCtrlLeftAsRightClick) {
+            // The order matters, this event still releases the right button
+            button = MouseButton.RIGHT;
+            if (!down) {
+                mouseCtrlLeftAsRightClick = false;
+            }
+        }
+
+        eventQueueLock.lock();
         try {
-            eventQueueLock.lock();
-            GuiInputEvent event =
+            // Filter duplicates
+            final MouseButton eventButton = button;
+            final GuiInputEvent latest =
+                    findLatestEvent(
+                            GuiInputEventType.MOUSE_BUTTON,
+                            data -> ((GuiInputEvent.MouseButton) data).button() == eventButton);
+            final boolean latestDown =
+                    latest != null
+                            ? ((GuiInputEvent.MouseButton) latest.data()).down()
+                            : mouseDown[button.index];
+            if (latestDown == down) {
+                return;
+            }
+
+            // macOS: convert Ctrl (super) + left click into a right click. This is the physical
+            // Ctrl key, which is super for us.
+            if (configMacOSXBehaviors && button == MouseButton.LEFT && down) {
+                final GuiInputEvent latestSuper =
+                        findLatestEvent(
+                                GuiInputEventType.KEY,
+                                data -> ((GuiInputEvent.KeyPress) data).key() == Key.MOD_SUPER);
+                if (latestSuper != null
+                        ? ((GuiInputEvent.KeyPress) latestSuper.data()).down()
+                        : keySuper) {
+                    mouseCtrlLeftAsRightClick = true;
+                    button = MouseButton.RIGHT;
+                    final GuiInputEvent latestRight =
+                            findLatestEvent(
+                                    GuiInputEventType.MOUSE_BUTTON,
+                                    data ->
+                                            ((GuiInputEvent.MouseButton) data).button()
+                                                    == MouseButton.RIGHT);
+                    if (latestRight != null
+                            ? ((GuiInputEvent.MouseButton) latestRight.data()).down()
+                            : mouseDown[MouseButton.RIGHT.index]) {
+                        return;
+                    }
+                }
+            }
+
+            eventQueue.add(
                     new GuiInputEvent(
                             GuiInputEventType.MOUSE_BUTTON,
-                            GuiInputSource.NONE,
-                            new GuiInputEvent.MouseButton(button, down, mouseSource));
-            eventQueue.add(event);
+                            GuiInputSource.MOUSE,
+                            new GuiInputEvent.MouseButton(button, down, mouseSource)));
         } finally {
             eventQueueLock.unlock();
         }
     }
 
     public void addMouseWheelEvent(float wheelX, float wheelY) {
-        if (!appAcceptingEvents) {
+        // Filter duplicates, wheel values are relative so this is easy
+        if (!appAcceptingEvents || (wheelX == 0.0f && wheelY == 0.0f)) {
             return;
         }
+        eventQueueLock.lock();
         try {
-            eventQueueLock.lock();
-            GuiInputEvent event =
+            eventQueue.add(
                     new GuiInputEvent(
                             GuiInputEventType.MOUSE_WHEEL,
-                            GuiInputSource.NONE,
-                            new GuiInputEvent.MouseWheel(wheelX, wheelY, mouseSource));
-            eventQueue.add(event);
+                            GuiInputSource.MOUSE,
+                            new GuiInputEvent.MouseWheel(wheelX, wheelY, mouseSource)));
         } finally {
             eventQueueLock.unlock();
         }
@@ -604,8 +957,8 @@ public class IkIO {
         if (!appAcceptingEvents) {
             return;
         }
+        eventQueueLock.lock();
         try {
-            eventQueueLock.lock();
             GuiInputEvent event =
                     new GuiInputEvent(
                             GuiInputEventType.MOUSE_VIEWPORT,
@@ -617,60 +970,114 @@ public class IkIO {
         }
     }
 
+    /**
+     * Queue a new character input.
+     *
+     * @param c The character that was typed.
+     */
     public void addInputCharacter(char c) {
-        // TODO(ches) complete this
+        if (!appAcceptingEvents || c == 0) {
+            return;
+        }
+        eventQueueLock.lock();
+        try {
+            GuiInputEvent event =
+                    new GuiInputEvent(
+                            GuiInputEventType.TEXT,
+                            GuiInputSource.KEYBOARD,
+                            new GuiInputEvent.Text(c));
+            eventQueue.add(event);
+        } finally {
+            eventQueueLock.unlock();
+        }
     }
 
-    public void addInputCharacterUTF16(char c) {
-        // TODO(ches) complete this
+    /**
+     * Queue a unicode code point as character input, which might be more than one UTF-16 character.
+     *
+     * @param codePoint The unicode code point that was typed.
+     */
+    public void addInputCharacter(int codePoint) {
+        if (!Character.isValidCodePoint(codePoint)) {
+            return;
+        }
+        for (char c : Character.toChars(codePoint)) {
+            addInputCharacter(c);
+        }
     }
 
-    public void addInputCharactersUTF8(@NonNull String str) {
-        // TODO(ches) complete this
+    /**
+     * Queue all the characters in a string as new character inputs.
+     *
+     * @param str The text that was input.
+     */
+    public void addInputCharacters(@NonNull String str) {
+        for (int i = 0; i < str.length(); ++i) {
+            addInputCharacter(str.charAt(i));
+        }
     }
 
     public void setAppAcceptingEvents(boolean acceptingEvents) {
-        // TODO(ches) complete this
         appAcceptingEvents = acceptingEvents;
     }
 
     /** Clear out (discard) everything in the event queue. */
     public void clearEventQueue() {
+        eventQueueLock.lock();
         try {
-            eventQueueLock.lock();
             eventQueue.clear();
         } finally {
             eventQueueLock.unlock();
         }
     }
 
-    /** Reset fields indicating state has changed this frame, in preparation for a new frame. */
-    public void clearFrameSpecificValues() {
-        mouseDelta.set(0, 0);
-        for (int i = 0; i < MouseButton.COUNT; ++i) {
-            mouseClicked[i] = false;
-            mouseReleased[i] = false;
-        }
-    }
-
+    /** Clear the current keyboard and gamepad state, as if all keys were released. */
     public void clearInputKeys() {
-        // TODO(ches) complete this
+        for (Key key : Key.values()) {
+            // The mouse keys are cleared by clearInputMouse()
+            if (key.isMouseKey()) {
+                continue;
+            }
+            clearKey(key);
+        }
+        java.util.Arrays.fill(modKeyEventsDown, false);
+        keyCtrl = false;
+        keyShift = false;
+        keyAlt = false;
+        keySuper = false;
+        keyMods = KeyModFlags.NONE;
+        inputQueueCharacters.setLength(0);
     }
 
+    /** Clear the current mouse state, as if all buttons were released. */
     public void clearInputMouse() {
-        // TODO(ches) complete this
+        for (Key key : Key.values()) {
+            if (key.isMouseKey()) {
+                clearKey(key);
+            }
+        }
+        for (int i = 0; i < MouseButton.COUNT; ++i) {
+            mouseDown[i] = false;
+            mouseDownDuration[i] = -1;
+            mouseDownDurationPrevious[i] = -1;
+        }
+        mouseWheel = 0;
+        mouseWheelH = 0;
+    }
+
+    private void clearKey(@NonNull Key key) {
+        final int index = key.ordinal();
+        keysDown[index] = false;
+        keysDownDuration[index] = -1;
+        keysDownDurationPrevious[index] = -1;
     }
 
     public boolean getMouseDown(@NonNull MouseButton button) {
         return mouseDown[button.index];
     }
 
-    public double getMouseClickedTime(@NonNull MouseButton button) {
+    public long getMouseClickedTime(@NonNull MouseButton button) {
         return mouseClickedTime[button.index];
-    }
-
-    public void setMouseClickedTime(@NonNull MouseButton button, long value) {
-        mouseClickedTime[button.index] = value;
     }
 
     public boolean getMouseClicked(@NonNull MouseButton button) {
@@ -697,29 +1104,98 @@ public class IkIO {
         return mouseDownOwned[button.index];
     }
 
-    public boolean getMouseDownOwnedUnlessPopupClose(int index) {
-        // TODO(ches) complete this
-        return false;
+    public boolean getMouseDownOwnedUnlessPopupClose(@NonNull MouseButton button) {
+        return mouseDownOwnedUnlessPopupClose[button.index];
     }
 
-    public float getMouseDownDuration(@NonNull MouseButton button) {
+    public long getMouseDownDuration(@NonNull MouseButton button) {
         return mouseDownDuration[button.index];
     }
 
-    public float getMouseDragMaxDistanceSqr(int index) {
-        // TODO(ches) complete this
-        return 0;
+    public float getMouseDragMaxDistanceSqr(@NonNull MouseButton button) {
+        return mouseDragMaxDistanceSquare[button.index];
     }
 
-    private void handleFocus(boolean focused) {
-        // TODO(ches) complete this
-        if (!focused && !configDebugIgnoreFocusLoss) {
-            appFocusLost = true;
-        }
+    /**
+     * Check if a key is currently held down.
+     *
+     * @param key The key.
+     * @return True if the key is down.
+     */
+    public boolean getKeyDown(@NonNull Key key) {
+        return keysDown[key.ordinal()];
+    }
+
+    /**
+     * How long the key has been held down for.
+     *
+     * @param key The key.
+     * @return The duration in milliseconds, 0 if just pressed this frame, -1 if not down.
+     */
+    public long getKeyDownDuration(@NonNull Key key) {
+        return keysDownDuration[key.ordinal()];
     }
 
     private void handleKey(@NonNull Key key, boolean down, float analogValue) {
-        // TODO(ches) complete this
+        keysDown[key.ordinal()] = down;
+        keysAnalogValue[key.ordinal()] = analogValue;
+        switch (key) {
+            case MOD_CTRL -> modKeyEventsDown[0] = down;
+            case MOD_SHIFT -> modKeyEventsDown[1] = down;
+            case MOD_ALT -> modKeyEventsDown[2] = down;
+            case MOD_SUPER -> modKeyEventsDown[3] = down;
+            default -> {}
+        }
+        // Backends may submit either the modifier keys themselves or the left/right keys
+        keyCtrl = modKeyEventsDown[0] || getKeyDown(Key.LEFT_CTRL) || getKeyDown(Key.RIGHT_CTRL);
+        keyShift = modKeyEventsDown[1] || getKeyDown(Key.LEFT_SHIFT) || getKeyDown(Key.RIGHT_SHIFT);
+        keyAlt = modKeyEventsDown[2] || getKeyDown(Key.LEFT_ALT) || getKeyDown(Key.RIGHT_ALT);
+        keySuper = modKeyEventsDown[3] || getKeyDown(Key.LEFT_SUPER) || getKeyDown(Key.RIGHT_SUPER);
+        keysDown[Key.MOD_CTRL.ordinal()] = keyCtrl;
+        keysDown[Key.MOD_SHIFT.ordinal()] = keyShift;
+        keysDown[Key.MOD_ALT.ordinal()] = keyAlt;
+        keysDown[Key.MOD_SUPER.ordinal()] = keySuper;
+    }
+
+    /**
+     * The modifiers from the current modifier key state, bypassing key ownership.
+     *
+     * @return The modifiers.
+     * @see KeyModFlags
+     */
+    private int getMergedModsFromKeys() {
+        int mods = KeyModFlags.NONE;
+        if (keysDown[Key.MOD_CTRL.ordinal()]) {
+            mods |= KeyModFlags.CTRL;
+        }
+        if (keysDown[Key.MOD_SHIFT.ordinal()]) {
+            mods |= KeyModFlags.SHIFT;
+        }
+        if (keysDown[Key.MOD_ALT.ordinal()]) {
+            mods |= KeyModFlags.ALT;
+        }
+        if (keysDown[Key.MOD_SUPER.ordinal()]) {
+            mods |= KeyModFlags.SUPER;
+        }
+        return mods;
+    }
+
+    /**
+     * Whether a key chord might produce a character, mimicking the logic in input text widgets.
+     *
+     * @param mods The modifiers held.
+     * @param key The key.
+     * @return True if the key might be for character input.
+     */
+    private boolean isKeyPotentiallyCharInput(int mods, @NonNull Key key) {
+        // When the right mods are pressed it can't be character input
+        final boolean ignoreCharInputs =
+                ((mods & KeyModFlags.CTRL) != 0 && (mods & KeyModFlags.ALT) == 0)
+                        || (configMacOSXBehaviors && (mods & KeyModFlags.CTRL) != 0);
+        if (ignoreCharInputs || key == Key.NONE) {
+            return false;
+        }
+        return IkGui.getContext().keysMayBeCharInput[key.ordinal()];
     }
 
     /**
@@ -734,134 +1210,290 @@ public class IkIO {
             log.warn("Invalid mouse button index {} in setMouseDown", index);
             return;
         }
-        final boolean oldValue = mouseDown[index];
-        if (oldValue != value) {
-            mouseDown[index] = value;
-            if (value) {
-                final long lastClick = mouseClickedTime[index];
-                final long thisClick = IkGui.getContext().frameStartTime;
-                final boolean repeatedClick =
-                        (thisClick - lastClick > mouseDoubleClickTime)
-                                && (mouseClickedPosition[index].distance(mousePosition)
-                                        <= mouseDoubleClickMaxDistance);
-                mouseClickedTime[index] = thisClick;
-                mouseClicked[index] = true;
-                mouseClickedPosition[index].set(mousePosition);
-
-                if (repeatedClick) {
-                    mouseClickedLastCount[index] += 1;
-                } else {
-                    mouseClickedLastCount[index] = 1;
-                }
-                mouseClickedCount[index] = mouseClickedLastCount[index];
-                mouseDownDuration[index] = 0;
-            } else {
-                mouseReleasedTime[index] = IkGui.getContext().frameStartTime;
-                mouseReleased[index] = true;
-            }
-            // TODO(ches) handle owned / popup logic
-        }
-    }
-
-    private void handleMousePosition(float x, float y) {
-        mouseStationaryTimer = 0;
-        if (mouseInsideWindow) {
-            // It's in a window now
-            mousePosition.set(x, y);
-            float displaceX = mousePosition.x - mousePositionPrevious.x;
-            float displaceY = mousePosition.y - mousePositionPrevious.y;
-            if (mousePositionPrevious.x != -Float.MAX_VALUE
-                    && mousePositionPrevious.y != -Float.MAX_VALUE) {
-                mouseDelta.add(displaceX, displaceY);
-            } else {
-                mouseDelta.set(0, 0);
-            }
-        } else {
-            // It's not in a window now
-            mousePosition.set(-Float.MAX_VALUE, -Float.MAX_VALUE);
-            mouseDelta.set(0, 0);
-        }
+        mouseDown[index] = value;
     }
 
     private void handleMouseViewport(int id) {
-        // TODO(ches) complete this
+        mouseHoveredViewport = id;
     }
 
-    public void handleMouseWheel(float wheelX, float wheelY) {
-        if (mouseWheelRequestAxisSwap) {
-            mouseWheel += wheelY;
-            mouseWheelH += wheelX;
-        } else {
-            mouseWheel += wheelX;
-            mouseWheelH += wheelY;
-        }
+    private void handleMouseWheel(float wheelX, float wheelY) {
+        mouseWheelH += wheelX;
+        mouseWheel += wheelY;
     }
 
-    /** Process input events, called internally. */
+    /**
+     * Process input events, called internally. When {@link #configInputTrickleEventQueue} is set,
+     * multiple changes to the same input (e.g. a mouse button pressed and released) are spread over
+     * multiple frames so that very fast inputs are not lost. Events that are not processed this
+     * frame are left in the queue for next frame.
+     */
     public void processInputEvents() {
+        final boolean trickle = configInputTrickleEventQueue;
+        // Only trickle characters and keys when working with a text input
+        final boolean trickleInterleavedNonCharKeysAndText =
+                trickle && IkGui.getContext().wantTextInputNextFrame == 1;
+        boolean mouseMoved = false;
+        boolean mouseWheeled = false;
+        boolean keyChanged = false;
+        boolean keyChangedNonChar = false;
+        boolean textInputted = false;
+        int mouseButtonChanged = 0;
+        final boolean[] keysChanged = new boolean[keysDown.length];
+        final boolean noKeyboard = (configFlags & ConfigFlags.NO_KEYBOARD) != 0;
+
+        eventQueueLock.lock();
         try {
-            eventQueueLock.lock();
-
+            processing:
             while (!eventQueue.isEmpty()) {
-                GuiInputEvent event = eventQueue.poll();
+                final GuiInputEvent event = eventQueue.peek();
                 switch (event.type()) {
-                    case GuiInputEventType.FOCUS:
-                        {
-                            GuiInputEvent.Focused data = (GuiInputEvent.Focused) event.data();
-                            handleFocus(data.focused());
+                    case GuiInputEventType.MOUSE_POSITION -> {
+                        if (wantSetMousePosition) {
+                            break;
                         }
-                        break;
-                    case GuiInputEventType.KEY:
-                        {
-                            GuiInputEvent.KeyPress data = (GuiInputEvent.KeyPress) event.data();
-                            handleKey(data.key(), data.down(), data.analogValue());
+                        // Trickling: stop if we already handled a mouse button change
+                        if (trickle
+                                && (mouseButtonChanged != 0
+                                        || mouseWheeled
+                                        || keyChanged
+                                        || textInputted)) {
+                            break processing;
                         }
-                        break;
-                    case GuiInputEventType.MOUSE_BUTTON:
-                        {
-                            GuiInputEvent.MouseButton data =
-                                    (GuiInputEvent.MouseButton) event.data();
-                            handleMouseDown(data.button(), data.down());
+                        final GuiInputEvent.MousePosition data =
+                                (GuiInputEvent.MousePosition) event.data();
+                        mousePosition.set(data.posX(), data.posY());
+                        mouseSource = data.source();
+                        mouseMoved = true;
+                    }
+                    case GuiInputEventType.MOUSE_BUTTON -> {
+                        final GuiInputEvent.MouseButton data =
+                                (GuiInputEvent.MouseButton) event.data();
+                        final int buttonMask = 1 << data.button().index;
+                        // Trickling: stop if we got multiple actions on the same button
+                        if (trickle && ((mouseButtonChanged & buttonMask) != 0 || mouseWheeled)) {
+                            break processing;
                         }
-                        break;
-                    case GuiInputEventType.MOUSE_POSITION:
-                        {
-                            GuiInputEvent.MousePosition data =
-                                    (GuiInputEvent.MousePosition) event.data();
-                            handleMousePosition(data.posX(), data.posY());
+                        // Touch screens have no initial hover
+                        if (trickle && data.source() == MouseSource.TOUCH_SCREEN && mouseMoved) {
+                            break processing;
                         }
-                        break;
-                    case GuiInputEventType.MOUSE_VIEWPORT:
-                        {
-                            GuiInputEvent.Viewport data = (GuiInputEvent.Viewport) event.data();
-                            handleMouseViewport(data.id());
+                        handleMouseDown(data.button(), data.down());
+                        mouseSource = data.source();
+                        mouseButtonChanged |= buttonMask;
+                    }
+                    case GuiInputEventType.MOUSE_WHEEL -> {
+                        // Trickling: stop if we got multiple actions on the event
+                        if (trickle && (mouseMoved || mouseButtonChanged != 0)) {
+                            break processing;
                         }
-                        break;
-                    case GuiInputEventType.MOUSE_WHEEL:
-                        {
-                            GuiInputEvent.MouseWheel data = (GuiInputEvent.MouseWheel) event.data();
-                            handleMouseWheel(data.wheelX(), data.wheelY());
+                        final GuiInputEvent.MouseWheel data =
+                                (GuiInputEvent.MouseWheel) event.data();
+                        handleMouseWheel(data.wheelX(), data.wheelY());
+                        mouseSource = data.source();
+                        mouseWheeled = true;
+                    }
+                    case GuiInputEventType.MOUSE_VIEWPORT -> {
+                        final GuiInputEvent.Viewport data = (GuiInputEvent.Viewport) event.data();
+                        handleMouseViewport(data.id());
+                    }
+                    case GuiInputEventType.KEY -> {
+                        if (noKeyboard) {
+                            break;
                         }
-                        break;
+                        final GuiInputEvent.KeyPress data = (GuiInputEvent.KeyPress) event.data();
+                        final int keyIndex = data.key().ordinal();
+                        // Trickling: stop if we got multiple actions on the same key
+                        if (trickle
+                                && keysDown[keyIndex] != data.down()
+                                && (keysChanged[keyIndex] || mouseButtonChanged != 0)) {
+                            break processing;
+                        }
+                        final boolean keyIsPotentiallyForCharInput =
+                                isKeyPotentiallyCharInput(getMergedModsFromKeys(), data.key());
+                        if (trickleInterleavedNonCharKeysAndText
+                                && textInputted
+                                && !keyIsPotentiallyForCharInput) {
+                            break processing;
+                        }
+                        // Analog changes alone don't count, so they don't block other events
+                        if (keysDown[keyIndex] != data.down()) {
+                            keyChanged = true;
+                            keysChanged[keyIndex] = true;
+                            if (trickleInterleavedNonCharKeysAndText
+                                    && !keyIsPotentiallyForCharInput) {
+                                keyChangedNonChar = true;
+                            }
+                        }
+                        handleKey(data.key(), data.down(), data.analogValue());
+                    }
+                    case GuiInputEventType.TEXT -> {
+                        if (noKeyboard) {
+                            break;
+                        }
+                        // Trickling: stop if keys or the mouse have been interacted with
+                        if (trickle && (mouseButtonChanged != 0 || mouseMoved || mouseWheeled)) {
+                            break processing;
+                        }
+                        if (trickleInterleavedNonCharKeysAndText && keyChangedNonChar) {
+                            break processing;
+                        }
+                        final GuiInputEvent.Text data = (GuiInputEvent.Text) event.data();
+                        inputQueueCharacters.append(data.character());
+                        if (trickleInterleavedNonCharKeysAndText) {
+                            textInputted = true;
+                        }
+                    }
+                    case GuiInputEventType.FOCUS -> {
+                        // Processed in newFrame(), to give multi-viewport backends a chance to
+                        // queue a focus loss and gain in the same frame
+                        final GuiInputEvent.Focused data = (GuiInputEvent.Focused) event.data();
+                        appFocusLost = !data.focused();
+                    }
+                    case GuiInputEventType.NONE -> {}
                 }
+                eventQueue.poll();
             }
-
         } finally {
             eventQueueLock.unlock();
         }
+
+        // Clear the button state when the focus is lost, so e.g. releasing Alt after Alt+Tab
+        // doesn't toggle the menu
+        if (appFocusLost) {
+            clearInputKeys();
+            clearInputMouse();
+        }
     }
 
-    /** Update the mouse input information at the start of a frame. Called internally. */
-    public void updateMouseInputs() {
-        for (int index = 0; index < MouseButton.COUNT; index++) {
-            if (mouseDown[index]) {
-                mouseDownDuration[index] += deltaTime;
-            } else {
-                mouseReleasedTime[index] += deltaTime;
+    /**
+     * Update the keyboard input information at the start of a frame. Called internally.
+     *
+     * @param deltaTime The time since the last frame, in milliseconds.
+     */
+    public void updateKeyboardInputs(long deltaTime) {
+        // Update the mouse key aliases
+        for (MouseButton button : MouseButton.values()) {
+            if (button != MouseButton.NONE) {
+                keysDown[Key.fromMouseButton(button).ordinal()] = mouseDown[button.index];
             }
         }
-        if (mouseDelta.x == 0 && mouseDelta.y == 0) {
+        keysDown[Key.MOUSE_WHEEL_X.ordinal()] = mouseWheelH != 0.0f;
+        keysDown[Key.MOUSE_WHEEL_Y.ordinal()] = mouseWheel != 0.0f;
+
+        keyMods = KeyModFlags.NONE;
+        if (keyCtrl) {
+            keyMods |= KeyModFlags.CTRL;
+        }
+        if (keyShift) {
+            keyMods |= KeyModFlags.SHIFT;
+        }
+        if (keyAlt) {
+            keyMods |= KeyModFlags.ALT;
+        }
+        if (keySuper) {
+            keyMods |= KeyModFlags.SUPER;
+        }
+
+        for (int i = 0; i < keysDown.length; ++i) {
+            keysDownDurationPrevious[i] = keysDownDuration[i];
+            if (keysDown[i]) {
+                keysDownDuration[i] = keysDownDuration[i] < 0 ? 0 : keysDownDuration[i] + deltaTime;
+            } else {
+                keysDownDuration[i] = -1;
+            }
+        }
+    }
+
+    /**
+     * Update the mouse input information at the start of a frame. Called internally.
+     *
+     * @param time The current time, in milliseconds.
+     * @param deltaTime The time since the last frame, in milliseconds.
+     */
+    public void updateMouseInputs(long time, long deltaTime) {
+        boolean anyDown = false;
+        for (int i = 0; i < MouseButton.COUNT; ++i) {
+            anyDown = anyDown || mouseDown[i];
+        }
+        // When the mouse leaves the window and isn't dragging, we don't know where it is
+        if (!mouseInsideWindow && !anyDown) {
+            mousePosition.set(-Float.MAX_VALUE, -Float.MAX_VALUE);
+        }
+
+        // As a standard behavior, holding shift while using the vertical mouse wheel scrolls
+        // horizontally. This isn't done on macOS, where the OS input layer handles it.
+        mouseWheelRequestAxisSwap = keyShift && !configMacOSXBehaviors;
+
+        if (IkGui.isMousePosValid(mousePosition)) {
+            // Round mouse position to avoid spreading non-rounded positions
+            mousePosition.set(
+                    (float) Math.floor(mousePosition.x), (float) Math.floor(mousePosition.y));
+        }
+
+        if (IkGui.isMousePosValid(mousePosition) && IkGui.isMousePosValid(mousePositionPrevious)) {
+            mouseDelta.set(mousePosition).sub(mousePositionPrevious);
+        } else {
+            mouseDelta.set(0, 0);
+        }
+
+        if (mouseDelta.lengthSquared() > 0) {
+            mouseStationaryTimer = 0;
+        } else {
             mouseStationaryTimer += deltaTime;
+        }
+
+        for (int i = 0; i < MouseButton.COUNT; ++i) {
+            mouseClicked[i] = mouseDown[i] && mouseDownDuration[i] < 0;
+            mouseClickedCount[i] = 0;
+            mouseReleased[i] = !mouseDown[i] && mouseDownDuration[i] >= 0;
+            if (mouseReleased[i]) {
+                mouseReleasedTime[i] = time;
+            }
+            mouseDownDurationPrevious[i] = mouseDownDuration[i];
+            if (mouseDown[i]) {
+                mouseDownDuration[i] =
+                        mouseDownDuration[i] < 0 ? 0 : mouseDownDuration[i] + deltaTime;
+            } else {
+                mouseDownDuration[i] = -1;
+            }
+
+            if (mouseClicked[i]) {
+                boolean isRepeatedClick = false;
+                if (time - mouseClickedTime[i] < mouseDoubleClickTime) {
+                    float distanceSquared =
+                            IkGui.isMousePosValid(mousePosition)
+                                    ? mousePosition.distanceSquared(mouseClickedPosition[i])
+                                    : 0.0f;
+                    if (distanceSquared
+                            < mouseDoubleClickMaxDistance * mouseDoubleClickMaxDistance) {
+                        isRepeatedClick = true;
+                    }
+                }
+                if (isRepeatedClick) {
+                    mouseClickedLastCount[i] += 1;
+                } else {
+                    mouseClickedLastCount[i] = 1;
+                }
+                mouseClickedTime[i] = time;
+                mouseClickedPosition[i].set(mousePosition);
+                mouseClickedCount[i] = mouseClickedLastCount[i];
+                mouseDragMaxDistanceAbsolute[i].set(0, 0);
+                mouseDragMaxDistanceSquare[i] = 0;
+            } else if (mouseDown[i]) {
+                // Track the maximum distance from the click position, used for drag thresholds
+                float deltaX = 0;
+                float deltaY = 0;
+                if (IkGui.isMousePosValid(mousePosition)) {
+                    deltaX = mousePosition.x - mouseClickedPosition[i].x;
+                    deltaY = mousePosition.y - mouseClickedPosition[i].y;
+                }
+                mouseDragMaxDistanceSquare[i] =
+                        Math.max(mouseDragMaxDistanceSquare[i], deltaX * deltaX + deltaY * deltaY);
+                mouseDragMaxDistanceAbsolute[i].set(
+                        Math.max(mouseDragMaxDistanceAbsolute[i].x, Math.abs(deltaX)),
+                        Math.max(mouseDragMaxDistanceAbsolute[i].y, Math.abs(deltaY)));
+            }
         }
     }
 }

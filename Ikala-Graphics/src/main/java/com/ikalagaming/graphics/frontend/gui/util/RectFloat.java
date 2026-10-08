@@ -25,6 +25,15 @@ public class RectFloat {
     }
 
     /**
+     * Construct a copy of another rectangle.
+     *
+     * @param other The rectangle to copy.
+     */
+    public RectFloat(@NonNull RectFloat other) {
+        this(other.left, other.top, other.right, other.bottom);
+    }
+
+    /**
      * Construct a rect from a point and size.
      *
      * @param topLeft The left and top position.
@@ -145,5 +154,144 @@ public class RectFloat {
      */
     public void set(@NonNull RectFloat other) {
         set(other.left, other.top, other.right, other.bottom);
+    }
+
+    /**
+     * Check if the rectangle is inverted, meaning the left is past the right or the top is below
+     * the bottom.
+     *
+     * @return True if inverted.
+     */
+    public boolean isInverted() {
+        return left > right || top > bottom;
+    }
+
+    /**
+     * The horizontal center.
+     *
+     * @return The x coordinate of the center.
+     */
+    public float getCenterX() {
+        return (left + right) * 0.5f;
+    }
+
+    /**
+     * The vertical center.
+     *
+     * @return The y coordinate of the center.
+     */
+    public float getCenterY() {
+        return (top + bottom) * 0.5f;
+    }
+
+    /**
+     * Returns the area of the rectangle.
+     *
+     * @return The width times the height.
+     */
+    public float getArea() {
+        return (right - left) * (bottom - top);
+    }
+
+    /**
+     * Check if this rectangle overlaps another one at all. Touching edges do not count as
+     * overlapping.
+     *
+     * @param other The other rectangle.
+     * @return True if the rectangles overlap.
+     */
+    public boolean overlaps(@NonNull RectFloat other) {
+        return other.top < bottom && other.bottom > top && other.left < right && other.right > left;
+    }
+
+    /**
+     * Check if this rectangle fully contains another one.
+     *
+     * @param other The other rectangle.
+     * @return True if the other rectangle is entirely within this one.
+     */
+    public boolean contains(@NonNull RectFloat other) {
+        return other.left >= left
+                && other.top >= top
+                && other.right <= right
+                && other.bottom <= bottom;
+    }
+
+    /**
+     * Shrink this rectangle so that it fits inside the other one. Only the outer edges are clamped,
+     * so the result may be inverted (have a negative width or height) if the rectangles don't
+     * overlap.
+     *
+     * @param other The rectangle to clip with.
+     */
+    public void clipWith(@NonNull RectFloat other) {
+        left = Math.max(left, other.left);
+        top = Math.max(top, other.top);
+        right = Math.min(right, other.right);
+        bottom = Math.min(bottom, other.bottom);
+    }
+
+    /**
+     * Fully clip this rectangle with another one, ensuring that the result is never inverted (the
+     * max values are never less than the min values).
+     *
+     * @param other The rectangle to clip with.
+     */
+    public void clipWithFull(@NonNull RectFloat other) {
+        left = MathUtil.clamp(left, other.left, Math.max(other.left, other.right));
+        top = MathUtil.clamp(top, other.top, Math.max(other.top, other.bottom));
+        right = MathUtil.clamp(right, other.left, Math.max(other.left, other.right));
+        bottom = MathUtil.clamp(bottom, other.top, Math.max(other.top, other.bottom));
+    }
+
+    /**
+     * Grow the rectangle in all directions by the given amounts. Negative values shrink it.
+     *
+     * @param amountX The amount to move the left and right edges outward.
+     * @param amountY The amount to move the top and bottom edges outward.
+     */
+    public void expand(float amountX, float amountY) {
+        left -= amountX;
+        top -= amountY;
+        right += amountX;
+        bottom += amountY;
+    }
+
+    /**
+     * Move the rectangle by the given amount.
+     *
+     * @param x The amount to move along the x-axis.
+     * @param y The amount to move along the y-axis.
+     */
+    public void translate(float x, float y) {
+        left += x;
+        right += x;
+        top += y;
+        bottom += y;
+    }
+
+    /**
+     * Grow the rectangle so that it contains the given point.
+     *
+     * @param x The x coordinate of the point.
+     * @param y The y coordinate of the point.
+     */
+    public void add(float x, float y) {
+        left = Math.min(left, x);
+        top = Math.min(top, y);
+        right = Math.max(right, x);
+        bottom = Math.max(bottom, y);
+    }
+
+    /**
+     * Grow the rectangle so that it contains another rectangle.
+     *
+     * @param other The rectangle to include.
+     */
+    public void add(@NonNull RectFloat other) {
+        left = Math.min(left, other.left);
+        top = Math.min(top, other.top);
+        right = Math.max(right, other.right);
+        bottom = Math.max(bottom, other.bottom);
     }
 }

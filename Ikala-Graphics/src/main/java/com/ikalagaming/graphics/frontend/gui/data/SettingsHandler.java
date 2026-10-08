@@ -1,13 +1,21 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
 import com.ikalagaming.graphics.frontend.gui.callback.*;
+import com.ikalagaming.graphics.frontend.gui.util.Hash;
 
+import lombok.NonNull;
+
+/**
+ * Handles one type of entry in the .ini file, e.g. "[Window][Name]". Any of the functions may be
+ * null, except the read open/line functions if the type is to be loaded, and the write all
+ * function.
+ */
 public class SettingsHandler {
     /** Short description stored in .ini file. Disallowed characters: '[' ']'. */
-    public String typeName;
+    public final String typeName;
 
     /** The hash of type name. */
-    public int typeHash;
+    public final int typeHash;
 
     /** Clear all settings data. */
     public SettingsClearAllFunction clearAllFunction;
@@ -27,5 +35,18 @@ public class SettingsHandler {
     /** Write: Output every entry into output buffer. */
     public SettingsWriteAllFunction writeAllFunction;
 
+    /** Cleanup or patch settings, e.g. discarding old entries. */
+    public SettingsCleanupFunction cleanupFunction;
+
     public Object userData;
+
+    /**
+     * Create a handler for a type of .ini entry.
+     *
+     * @param typeName The type name, which must not contain '[' or ']'.
+     */
+    public SettingsHandler(@NonNull String typeName) {
+        this.typeName = typeName;
+        typeHash = Hash.getID(typeName);
+    }
 }

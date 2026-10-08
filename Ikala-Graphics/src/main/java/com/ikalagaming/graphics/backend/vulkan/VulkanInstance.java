@@ -328,6 +328,8 @@ public class VulkanInstance implements Instance {
             deleteResource(nextEntry);
             nextEntry = GraphicsManager.getDeletionQueue().pop();
         }
+        // Created in initializeGui()
+        IkGui.destroyContext();
 
         for (VulkanState.WindowInfo windowInfo : state.windows.values()) {
             cleanupWindow(windowInfo);

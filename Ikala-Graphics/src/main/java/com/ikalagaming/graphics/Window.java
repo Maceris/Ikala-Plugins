@@ -8,7 +8,12 @@ import com.ikalagaming.graphics.exceptions.WindowCreationException;
 import com.ikalagaming.graphics.frontend.BackendType;
 import com.ikalagaming.graphics.frontend.GraphicsSettings;
 import com.ikalagaming.graphics.frontend.gui.IkGui;
+import com.ikalagaming.graphics.frontend.gui.data.IkIO;
+import com.ikalagaming.graphics.frontend.gui.data.PlatformIO;
+import com.ikalagaming.graphics.frontend.gui.enums.Key;
 import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
+import com.ikalagaming.graphics.frontend.gui.flags.BackendFlags;
+import com.ikalagaming.graphics.frontend.gui.flags.ConfigFlags;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.plugins.config.ConfigManager;
@@ -105,6 +110,28 @@ public class Window {
 
     /** The title that was provided for the window. */
     private final String title;
+
+    /** The mouse cursors shown for IkGui, null until the IkGui platform IO is set up. */
+    private GlfwMouseCursors mouseCursors;
+
+    /** How IkGui changes the cursor of this window. */
+    private final GlfwMouseCursors.CursorTarget cursorTarget =
+            new GlfwMouseCursors.CursorTarget() {
+                @Override
+                public int getCursorMode() {
+                    return glfwGetInputMode(windowHandle, GLFW_CURSOR);
+                }
+
+                @Override
+                public void setCursorMode(int mode) {
+                    glfwSetInputMode(windowHandle, GLFW_CURSOR, mode);
+                }
+
+                @Override
+                public void setCursor(long cursor) {
+                    glfwSetCursor(windowHandle, cursor);
+                }
+            };
 
     /**
      * Create a new window.
@@ -309,6 +336,10 @@ public class Window {
             return;
         }
 
+        if (mouseCursors != null) {
+            mouseCursors.destroy();
+            mouseCursors = null;
+        }
         Callbacks.glfwFreeCallbacks(windowHandle);
         glfwDestroyWindow(windowHandle);
         GLFWErrorCallback callback = glfwSetErrorCallback(null);
@@ -344,6 +375,21 @@ public class Window {
 
     /** Poll for events and process input. */
     public void pollEvents() {
+        if (IkGui.getContext() != null) {
+            final IkIO io = IkGui.getIO();
+            // Move the OS cursor if navigation requested it (io.configNavMoveSetMousePosition)
+            if (io.wantSetMousePosition) {
+                glfwSetCursorPos(windowHandle, io.mousePosition.x, io.mousePosition.y);
+            }
+            // Show the cursor shape IkGui wants
+            if (mouseCursors != null) {
+                mouseCursors.update(
+                        cursorTarget,
+                        IkGui.getMouseCursor(),
+                        (io.configFlags & ConfigFlags.NO_MOUSE_CURSOR_CHANGE) != 0,
+                        io.configMouseDrawCursor);
+            }
+        }
         glfwPollEvents();
     }
 
@@ -375,7 +421,12 @@ public class Window {
         glfwSetKeyCallback(
                 windowHandle,
                 (window, key, scancode, action, mods) -> {
-                    // TODO(ches) use our new input system
+                    final Key ikKey = mapGLFWToIkGuiKey(key);
+                    if (ikKey != Key.NONE && (action == GLFW_PRESS || action == GLFW_RELEASE)) {
+                        IkGui.getIO().addKeyEvent(ikKey, action == GLFW_PRESS);
+                    }
+
+                    // TODO(ches) remove this once we fully use our new input system
                     ImGuiIO io = ImGui.getIO();
 
                     final int mappedKey = mapGLFWToImGuiKey(key);
@@ -412,6 +463,7 @@ public class Window {
                     ImGuiIO io = ImGui.getIO();
                     io.setMouseWheelH((float) (io.getMouseWheelH() + xOffset));
                     io.setMouseWheel((float) (io.getMouseWheel() + yOffset));
+                    IkGui.getIO().addMouseWheelEvent((float) xOffset, (float) yOffset);
                 });
         glfwSetCharCallback(
                 windowHandle,
@@ -419,6 +471,7 @@ public class Window {
                     // TODO(ches) use our new input system
                     ImGuiIO io = ImGui.getIO();
                     io.addInputCharacter(codepoint);
+                    IkGui.getIO().addInputCharacter(codepoint);
                 });
     }
 
@@ -479,6 +532,144 @@ public class Window {
      */
     public boolean windowShouldClose() {
         return glfwWindowShouldClose(windowHandle);
+    }
+
+    /**
+     * Hook up the IkGui platform functions (like the clipboard) to this window. Call this after the
+     * IkGui context is created.
+     */
+    public void setupIkGuiPlatformIO() {
+        final PlatformIO platformIO = IkGui.getPlatformIO();
+        platformIO.getClipboardTextFunction =
+                () -> {
+                    final String text = glfwGetClipboardString(windowHandle);
+                    return text == null ? "" : text;
+                };
+        platformIO.setClipboardTextFunction = text -> glfwSetClipboardString(windowHandle, text);
+        // We can honor io.wantSetMousePosition requests
+        IkGui.getIO().backendFlags |= BackendFlags.HAS_SET_MOUSE_POS;
+        // We can honor getMouseCursor() values
+        if (mouseCursors == null) {
+            mouseCursors = GlfwMouseCursors.createStandardCursors();
+        }
+        IkGui.getIO().backendFlags |= BackendFlags.HAS_MOUSE_CURSORS;
+    }
+
+    /**
+     * Convert a GLFW key code into an IkGui key.
+     *
+     * @param key The GLFW key code.
+     * @return The IkGui key, or Key.NONE if there is no equivalent.
+     */
+    public static Key mapGLFWToIkGuiKey(int key) {
+        return switch (key) {
+            case GLFW_KEY_TAB -> Key.TAB;
+            case GLFW_KEY_LEFT -> Key.ARROW_LEFT;
+            case GLFW_KEY_RIGHT -> Key.ARROW_RIGHT;
+            case GLFW_KEY_UP -> Key.ARROW_UP;
+            case GLFW_KEY_DOWN -> Key.ARROW_DOWN;
+            case GLFW_KEY_PAGE_UP -> Key.PAGE_UP;
+            case GLFW_KEY_PAGE_DOWN -> Key.PAGE_DOWN;
+            case GLFW_KEY_HOME -> Key.HOME;
+            case GLFW_KEY_END -> Key.END;
+            case GLFW_KEY_INSERT -> Key.INSERT;
+            case GLFW_KEY_DELETE -> Key.DELETE;
+            case GLFW_KEY_BACKSPACE -> Key.BACKSPACE;
+            case GLFW_KEY_SPACE -> Key.SPACE;
+            case GLFW_KEY_ENTER -> Key.ENTER;
+            case GLFW_KEY_ESCAPE -> Key.ESCAPE;
+            case GLFW_KEY_KP_ENTER -> Key.NUMPAD_ENTER;
+            case GLFW_KEY_LEFT_CONTROL -> Key.LEFT_CTRL;
+            case GLFW_KEY_RIGHT_CONTROL -> Key.RIGHT_CTRL;
+            case GLFW_KEY_LEFT_SHIFT -> Key.LEFT_SHIFT;
+            case GLFW_KEY_RIGHT_SHIFT -> Key.RIGHT_SHIFT;
+            case GLFW_KEY_LEFT_ALT -> Key.LEFT_ALT;
+            case GLFW_KEY_RIGHT_ALT -> Key.RIGHT_ALT;
+            case GLFW_KEY_LEFT_SUPER -> Key.LEFT_SUPER;
+            case GLFW_KEY_RIGHT_SUPER -> Key.RIGHT_SUPER;
+            case GLFW_KEY_MENU -> Key.MENU;
+            case GLFW_KEY_PAUSE -> Key.PAUSE;
+
+            case GLFW_KEY_A -> Key.A;
+            case GLFW_KEY_B -> Key.B;
+            case GLFW_KEY_C -> Key.C;
+            case GLFW_KEY_D -> Key.D;
+            case GLFW_KEY_E -> Key.E;
+            case GLFW_KEY_F -> Key.F;
+            case GLFW_KEY_G -> Key.G;
+            case GLFW_KEY_H -> Key.H;
+            case GLFW_KEY_I -> Key.I;
+            case GLFW_KEY_J -> Key.J;
+            case GLFW_KEY_K -> Key.K;
+            case GLFW_KEY_L -> Key.L;
+            case GLFW_KEY_M -> Key.M;
+            case GLFW_KEY_N -> Key.N;
+            case GLFW_KEY_O -> Key.O;
+            case GLFW_KEY_P -> Key.P;
+            case GLFW_KEY_Q -> Key.Q;
+            case GLFW_KEY_R -> Key.R;
+            case GLFW_KEY_S -> Key.S;
+            case GLFW_KEY_T -> Key.T;
+            case GLFW_KEY_U -> Key.U;
+            case GLFW_KEY_V -> Key.V;
+            case GLFW_KEY_W -> Key.W;
+            case GLFW_KEY_X -> Key.X;
+            case GLFW_KEY_Y -> Key.Y;
+            case GLFW_KEY_Z -> Key.Z;
+
+            case GLFW_KEY_0 -> Key.ZERO;
+            case GLFW_KEY_1 -> Key.ONE;
+            case GLFW_KEY_2 -> Key.TWO;
+            case GLFW_KEY_3 -> Key.THREE;
+            case GLFW_KEY_4 -> Key.FOUR;
+            case GLFW_KEY_5 -> Key.FIVE;
+            case GLFW_KEY_6 -> Key.SIX;
+            case GLFW_KEY_7 -> Key.SEVEN;
+            case GLFW_KEY_8 -> Key.EIGHT;
+            case GLFW_KEY_9 -> Key.NINE;
+
+            case GLFW_KEY_KP_0 -> Key.NUMPAD_ZERO;
+            case GLFW_KEY_KP_1 -> Key.NUMPAD_ONE;
+            case GLFW_KEY_KP_2 -> Key.NUMPAD_TWO;
+            case GLFW_KEY_KP_3 -> Key.NUMPAD_THREE;
+            case GLFW_KEY_KP_4 -> Key.NUMPAD_FOUR;
+            case GLFW_KEY_KP_5 -> Key.NUMPAD_FIVE;
+            case GLFW_KEY_KP_6 -> Key.NUMPAD_SIX;
+            case GLFW_KEY_KP_7 -> Key.NUMPAD_SEVEN;
+            case GLFW_KEY_KP_8 -> Key.NUMPAD_EIGHT;
+            case GLFW_KEY_KP_9 -> Key.NUMPAD_NINE;
+            case GLFW_KEY_KP_DECIMAL -> Key.NUMPAD_PERIOD;
+            case GLFW_KEY_KP_DIVIDE -> Key.NUMPAD_DIVIDE;
+            case GLFW_KEY_KP_MULTIPLY -> Key.NUMPAD_MULTIPLY;
+            case GLFW_KEY_KP_SUBTRACT -> Key.NUMPAD_SUBTRACT;
+            case GLFW_KEY_KP_ADD -> Key.NUMPAD_ADD;
+            case GLFW_KEY_NUM_LOCK -> Key.NUM_LOCK;
+
+            case GLFW_KEY_F1 -> Key.F1;
+            case GLFW_KEY_F2 -> Key.F2;
+            case GLFW_KEY_F3 -> Key.F3;
+            case GLFW_KEY_F4 -> Key.F4;
+            case GLFW_KEY_F5 -> Key.F5;
+            case GLFW_KEY_F6 -> Key.F6;
+            case GLFW_KEY_F7 -> Key.F7;
+            case GLFW_KEY_F8 -> Key.F8;
+            case GLFW_KEY_F9 -> Key.F9;
+            case GLFW_KEY_F10 -> Key.F10;
+            case GLFW_KEY_F11 -> Key.F11;
+            case GLFW_KEY_F12 -> Key.F12;
+
+            case GLFW_KEY_APOSTROPHE -> Key.APOSTROPHE;
+            case GLFW_KEY_COMMA -> Key.COMMA;
+            case GLFW_KEY_MINUS -> Key.MINUS;
+            case GLFW_KEY_PERIOD -> Key.PERIOD;
+            case GLFW_KEY_SLASH -> Key.FORWARD_SLASH;
+            case GLFW_KEY_SEMICOLON -> Key.SEMICOLON;
+            case GLFW_KEY_EQUAL -> Key.EQUALS;
+            case GLFW_KEY_LEFT_BRACKET -> Key.LEFT_BRACKET;
+            case GLFW_KEY_BACKSLASH -> Key.BACK_SLASH;
+            case GLFW_KEY_RIGHT_BRACKET -> Key.RIGHT_BRACKET;
+            default -> Key.NONE;
+        };
     }
 
     public static int mapGLFWToImGuiKey(int key) {

@@ -26,7 +26,7 @@ public class Slider extends Component implements Interactive {
      *
      * @param label Label to use. A null value will result in an empty string.
      * @param initialState Initial value of the slider.
-     * @param minValue Minimum allowed value. Will be clamped to the min value of a float if
+     * @param minValue Minimum allowed value. Will be clamped to the lowest value of a float if
      *     infinite or NaN.
      * @param maxValue Maximum allowed value. Will be clamped to the max value of a float if
      *     infinite or NaN.
@@ -40,7 +40,7 @@ public class Slider extends Component implements Interactive {
      *
      * @param label Label to use. A null value will result in an empty string.
      * @param initialState Initial value of the slider.
-     * @param minValue Minimum allowed value. Will be clamped to the min value of a float if
+     * @param minValue Minimum allowed value. Will be clamped to the lowest value of a float if
      *     infinite or NaN.
      * @param maxValue Maximum allowed value. Will be clamped to the max value of a float if
      *     infinite or NaN.
@@ -55,7 +55,7 @@ public class Slider extends Component implements Interactive {
      *
      * @param label Label to use. A null value will result in an empty string.
      * @param initialState Initial value of the slider.
-     * @param minValue Minimum allowed value. Will be clamped to the min value of a float if
+     * @param minValue Minimum allowed value. Will be clamped to the lowest value of a float if
      *     infinite or NaN.
      * @param maxValue Maximum allowed value. Will be clamped to the max value of a float if
      *     infinite or NaN.
@@ -72,7 +72,7 @@ public class Slider extends Component implements Interactive {
             int flags) {
         this.label = Objects.requireNonNullElse(label, "");
         this.value = new float[] {initialState};
-        this.minValue = Float.isFinite(minValue) ? minValue : Float.MIN_VALUE;
+        this.minValue = Float.isFinite(minValue) ? minValue : -Float.MAX_VALUE;
         this.maxValue = Float.isFinite(maxValue) ? maxValue : Float.MAX_VALUE;
         this.format = Objects.requireNonNullElse(format, "%.3f");
         this.flags = flags;

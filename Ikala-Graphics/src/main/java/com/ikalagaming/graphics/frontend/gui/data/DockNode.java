@@ -4,6 +4,7 @@ import com.ikalagaming.graphics.frontend.gui.enums.Axis;
 import com.ikalagaming.graphics.frontend.gui.enums.DataAuthority;
 import com.ikalagaming.graphics.frontend.gui.enums.DockNodeState;
 import com.ikalagaming.graphics.frontend.gui.flags.DockNodeFlags;
+import com.ikalagaming.graphics.frontend.gui.util.Color;
 import com.ikalagaming.graphics.frontend.gui.util.RectFloat;
 
 import lombok.NonNull;
@@ -17,7 +18,7 @@ public class DockNode {
     public @NonNull DataAuthority authorityForSize;
     public @NonNull DataAuthority authorityForViewport;
 
-    /** (Root node only) Pointer to central node. */
+    /** (Root node only) The central node of the hierarchy. */
     public DockNode centralNode;
 
     /** (Split node only) Child nodes (left/right or top/bottom). The array is size 2. */
@@ -105,6 +106,8 @@ public class DockNode {
     public Axis splitAxis;
 
     public @NonNull DockNodeState state;
+
+    /** The tab bar, which is only present while the node is visible and shows tabs. */
     public TabBar tabBar;
 
     /**
@@ -133,9 +136,9 @@ public class DockNode {
     /** Note, unordered list. Iterate tabBar.tabs for user-order. */
     public List<Window> windows;
 
-    public DockNode() {
-        authorityForPosition = DataAuthority.AUTO;
-        authorityForSize = DataAuthority.AUTO;
+    public DockNode(int id) {
+        authorityForPosition = DataAuthority.DOCK_NODE;
+        authorityForSize = DataAuthority.DOCK_NODE;
         authorityForViewport = DataAuthority.AUTO;
         centralNode = null;
         childNodes = new DockNode[2];
@@ -144,29 +147,29 @@ public class DockNode {
         hasCloseButton = false;
         hasWindowMenuButton = false;
         hostWindow = null;
-        id = 0;
+        this.id = id;
         isBackgroundDrawnThisFrame = false;
         isFocused = false;
-        isVisible = false;
-        lastBackgroundColor = 0;
+        isVisible = true;
+        lastBackgroundColor = Color.WHITE;
         lastFocusedNodeID = 0;
-        lastFrameActive = 0;
-        lastFrameAlive = 0;
-        lastFrameFocused = 0;
-        localFlags = 0;
-        localFlagsInWindows = 0;
-        mergedFlags = 0;
+        lastFrameActive = -1;
+        lastFrameAlive = -1;
+        lastFrameFocused = -1;
+        localFlags = DockNodeFlags.NONE;
+        localFlagsInWindows = DockNodeFlags.NONE;
+        mergedFlags = DockNodeFlags.NONE;
         onlyNodeWithWindows = null;
         parentNode = null;
         position = new Vector2f(0.0f, 0.0f);
         refViewportID = 0;
         selectedTabID = 0;
-        sharedFlags = 0;
+        sharedFlags = DockNodeFlags.NONE;
         size = new Vector2f(0.0f, 0.0f);
         sizeRef = new Vector2f(0.0f, 0.0f);
         splitAxis = Axis.NONE;
         state = DockNodeState.UNKNOWN;
-        tabBar = new TabBar();
+        tabBar = null;
         visibleWindow = null;
         wantCloseAll = false;
         wantCloseTabID = 0;
@@ -218,6 +221,10 @@ public class DockNode {
 
     public RectFloat rect() {
         return new RectFloat(position.x, position.y, position.x + size.x, position.y + size.y);
+    }
+
+    public boolean isNoDockingOverMe() {
+        return (mergedFlags & DockNodeFlags.INTERNAL_NO_DOCKING_OVER_ME) != 0;
     }
 
     public void setLocalFlags(int flags) {

@@ -215,6 +215,9 @@ public class PipelineManager {
     public void cleanup() {
         GraphicsManager.getDeletionQueue().add(imguiFont);
         imguiFont = null;
+        if (IkGui.getContext() != null) {
+            IkGui.getIO().fonts.texture = null;
+        }
         GraphicsManager.getDeletionQueue().add(fontAtlas);
         fontAtlas = null;
         imGuiMesh.cleanup();
@@ -264,6 +267,8 @@ public class PipelineManager {
                                 Format.R8G8B8A8_UINT,
                                 FontAtlas.FONT_ATLAS_IMAGE_WIDTH,
                                 FontAtlas.FONT_ATLAS_IMAGE_HEIGHT);
+        // Let the debug tools display the atlas
+        fontAtlas1.texture = this.fontAtlas.info();
     }
 
     /** Initialize the lighting SSBOs and fill them with zeroes. */

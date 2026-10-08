@@ -319,7 +319,10 @@ public class GuiRender implements RenderStage {
             IkGui.getIO().fonts.stagedBitmaps.clear();
         }
 
-        DrawData drawData = IkGui.getContext().drawData;
+        DrawData drawData = IkGui.getDrawData();
+        if (drawData == null) {
+            return;
+        }
         int drawListCount = drawData.getDrawListCount();
         for (int i = 0; i < drawListCount; ++i) {
             int vertexCount = drawData.getDrawListVertexCount(i);

@@ -1,15 +1,28 @@
 package com.ikalagaming.graphics.frontend.gui.data;
 
+import lombok.NonNull;
+
 import java.util.ArrayList;
+import java.util.List;
 
+/** Temporary list clipper data, shared and reused between clippers. */
 public class ListClipperData {
-    private ListClipper listClipper;
-    private float lossynessOffset;
-    private int stepNumber;
-    private int itemsFrozen;
-    private ArrayList<ListClipperRange> ranges;
+    public ListClipper listClipper;
+    public float lossynessOffset;
+    public int stepNumber;
+    public int itemsFrozen;
+    public final List<ListClipperRange> ranges;
 
-    public void reset(ListClipper clipper) {
+    public ListClipperData() {
+        ranges = new ArrayList<>();
+    }
+
+    /**
+     * Reset for use by a clipper.
+     *
+     * @param clipper The clipper using this data.
+     */
+    public void reset(@NonNull ListClipper clipper) {
         listClipper = clipper;
         stepNumber = 0;
         itemsFrozen = 0;
