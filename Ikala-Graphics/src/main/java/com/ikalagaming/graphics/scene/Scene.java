@@ -2,8 +2,11 @@ package com.ikalagaming.graphics.scene;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.backend.base.State;
+import com.ikalagaming.graphics.frontend.Buffer;
+import com.ikalagaming.graphics.frontend.DeletionQueue;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.graph.MaterialCache;
+import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
 
@@ -15,6 +18,7 @@ import org.joml.Vector4f;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 /** A scene to be rendered, containing the items and lighting. */
 @Getter
@@ -125,6 +129,36 @@ public class Scene {
      */
     public void addModel(@NonNull Model model) {
         modelMap.put(model.getId(), model);
+    }
+
+    /**
+     * Queue up deletion of every GPU resource the scene owns, which are the model buffers, material
+     * textures, and skybox texture. The scene should not be rendered afterward.
+     */
+    public void cleanup() {
+        DeletionQueue deletionQueue = GraphicsManager.getDeletionQueue();
+        Consumer<Buffer> delete =
+                buffer -> {
+                    if (buffer != null) {
+                        deletionQueue.add(buffer);
+                    }
+                };
+        for (Model model : modelMap.values()) {
+            delete.accept(model.getAnimationBuffer());
+            delete.accept(model.getEntityAnimationOffsetsBuffer());
+            delete.accept(model.getModelMatricesBuffer());
+            delete.accept(model.getMaterialOverridesBuffer());
+            for (MeshData mesh : model.getMeshDataList()) {
+                delete.accept(mesh.getBoneWeightBuffer());
+                delete.accept(mesh.getVertexBuffer());
+                delete.accept(mesh.getAnimationTargetBuffer());
+                delete.accept(mesh.getIndexBuffer());
+                delete.accept(mesh.getDrawIndirectBuffer());
+            }
+        }
+        modelMap.clear();
+        materialCache.cleanup();
+        setSkyboxTexture(null);
     }
 
     /**

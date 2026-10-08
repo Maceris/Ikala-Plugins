@@ -26,6 +26,9 @@ import java.nio.LongBuffer;
 @Slf4j
 public class SharedBuffer implements Buffer {
 
+    /** The smallest size {@link #ensureCapacity(long, VulkanState)} makes a buffer. */
+    public static final long MIN_CAPACITY = 1024;
+
     /**
      * Usage flags that every shared buffer gets in addition to what is requested. Device addresses
      * are always available, and transfer destination allows vkCmdUpdateBuffer and copies.
@@ -34,12 +37,12 @@ public class SharedBuffer implements Buffer {
             VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
     /**
-     * A buffer that has been replaced but may still be in use by a frame in flight.
+     * The handles for a VMA buffer.
      *
      * @param buffer The VkBuffer handle.
      * @param allocation The VMA allocation handle.
      */
-    public record RetiredBuffer(long buffer, long allocation) {}
+    private record BufferHandles(long buffer, long allocation) {}
 
     /** VMA handle for the allocation. */
     public long allocation = VK_NULL_HANDLE;
@@ -72,7 +75,7 @@ public class SharedBuffer implements Buffer {
      * @param stack The stack to allocate temporary structs on.
      * @return The buffer and allocation handles.
      */
-    private static RetiredBuffer createMapped(
+    private static BufferHandles createMapped(
             long bufferSize,
             int usage,
             @NonNull VulkanState state,
@@ -105,7 +108,7 @@ public class SharedBuffer implements Buffer {
                         longOutput,
                         pointerOutput,
                         allocationInfo));
-        return new RetiredBuffer(longOutput.get(0), pointerOutput.get(0));
+        return new BufferHandles(longOutput.get(0), pointerOutput.get(0));
     }
 
     /**
@@ -152,10 +155,10 @@ public class SharedBuffer implements Buffer {
             long bufferSize,
             @NonNull VulkanState state,
             boolean keepContents) {
-        final RetiredBuffer old =
+        final BufferHandles old =
                 buffer.buffer == VK_NULL_HANDLE
                         ? null
-                        : new RetiredBuffer(buffer.buffer, buffer.allocation);
+                        : new BufferHandles(buffer.buffer, buffer.allocation);
         final long oldMappedData = buffer.allocationInfo.pMappedData();
         final long oldSize = buffer.allocationInfo.size();
 
@@ -167,7 +170,7 @@ public class SharedBuffer implements Buffer {
         } else {
             try (MemoryStack stack = MemoryStack.stackPush()) {
                 VmaAllocationInfo newAllocationInfo = VmaAllocationInfo.create();
-                RetiredBuffer created =
+                BufferHandles created =
                         createMapped(bufferSize, buffer.usage, state, newAllocationInfo, stack);
 
                 if (keepContents && old != null) {
@@ -185,7 +188,8 @@ public class SharedBuffer implements Buffer {
         }
 
         if (old != null) {
-            state.retireBuffer(old);
+            state.deferFree(
+                    () -> vmaDestroyBuffer(state.vmaAllocator, old.buffer(), old.allocation()));
         }
         buffer.updated = true;
     }
@@ -208,7 +212,7 @@ public class SharedBuffer implements Buffer {
         }
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            RetiredBuffer created =
+            BufferHandles created =
                     createMapped(bufferSize, result.usage, state, result.allocationInfo, stack);
             result.buffer = created.buffer();
             result.allocation = created.allocation();
@@ -305,6 +309,22 @@ public class SharedBuffer implements Buffer {
     public void ensureFits(long bytes, @NonNull VulkanState state, boolean keepContents) {
         if (bytes > allocationInfo.size()) {
             SharedBuffer.reallocate(this, bytes, state, keepContents);
+        }
+    }
+
+    /**
+     * Make sure the buffer can fit the specified number of bytes, growing it to a power of two (and
+     * at least {@link #MIN_CAPACITY} bytes) if it can't. This is meant for buffers that are
+     * refilled every frame, so the size settles down quickly and the buffer always exists. Old
+     * contents are discarded if resized.
+     *
+     * @param bytes The number of bytes we need to store.
+     * @param state The Vulkan state.
+     */
+    public void ensureCapacity(long bytes, @NonNull VulkanState state) {
+        final long needed = Math.max(bytes, MIN_CAPACITY);
+        if (needed > allocationInfo.size()) {
+            SharedBuffer.reallocate(this, Long.highestOneBit(needed - 1) << 1, state, false);
         }
     }
 }

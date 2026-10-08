@@ -290,6 +290,7 @@ public class FormatMapperOpenGL {
                             R32G32B32A32_SFLOAT,
                             R16G16B16A16_SNORM,
                             R8G8B8A8_UINT,
+                            R8G8B8A8_UNORM,
                             R8G8B8A8_SINT,
                             R32G32B32A32_UINT,
                             R32G32B32A32_SINT,
@@ -300,7 +301,6 @@ public class FormatMapperOpenGL {
                             X8_D24_UNORM_PACK32,
                             S8_UINT,
                             R8G8B8A8_USCALED,
-                            R8G8B8A8_UNORM,
                             R8G8B8A8_SSCALED,
                             R8G8B8_USCALED,
                             R8G8B8_UNORM,
@@ -505,13 +505,12 @@ public class FormatMapperOpenGL {
                             R8G8_SINT,
                             R8_SNORM ->
                     GL_BYTE;
-            case R8_UINT, R8G8B8_UINT, R8G8B8A8_UINT, R8G8_UINT -> GL_UNSIGNED_BYTE;
+            case R8_UINT, R8G8B8_UINT, R8G8B8A8_UINT, R8G8B8A8_UNORM, R8G8_UINT -> GL_UNSIGNED_BYTE;
             case R8G8B8_SRGB -> GL_SRGB8;
             case UNDEFINED,
                             X8_D24_UNORM_PACK32,
                             S8_UINT,
                             R8G8B8A8_USCALED,
-                            R8G8B8A8_UNORM,
                             R8G8B8A8_SSCALED,
                             R8G8B8_USCALED,
                             R8G8B8_UNORM,

@@ -234,7 +234,7 @@ public class PipelineManager {
                         .getTextureLoader()
                         .load(
                                 null,
-                                Format.R8G8B8A8_UINT,
+                                Format.R8G8B8A8_UNORM,
                                 FontAtlas.FONT_ATLAS_IMAGE_WIDTH,
                                 FontAtlas.FONT_ATLAS_IMAGE_HEIGHT);
         // Let the debug tools display the atlas

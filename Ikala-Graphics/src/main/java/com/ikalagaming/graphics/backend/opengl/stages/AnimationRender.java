@@ -12,7 +12,6 @@ import com.ikalagaming.graphics.backend.opengl.BufferUtilOpenGL;
 import com.ikalagaming.graphics.frontend.Shader;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
-import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
@@ -31,18 +30,7 @@ public class AnimationRender implements RenderStage {
                 (int) ((BufferOpenGL) model.getEntityAnimationOffsetsBuffer()).id());
         IntBuffer animationOffsets = MemoryUtil.memAllocInt(entityCount);
         for (int i = 0; i < entityCount; ++i) {
-            Entity entity = model.getEntitiesList().get(i);
-
-            Model.Animation animation = entity.getAnimationState().getCurrentAnimation();
-            if (animation == null) {
-                animationOffsets.put(-1);
-                continue;
-            }
-            int baseOffset = animation.offset();
-            int frameIndex = entity.getAnimationState().getCurrentFrameIndex();
-            int frameSize = animation.boneCount() * 4 * 4 /* mat4 */ * 4 /* 4 bytes per float */;
-
-            animationOffsets.put(baseOffset + frameIndex * frameSize);
+            animationOffsets.put(Model.getAnimationMatrixOffset(model.getEntitiesList().get(i)));
         }
         animationOffsets.flip();
 
@@ -117,8 +105,16 @@ public class AnimationRender implements RenderStage {
             BufferUtilOpenGL.bindBuffer((BufferOpenGL) model.getEntityAnimationOffsetsBuffer(), 1);
 
             for (MeshData meshData : model.getMeshDataList()) {
-                BufferUtilOpenGL.bindBuffer((BufferOpenGL) meshData.getVertexBuffer(), 2);
-                BufferUtilOpenGL.bindBuffer((BufferOpenGL) meshData.getBoneWeightBuffer(), 3);
+                // These are uniform buffers, so bindBuffer would put them on uniform binding points
+                // rather than the storage buffer bindings the shader reads
+                glBindBufferBase(
+                        GL_SHADER_STORAGE_BUFFER,
+                        2,
+                        (int) ((BufferOpenGL) meshData.getVertexBuffer()).id());
+                glBindBufferBase(
+                        GL_SHADER_STORAGE_BUFFER,
+                        3,
+                        (int) ((BufferOpenGL) meshData.getBoneWeightBuffer()).id());
                 BufferUtilOpenGL.bindBuffer((BufferOpenGL) meshData.getAnimationTargetBuffer(), 4);
 
                 final int vertexCount = meshData.getVertexCount();
@@ -126,7 +122,8 @@ public class AnimationRender implements RenderStage {
             }
         }
 
-        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+        // The scene and shadow stages read the results as vertex attributes
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
         shader.unbind();
     }
 }

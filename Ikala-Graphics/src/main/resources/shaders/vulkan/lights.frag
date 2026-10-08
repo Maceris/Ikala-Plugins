@@ -104,7 +104,9 @@ layout(std430, set = 0, binding = 3) readonly buffer Materials {
     Material materials[];
 };
 
-layout(set = 0, binding = 4) uniform sampler2D bindlessTextures[];
+layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
+// The same array, for reading integer textures like the material indices
+layout(set = 1, binding = 0) uniform usampler2D bindlessUintTextures[];
 
 float sqr(float x) {
     return x * x;
@@ -287,46 +289,47 @@ float textureProj(vec4 shadowCoord, vec2 offset, int idx) {
 float calcShadow(vec4 worldPosition, int idx) {
     vec4 shadowMapPosition = cascadeShadowSplits[idx].projViewMatrix * worldPosition;
     float shadow = 1.0;
-    vec4 shadowCoord = (shadowMapPosition / shadowMapPosition.w) * 0.5 + 0.5;
+    vec4 ndc = shadowMapPosition / shadowMapPosition.w;
+    // The shadow maps aren't drawn with a flipped viewport, and Vulkan depth is already [0, 1]
+    vec4 shadowCoord = vec4(ndc.xy * 0.5 + 0.5, ndc.z, 1.0);
     shadow = textureProj(shadowCoord, vec2(0, 0), idx);
     return shadow;
 }
 
 void main()
 {
-    vec4 baseColor = texture(bindlessTextures[nonuniformEXT(baseColorSamplerIndex)], outTextCoord);
-    vec3 normal = texture(bindlessTextures[nonuniformEXT(normalSamplerIndex)], outTextCoord).rgb;
-    vec3 tangent = texture(bindlessTextures[nonuniformEXT(tangentSamplerIndex)], outTextCoord).rgb;
+    // The g-buffer can be larger than the screen, but we draw 1:1 with it, so read by pixel
+    ivec2 pixel = ivec2(gl_FragCoord.xy);
+    vec4 baseColor = texelFetch(bindlessTextures[nonuniformEXT(baseColorSamplerIndex)], pixel, 0);
+    vec3 normal = texelFetch(bindlessTextures[nonuniformEXT(normalSamplerIndex)], pixel, 0).rgb;
+    vec3 tangent = texelFetch(bindlessTextures[nonuniformEXT(tangentSamplerIndex)], pixel, 0).rgb;
     vec3 bitangent = cross(normal, tangent);// Hopefully close enough, normal isn't the "real" normal
-    vec4 materialPacked = texture(bindlessTextures[nonuniformEXT(materialSamplerIndex)], outTextCoord);
-    uint materialIndex =
-        uint(materialPacked.r) << 24 |
-        uint(materialPacked.g) << 16 |
-        uint(materialPacked.b) << 8 |
-        uint(materialPacked.a);
+    uint materialIndex = texelFetch(bindlessUintTextures[nonuniformEXT(materialSamplerIndex)], pixel, 0).r;
 
     Material material = materials[materialIndex];
 
-    // Retrieve position from depth
-    float depth = texture(bindlessTextures[nonuniformEXT(depthSamplerIndex)], outTextCoord).x * 2.0 - 1.0;
+    // Retrieve position from depth, which is already [0, 1] like Vulkan clip space
+    float depth = texelFetch(bindlessTextures[nonuniformEXT(depthSamplerIndex)], pixel, 0).x;
     if (depth == 1) {
         discard;
     }
-    vec4 clip = vec4(outTextCoord.x * 2.0 - 1.0, outTextCoord.y * 2.0 - 1.0, depth, 1.0);
+    // The scene is drawn with OpenGL style y up, but this quad isn't flipped, so flip y back
+    vec4 clip = vec4(outTextCoord.x * 2.0 - 1.0, 1.0 - outTextCoord.y * 2.0, depth, 1.0);
     vec4 viewW = invProjectionMatrix * clip;
     vec3 viewPosition = viewW.xyz / viewW.w;
     vec4 worldPosition = invViewMatrix * vec4(viewPosition, 1);
 
-    vec3 color = calcDirLight(baseColor.xyz, material, directionalLight, viewPosition, normal, tangent, bitangent);
-
-    int cascadeIndex;
-    for (int i=0; i < NUM_CASCADES - 1; i++) {
+    // The splits get further away (more negative in view space), so use the last one we're past
+    int cascadeIndex = 0;
+    for (int i = 0; i < NUM_CASCADES - 1; i++) {
         if (viewPosition.z < cascadeShadowSplits[i].splitDistance) {
             cascadeIndex = i + 1;
-            break;
         }
     }
+    // Only the directional light casts shadows
     float shadowFactor = calcShadow(worldPosition, cascadeIndex);
+    vec3 color = calcDirLight(baseColor.xyz, material, directionalLight, viewPosition, normal, tangent, bitangent)
+        * shadowFactor;
 
     for (int i = 0; i < pointLightCount; ++i) {
         if (pointLights[i].intensity > 0) {
@@ -349,5 +352,5 @@ void main()
     }
 
     fragColor.a = baseColor.a;
-    fragColor.rgb = finalColor * (1 + 0.00001 * shadowFactor);
+    fragColor.rgb = finalColor;
 }

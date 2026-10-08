@@ -1,19 +1,24 @@
 #version 460
+#extension GL_EXT_buffer_reference : require
 
 const int MAX_WEIGHTS = 4;
 
+// Floats per vertex: position, normal, tangent, bitangent, texture coordinates
+const int VERTEX_SIZE = 14;
+
 // The actual animation frames, for all bones
-layout(std430, binding = 0) readonly buffer AnimationData {
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer AnimationData {
     mat4 animationData[];
 };
 
-// The offset into animation data per-entity. Will be -1 if not animating right now.
-layout(std430, binding = 1) readonly buffer AnimationOffsets {
+// The index of the first matrix of the frame in the animation data, per pose. Will be -1 for the
+// bind pose, when not animating.
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer AnimationOffsets {
     int animationOffsets[];
 };
 
 // Vertex data for the mesh
-layout(std430, binding = 2) readonly buffer ModelData {
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer ModelData {
     float modelData[];
 };
 
@@ -22,16 +27,29 @@ struct BoneWeight {
     float weight;
 };
 // Bone weight data for the mesh
-layout(std430, binding = 3) readonly buffer WeightData {
+layout(buffer_reference, std430, buffer_reference_align = 8) readonly buffer WeightData {
     BoneWeight boneWeightData[];
 };
 
-// Output of the animation for the mesh
-layout(std430, binding = 4) buffer AnimationTarget {
+// Output of the animation for the mesh, a full copy of the vertices for each pose. Entities on the
+// same frame of the same animation share a pose.
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer AnimationTarget {
     float animationTarget[];
 };
 
-layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+// The buffers change for every mesh, so they are passed as device addresses
+layout(push_constant) uniform Constants {
+    AnimationData frames;
+    AnimationOffsets offsets;
+    ModelData model;
+    WeightData weights;
+    AnimationTarget target;
+    // Where this model's poses start in the offsets buffer
+    uint firstPose;
+    uint vertexCount;
+};
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 vec4 applyTransforms(vec4 value, mat4 transforms[MAX_WEIGHTS]) {
     vec4 result = vec4(0);
@@ -43,42 +61,48 @@ vec4 applyTransforms(vec4 value, mat4 transforms[MAX_WEIGHTS]) {
 
 void main()
 {
-    const int baseIdxVertex = int(gl_GlobalInvocationID.x) * 14;
-    const int baseIdxWeights = int(gl_GlobalInvocationID.x) * 8;
-    const int baseIdxAnimation = int(gl_GlobalInvocationID.y);
-    const int animationOffset = animationOffsets[baseIdxAnimation];
-    const int targetOffset = baseIdxAnimation * modelData.length() * 14;
+    // Groups of 64 vertices, so the last group can run past the end of the mesh
+    if (gl_GlobalInvocationID.x >= vertexCount) {
+        return;
+    }
+    const int baseIdxVertex = int(gl_GlobalInvocationID.x) * VERTEX_SIZE;
+    const int baseIdxWeights = int(gl_GlobalInvocationID.x) * MAX_WEIGHTS;
+    const int pose = int(gl_GlobalInvocationID.y);
+    const int animationOffset = offsets.animationOffsets[firstPose + pose];
+    const int targetOffset = pose * int(vertexCount) * VERTEX_SIZE;
 
     int currentIndex = baseIdxVertex;
     mat4 animationTransforms[MAX_WEIGHTS];
 
     for (int i = 0; i < MAX_WEIGHTS; ++i) {
-        BoneWeight boneWeight = boneWeightData[baseIdxWeights + i];
+        BoneWeight boneWeight = weights.boneWeightData[baseIdxWeights + i];
 
         if (animationOffset != -1) {
-            animationTransforms[i] = boneWeight.weight * animationData[animationOffset + boneWeight.boneIndex];
+            animationTransforms[i] = boneWeight.weight * frames.animationData[animationOffset + boneWeight.boneIndex];
         } else {
             animationTransforms[i] = mat4(1.0);
         }
     }
 
-    vec4 position = vec4(modelData[currentIndex], modelData[currentIndex + 1], modelData[currentIndex + 2], 1);
+    vec4 position = vec4(model.modelData[currentIndex], model.modelData[currentIndex + 1],
+        model.modelData[currentIndex + 2], 1);
     position = applyTransforms(position, animationTransforms);
-    animationTarget[targetOffset + currentIndex] = position.x / position.w;
-    animationTarget[targetOffset + currentIndex + 1] = position.y / position.w;
-    animationTarget[targetOffset + currentIndex + 2] = position.z / position.w;
+    target.animationTarget[targetOffset + currentIndex] = position.x / position.w;
+    target.animationTarget[targetOffset + currentIndex + 1] = position.y / position.w;
+    target.animationTarget[targetOffset + currentIndex + 2] = position.z / position.w;
 
     for (int i = 0; i < 3; ++i) {
         // Normal, tangent, and bitangent respectively
         currentIndex += 3;
-        vec4 value = vec4(modelData[currentIndex], modelData[currentIndex + 1], modelData[currentIndex + 2], 0);
+        vec4 value = vec4(model.modelData[currentIndex], model.modelData[currentIndex + 1],
+            model.modelData[currentIndex + 2], 0);
         value = applyTransforms(value, animationTransforms);
-        animationTarget[targetOffset + currentIndex] = value.x;
-        animationTarget[targetOffset + currentIndex + 1] = value.y;
-        animationTarget[targetOffset + currentIndex + 2] = value.z;
+        target.animationTarget[targetOffset + currentIndex] = value.x;
+        target.animationTarget[targetOffset + currentIndex + 1] = value.y;
+        target.animationTarget[targetOffset + currentIndex + 2] = value.z;
     }
 
     currentIndex += 3;
-    animationTarget[targetOffset + currentIndex] = modelData[currentIndex];
-    animationTarget[targetOffset + currentIndex + 1] = modelData[currentIndex + 1];
+    target.animationTarget[targetOffset + currentIndex] = model.modelData[currentIndex];
+    target.animationTarget[targetOffset + currentIndex + 1] = model.modelData[currentIndex + 1];
 }

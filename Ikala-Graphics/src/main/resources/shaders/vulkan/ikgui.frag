@@ -63,11 +63,22 @@ layout(std430, set = 0, binding = 3) buffer PointDetails {
 	PointDetail pointDetails[];
 };
 
-layout(set = 0, binding = 4) uniform sampler2D bindlessTextures[];
+// Bindless texture slots for the textures used by draw commands, indexed by texture ID.
+layout(std430, set = 0, binding = 4) readonly buffer TextureIndices {
+	int textureIndices[];
+};
+
+layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
+
+// Every draw list is packed into the same buffers, so these are where the current one starts
+layout(push_constant) uniform DrawListOffsets {
+    int commandOffset;
+    int pointOffset;
+    int detailOffset;
+};
 
 vec4 sampleTexture(int textureIndex, vec2 uv) {
-    //TODO(ches) map draw data texture indices into the bindless array once the Vulkan GUI renders
-    return texture(bindlessTextures[nonuniformEXT(textureIndex)], uv);
+    return texture(bindlessTextures[nonuniformEXT(textureIndices[textureIndex])], uv);
 }
 
 float hash11(uint n) {
@@ -687,12 +698,14 @@ void draw_text(Command command, vec2 fragPos) {
 }
 
 void main() {
-    Command command = commands[quadID];
+    Command command = commands[quadID + commandOffset];
+    // Indices in the command are relative to the start of the draw list
+    command.pointIndex += pointOffset;
+    command.detailIndex += detailOffset;
 
-    // Fragment position in pixels but...
-    // with y flipped to be 0 at the top left like our points expect, and offset by the viewport
-    // position since points are in absolute coordinates
-    vec2 fragPos = vec2(gl_FragCoord.x, (-2 / scale.y) - gl_FragCoord.y) + displayPosition;
+    // Fragment position in pixels, offset by the viewport position since points are in absolute
+    // coordinates. Vulkan already puts 0 at the top left like our points expect.
+    vec2 fragPos = gl_FragCoord.xy + displayPosition;
 
     switch (command.type) {
         case ELEMENT_TYPE_CIRCLE:

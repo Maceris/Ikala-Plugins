@@ -38,6 +38,12 @@ layout(location = 6) flat out uint outMaterialIdx;
 layout(set = 0, binding = 0) uniform Uniforms {
     mat4 projectionMatrix;
     mat4 viewMatrix;
+};
+
+// Every model is packed into the same buffers each frame, and these change for every mesh
+layout(push_constant) uniform MeshConstants {
+    uint firstMatrix;
+    uint firstOverride;
     uint materialIndex;
     uint meshIndex;
 };
@@ -61,11 +67,12 @@ void main()
     vec4 initTangent = vec4(tangent, 0.0);
     vec4 initBitangent = vec4(bitangent, 0.0);
 
-    uint overrideIndex = gl_BaseInstance + gl_InstanceIndex + meshIndex;
+    // gl_InstanceIndex already includes the base instance, unlike gl_InstanceID in OpenGL
+    uint overrideIndex = firstOverride + gl_InstanceIndex + meshIndex;
     uint override = materialOverrides[overrideIndex];
     outMaterialIdx = override != 0 ? override : materialIndex;
 
-    mat4 modelMatrix =  modelMatrices[gl_BaseInstance + gl_InstanceIndex];
+    mat4 modelMatrix =  modelMatrices[firstMatrix + gl_InstanceIndex];
     mat4 modelViewMatrix = viewMatrix * modelMatrix;
     outWorldPosition = modelMatrix * initPos;
     outViewPosition  = viewMatrix * outWorldPosition;

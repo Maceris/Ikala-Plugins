@@ -17,15 +17,12 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.launcher.events.Shutdown;
 
-import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.glfw.GLFWErrorCallback;
 
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 
@@ -103,19 +100,19 @@ public class GraphicsManager {
      */
     @Nullable private static GraphicsSettings.Quality requestedQuality = null;
 
-    /** Whether we should shut down. */
-    @Getter(value = AccessLevel.PACKAGE)
+    /**
+     * Whether another thread asked us to shut down, which the main thread picks up on its next
+     * tick.
+     *
+     * @see #requestShutdown()
+     */
     private static final AtomicBoolean shutdownFlag = new AtomicBoolean(false);
 
     /**
-     * Used to track the tick method reference in the framework.
-     *
-     * @param tickStageID The stage ID to use.
-     * @return The tick stage ID.
+     * The thread that created the window. GLFW and the renderer must only be used from this thread,
+     * including when cleaning up.
      */
-    @Getter(value = AccessLevel.PACKAGE)
-    @Setter(value = AccessLevel.PACKAGE)
-    private static UUID tickStageID;
+    private static Thread mainThread;
 
     /**
      * The window utility.
@@ -148,6 +145,7 @@ public class GraphicsManager {
             return false;
         }
         shutdownFlag.set(false);
+        mainThread = Thread.currentThread();
 
         /*
          * TODO(ches) we will probably want to refactor this so windows are more transient, rather than being treated
@@ -266,10 +264,31 @@ public class GraphicsManager {
     }
 
     /**
-     * Terminate GLFW and free the error callback. If any windows still remain, they are destroyed.
+     * Shut down graphics from any thread. On the main thread, this cleans up immediately.
+     * Otherwise, it flags the main thread to clean up on its next tick, after which the tick stage
+     * removes itself.
+     */
+    static void requestShutdown() {
+        if (Thread.currentThread() == mainThread) {
+            terminate();
+        } else {
+            shutdownFlag.set(true);
+        }
+    }
+
+    /**
+     * Clean up the renderer, terminate GLFW and free the error callback. If any windows still
+     * remain, they are destroyed. Does nothing if we already terminated. Must be called from the
+     * main thread.
      */
     public static void terminate() {
-        // TODO(ches) unload all the models, scene
+        if (!initialized.get()) {
+            return;
+        }
+        if (scene != null) {
+            // Queues everything up for deletion, which the renderer processes as it cleans up
+            scene.cleanup();
+        }
         renderInstance.cleanup();
 
         if (null != window) {
@@ -289,16 +308,20 @@ public class GraphicsManager {
      */
     static int tick() {
         if (null == window) {
-            return Launcher.STATUS_ERROR;
+            // Already terminated, so there is nothing left to tick
+            return Launcher.STATUS_REQUEST_REMOVAL;
         }
         if (shutdownFlag.get()) {
             terminate();
-            return Launcher.STATUS_OK;
+            return Launcher.STATUS_REQUEST_REMOVAL;
         }
 
         if (window.windowShouldClose()) {
-            window.destroy();
-            window = null;
+            /*
+             * Clean up the renderer now, while the window it renders to still exists. Once this stage is removed
+             * nothing would call terminate() later.
+             */
+            terminate();
             new Shutdown().fire();
             return Launcher.STATUS_REQUEST_REMOVAL;
         }

@@ -15,6 +15,7 @@ layout(set = 0, binding = 0) uniform Uniforms {
 
 void main()
 {
-    gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0);
+    // Put the skybox at the far plane, so it only shows where the scene didn't draw anything
+    gl_Position = (projectionMatrix * viewMatrix * vec4(position, 1.0)).xyww;
     outTextCoord = texCoord;
 }

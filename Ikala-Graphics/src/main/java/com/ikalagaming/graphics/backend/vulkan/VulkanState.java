@@ -1,6 +1,5 @@
 package com.ikalagaming.graphics.backend.vulkan;
 
-import static org.lwjgl.util.vma.Vma.vmaDestroyBuffer;
 import static org.lwjgl.vulkan.VK10.VK_FORMAT_UNDEFINED;
 import static org.lwjgl.vulkan.VK13.VK_NULL_HANDLE;
 
@@ -21,6 +20,15 @@ public class VulkanState implements State {
 
     /** The Vulkan instance. */
     public VkInstance instance = null;
+
+    /** The VkDebugUtilsMessengerEXT for validation messages, VK_NULL_HANDLE if not enabled. */
+    public long debugMessenger = VK_NULL_HANDLE;
+
+    /** The global bindless texture array. */
+    public BindlessTextures bindlessTextures = null;
+
+    /** For submitting work outside the frame, like texture uploads. */
+    public ImmediateCommands immediateCommands = null;
 
     /** The command pool for graphics commands. */
     public long commandPoolGraphics = VK_NULL_HANDLE;
@@ -84,18 +92,18 @@ public class VulkanState implements State {
     public final Map<Window, WindowInfo> windows = new HashMap<>();
 
     /**
-     * Buffers that were replaced while frames in flight might still be using them, one list per
-     * frame in flight. A list is freed once the fence for that frame index has been waited on.
+     * Resource frees that have to wait until no frame in flight can be using the resource, one list
+     * per frame in flight. A list is run once the fence for that frame index has been waited on.
      */
-    public final List<List<SharedBuffer.RetiredBuffer>> retiredBuffers = createRetiredBufferLists();
+    public final List<List<Runnable>> deferredFrees = createDeferredFreeLists();
 
     /**
-     * Create the per-frame lists of retired buffers.
+     * Create the per-frame lists of deferred frees.
      *
      * @return One empty list per frame in flight.
      */
-    private static List<List<SharedBuffer.RetiredBuffer>> createRetiredBufferLists() {
-        List<List<SharedBuffer.RetiredBuffer>> result = new ArrayList<>();
+    private static List<List<Runnable>> createDeferredFreeLists() {
+        List<List<Runnable>> result = new ArrayList<>();
         for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
             result.add(new ArrayList<>());
         }
@@ -103,27 +111,25 @@ public class VulkanState implements State {
     }
 
     /**
-     * Queue a buffer to be freed once the current frame index comes around again, by which point no
-     * frame in flight can still be using it.
+     * Free something once the current frame index comes around again, by which point no frame in
+     * flight can still be using it.
      *
-     * @param buffer The buffer to free later.
+     * @param free The code that frees the resource.
      */
-    public void retireBuffer(@NonNull SharedBuffer.RetiredBuffer buffer) {
-        retiredBuffers.get(frameIndex).add(buffer);
+    public void deferFree(@NonNull Runnable free) {
+        deferredFrees.get(frameIndex).add(free);
     }
 
     /**
-     * Free the retired buffers for a frame index. Only call this once the GPU is done with that
+     * Run the deferred frees for a frame index. Only call this once the GPU is done with that
      * frame, such as after waiting on its fence.
      *
-     * @param index The frame index to free buffers for.
+     * @param index The frame index to free resources for.
      */
-    public void freeRetiredBuffers(int index) {
-        List<SharedBuffer.RetiredBuffer> retired = retiredBuffers.get(index);
-        for (SharedBuffer.RetiredBuffer buffer : retired) {
-            vmaDestroyBuffer(vmaAllocator, buffer.buffer(), buffer.allocation());
-        }
-        retired.clear();
+    public void runDeferredFrees(int index) {
+        List<Runnable> frees = deferredFrees.get(index);
+        frees.forEach(Runnable::run);
+        frees.clear();
     }
 
     public static class Device {
@@ -144,11 +150,6 @@ public class VulkanState implements State {
 
     /** Information about the physical hardware devices. */
     public static class PhysicalDeviceInfo {
-
-        /**
-         * The number of bytes that we need to store the descriptors for {@link #maxBindlessImages}.
-         */
-        public long bindlessTextureDescriptorBufferSize;
 
         /** The surface capability information. */
         public VkSurfaceCapabilitiesKHR capabilities = null;
@@ -185,6 +186,12 @@ public class VulkanState implements State {
         public QueueFamilyIndices queueFamilyIndices = null;
 
         /**
+         * Whether the device has VK_KHR_portability_subset, meaning it's not fully conformant (like
+         * MoltenVK) and we have to enable the extension.
+         */
+        public boolean portabilitySubset = false;
+
+        /**
          * An intermediate list of queue family properties. Once we have a surface to work with,
          * this is cleared out again and {@link #queueFamilyIndices} is populated with the indices
          * we care about.
@@ -210,6 +217,12 @@ public class VulkanState implements State {
         public long swapchainHandle;
         public long[] swapchainImages;
         public long[] swapchainImageViews;
+
+        /** The swapchain image width in pixels, which might not match the window. */
+        public int swapchainWidth;
+
+        /** The swapchain image height in pixels, which might not match the window. */
+        public int swapchainHeight;
 
         /** If we need to update the swapchain. */
         public boolean updateSwapchain;

@@ -3,121 +3,76 @@ package com.ikalagaming.graphics.backend.vulkan.stages;
 import static com.ikalagaming.graphics.backend.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
-import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
-import com.ikalagaming.graphics.backend.vulkan.ShaderBindings;
-import com.ikalagaming.graphics.backend.vulkan.ShaderVulkan;
-import com.ikalagaming.graphics.backend.vulkan.SharedBuffer;
-import com.ikalagaming.graphics.backend.vulkan.VulkanState;
+import com.ikalagaming.graphics.backend.vulkan.*;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
-import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.system.MemoryStack;
-import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
 
 import java.nio.ByteBuffer;
-import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 
-/** Handles computations for animated models. */
-@Setter
+/**
+ * Runs the animation compute shader, which applies each pose's animation frame to the mesh vertices
+ * and writes the results to the mesh's animation target buffer. Entities on the same frame of the
+ * same animation share a pose, so each pose is only skinned once. The scene and shadow stages draw
+ * animated models from those buffers.
+ */
 @Slf4j
 public class AnimationRender implements RenderStage {
 
-    /** VkDescriptorSet's for a frame, will be VK_NULL_HANDLE if not set up. */
-    private static class Descriptors {
-        /** The total number of descriptors to create, not how many actually get bound per frame. */
-        public static final int COUNT = 5;
+    /** Floats per vertex in the mesh and animation target buffers. */
+    private static final int VERTEX_SIZE_IN_FLOATS = 14;
 
-        public long animationData = VK_NULL_HANDLE;
-        public long animationOffsets = VK_NULL_HANDLE;
-        public long modelData = VK_NULL_HANDLE;
-        public long boneWeightData = VK_NULL_HANDLE;
-        public long animationTarget = VK_NULL_HANDLE;
-
-        /** Clear values so we don't refer to junk descriptor handles. */
-        public void reset() {
-            animationData = VK_NULL_HANDLE;
-            animationOffsets = VK_NULL_HANDLE;
-            modelData = VK_NULL_HANDLE;
-            boneWeightData = VK_NULL_HANDLE;
-            animationTarget = VK_NULL_HANDLE;
+    /**
+     * Make sure each mesh's animation target buffer can hold a copy of the vertices for every pose,
+     * growing the capacity by doubling like the OpenGL backend.
+     *
+     * @param state The Vulkan state.
+     * @param model The model.
+     * @param poseCount The number of distinct poses the model's entities are in.
+     */
+    private static void updateInstancedStorage(
+            @NonNull VulkanState state, @NonNull Model model, int poseCount) {
+        int poseCap = model.getMaxAnimatedBufferCapacity();
+        if (poseCount <= poseCap) {
+            return;
         }
-    }
-
-    private static void updateAnimationOffsets(VulkanState state, Model model, int entityCount) {
-        ByteBuffer animationOffsets = MemoryUtil.memAlloc(entityCount * Integer.BYTES);
-        for (int i = 0; i < entityCount; ++i) {
-            Entity entity = model.getEntitiesList().get(i);
-
-            Model.Animation animation = entity.getAnimationState().getCurrentAnimation();
-            if (animation == null) {
-                animationOffsets.putInt(-1);
-                continue;
-            }
-            int baseOffset = animation.offset();
-            int frameIndex = entity.getAnimationState().getCurrentFrameIndex();
-            int frameSize = animation.boneCount() * 4 * 4 /* mat4 */ * 4 /* 4 bytes per float */;
-
-            animationOffsets.putInt(baseOffset + frameIndex * frameSize);
+        if (poseCap < 4) {
+            poseCap = 4;
         }
-        animationOffsets.flip();
+        while (poseCount >= poseCap) {
+            poseCap *= 2;
+        }
+        model.setMaxAnimatedBufferCapacity(poseCap);
 
-        var offsetsBuffer = (SharedBuffer) model.getEntityAnimationOffsetsBuffer();
-        offsetsBuffer.ensureFits(animationOffsets.limit(), state);
-        MemoryUtil.memCopy(
-                MemoryUtil.memGetAddress(animationOffsets, 0),
-                offsetsBuffer.allocationInfo.pMappedData(),
-                animationOffsets.limit());
-        MemoryUtil.memFree(animationOffsets);
-    }
-
-    private static void updateInstancedStorage(VulkanState state, Model model, int entityCount) {
-        int entityCap = model.getMaxAnimatedBufferCapacity();
-
-        if (entityCount > entityCap) {
-            if (entityCap < 4) {
-                entityCap = 4;
-            }
-
-            while (entityCount >= entityCap) {
-                entityCap *= 2;
-            }
-            model.setMaxAnimatedBufferCapacity(entityCap);
-
-            for (MeshData meshData : model.getMeshDataList()) {
-                var targetBuffer = (SharedBuffer) meshData.getAnimationTargetBuffer();
-                targetBuffer.ensureFits(
-                        (long) entityCap * meshData.getVertexCount() * 14 * 4, state);
-            }
+        // The old buffers are freed once frames in flight are done with them
+        for (MeshData meshData : model.getMeshDataList()) {
+            var targetBuffer = (SharedBuffer) meshData.getAnimationTargetBuffer();
+            targetBuffer.ensureFits(
+                    (long) poseCap
+                            * meshData.getVertexCount()
+                            * VERTEX_SIZE_IN_FLOATS
+                            * Float.BYTES,
+                    state);
         }
     }
 
     /** The shader to use for rendering. */
     @NonNull private ShaderVulkan shader;
 
-    /** VkDescriptorSetLayout pointer, will be VK_NULL_HANDLE if not set up. */
-    private long descriptorSetLayout;
-
     /** VkPipelineLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long pipelineLayout;
 
     /** VkPipeline pointer, will be VK_NULL_HANDLE if not set up. */
     private long pipeline;
-
-    /** VkDescriptorPool pointer, will be VK_NULL_HANDLE if not set up. */
-    private long descriptorPool;
-
-    /** All the descriptors, one per frame in flight. */
-    private Descriptors[] descriptors;
 
     /**
      * Set up the animation render stage.
@@ -126,14 +81,8 @@ public class AnimationRender implements RenderStage {
      */
     public AnimationRender(final @NonNull ShaderVulkan shader) {
         this.shader = shader;
-        this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
         this.pipeline = VK_NULL_HANDLE;
-
-        this.descriptors = new Descriptors[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
-        for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
-            this.descriptors[i] = new Descriptors();
-        }
     }
 
     @Override
@@ -147,38 +96,131 @@ public class AnimationRender implements RenderStage {
     @Override
     public void cleanup(@NonNull State state) {
         VulkanState vulkanState = (VulkanState) state;
-        for (Descriptors descriptorSet : this.descriptors) {
-            descriptorSet.reset();
-        }
-        vkDestroyDescriptorPool(vulkanState.device.logical, descriptorPool, null);
-        descriptorPool = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
         pipelineLayout = VK_NULL_HANDLE;
-        vkDestroyDescriptorSetLayout(vulkanState.device.logical, descriptorSetLayout, null);
-        descriptorSetLayout = VK_NULL_HANDLE;
     }
 
+    /**
+     * Compute animation transformations for all animated models in the scene.
+     *
+     * @param scene The scene we are rendering.
+     */
     @Override
     public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
+        VulkanState vulkanState = (VulkanState) state;
+        final VkCommandBuffer commandBuffer =
+                vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
+        final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
 
-        for (Model model : scene.getModelMap().values()) {
-            int entityCount = model.getEntitiesList().size();
-            if (!model.isAnimated() || entityCount == 0) {
-                continue;
-            }
-
-            updateInstancedStorage((VulkanState) state, model, entityCount);
-            updateAnimationOffsets((VulkanState) state, model, entityCount);
-
-            for (MeshData meshData : model.getMeshDataList()) {
-                final int vertexCount = meshData.getVertexCount();
-                // TODO(ches) render
-                // TODO(ches) we are going to have to update the buffer bindings a LOT here
-                // glDispatchCompute(vertexCount, entityCount, 1);
+        // The model matrix stage already grouped the entities into poses and wrote the offsets
+        boolean anyAnimated = false;
+        for (var entry : frameData.modelDrawInfo.entrySet()) {
+            if (entry.getKey().isAnimated()) {
+                updateInstancedStorage(vulkanState, entry.getKey(), entry.getValue().poseCount());
+                anyAnimated = true;
             }
         }
+        if (!anyAnimated) {
+            return;
+        }
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            // An earlier frame may still be drawing from the animation targets
+            memoryBarrier(
+                    commandBuffer,
+                    VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT,
+                    VK_ACCESS_2_NONE,
+                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                    stack);
+
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+
+            ByteBuffer pushConstants = stack.calloc(ShaderBindings.Animation.PUSH_CONSTANTS_SIZE);
+            pushConstants.putLong(
+                    ShaderBindings.Animation.PUSH_CONSTANT_ANIMATION_OFFSETS_OFFSET,
+                    frameData.animationOffsets.deviceAddress);
+
+            for (var entry : frameData.modelDrawInfo.entrySet()) {
+                final Model model = entry.getKey();
+                if (!model.isAnimated()) {
+                    continue;
+                }
+                final PerFrameData.ModelDrawInfo info = entry.getValue();
+                pushConstants.putLong(
+                        ShaderBindings.Animation.PUSH_CONSTANT_ANIMATION_DATA_OFFSET,
+                        ((SharedBuffer) model.getAnimationBuffer()).deviceAddress);
+                pushConstants.putInt(
+                        ShaderBindings.Animation.PUSH_CONSTANT_FIRST_POSE_OFFSET, info.firstPose());
+
+                for (MeshData meshData : model.getMeshDataList()) {
+                    final int vertexCount = meshData.getVertexCount();
+                    pushConstants.putLong(
+                            ShaderBindings.Animation.PUSH_CONSTANT_MODEL_DATA_OFFSET,
+                            ((SharedBuffer) meshData.getVertexBuffer()).deviceAddress);
+                    pushConstants.putLong(
+                            ShaderBindings.Animation.PUSH_CONSTANT_BONE_WEIGHTS_OFFSET,
+                            ((SharedBuffer) meshData.getBoneWeightBuffer()).deviceAddress);
+                    pushConstants.putLong(
+                            ShaderBindings.Animation.PUSH_CONSTANT_ANIMATION_TARGET_OFFSET,
+                            ((SharedBuffer) meshData.getAnimationTargetBuffer()).deviceAddress);
+                    pushConstants.putInt(
+                            ShaderBindings.Animation.PUSH_CONSTANT_VERTEX_COUNT_OFFSET,
+                            vertexCount);
+                    vkCmdPushConstants(
+                            commandBuffer,
+                            pipelineLayout,
+                            VK_SHADER_STAGE_COMPUTE_BIT,
+                            0,
+                            pushConstants);
+
+                    final int workgroups =
+                            (vertexCount + ShaderBindings.Animation.WORKGROUP_SIZE - 1)
+                                    / ShaderBindings.Animation.WORKGROUP_SIZE;
+                    vkCmdDispatch(commandBuffer, workgroups, info.poseCount(), 1);
+                }
+            }
+
+            // The scene and shadow stages read the results as vertices
+            memoryBarrier(
+                    commandBuffer,
+                    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                    VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT,
+                    VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT,
+                    stack);
+        }
+    }
+
+    /**
+     * Record a global memory barrier.
+     *
+     * @param commandBuffer The command buffer to record into.
+     * @param srcStage The source VkPipelineStageFlags2.
+     * @param srcAccess The source VkAccessFlags2.
+     * @param dstStage The destination VkPipelineStageFlags2.
+     * @param dstAccess The destination VkAccessFlags2.
+     * @param stack The stack to allocate on.
+     */
+    private static void memoryBarrier(
+            @NonNull VkCommandBuffer commandBuffer,
+            long srcStage,
+            long srcAccess,
+            long dstStage,
+            long dstAccess,
+            @NonNull MemoryStack stack) {
+        VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
+        barrier.get(0)
+                .sType$Default()
+                .srcStageMask(srcStage)
+                .srcAccessMask(srcAccess)
+                .dstStageMask(dstStage)
+                .dstAccessMask(dstAccess);
+        vkCmdPipelineBarrier2(
+                commandBuffer,
+                VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
     }
 
     private void createPipelineLayout(@NonNull VulkanState state) {
@@ -186,132 +228,21 @@ public class AnimationRender implements RenderStage {
             LongBuffer longOutput = stack.callocLong(1);
 
             VkPushConstantRange.Buffer pushConstantRanges = VkPushConstantRange.calloc(1, stack);
-            pushConstantRanges.get(0).stageFlags(VK_SHADER_STAGE_COMPUTE_BIT).size(Long.BYTES);
+            pushConstantRanges
+                    .get(0)
+                    .stageFlags(VK_SHADER_STAGE_COMPUTE_BIT)
+                    .offset(0)
+                    .size(ShaderBindings.Animation.PUSH_CONSTANTS_SIZE);
 
-            IntBuffer descriptorVariableFlags = stack.ints(0, 0, 0, 0, 0);
-
-            VkDescriptorSetLayoutBindingFlagsCreateInfo descriptorSetBindingFlags =
-                    VkDescriptorSetLayoutBindingFlagsCreateInfo.calloc(stack);
-            descriptorSetBindingFlags
-                    .sType$Default()
-                    .bindingCount(5)
-                    .pBindingFlags(descriptorVariableFlags);
-
-            VkDescriptorSetLayoutBinding.Buffer descriptorSetLayoutBindings =
-                    VkDescriptorSetLayoutBinding.calloc(5, stack);
-            descriptorSetLayoutBindings
-                    .get(ShaderBindings.Animation.ANIMATION_DATA_BINDING)
-                    .binding(ShaderBindings.Animation.ANIMATION_DATA_BINDING)
-                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                    .descriptorCount(1)
-                    .stageFlags(VK_SHADER_STAGE_COMPUTE_BIT);
-            descriptorSetLayoutBindings
-                    .get(ShaderBindings.Animation.ANIMATION_OFFSETS_BINDING)
-                    .binding(ShaderBindings.Animation.ANIMATION_OFFSETS_BINDING)
-                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                    .descriptorCount(1)
-                    .stageFlags(VK_SHADER_STAGE_COMPUTE_BIT);
-            descriptorSetLayoutBindings
-                    .get(ShaderBindings.Animation.MODEL_DATA_BINDING)
-                    .binding(ShaderBindings.Animation.MODEL_DATA_BINDING)
-                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                    .descriptorCount(1)
-                    .stageFlags(VK_SHADER_STAGE_COMPUTE_BIT);
-            descriptorSetLayoutBindings
-                    .get(ShaderBindings.Animation.BONE_WEIGHT_BINDING)
-                    .binding(ShaderBindings.Animation.BONE_WEIGHT_BINDING)
-                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                    .descriptorCount(1)
-                    .stageFlags(VK_SHADER_STAGE_COMPUTE_BIT);
-            descriptorSetLayoutBindings
-                    .get(ShaderBindings.Animation.ANIMATION_TARGET_BINDING)
-                    .binding(ShaderBindings.Animation.ANIMATION_TARGET_BINDING)
-                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                    .descriptorCount(1)
-                    .stageFlags(VK_SHADER_STAGE_COMPUTE_BIT);
-
-            VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo =
-                    VkDescriptorSetLayoutCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .pNext(descriptorSetBindingFlags)
-                            .pBindings(descriptorSetLayoutBindings)
-                            .flags(VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT);
-
-            checkError(
-                    vkCreateDescriptorSetLayout(
-                            state.device.logical, descriptorSetLayoutCreateInfo, null, longOutput));
-            descriptorSetLayout = longOutput.get(0);
-
-            LongBuffer descriptorSetLayoutAddress = stack.longs(descriptorSetLayout);
-
+            // No descriptor sets, the buffers are all passed by device address
             VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo =
-                    VkPipelineLayoutCreateInfo.calloc(stack);
-            pipelineLayoutCreateInfo
-                    .sType$Default()
-                    .setLayoutCount(1)
-                    .pSetLayouts(descriptorSetLayoutAddress)
-                    .pPushConstantRanges(pushConstantRanges);
+                    VkPipelineLayoutCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .pPushConstantRanges(pushConstantRanges);
             checkError(
                     vkCreatePipelineLayout(
                             state.device.logical, pipelineLayoutCreateInfo, null, longOutput));
             pipelineLayout = longOutput.get(0);
-
-            VkDescriptorPoolSize.Buffer poolSizes =
-                    VkDescriptorPoolSize.calloc(GraphicsManager.MAX_FRAMES_IN_FLIGHT, stack);
-            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
-                poolSizes.get(i).type(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).descriptorCount(5);
-            }
-            VkDescriptorPoolCreateInfo descriptorPoolCreateInfo =
-                    VkDescriptorPoolCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .maxSets(GraphicsManager.MAX_FRAMES_IN_FLIGHT * Descriptors.COUNT)
-                            .flags(VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT)
-                            .pPoolSizes(poolSizes);
-
-            checkError(
-                    vkCreateDescriptorPool(
-                            state.device.logical, descriptorPoolCreateInfo, null, longOutput));
-            descriptorPool = longOutput.get(0);
-
-            LongBuffer descriptorSetLayoutAddresses =
-                    stack.callocLong(GraphicsManager.MAX_FRAMES_IN_FLIGHT);
-            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
-                descriptorSetLayoutAddresses.put(i, descriptorSetLayout);
-            }
-
-            VkDescriptorSetAllocateInfo descriptorSetAlloc =
-                    VkDescriptorSetAllocateInfo.calloc(stack)
-                            .sType$Default()
-                            .pNext(VK_NULL_HANDLE)
-                            .descriptorPool(descriptorPool)
-                            .pSetLayouts(descriptorSetLayoutAddresses);
-            LongBuffer setAddresses =
-                    stack.callocLong(GraphicsManager.MAX_FRAMES_IN_FLIGHT * Descriptors.COUNT);
-            checkError(
-                    vkAllocateDescriptorSets(
-                            state.device.logical, descriptorSetAlloc, setAddresses));
-            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
-                descriptors[i].animationData =
-                        setAddresses.get(
-                                i * Descriptors.COUNT
-                                        + ShaderBindings.Animation.ANIMATION_DATA_BINDING);
-                descriptors[i].animationOffsets =
-                        setAddresses.get(
-                                i * Descriptors.COUNT
-                                        + ShaderBindings.Animation.ANIMATION_OFFSETS_BINDING);
-                descriptors[i].modelData =
-                        setAddresses.get(
-                                i * Descriptors.COUNT
-                                        + ShaderBindings.Animation.MODEL_DATA_BINDING);
-                descriptors[i].boneWeightData =
-                        setAddresses.get(
-                                i * Descriptors.COUNT
-                                        + ShaderBindings.Animation.BONE_WEIGHT_BINDING);
-                descriptors[i].animationTarget =
-                        setAddresses.get(
-                                i * Descriptors.COUNT
-                                        + ShaderBindings.Animation.ANIMATION_TARGET_BINDING);
-            }
         }
     }
 
@@ -324,12 +255,8 @@ public class AnimationRender implements RenderStage {
             pipelineCreateInfos
                     .get(0)
                     .sType$Default()
-                    .pNext(VK_NULL_HANDLE)
-                    .flags(0)
                     .stage(shader.shaderStages.get(0))
-                    .layout(pipelineLayout)
-                    .basePipelineHandle(VK_NULL_HANDLE)
-                    .basePipelineIndex(0);
+                    .layout(pipelineLayout);
 
             checkError(
                     vkCreateComputePipelines(
@@ -338,7 +265,6 @@ public class AnimationRender implements RenderStage {
                             pipelineCreateInfos,
                             null,
                             longOutput));
-
             pipeline = longOutput.get(0);
         }
     }

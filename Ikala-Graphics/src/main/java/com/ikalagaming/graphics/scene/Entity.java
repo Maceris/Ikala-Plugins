@@ -37,10 +37,10 @@ public class Entity {
     /**
      * Animation state associated with the entity.
      *
-     * @param animationData The new animation state.
+     * @param animationState The new animation state.
      * @return The animation state.
      */
-    private AnimationState animationState;
+    @Setter private AnimationState animationState;
 
     /**
      * The combined translation, rotation, and scale transformations.

@@ -16,6 +16,7 @@ layout(set = 0, binding = 0) uniform Uniforms {
 void main()
 {
     vec2 pos = inPos - displayPosition;
-    gl_Position = vec4(pos.x * scale.x - 1, pos.y * scale.y + 1, 0.0, 1.0);
+    // Vulkan NDC has y pointing down, matching our pixel coordinates, so scale.y is positive
+    gl_Position = vec4(pos.x * scale.x - 1, pos.y * scale.y - 1, 0.0, 1.0);
     quadID = gl_VertexIndex / 6;
 }

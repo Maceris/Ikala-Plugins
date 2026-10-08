@@ -1,38 +1,14 @@
 package com.ikalagaming.graphics.backend.vulkan.stages;
 
 import static com.ikalagaming.graphics.backend.vulkan.VulkanInstance.checkError;
-import static org.lwjgl.vulkan.VK10.VK_COLOR_COMPONENT_A_BIT;
-import static org.lwjgl.vulkan.VK10.VK_COLOR_COMPONENT_B_BIT;
-import static org.lwjgl.vulkan.VK10.VK_COLOR_COMPONENT_G_BIT;
-import static org.lwjgl.vulkan.VK10.VK_COLOR_COMPONENT_R_BIT;
-import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_LESS_OR_EQUAL;
-import static org.lwjgl.vulkan.VK10.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-import static org.lwjgl.vulkan.VK10.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-import static org.lwjgl.vulkan.VK10.VK_DYNAMIC_STATE_SCISSOR;
-import static org.lwjgl.vulkan.VK10.VK_DYNAMIC_STATE_VIEWPORT;
-import static org.lwjgl.vulkan.VK10.VK_FORMAT_R32G32B32_SFLOAT;
-import static org.lwjgl.vulkan.VK10.VK_FORMAT_R32G32_SFLOAT;
-import static org.lwjgl.vulkan.VK10.VK_FORMAT_R8G8B8A8_SRGB;
-import static org.lwjgl.vulkan.VK10.VK_NULL_HANDLE;
-import static org.lwjgl.vulkan.VK10.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-import static org.lwjgl.vulkan.VK10.VK_SAMPLE_COUNT_1_BIT;
-import static org.lwjgl.vulkan.VK10.VK_SHADER_STAGE_FRAGMENT_BIT;
-import static org.lwjgl.vulkan.VK10.VK_SHADER_STAGE_VERTEX_BIT;
-import static org.lwjgl.vulkan.VK10.VK_VERTEX_INPUT_RATE_VERTEX;
-import static org.lwjgl.vulkan.VK10.vkCreateDescriptorSetLayout;
-import static org.lwjgl.vulkan.VK10.vkCreateGraphicsPipelines;
-import static org.lwjgl.vulkan.VK10.vkCreatePipelineLayout;
-import static org.lwjgl.vulkan.VK12.*;
-import static org.lwjgl.vulkan.VK12.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+import static org.lwjgl.vulkan.VK13.*;
 
-import com.ikalagaming.graphics.ShaderUniforms;
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
-import com.ikalagaming.graphics.backend.vulkan.ShaderBindings;
-import com.ikalagaming.graphics.backend.vulkan.ShaderVulkan;
-import com.ikalagaming.graphics.backend.vulkan.SkyboxModel;
-import com.ikalagaming.graphics.backend.vulkan.VulkanState;
+import com.ikalagaming.graphics.backend.vulkan.*;
+import com.ikalagaming.graphics.frontend.RenderConfig;
 import com.ikalagaming.graphics.frontend.Texture;
 import com.ikalagaming.graphics.scene.Scene;
 
@@ -41,16 +17,22 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
 
-import java.nio.IntBuffer;
+import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
+import java.util.Arrays;
 
-/** Renders a skybox behind the geometry. */
+/**
+ * Draws the skybox behind the lit scene. The skybox is drawn at the far plane and depth tested
+ * against the g-buffer depth, so it only shows where the scene didn't draw anything. OpenGL gets
+ * the same result by having the light pass write depth where there is geometry.
+ */
 @Slf4j
 public class SkyboxRender implements RenderStage {
 
-    /** The cameras view matrix. */
+    /** The cameras view matrix, without the translation. */
     private final Matrix4f viewMatrix;
 
     /** The shader to use for rendering. */
@@ -65,8 +47,23 @@ public class SkyboxRender implements RenderStage {
     /** VkPipelineLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long pipelineLayout;
 
-    /** VkPipeline pointer, will be VK_NULL_HANDLE if not set up. */
-    private long pipeline;
+    /**
+     * VkPipeline that alpha blends onto the final image, like OpenGL does when rendering to the
+     * back buffer. VK_NULL_HANDLE if not set up.
+     */
+    private long pipelineAlphaBlend;
+
+    /**
+     * VkPipeline that adds onto the pre-filter image, like OpenGL does when rendering to the screen
+     * texture. VK_NULL_HANDLE if not set up.
+     */
+    private long pipelineAdditive;
+
+    /** VkDescriptorPool pointer, will be VK_NULL_HANDLE if not set up. */
+    private long descriptorPool;
+
+    /** The VkDescriptorSet for each frame in flight, VK_NULL_HANDLE if not set up. */
+    private final long[] descriptorSets;
 
     /**
      * Set up the skybox render stage.
@@ -80,7 +77,10 @@ public class SkyboxRender implements RenderStage {
         this.skybox = skybox;
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
-        this.pipeline = VK_NULL_HANDLE;
+        this.pipelineAlphaBlend = VK_NULL_HANDLE;
+        this.pipelineAdditive = VK_NULL_HANDLE;
+        this.descriptorPool = VK_NULL_HANDLE;
+        this.descriptorSets = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
     }
 
     @Override
@@ -88,14 +88,21 @@ public class SkyboxRender implements RenderStage {
         log.debug("Initializing skybox render");
         VulkanState vulkanState = (VulkanState) state;
         createPipelineLayout(vulkanState);
-        createPipeline(vulkanState);
+        pipelineAlphaBlend = createPipeline(vulkanState, false);
+        pipelineAdditive = createPipeline(vulkanState, true);
     }
 
     @Override
     public void cleanup(@NonNull State state) {
         VulkanState vulkanState = (VulkanState) state;
-        vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
-        pipeline = VK_NULL_HANDLE;
+        // Freed along with the pool
+        Arrays.fill(descriptorSets, VK_NULL_HANDLE);
+        vkDestroyDescriptorPool(vulkanState.device.logical, descriptorPool, null);
+        descriptorPool = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, pipelineAdditive, null);
+        pipelineAdditive = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, pipelineAlphaBlend, null);
+        pipelineAlphaBlend = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
         pipelineLayout = VK_NULL_HANDLE;
         vkDestroyDescriptorSetLayout(vulkanState.device.logical, descriptorSetLayout, null);
@@ -104,135 +111,303 @@ public class SkyboxRender implements RenderStage {
 
     @Override
     public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
-        shader.bind();
-        var uniformsMap = shader.getUniformMap();
+        VulkanState vulkanState = (VulkanState) state;
+        final VkCommandBuffer commandBuffer =
+                vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
+        final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
+        final boolean hasFilter = RenderConfig.hasFilterStage(renderConfig);
+        final boolean hasScene = RenderConfig.hasSceneStage(renderConfig);
+        final TextureInfoVulkan target =
+                hasFilter ? frameData.preFilterTexture : frameData.finalTexture;
+        final TextureInfoVulkan depth = frameData.gBuffer.depth();
 
-        // TODO(ches) handle the case (barriers) where we don't have a scene
+        updateUniforms(scene, frameData);
 
-        uniformsMap.setUniform(
-                ShaderUniforms.Skybox.PROJECTION_MATRIX,
-                scene.getProjection().getProjectionMatrix());
+        final int width = Math.min(window.getWidth(), vulkanState.realSize.width());
+        final int height = Math.min(window.getHeight(), vulkanState.realSize.height());
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkImageMemoryBarrier2.Buffer barriers = VkImageMemoryBarrier2.calloc(2, stack);
+            final int depthLayout;
+            if (hasScene) {
+                // The light stage rendered to the target, and the depth is already read only
+                SceneRender.imageBarrier(
+                        barriers.get(0),
+                        target.texture,
+                        VK_IMAGE_ASPECT_COLOR_BIT,
+                        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT
+                                | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                barriers.limit(1);
+                depthLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
+            } else {
+                // Nothing drew this frame, so start both from scratch
+                SceneRender.imageBarrier(
+                        barriers.get(0),
+                        target.texture,
+                        VK_IMAGE_ASPECT_COLOR_BIT,
+                        VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT
+                                | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                        VK_ACCESS_2_NONE,
+                        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT
+                                | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                        VK_IMAGE_LAYOUT_UNDEFINED,
+                        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                SceneRender.imageBarrier(
+                        barriers.get(1),
+                        depth.texture,
+                        VK_IMAGE_ASPECT_DEPTH_BIT,
+                        VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
+                                | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                        VK_ACCESS_2_NONE,
+                        VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
+                                | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                        VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT
+                                | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                        VK_IMAGE_LAYOUT_UNDEFINED,
+                        VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+                depthLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+            }
+            vkCmdPipelineBarrier2(
+                    commandBuffer,
+                    VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barriers));
+
+            VkRenderingAttachmentInfo.Buffer colorAttachments =
+                    VkRenderingAttachmentInfo.calloc(1, stack);
+            colorAttachments
+                    .get(0)
+                    .sType$Default()
+                    .imageView(target.view)
+                    .imageLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+                    .loadOp(hasScene ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR)
+                    .storeOp(VK_ATTACHMENT_STORE_OP_STORE);
+            // Read only, the depth stays as the scene left it for filters to use
+            VkRenderingAttachmentInfo depthAttachment =
+                    VkRenderingAttachmentInfo.calloc(stack)
+                            .sType$Default()
+                            .imageView(depth.view)
+                            .imageLayout(depthLayout)
+                            .loadOp(
+                                    hasScene
+                                            ? VK_ATTACHMENT_LOAD_OP_LOAD
+                                            : VK_ATTACHMENT_LOAD_OP_CLEAR)
+                            .storeOp(
+                                    hasScene
+                                            ? VK_ATTACHMENT_STORE_OP_NONE
+                                            : VK_ATTACHMENT_STORE_OP_DONT_CARE);
+            depthAttachment.clearValue().depthStencil().depth(1.0f);
+
+            VkRenderingInfo renderingInfo =
+                    VkRenderingInfo.calloc(stack)
+                            .sType$Default()
+                            .renderArea(area -> area.extent().set(width, height))
+                            .layerCount(1)
+                            .pColorAttachments(colorAttachments)
+                            .pDepthAttachment(depthAttachment);
+            vkCmdBeginRendering(commandBuffer, renderingInfo);
+
+            if (width > 0 && height > 0) {
+                vkCmdBindPipeline(
+                        commandBuffer,
+                        VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        hasFilter ? pipelineAdditive : pipelineAlphaBlend);
+
+                // A negative height flips y so the projection matrices work the same as in OpenGL
+                VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
+                viewports
+                        .get(0)
+                        .x(0)
+                        .y(height)
+                        .width(width)
+                        .height(-height)
+                        .minDepth(0)
+                        .maxDepth(1);
+                vkCmdSetViewport(commandBuffer, 0, viewports);
+                VkRect2D.Buffer scissors = VkRect2D.calloc(1, stack);
+                scissors.get(0).extent().set(width, height);
+                vkCmdSetScissor(commandBuffer, 0, scissors);
+
+                vkCmdBindDescriptorSets(
+                        commandBuffer,
+                        VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        pipelineLayout,
+                        0,
+                        stack.longs(
+                                descriptorSets[vulkanState.frameIndex],
+                                vulkanState.bindlessTextures.getDescriptorSet()),
+                        null);
+                vkCmdBindVertexBuffers(
+                        commandBuffer,
+                        0,
+                        stack.longs(skybox.getVertexBuffer().buffer),
+                        stack.longs(0));
+                vkCmdBindIndexBuffer(
+                        commandBuffer, skybox.getIndexBuffer().buffer, 0, VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexed(commandBuffer, SkyboxModel.VERTEX_COUNT, 1, 0, 0, 0);
+            }
+
+            vkCmdEndRendering(commandBuffer);
+        }
+    }
+
+    /**
+     * Write the uniforms for the current frame.
+     *
+     * @param scene The scene.
+     * @param frameData The data for the current frame.
+     */
+    private void updateUniforms(@NonNull Scene scene, @NonNull PerFrameData frameData) {
+        ByteBuffer uniformData =
+                MemoryUtil.memByteBuffer(
+                        frameData.skyboxUniforms.allocationInfo.pMappedData(),
+                        ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE);
+
+        scene.getProjection()
+                .getProjectionMatrix()
+                .get(ShaderBindings.Skybox.PROJECTION_MATRIX_OFFSET, uniformData);
+        // The skybox moves with the camera, so only the rotation matters
         viewMatrix.set(scene.getCamera().getViewMatrix());
         viewMatrix.m30(0);
         viewMatrix.m31(0);
         viewMatrix.m32(0);
-        uniformsMap.setUniform(ShaderUniforms.Skybox.VIEW_MATRIX, viewMatrix);
-        uniformsMap.setUniform(ShaderUniforms.Skybox.TEXTURE_SAMPLER, 0);
-
-        uniformsMap.setUniform(ShaderUniforms.Skybox.DIFFUSE, scene.getSkyboxDiffuse());
+        viewMatrix.get(ShaderBindings.Skybox.VIEW_MATRIX_OFFSET, uniformData);
+        scene.getSkyboxDiffuse().get(ShaderBindings.Skybox.DIFFUSE_OFFSET, uniformData);
 
         Texture texture = scene.getSkyboxTexture();
-        boolean hasTexture = false;
+        int textureIndex = TextureInfoVulkan.NO_BINDLESS_INDEX;
         if (texture != null) {
-            // TODO(ches) bind texture
-            hasTexture = true;
+            textureIndex = ((TextureInfoVulkan) texture.info()).bindlessIndex;
         }
-
-        uniformsMap.setUniform(ShaderUniforms.Skybox.HAS_TEXTURE, hasTexture ? 1 : 0);
-
-        // TODO(ches) draw skybox
-
-        shader.unbind();
+        final boolean hasTexture = textureIndex != TextureInfoVulkan.NO_BINDLESS_INDEX;
+        uniformData.putInt(ShaderBindings.Skybox.HAS_TEXTURE_OFFSET, hasTexture ? 1 : 0);
+        uniformData.putInt(
+                ShaderBindings.Skybox.TEXTURE_INDEX_OFFSET,
+                hasTexture ? textureIndex : ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX);
     }
 
     private void createPipelineLayout(@NonNull VulkanState state) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
-            VkPushConstantRange.Buffer pushConstantRanges = VkPushConstantRange.calloc(1, stack);
-            pushConstantRanges
-                    .get(0)
-                    .stageFlags(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
-                    .size(Long.BYTES);
-
-            IntBuffer descriptorVariableFlags =
-                    stack.ints(
-                            0,
-                            VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
-                                    /* Not every texture slot should need to be filled */
-                                    | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
-                                    /* We will probably update the buffer while figuring out what to render */
-                                    | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT);
-
-            VkDescriptorSetLayoutBindingFlagsCreateInfo descriptorSetBindingFlags =
-                    VkDescriptorSetLayoutBindingFlagsCreateInfo.calloc(stack);
-            descriptorSetBindingFlags
-                    .sType$Default()
-                    .bindingCount(2)
-                    .pBindingFlags(descriptorVariableFlags);
-
-            VkDescriptorSetLayoutBinding.Buffer descriptorSetLayoutBindings =
-                    VkDescriptorSetLayoutBinding.calloc(2, stack);
-            descriptorSetLayoutBindings
-                    .get(ShaderBindings.Skybox.UNIFORMS_BINDING)
+            VkDescriptorSetLayoutBinding.Buffer bindings =
+                    VkDescriptorSetLayoutBinding.calloc(1, stack);
+            bindings.get(0)
                     .binding(ShaderBindings.Skybox.UNIFORMS_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
                     .descriptorCount(1)
                     .stageFlags(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-            descriptorSetLayoutBindings
-                    .get(ShaderBindings.Skybox.TEXTURES_BINDING)
-                    .binding(ShaderBindings.Skybox.TEXTURES_BINDING)
-                    .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                    .descriptorCount(state.device.physical.maxBindlessImages)
-                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
 
             VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo =
                     VkDescriptorSetLayoutCreateInfo.calloc(stack)
                             .sType$Default()
-                            .pNext(descriptorSetBindingFlags)
-                            .pBindings(descriptorSetLayoutBindings)
-                            .flags(VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT);
-
+                            .pBindings(bindings);
             checkError(
                     vkCreateDescriptorSetLayout(
                             state.device.logical, descriptorSetLayoutCreateInfo, null, longOutput));
             descriptorSetLayout = longOutput.get(0);
 
-            LongBuffer descriptorSetLayoutAddress = stack.longs(descriptorSetLayout);
-
             VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo =
-                    VkPipelineLayoutCreateInfo.calloc(stack);
-            pipelineLayoutCreateInfo
-                    .sType$Default()
-                    .setLayoutCount(1)
-                    .pSetLayouts(descriptorSetLayoutAddress)
-                    .pPushConstantRanges(pushConstantRanges);
+                    VkPipelineLayoutCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .pSetLayouts(
+                                    stack.longs(
+                                            descriptorSetLayout,
+                                            state.bindlessTextures.getDescriptorSetLayout()));
             checkError(
                     vkCreatePipelineLayout(
                             state.device.logical, pipelineLayoutCreateInfo, null, longOutput));
             pipelineLayout = longOutput.get(0);
+
+            VkDescriptorPoolSize.Buffer poolSizes = VkDescriptorPoolSize.calloc(1, stack);
+            poolSizes
+                    .get(0)
+                    .type(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+                    .descriptorCount(GraphicsManager.MAX_FRAMES_IN_FLIGHT);
+            VkDescriptorPoolCreateInfo descriptorPoolCreateInfo =
+                    VkDescriptorPoolCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .maxSets(GraphicsManager.MAX_FRAMES_IN_FLIGHT)
+                            .pPoolSizes(poolSizes);
+            checkError(
+                    vkCreateDescriptorPool(
+                            state.device.logical, descriptorPoolCreateInfo, null, longOutput));
+            descriptorPool = longOutput.get(0);
+
+            LongBuffer setLayouts = stack.callocLong(GraphicsManager.MAX_FRAMES_IN_FLIGHT);
+            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+                setLayouts.put(i, descriptorSetLayout);
+            }
+            VkDescriptorSetAllocateInfo descriptorSetAlloc =
+                    VkDescriptorSetAllocateInfo.calloc(stack)
+                            .sType$Default()
+                            .descriptorPool(descriptorPool)
+                            .pSetLayouts(setLayouts);
+            checkError(
+                    vkAllocateDescriptorSets(
+                            state.device.logical, descriptorSetAlloc, descriptorSets));
+
+            // The uniform buffers never change, so write them once
+            VkWriteDescriptorSet.Buffer writes =
+                    VkWriteDescriptorSet.calloc(GraphicsManager.MAX_FRAMES_IN_FLIGHT, stack);
+            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+                VkDescriptorBufferInfo.Buffer bufferInfo = VkDescriptorBufferInfo.calloc(1, stack);
+                bufferInfo
+                        .get(0)
+                        .buffer(state.perFrameData[i].skyboxUniforms.buffer)
+                        .offset(0)
+                        .range(VK_WHOLE_SIZE);
+                writes.get(i)
+                        .sType$Default()
+                        .dstSet(descriptorSets[i])
+                        .dstBinding(ShaderBindings.Skybox.UNIFORMS_BINDING)
+                        .descriptorCount(1)
+                        .descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+                        .pBufferInfo(bufferInfo);
+            }
+            vkUpdateDescriptorSets(state.device.logical, writes, null);
         }
     }
 
-    private void createPipeline(@NonNull VulkanState state) {
+    /**
+     * Create a pipeline for drawing the skybox.
+     *
+     * @param state The Vulkan state.
+     * @param additive True to add onto the target, false to alpha blend onto it.
+     * @return The VkPipeline.
+     */
+    private long createPipeline(@NonNull VulkanState state, boolean additive) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
             VkVertexInputAttributeDescription.Buffer vertexAttributes =
                     VkVertexInputAttributeDescription.calloc(2, stack);
-
-            int offset = 0;
             // Positions
             vertexAttributes
                     .get(0)
                     .binding(0)
                     .location(0)
                     .format(VK_FORMAT_R32G32B32_SFLOAT)
-                    .offset(offset);
-            offset += 3 * Float.BYTES;
-
+                    .offset(0);
             // Texture coordinates
             vertexAttributes
                     .get(1)
                     .binding(0)
                     .location(1)
                     .format(VK_FORMAT_R32G32_SFLOAT)
-                    .offset(offset);
-            offset += 2 * Float.BYTES;
+                    .offset(3 * Float.BYTES);
 
             VkVertexInputBindingDescription.Buffer vertexBindings =
                     VkVertexInputBindingDescription.calloc(1, stack);
-            vertexBindings.get(0).binding(0).stride(offset).inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
+            vertexBindings
+                    .get(0)
+                    .binding(0)
+                    .stride(SkyboxModel.FLOATS_PER_VERTEX * Float.BYTES)
+                    .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
 
             VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo =
                     VkPipelineVertexInputStateCreateInfo.calloc(stack)
@@ -251,13 +426,14 @@ public class SkyboxRender implements RenderStage {
                             .viewportCount(1)
                             .scissorCount(1);
 
-            IntBuffer dynamicStates =
-                    stack.ints(VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR);
             VkPipelineDynamicStateCreateInfo dynamicState =
                     VkPipelineDynamicStateCreateInfo.calloc(stack)
                             .sType$Default()
-                            .pDynamicStates(dynamicStates);
+                            .pDynamicStates(
+                                    stack.ints(
+                                            VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR));
 
+            // Equal passes at the far plane, where the scene didn't draw anything
             VkPipelineDepthStencilStateCreateInfo depthStencilState =
                     VkPipelineDepthStencilStateCreateInfo.calloc(stack)
                             .sType$Default()
@@ -265,33 +441,46 @@ public class SkyboxRender implements RenderStage {
                             .depthWriteEnable(false)
                             .depthCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
 
-            IntBuffer imageFormat = stack.ints(VK_FORMAT_R8G8B8A8_SRGB);
-
             VkPipelineRenderingCreateInfo renderingCreateInfo =
                     VkPipelineRenderingCreateInfo.calloc(stack)
                             .sType$Default()
-                            .colorAttachmentCount(1)
-                            .pColorAttachmentFormats(imageFormat)
-                            .depthAttachmentFormat(state.device.physical.depthFormat);
+                            .pColorAttachmentFormats(
+                                    stack.ints(PipelineManagerVulkan.SCREEN_FORMAT))
+                            .depthAttachmentFormat(PipelineManagerVulkan.DEPTH_FORMAT);
 
+            // OpenGL applies the same factors to the alpha channel too
+            final int srcFactor = additive ? VK_BLEND_FACTOR_ONE : VK_BLEND_FACTOR_SRC_ALPHA;
+            final int dstFactor =
+                    additive ? VK_BLEND_FACTOR_ONE : VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
             VkPipelineColorBlendAttachmentState.Buffer blendAttachments =
                     VkPipelineColorBlendAttachmentState.calloc(1, stack);
             blendAttachments
                     .get(0)
+                    .blendEnable(true)
+                    .srcColorBlendFactor(srcFactor)
+                    .dstColorBlendFactor(dstFactor)
+                    .colorBlendOp(VK_BLEND_OP_ADD)
+                    .srcAlphaBlendFactor(srcFactor)
+                    .dstAlphaBlendFactor(dstFactor)
+                    .alphaBlendOp(VK_BLEND_OP_ADD)
                     .colorWriteMask(
                             VK_COLOR_COMPONENT_R_BIT
                                     | VK_COLOR_COMPONENT_G_BIT
                                     | VK_COLOR_COMPONENT_B_BIT
                                     | VK_COLOR_COMPONENT_A_BIT);
-
             VkPipelineColorBlendStateCreateInfo colorBlendState =
                     VkPipelineColorBlendStateCreateInfo.calloc(stack)
                             .sType$Default()
-                            .attachmentCount(1)
                             .pAttachments(blendAttachments);
+
+            // Back face culling with counter-clockwise front faces like OpenGL, the flipped
+            // viewport keeps the winding the same
             VkPipelineRasterizationStateCreateInfo rasterizationState =
                     VkPipelineRasterizationStateCreateInfo.calloc(stack)
                             .sType$Default()
+                            .polygonMode(VK_POLYGON_MODE_FILL)
+                            .cullMode(VK_CULL_MODE_BACK_BIT)
+                            .frontFace(VK_FRONT_FACE_COUNTER_CLOCKWISE)
                             .lineWidth(1.0f);
             VkPipelineMultisampleStateCreateInfo multisampleState =
                     VkPipelineMultisampleStateCreateInfo.calloc(stack)
@@ -325,7 +514,7 @@ public class SkyboxRender implements RenderStage {
                             null,
                             longOutput));
 
-            pipeline = longOutput.get(0);
+            return longOutput.get(0);
         }
     }
 }

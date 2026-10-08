@@ -19,6 +19,7 @@ import org.lwjgl.assimp.*;
 
 import java.io.File;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.*;
@@ -103,6 +104,9 @@ public class ModelConverter {
      */
     public static final int MAX_WEIGHTS = 4;
 
+    /** The size of a 4x4 float matrix in bytes. */
+    private static final int MATRIX_SIZE_IN_BYTES = 4 * 4 * Float.BYTES;
+
     /** The maximum number of bones that are allowed in a model. */
     public static final int MAX_BONES = 256;
 
@@ -126,6 +130,7 @@ public class ModelConverter {
             @NonNull List<ModelConverter.Bone> boneList,
             @NonNull ByteBuffer frameData,
             int frame,
+            int boneCount,
             @NonNull Node node,
             @NonNull Matrix4f parentTransformation,
             @NonNull Matrix4f globalInverseTransform) {
@@ -143,12 +148,25 @@ public class ModelConverter {
                 boneList.stream().filter(b -> b.boneName().equals(nodeName)).toList();
 
         for (ModelConverter.Bone bone : affectedBones) {
+            if (bone.boneID() >= boneCount) {
+                // Past MAX_BONES, there's no room for it
+                continue;
+            }
             Matrix4f boneTransform =
                     new Matrix4f(globalInverseTransform)
                             .mul(nodeGlobalTransform)
                             .mul(bone.offsetMatrix());
 
-            boneTransform.get(frameData);
+            /*
+             * NOTE(ches) Matrix4f.get(ByteBuffer) doesn't advance the position, so write each bone at an absolute
+             * index. Frames are boneCount matrices each, in bone ID order, which is how the shader indexes them.
+             */
+            final int index = (frame * boneCount + bone.boneID()) * MATRIX_SIZE_IN_BYTES;
+            // NOTE(ches) JOML can only write straight into direct buffers, this is a heap buffer
+            float[] values = boneTransform.get(new float[16]);
+            for (int i = 0; i < values.length; ++i) {
+                frameData.putFloat(index + i * Float.BYTES, values[i]);
+            }
         }
 
         for (Node childNode : node.getChildren()) {
@@ -157,6 +175,7 @@ public class ModelConverter {
                     boneList,
                     frameData,
                     frame,
+                    boneCount,
                     childNode,
                     nodeGlobalTransform,
                     globalInverseTransform);
@@ -207,7 +226,9 @@ public class ModelConverter {
         Matrix4f nodeTransform;
         int numScalingKeys;
 
-        try (AINodeAnim aiNodeAnim = AINodeAnim.create(channel)) {
+        // assimp owns this memory, so it must not be freed (or closed) by us
+        {
+            AINodeAnim aiNodeAnim = AINodeAnim.create(channel);
             AIVectorKey.Buffer positionKeys = aiNodeAnim.mPositionKeys();
             scalingKeys = aiNodeAnim.mScalingKeys();
             AIQuatKey.Buffer rotationKeys = aiNodeAnim.mRotationKeys();
@@ -253,7 +274,9 @@ public class ModelConverter {
         }
         for (int i = 0; i < numNodeAnims; ++i) {
             int numFrames;
-            try (AINodeAnim aiNodeAnim = AINodeAnim.create(aiChannels.get(i))) {
+            // assimp owns this memory, so it must not be freed (or closed) by us
+            {
+                AINodeAnim aiNodeAnim = AINodeAnim.create(aiChannels.get(i));
                 numFrames =
                         Math.max(
                                 Math.max(
@@ -283,7 +306,9 @@ public class ModelConverter {
         }
         for (int i = 0; i < numAnimNodes; ++i) {
             long channel = aiChannels.get(i);
-            try (AINodeAnim aiNodeAnim = AINodeAnim.create(channel)) {
+            // assimp owns this memory, so it must not be freed (or closed) by us
+            {
+                AINodeAnim aiNodeAnim = AINodeAnim.create(channel);
                 if (nodeName.equals(aiNodeAnim.mNodeName().dataString())) {
                     return channel;
                 }
@@ -412,9 +437,10 @@ public class ModelConverter {
                 animationName = aiName.dataString();
             }
 
-            final int FRAME_SIZE = (4 * 4 /* matrix */) * 4 /* bytes per float */;
-
-            ByteBuffer frameData = ByteBuffer.allocate(maxFrames * boneCount * FRAME_SIZE);
+            // Uploaded to the GPU as is, so it has to be little endian
+            ByteBuffer frameData =
+                    ByteBuffer.allocate(maxFrames * boneCount * MATRIX_SIZE_IN_BYTES)
+                            .order(ByteOrder.LITTLE_ENDIAN);
 
             for (int frameNumber = 0; frameNumber < maxFrames; frameNumber++) {
                 ModelConverter.buildFrameMatrices(
@@ -422,6 +448,7 @@ public class ModelConverter {
                         boneList,
                         frameData,
                         frameNumber,
+                        boneCount,
                         rootNode,
                         rootNode.getNodeTransformation(),
                         globalInverseTransformation);
@@ -461,22 +488,19 @@ public class ModelConverter {
         Map<Integer, List<ModelConverter.VertexWeight>> weightSet = new HashMap<>();
 
         for (int i = 0; i < numBones; ++i) {
-            Bone bone;
-            int numWeights;
-            AIVertexWeight.Buffer aiWeights;
-            try (AIBone aiBone = AIBone.create(aiBones.get(i))) {
-                int id = boneList.size();
-                String boneName;
-                if (aiBone.mName().length() <= 0) {
-                    boneName = "bone" + id;
-                } else {
-                    boneName = aiBone.mName().dataString();
-                }
-                bone = new Bone(id, boneName, ModelConverter.toMatrix(aiBone.mOffsetMatrix()));
-                boneList.add(bone);
-                numWeights = aiBone.mNumWeights();
-                aiWeights = aiBone.mWeights();
+            // NOTE(ches) assimp owns this memory, so it must not be freed (or closed) by us
+            AIBone aiBone = AIBone.create(aiBones.get(i));
+            int id = boneList.size();
+            String boneName;
+            if (aiBone.mName().length() <= 0) {
+                boneName = "bone" + id;
+            } else {
+                boneName = aiBone.mName().dataString();
             }
+            Bone bone = new Bone(id, boneName, ModelConverter.toMatrix(aiBone.mOffsetMatrix()));
+            boneList.add(bone);
+            int numWeights = aiBone.mNumWeights();
+            AIVertexWeight.Buffer aiWeights = aiBone.mWeights();
 
             for (int j = 0; j < numWeights; j++) {
                 AIVertexWeight aiWeight = aiWeights.get(j);
@@ -490,12 +514,14 @@ public class ModelConverter {
         }
 
         final int numVertices = aiMesh.mNumVertices();
+        // Uploaded to the GPU as is, so it has to be little endian
         ByteBuffer resultData =
                 ByteBuffer.allocate(
-                        numVertices
-                                * MAX_WEIGHTS
-                                * 2 /* index + weight */
-                                * 4 /* bytes per int/float */);
+                                numVertices
+                                        * MAX_WEIGHTS
+                                        * 2 /* index + weight */
+                                        * 4 /* bytes per int/float */)
+                        .order(ByteOrder.LITTLE_ENDIAN);
 
         for (int i = 0; i < numVertices; ++i) {
             List<ModelConverter.VertexWeight> vertexWeightList =

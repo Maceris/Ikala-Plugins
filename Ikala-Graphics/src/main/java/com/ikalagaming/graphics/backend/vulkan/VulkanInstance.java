@@ -5,6 +5,8 @@ import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
 import static org.lwjgl.system.MemoryUtil.NULL;
 import static org.lwjgl.util.vma.Vma.*;
 import static org.lwjgl.vulkan.EXTDebugUtils.*;
+import static org.lwjgl.vulkan.KHRPortabilityEnumeration.*;
+import static org.lwjgl.vulkan.KHRPortabilitySubset.VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME;
 import static org.lwjgl.vulkan.KHRSurface.*;
 import static org.lwjgl.vulkan.KHRSwapchain.*;
 import static org.lwjgl.vulkan.VK10.vkGetPhysicalDeviceProperties;
@@ -40,7 +42,9 @@ import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 public class VulkanInstance implements Instance {
@@ -75,8 +79,25 @@ public class VulkanInstance implements Instance {
     /** The list of validation layers we want if validation is enabled. */
     private static final String[] VALIDATION_LAYERS = {"VK_LAYER_KHRONOS_validation"};
 
-    /** Whether to enable validation layers and logging. */
+    /**
+     * Whether to try to enable validation layers and logging. If the layers aren't installed, as
+     * when running directly on MoltenVK without a loader, we log a warning and run without them.
+     */
     private static final boolean ENABLE_VALIDATION = true;
+
+    /** The swapchain image format. Supported practically everywhere, checked during selection. */
+    private static final int SWAPCHAIN_FORMAT = VK_FORMAT_B8G8R8A8_UNORM;
+
+    /** The swapchain color space, paired with {@link #SWAPCHAIN_FORMAT}. */
+    private static final int SWAPCHAIN_COLOR_SPACE = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+
+    /** Composite alpha modes we can live with, in order of preference. */
+    private static final int[] COMPOSITE_ALPHA_PREFERENCES = {
+        VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+        VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
+        VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
+        VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR
+    };
 
     /**
      * Check for an error, and if there is one then log it and throw an exception.
@@ -112,6 +133,18 @@ public class VulkanInstance implements Instance {
                         case VK_ERROR_FRAGMENTATION -> "VK_ERROR_FRAGMENTATION";
                         case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS ->
                                 "VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS";
+
+                            // Surfaces and swapchains
+                        case VK_ERROR_SURFACE_LOST_KHR -> "VK_ERROR_SURFACE_LOST_KHR";
+                        case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR ->
+                                "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR";
+                        case VK_ERROR_OUT_OF_DATE_KHR -> "VK_ERROR_OUT_OF_DATE_KHR";
+                        case VK_SUBOPTIMAL_KHR -> "VK_SUBOPTIMAL_KHR";
+
+                            // Not errors, but not success either
+                        case VK_NOT_READY -> "VK_NOT_READY";
+                        case VK_TIMEOUT -> "VK_TIMEOUT";
+                        case VK_INCOMPLETE -> "VK_INCOMPLETE";
 
                             // Vulkan 1.3 errors
                             // Nothing for now
@@ -249,13 +282,13 @@ public class VulkanInstance implements Instance {
     private PipelineManagerVulkan pipelineManager;
 
     /**
-     * Check that the specified layers are available, and throw an exception if any are not.
+     * Check that the specified layers are available, and log a warning if any are not.
      *
      * @param availableLayerNames The layer names that are available.
-     * @param requiredLayerNames The layers that we require.
-     * @throws RenderException If required layers are missing.
+     * @param requiredLayerNames The layers that we want.
+     * @return Whether all the layers are available.
      */
-    private void checkLayers(
+    private boolean checkLayers(
             @NonNull VkLayerProperties.Buffer availableLayerNames,
             PointerBuffer requiredLayerNames) {
 
@@ -281,8 +314,7 @@ public class VulkanInstance implements Instance {
 
         if (!missingLayers.isEmpty()) {
             final var layerNames = String.join(", ", missingLayers);
-            final var message = SafeResourceLoader.format("Vulkan layers missing: {}", layerNames);
-            log.error(message);
+            log.warn("Vulkan layers missing, running without them: {}", layerNames);
 
             if (log.isDebugEnabled()) {
                 List<String> layers = new ArrayList<>();
@@ -294,25 +326,50 @@ public class VulkanInstance implements Instance {
                 }
                 log.debug("Found Vulkan layers: {}", String.join(", ", layers));
             }
-
-            throw new RenderException(message);
+            return false;
         }
+        return true;
     }
 
     /**
-     * Check if we need to update the swapchain.
+     * Find the names of all the instance extensions available.
      *
-     * @param errorCode The error code from a vulkan function that might be
-     *     VK_ERROR_OUT_OF_DATE_KHR.
-     * @param windowInfo The window we are interested in.
-     * @return if we updated the swapchain.
+     * @return The extension names.
      */
-    private void checkSwapchain(int errorCode, @NonNull VulkanState.WindowInfo windowInfo) {
+    private List<String> getAvailableInstanceExtensions() {
+        checkError(vkEnumerateInstanceExtensionProperties((String) null, intOutput, null));
+        List<String> result = new ArrayList<>();
+        // Can be too big for the stack, so it's garbage collected instead
+        VkExtensionProperties.Buffer properties = VkExtensionProperties.create(intOutput.get(0));
+        checkError(vkEnumerateInstanceExtensionProperties((String) null, intOutput, properties));
+        for (int i = 0; i < intOutput.get(0); ++i) {
+            result.add(properties.get(i).extensionNameString());
+        }
+        return result;
+    }
+
+    /**
+     * Check the result of acquiring or presenting a swapchain image, and flag the swapchain for
+     * regeneration if it no longer matches the surface.
+     *
+     * @param errorCode The result of vkAcquireNextImageKHR or vkQueuePresentKHR.
+     * @param windowInfo The window we are interested in.
+     * @return False if the swapchain was out of date and the operation did not happen. True if it
+     *     happened, even if the swapchain is suboptimal and will be regenerated.
+     * @throws RenderException For any other error.
+     */
+    private boolean checkSwapchain(int errorCode, @NonNull VulkanState.WindowInfo windowInfo) {
         if (errorCode == VK_ERROR_OUT_OF_DATE_KHR) {
             windowInfo.updateSwapchain = true;
-        } else {
-            checkError(errorCode);
+            return false;
         }
+        if (errorCode == VK_SUBOPTIMAL_KHR) {
+            // Still usable, so finish the frame and regenerate afterward
+            windowInfo.updateSwapchain = true;
+            return true;
+        }
+        checkError(errorCode);
+        return true;
     }
 
     @Override
@@ -320,15 +377,23 @@ public class VulkanInstance implements Instance {
         checkError(vkDeviceWaitIdle(state.device.logical));
 
         pipelineManager.cleanup(state);
-        for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
-            state.freeRetiredBuffers(i);
-        }
+        // Queues them up for deletion below
+        shaderMap.clearAll();
 
         DeletionQueue.Entry nextEntry = GraphicsManager.getDeletionQueue().pop();
         while (nextEntry != null) {
             deleteResource(nextEntry);
             nextEntry = GraphicsManager.getDeletionQueue().pop();
         }
+        // The device is idle, so everything deferred can go now
+        for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+            state.runDeferredFrees(i);
+        }
+        ((TextureLoaderVulkan) textureLoader).cleanup();
+        state.bindlessTextures.cleanup(state);
+        state.bindlessTextures = null;
+        state.immediateCommands.cleanup(state);
+        state.immediateCommands = null;
         // Created in initializeGui()
         IkGui.destroyContext();
 
@@ -337,6 +402,14 @@ public class VulkanInstance implements Instance {
         }
         state.windows.clear();
 
+        for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+            vkDestroyFence(state.device.logical, state.fences[i], null);
+            state.fences[i] = VK_NULL_HANDLE;
+            vkDestroySemaphore(state.device.logical, state.imageAcquiredSemaphores[i], null);
+            state.imageAcquiredSemaphores[i] = VK_NULL_HANDLE;
+        }
+
+        // Frees the command buffers allocated from them too
         vkDestroyCommandPool(state.device.logical, state.commandPoolGraphics, null);
         state.commandPoolGraphics = VK_NULL_HANDLE;
         if (state.hasSeparateTransferQueue) {
@@ -348,35 +421,59 @@ public class VulkanInstance implements Instance {
         vkDestroyDevice(state.device.logical, null);
         cleanupPhysicalDeviceInfo(state.device.physical);
         state.device.physical = null;
+        if (state.debugMessenger != VK_NULL_HANDLE) {
+            vkDestroyDebugUtilsMessengerEXT(state.instance, state.debugMessenger, null);
+            state.debugMessenger = VK_NULL_HANDLE;
+        }
         vkDestroyInstance(state.instance, null);
+        state.instance = null;
+
+        debugLogger.free();
+        MemoryUtil.memFree(intOutput);
+        MemoryUtil.memFree(longOutput);
+        MemoryUtil.memFree(pointerOutput);
     }
 
     /**
-     * Clean up any memory owned by the struct.
+     * Drop references to the device info structs. They are all garbage collected buffers (created
+     * with create() rather than calloc()), so they must not be freed manually.
      *
      * @param deviceInfo The struct to clean up.
      */
     private void cleanupPhysicalDeviceInfo(@NonNull VulkanState.PhysicalDeviceInfo deviceInfo) {
-        if (deviceInfo.formats != null) {
-            deviceInfo.formats.free();
-            deviceInfo.formats = null;
+        deviceInfo.capabilities = null;
+        deviceInfo.formats = null;
+        deviceInfo.queueFamilyProperties = null;
+    }
+
+    /**
+     * Destroy the swapchain image views and the semaphores that go with them. The device must be
+     * idle.
+     *
+     * @param windowInfo The window to clean up after.
+     */
+    private void cleanupSwapchainResources(@NonNull VulkanState.WindowInfo windowInfo) {
+        if (windowInfo.swapchainImageViews != null) {
+            for (long view : windowInfo.swapchainImageViews) {
+                vkDestroyImageView(state.device.logical, view, null);
+            }
+            windowInfo.swapchainImageViews = null;
         }
-        if (deviceInfo.queueFamilyProperties != null) {
-            deviceInfo.queueFamilyProperties.free();
-            deviceInfo.queueFamilyProperties = null;
+        if (windowInfo.renderCompleteSemaphores != null) {
+            for (long handle : windowInfo.renderCompleteSemaphores) {
+                vkDestroySemaphore(state.device.logical, handle, null);
+            }
+            windowInfo.renderCompleteSemaphores = null;
         }
+        windowInfo.swapchainImages = null;
     }
 
     private void cleanupWindow(VulkanState.WindowInfo windowInfo) {
-        for (int i = 0; i < windowInfo.swapchainImageViews.length; i++) {
-            vkDestroyImageView(state.device.logical, windowInfo.swapchainImageViews[i], null);
-        }
-
-        for (long handle : windowInfo.renderCompleteSemaphores) {
-            vkDestroySemaphore(state.device.logical, handle, null);
-        }
-
+        cleanupSwapchainResources(windowInfo);
+        vkDestroySwapchainKHR(state.device.logical, windowInfo.swapchainHandle, null);
+        windowInfo.swapchainHandle = VK_NULL_HANDLE;
         vkDestroySurfaceKHR(state.instance, windowInfo.surfaceHandle, null);
+        windowInfo.surfaceHandle = VK_NULL_HANDLE;
     }
 
     /**
@@ -417,6 +514,7 @@ public class VulkanInstance implements Instance {
                     .descriptorBindingPartiallyBound(true)
                     .descriptorBindingSampledImageUpdateAfterBind(true)
                     .descriptorBindingStorageBufferUpdateAfterBind(true)
+                    .descriptorBindingUpdateUnusedWhilePending(true)
                     .descriptorBindingVariableDescriptorCount(true)
                     .descriptorIndexing(true)
                     .runtimeDescriptorArray(true)
@@ -433,7 +531,12 @@ public class VulkanInstance implements Instance {
                     .pNext(enabledVk12Features.address());
 
             VkPhysicalDeviceFeatures enabledVkFeatures = VkPhysicalDeviceFeatures.calloc(stack);
-            enabledVkFeatures.samplerAnisotropy(true).fillModeNonSolid(true);
+            enabledVkFeatures
+                    .samplerAnisotropy(true)
+                    .fillModeNonSolid(true)
+                    // Scene draws use indirect commands with several draws and base instances
+                    .multiDrawIndirect(true)
+                    .drawIndirectFirstInstance(true);
 
             VkDeviceQueueCreateInfo.Buffer deviceQueueCreateInfos;
 
@@ -481,8 +584,12 @@ public class VulkanInstance implements Instance {
             }
 
             PointerBuffer deviceExtensionNames =
-                    PointerBuffer.allocateDirect(REQUIRED_DEVICE_EXTENSIONS.length);
+                    stack.mallocPointer(REQUIRED_DEVICE_EXTENSIONS.length + 1);
             Arrays.stream(REQUIRED_DEVICE_EXTENSIONS).forEach(deviceExtensionNames::put);
+            if (state.device.physical.portabilitySubset) {
+                // Required when the device has it, such as MoltenVK on macOS
+                deviceExtensionNames.put(stack.ASCII(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME));
+            }
             deviceExtensionNames.flip();
 
             VkDeviceCreateInfo deviceCreateInfo = VkDeviceCreateInfo.create();
@@ -533,75 +640,114 @@ public class VulkanInstance implements Instance {
         } else {
             state.device.transferQueue = state.device.graphicsQueue;
         }
-
-        checkError(
-                glfwCreateWindowSurface(
-                        state.instance, window.getWindowHandle(), null, longOutput));
-        windowInfo.surfaceHandle = longOutput.get(0);
     }
 
-    private void createSwapchain(@NonNull Window window) {
-        VulkanState.WindowInfo windowInfo = state.windows.get(window);
-
+    /**
+     * Create the swapchain for a window, along with its image views and semaphores. If the window
+     * already has one it is replaced, in which case the device must be idle.
+     *
+     * @param windowInfo The window to create a swapchain for.
+     * @return False if the window has no area right now (such as while minimized), in which case
+     *     nothing changed and we should try again later.
+     */
+    private boolean createSwapchain(@NonNull VulkanState.WindowInfo windowInfo) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkSurfaceCapabilitiesKHR capabilities = state.device.physical.capabilities;
             checkError(
                     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
                             state.device.physical.physicalDevice,
                             windowInfo.surfaceHandle,
-                            state.device.physical.capabilities));
-            VkExtent2D swapchainExtent = VkExtent2D.calloc(stack);
+                            capabilities));
 
-            if (state.device.physical.capabilities.currentExtent().width() == 0xFFFF_FFFF) {
-                swapchainExtent.set(window.getWidth(), window.getHeight());
+            final int width;
+            final int height;
+            if (capabilities.currentExtent().width() == 0xFFFF_FFFF) {
+                // The swapchain decides the surface size, so match the framebuffer
+                width =
+                        Math.clamp(
+                                windowInfo.window.getWidth(),
+                                capabilities.minImageExtent().width(),
+                                capabilities.maxImageExtent().width());
+                height =
+                        Math.clamp(
+                                windowInfo.window.getHeight(),
+                                capabilities.minImageExtent().height(),
+                                capabilities.maxImageExtent().height());
             } else {
-                swapchainExtent.set(state.device.physical.capabilities.currentExtent());
+                width = capabilities.currentExtent().width();
+                height = capabilities.currentExtent().height();
             }
+            if (width == 0 || height == 0) {
+                // Minimized, swapchains can't be empty
+                return false;
+            }
+
+            // One more than the minimum so we don't wait on the presentation engine to get one
+            int imageCount = capabilities.minImageCount() + 1;
+            if (capabilities.maxImageCount() > 0) {
+                // 0 means there is no maximum
+                imageCount = Math.min(imageCount, capabilities.maxImageCount());
+            }
+
+            final long oldSwapchain = windowInfo.swapchainHandle;
 
             /*
              * NOTE(ches) The swapchain is BGRA as that's guaranteed to be everywhere, though our app generally operates
-             * in RGBA. We'll just swizzle at the last possible second. VK_PRESENT_MODE_FIFO_KHR is a v-synced mode
+             * in RGBA. We'll just swizzle at the last possible second. It's UNORM rather than sRGB since, like the OpenGL
+             * backend, we hand it colors that are already in display space. VK_PRESENT_MODE_FIFO_KHR is a v-synced mode
              * and the only mode guaranteed to be available everywhere.
              */
             VkSwapchainCreateInfoKHR swapchainCreateInfo =
                     VkSwapchainCreateInfoKHR.calloc(stack)
                             .sType$Default()
                             .surface(windowInfo.surfaceHandle)
-                            .minImageCount(state.device.physical.capabilities.minImageCount())
-                            .imageFormat(VK_FORMAT_B8G8R8A8_SRGB)
-                            .imageColorSpace(VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-                            .imageExtent(swapchainExtent)
+                            .minImageCount(imageCount)
+                            .imageFormat(SWAPCHAIN_FORMAT)
+                            .imageColorSpace(SWAPCHAIN_COLOR_SPACE)
+                            .imageExtent(e -> e.set(width, height))
                             .imageArrayLayers(1)
                             .imageUsage(
                                     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
                                             | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-                            .preTransform(VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
-                            .compositeAlpha(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
-                            .presentMode(VK_PRESENT_MODE_FIFO_KHR);
+                            .imageSharingMode(VK_SHARING_MODE_EXCLUSIVE)
+                            .preTransform(capabilities.currentTransform())
+                            .compositeAlpha(selectCompositeAlpha(capabilities))
+                            .presentMode(VK_PRESENT_MODE_FIFO_KHR)
+                            .clipped(true)
+                            .oldSwapchain(oldSwapchain);
 
             checkError(
                     vkCreateSwapchainKHR(
                             state.device.logical, swapchainCreateInfo, null, longOutput));
             windowInfo.swapchainHandle = longOutput.get(0);
+            windowInfo.swapchainWidth = width;
+            windowInfo.swapchainHeight = height;
+
+            // Retired by creating the new one, and the device is idle so nothing is using it
+            cleanupSwapchainResources(windowInfo);
+            if (oldSwapchain != VK_NULL_HANDLE) {
+                vkDestroySwapchainKHR(state.device.logical, oldSwapchain, null);
+            }
 
             checkError(
                     vkGetSwapchainImagesKHR(
                             state.device.logical, windowInfo.swapchainHandle, intOutput, null));
-            final int imageCount = intOutput.get(0);
-            LongBuffer images = stack.callocLong(imageCount);
+            final int actualImageCount = intOutput.get(0);
+            LongBuffer images = stack.callocLong(actualImageCount);
             checkError(
                     vkGetSwapchainImagesKHR(
                             state.device.logical, windowInfo.swapchainHandle, intOutput, images));
 
-            windowInfo.swapchainImages = new long[imageCount];
+            windowInfo.swapchainImages = new long[actualImageCount];
             images.get(0, windowInfo.swapchainImages);
-            windowInfo.swapchainImageViews = new long[imageCount];
-            for (int i = 0; i < imageCount; i++) {
+            windowInfo.swapchainImageViews = new long[actualImageCount];
+            for (int i = 0; i < actualImageCount; i++) {
                 VkImageViewCreateInfo viewCreateInfo =
                         VkImageViewCreateInfo.calloc(stack)
                                 .sType$Default()
                                 .image(windowInfo.swapchainImages[i])
                                 .viewType(VK_IMAGE_VIEW_TYPE_2D)
-                                .format(VK_FORMAT_B8G8R8A8_SRGB)
+                                .format(SWAPCHAIN_FORMAT)
                                 .subresourceRange(
                                         VkImageSubresourceRange.calloc(stack)
                                                 .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
@@ -612,18 +758,21 @@ public class VulkanInstance implements Instance {
                 windowInfo.swapchainImageViews[i] = longOutput.get(0);
             }
 
-            windowInfo.lastSwapchainGeneration = System.currentTimeMillis();
-
-            windowInfo.renderCompleteSemaphores = new long[imageCount];
+            // One per image rather than per frame in flight, since presentation holds onto them
+            windowInfo.renderCompleteSemaphores = new long[actualImageCount];
             VkSemaphoreCreateInfo semaphoreCreateInfo =
                     VkSemaphoreCreateInfo.calloc(stack).sType$Default();
-            for (int i = 0; i < imageCount; i++) {
+            for (int i = 0; i < actualImageCount; i++) {
                 checkError(
                         vkCreateSemaphore(
                                 state.device.logical, semaphoreCreateInfo, null, longOutput));
                 windowInfo.renderCompleteSemaphores[i] = longOutput.get(0);
             }
+
+            windowInfo.lastSwapchainGeneration = System.currentTimeMillis();
+            windowInfo.updateSwapchain = false;
         }
+        return true;
     }
 
     private void createSynchronizationInfo() {
@@ -660,11 +809,32 @@ public class VulkanInstance implements Instance {
             PointerBuffer requiredExtensionNames = PointerBuffer.allocateDirect(64);
 
             populateRequiredExtensions(requiredExtensionNames);
-            requiredExtensionNames.flip();
+            final List<String> availableExtensions = getAvailableInstanceExtensions();
+
+            /*
+             * Implementations that aren't fully conformant, like MoltenVK on macOS, are only listed if we ask for them.
+             * Through the Vulkan loader, they are hidden without this.
+             */
+            final boolean portability =
+                    availableExtensions.contains(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+            if (portability) {
+                ByteBuffer portabilityName =
+                        MemoryUtil.memASCII(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+                freeThese.add(portabilityName);
+                requiredExtensionNames.put(portabilityName);
+            }
 
             PointerBuffer requiredLayerNames = null;
+            boolean validation = ENABLE_VALIDATION;
 
-            if (ENABLE_VALIDATION) {
+            if (validation && !availableExtensions.contains(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
+                log.warn(
+                        "Missing {}, running without validation",
+                        VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+                validation = false;
+            }
+
+            if (validation) {
                 requiredLayerNames = PointerBuffer.allocateDirect(VALIDATION_LAYERS.length);
                 for (String validationLayer : VALIDATION_LAYERS) {
                     ByteBuffer converted = MemoryUtil.memASCII(validationLayer);
@@ -679,8 +849,19 @@ public class VulkanInstance implements Instance {
                         VkLayerProperties.create(intOutput.get(0));
                 checkError(vkEnumerateInstanceLayerProperties(intOutput, availableLayers));
 
-                checkLayers(availableLayers, requiredLayerNames);
+                // Not installed with the Vulkan runtime or MoltenVK, only the SDK
+                validation = checkLayers(availableLayers, requiredLayerNames);
+                if (!validation) {
+                    requiredLayerNames = null;
+                }
             }
+
+            if (validation) {
+                ByteBuffer debugUtils = MemoryUtil.memASCII(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+                freeThese.add(debugUtils);
+                requiredExtensionNames.put(debugUtils);
+            }
+            requiredExtensionNames.flip();
 
             ByteBuffer appName = MemoryUtil.memUTF8(window.getTitle());
             freeThese.add(appName);
@@ -701,14 +882,17 @@ public class VulkanInstance implements Instance {
                     VkInstanceCreateInfo.create()
                             .sType$Default()
                             .pNext(NULL)
-                            .flags(0)
+                            .flags(
+                                    portability
+                                            ? VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR
+                                            : 0)
                             .pApplicationInfo(applicationInfo)
                             .ppEnabledLayerNames(requiredLayerNames)
                             .ppEnabledExtensionNames(requiredExtensionNames);
 
-            VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
+            VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo = null;
 
-            if (ENABLE_VALIDATION) {
+            if (validation) {
                 debugCreateInfo =
                         VkDebugUtilsMessengerCreateInfoEXT.create()
                                 .sType$Default()
@@ -747,6 +931,14 @@ public class VulkanInstance implements Instance {
 
             state.instance = new VkInstance(pointerOutput.get(0), instanceInfo);
 
+            if (validation) {
+                // The create info chained above only covers instance creation and destruction
+                checkError(
+                        vkCreateDebugUtilsMessengerEXT(
+                                state.instance, debugCreateInfo, null, longOutput));
+                state.debugMessenger = longOutput.get(0);
+            }
+
             checkError(vkEnumeratePhysicalDevices(state.instance, intOutput, null));
 
             if (intOutput.get(0) <= 0) {
@@ -769,26 +961,21 @@ public class VulkanInstance implements Instance {
                     VkPhysicalDeviceVulkan12Properties vk12Properties =
                             VkPhysicalDeviceVulkan12Properties.calloc(stack).sType$Default();
 
-                    VkPhysicalDeviceDescriptorBufferPropertiesEXT bufferProperties =
-                            VkPhysicalDeviceDescriptorBufferPropertiesEXT.calloc(stack)
-                                    .sType$Default();
-
                     VkPhysicalDeviceProperties2 deviceProperties2 =
                             VkPhysicalDeviceProperties2.calloc(stack)
                                     .sType$Default()
-                                    .pNext(vk12Properties)
-                                    .pNext(bufferProperties);
+                                    .pNext(vk12Properties);
 
                     vkGetPhysicalDeviceProperties2(deviceInfo.physicalDevice, deviceProperties2);
 
                     deviceInfo.maxBindlessImages =
                             Math.min(
                                     deviceInfo.maxBindlessImages,
-                                    vk12Properties.maxDescriptorSetUpdateAfterBindSampledImages());
-
-                    long samplerSize = bufferProperties.combinedImageSamplerDescriptorSize();
-                    deviceInfo.bindlessTextureDescriptorBufferSize =
-                            deviceInfo.maxBindlessImages * samplerSize;
+                                    Math.min(
+                                            vk12Properties
+                                                    .maxDescriptorSetUpdateAfterBindSampledImages(),
+                                            vk12Properties
+                                                    .maxPerStageDescriptorUpdateAfterBindSampledImages()));
                 }
 
                 try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -837,19 +1024,15 @@ public class VulkanInstance implements Instance {
         switch (entry.type()) {
             case BUFFER -> {
                 var buffer = (SharedBuffer) entry.resource();
-                SharedBuffer.free(buffer, state);
+                state.deferFree(() -> SharedBuffer.free(buffer, state));
             }
             case FRAME_BUFFER -> {}
             case SHADER -> {
                 var shader = (ShaderVulkan) entry.resource();
                 shader.free();
             }
-            case TEXTURE -> {
-                var texture = (Texture) entry.resource();
-                var textureInfo = (TextureInfoVulkan) texture.info();
-                vmaDestroyImage(
-                        state.vmaAllocator, textureInfo.texture, textureInfo.textureAllocation);
-            }
+            case TEXTURE ->
+                    ((TextureLoaderVulkan) textureLoader).delete((Texture) entry.resource());
         }
     }
 
@@ -883,7 +1066,11 @@ public class VulkanInstance implements Instance {
             state.vmaAllocator = pointerOutput.get(0);
         }
 
-        createSwapchain(window);
+        VulkanState.WindowInfo windowInfo = state.windows.get(window);
+        if (!createSwapchain(windowInfo)) {
+            // Started minimized, try again once it has a size
+            windowInfo.updateSwapchain = true;
+        }
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkCommandPoolCreateInfo commandPoolCreateInfo =
                     VkCommandPoolCreateInfo.calloc(stack)
@@ -940,7 +1127,9 @@ public class VulkanInstance implements Instance {
             }
         }
 
-        textureLoader = new TextureLoaderVulkan();
+        state.immediateCommands = new ImmediateCommands(state);
+        state.bindlessTextures = new BindlessTextures(state);
+        textureLoader = new TextureLoaderVulkan(state);
         shaderMap = new ShaderMap();
         initializeShaders();
         initializeGui(window);
@@ -950,8 +1139,6 @@ public class VulkanInstance implements Instance {
         pipeline.initialize(window, shaderMap);
 
         createSynchronizationInfo();
-
-        initializeGui(window);
         return true;
     }
 
@@ -1177,95 +1364,21 @@ public class VulkanInstance implements Instance {
         return state;
     }
 
-    private void regenerateSwapchain(@NonNull VulkanState.WindowInfo windowInfo) {
+    /**
+     * Recreate the swapchain to match the window, and grow the render targets if needed.
+     *
+     * @param windowInfo The window whose swapchain is out of date.
+     * @return False if the window has no area right now, so there is nothing to render to.
+     */
+    private boolean regenerateSwapchain(@NonNull VulkanState.WindowInfo windowInfo) {
         checkError(vkDeviceWaitIdle(state.device.logical));
 
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            checkError(
-                    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-                            state.device.physical.physicalDevice,
-                            windowInfo.surfaceHandle,
-                            state.device.physical.capabilities));
-            VkExtent2D swapchainExtent = VkExtent2D.calloc(stack);
-
-            if (state.device.physical.capabilities.currentExtent().width() == 0xFFFF_FFFF) {
-                swapchainExtent.set(windowInfo.window.getWidth(), windowInfo.window.getHeight());
-            } else {
-                swapchainExtent.set(state.device.physical.capabilities.currentExtent());
-            }
-
-            VkSwapchainCreateInfoKHR swapchainCreateInfo =
-                    VkSwapchainCreateInfoKHR.calloc(stack)
-                            .sType$Default()
-                            .surface(windowInfo.surfaceHandle)
-                            .minImageCount(state.device.physical.capabilities.minImageCount())
-                            .imageFormat(VK_FORMAT_B8G8R8A8_SRGB)
-                            .imageColorSpace(VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-                            .imageExtent(swapchainExtent)
-                            .imageArrayLayers(1)
-                            .imageUsage(
-                                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
-                                            | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-                            .preTransform(VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
-                            .compositeAlpha(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
-                            .presentMode(VK_PRESENT_MODE_FIFO_KHR)
-                            .oldSwapchain(windowInfo.swapchainHandle);
-            checkError(
-                    vkCreateSwapchainKHR(
-                            state.device.logical, swapchainCreateInfo, null, longOutput));
-            windowInfo.swapchainHandle = longOutput.get(0);
-
-            for (int i = 0; i < windowInfo.swapchainImageViews.length; i++) {
-                vkDestroyImageView(state.device.logical, windowInfo.swapchainImageViews[i], null);
-            }
-
-            checkError(
-                    vkGetSwapchainImagesKHR(
-                            state.device.logical, windowInfo.swapchainHandle, intOutput, null));
-            final int imageCount = intOutput.get(0);
-            LongBuffer images = stack.callocLong(imageCount);
-            checkError(
-                    vkGetSwapchainImagesKHR(
-                            state.device.logical, windowInfo.swapchainHandle, intOutput, images));
-            windowInfo.swapchainImages = new long[imageCount];
-            images.get(0, windowInfo.swapchainImages);
-
-            windowInfo.swapchainImageViews = new long[imageCount];
-            for (int i = 0; i < imageCount; i++) {
-                VkImageViewCreateInfo viewCreateInfo =
-                        VkImageViewCreateInfo.calloc(stack)
-                                .sType$Default()
-                                .image(windowInfo.swapchainImages[i])
-                                .viewType(VK_IMAGE_VIEW_TYPE_2D)
-                                .format(VK_FORMAT_B8G8R8A8_SRGB)
-                                .subresourceRange(
-                                        VkImageSubresourceRange.calloc(stack)
-                                                .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
-                                                .levelCount(1)
-                                                .layerCount(1));
-                checkError(
-                        vkCreateImageView(state.device.logical, viewCreateInfo, null, longOutput));
-                windowInfo.swapchainImageViews[i] = longOutput.get(0);
-            }
-
-            for (long handle : windowInfo.renderCompleteSemaphores) {
-                vkDestroySemaphore(state.device.logical, handle, null);
-            }
-            windowInfo.renderCompleteSemaphores = new long[imageCount];
-            VkSemaphoreCreateInfo semaphoreCreateInfo =
-                    VkSemaphoreCreateInfo.calloc(stack).sType$Default();
-            for (int i = 0; i < imageCount; i++) {
-                checkError(
-                        vkCreateSemaphore(
-                                state.device.logical, semaphoreCreateInfo, null, longOutput));
-                windowInfo.renderCompleteSemaphores[i] = longOutput.get(0);
-            }
-            vkDestroySwapchainKHR(state.device.logical, swapchainCreateInfo.oldSwapchain(), null);
-            windowInfo.lastSwapchainGeneration = System.currentTimeMillis();
-            windowInfo.updateSwapchain = false;
+        if (!createSwapchain(windowInfo)) {
+            return false;
         }
 
-        pipelineManager.resize(state, windowInfo.window.getWidth(), windowInfo.window.getHeight());
+        pipelineManager.resize(state, windowInfo.swapchainWidth, windowInfo.swapchainHeight);
+        return true;
     }
 
     @Override
@@ -1275,103 +1388,106 @@ public class VulkanInstance implements Instance {
         }
         VulkanState.WindowInfo windowInfo = state.windows.get(window);
 
-        if (!windowInfo.updateSwapchain) {
-            longOutput.put(0, state.fences[state.frameIndex]);
-            checkError(vkWaitForFences(state.device.logical, longOutput, true, Integer.MAX_VALUE));
-            // The GPU is done with this frame index, so nothing can be using these anymore
-            state.freeRetiredBuffers(state.frameIndex);
-            longOutput.put(0, state.fences[state.frameIndex]);
-            checkError(vkResetFences(state.device.logical, longOutput));
-
-            final long swapchain = windowInfo.swapchainHandle;
-
-            // Not worth even checking if we have to update the swapchain
-            checkSwapchain(
-                    vkAcquireNextImageKHR(
-                            state.device.logical,
-                            swapchain,
-                            Long.MAX_VALUE,
-                            state.imageAcquiredSemaphores[state.frameIndex],
-                            VK_NULL_HANDLE,
-                            intOutput),
-                    windowInfo);
+        if (windowInfo.updateSwapchain
+                && (!shouldRegenerateSwapchain(windowInfo) || !regenerateSwapchain(windowInfo))) {
+            // Resizing or minimized, skip the frame until we have a swapchain that fits
+            return;
         }
-        if (!windowInfo.updateSwapchain) {
-            windowInfo.currentSwapchainIndex = intOutput.get(0);
 
-            final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
-            checkError(vkResetCommandBuffer(commandBuffer, 0));
+        longOutput.put(0, state.fences[state.frameIndex]);
+        checkError(vkWaitForFences(state.device.logical, longOutput, true, Long.MAX_VALUE));
+        // The GPU is done with this frame index, so nothing can be using these anymore
+        state.runDeferredFrees(state.frameIndex);
 
-            try (MemoryStack stack = MemoryStack.stackPush()) {
-                VkCommandBufferBeginInfo commandBufferBeginInfo =
-                        VkCommandBufferBeginInfo.calloc(stack)
-                                .sType$Default()
-                                .flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-                checkError(vkBeginCommandBuffer(commandBuffer, commandBufferBeginInfo));
-            }
-
-            // This will record the command buffer
-            pipeline.render(scene, shaderMap, windowInfo.window, state);
-
-            vkEndCommandBuffer(commandBuffer);
-
-            try (MemoryStack stack = MemoryStack.stackPush()) {
-                VkSemaphoreSubmitInfo.Buffer waitSemaphoreInfos =
-                        VkSemaphoreSubmitInfo.calloc(1, stack);
-                waitSemaphoreInfos
-                        .get(0)
-                        .sType$Default()
-                        .semaphore(state.imageAcquiredSemaphores[state.frameIndex])
-                        .stageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
-
-                VkCommandBufferSubmitInfo.Buffer commandBufferSubmitInfos =
-                        VkCommandBufferSubmitInfo.calloc(1, stack);
-                commandBufferSubmitInfos.get(0).sType$Default().commandBuffer(commandBuffer);
-                VkSemaphoreSubmitInfo.Buffer signalSemaphoreInfos =
-                        VkSemaphoreSubmitInfo.calloc(1, stack);
-                signalSemaphoreInfos
-                        .get(0)
-                        .sType$Default()
-                        .semaphore(
-                                windowInfo
-                                        .renderCompleteSemaphores[windowInfo.currentSwapchainIndex])
-                        .stageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
-
-                VkSubmitInfo2.Buffer submitInfos = VkSubmitInfo2.calloc(1, stack);
-                submitInfos
-                        .get(0)
-                        .sType$Default()
-                        .pWaitSemaphoreInfos(waitSemaphoreInfos)
-                        .pCommandBufferInfos(commandBufferSubmitInfos)
-                        .pSignalSemaphoreInfos(signalSemaphoreInfos);
-                checkError(
-                        vkQueueSubmit2(
-                                state.device.graphicsQueue,
-                                submitInfos,
-                                state.fences[state.frameIndex]));
-
-                LongBuffer waitSemaphores =
-                        stack.longs(
-                                windowInfo
-                                        .renderCompleteSemaphores[
-                                        windowInfo.currentSwapchainIndex]);
-                LongBuffer swapchains = stack.longs(windowInfo.swapchainHandle);
-                IntBuffer imageIndices = stack.ints(windowInfo.currentSwapchainIndex);
-
-                VkPresentInfoKHR presentInfo =
-                        VkPresentInfoKHR.calloc(stack)
-                                .sType$Default()
-                                .pWaitSemaphores(waitSemaphores)
-                                .pSwapchains(swapchains)
-                                .swapchainCount(1)
-                                .pImageIndices(imageIndices);
+        final boolean acquired =
                 checkSwapchain(
-                        vkQueuePresentKHR(state.device.graphicsQueue, presentInfo), windowInfo);
-            }
+                        vkAcquireNextImageKHR(
+                                state.device.logical,
+                                windowInfo.swapchainHandle,
+                                Long.MAX_VALUE,
+                                state.imageAcquiredSemaphores[state.frameIndex],
+                                VK_NULL_HANDLE,
+                                intOutput),
+                        windowInfo);
+        if (!acquired) {
+            /*
+             * The fence is still signaled since we haven't reset it, and the semaphore was never
+             * signaled, so we can just try again with this frame index once the swapchain is
+             * regenerated.
+             */
+            return;
+        }
+        windowInfo.currentSwapchainIndex = intOutput.get(0);
+
+        // Only reset once we know we are going to submit something that will signal it
+        longOutput.put(0, state.fences[state.frameIndex]);
+        checkError(vkResetFences(state.device.logical, longOutput));
+
+        final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
+        checkError(vkResetCommandBuffer(commandBuffer, 0));
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkCommandBufferBeginInfo commandBufferBeginInfo =
+                    VkCommandBufferBeginInfo.calloc(stack)
+                            .sType$Default()
+                            .flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+            checkError(vkBeginCommandBuffer(commandBuffer, commandBufferBeginInfo));
         }
 
-        if (shouldRegenerateSwapchain(windowInfo)) {
-            regenerateSwapchain(windowInfo);
+        // This will record the command buffer
+        pipeline.render(scene, shaderMap, windowInfo.window, state);
+
+        checkError(vkEndCommandBuffer(commandBuffer));
+
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkSemaphoreSubmitInfo.Buffer waitSemaphoreInfos =
+                    VkSemaphoreSubmitInfo.calloc(1, stack);
+            waitSemaphoreInfos
+                    .get(0)
+                    .sType$Default()
+                    .semaphore(state.imageAcquiredSemaphores[state.frameIndex])
+                    .stageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
+
+            VkCommandBufferSubmitInfo.Buffer commandBufferSubmitInfos =
+                    VkCommandBufferSubmitInfo.calloc(1, stack);
+            commandBufferSubmitInfos.get(0).sType$Default().commandBuffer(commandBuffer);
+            VkSemaphoreSubmitInfo.Buffer signalSemaphoreInfos =
+                    VkSemaphoreSubmitInfo.calloc(1, stack);
+            signalSemaphoreInfos
+                    .get(0)
+                    .sType$Default()
+                    .semaphore(
+                            windowInfo.renderCompleteSemaphores[windowInfo.currentSwapchainIndex])
+                    .stageMask(VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
+
+            VkSubmitInfo2.Buffer submitInfos = VkSubmitInfo2.calloc(1, stack);
+            submitInfos
+                    .get(0)
+                    .sType$Default()
+                    .pWaitSemaphoreInfos(waitSemaphoreInfos)
+                    .pCommandBufferInfos(commandBufferSubmitInfos)
+                    .pSignalSemaphoreInfos(signalSemaphoreInfos);
+            checkError(
+                    vkQueueSubmit2(
+                            state.device.graphicsQueue,
+                            submitInfos,
+                            state.fences[state.frameIndex]));
+
+            LongBuffer waitSemaphores =
+                    stack.longs(
+                            windowInfo.renderCompleteSemaphores[windowInfo.currentSwapchainIndex]);
+            LongBuffer swapchains = stack.longs(windowInfo.swapchainHandle);
+            IntBuffer imageIndices = stack.ints(windowInfo.currentSwapchainIndex);
+
+            VkPresentInfoKHR presentInfo =
+                    VkPresentInfoKHR.calloc(stack)
+                            .sType$Default()
+                            .pWaitSemaphores(waitSemaphores)
+                            .pSwapchains(swapchains)
+                            .swapchainCount(1)
+                            .pImageIndices(imageIndices);
+            // The graphics queue family is required to support presenting during device selection
+            checkSwapchain(vkQueuePresentKHR(state.device.graphicsQueue, presentInfo), windowInfo);
         }
 
         state.frameIndex = (state.frameIndex + 1) % GraphicsManager.MAX_FRAMES_IN_FLIGHT;
@@ -1383,6 +1499,8 @@ public class VulkanInstance implements Instance {
         VulkanState.WindowInfo windowInfo = state.windows.get(window);
         windowInfo.updateSwapchain = true;
         windowInfo.lastResize = System.currentTimeMillis();
+        IkIO ikIO = IkGui.getIO();
+        ikIO.displaySize.set(width, height);
     }
 
     /**
@@ -1407,18 +1525,40 @@ public class VulkanInstance implements Instance {
             return 0;
         }
 
-        if (!deviceInfo.deviceFeatures.geometryShader()) {
+        if (deviceInfo.queueFamilyIndices.graphics() != deviceInfo.queueFamilyIndices.present()) {
+            /*
+             * We present on the graphics queue. Every desktop GPU has a family that does both, so it's not worth
+             * transferring swapchain image ownership between queues for the hypothetical ones that don't.
+             */
+            log.debug(
+                    "Skipping {}, no queue family supports both graphics and present",
+                    deviceInfo.deviceProperties.deviceNameString());
             return 0;
         }
 
-        if (!supportsRequiredExtensions(deviceInfo.physicalDevice)) {
+        if (VK_API_VERSION_MAJOR(deviceInfo.deviceProperties.apiVersion()) == 1
+                && VK_API_VERSION_MINOR(deviceInfo.deviceProperties.apiVersion()) < 3) {
+            log.debug(
+                    "Skipping {}, it only supports Vulkan {}.{}",
+                    deviceInfo.deviceProperties.deviceNameString(),
+                    VK_API_VERSION_MAJOR(deviceInfo.deviceProperties.apiVersion()),
+                    VK_API_VERSION_MINOR(deviceInfo.deviceProperties.apiVersion()));
+            return 0;
+        }
+
+        if (!supportsRequiredFeatures(deviceInfo)) {
+            return 0;
+        }
+
+        if (!supportsRequiredExtensions(deviceInfo)) {
             return 0;
         }
 
         updateSwapChainSupport(deviceInfo, surfaceHandle);
         if (deviceInfo.formats == null
                 || deviceInfo.presentModes == null
-                || deviceInfo.presentModes.length == 0) {
+                || deviceInfo.presentModes.length == 0
+                || !supportsSwapchainFormat(deviceInfo.formats)) {
             deviceInfo.capabilities = null;
             deviceInfo.formats = null;
             deviceInfo.presentModes = null;
@@ -1455,7 +1595,8 @@ public class VulkanInstance implements Instance {
 
         for (VulkanState.PhysicalDeviceInfo device : state.physicalDevices) {
             int score = scoreDevice(device, surfaceHandle);
-            if (score > highestScore) {
+            // 0 means the device can't run the engine at all
+            if (score > 0 && score > highestScore) {
                 highestScore = score;
                 bestChoice = device;
             }
@@ -1479,28 +1620,142 @@ public class VulkanInstance implements Instance {
     }
 
     /**
-     * Check if the specified device supports the required device extensions.
+     * Pick a composite alpha mode the surface supports. Opaque is preferred, but not every platform
+     * supports it.
      *
-     * @param device The device
+     * @param capabilities The surface capabilities.
+     * @return The composite alpha flag to use.
+     */
+    private static int selectCompositeAlpha(@NonNull VkSurfaceCapabilitiesKHR capabilities) {
+        for (int mode : COMPOSITE_ALPHA_PREFERENCES) {
+            if ((capabilities.supportedCompositeAlpha() & mode) != 0) {
+                return mode;
+            }
+        }
+        // At least one bit is guaranteed to be set, so this shouldn't happen
+        return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    }
+
+    /**
+     * Check if the specified device supports the required device extensions, and note optional ones
+     * that we have to enable if present.
+     *
+     * @param deviceInfo The device to check. Updated with the optional extensions it has.
      * @return Whether we found the support that we need.
      */
-    private boolean supportsRequiredExtensions(@NonNull VkPhysicalDevice device) {
-        vkEnumerateDeviceExtensionProperties(device, (String) null, intOutput, null);
-        var properties = VkExtensionProperties.calloc(intOutput.get(0));
-        vkEnumerateDeviceExtensionProperties(device, (String) null, intOutput, properties);
-
+    private boolean supportsRequiredExtensions(@NonNull VulkanState.PhysicalDeviceInfo deviceInfo) {
         List<String> missingExtensions = new ArrayList<>(REQUIRED_DEVICE_EXTENSION_NAMES);
 
+        checkError(
+                vkEnumerateDeviceExtensionProperties(
+                        deviceInfo.physicalDevice, (String) null, intOutput, null));
+        // Hundreds of these is too big for the stack, so it's garbage collected instead
+        var properties = VkExtensionProperties.create(intOutput.get(0));
+        checkError(
+                vkEnumerateDeviceExtensionProperties(
+                        deviceInfo.physicalDevice, (String) null, intOutput, properties));
+
+        deviceInfo.portabilitySubset = false;
         for (int i = 0; i < properties.limit(); ++i) {
-            if (missingExtensions.isEmpty()) {
-                break;
-            }
             var extension = properties.get(i).extensionNameString();
             missingExtensions.remove(extension);
+            if (VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME.equals(extension)) {
+                deviceInfo.portabilitySubset = true;
+            }
         }
 
-        properties.free();
+        if (!missingExtensions.isEmpty()) {
+            log.debug(
+                    "Skipping {}, missing extensions {}",
+                    deviceInfo.deviceProperties.deviceNameString(),
+                    String.join(", ", missingExtensions));
+        }
         return missingExtensions.isEmpty();
+    }
+
+    /**
+     * Check if the specified device supports every feature we enable when creating the logical
+     * device. Keep this in sync with {@link #createSurface(Window)}.
+     *
+     * @param deviceInfo The device to check.
+     * @return Whether all the features we need are supported.
+     */
+    private boolean supportsRequiredFeatures(@NonNull VulkanState.PhysicalDeviceInfo deviceInfo) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkPhysicalDeviceVulkan11Features vk11 =
+                    VkPhysicalDeviceVulkan11Features.calloc(stack).sType$Default();
+            VkPhysicalDeviceVulkan12Features vk12 =
+                    VkPhysicalDeviceVulkan12Features.calloc(stack)
+                            .sType$Default()
+                            .pNext(vk11.address());
+            VkPhysicalDeviceVulkan13Features vk13 =
+                    VkPhysicalDeviceVulkan13Features.calloc(stack)
+                            .sType$Default()
+                            .pNext(vk12.address());
+            VkPhysicalDeviceFeatures2 features =
+                    VkPhysicalDeviceFeatures2.calloc(stack).sType$Default().pNext(vk13.address());
+            vkGetPhysicalDeviceFeatures2(deviceInfo.physicalDevice, features);
+            VkPhysicalDeviceFeatures vk10 = features.features();
+
+            Map<String, Boolean> required = new LinkedHashMap<>();
+            required.put("samplerAnisotropy", vk10.samplerAnisotropy());
+            required.put("fillModeNonSolid", vk10.fillModeNonSolid());
+            required.put("multiDrawIndirect", vk10.multiDrawIndirect());
+            required.put("drawIndirectFirstInstance", vk10.drawIndirectFirstInstance());
+            required.put("shaderDrawParameters", vk11.shaderDrawParameters());
+            required.put("bufferDeviceAddress", vk12.bufferDeviceAddress());
+            required.put("descriptorBindingPartiallyBound", vk12.descriptorBindingPartiallyBound());
+            required.put(
+                    "descriptorBindingSampledImageUpdateAfterBind",
+                    vk12.descriptorBindingSampledImageUpdateAfterBind());
+            required.put(
+                    "descriptorBindingStorageBufferUpdateAfterBind",
+                    vk12.descriptorBindingStorageBufferUpdateAfterBind());
+            required.put(
+                    "descriptorBindingUpdateUnusedWhilePending",
+                    vk12.descriptorBindingUpdateUnusedWhilePending());
+            required.put(
+                    "descriptorBindingVariableDescriptorCount",
+                    vk12.descriptorBindingVariableDescriptorCount());
+            required.put("descriptorIndexing", vk12.descriptorIndexing());
+            required.put("runtimeDescriptorArray", vk12.runtimeDescriptorArray());
+            required.put(
+                    "shaderSampledImageArrayNonUniformIndexing",
+                    vk12.shaderSampledImageArrayNonUniformIndexing());
+            required.put("dynamicRendering", vk13.dynamicRendering());
+            required.put("shaderDemoteToHelperInvocation", vk13.shaderDemoteToHelperInvocation());
+            required.put("synchronization2", vk13.synchronization2());
+
+            List<String> missing =
+                    required.entrySet().stream()
+                            .filter(entry -> !entry.getValue())
+                            .map(Map.Entry::getKey)
+                            .toList();
+            if (!missing.isEmpty()) {
+                log.debug(
+                        "Skipping {}, missing features {}",
+                        deviceInfo.deviceProperties.deviceNameString(),
+                        String.join(", ", missing));
+                return false;
+            }
+            return true;
+        }
+    }
+
+    /**
+     * Check if the surface supports the format and color space we use for the swapchain.
+     *
+     * @param formats The formats the surface supports.
+     * @return Whether we can use {@link #SWAPCHAIN_FORMAT} with {@link #SWAPCHAIN_COLOR_SPACE}.
+     */
+    private static boolean supportsSwapchainFormat(@NonNull VkSurfaceFormatKHR.Buffer formats) {
+        for (int i = 0; i < formats.limit(); ++i) {
+            if (formats.get(i).format() == SWAPCHAIN_FORMAT
+                    && formats.get(i).colorSpace() == SWAPCHAIN_COLOR_SPACE) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

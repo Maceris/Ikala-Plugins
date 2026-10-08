@@ -1,11 +1,31 @@
 package com.ikalagaming.graphics.backend.vulkan;
 
-import static org.lwjgl.vulkan.VK13.VK_NULL_HANDLE;
+import static org.lwjgl.util.vma.Vma.vmaDestroyImage;
+import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.frontend.TextureInfo;
 
+import lombok.NonNull;
+
 /** Tracks handles for a texture, but does not handle the lifetimes. */
 public class TextureInfoVulkan implements TextureInfo {
+
+    /** The value of {@link #bindlessIndex} when the texture has no slot. */
+    public static final int NO_BINDLESS_INDEX = -1;
+
+    /**
+     * The slot in the bindless texture array, or {@link #NO_BINDLESS_INDEX} if the texture is not
+     * registered.
+     *
+     * @see BindlessTextures
+     */
+    public int bindlessIndex = NO_BINDLESS_INDEX;
+
+    /**
+     * Whether the sampler belongs to this texture and should be destroyed with it, as opposed to
+     * being shared between textures.
+     */
+    public boolean ownsSampler = false;
 
     /** Image sampler handle. 0 if unused. */
     public long sampler = VK_NULL_HANDLE;
@@ -61,5 +81,23 @@ public class TextureInfoVulkan implements TextureInfo {
     public TextureInfoVulkan view(long view) {
         this.view = view;
         return this;
+    }
+
+    /**
+     * Destroy the view, the image, and the sampler if this texture owns it, then clear the handles.
+     * This does not release the bindless slot. The GPU must be done with the texture.
+     *
+     * @param state The Vulkan state.
+     */
+    public void destroy(@NonNull VulkanState state) {
+        vkDestroyImageView(state.device.logical, view, null);
+        view = VK_NULL_HANDLE;
+        if (ownsSampler) {
+            vkDestroySampler(state.device.logical, sampler, null);
+        }
+        sampler = VK_NULL_HANDLE;
+        vmaDestroyImage(state.vmaAllocator, texture, textureAllocation);
+        texture = VK_NULL_HANDLE;
+        textureAllocation = VK_NULL_HANDLE;
     }
 }

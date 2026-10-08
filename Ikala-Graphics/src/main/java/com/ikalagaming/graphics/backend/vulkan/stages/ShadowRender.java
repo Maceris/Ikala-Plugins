@@ -1,17 +1,13 @@
 package com.ikalagaming.graphics.backend.vulkan.stages;
 
 import static com.ikalagaming.graphics.backend.vulkan.VulkanInstance.checkError;
-import static org.lwjgl.vulkan.VK10.*;
-import static org.lwjgl.vulkan.VK10.vkDestroyDescriptorSetLayout;
-import static org.lwjgl.vulkan.VK12.*;
-import static org.lwjgl.vulkan.VK12.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+import static org.lwjgl.vulkan.VK13.*;
 
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.backend.base.RenderStage;
 import com.ikalagaming.graphics.backend.base.State;
-import com.ikalagaming.graphics.backend.vulkan.ShaderBindings;
-import com.ikalagaming.graphics.backend.vulkan.ShaderVulkan;
-import com.ikalagaming.graphics.backend.vulkan.VulkanState;
+import com.ikalagaming.graphics.backend.vulkan.*;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
@@ -23,10 +19,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 
-import java.nio.IntBuffer;
+import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
+import java.util.Arrays;
 
-/** Handles rendering of cascade shadows. */
+/**
+ * Renders the scene depth from the directional light into each cascade shadow map. The shadow maps
+ * are left in the read only layout for the light stage.
+ */
 @Slf4j
 public class ShadowRender implements RenderStage {
 
@@ -42,6 +42,18 @@ public class ShadowRender implements RenderStage {
     /** VkPipeline pointer, will be VK_NULL_HANDLE if not set up. */
     private long pipeline;
 
+    /** VkDescriptorPool pointer, will be VK_NULL_HANDLE if not set up. */
+    private long descriptorPool;
+
+    /** The VkDescriptorSet for each frame in flight, VK_NULL_HANDLE if not set up. */
+    private final long[] descriptorSets;
+
+    /**
+     * The VkBuffer the model matrix binding of each frame's descriptor set points at, so we know
+     * when to rewrite them.
+     */
+    private final long[][] writtenBuffers;
+
     /**
      * Set up the shadow render stage.
      *
@@ -52,6 +64,9 @@ public class ShadowRender implements RenderStage {
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
         this.pipeline = VK_NULL_HANDLE;
+        this.descriptorPool = VK_NULL_HANDLE;
+        this.descriptorSets = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+        this.writtenBuffers = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT][1];
     }
 
     @Override
@@ -65,6 +80,10 @@ public class ShadowRender implements RenderStage {
     @Override
     public void cleanup(@NonNull State state) {
         VulkanState vulkanState = (VulkanState) state;
+        // Freed along with the pool
+        Arrays.fill(descriptorSets, VK_NULL_HANDLE);
+        vkDestroyDescriptorPool(vulkanState.device.logical, descriptorPool, null);
+        descriptorPool = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
@@ -76,47 +95,204 @@ public class ShadowRender implements RenderStage {
     @Override
     public void render(Scene scene, @NonNull Window window, State state, int renderConfig) {
         VulkanState vulkanState = (VulkanState) state;
+        final VkCommandBuffer commandBuffer =
+                vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
+        final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
 
-        CascadeShadowSplit[] cascadeShadowSplits =
-                vulkanState.perFrameData[vulkanState.frameIndex].cascadeShadowSplits;
+        CascadeShadowSplit[] cascadeShadowSplits = frameData.cascadeShadowSplits;
         CascadeShadowSplit.updateCascadeShadows(cascadeShadowSplits, scene);
 
-        // TODO(ches) bind depth map
+        SceneRender.writeStorageBindings(
+                vulkanState,
+                descriptorSets[vulkanState.frameIndex],
+                new SharedBuffer[] {frameData.sceneModelMatrices},
+                new int[] {ShaderBindings.Shadow.MODEL_MATRICES_BINDING},
+                writtenBuffers[vulkanState.frameIndex]);
 
-        for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
-            // TODO(ches) clear all the depth map textures
+        final TextureInfoVulkan[] shadowMaps = frameData.cascadeShadows;
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            // The light stage of an earlier frame may still be reading them
+            transitionShadowMaps(
+                    commandBuffer,
+                    shadowMaps,
+                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                    VK_ACCESS_2_NONE,
+                    VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
+                            | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                    VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT
+                            | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                    VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                    stack);
 
-            CascadeShadowSplit shadowCascade = cascadeShadowSplits[i];
+            ByteBuffer pushConstants = stack.calloc(ShaderBindings.Shadow.PUSH_CONSTANTS_SIZE);
+            for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
+                cascadeShadowSplits[i]
+                        .getProjViewMatrix()
+                        .get(
+                                ShaderBindings.Shadow.PUSH_CONSTANT_PROJECTION_VIEW_MATRIX_OFFSET,
+                                pushConstants);
+                renderCascade(commandBuffer, vulkanState, shadowMaps[i], pushConstants);
+            }
 
-            // TODO(ches) frustum culling, this is pretty excessive
-            renderScene(scene);
+            transitionShadowMaps(
+                    commandBuffer,
+                    shadowMaps,
+                    VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
+                            | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                    VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                    VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                    VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                    VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+                    stack);
         }
     }
 
-    private void renderScene(Scene scene) {
-        for (Model model : scene.getModelMap().values()) {
-            final int entityCount = model.getEntitiesList().size();
-            if (entityCount == 0) {
-                continue;
-            }
+    /**
+     * Draw the scene depth into one cascade's shadow map.
+     *
+     * @param commandBuffer The command buffer to record into.
+     * @param state The Vulkan state.
+     * @param shadowMap The shadow map to render into, as a depth attachment.
+     * @param pushConstants The push constants, with the cascade's matrix already filled out.
+     */
+    private void renderCascade(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull VulkanState state,
+            @NonNull TextureInfoVulkan shadowMap,
+            @NonNull ByteBuffer pushConstants) {
+        final PerFrameData frameData = state.perFrameData[state.frameIndex];
+        final int width = CascadeShadowSplit.SHADOW_MAP_WIDTH;
+        final int height = CascadeShadowSplit.SHADOW_MAP_HEIGHT;
 
-            final int commandCount = model.isAnimated() ? entityCount : 1;
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkRenderingAttachmentInfo depthAttachment =
+                    VkRenderingAttachmentInfo.calloc(stack)
+                            .sType$Default()
+                            .imageView(shadowMap.view)
+                            .imageLayout(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL)
+                            .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
+                            .storeOp(VK_ATTACHMENT_STORE_OP_STORE);
+            depthAttachment.clearValue().depthStencil().depth(1.0f);
+            VkRenderingInfo renderingInfo =
+                    VkRenderingInfo.calloc(stack)
+                            .sType$Default()
+                            .renderArea(area -> area.extent().set(width, height))
+                            .layerCount(1)
+                            .pDepthAttachment(depthAttachment);
+            vkCmdBeginRendering(commandBuffer, renderingInfo);
 
-            // TODO(ches) bind model matrices buffers
+            if (!frameData.modelDrawInfo.isEmpty()) {
+                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-            for (MeshData mesh : model.getMeshDataList()) {
-                if (model.isAnimated()) {
-                    // TODO(ches) bind mesh.getAnimationTargetBuffer().id()
+                // Not flipped, so the light stage can use the shadow map coordinates as is
+                VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
+                viewports.get(0).width(width).height(height).minDepth(0).maxDepth(1);
+                vkCmdSetViewport(commandBuffer, 0, viewports);
+                VkRect2D.Buffer scissors = VkRect2D.calloc(1, stack);
+                scissors.get(0).extent().set(width, height);
+                vkCmdSetScissor(commandBuffer, 0, scissors);
 
-                } else {
-                    // TODO(ches) ... don't bind mesh.getAnimationTargetBuffer().id()
+                vkCmdBindDescriptorSets(
+                        commandBuffer,
+                        VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        pipelineLayout,
+                        0,
+                        stack.longs(descriptorSets[state.frameIndex]),
+                        null);
+
+                LongBuffer vertexBuffers = stack.callocLong(1);
+                LongBuffer vertexOffsets = stack.callocLong(1);
+
+                // TODO(ches) frustum culling, this is pretty excessive
+                for (var entry : frameData.modelDrawInfo.entrySet()) {
+                    final Model model = entry.getKey();
+                    final PerFrameData.ModelDrawInfo info = entry.getValue();
+                    pushConstants.putInt(
+                            ShaderBindings.Shadow.PUSH_CONSTANT_FIRST_MATRIX_OFFSET,
+                            info.firstMatrix());
+                    vkCmdPushConstants(
+                            commandBuffer,
+                            pipelineLayout,
+                            VK_SHADER_STAGE_VERTEX_BIT,
+                            0,
+                            pushConstants);
+
+                    int meshIndex = 0;
+                    for (MeshData mesh : model.getMeshDataList()) {
+                        final long vertexSource = SceneRender.vertexSource(model, mesh);
+                        if (vertexSource == VK_NULL_HANDLE) {
+                            // An animated model the animation stage has not run for yet
+                            meshIndex += 1;
+                            continue;
+                        }
+                        vertexBuffers.put(0, vertexSource);
+                        vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffers, vertexOffsets);
+                        vkCmdBindIndexBuffer(
+                                commandBuffer,
+                                ((SharedBuffer) mesh.getIndexBuffer()).buffer,
+                                0,
+                                VK_INDEX_TYPE_UINT32);
+
+                        final long commandOffset =
+                                (long) (info.firstCommand() + meshIndex * info.commandCount())
+                                        * ModelMatrixUpdate.DRAW_COMMAND_SIZE;
+                        vkCmdDrawIndexedIndirect(
+                                commandBuffer,
+                                frameData.sceneDrawCommands.buffer,
+                                commandOffset,
+                                info.commandCount(),
+                                ModelMatrixUpdate.DRAW_COMMAND_SIZE);
+                        meshIndex += 1;
+                    }
                 }
-                // TODO(ches) bind index, draw indirect buffer
-                // TODO(chs) draw indirect
             }
 
-            // TODO(ches) unbind model matrices?
+            vkCmdEndRendering(commandBuffer);
         }
+    }
+
+    /**
+     * Record a barrier for all the shadow maps.
+     *
+     * @param commandBuffer The command buffer to record into.
+     * @param shadowMaps The shadow maps.
+     * @param srcStage The source VkPipelineStageFlags2.
+     * @param srcAccess The source VkAccessFlags2.
+     * @param dstStage The destination VkPipelineStageFlags2.
+     * @param dstAccess The destination VkAccessFlags2.
+     * @param oldLayout The layout to transition from.
+     * @param newLayout The layout to transition to.
+     * @param stack The stack to allocate on.
+     */
+    private static void transitionShadowMaps(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull TextureInfoVulkan[] shadowMaps,
+            long srcStage,
+            long srcAccess,
+            long dstStage,
+            long dstAccess,
+            int oldLayout,
+            int newLayout,
+            @NonNull MemoryStack stack) {
+        VkImageMemoryBarrier2.Buffer barriers =
+                VkImageMemoryBarrier2.calloc(shadowMaps.length, stack);
+        for (int i = 0; i < shadowMaps.length; i++) {
+            SceneRender.imageBarrier(
+                    barriers.get(i),
+                    shadowMaps[i].texture,
+                    VK_IMAGE_ASPECT_DEPTH_BIT,
+                    srcStage,
+                    srcAccess,
+                    dstStage,
+                    dstAccess,
+                    oldLayout,
+                    newLayout);
+        }
+        vkCmdPipelineBarrier2(
+                commandBuffer,
+                VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barriers));
     }
 
     private void createPipelineLayout(@NonNull VulkanState state) {
@@ -124,58 +300,67 @@ public class ShadowRender implements RenderStage {
             LongBuffer longOutput = stack.callocLong(1);
 
             VkPushConstantRange.Buffer pushConstantRanges = VkPushConstantRange.calloc(1, stack);
-            pushConstantRanges.get(0).stageFlags(VK_SHADER_STAGE_VERTEX_BIT).size(Long.BYTES);
+            pushConstantRanges
+                    .get(0)
+                    .stageFlags(VK_SHADER_STAGE_VERTEX_BIT)
+                    .offset(0)
+                    .size(ShaderBindings.Shadow.PUSH_CONSTANTS_SIZE);
 
-            IntBuffer descriptorVariableFlags =
-                    stack.ints(0, VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT);
-
-            VkDescriptorSetLayoutBindingFlagsCreateInfo descriptorSetBindingFlags =
-                    VkDescriptorSetLayoutBindingFlagsCreateInfo.calloc(stack);
-            descriptorSetBindingFlags
-                    .sType$Default()
-                    .bindingCount(2)
-                    .pBindingFlags(descriptorVariableFlags);
-
-            VkDescriptorSetLayoutBinding.Buffer descriptorSetLayoutBindings =
-                    VkDescriptorSetLayoutBinding.calloc(2, stack);
-            descriptorSetLayoutBindings
-                    .get(ShaderBindings.Shadow.UNIFORMS_BINDING)
-                    .binding(ShaderBindings.Shadow.UNIFORMS_BINDING)
-                    .descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-                    .descriptorCount(1)
-                    .stageFlags(VK_SHADER_STAGE_VERTEX_BIT);
-            descriptorSetLayoutBindings
-                    .get(ShaderBindings.Shadow.MODEL_MATRICES_BINDING)
+            VkDescriptorSetLayoutBinding.Buffer bindings =
+                    VkDescriptorSetLayoutBinding.calloc(1, stack);
+            bindings.get(0)
                     .binding(ShaderBindings.Shadow.MODEL_MATRICES_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1)
                     .stageFlags(VK_SHADER_STAGE_VERTEX_BIT);
 
+            // Each frame has its own set, only updated once the GPU is done with that frame
             VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo =
                     VkDescriptorSetLayoutCreateInfo.calloc(stack)
                             .sType$Default()
-                            .pNext(descriptorSetBindingFlags)
-                            .pBindings(descriptorSetLayoutBindings)
-                            .flags(VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT);
-
+                            .pBindings(bindings);
             checkError(
                     vkCreateDescriptorSetLayout(
                             state.device.logical, descriptorSetLayoutCreateInfo, null, longOutput));
             descriptorSetLayout = longOutput.get(0);
 
-            LongBuffer descriptorSetLayoutAddress = stack.longs(descriptorSetLayout);
-
             VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo =
-                    VkPipelineLayoutCreateInfo.calloc(stack);
-            pipelineLayoutCreateInfo
-                    .sType$Default()
-                    .setLayoutCount(1)
-                    .pSetLayouts(descriptorSetLayoutAddress)
-                    .pPushConstantRanges(pushConstantRanges);
+                    VkPipelineLayoutCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .pSetLayouts(stack.longs(descriptorSetLayout))
+                            .pPushConstantRanges(pushConstantRanges);
             checkError(
                     vkCreatePipelineLayout(
                             state.device.logical, pipelineLayoutCreateInfo, null, longOutput));
             pipelineLayout = longOutput.get(0);
+
+            VkDescriptorPoolSize.Buffer poolSizes = VkDescriptorPoolSize.calloc(1, stack);
+            poolSizes
+                    .get(0)
+                    .type(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                    .descriptorCount(GraphicsManager.MAX_FRAMES_IN_FLIGHT);
+            VkDescriptorPoolCreateInfo descriptorPoolCreateInfo =
+                    VkDescriptorPoolCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .maxSets(GraphicsManager.MAX_FRAMES_IN_FLIGHT)
+                            .pPoolSizes(poolSizes);
+            checkError(
+                    vkCreateDescriptorPool(
+                            state.device.logical, descriptorPoolCreateInfo, null, longOutput));
+            descriptorPool = longOutput.get(0);
+
+            LongBuffer setLayouts = stack.callocLong(GraphicsManager.MAX_FRAMES_IN_FLIGHT);
+            for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
+                setLayouts.put(i, descriptorSetLayout);
+            }
+            VkDescriptorSetAllocateInfo descriptorSetAlloc =
+                    VkDescriptorSetAllocateInfo.calloc(stack)
+                            .sType$Default()
+                            .descriptorPool(descriptorPool)
+                            .pSetLayouts(setLayouts);
+            checkError(
+                    vkAllocateDescriptorSets(
+                            state.device.logical, descriptorSetAlloc, descriptorSets));
         }
     }
 
@@ -183,58 +368,23 @@ public class ShadowRender implements RenderStage {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
+            // Only the position is needed, the rest of the vertex is skipped over
             VkVertexInputAttributeDescription.Buffer vertexAttributes =
-                    VkVertexInputAttributeDescription.calloc(5, stack);
-
-            int offset = 0;
-            // Positions
+                    VkVertexInputAttributeDescription.calloc(1, stack);
             vertexAttributes
                     .get(0)
                     .binding(0)
                     .location(0)
                     .format(VK_FORMAT_R32G32B32_SFLOAT)
-                    .offset(offset);
-            offset += 3 * Float.BYTES;
-
-            // Normals
-            vertexAttributes
-                    .get(1)
-                    .binding(0)
-                    .location(1)
-                    .format(VK_FORMAT_R32G32B32_SFLOAT)
-                    .offset(offset);
-            offset += 3 * Float.BYTES;
-
-            // Tangents
-            vertexAttributes
-                    .get(2)
-                    .binding(0)
-                    .location(2)
-                    .format(VK_FORMAT_R32G32B32_SFLOAT)
-                    .offset(offset);
-            offset += 3 * Float.BYTES;
-
-            // Bitangents
-            vertexAttributes
-                    .get(3)
-                    .binding(0)
-                    .location(3)
-                    .format(VK_FORMAT_R32G32B32_SFLOAT)
-                    .offset(offset);
-            offset += 3 * Float.BYTES;
-
-            // Texture coordinates
-            vertexAttributes
-                    .get(4)
-                    .binding(0)
-                    .location(4)
-                    .format(VK_FORMAT_R32G32_SFLOAT)
-                    .offset(offset);
-            offset += 2 * Float.BYTES;
+                    .offset(0);
 
             VkVertexInputBindingDescription.Buffer vertexBindings =
                     VkVertexInputBindingDescription.calloc(1, stack);
-            vertexBindings.get(0).binding(0).stride(offset).inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
+            vertexBindings
+                    .get(0)
+                    .binding(0)
+                    .stride(MeshData.VERTEX_SIZE_IN_BYTES)
+                    .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
 
             VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo =
                     VkPipelineVertexInputStateCreateInfo.calloc(stack)
@@ -253,31 +403,37 @@ public class ShadowRender implements RenderStage {
                             .viewportCount(1)
                             .scissorCount(1);
 
-            IntBuffer dynamicStates =
-                    stack.ints(VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR);
             VkPipelineDynamicStateCreateInfo dynamicState =
                     VkPipelineDynamicStateCreateInfo.calloc(stack)
                             .sType$Default()
-                            .pDynamicStates(dynamicStates);
+                            .pDynamicStates(
+                                    stack.ints(
+                                            VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR));
 
+            // OpenGL's default depth function
             VkPipelineDepthStencilStateCreateInfo depthStencilState =
                     VkPipelineDepthStencilStateCreateInfo.calloc(stack)
                             .sType$Default()
                             .depthTestEnable(true)
                             .depthWriteEnable(true)
-                            .depthCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL);
+                            .depthCompareOp(VK_COMPARE_OP_LESS);
 
             VkPipelineRenderingCreateInfo renderingCreateInfo =
                     VkPipelineRenderingCreateInfo.calloc(stack)
                             .sType$Default()
-                            .colorAttachmentCount(0)
-                            .pColorAttachmentFormats(null)
-                            .depthAttachmentFormat(state.device.physical.depthFormat);
+                            .depthAttachmentFormat(PipelineManagerVulkan.DEPTH_FORMAT);
 
+            VkPipelineColorBlendStateCreateInfo colorBlendState =
+                    VkPipelineColorBlendStateCreateInfo.calloc(stack).sType$Default();
+
+            // Back face culling like OpenGL. The viewport isn't flipped here, which flips the
+            // winding, so counter-clockwise faces in OpenGL are clockwise here.
             VkPipelineRasterizationStateCreateInfo rasterizationState =
                     VkPipelineRasterizationStateCreateInfo.calloc(stack)
                             .sType$Default()
-                            .rasterizerDiscardEnable(true)
+                            .polygonMode(VK_POLYGON_MODE_FILL)
+                            .cullMode(VK_CULL_MODE_BACK_BIT)
+                            .frontFace(VK_FRONT_FACE_CLOCKWISE)
                             .lineWidth(1.0f);
             VkPipelineMultisampleStateCreateInfo multisampleState =
                     VkPipelineMultisampleStateCreateInfo.calloc(stack)
@@ -298,7 +454,7 @@ public class ShadowRender implements RenderStage {
                     .pRasterizationState(rasterizationState)
                     .pMultisampleState(multisampleState)
                     .pDepthStencilState(depthStencilState)
-                    .pColorBlendState(null)
+                    .pColorBlendState(colorBlendState)
                     .pDynamicState(dynamicState)
                     .layout(pipelineLayout)
                     .renderPass(VK_NULL_HANDLE);

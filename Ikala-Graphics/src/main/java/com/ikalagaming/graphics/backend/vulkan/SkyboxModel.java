@@ -1,12 +1,16 @@
 package com.ikalagaming.graphics.backend.vulkan;
 
+import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+
 import lombok.Getter;
-import org.lwjgl.system.MemoryStack;
+import lombok.NonNull;
+import org.lwjgl.system.MemoryUtil;
 
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 
-/** A skybox model. */
+/** A skybox model, with positions and texture coordinates interleaved in one vertex buffer. */
 @Getter
 public class SkyboxModel {
 
@@ -88,49 +92,59 @@ public class SkyboxModel {
                 5, 12, 13 // Bottom Lower
             };
 
-    private final int vao;
-    private final int[] vbos;
-
     /**
      * The number of vertices to draw (i.e. number of indices), since we reuse a couple of the
      * vertices.
      */
     public static final int VERTEX_COUNT = INDICES.length;
 
+    /** The number of floats per vertex, a position followed by texture coordinates. */
+    public static final int FLOATS_PER_VERTEX = 3 + 2;
+
+    /** The interleaved positions and texture coordinates. */
+    private final SharedBuffer vertexBuffer;
+
+    /** The indices. */
+    private final SharedBuffer indexBuffer;
+
     /**
-     * The number of VBOs. These are for position, texture coordinates, and indices respectively.
+     * Create the skybox buffers.
+     *
+     * @param state The Vulkan state.
      */
-    public static final int VBO_COUNT = 3;
+    public SkyboxModel(@NonNull VulkanState state) {
+        final int vertexCount = POSITIONS.length / 3;
+        vertexBuffer =
+                SharedBuffer.allocate(
+                        (long) vertexCount * FLOATS_PER_VERTEX * Float.BYTES,
+                        state,
+                        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+        indexBuffer =
+                SharedBuffer.allocate(
+                        (long) INDICES.length * Integer.BYTES,
+                        state,
+                        VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 
-    public SkyboxModel() {
-        vbos = new int[VBO_COUNT];
-
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            vao = 0;
-
-            // Positions VBO
-
-            final int vboPositions = vbos[0];
-            final int vboTextureCoordinates = vbos[1];
-            final int vboIndices = vbos[2];
-
-            FloatBuffer positionsBuffer = stack.callocFloat(POSITIONS.length);
-            positionsBuffer.put(0, POSITIONS);
-            // TODO(ches) set up buffer
-
-            FloatBuffer textureCoordinatesBuffer = stack.callocFloat(TEXTURE_COORDINATES.length);
-            textureCoordinatesBuffer.put(0, TEXTURE_COORDINATES);
-            // TODO(ches) set up buffer
-
-            IntBuffer indicesBuffer = stack.callocInt(INDICES.length);
-            indicesBuffer.put(0, INDICES);
-            // TODO(ches) set up buffer
-
+        FloatBuffer vertices =
+                MemoryUtil.memFloatBuffer(
+                        vertexBuffer.allocationInfo.pMappedData(), vertexCount * FLOATS_PER_VERTEX);
+        for (int i = 0; i < vertexCount; i++) {
+            vertices.put(POSITIONS, i * 3, 3);
+            vertices.put(TEXTURE_COORDINATES, i * 2, 2);
         }
+
+        IntBuffer indices =
+                MemoryUtil.memIntBuffer(indexBuffer.allocationInfo.pMappedData(), INDICES.length);
+        indices.put(INDICES);
     }
 
-    /** Clean up the model buffers. */
-    public void cleanup() {
-        // TODO(ches) clean up
+    /**
+     * Clean up the model buffers.
+     *
+     * @param state The Vulkan state.
+     */
+    public void cleanup(@NonNull VulkanState state) {
+        SharedBuffer.free(vertexBuffer, state);
+        SharedBuffer.free(indexBuffer, state);
     }
 }

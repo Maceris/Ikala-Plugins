@@ -1,5 +1,8 @@
 package com.ikalagaming.graphics.scene;
 
+import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.frontend.BackendType;
+
 import lombok.Getter;
 import org.joml.Matrix4f;
 
@@ -51,9 +54,13 @@ public class Projection {
      * @param height The new height of the screen in pixels.
      */
     public void updateProjMatrix(int width, int height) {
-        // TODO(ches) support Directx/Vulkan [0, 1] Z range, or force it to be always [0, 1]
+        // OpenGL clip space depth is [-1, 1], Vulkan is [0, 1]
         projectionMatrix.setPerspective(
-                Projection.FOV, (float) width / height, Projection.Z_NEAR, Projection.Z_FAR);
+                Projection.FOV,
+                (float) width / height,
+                Projection.Z_NEAR,
+                Projection.Z_FAR,
+                GraphicsManager.getBackendType() == BackendType.VULKAN);
         inverseProjectionMatrix.set(projectionMatrix).invert();
     }
 }

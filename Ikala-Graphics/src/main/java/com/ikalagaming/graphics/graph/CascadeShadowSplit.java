@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.graph;
 
+import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.frontend.BackendType;
 import com.ikalagaming.graphics.scene.Projection;
 import com.ikalagaming.graphics.scene.Scene;
 
@@ -72,16 +74,20 @@ public class CascadeShadowSplit {
         final float farClip = Projection.Z_FAR;
         final float clipRange = farClip - nearClip;
 
+        // Clip space depth is [0, 1] in Vulkan and [-1, 1] in OpenGL
+        final boolean zeroToOneDepth = GraphicsManager.getBackendType() == BackendType.VULKAN;
+        final float nearZ = zeroToOneDepth ? 0.0f : -1.0f;
+
         // Calculate orthographic projection matrix for each cascade
         float lastSplitDistance = 0.0f;
         for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
             float splitDistance = cachedSplits[i];
 
             Vector3f[] frustumCorners = { //
-                new Vector3f(-1.0f, 1.0f, -1.0f), //
-                new Vector3f(1.0f, 1.0f, -1.0f), //
-                new Vector3f(1.0f, -1.0f, -1.0f), //
-                new Vector3f(-1.0f, -1.0f, -1.0f), //
+                new Vector3f(-1.0f, 1.0f, nearZ), //
+                new Vector3f(1.0f, 1.0f, nearZ), //
+                new Vector3f(1.0f, -1.0f, nearZ), //
+                new Vector3f(-1.0f, -1.0f, nearZ), //
                 new Vector3f(-1.0f, 1.0f, 1.0f), //
                 new Vector3f(1.0f, 1.0f, 1.0f), //
                 new Vector3f(1.0f, -1.0f, 1.0f), //
@@ -122,9 +128,15 @@ public class CascadeShadowSplit {
             Vector3f lightDirection = new Vector3f(lightDir).mul(-1).normalize();
             Vector3f eye = new Vector3f(frustumCenter).add(lightDirection.mul(radius));
             Vector3f up = new Vector3f(0.0f, 1.0f, 0.0f);
-            Matrix4f lightViewMatrix = new Matrix4f().lookAtLH(eye, frustumCenter, up);
+            /*
+             * NOTE(ches) This has to be right handed to match the orthographic projection. With a left handed view,
+             * surfaces closer to the light ended up with larger depth values, so the shadow map kept the surfaces
+             * furthest from the light and shadows were drawn on top of the geometry casting them.
+             */
+            Matrix4f lightViewMatrix = new Matrix4f().lookAt(eye, frustumCenter, up);
             Matrix4f lightOrthoMatrix =
-                    new Matrix4f().ortho(-radius, radius, -radius, radius, 0, 2 * radius, true);
+                    new Matrix4f()
+                            .ortho(-radius, radius, -radius, radius, 0, 2 * radius, zeroToOneDepth);
 
             // Store split distance and matrix in cascade
             CascadeShadowSplit cascadeShadowSplit = cascadeShadowSplits[i];

@@ -11,6 +11,7 @@ import com.ikalagaming.graphics.backend.vulkan.VulkanState;
 import com.ikalagaming.graphics.frontend.BackendType;
 import com.ikalagaming.graphics.frontend.Buffer;
 import com.ikalagaming.graphics.frontend.Material;
+import com.ikalagaming.graphics.frontend.Texture;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -125,5 +126,27 @@ public class MaterialCache {
     @Synchronized
     public int getMaterialIndex(Material material) {
         return Optional.ofNullable(material).map(materialLookup::get).orElse(0);
+    }
+
+    /**
+     * Queue up deletion of the material buffer and every texture used by the materials. The cache
+     * should not be used afterward.
+     */
+    @Synchronized
+    public void cleanup() {
+        // Materials can share textures, so only delete each one once
+        Set<Texture> textures = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Material material : materialsList) {
+            if (material.getTexture() != null) {
+                textures.add(material.getTexture());
+            }
+            if (material.getNormalMap() != null) {
+                textures.add(material.getNormalMap());
+            }
+        }
+        textures.forEach(GraphicsManager.getDeletionQueue()::add);
+        GraphicsManager.getDeletionQueue().add(materialBuffer);
+        materialsList.clear();
+        materialLookup.clear();
     }
 }

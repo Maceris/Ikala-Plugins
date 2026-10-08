@@ -42,6 +42,7 @@ public interface TextureLoader {
      */
     Texture loadBindless(@NonNull String texturePath);
 
+    // TODO(ches) swap to only bindless
     /**
      * Load a texture to the GPU from a file.
      *

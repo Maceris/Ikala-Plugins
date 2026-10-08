@@ -62,7 +62,8 @@ public class SwapchainPresent implements RenderStage {
                     .get(1)
                     .sType$Default()
                     .srcStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
-                    .srcAccessMask(0)
+                    // Make the rendering visible to the blit
+                    .srcAccessMask(VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT)
                     .dstStageMask(VK_PIPELINE_STAGE_2_TRANSFER_BIT)
                     .dstAccessMask(VK_ACCESS_TRANSFER_READ_BIT)
                     .oldLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
@@ -85,9 +86,12 @@ public class SwapchainPresent implements RenderStage {
                             .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
                             .layerCount(1)
                             .mipLevel(0);
+            // The same region the other stages render to
+            final int renderWidth = Math.min(window.getWidth(), vulkanState.realSize.width());
+            final int renderHeight = Math.min(window.getHeight(), vulkanState.realSize.height());
             VkOffset3D.Buffer sourceOffsets = VkOffset3D.calloc(2, stack);
             sourceOffsets.get(0).set(0, 0, 0);
-            sourceOffsets.get(1).set(window.getWidth(), window.getHeight(), 1);
+            sourceOffsets.get(1).set(renderWidth, renderHeight, 1);
 
             VkImageSubresourceLayers destLayers =
                     VkImageSubresourceLayers.calloc(stack)
@@ -96,7 +100,8 @@ public class SwapchainPresent implements RenderStage {
                             .mipLevel(0);
             VkOffset3D.Buffer destOffsets = VkOffset3D.calloc(2, stack);
             destOffsets.get(0).set(0, 0, 0);
-            destOffsets.get(1).set(window.getWidth(), window.getHeight(), 1);
+            // Usually the same size, but the swapchain can briefly disagree with the window
+            destOffsets.get(1).set(windowInfo.swapchainWidth, windowInfo.swapchainHeight, 1);
 
             VkImageBlit.Buffer blitRegions = VkImageBlit.calloc(1, stack);
             blitRegions

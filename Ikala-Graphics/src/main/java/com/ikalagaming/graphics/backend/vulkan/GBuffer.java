@@ -19,6 +19,21 @@ public record GBuffer(
         int width,
         int height) {
 
+    /** Index of the base color texture. */
+    public static final int BASE_COLOR = 0;
+
+    /** Index of the normal texture. */
+    public static final int NORMAL = 1;
+
+    /** Index of the tangent texture. */
+    public static final int TANGENT = 2;
+
+    /** Index of the material index texture. */
+    public static final int MATERIAL = 3;
+
+    /** The number of textures, not counting depth. */
+    public static final int TEXTURE_COUNT = 4;
+
     @Override
     public String toString() {
         return "GBuffer{"

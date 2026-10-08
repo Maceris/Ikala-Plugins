@@ -304,16 +304,17 @@ void main()
     vec3 viewPosition = viewW.xyz / viewW.w;
     vec4 worldPosition = invViewMatrix * vec4(viewPosition, 1);
 
-    vec3 color = calcDirLight(baseColor.xyz, material, directionalLight, viewPosition, normal, tangent, bitangent);
-
-    int cascadeIndex;
-    for (int i=0; i < NUM_CASCADES - 1; i++) {
+    // The splits get further away (more negative in view space), so use the last one we're past
+    int cascadeIndex = 0;
+    for (int i = 0; i < NUM_CASCADES - 1; i++) {
         if (viewPosition.z < cascadeShadowSplits[i].splitDistance) {
             cascadeIndex = i + 1;
-            break;
         }
     }
+    // Only the directional light casts shadows
     float shadowFactor = calcShadow(worldPosition, cascadeIndex);
+    vec3 color = calcDirLight(baseColor.xyz, material, directionalLight, viewPosition, normal, tangent, bitangent)
+        * shadowFactor;
 
     for (int i = 0; i < pointLightCount; ++i) {
         if (pointLights[i].intensity > 0) {
@@ -336,5 +337,5 @@ void main()
     }
 
     fragColor.a = baseColor.a;
-    fragColor.rgb = finalColor * (1 + 0.00001 * shadowFactor);
+    fragColor.rgb = finalColor;
 }

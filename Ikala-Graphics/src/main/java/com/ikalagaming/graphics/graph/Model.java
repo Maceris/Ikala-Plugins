@@ -10,6 +10,7 @@ import com.ikalagaming.graphics.backend.vulkan.SharedBuffer;
 import com.ikalagaming.graphics.backend.vulkan.VulkanState;
 import com.ikalagaming.graphics.frontend.BackendType;
 import com.ikalagaming.graphics.frontend.Buffer;
+import com.ikalagaming.graphics.scene.AnimationState;
 import com.ikalagaming.graphics.scene.Entity;
 
 import lombok.Getter;
@@ -23,6 +24,28 @@ import java.util.Objects;
 /** A model for rendering. */
 @Getter
 public class Model {
+
+    /** The size of a 4x4 float matrix in bytes. */
+    private static final int MATRIX_SIZE_IN_BYTES = 4 * 4 * Float.BYTES;
+
+    /**
+     * Find where an entity's current animation frame starts in the model's animation buffer, as an
+     * index of 4x4 matrices, which is how the animation shaders read it.
+     *
+     * @param entity The entity.
+     * @return The index of the first bone matrix of the current frame, or -1 if the entity isn't
+     *     animating.
+     */
+    public static int getAnimationMatrixOffset(@NonNull Entity entity) {
+        AnimationState state = entity.getAnimationState();
+        if (state == null || state.getCurrentAnimation() == null) {
+            return -1;
+        }
+        Model.Animation animation = state.getCurrentAnimation();
+        // The animation offset is in bytes, frames are boneCount matrices each
+        return animation.offset() / MATRIX_SIZE_IN_BYTES
+                + state.getCurrentFrameIndex() * animation.boneCount();
+    }
 
     /** The maximum number of entities that a model can have. */
     public static final int MAX_ENTITIES = 1024;

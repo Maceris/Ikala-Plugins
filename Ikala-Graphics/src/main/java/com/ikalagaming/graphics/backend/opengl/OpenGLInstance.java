@@ -399,6 +399,8 @@ public class OpenGLInstance implements Instance {
             for (Model.Animation animation : model.getAnimationList()) {
                 animations.put(animation.frameData());
             }
+            // OpenGL uploads what remains in the buffer, which is nothing until it's flipped
+            animations.flip();
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, animationBuffer);
             glBufferStorage(GL_SHADER_STORAGE_BUFFER, animations, 0);
             MemoryUtil.memFree(animations);
@@ -412,8 +414,12 @@ public class OpenGLInstance implements Instance {
                 meshData.setBoneWeightBuffer(
                         new BufferOpenGL(boneWeightBuffer, BufferOpenGL.Type.UNIFORM));
                 glBindBuffer(GL_UNIFORM_BUFFER, boneWeightBuffer);
-                glBufferStorage(
-                        GL_UNIFORM_BUFFER, ByteBuffer.wrap(meshData.getBoneWeightData()), 0);
+                // LWJGL needs a direct buffer to pass to OpenGL, a wrapped array crashes
+                byte[] boneWeights = meshData.getBoneWeightData();
+                ByteBuffer boneWeightData = MemoryUtil.memAlloc(boneWeights.length);
+                boneWeightData.put(boneWeights).flip();
+                glBufferStorage(GL_UNIFORM_BUFFER, boneWeightData, 0);
+                MemoryUtil.memFree(boneWeightData);
             }
         }
         for (MeshData meshData : model.getMeshDataList()) {

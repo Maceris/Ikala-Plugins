@@ -15,7 +15,6 @@ import java.util.HashSet;
 import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 import java.util.Set;
-import java.util.UUID;
 
 /**
  * The plugin for handling graphics.
@@ -54,8 +53,11 @@ public class GraphicsPlugin extends Plugin {
 
     @Override
     public boolean onDisable() {
-        GraphicsManager.getShutdownFlag().set(true);
-        Launcher.removeMainThreadStage(GraphicsManager.getTickStageID());
+        /*
+         * The tick stage removes itself once graphics have shut down. Removing it here could stop the main thread
+         * from ever ticking again to do the cleanup.
+         */
+        GraphicsManager.requestShutdown();
         return true;
     }
 
@@ -68,8 +70,7 @@ public class GraphicsPlugin extends Plugin {
         if (!GraphicsManager.createWindow()) {
             return false;
         }
-        UUID stageID = Launcher.addMainThreadStage(GraphicsManager::tick);
-        GraphicsManager.setTickStageID(stageID);
+        Launcher.addMainThreadStage(GraphicsManager::tick);
         return true;
     }
 

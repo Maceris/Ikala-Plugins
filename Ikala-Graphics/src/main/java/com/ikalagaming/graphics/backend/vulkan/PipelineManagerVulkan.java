@@ -31,15 +31,30 @@ public class PipelineManagerVulkan {
     /** The size of a 4x4 model matrix ({@value}). */
     public static final int MODEL_MATRIX_SIZE = 4 * 4;
 
+    /**
+     * Format of the base color, normal, and tangent textures in the g-buffer. Matches the OpenGL
+     * backend.
+     */
+    public static final int GBUFFER_COLOR_FORMAT = VK_FORMAT_R32G32B32A32_SFLOAT;
+
+    /** Format of the material index texture in the g-buffer. */
+    public static final int GBUFFER_MATERIAL_FORMAT = VK_FORMAT_R32_UINT;
+
+    /** Format of the g-buffer depth and the shadow maps. Supported everywhere for both uses. */
+    public static final int DEPTH_FORMAT = VK_FORMAT_D32_SFLOAT;
+
+    /**
+     * Format of the images we render the lit scene, filters, and GUI into. Not sRGB, since the
+     * OpenGL backend doesn't convert to sRGB either and we want the same output.
+     */
+    public static final int SCREEN_FORMAT = VK_FORMAT_R8G8B8A8_UNORM;
+
     /** Fallback pipeline that does nothing. */
     public static final Pipeline ERROR_PIPELINE =
             new PipelineVulkan(new RenderStage[0], RenderConfig.ERROR_MASK);
 
     /** The texture we store the font atlas on. */
     private Texture fontAtlas;
-
-    /** The GUI mesh to render. */
-    private GuiMesh guiMesh;
 
     /** A mesh for rendering onto. */
     private QuadMesh quadMesh;
@@ -49,6 +64,12 @@ public class PipelineManagerVulkan {
 
     /** Model used for rendering the skybox. */
     private SkyboxModel skybox;
+
+    /**
+     * The cascade shadow maps. These are shared between frames like in OpenGL, barriers keep a
+     * frame from writing them while an earlier one reads them.
+     */
+    private TextureInfoVulkan[] shadowMaps;
 
     private final AnimationRender stageAnimationRender;
     private final FilterRender stageFilterRender;
@@ -67,11 +88,11 @@ public class PipelineManagerVulkan {
             @NonNull Window window, @NonNull ShaderMap shaders, @NonNull VulkanState state) {
 
         renderers = new HashMap<>();
+        createShadowMaps(state);
         createShaderData(window, state);
         createGuiFont();
-        skybox = new SkyboxModel();
+        skybox = new SkyboxModel(state);
         quadMesh = QuadMesh.getInstance(state);
-        guiMesh = GuiMesh.create(state);
 
         stageModelMatrixUpdate = new ModelMatrixUpdate();
         stageModelMatrixUpdate.initialize(state);
@@ -79,8 +100,7 @@ public class PipelineManagerVulkan {
                 new SceneRender((ShaderVulkan) shaders.getShader(RenderStage.Type.SCENE));
         stageSceneRender.initialize(state);
         stageGuiRender =
-                new GuiRender(
-                        (ShaderVulkan) shaders.getShader(RenderStage.Type.GUI), guiMesh, fontAtlas);
+                new GuiRender((ShaderVulkan) shaders.getShader(RenderStage.Type.GUI), fontAtlas);
         stageGuiRender.initialize(state);
         stageSkyboxRender =
                 new SkyboxRender((ShaderVulkan) shaders.getShader(RenderStage.Type.SKYBOX), skybox);
@@ -136,23 +156,40 @@ public class PipelineManagerVulkan {
         return new PipelineVulkan(stages.toArray(new RenderStage[0]), configuration);
     }
 
-    private TextureInfoVulkan createDepthTexture(
-            @NonNull VulkanState state, @NonNull VkExtent3D imageExtent) {
+    /**
+     * Create a 2D image to render into, with a view and its own sampler.
+     *
+     * @param state The Vulkan state.
+     * @param width The width in pixels.
+     * @param height The height in pixels.
+     * @param format The VkFormat.
+     * @param usage The VkImageUsageFlags.
+     * @param aspect The VkImageAspectFlags for the view.
+     * @param filter The VkFilter for the sampler.
+     * @param addressMode The VkSamplerAddressMode for the sampler.
+     * @return The texture, in the undefined layout.
+     */
+    private TextureInfoVulkan createRenderTarget(
+            @NonNull VulkanState state,
+            int width,
+            int height,
+            int format,
+            int usage,
+            int aspect,
+            int filter,
+            int addressMode) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
-
             VkImageCreateInfo imageCreateInfo =
                     VkImageCreateInfo.calloc(stack)
                             .sType$Default()
                             .imageType(VK_IMAGE_TYPE_2D)
-                            .format(VK_FORMAT_D32_SFLOAT)
-                            .extent(imageExtent)
+                            .format(format)
+                            .extent(e -> e.set(width, height, 1))
                             .mipLevels(1)
                             .arrayLayers(1)
                             .samples(VK_SAMPLE_COUNT_1_BIT)
                             .tiling(VK_IMAGE_TILING_OPTIMAL)
-                            .usage(
-                                    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
-                                            | VK_IMAGE_USAGE_SAMPLED_BIT)
+                            .usage(usage)
                             .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED);
 
             VmaAllocationCreateInfo imageAlloc =
@@ -176,40 +213,137 @@ public class PipelineManagerVulkan {
                             .sType$Default()
                             .image(image)
                             .viewType(VK_IMAGE_VIEW_TYPE_2D)
-                            .format(VK_FORMAT_D32_SFLOAT)
+                            .format(format)
                             .subresourceRange(
-                                    VkImageSubresourceRange.calloc(stack)
-                                            .aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT)
-                                            .levelCount(1)
-                                            .layerCount(1));
+                                    range -> range.aspectMask(aspect).levelCount(1).layerCount(1));
             checkError(vkCreateImageView(state.device.logical, viewCreateInfo, null, longOutput));
             final long imageView = longOutput.get(0);
 
-            VkSamplerCreateInfo samplerCreateInfo = VkSamplerCreateInfo.calloc(stack);
-            samplerCreateInfo
-                    .sType$Default()
-                    .magFilter(VK_FILTER_LINEAR)
-                    .minFilter(VK_FILTER_LINEAR)
-                    .addressModeU(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER)
-                    .addressModeV(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER)
-                    .addressModeW(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER)
-                    .anisotropyEnable(false)
-                    .compareEnable(false)
-                    .compareOp(VK_COMPARE_OP_NEVER)
-                    .mipmapMode(VK_SAMPLER_MIPMAP_MODE_LINEAR)
-                    .mipLodBias(0.0f)
-                    .minLod(0.0f)
-                    .maxLod(0.0f);
-
+            // The default border color is transparent black, like OpenGL
+            VkSamplerCreateInfo samplerCreateInfo =
+                    VkSamplerCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .magFilter(filter)
+                            .minFilter(filter)
+                            .mipmapMode(VK_SAMPLER_MIPMAP_MODE_NEAREST)
+                            .addressModeU(addressMode)
+                            .addressModeV(addressMode)
+                            .addressModeW(addressMode)
+                            .anisotropyEnable(false)
+                            .compareEnable(false)
+                            .minLod(0.0f)
+                            .maxLod(0.0f);
             checkError(vkCreateSampler(state.device.logical, samplerCreateInfo, null, longOutput));
             final long imageSampler = longOutput.get(0);
 
-            return new TextureInfoVulkan()
-                    .texture(image)
-                    .textureAllocation(imageAllocation)
-                    .view(imageView)
-                    .sampler(imageSampler);
+            TextureInfoVulkan result =
+                    new TextureInfoVulkan()
+                            .texture(image)
+                            .textureAllocation(imageAllocation)
+                            .view(imageView)
+                            .sampler(imageSampler);
+            result.ownsSampler = true;
+            return result;
         }
+    }
+
+    /**
+     * Create the cascade shadow maps, cleared to the far plane and ready to be sampled, and give
+     * them bindless slots. They are a fixed size, so they don't change when the window resizes.
+     *
+     * @param state The Vulkan state.
+     */
+    private void createShadowMaps(@NonNull VulkanState state) {
+        shadowMaps = new TextureInfoVulkan[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
+        for (int i = 0; i < shadowMaps.length; i++) {
+            shadowMaps[i] =
+                    createRenderTarget(
+                            state,
+                            CascadeShadowSplit.SHADOW_MAP_WIDTH,
+                            CascadeShadowSplit.SHADOW_MAP_HEIGHT,
+                            DEPTH_FORMAT,
+                            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+                                    | VK_IMAGE_USAGE_SAMPLED_BIT
+                                    | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                            VK_IMAGE_ASPECT_DEPTH_BIT,
+                            VK_FILTER_LINEAR,
+                            VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER);
+            state.bindlessTextures.register(state, shadowMaps[i]);
+        }
+
+        // The light stage samples these even if the shadow stage never draws to them
+        state.immediateCommands.submit(
+                state,
+                commandBuffer -> {
+                    try (MemoryStack stack = MemoryStack.stackPush()) {
+                        VkImageMemoryBarrier2.Buffer barriers =
+                                VkImageMemoryBarrier2.calloc(shadowMaps.length, stack);
+                        for (int i = 0; i < shadowMaps.length; i++) {
+                            barriers.get(i)
+                                    .sType$Default()
+                                    .srcStageMask(VK_PIPELINE_STAGE_2_NONE)
+                                    .srcAccessMask(VK_ACCESS_2_NONE)
+                                    .dstStageMask(VK_PIPELINE_STAGE_2_CLEAR_BIT)
+                                    .dstAccessMask(VK_ACCESS_2_TRANSFER_WRITE_BIT)
+                                    .oldLayout(VK_IMAGE_LAYOUT_UNDEFINED)
+                                    .newLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+                                    .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                                    .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                                    .image(shadowMaps[i].texture)
+                                    .subresourceRange(
+                                            range ->
+                                                    range.aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT)
+                                                            .levelCount(1)
+                                                            .layerCount(1));
+                        }
+                        VkDependencyInfo dependencyInfo =
+                                VkDependencyInfo.calloc(stack)
+                                        .sType$Default()
+                                        .pImageMemoryBarriers(barriers);
+                        vkCmdPipelineBarrier2(commandBuffer, dependencyInfo);
+
+                        VkClearDepthStencilValue clearValue =
+                                VkClearDepthStencilValue.calloc(stack).depth(1.0f);
+                        VkImageSubresourceRange.Buffer ranges =
+                                VkImageSubresourceRange.calloc(1, stack);
+                        ranges.get(0)
+                                .aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT)
+                                .levelCount(1)
+                                .layerCount(1);
+                        for (TextureInfoVulkan shadowMap : shadowMaps) {
+                            vkCmdClearDepthStencilImage(
+                                    commandBuffer,
+                                    shadowMap.texture,
+                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                    clearValue,
+                                    ranges);
+                        }
+
+                        for (int i = 0; i < shadowMaps.length; i++) {
+                            barriers.get(i)
+                                    .srcStageMask(VK_PIPELINE_STAGE_2_CLEAR_BIT)
+                                    .srcAccessMask(VK_ACCESS_2_TRANSFER_WRITE_BIT)
+                                    .dstStageMask(VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT)
+                                    .dstAccessMask(VK_ACCESS_2_SHADER_SAMPLED_READ_BIT)
+                                    .oldLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+                                    .newLayout(VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+                        }
+                        vkCmdPipelineBarrier2(commandBuffer, dependencyInfo);
+                    }
+                });
+    }
+
+    /**
+     * Destroy the shadow maps and release their bindless slots.
+     *
+     * @param state The Vulkan state.
+     */
+    private void cleanupShadowMaps(@NonNull VulkanState state) {
+        for (TextureInfoVulkan shadowMap : shadowMaps) {
+            state.bindlessTextures.release(state, shadowMap);
+            shadowMap.destroy(state);
+        }
+        shadowMaps = null;
     }
 
     private void createShaderData(@NonNull Window window, @NonNull VulkanState state) {
@@ -228,20 +362,8 @@ public class PipelineManagerVulkan {
                 state.perFrameData[i] = new PerFrameData();
 
                 final long DEFERRED_UNTIL_LATER = 0;
-                state.perFrameData[i].animationData =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].animationOffsets =
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
-                state.perFrameData[i].animationModelData =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
-                state.perFrameData[i].animationBoneWeight =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
-                // Written by the animation compute shader, read as vertices by later stages
-                state.perFrameData[i].animationTarget =
-                        SharedBuffer.allocate(
-                                DEFERRED_UNTIL_LATER,
-                                state,
-                                STORAGE | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
                 state.perFrameData[i].guiUniforms =
                         SharedBuffer.allocate(
                                 ShaderBindings.GUI.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
@@ -251,6 +373,14 @@ public class PipelineManagerVulkan {
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].guiPointDetails =
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
+                state.perFrameData[i].guiVertices =
+                        SharedBuffer.allocate(
+                                DEFERRED_UNTIL_LATER, state, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+                state.perFrameData[i].guiTextureIndices =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
+                state.perFrameData[i].guiFontStaging =
+                        SharedBuffer.allocate(
+                                DEFERRED_UNTIL_LATER, state, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
                 state.perFrameData[i].lightUniforms =
                         SharedBuffer.allocate(
                                 ShaderBindings.Light.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
@@ -265,41 +395,20 @@ public class PipelineManagerVulkan {
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].sceneMaterialOverrides =
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
-                state.perFrameData[i].shadowUniforms =
+                state.perFrameData[i].sceneDrawCommands =
                         SharedBuffer.allocate(
-                                ShaderBindings.Shadow.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
-                state.perFrameData[i].shadowModelMatrices =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
+                                DEFERRED_UNTIL_LATER, state, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+                state.perFrameData[i].modelDrawInfo = new HashMap<>();
                 state.perFrameData[i].skyboxUniforms =
                         SharedBuffer.allocate(
                                 ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
+                state.perFrameData[i].filterUniforms =
+                        SharedBuffer.allocate(
+                                ShaderBindings.Filter.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
                 state.perFrameData[i].materials =
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
-                // TODO(ches) replace this with update-after-bind descriptor sets for the textures
-                state.perFrameData[i].textures =
-                        SharedBuffer.allocate(
-                                state.device.physical.bindlessTextureDescriptorBufferSize,
-                                state,
-                                0);
                 state.perFrameData[i].cascadeShadowSplits =
                         new CascadeShadowSplit[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
-
-                state.perFrameData[i].animationDataAllocator =
-                        new BufferAllocator(state.perFrameData[i].animationData, 16);
-                state.perFrameData[i].animationOffsetsAllocator =
-                        new BufferAllocator(state.perFrameData[i].animationOffsets, 16);
-                state.perFrameData[i].animationModelDataAllocator =
-                        new BufferAllocator(state.perFrameData[i].animationModelData, 16);
-                state.perFrameData[i].animationBoneWeightAllocator =
-                        new BufferAllocator(state.perFrameData[i].animationBoneWeight, 16);
-                state.perFrameData[i].animationTargetAllocator =
-                        new BufferAllocator(state.perFrameData[i].animationTarget, 16);
-
-                state.perFrameData[i].animationDataAllocations = new HashMap<>();
-                state.perFrameData[i].animationOffsetAllocations = new HashMap<>();
-                state.perFrameData[i].animationModelAllocations = new HashMap<>();
-                state.perFrameData[i].animationBoneWeightAllocations = new HashMap<>();
-                state.perFrameData[i].animationTargetAllocations = new HashMap<>();
 
                 createIntermediaryTextures(state, state.perFrameData[i], imageExtent);
             }
@@ -310,98 +419,43 @@ public class PipelineManagerVulkan {
             @NonNull VulkanState state,
             @NonNull PerFrameData data,
             @NonNull VkExtent3D imageExtent) {
-        data.cascadeShadows = new TextureInfoVulkan[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
+        data.cascadeShadows = shadowMaps;
         for (int shadow = 0; shadow < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; shadow++) {
             data.cascadeShadowSplits[shadow] = new CascadeShadowSplit();
-            data.cascadeShadows[shadow] = createDepthTexture(state, imageExtent);
         }
         data.gBuffer = generateGBuffer(state, imageExtent);
+
+        // These are sampled through the bindless array by the light stage
+        for (TextureInfoVulkan texture : data.gBuffer.textures()) {
+            state.bindlessTextures.register(state, texture);
+        }
+        state.bindlessTextures.register(state, data.gBuffer.depth());
+
+        // Transfer destination so the filter can clear it if nothing rendered to it
         data.preFilterTexture =
-                createTexture(
+                createRenderTarget(
                         state,
-                        imageExtent,
-                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-        data.finalTexture =
-                createTexture(
-                        state,
-                        imageExtent,
+                        imageExtent.width(),
+                        imageExtent.height(),
+                        SCREEN_FORMAT,
                         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
                                 | VK_IMAGE_USAGE_SAMPLED_BIT
-                                | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-    }
-
-    private TextureInfoVulkan createTexture(
-            @NonNull VulkanState state, @NonNull VkExtent3D imageExtent, int imageUsage) {
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-
-            VkImageCreateInfo imageCreateInfo =
-                    VkImageCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .imageType(VK_IMAGE_TYPE_2D)
-                            .format(VK_FORMAT_R8G8B8A8_SRGB)
-                            .extent(imageExtent)
-                            .mipLevels(1)
-                            .arrayLayers(1)
-                            .samples(VK_SAMPLE_COUNT_1_BIT)
-                            .tiling(VK_IMAGE_TILING_OPTIMAL)
-                            .usage(imageUsage)
-                            .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED);
-
-            VmaAllocationCreateInfo imageAlloc =
-                    VmaAllocationCreateInfo.calloc(stack)
-                            .flags(VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT)
-                            .usage(VMA_MEMORY_USAGE_AUTO);
-
-            checkError(
-                    vmaCreateImage(
-                            state.vmaAllocator,
-                            imageCreateInfo,
-                            imageAlloc,
-                            longOutput,
-                            pointerOutput,
-                            null));
-            final long image = longOutput.get(0);
-            final long imageAllocation = pointerOutput.get(0);
-
-            VkImageViewCreateInfo viewCreateInfo =
-                    VkImageViewCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .image(image)
-                            .viewType(VK_IMAGE_VIEW_TYPE_2D)
-                            .format(VK_FORMAT_R8G8B8A8_SRGB)
-                            .subresourceRange(
-                                    VkImageSubresourceRange.calloc(stack)
-                                            .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
-                                            .levelCount(1)
-                                            .layerCount(1));
-            checkError(vkCreateImageView(state.device.logical, viewCreateInfo, null, longOutput));
-            final long imageView = longOutput.get(0);
-
-            VkSamplerCreateInfo samplerCreateInfo = VkSamplerCreateInfo.calloc(stack);
-            samplerCreateInfo
-                    .sType$Default()
-                    .magFilter(VK_FILTER_LINEAR)
-                    .minFilter(VK_FILTER_LINEAR)
-                    .addressModeU(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
-                    .addressModeV(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
-                    .addressModeW(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
-                    .anisotropyEnable(false)
-                    .compareEnable(false)
-                    .compareOp(VK_COMPARE_OP_ALWAYS)
-                    .mipmapMode(VK_SAMPLER_MIPMAP_MODE_LINEAR)
-                    .mipLodBias(0.0f)
-                    .minLod(0.0f)
-                    .maxLod(0.0f);
-
-            checkError(vkCreateSampler(state.device.logical, samplerCreateInfo, null, longOutput));
-            final long imageSampler = longOutput.get(0);
-
-            return new TextureInfoVulkan()
-                    .texture(image)
-                    .textureAllocation(imageAllocation)
-                    .view(imageView)
-                    .sampler(imageSampler);
-        }
+                                | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                        VK_IMAGE_ASPECT_COLOR_BIT,
+                        VK_FILTER_LINEAR,
+                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        data.finalTexture =
+                createRenderTarget(
+                        state,
+                        imageExtent.width(),
+                        imageExtent.height(),
+                        SCREEN_FORMAT,
+                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+                                | VK_IMAGE_USAGE_SAMPLED_BIT
+                                | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                        VK_IMAGE_ASPECT_COLOR_BIT,
+                        VK_FILTER_LINEAR,
+                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
     }
 
     /** Clean up all the rendering resources. */
@@ -418,10 +472,10 @@ public class PipelineManagerVulkan {
         stageShadowRender.cleanup(state);
         stageSkyboxRender.cleanup(state);
         stageSwapchainPresent.cleanup(state);
+        cleanupShadowMaps(state);
         GraphicsManager.getDeletionQueue().add(fontAtlas);
         fontAtlas = null;
-        guiMesh.cleanup();
-        skybox.cleanup();
+        skybox.cleanup(state);
         skybox = null;
         quadMesh.cleanup(state);
         quadMesh = null;
@@ -435,54 +489,32 @@ public class PipelineManagerVulkan {
      */
     private void cleanupIntermediaryTextures(
             @NonNull VulkanState state, @NonNull PerFrameData data) {
-        if (data.cascadeShadows != null) {
-            for (int shadow = 0; shadow < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; shadow++) {
-                vmaDestroyImage(
-                        state.vmaAllocator,
-                        data.cascadeShadows[shadow].texture,
-                        data.cascadeShadows[shadow].textureAllocation);
-            }
-            data.cascadeShadows = null;
-        }
+        // Shared between frames, cleaned up separately
+        data.cascadeShadows = null;
 
         if (data.gBuffer != null) {
             for (TextureInfoVulkan info : data.gBuffer.textures()) {
-                vmaDestroyImage(state.vmaAllocator, info.texture, info.textureAllocation);
+                state.bindlessTextures.release(state, info);
+                info.destroy(state);
             }
-            vmaDestroyImage(
-                    state.vmaAllocator,
-                    data.gBuffer.depth().texture,
-                    data.gBuffer.depth().textureAllocation);
+            state.bindlessTextures.release(state, data.gBuffer.depth());
+            data.gBuffer.depth().destroy(state);
             data.gBuffer = null;
         }
 
         if (data.preFilterTexture != null) {
-            vmaDestroyImage(
-                    state.vmaAllocator,
-                    data.preFilterTexture.texture,
-                    data.preFilterTexture.textureAllocation);
+            data.preFilterTexture.destroy(state);
             data.preFilterTexture = null;
         }
         if (data.finalTexture != null) {
-            vmaDestroyImage(
-                    state.vmaAllocator,
-                    data.finalTexture.texture,
-                    data.finalTexture.textureAllocation);
+            data.finalTexture.destroy(state);
             data.finalTexture = null;
         }
     }
 
     private void cleanupPerFrameData(@NonNull VulkanState state, @NonNull PerFrameData data) {
-        SharedBuffer.free(data.animationData, state);
-        data.animationData = null;
         SharedBuffer.free(data.animationOffsets, state);
         data.animationOffsets = null;
-        SharedBuffer.free(data.animationModelData, state);
-        data.animationModelData = null;
-        SharedBuffer.free(data.animationBoneWeight, state);
-        data.animationBoneWeight = null;
-        SharedBuffer.free(data.animationTarget, state);
-        data.animationTarget = null;
         SharedBuffer.free(data.guiUniforms, state);
         data.guiUniforms = null;
         SharedBuffer.free(data.guiCommands, state);
@@ -491,6 +523,12 @@ public class PipelineManagerVulkan {
         data.guiPoints = null;
         SharedBuffer.free(data.guiPointDetails, state);
         data.guiPointDetails = null;
+        SharedBuffer.free(data.guiVertices, state);
+        data.guiVertices = null;
+        SharedBuffer.free(data.guiTextureIndices, state);
+        data.guiTextureIndices = null;
+        SharedBuffer.free(data.guiFontStaging, state);
+        data.guiFontStaging = null;
         SharedBuffer.free(data.lightUniforms, state);
         data.lightUniforms = null;
         SharedBuffer.free(data.lightPointLights, state);
@@ -503,38 +541,15 @@ public class PipelineManagerVulkan {
         data.sceneModelMatrices = null;
         SharedBuffer.free(data.sceneMaterialOverrides, state);
         data.sceneMaterialOverrides = null;
-        SharedBuffer.free(data.shadowUniforms, state);
-        data.shadowUniforms = null;
-        SharedBuffer.free(data.shadowModelMatrices, state);
-        data.shadowModelMatrices = null;
+        SharedBuffer.free(data.sceneDrawCommands, state);
+        data.sceneDrawCommands = null;
+        data.modelDrawInfo = null;
         SharedBuffer.free(data.skyboxUniforms, state);
         data.skyboxUniforms = null;
+        SharedBuffer.free(data.filterUniforms, state);
+        data.filterUniforms = null;
         SharedBuffer.free(data.materials, state);
         data.materials = null;
-        SharedBuffer.free(data.textures, state);
-        data.textures = null;
-
-        data.animationDataAllocator.clear();
-        data.animationDataAllocator = null;
-        data.animationOffsetsAllocator.clear();
-        data.animationOffsetsAllocator = null;
-        data.animationModelDataAllocator.clear();
-        data.animationModelDataAllocator = null;
-        data.animationBoneWeightAllocator.clear();
-        data.animationBoneWeightAllocator = null;
-        data.animationTargetAllocator.clear();
-        data.animationTargetAllocator = null;
-
-        data.animationDataAllocations.clear();
-        data.animationDataAllocations = null;
-        data.animationOffsetAllocations.clear();
-        data.animationOffsetAllocations = null;
-        data.animationModelAllocations.clear();
-        data.animationModelAllocations = null;
-        data.animationBoneWeightAllocations.clear();
-        data.animationBoneWeightAllocations = null;
-        data.animationTargetAllocations.clear();
-        data.animationTargetAllocations = null;
 
         data.cascadeShadowSplits = null;
 
@@ -556,23 +571,52 @@ public class PipelineManagerVulkan {
                         .getTextureLoader()
                         .load(
                                 null,
-                                Format.R8G8B8A8_UINT,
+                                Format.R8G8B8A8_UNORM,
                                 FontAtlas.FONT_ATLAS_IMAGE_WIDTH,
                                 FontAtlas.FONT_ATLAS_IMAGE_HEIGHT);
     }
 
     private GBuffer generateGBuffer(@NonNull VulkanState state, @NonNull VkExtent3D imageExtent) {
-        TextureInfoVulkan[] textures = new TextureInfoVulkan[5];
-        for (int i = 0; i < textures.length; i++) {
-            textures[i] =
-                    createTexture(
-                            state,
-                            imageExtent,
-                            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-        }
-        TextureInfoVulkan depth = createDepthTexture(state, imageExtent);
+        final int width = imageExtent.width();
+        final int height = imageExtent.height();
+        final int colorUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 
-        return new GBuffer(textures, depth, imageExtent.width(), imageExtent.height());
+        // Read 1:1 by the light stage, so nearest filtering like in OpenGL
+        TextureInfoVulkan[] textures = new TextureInfoVulkan[GBuffer.TEXTURE_COUNT];
+        for (int i = 0; i < GBuffer.MATERIAL; i++) {
+            textures[i] =
+                    createRenderTarget(
+                            state,
+                            width,
+                            height,
+                            GBUFFER_COLOR_FORMAT,
+                            colorUsage,
+                            VK_IMAGE_ASPECT_COLOR_BIT,
+                            VK_FILTER_NEAREST,
+                            VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        }
+        textures[GBuffer.MATERIAL] =
+                createRenderTarget(
+                        state,
+                        width,
+                        height,
+                        GBUFFER_MATERIAL_FORMAT,
+                        colorUsage,
+                        VK_IMAGE_ASPECT_COLOR_BIT,
+                        VK_FILTER_NEAREST,
+                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        TextureInfoVulkan depth =
+                createRenderTarget(
+                        state,
+                        width,
+                        height,
+                        DEPTH_FORMAT,
+                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                        VK_IMAGE_ASPECT_DEPTH_BIT,
+                        VK_FILTER_NEAREST,
+                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+
+        return new GBuffer(textures, depth, width, height);
     }
 
     public Pipeline getPipeline(final int configuration) {
@@ -591,19 +635,23 @@ public class PipelineManagerVulkan {
             return;
         }
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            // Just keep doubling the image until we get to the full screen size
+            /*
+             * Keep doubling the image until we get to the full screen size, but always at least fit the window. The
+             * monitor size is in screen coordinates, which can be smaller than the window in pixels (high DPI on
+             * macOS), and windows can span several monitors.
+             */
             final int newWidth =
-                    width < Window.getLargestMonitorWidth()
-                            ? Math.min(
+                    Math.max(
+                            width,
+                            Math.min(
                                     Math.max(state.realSize.width(), width) * 2,
-                                    Window.getLargestMonitorWidth())
-                            : Window.getLargestMonitorWidth();
+                                    Window.getLargestMonitorWidth()));
             final int newHeight =
-                    height < Window.getLargestMonitorHeight()
-                            ? Math.min(
+                    Math.max(
+                            height,
+                            Math.min(
                                     Math.max(state.realSize.height(), height) * 2,
-                                    Window.getLargestMonitorHeight())
-                            : Window.getLargestMonitorHeight();
+                                    Window.getLargestMonitorHeight()));
 
             VkExtent3D imageExtent = VkExtent3D.calloc(stack);
             imageExtent.set(newWidth, newHeight, 1);

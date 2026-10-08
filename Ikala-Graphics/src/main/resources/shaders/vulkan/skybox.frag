@@ -13,7 +13,7 @@ layout(set = 0, binding = 0) uniform Uniforms {
     int textureIndex;
 };
 
-layout(set = 0, binding = 1) uniform sampler2D bindlessTextures[];
+layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
 
 void main()
 {
