@@ -109,6 +109,24 @@ public class FontAtlas {
      */
     private record ResolvedChar(Font font, char value) {}
 
+    /**
+     * How many spaces wide a tab is. Fonts generally don't have a tab glyph, so like Dear ImGui we
+     * draw tabs as a wide space.
+     */
+    public static final int TAB_SIZE = 4;
+
+    /**
+     * Check if a character is whitespace that fonts don't have glyphs for, which we draw as a space
+     * of some width. Tabs are a wide space, and line breaks have no width for text that isn't split
+     * into lines, like Dear ImGui skipping carriage returns.
+     *
+     * @param c The character.
+     * @return True if the character is drawn using the space glyph.
+     */
+    private static boolean isSpecialWhitespace(char c) {
+        return c == '\t' || c == '\n' || c == '\r';
+    }
+
     /** Which bits of a linear allocator are empty. */
     @AllArgsConstructor
     static class FreeBlock {
@@ -627,6 +645,11 @@ public class FontAtlas {
      * @return The font and character to display, or null if there are no fonts.
      */
     private ResolvedChar resolveFont(char c) {
+        if (isSpecialWhitespace(c)) {
+            // Drawn as spaces, so use whichever font has a space
+            final ResolvedChar space = resolveFont(' ');
+            return space == null ? null : new ResolvedChar(space.font(), c);
+        }
         final Context context = IkGui.getContext();
         final Font primary = context.font;
         if (primary != null && primary.supports(c)) {
@@ -791,7 +814,8 @@ public class FontAtlas {
     private StagedBitmap loadGlyph(@NonNull Font font, char c, @NonNull CacheElement element) {
         font.lock.lock();
         try {
-            int glyphIndex = FT_Get_Char_Index(font.face, c);
+            // Tabs and line breaks use the space glyph
+            int glyphIndex = FT_Get_Char_Index(font.face, isSpecialWhitespace(c) ? ' ' : c);
             int error = FT_Load_Glyph(font.face, glyphIndex, FT_LOAD_DEFAULT);
             if (error != FT_Err_Ok) {
                 IkGuiInternal.reportError(log, "Failed to load char {} for font {}", c, font.name);
@@ -803,6 +827,11 @@ public class FontAtlas {
             // In 26.6 pixel format (i.e. 1/64 of a pixel). Glyphs without a bitmap like spaces
             // still have an advance.
             element.info.advance = slot.advance().x() / 64.0f;
+            if (c == '\t') {
+                element.info.advance *= TAB_SIZE;
+            } else if (c == '\n' || c == '\r') {
+                element.info.advance = 0.0f;
+            }
 
             if (slot.format() != FT_GLYPH_FORMAT_BITMAP) {
                 error = FT_Render_Glyph(slot, FT_RENDER_MODE_NORMAL);

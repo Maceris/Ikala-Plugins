@@ -11,6 +11,7 @@ import com.ikalagaming.graphics.frontend.gui.data.IkIO;
 import com.ikalagaming.graphics.frontend.gui.data.IkInt;
 import com.ikalagaming.graphics.frontend.gui.enums.ColorType;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
+import com.ikalagaming.graphics.frontend.gui.windows.IkScriptDebugger;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
@@ -22,6 +23,44 @@ import lombok.NonNull;
 
 /** A GUI for manipulating lights */
 public class GUIControls extends MainToolbar {
+
+    /** A sample script that uses the dialogue functions, to start the script debugger with. */
+    private static final String SAMPLE_SCRIPT =
+            """
+			clearDialogue();
+			leftChat("Hi!");
+			rightChat("... Oh");
+			option("okay");
+			option("stop trying to make fetch happen!");
+			showDialogue();
+			yield("Dialogue");
+			int choice = getLastDialogueSelection();
+			clearDialogue();
+
+			switch(choice) {
+				case 0:
+					goto okay;
+				case 1:
+					goto fetch;
+				default:
+					goto end;
+			}
+
+			okay:
+			rightChat("Okay.");
+			leftChat("Wow, rude");
+			goto end;
+
+			fetch:
+			rightChat("Stop trying to make fetch happen!");
+			leftChat("Don't tell me what to do, mom!");
+			goto end;
+
+			end:
+			option("Leave");
+			yield("Dialogue");
+			hideDialogue();
+			""";
 
     private IkInt selectedFilter;
     private IkBoolean wireframe;
@@ -85,7 +124,9 @@ public class GUIControls extends MainToolbar {
         windowImages.setup(scene);
 
         ikScriptDebugger = new IkScriptDebugger();
-        ikScriptDebugger.setup(scene);
+        ikScriptDebugger.setScriptContents(SAMPLE_SCRIPT);
+        // Shown or hidden with showIkScriptDebugger instead
+        ikScriptDebugger.setVisible(true);
 
         windowLuaConsole = new LuaConsole();
         windowLuaConsole.setup(scene);
@@ -139,7 +180,7 @@ public class GUIControls extends MainToolbar {
             IkGui.endMainMenuBar();
         }
 
-        showWindows();
+        showWindows(width, height);
     }
 
     @Override
@@ -214,8 +255,13 @@ public class GUIControls extends MainToolbar {
         }
     }
 
-    /** Render whichever windows are applicable. */
-    private void showWindows() {
+    /**
+     * Render whichever windows are applicable.
+     *
+     * @param width The width of the window in pixels.
+     * @param height The height of the window in pixels.
+     */
+    private void showWindows(final int width, final int height) {
         if (showDemo.get()) {
             IkGui.showDemoWindow();
         }
@@ -233,7 +279,7 @@ public class GUIControls extends MainToolbar {
             windowSceneControls.draw();
         }
         if (showIkScriptDebugger.get()) {
-            ikScriptDebugger.draw();
+            ikScriptDebugger.draw(width, height);
         }
         if (showImageWindow.get()) {
             windowImages.draw();

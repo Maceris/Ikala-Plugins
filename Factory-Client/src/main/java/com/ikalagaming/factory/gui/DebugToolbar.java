@@ -12,6 +12,8 @@ import com.ikalagaming.graphics.frontend.gui.enums.ColorType;
 import com.ikalagaming.graphics.frontend.gui.util.Color;
 import com.ikalagaming.graphics.frontend.gui.windows.GraphicsDebug;
 import com.ikalagaming.graphics.frontend.gui.windows.IkGuiDemo;
+import com.ikalagaming.graphics.frontend.gui.windows.IkScriptDebugger;
+import com.ikalagaming.graphics.frontend.gui.windows.ScriptMonitor;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.launcher.events.Shutdown;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -25,6 +27,8 @@ public class DebugToolbar extends MainToolbar {
     private final Checkbox debug;
     private final Checkbox demoIkGuiWindow;
     private final Checkbox graphicsWindow;
+    private final Checkbox scriptDebugger;
+    private final Checkbox scriptMonitor;
 
     public DebugToolbar(@NonNull WindowManager windowManager) {
         this.windowManager = windowManager;
@@ -49,6 +53,19 @@ public class DebugToolbar extends MainToolbar {
                         "TOOLBAR_DEBUG_GRAPHICS_DEBUG", FactoryClientPlugin.getResourceBundle());
         graphicsWindow =
                 new Checkbox(textGraphics, windowManager.isVisible(GraphicsDebug.WINDOW_NAME));
+
+        var textScriptDebugger =
+                SafeResourceLoader.getString(
+                        "TOOLBAR_DEBUG_IKSCRIPT_DEBUGGER", FactoryClientPlugin.getResourceBundle());
+        scriptDebugger =
+                new Checkbox(
+                        textScriptDebugger, windowManager.isVisible(IkScriptDebugger.WINDOW_NAME));
+
+        var textScriptMonitor =
+                SafeResourceLoader.getString(
+                        "TOOLBAR_DEBUG_SCRIPT_MONITOR", FactoryClientPlugin.getResourceBundle());
+        scriptMonitor =
+                new Checkbox(textScriptMonitor, windowManager.isVisible(ScriptMonitor.WINDOW_NAME));
     }
 
     @Override
@@ -59,6 +76,8 @@ public class DebugToolbar extends MainToolbar {
                 debug.draw(width, height);
                 demoIkGuiWindow.draw(width, height);
                 graphicsWindow.draw(width, height);
+                scriptDebugger.draw(width, height);
+                scriptMonitor.draw(width, height);
                 IkGui.endMenu();
             }
             IkGui.pushStyleColor(ColorType.TEXT, Color.rgba(1f, 0.1f, 0.1f, 1.0f));
@@ -87,6 +106,14 @@ public class DebugToolbar extends MainToolbar {
         }
         if (graphicsWindow.checkResult()) {
             windowManager.setVisible(GraphicsDebug.WINDOW_NAME, graphicsWindow.getState());
+            return true;
+        }
+        if (scriptDebugger.checkResult()) {
+            windowManager.setVisible(IkScriptDebugger.WINDOW_NAME, scriptDebugger.getState());
+            return true;
+        }
+        if (scriptMonitor.checkResult()) {
+            windowManager.setVisible(ScriptMonitor.WINDOW_NAME, scriptMonitor.getState());
             return true;
         }
         return false;

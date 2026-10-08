@@ -242,6 +242,33 @@ class FontAtlasTest {
     }
 
     @Test
+    void testTabIsWideSpace() {
+        // Fonts don't have a tab glyph, so tabs are drawn as a wide space like Dear ImGui
+        useAtlas(1 << 14, "Noto");
+        atlas.registerCharacter(' ', 16);
+        atlas.registerCharacter('\t', 16);
+
+        final FontAtlas.CharInfo space = info(' ', 16);
+        final FontAtlas.CharInfo tab = info('\t', 16);
+        assertEquals(space.advance * FontAtlas.TAB_SIZE, tab.advance);
+        assertEquals(0, tab.width);
+        assertFalse(anyErrors(), "Tabs should not report a missing character");
+    }
+
+    @Test
+    void testLineBreaksHaveNoWidth() {
+        // Text that isn't split into lines shouldn't report missing characters for line breaks
+        useAtlas(1 << 14, "Noto");
+        for (char c : new char[] {'\n', '\r'}) {
+            atlas.registerCharacter(c, 16);
+            final FontAtlas.CharInfo info = info(c, 16);
+            assertEquals(0.0f, info.advance);
+            assertEquals(0, info.width);
+        }
+        assertFalse(anyErrors(), "Line breaks should not report a missing character");
+    }
+
+    @Test
     void testKerningIsScaledPixels() throws IOException {
         // Arial has a kerning table, but isn't available everywhere
         final Path arial = Path.of("C:/Windows/Fonts/arial.ttf");
