@@ -40,6 +40,86 @@ public final class AssetValidator {
     }
 
     /**
+     * One row of a container's section table, as found in the file, for tools that show broken
+     * files.
+     *
+     * @param index The position in the table.
+     * @param tag The section tag.
+     * @param version The section version.
+     * @param flags The section flags.
+     * @param offset The payload offset from the start of the file.
+     * @param length The payload length.
+     * @param storedCrc The CRC-32C the table says the payload has.
+     * @param actualCrc The CRC-32C the payload really has, or null if it is outside the file.
+     * @param known Whether the reader understands this tag and version.
+     * @param section The section, or null if its payload is outside the file.
+     */
+    public record Entry(
+            int index,
+            int tag,
+            int version,
+            int flags,
+            long offset,
+            long length,
+            int storedCrc,
+            @Nullable Integer actualCrc,
+            boolean known,
+            @Nullable Section section) {
+
+        /**
+         * Whether readers must understand this section to use the file.
+         *
+         * @return Whether the required flag is set.
+         */
+        public boolean isRequired() {
+            return (flags & Section.FLAG_REQUIRED) != 0;
+        }
+
+        /**
+         * Whether the payload is inside the file and matches its checksum.
+         *
+         * @return True if the checksum is right.
+         */
+        public boolean crcMatches() {
+            return actualCrc != null && actualCrc == storedCrc;
+        }
+    }
+
+    /**
+     * Everything that could be read from a container, whether or not it is valid.
+     *
+     * @param header The header, or null if it couldn't be read.
+     * @param entries Every row of the section table, or none if the table couldn't be read.
+     * @param metadata The metadata, or null if it is missing or broken.
+     * @param problems Every problem found.
+     */
+    public record Inspection(
+            @Nullable AssetHeader header,
+            @NonNull List<Entry> entries,
+            @Nullable AssetMetadata metadata,
+            @NonNull List<Problem> problems) {
+
+        /**
+         * Count the problems of one severity.
+         *
+         * @param severity The severity to count.
+         * @return How many problems have it.
+         */
+        public long count(@NonNull Severity severity) {
+            return problems.stream().filter(p -> p.severity() == severity).count();
+        }
+
+        /**
+         * Whether the file can be read.
+         *
+         * @return True if there are no errors.
+         */
+        public boolean isReadable() {
+            return count(Severity.ERROR) == 0;
+        }
+    }
+
+    /**
      * Everything learned while checking a file.
      *
      * @param header The header, or null if it couldn't be read.
@@ -76,7 +156,7 @@ public final class AssetValidator {
      * @param length The payload length.
      * @param crc The expected CRC-32C of the payload.
      */
-    private record Entry(
+    private record Row(
             int index, int tag, int version, int flags, long offset, long length, int crc) {
         String describe() {
             return "Section " + index + " (" + SectionTag.toString(tag) + ")";
@@ -113,34 +193,69 @@ public final class AssetValidator {
      * @return What was found.
      */
     static Result check(@NonNull ByteBuffer file, @NonNull KnownSections known) {
+        Inspection inspection = inspect(file, known);
+        List<Section> sections =
+                inspection.entries().stream()
+                        .map(Entry::section)
+                        .filter(section -> section != null)
+                        .toList();
+        return new Result(
+                inspection.header(), sections, inspection.metadata(), inspection.problems());
+    }
+
+    /**
+     * Read as much of a container as possible, even a broken one, and report every problem. Never
+     * throws for a malformed file. For tools that show files, like the asset inspector.
+     *
+     * @param file The whole file, from its position to its limit. The buffer is not modified.
+     * @param known The sections the reader understands.
+     * @return What was found.
+     */
+    public static Inspection inspect(@NonNull ByteBuffer file, @NonNull KnownSections known) {
         ByteBuffer buffer = file.slice().order(ByteOrder.LITTLE_ENDIAN);
         List<Problem> problems = new ArrayList<>();
         List<Section> sections = new ArrayList<>();
+        List<Entry> found = new ArrayList<>();
         AssetHeader header = readHeader(buffer, problems);
         if (header == null) {
-            return new Result(null, List.of(), null, problems);
+            return new Inspection(null, List.of(), null, problems);
         }
 
-        List<Entry> entries = readTable(buffer, problems);
+        List<Row> entries = readTable(buffer, problems);
         if (entries == null) {
-            return new Result(header, List.of(), null, problems);
+            return new Inspection(header, List.of(), null, problems);
         }
 
         long tableEnd =
                 buffer.getLong(HEADER_TABLE_OFFSET)
                         + (long) entries.size() * buffer.getInt(HEADER_TABLE_ENTRY_SIZE);
         long headerEnd = Integer.toUnsignedLong(buffer.getInt(HEADER_HEADER_SIZE));
-        List<Entry> inBounds = new ArrayList<>();
-        for (Entry entry : entries) {
-            if (checkEntry(buffer, entry, known, problems)) {
+        List<Row> inBounds = new ArrayList<>();
+        for (Row entry : entries) {
+            Integer actualCrc = checkEntry(buffer, entry, known, problems);
+            Section section = null;
+            if (actualCrc != null) {
                 inBounds.add(entry);
                 ByteBuffer payload = buffer.slice((int) entry.offset(), (int) entry.length());
-                sections.add(new Section(entry.tag(), entry.version(), entry.flags(), payload));
+                section = new Section(entry.tag(), entry.version(), entry.flags(), payload);
+                sections.add(section);
             }
+            found.add(
+                    new Entry(
+                            entry.index(),
+                            entry.tag(),
+                            entry.version(),
+                            entry.flags(),
+                            entry.offset(),
+                            entry.length(),
+                            entry.crc(),
+                            actualCrc,
+                            known.isKnown(entry.tag(), entry.version()),
+                            section));
         }
         checkOverlaps(inBounds, headerEnd, tableEnd, problems);
         AssetMetadata metadata = checkMetadata(sections, problems);
-        return new Result(header, List.copyOf(sections), metadata, problems);
+        return new Inspection(header, List.copyOf(found), metadata, problems);
     }
 
     /**
@@ -214,7 +329,7 @@ public final class AssetValidator {
      * @param problems Where to report problems.
      * @return The entries, or null if the table itself is out of bounds.
      */
-    private static @Nullable List<Entry> readTable(ByteBuffer buffer, List<Problem> problems) {
+    private static @Nullable List<Row> readTable(ByteBuffer buffer, List<Problem> problems) {
         long count = Integer.toUnsignedLong(buffer.getInt(HEADER_SECTION_COUNT));
         long entrySize = Integer.toUnsignedLong(buffer.getInt(HEADER_TABLE_ENTRY_SIZE));
         long tableOffset = buffer.getLong(HEADER_TABLE_OFFSET);
@@ -240,11 +355,11 @@ public final class AssetValidator {
             return null;
         }
 
-        List<Entry> entries = new ArrayList<>((int) count);
+        List<Row> entries = new ArrayList<>((int) count);
         for (int i = 0; i < count; ++i) {
             int base = (int) (tableOffset + i * entrySize);
             entries.add(
-                    new Entry(
+                    new Row(
                             i,
                             buffer.getInt(base + ENTRY_TAG),
                             Short.toUnsignedInt(buffer.getShort(base + ENTRY_VERSION)),
@@ -263,10 +378,10 @@ public final class AssetValidator {
      * @param entry The entry.
      * @param known The sections the reader understands.
      * @param problems Where to report problems.
-     * @return Whether the payload is inside the file, so the section can be read.
+     * @return The payload's actual CRC-32C, or null if the payload is outside the file.
      */
-    private static boolean checkEntry(
-            ByteBuffer buffer, Entry entry, KnownSections known, List<Problem> problems) {
+    private static @Nullable Integer checkEntry(
+            ByteBuffer buffer, Row entry, KnownSections known, List<Problem> problems) {
         if (entry.offset() < 0
                 || entry.length() < 0
                 || entry.offset() > buffer.remaining()
@@ -277,7 +392,7 @@ public final class AssetValidator {
                     entry.describe(),
                     Long.toUnsignedString(entry.offset()),
                     Long.toUnsignedString(entry.length()));
-            return false;
+            return null;
         }
         if (entry.offset() % ALIGNMENT != 0) {
             error(
@@ -307,7 +422,7 @@ public final class AssetValidator {
                     entry.describe(),
                     entry.version());
         }
-        return true;
+        return (int) crc.getValue();
     }
 
     /**
@@ -319,14 +434,14 @@ public final class AssetValidator {
      * @param problems Where to report problems.
      */
     private static void checkOverlaps(
-            List<Entry> entries, long headerEnd, long tableEnd, List<Problem> problems) {
-        List<Entry> sorted = new ArrayList<>(entries);
-        sorted.sort(Comparator.comparingLong(Entry::offset));
+            List<Row> entries, long headerEnd, long tableEnd, List<Problem> problems) {
+        List<Row> sorted = new ArrayList<>(entries);
+        sorted.sort(Comparator.comparingLong(Row::offset));
         // Empty payloads take no space, so they can't overlap anything
         sorted.removeIf(entry -> entry.length() == 0);
         long reservedEnd = Math.max(headerEnd, tableEnd);
-        Entry previous = null;
-        for (Entry entry : sorted) {
+        Row previous = null;
+        for (Row entry : sorted) {
             if (entry.offset() < reservedEnd) {
                 error(problems, "%s overlaps the header or section table", entry.describe());
             }

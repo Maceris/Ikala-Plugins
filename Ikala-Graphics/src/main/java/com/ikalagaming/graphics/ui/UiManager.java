@@ -222,7 +222,7 @@ public class UiManager {
                         viewport.workPosition.y,
                         viewport.workPosition.x + viewport.workSize.x,
                         viewport.workPosition.y + viewport.workSize.y);
-        final UiFrame frame = new UiFrame(context, events::add);
+        final UiFrame frame = new UiFrame(context, events::add, engine);
         for (Entry entry : surfaces.values()) {
             if (entry.surface().isVisible()) {
                 entry.surface().draw(area, frame, engine);

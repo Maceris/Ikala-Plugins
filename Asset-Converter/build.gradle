@@ -70,6 +70,7 @@ dependencies {
 
 	// Testing
 	testImplementation project(':Ikala-Core')
+	testImplementation project(':Ikala-Graphics')
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
 	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 	

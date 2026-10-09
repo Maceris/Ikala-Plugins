@@ -18,15 +18,23 @@ import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
 
+import java.util.function.Consumer;
+
 /** A menu bar at the top of the screen for debugging. */
 public class DebugToolbar extends MainToolbar {
     private final WindowManager windowManager;
     private final Checkbox debug;
     private final Checkbox ikDemoWindow;
     private final Checkbox graphicsWindow;
+    private final Checkbox assetInspector;
 
-    public DebugToolbar(@NonNull WindowManager windowManager) {
+    /** Shows or hides the asset inspector. */
+    private final Consumer<Boolean> inspectorVisible;
+
+    public DebugToolbar(
+            @NonNull WindowManager windowManager, @NonNull Consumer<Boolean> inspectorVisible) {
         this.windowManager = windowManager;
+        this.inspectorVisible = inspectorVisible;
 
         var textDebug =
                 SafeResourceLoader.getString(
@@ -43,6 +51,11 @@ public class DebugToolbar extends MainToolbar {
                         "TOOLBAR_DEBUG_GRAPHICS_DEBUG", ConverterPlugin.getResourceBundle());
         graphicsWindow =
                 new Checkbox(textGraphics, windowManager.isVisible(GraphicsDebug.WINDOW_NAME));
+
+        var textInspector =
+                SafeResourceLoader.getString(
+                        "TOOLBAR_DEBUG_ASSET_INSPECTOR", ConverterPlugin.getResourceBundle());
+        assetInspector = new Checkbox(textInspector, false);
     }
 
     @Override
@@ -52,6 +65,7 @@ public class DebugToolbar extends MainToolbar {
                 debug.draw(width, height);
                 ikDemoWindow.draw(width, height);
                 graphicsWindow.draw(width, height);
+                assetInspector.draw(width, height);
                 IkGui.endMenu();
             }
             IkGui.pushStyleColor(ColorType.TEXT, Color.rgba(1f, 0.1f, 0.1f, 1.0f));
@@ -76,6 +90,10 @@ public class DebugToolbar extends MainToolbar {
         }
         if (graphicsWindow.checkResult()) {
             windowManager.setVisible(GraphicsDebug.WINDOW_NAME, graphicsWindow.getState());
+            return true;
+        }
+        if (assetInspector.checkResult()) {
+            inspectorVisible.accept(assetInspector.getState());
             return true;
         }
         return false;

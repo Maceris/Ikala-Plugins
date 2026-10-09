@@ -5,8 +5,10 @@ import static com.ikalagaming.converter.gui.DefaultWindows.*;
 import com.ikalagaming.converter.gui.DebugToolbar;
 import com.ikalagaming.converter.gui.window.Debug;
 import com.ikalagaming.converter.gui.window.MainMenu;
+import com.ikalagaming.converter.inspector.AssetInspectorWindow;
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.UI;
 import com.ikalagaming.graphics.gui.WindowManager;
 import com.ikalagaming.graphics.gui.windows.GraphicsDebug;
 import com.ikalagaming.graphics.gui.windows.IkGuiDemo;
@@ -69,6 +71,17 @@ public class ConverterPlugin extends Plugin {
         return true;
     }
 
+    /**
+     * Show or hide the asset inspector.
+     *
+     * @param visible Whether it should be shown.
+     */
+    public void setInspectorVisible(boolean visible) {
+        GraphicsManager.forPlugin(getName())
+                .ui()
+                .setVisible(AssetInspectorWindow.SURFACE_ID, visible);
+    }
+
     @Override
     public boolean onEnable() {
         guiManager = GraphicsManager.getWindowManager();
@@ -76,9 +89,13 @@ public class ConverterPlugin extends Plugin {
         guiManager.addWindow(graphics, DEBUG.getName(), new Debug());
         guiManager.addWindow(graphics, IkGuiDemo.WINDOW_NAME, new IkGuiDemo());
         guiManager.addWindow(graphics, GraphicsDebug.WINDOW_NAME, new GraphicsDebug());
-        graphics.ui().show(new MainMenu(graphics.ui()).build());
+        UI ui = graphics.ui();
+        ui.show(new MainMenu(ui, () -> setInspectorVisible(true)).build());
+        // Shown once so later toggles only change its visibility, and keep its state
+        ui.show(new AssetInspectorWindow(ui).build());
+        ui.setVisible(AssetInspectorWindow.SURFACE_ID, false);
 
-        guiManager.setToolbar(graphics, new DebugToolbar(guiManager));
+        guiManager.setToolbar(graphics, new DebugToolbar(guiManager, this::setInspectorVisible));
         return true;
     }
 }

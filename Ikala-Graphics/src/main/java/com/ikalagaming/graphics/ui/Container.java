@@ -57,6 +57,20 @@ public abstract class Container<S extends Container<S>> extends Node<S> {
     }
 
     /**
+     * Remove every child, for rebuilding a list.
+     *
+     * @return This container.
+     */
+    public S clear() {
+        if (!children.isEmpty()) {
+            children.forEach(child -> child.parent = null);
+            children.clear();
+            markDirty();
+        }
+        return self();
+    }
+
+    /**
      * Find a direct child by ID.
      *
      * @param childId The ID to look for.

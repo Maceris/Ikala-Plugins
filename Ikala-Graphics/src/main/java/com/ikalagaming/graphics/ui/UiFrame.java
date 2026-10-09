@@ -10,8 +10,12 @@ import java.util.function.Consumer;
  * @param context The layout context used this frame.
  * @param events Collects actions that nodes fire, such as button clicks. They run later, outside
  *     rendering, so they can do things like load models.
+ * @param engine Lays out content that is laid out while it is submitted, like a scroll's.
  */
-public record UiFrame(@NonNull LayoutContext context, @NonNull Consumer<Runnable> events) {
+public record UiFrame(
+        @NonNull LayoutContext context,
+        @NonNull Consumer<Runnable> events,
+        @NonNull LayoutEngine engine) {
 
     /**
      * Fire an action, which runs on the render thread after the frame is drawn.

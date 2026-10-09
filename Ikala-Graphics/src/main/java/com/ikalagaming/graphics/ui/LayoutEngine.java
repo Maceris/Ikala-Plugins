@@ -59,7 +59,10 @@ public final class LayoutEngine {
         if (!root.dirty && placement.equals(lastPlacements.get(root))) {
             return false;
         }
-        resolveFonts(root, context.fontSize() * context.scale(), context);
+        // The content of a scroll is laid out on its own, but keeps the scroll's font
+        float inherited =
+                root.parent != null ? root.parent.fontPixels : context.fontSize() * context.scale();
+        resolveFonts(root, inherited, context);
         for (Axis axis : Axis.values()) {
             fit(root, axis, context);
             root.size[axis.index()] = axis == Axis.X ? width : height;
@@ -169,7 +172,8 @@ public final class LayoutEngine {
      * @param context The layout context.
      */
     private static void sizeChildren(Node<?> node, Axis axis, LayoutContext context) {
-        if (node.children.isEmpty()) {
+        // A scroll lays out its content itself, once it knows its view size
+        if (node.children.isEmpty() || node instanceof Scroll) {
             return;
         }
         int i = axis.index();
@@ -326,7 +330,7 @@ public final class LayoutEngine {
      */
     private static void position(Node<?> node, float x, float y, LayoutContext context) {
         node.rect.set(x, y, x + node.size[0], y + node.size[1]);
-        if (node.children.isEmpty()) {
+        if (node.children.isEmpty() || node instanceof Scroll) {
             return;
         }
         float left = x + resolve(node.padding.left(), node.size[0], node, context);

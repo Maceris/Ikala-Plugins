@@ -47,13 +47,18 @@ public class MainMenu {
     /** The UI the menu is shown through. */
     private final UI ui;
 
+    /** Shows the asset inspector. */
+    private final Runnable openInspector;
+
     /**
      * Create the main menu.
      *
      * @param ui The converter plugin's UI.
+     * @param openInspector Shows the asset inspector.
      */
-    public MainMenu(@NonNull UI ui) {
+    public MainMenu(@NonNull UI ui, @NonNull Runnable openInspector) {
         this.ui = ui;
+        this.openInspector = openInspector;
     }
 
     /**
@@ -68,6 +73,9 @@ public class MainMenu {
         var textModelLoader =
                 SafeResourceLoader.getString(
                         "MENU_MAIN_MODEL_LOADER", ConverterPlugin.getResourceBundle());
+        var textInspector =
+                SafeResourceLoader.getString(
+                        "MENU_MAIN_ASSET_INSPECTOR", ConverterPlugin.getResourceBundle());
 
         Column buttons =
                 new Column("buttons")
@@ -84,7 +92,11 @@ public class MainMenu {
                                         .onClick(
                                                 () -> {
                                                     // TODO(ches) model loading UI
-                                                }));
+                                                }),
+                                new Button("asset-inspector", textInspector)
+                                        .width(Sizing.fixed(BUTTON_WIDTH))
+                                        .height(Sizing.fixed(BUTTON_HEIGHT))
+                                        .onClick(this::startInspector));
         Column content =
                 new Column("content").justify(Justify.CENTER).align(Align.CENTER).add(buttons);
 
@@ -92,6 +104,12 @@ public class MainMenu {
                 .anchors(Anchors.fill())
                 .layer(Layer.BACKGROUND)
                 .content(content);
+    }
+
+    /** Hide the menu and show the asset inspector. */
+    private void startInspector() {
+        ui.setVisible(SURFACE_ID, false);
+        openInspector.run();
     }
 
     /** Hide the menu and load the sphere demo. */

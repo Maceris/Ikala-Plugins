@@ -247,7 +247,10 @@ public abstract class Node<S extends Node<S>> {
      */
     final Node<?> clean() {
         dirty = false;
-        children.forEach(Node::clean);
+        // A scroll lays out its own content, which stays dirty until then
+        if (!(this instanceof Scroll)) {
+            children.forEach(Node::clean);
+        }
         return this;
     }
 
