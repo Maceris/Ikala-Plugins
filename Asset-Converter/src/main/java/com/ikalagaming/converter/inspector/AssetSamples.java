@@ -83,6 +83,23 @@ public final class AssetSamples {
     }
 
     /**
+     * Count the containers in a folder.
+     *
+     * @param folder The folder.
+     * @return How many {@code .ika} files it has, 0 if it doesn't exist.
+     */
+    public static int count(@NonNull Path folder) {
+        if (!Files.isDirectory(folder)) {
+            return 0;
+        }
+        try (var files = Files.list(folder)) {
+            return (int) files.filter(file -> file.toString().endsWith(".ika")).count();
+        } catch (IOException e) {
+            return 0;
+        }
+    }
+
+    /**
      * A writer with the metadata and the sections every sample shares.
      *
      * @return The writer.

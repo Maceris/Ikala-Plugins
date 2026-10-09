@@ -11,16 +11,11 @@ import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.scene.lights.PointLight;
-import com.ikalagaming.graphics.ui.Align;
-import com.ikalagaming.graphics.ui.Anchors;
-import com.ikalagaming.graphics.ui.Button;
-import com.ikalagaming.graphics.ui.Column;
-import com.ikalagaming.graphics.ui.Justify;
-import com.ikalagaming.graphics.ui.Layer;
-import com.ikalagaming.graphics.ui.Sizing;
-import com.ikalagaming.graphics.ui.Surface;
+import com.ikalagaming.graphics.ui.spec.Observable;
+import com.ikalagaming.graphics.ui.spec.SpecBindings;
+import com.ikalagaming.graphics.ui.spec.SpecInstance;
+import com.ikalagaming.graphics.ui.spec.UiSpec;
 import com.ikalagaming.launcher.PluginFolder;
-import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -30,19 +25,17 @@ import org.joml.Vector3f;
 import java.util.Objects;
 
 /**
- * The main menu we start up showing, built as retained UI: a full-screen surface with a centered
- * column of buttons that a mouse, keyboard or gamepad can use.
+ * The main menu we start up showing. Its layout lives in the spec {@code ui/main-menu.yml} in the
+ * plugin's data folder, which the editor reloads when it changes; this class supplies what the spec
+ * names: the button handlers, the sample count, and the plugin's text.
  */
 @Slf4j
 public class MainMenu {
-    /** The ID of the main menu surface. */
+    /** The ID of the main menu surface, set in the spec. */
     public static final String SURFACE_ID = "converter/main-menu";
 
-    /** The width of the menu buttons, in UI units. */
-    private static final float BUTTON_WIDTH = 240;
-
-    /** The height of the menu buttons, in UI units. */
-    private static final float BUTTON_HEIGHT = 40;
+    /** Where the spec is, within the plugin's data folder. */
+    public static final String SPEC = "ui/main-menu.yml";
 
     /** The UI the menu is shown through. */
     private final UI ui;
@@ -50,60 +43,45 @@ public class MainMenu {
     /** Shows the asset inspector. */
     private final Runnable openInspector;
 
+    /** How many sample containers have been written, shown under the buttons. */
+    private final Observable<Integer> sampleCount;
+
     /**
      * Create the main menu.
      *
      * @param ui The converter plugin's UI.
      * @param openInspector Shows the asset inspector.
+     * @param sampleCount How many sample containers have been written.
      */
-    public MainMenu(@NonNull UI ui, @NonNull Runnable openInspector) {
+    public MainMenu(
+            @NonNull UI ui,
+            @NonNull Runnable openInspector,
+            @NonNull Observable<Integer> sampleCount) {
         this.ui = ui;
         this.openInspector = openInspector;
+        this.sampleCount = sampleCount;
     }
 
     /**
-     * Build the menu surface, ready to show.
+     * Load the menu spec and show it.
      *
-     * @return The surface.
+     * @return The open menu.
+     * @throws com.ikalagaming.graphics.ui.spec.SpecException If the spec is broken.
      */
-    public Surface build() {
-        var textSphereDemo =
-                SafeResourceLoader.getString(
-                        "MENU_MAIN_SPHERE_DEMO", ConverterPlugin.getResourceBundle());
-        var textModelLoader =
-                SafeResourceLoader.getString(
-                        "MENU_MAIN_MODEL_LOADER", ConverterPlugin.getResourceBundle());
-        var textInspector =
-                SafeResourceLoader.getString(
-                        "MENU_MAIN_ASSET_INSPECTOR", ConverterPlugin.getResourceBundle());
-
-        Column buttons =
-                new Column("buttons")
-                        .gap(12)
-                        .add(
-                                new Button("sphere-demo", textSphereDemo)
-                                        .width(Sizing.fixed(BUTTON_WIDTH))
-                                        .height(Sizing.fixed(BUTTON_HEIGHT))
-                                        .autofocus(true)
-                                        .onClick(this::startSphereDemo),
-                                new Button("model-loader", textModelLoader)
-                                        .width(Sizing.fixed(BUTTON_WIDTH))
-                                        .height(Sizing.fixed(BUTTON_HEIGHT))
-                                        .onClick(
-                                                () -> {
-                                                    // TODO(ches) model loading UI
-                                                }),
-                                new Button("asset-inspector", textInspector)
-                                        .width(Sizing.fixed(BUTTON_WIDTH))
-                                        .height(Sizing.fixed(BUTTON_HEIGHT))
-                                        .onClick(this::startInspector));
-        Column content =
-                new Column("content").justify(Justify.CENTER).align(Align.CENTER).add(buttons);
-
-        return ui.surface(SURFACE_ID)
-                .anchors(Anchors.fill())
-                .layer(Layer.BACKGROUND)
-                .content(content);
+    public SpecInstance open() {
+        UiSpec spec = ui.loadSpec(SPEC);
+        return ui.open(
+                spec,
+                new SpecBindings()
+                        .bundle(ConverterPlugin.getResourceBundle())
+                        .handler("start-sphere-demo", this::startSphereDemo)
+                        .handler(
+                                "open-model-loader",
+                                () -> {
+                                    // TODO(ches) model loading UI
+                                })
+                        .handler("open-inspector", this::startInspector)
+                        .value("samples.count", sampleCount));
     }
 
     /** Hide the menu and show the asset inspector. */

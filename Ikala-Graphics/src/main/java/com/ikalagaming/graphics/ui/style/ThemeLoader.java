@@ -100,7 +100,7 @@ public final class ThemeLoader {
         if (document == null) {
             throw new ThemeException(source + ": the theme is empty");
         }
-        Map<String, Object> root = map(document, source);
+        Map<String, Object> root = StyleParser.map(document, source);
         for (String key : root.keySet()) {
             if (!TOP_LEVEL.contains(key)) {
                 throw new ThemeException(source + ": unknown key '" + key + "'");
@@ -112,7 +112,7 @@ public final class ThemeLoader {
         Map<String, Object> tokens = new HashMap<>(base.tokens());
         base.variants().values().forEach(tokens::putAll);
         if (root.containsKey("tokens")) {
-            map(root.get("tokens"), "tokens")
+            StyleParser.map(root.get("tokens"), "tokens")
                     .forEach(
                             (tokenName, value) -> {
                                 builder.token(tokenName, value);
@@ -120,10 +120,10 @@ public final class ThemeLoader {
                             });
         }
         if (root.containsKey("variants")) {
-            map(root.get("variants"), "variants")
+            StyleParser.map(root.get("variants"), "variants")
                     .forEach(
                             (variant, overrides) ->
-                                    map(overrides, "variants." + variant)
+                                    StyleParser.map(overrides, "variants." + variant)
                                             .forEach(
                                                     (tokenName, value) -> {
                                                         builder.variant(variant, tokenName, value);
@@ -132,78 +132,26 @@ public final class ThemeLoader {
         }
         checkTokens(tokens);
         if (root.containsKey("types")) {
-            map(root.get("types"), "types")
+            StyleParser.map(root.get("types"), "types")
                     .forEach(
                             (type, style) ->
                                     builder.type(
-                                            type, style(style, "types." + type, tokens, true)));
+                                            type,
+                                            StyleParser.style(
+                                                    style, "types." + type, tokens::containsKey)));
         }
         if (root.containsKey("classes")) {
-            map(root.get("classes"), "classes")
+            StyleParser.map(root.get("classes"), "classes")
                     .forEach(
                             (className, style) ->
                                     builder.styleClass(
                                             className,
-                                            style(style, "classes." + className, tokens, true)));
+                                            StyleParser.style(
+                                                    style,
+                                                    "classes." + className,
+                                                    tokens::containsKey)));
         }
         return builder.build();
-    }
-
-    /**
-     * Parse a style.
-     *
-     * @param value The YAML map.
-     * @param path Where it is, for messages.
-     * @param tokens Every token it may refer to.
-     * @param allowStates Whether state overrides are allowed, which they aren't inside a state.
-     * @return The style.
-     */
-    private static Style style(
-            Object value, String path, Map<String, Object> tokens, boolean allowStates) {
-        Style.Builder builder = Style.builder();
-        for (Map.Entry<String, Object> entry : map(value, path).entrySet()) {
-            String where = path + "." + entry.getKey();
-            StyleKey key = StyleKey.byName(entry.getKey());
-            if (key != null) {
-                builder.set(key, styleValue(entry.getValue(), key, where, tokens));
-                continue;
-            }
-            StyleState state = StyleState.byName(entry.getKey());
-            if (state != null && allowStates) {
-                builder.state(state, style(entry.getValue(), where, tokens, false));
-                continue;
-            }
-            throw new ThemeException(where + ": unknown style property '" + entry.getKey() + "'");
-        }
-        return builder.build();
-    }
-
-    /**
-     * Parse one style value: a token reference, or a literal checked against the property's type.
-     *
-     * @param value The YAML value.
-     * @param key The property.
-     * @param where Where it is, for messages.
-     * @param tokens Every token it may refer to.
-     * @return A {@link Token} or a converted literal.
-     */
-    private static Object styleValue(
-            Object value, StyleKey key, String where, Map<String, Object> tokens) {
-        if (value == null) {
-            throw new ThemeException(where + ": missing value");
-        }
-        Token token = StyleValues.tokenOf(value);
-        if (token != null) {
-            if (!tokens.containsKey(token.name())) {
-                throw new ThemeException(where + ": unknown token " + token);
-            }
-            return token;
-        }
-        try {
-            return StyleValues.convert(value, key.getType());
-        } catch (IllegalArgumentException e) {
-            throw new ThemeException(where + ": " + e.getMessage(), e);
-        }
     }
 
     /**
@@ -234,26 +182,6 @@ public final class ThemeLoader {
                 value = tokens.get(token.name());
             }
         }
-    }
-
-    /**
-     * Read a YAML map with string keys.
-     *
-     * @param value The YAML value.
-     * @param path Where it is, for messages.
-     * @return The map.
-     */
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> map(Object value, String path) {
-        if (!(value instanceof Map<?, ?> map)) {
-            throw new ThemeException(path + ": expected a map of names to values");
-        }
-        for (Object key : map.keySet()) {
-            if (!(key instanceof String)) {
-                throw new ThemeException(path + ": the key " + key + " is not a name");
-            }
-        }
-        return (Map<String, Object>) map;
     }
 
     /** Static loading only. */

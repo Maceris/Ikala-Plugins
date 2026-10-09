@@ -5,6 +5,10 @@ import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.Style;
 import com.ikalagaming.graphics.gui.data.Viewport;
 import com.ikalagaming.graphics.gui.util.RectFloat;
+import com.ikalagaming.graphics.ui.spec.NodeTypes;
+import com.ikalagaming.graphics.ui.spec.SpecInstance;
+import com.ikalagaming.graphics.ui.spec.SpecLoader;
+import com.ikalagaming.graphics.ui.spec.UiSpec;
 import com.ikalagaming.graphics.ui.style.ActiveTheme;
 import com.ikalagaming.graphics.ui.style.Theme;
 import com.ikalagaming.graphics.ui.style.ThemeLoader;
@@ -13,7 +17,11 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -82,6 +90,24 @@ public class UiManager {
 
     /** The theme in use, with its variants. Render thread only. */
     private ActiveTheme activeTheme = ActiveTheme.EMPTY;
+
+    /** Node types UI specs can use. Safe from any thread. */
+    private final NodeTypes nodeTypes = new NodeTypes();
+
+    /** Open UI specs. Render thread only. */
+    private final List<SpecInstance> specs = new ArrayList<>();
+
+    /** When each open spec's files were last changed, for hot reload. Render thread only. */
+    private final Map<SpecInstance, Map<Path, Long>> specStamps = new HashMap<>();
+
+    /** Whether open specs are rebuilt when their files change. */
+    private volatile boolean hotReload;
+
+    /** When to next check spec files for changes, in nanoseconds. */
+    private long nextReloadCheck;
+
+    /** How often spec files are checked for changes, in nanoseconds. */
+    private static final long RELOAD_INTERVAL = 1_000_000_000L;
 
     /** Lays out the surfaces. */
     private final LayoutEngine engine = new LayoutEngine();
@@ -226,6 +252,93 @@ public class UiManager {
     }
 
     /**
+     * The node types UI specs can use.
+     *
+     * @return The registry.
+     */
+    public NodeTypes getNodeTypes() {
+        return nodeTypes;
+    }
+
+    /**
+     * Rebuild open specs when their files change, for editing UIs without restarting. Meant for
+     * tools like the editor.
+     *
+     * @param enabled Whether to watch spec files.
+     */
+    public void setHotReload(boolean enabled) {
+        hotReload = enabled;
+    }
+
+    /**
+     * Show an opened spec. Render thread only; {@link SpecInstance#open} posts this.
+     *
+     * @param instance The spec instance.
+     */
+    public void addSpec(@NonNull SpecInstance instance) {
+        if (instance.isClosed()) {
+            return;
+        }
+        if (instance.getOwner().isClosed()) {
+            instance.detach();
+            return;
+        }
+        specs.add(instance);
+        specStamps.put(instance, stamps(instance.getSpec()));
+        add(instance.getOwner(), instance.getSurface());
+    }
+
+    /**
+     * Remove a closed spec and its surface, if the surface is still the one shown. Render thread
+     * only.
+     *
+     * @param instance The spec instance.
+     * @param surface The surface it showed.
+     */
+    public void removeSpec(@NonNull SpecInstance instance, Surface surface) {
+        specs.remove(instance);
+        specStamps.remove(instance);
+        if (surface != null) {
+            Entry entry = surfaces.get(surface.getId());
+            if (entry != null && entry.surface() == surface) {
+                surfaces.remove(surface.getId());
+            }
+        }
+    }
+
+    /**
+     * Show the rebuilt surface of a reloaded spec in place of its old one. Render thread only.
+     *
+     * @param instance The spec instance.
+     * @param old The surface it showed before.
+     * @param next The surface to show now.
+     */
+    public void addSpecSurface(@NonNull SpecInstance instance, Surface old, @NonNull Surface next) {
+        if (old != null && !old.getId().equals(next.getId())) {
+            removeSpec(instance, old);
+            specs.add(instance);
+        }
+        add(instance.getOwner(), next);
+    }
+
+    /**
+     * A surface is no longer shown, so close any spec that showed it.
+     *
+     * @param surface The surface.
+     */
+    private void surfaceGone(Surface surface) {
+        specs.removeIf(
+                spec -> {
+                    if (spec.shows(surface)) {
+                        spec.detach();
+                        specStamps.remove(spec);
+                        return true;
+                    }
+                    return false;
+                });
+    }
+
+    /**
      * Show a surface. Render thread only; other threads post this.
      *
      * @param owner The context of the plugin showing it.
@@ -239,6 +352,7 @@ public class UiManager {
         surface.setVisible(true);
         Entry previous = surfaces.put(surface.getId(), new Entry(owner, surface));
         if (previous != null && previous.surface() != surface) {
+            surfaceGone(previous.surface());
             if (previous.owner().getOwner().equals(owner.getOwner())) {
                 log.debug("Surface {} replaced by {}", surface.getId(), owner.getOwnerKey());
             } else {
@@ -286,6 +400,7 @@ public class UiManager {
         Entry entry = surfaces.get(id);
         if (entry != null && entry.owner() == owner) {
             surfaces.remove(id);
+            surfaceGone(entry.surface());
         }
     }
 
@@ -296,8 +411,27 @@ public class UiManager {
      * @param owner The context whose surfaces should go.
      */
     public void removeAllOwnedBy(@NonNull GraphicsContext owner) {
+        // Right away, so no spec opened from now on can use the plugin's node types
+        nodeTypes.removeAllOwnedBy(owner);
         post(
                 () -> {
+                    // Specs the plugin opened, and other plugins' specs built from its node types,
+                    // which would otherwise keep its classes alive
+                    for (SpecInstance spec : List.copyOf(specs)) {
+                        boolean owned = spec.getOwner() == owner;
+                        if (owned || spec.usesTypesFrom(owner)) {
+                            if (!owned) {
+                                log.info(
+                                        "Closing UI spec {} from {}, it uses node types from {}",
+                                        spec.getSpec().source(),
+                                        spec.getOwner().getOwner(),
+                                        owner.getOwner());
+                            }
+                            Surface surface = spec.getSurface();
+                            spec.detach();
+                            removeSpec(spec, surface);
+                        }
+                    }
                     if (themeOverride != null && themeOverride.owner() == owner) {
                         themeOverride = null;
                         themeChanged = true;
@@ -306,7 +440,15 @@ public class UiManager {
                         themeChanged = true;
                     }
                     int before = surfaces.size();
-                    surfaces.values().removeIf(entry -> entry.owner() == owner);
+                    surfaces.values()
+                            .removeIf(
+                                    entry -> {
+                                        if (entry.owner() == owner) {
+                                            surfaceGone(entry.surface());
+                                            return true;
+                                        }
+                                        return false;
+                                    });
                     int removed = before - surfaces.size();
                     if (removed > 0) {
                         log.debug("Removed {} surfaces owned by {}", removed, owner.getOwnerKey());
@@ -341,6 +483,9 @@ public class UiManager {
      */
     public void draw() {
         runPending();
+        if (hotReload) {
+            checkSpecFiles();
+        }
         final Viewport viewport = IkGui.getMainViewport();
         final float scale = contentScale * uiScale;
         // Kept current even with nothing shown, so a theme change is visible to readers at once
@@ -370,6 +515,66 @@ public class UiManager {
                 entry.surface().draw(area, frame, engine);
             }
         }
+    }
+
+    /**
+     * How many specs are open. Render thread only.
+     *
+     * @return The number of open specs.
+     */
+    public int specCount() {
+        return specs.size();
+    }
+
+    /** Rebuild open specs whose files changed, at most about once a second. */
+    private void checkSpecFiles() {
+        long now = System.nanoTime();
+        if (now < nextReloadCheck) {
+            return;
+        }
+        nextReloadCheck = now + RELOAD_INTERVAL;
+        reloadChangedSpecs();
+    }
+
+    /** Rebuild open specs whose files changed. Render thread only. */
+    public void reloadChangedSpecs() {
+        for (SpecInstance spec : List.copyOf(specs)) {
+            UiSpec current = spec.getSpec();
+            if (current.files().isEmpty()) {
+                continue;
+            }
+            Map<Path, Long> latest = stamps(current);
+            if (latest.equals(specStamps.get(spec))) {
+                continue;
+            }
+            // Remember the new times either way, so a broken edit is only reported once
+            specStamps.put(spec, latest);
+            try {
+                spec.reload(SpecLoader.load(current.files().getFirst()));
+                specStamps.put(spec, stamps(spec.getSpec()));
+                log.info("Reloaded UI spec {}", current.source());
+            } catch (RuntimeException e) {
+                log.warn("Could not reload UI spec {}: {}", current.source(), e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * When each of a spec's files was last changed.
+     *
+     * @param spec The spec.
+     * @return Modification times by file, with -1 for a file that can't be read.
+     */
+    private static Map<Path, Long> stamps(UiSpec spec) {
+        Map<Path, Long> stamps = new HashMap<>();
+        for (Path file : spec.files()) {
+            try {
+                stamps.put(file, Files.getLastModifiedTime(file).toMillis());
+            } catch (IOException e) {
+                stamps.put(file, -1L);
+            }
+        }
+        return stamps;
     }
 
     /**

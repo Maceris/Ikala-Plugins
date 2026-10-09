@@ -2,6 +2,12 @@ package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.ui.Surface;
 import com.ikalagaming.graphics.ui.UiManager;
+import com.ikalagaming.graphics.ui.spec.NodeFactory;
+import com.ikalagaming.graphics.ui.spec.SpecBindings;
+import com.ikalagaming.graphics.ui.spec.SpecException;
+import com.ikalagaming.graphics.ui.spec.SpecInstance;
+import com.ikalagaming.graphics.ui.spec.SpecLoader;
+import com.ikalagaming.graphics.ui.spec.UiSpec;
 import com.ikalagaming.graphics.ui.style.Theme;
 import com.ikalagaming.graphics.ui.style.ThemeException;
 import com.ikalagaming.graphics.ui.style.ThemeLoader;
@@ -116,6 +122,48 @@ public final class UI {
         context.checkOpen();
         File file = PluginFolder.getResource(context.getOwner(), ResourceType.DATA, path);
         return ThemeLoader.load(file.toPath(), manager.get().getDefaultTheme());
+    }
+
+    /**
+     * Open a UI spec: build it now and show it from the next frame. Its handlers and observables
+     * come from the bindings. It is closed when this plugin unloads.
+     *
+     * @param spec The spec.
+     * @param bindings The handlers, observables, lists and resource bundle the spec names.
+     * @return The open spec, which can find nodes and be closed.
+     * @throws SpecException If the spec can't be built with these bindings, such as a missing
+     *     handler; nothing is shown then.
+     */
+    public SpecInstance open(@NonNull UiSpec spec, @NonNull SpecBindings bindings) {
+        context.checkOpen();
+        return SpecInstance.open(manager.get(), context, spec, bindings);
+    }
+
+    /**
+     * Load a UI spec from this plugin's data folder, so it can be hot reloaded in the editor.
+     *
+     * @param path The path within the plugin's data folder.
+     * @return The spec.
+     * @throws SpecException If the spec is broken.
+     * @throws java.io.UncheckedIOException If it can't be read.
+     */
+    public UiSpec loadSpec(@NonNull String path) {
+        context.checkOpen();
+        File file = PluginFolder.getResource(context.getOwner(), ResourceType.DATA, path);
+        return SpecLoader.load(file.toPath());
+    }
+
+    /**
+     * Add a node type that UI specs can use, owned by this plugin. When it unloads, the type is
+     * removed and every open spec using it is closed, from any plugin.
+     *
+     * @param name The type name; prefix it with the plugin, like {@code converter.slot}.
+     * @param factory Makes nodes of the type.
+     * @throws IllegalArgumentException If the name is already taken.
+     */
+    public void registerNodeType(@NonNull String name, @NonNull NodeFactory factory) {
+        context.checkOpen();
+        manager.get().getNodeTypes().register(context, name, factory);
     }
 
     /**

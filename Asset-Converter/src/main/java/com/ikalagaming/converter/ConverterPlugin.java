@@ -6,12 +6,14 @@ import com.ikalagaming.converter.gui.DebugToolbar;
 import com.ikalagaming.converter.gui.window.Debug;
 import com.ikalagaming.converter.gui.window.MainMenu;
 import com.ikalagaming.converter.inspector.AssetInspectorWindow;
+import com.ikalagaming.converter.inspector.AssetSamples;
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.UI;
 import com.ikalagaming.graphics.gui.WindowManager;
 import com.ikalagaming.graphics.gui.windows.GraphicsDebug;
 import com.ikalagaming.graphics.gui.windows.IkGuiDemo;
+import com.ikalagaming.graphics.ui.spec.Observable;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 
@@ -19,6 +21,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.nio.file.Path;
 import java.util.*;
 
 /** Used for asset conversion for the graphics plugin. */
@@ -90,10 +93,14 @@ public class ConverterPlugin extends Plugin {
         guiManager.addWindow(graphics, IkGuiDemo.WINDOW_NAME, new IkGuiDemo());
         guiManager.addWindow(graphics, GraphicsDebug.WINDOW_NAME, new GraphicsDebug());
         UI ui = graphics.ui();
-        ui.show(new MainMenu(ui, () -> setInspectorVisible(true)).build());
-        // Shown once so later toggles only change its visibility, and keep its state
+        // This is the editor, so UI spec files are reloaded when they change
+        GraphicsManager.getUiManager().setHotReload(true);
+        Observable<Integer> sampleCount =
+                Observable.of(AssetSamples.count(Path.of(AssetSamples.FOLDER)));
         ui.addStyles(AssetInspectorWindow.styles());
-        ui.show(new AssetInspectorWindow(ui).build());
+        new MainMenu(ui, () -> setInspectorVisible(true), sampleCount).open();
+        // Shown once so later toggles only change its visibility, and keep its state
+        ui.show(new AssetInspectorWindow(ui, sampleCount).build());
         ui.setVisible(AssetInspectorWindow.SURFACE_ID, false);
 
         guiManager.setToolbar(graphics, new DebugToolbar(guiManager, this::setInspectorVisible));

@@ -24,6 +24,7 @@ import com.ikalagaming.graphics.ui.Sizing;
 import com.ikalagaming.graphics.ui.Surface;
 import com.ikalagaming.graphics.ui.TextInput;
 import com.ikalagaming.graphics.ui.UiFrame;
+import com.ikalagaming.graphics.ui.spec.Observable;
 import com.ikalagaming.graphics.ui.style.ActiveTheme;
 import com.ikalagaming.graphics.ui.style.Theme;
 import com.ikalagaming.graphics.ui.style.Token;
@@ -74,6 +75,9 @@ public class AssetInspectorWindow {
     /** Good news text this frame, from the theme. */
     private int okColor = OK_COLOR;
 
+    /** How many sample containers have been written. */
+    private final Observable<Integer> sampleCount;
+
     /** What is being browsed and shown. */
     private final AssetInspector inspector;
 
@@ -99,9 +103,11 @@ public class AssetInspectorWindow {
      * Create the inspector, browsing the working directory.
      *
      * @param ui The UI to show the window through.
+     * @param sampleCount Updated when samples are written, for the main menu.
      */
-    public AssetInspectorWindow(@NonNull UI ui) {
+    public AssetInspectorWindow(@NonNull UI ui, @NonNull Observable<Integer> sampleCount) {
         this.ui = ui;
+        this.sampleCount = sampleCount;
         inspector = new AssetInspector(Path.of(""));
         path = new TextInput("path", "").onSubmit(this::openPath);
         files = new Column("files").align(Align.STRETCH);
@@ -236,6 +242,7 @@ public class AssetInspectorWindow {
         Path folder = Path.of(AssetSamples.FOLDER);
         try {
             AssetSamples.write(folder);
+            sampleCount.set(AssetSamples.count(folder));
             navigate(folder);
         } catch (IOException e) {
             log.warn("Could not write the asset samples", e);
