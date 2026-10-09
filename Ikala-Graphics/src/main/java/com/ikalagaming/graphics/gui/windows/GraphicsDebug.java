@@ -31,6 +31,9 @@ public class GraphicsDebug extends GuiWindow {
     private final Checkbox showDirectionalLight;
     private final Checkbox showEntityBounds;
     private final Checkbox showShadowCascades;
+    private final Checkbox showNormals;
+    private final Checkbox showTangents;
+    private final Slider normalLength;
     private final Checkbox freezeObserver;
     private final Slider fogDensity;
     private final Slider directionalLightX;
@@ -51,6 +54,9 @@ public class GraphicsDebug extends GuiWindow {
         showDirectionalLight = new Checkbox("Directional light", false);
         showEntityBounds = new Checkbox("Entity bounds", false);
         showShadowCascades = new Checkbox("Shadow cascades", false);
+        showNormals = new Checkbox("Normals", false);
+        showTangents = new Checkbox("Tangents", false);
+        normalLength = new Slider("Normal length", 0.1f, 0.01f, 1f);
         freezeObserver = new Checkbox("Freeze observer", false);
         fogDensity = new Slider("Fog Density", 0, 0, 1);
         directionalLightX = new Slider("Directional Light X", 0, -1, 1);
@@ -66,6 +72,9 @@ public class GraphicsDebug extends GuiWindow {
         addChild(showDirectionalLight);
         addChild(showEntityBounds);
         addChild(showShadowCascades);
+        addChild(showNormals);
+        addChild(showTangents);
+        addChild(normalLength);
         addChild(freezeObserver);
         addChild(directionalLightX);
         addChild(directionalLightY);
@@ -189,6 +198,9 @@ public class GraphicsDebug extends GuiWindow {
                 showDirectionalLight.draw(width, height);
                 showEntityBounds.draw(width, height);
                 showShadowCascades.draw(width, height);
+                showNormals.draw(width, height);
+                showTangents.draw(width, height);
+                normalLength.draw(width, height);
                 freezeObserver.draw(width, height);
                 IkGui.textWrapped(
                         "Culling, level of detail and streaming use the observer, so freeze it to"
@@ -227,6 +239,17 @@ public class GraphicsDebug extends GuiWindow {
         if (showShadowCascades.checkResult()) {
             visualizers.setShadowCascades(showShadowCascades.getState());
             changed = true;
+        }
+        if (showNormals.checkResult()) {
+            visualizers.setNormals(showNormals.getState());
+            changed = true;
+        }
+        if (showTangents.checkResult()) {
+            visualizers.setTangents(showTangents.getState());
+            changed = true;
+        }
+        if (normalLength.checkResult()) {
+            visualizers.setNormalLength(normalLength.getValue());
         }
         if (freezeObserver.checkResult()) {
             if (freezeObserver.getState()) {

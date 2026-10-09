@@ -51,6 +51,30 @@ public class DebugVisualizers {
     private volatile boolean shadowCascades;
 
     /**
+     * Show a line along the normal of every vertex.
+     *
+     * @param normals Whether to show normals.
+     * @return Whether normals are shown.
+     */
+    private volatile boolean normals;
+
+    /**
+     * Show a line along the tangent of every vertex.
+     *
+     * @param tangents Whether to show tangents.
+     * @return Whether tangents are shown.
+     */
+    private volatile boolean tangents;
+
+    /**
+     * How long the normal and tangent lines are, in world units.
+     *
+     * @param normalLength The new line length.
+     * @return The line length.
+     */
+    private volatile float normalLength = 0.1f;
+
+    /**
      * Show the observer's frustum while it is frozen.
      *
      * @param observerFrustum Whether to show the frozen observer.
@@ -69,6 +93,8 @@ public class DebugVisualizers {
                 || directionalLight
                 || entityBounds
                 || shadowCascades
+                || normals
+                || tangents
                 || observerFrustum;
     }
 }

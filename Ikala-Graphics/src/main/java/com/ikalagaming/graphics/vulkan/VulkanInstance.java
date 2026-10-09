@@ -1387,7 +1387,7 @@ public class VulkanInstance {
         shaderMap.addShader(RenderStage.Type.SKYBOX, shaderProgram);
     }
 
-    /** Set up the debug shape shader. */
+    /** Set up the debug shape and debug normal shaders. */
     private void initializeDebugShader() {
         List<ShaderVulkan.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
@@ -1403,6 +1403,20 @@ public class VulkanInstance {
         var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
 
         shaderMap.addShader(RenderStage.Type.DEBUG, shaderProgram);
+
+        List<ShaderVulkan.ShaderModuleData> normalsModules = new ArrayList<>();
+        normalsModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/debug_normals.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        normalsModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/debug.frag",
+                        ShaderVulkan.Type.FRAGMENT,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(
+                RenderStage.Type.DEBUG_NORMALS, new ShaderVulkan(normalsModules, state));
     }
 
     /**

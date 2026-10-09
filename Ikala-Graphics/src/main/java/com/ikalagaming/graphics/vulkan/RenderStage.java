@@ -9,6 +9,7 @@ public interface RenderStage {
     enum Type {
         ANIMATION,
         DEBUG,
+        DEBUG_NORMALS,
         FILTER,
         GUI,
         LIGHT,

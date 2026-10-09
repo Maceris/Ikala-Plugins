@@ -5,14 +5,18 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.graph.MeshData;
+import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugShape;
+import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.vulkan.DebugGeometry;
 import com.ikalagaming.graphics.vulkan.DebugVisualizerShapes;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 import com.ikalagaming.graphics.vulkan.ShaderVulkan;
+import com.ikalagaming.graphics.vulkan.SharedBuffer;
 import com.ikalagaming.graphics.vulkan.TextureInfoVulkan;
 import com.ikalagaming.graphics.vulkan.VulkanState;
 
@@ -43,8 +47,41 @@ public class DebugRender implements RenderStage {
     /** The size of the push constants, the projection × view matrix. */
     private static final int PUSH_CONSTANT_SIZE = 16 * Float.BYTES;
 
+    /**
+     * The size of the normal line push constants: the projection × view matrix, the vertex and
+     * matrix buffer addresses, then the first matrix, vertex base, line length and mode.
+     */
+    private static final int NORMALS_PUSH_CONSTANT_SIZE = 16 * Float.BYTES + 2 * Long.BYTES + 16;
+
+    /** Where the vertex buffer address goes in the normal line push constants. */
+    private static final int NORMALS_VERTICES_OFFSET = 16 * Float.BYTES;
+
+    /** Where the model matrix buffer address goes in the normal line push constants. */
+    private static final int NORMALS_MATRICES_OFFSET = NORMALS_VERTICES_OFFSET + Long.BYTES;
+
+    /** Where the first matrix index goes in the normal line push constants. */
+    private static final int NORMALS_FIRST_MATRIX_OFFSET = NORMALS_MATRICES_OFFSET + Long.BYTES;
+
+    /** Where the vertex base goes in the normal line push constants. */
+    private static final int NORMALS_VERTEX_BASE_OFFSET = NORMALS_FIRST_MATRIX_OFFSET + 4;
+
+    /** Where the line length goes in the normal line push constants. */
+    private static final int NORMALS_LENGTH_OFFSET = NORMALS_VERTEX_BASE_OFFSET + 4;
+
+    /** Where the mode (0 normals, 1 tangents) goes in the normal line push constants. */
+    private static final int NORMALS_MODE_OFFSET = NORMALS_LENGTH_OFFSET + 4;
+
     /** The shader to use for rendering. */
     private final ShaderVulkan shader;
+
+    /** The shader that draws normal and tangent lines from the mesh vertex buffers. */
+    private final ShaderVulkan normalsShader;
+
+    /** VkPipelineLayout for the normal lines, VK_NULL_HANDLE if not set up. */
+    private long normalsPipelineLayout;
+
+    /** VkPipeline for the normal lines, VK_NULL_HANDLE if not set up. */
+    private long pipelineNormals;
 
     /** VkPipelineLayout, VK_NULL_HANDLE if not set up. */
     private long pipelineLayout;
@@ -67,25 +104,36 @@ public class DebugRender implements RenderStage {
     /**
      * Set up the debug render stage.
      *
-     * @param shader The shader to use for rendering.
+     * @param shader The shader to use for rendering shapes.
+     * @param normalsShader The shader to use for rendering normal and tangent lines.
      */
-    public DebugRender(@NonNull ShaderVulkan shader) {
+    public DebugRender(@NonNull ShaderVulkan shader, @NonNull ShaderVulkan normalsShader) {
         this.shader = shader;
+        this.normalsShader = normalsShader;
         pipelineLayout = VK_NULL_HANDLE;
         pipelineDepthTested = VK_NULL_HANDLE;
         pipelineOnTop = VK_NULL_HANDLE;
+        normalsPipelineLayout = VK_NULL_HANDLE;
+        pipelineNormals = VK_NULL_HANDLE;
     }
 
     @Override
     public void initialize(@NonNull VulkanState vulkanState) {
         log.debug("Initializing debug render");
-        createPipelineLayout(vulkanState);
-        pipelineDepthTested = createPipeline(vulkanState, true);
-        pipelineOnTop = createPipeline(vulkanState, false);
+        pipelineLayout = createPipelineLayout(vulkanState, PUSH_CONSTANT_SIZE);
+        pipelineDepthTested = createPipeline(vulkanState, shader, pipelineLayout, true, true);
+        pipelineOnTop = createPipeline(vulkanState, shader, pipelineLayout, false, true);
+        normalsPipelineLayout = createPipelineLayout(vulkanState, NORMALS_PUSH_CONSTANT_SIZE);
+        pipelineNormals =
+                createPipeline(vulkanState, normalsShader, normalsPipelineLayout, true, false);
     }
 
     @Override
     public void cleanup(@NonNull VulkanState vulkanState) {
+        vkDestroyPipeline(vulkanState.device.logical, pipelineNormals, null);
+        pipelineNormals = VK_NULL_HANDLE;
+        vkDestroyPipelineLayout(vulkanState.device.logical, normalsPipelineLayout, null);
+        normalsPipelineLayout = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, pipelineOnTop, null);
         pipelineOnTop = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, pipelineDepthTested, null);
@@ -108,18 +156,22 @@ public class DebugRender implements RenderStage {
         GraphicsManager.collectDebugShapes(shape -> add(shape, origin));
         DebugVisualizerShapes.collect(scene, frameData, shape -> add(shape, origin));
 
+        final DebugVisualizers visualizers = scene.getDebugVisualizers();
+        final boolean drawNormals = visualizers.isNormals() || visualizers.isTangents();
         final int vertexCount = depthTested.count() + onTop.count();
-        if (vertexCount == 0) {
+        if (vertexCount == 0 && !drawNormals) {
             return;
         }
 
-        frameData.debugVertices.ensureCapacity((long) vertexCount * VERTEX_SIZE, vulkanState);
-        ByteBuffer vertices =
-                MemoryUtil.memByteBuffer(
-                        frameData.debugVertices.allocationInfo.pMappedData(),
-                        vertexCount * VERTEX_SIZE);
-        depthTested.copyTo(vertices, 0);
-        onTop.copyTo(vertices, depthTested.count() * VERTEX_SIZE);
+        if (vertexCount > 0) {
+            frameData.debugVertices.ensureCapacity((long) vertexCount * VERTEX_SIZE, vulkanState);
+            ByteBuffer vertices =
+                    MemoryUtil.memByteBuffer(
+                            frameData.debugVertices.allocationInfo.pMappedData(),
+                            vertexCount * VERTEX_SIZE);
+            depthTested.copyTo(vertices, 0);
+            onTop.copyTo(vertices, depthTested.count() * VERTEX_SIZE);
+        }
 
         final int width = Math.min(window.getWidth(), vulkanState.realSize.width());
         final int height = Math.min(window.getHeight(), vulkanState.realSize.height());
@@ -186,24 +238,121 @@ public class DebugRender implements RenderStage {
             scissors.get(0).extent().set(width, height);
             vkCmdSetScissor(commandBuffer, 0, scissors);
 
-            vkCmdBindVertexBuffers(
-                    commandBuffer, 0, stack.longs(frameData.debugVertices.buffer), stack.longs(0));
+            if (vertexCount > 0) {
+                vkCmdBindVertexBuffers(
+                        commandBuffer,
+                        0,
+                        stack.longs(frameData.debugVertices.buffer),
+                        stack.longs(0));
+            }
             ByteBuffer pushConstants = stack.malloc(PUSH_CONSTANT_SIZE);
             projectionView.get(pushConstants);
-            vkCmdPushConstants(
-                    commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, pushConstants);
 
             if (depthTested.count() > 0) {
                 vkCmdBindPipeline(
                         commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineDepthTested);
+                vkCmdPushConstants(
+                        commandBuffer,
+                        pipelineLayout,
+                        VK_SHADER_STAGE_VERTEX_BIT,
+                        0,
+                        pushConstants);
                 vkCmdDraw(commandBuffer, depthTested.count(), 1, 0, 0);
             }
+            if (visualizers.isNormals()) {
+                recordNormals(commandBuffer, scene, frameData, 0, visualizers, stack);
+            }
+            if (visualizers.isTangents()) {
+                recordNormals(commandBuffer, scene, frameData, 1, visualizers, stack);
+            }
             if (onTop.count() > 0) {
+                vkCmdPushConstants(
+                        commandBuffer,
+                        pipelineLayout,
+                        VK_SHADER_STAGE_VERTEX_BIT,
+                        0,
+                        pushConstants);
                 vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineOnTop);
                 vkCmdDraw(commandBuffer, onTop.count(), 1, depthTested.count(), 0);
             }
 
             vkCmdEndRendering(commandBuffer);
+        }
+    }
+
+    /**
+     * Draw a line along the normal or tangent of every vertex of every mesh drawn this frame,
+     * reading the vertices straight from the mesh buffers. Uses the draw commands the model matrix
+     * update stage wrote, so animated entities line up with the pose they were drawn in.
+     *
+     * @param commandBuffer The command buffer, inside the rendering.
+     * @param scene The scene.
+     * @param frameData The current frame's data.
+     * @param mode 0 for normals, 1 for tangents.
+     * @param visualizers The visualizer settings, for the line length.
+     * @param stack The stack to allocate push constants on.
+     */
+    private void recordNormals(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull Scene scene,
+            @NonNull PerFrameData frameData,
+            int mode,
+            @NonNull DebugVisualizers visualizers,
+            @NonNull MemoryStack stack) {
+        if (frameData.modelDrawInfo == null || frameData.modelDrawInfo.isEmpty()) {
+            return;
+        }
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineNormals);
+        ByteBuffer pushConstants = stack.calloc(NORMALS_PUSH_CONSTANT_SIZE);
+        projectionView.get(0, pushConstants);
+        pushConstants.putLong(NORMALS_MATRICES_OFFSET, frameData.sceneModelMatrices.deviceAddress);
+        pushConstants.putFloat(NORMALS_LENGTH_OFFSET, visualizers.getNormalLength());
+        pushConstants.putInt(NORMALS_MODE_OFFSET, mode);
+
+        // Written by the model matrix update stage this frame, still mapped
+        ByteBuffer commands =
+                MemoryUtil.memByteBuffer(
+                        frameData.sceneDrawCommands.allocationInfo.pMappedData(),
+                        (int) frameData.sceneDrawCommands.allocationInfo.size());
+
+        for (var entry : frameData.modelDrawInfo.entrySet()) {
+            final Model model = entry.getKey();
+            final PerFrameData.ModelDrawInfo info = entry.getValue();
+            pushConstants.putInt(NORMALS_FIRST_MATRIX_OFFSET, info.firstMatrix());
+            int meshIndex = 0;
+            for (MeshData mesh : model.getMeshDataList()) {
+                final SharedBuffer vertices =
+                        model.isAnimated()
+                                ? mesh.getAnimationTargetBuffer()
+                                : mesh.getVertexBuffer();
+                if (vertices == null || vertices.deviceAddress == VK_NULL_HANDLE) {
+                    meshIndex += 1;
+                    continue;
+                }
+                pushConstants.putLong(NORMALS_VERTICES_OFFSET, vertices.deviceAddress);
+                for (int i = 0; i < info.commandCount(); ++i) {
+                    final int position =
+                            (info.firstCommand() + meshIndex * info.commandCount() + i)
+                                    * ModelMatrixUpdate.DRAW_COMMAND_SIZE;
+                    final int instanceCount = commands.getInt(position + Integer.BYTES);
+                    final int vertexOffset = commands.getInt(position + 3 * Integer.BYTES);
+                    final int firstInstance = commands.getInt(position + 4 * Integer.BYTES);
+                    pushConstants.putInt(NORMALS_VERTEX_BASE_OFFSET, vertexOffset);
+                    vkCmdPushConstants(
+                            commandBuffer,
+                            normalsPipelineLayout,
+                            VK_SHADER_STAGE_VERTEX_BIT,
+                            0,
+                            pushConstants);
+                    vkCmdDraw(
+                            commandBuffer,
+                            mesh.getVertexCount() * 2,
+                            instanceCount,
+                            0,
+                            firstInstance);
+                }
+                meshIndex += 1;
+            }
         }
     }
 
@@ -218,7 +367,14 @@ public class DebugRender implements RenderStage {
         DebugGeometry.append(shape, origin, list::add);
     }
 
-    private void createPipelineLayout(@NonNull VulkanState state) {
+    /**
+     * Create a pipeline layout with only vertex push constants.
+     *
+     * @param state The Vulkan state.
+     * @param pushConstantSize The size of the push constants in bytes.
+     * @return The VkPipelineLayout.
+     */
+    private static long createPipelineLayout(@NonNull VulkanState state, int pushConstantSize) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
             VkPushConstantRange.Buffer pushConstantRanges = VkPushConstantRange.calloc(1, stack);
@@ -226,7 +382,7 @@ public class DebugRender implements RenderStage {
                     .get(0)
                     .stageFlags(VK_SHADER_STAGE_VERTEX_BIT)
                     .offset(0)
-                    .size(PUSH_CONSTANT_SIZE);
+                    .size(pushConstantSize);
             VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo =
                     VkPipelineLayoutCreateInfo.calloc(stack)
                             .sType$Default()
@@ -234,7 +390,7 @@ public class DebugRender implements RenderStage {
             checkError(
                     vkCreatePipelineLayout(
                             state.device.logical, pipelineLayoutCreateInfo, null, longOutput));
-            pipelineLayout = longOutput.get(0);
+            return longOutput.get(0);
         }
     }
 
@@ -242,10 +398,19 @@ public class DebugRender implements RenderStage {
      * Create a pipeline for drawing lines.
      *
      * @param state The Vulkan state.
+     * @param pipelineShader The shader to draw with.
+     * @param layout The VkPipelineLayout.
      * @param depthTest Whether to test against the scene depth, or draw on top.
+     * @param vertexInput Whether vertices come from the debug vertex buffer, as opposed to the
+     *     shader fetching them itself.
      * @return The VkPipeline.
      */
-    private long createPipeline(@NonNull VulkanState state, boolean depthTest) {
+    private static long createPipeline(
+            @NonNull VulkanState state,
+            @NonNull ShaderVulkan pipelineShader,
+            long layout,
+            boolean depthTest,
+            boolean vertexInput) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
@@ -273,10 +438,12 @@ public class DebugRender implements RenderStage {
                     .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
 
             VkPipelineVertexInputStateCreateInfo vertexInputState =
-                    VkPipelineVertexInputStateCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .pVertexBindingDescriptions(vertexBindings)
-                            .pVertexAttributeDescriptions(vertexAttributes);
+                    VkPipelineVertexInputStateCreateInfo.calloc(stack).sType$Default();
+            if (vertexInput) {
+                vertexInputState
+                        .pVertexBindingDescriptions(vertexBindings)
+                        .pVertexAttributeDescriptions(vertexAttributes);
+            }
 
             VkPipelineInputAssemblyStateCreateInfo inputAssemblyState =
                     VkPipelineInputAssemblyStateCreateInfo.calloc(stack)
@@ -351,8 +518,8 @@ public class DebugRender implements RenderStage {
                     .get(0)
                     .sType$Default()
                     .pNext(renderingCreateInfo)
-                    .stageCount(shader.shaderModules.length)
-                    .pStages(shader.shaderStages)
+                    .stageCount(pipelineShader.shaderModules.length)
+                    .pStages(pipelineShader.shaderStages)
                     .pVertexInputState(vertexInputState)
                     .pInputAssemblyState(inputAssemblyState)
                     .pViewportState(viewportState)
@@ -361,7 +528,7 @@ public class DebugRender implements RenderStage {
                     .pDepthStencilState(depthStencilState)
                     .pColorBlendState(colorBlendState)
                     .pDynamicState(dynamicState)
-                    .layout(pipelineLayout)
+                    .layout(layout)
                     .renderPass(VK_NULL_HANDLE);
 
             checkError(

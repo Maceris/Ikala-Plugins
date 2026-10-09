@@ -110,7 +110,10 @@ public class PipelineManagerVulkan {
         stageAnimationRender.initialize(state);
         stageFilterRender = new FilterRender(shaders.getShader(RenderStage.Type.FILTER), quadMesh);
         stageFilterRender.initialize(state);
-        stageDebugRender = new DebugRender(shaders.getShader(RenderStage.Type.DEBUG));
+        stageDebugRender =
+                new DebugRender(
+                        shaders.getShader(RenderStage.Type.DEBUG),
+                        shaders.getShader(RenderStage.Type.DEBUG_NORMALS));
         stageDebugRender.initialize(state);
         stageSwapchainPresent = new SwapchainPresent();
         stageSwapchainPresent.initialize(state);
