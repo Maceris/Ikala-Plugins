@@ -1,13 +1,13 @@
 package com.ikalagaming.graphics.scene;
 
-import com.ikalagaming.graphics.Buffer;
-import com.ikalagaming.graphics.DeletionQueue;
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.Texture;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
+import com.ikalagaming.graphics.vulkan.DeletionQueue;
+import com.ikalagaming.graphics.vulkan.SharedBuffer;
 import com.ikalagaming.graphics.vulkan.VulkanState;
 
 import lombok.Getter;
@@ -68,7 +68,7 @@ public class Scene {
      * The texture of the skybox, which may be null if we want the sky to be just a single diffuse
      * color.
      */
-    private Texture skyboxTexture;
+    private TextureHandle skyboxTexture;
 
     /** The diffuse color of the skybox, for use when there is no texture. */
     private final Vector4f skyboxDiffuse;
@@ -133,12 +133,13 @@ public class Scene {
     }
 
     /**
-     * Queue up deletion of every GPU resource the scene owns, which are the model buffers, material
-     * textures, and skybox texture. The scene should not be rendered afterward.
+     * Queue up deletion of every GPU resource the scene owns, which are the model and material
+     * buffers. Textures belong to the plugins that loaded them. The scene should not be rendered
+     * afterward.
      */
     public void cleanup() {
         DeletionQueue deletionQueue = GraphicsManager.getDeletionQueue();
-        Consumer<Buffer> delete =
+        Consumer<SharedBuffer> delete =
                 buffer -> {
                     if (buffer != null) {
                         deletionQueue.add(buffer);
@@ -173,14 +174,12 @@ public class Scene {
     }
 
     /**
-     * Set the new skybox texture.
+     * Set the new skybox texture. The scene doesn't take ownership: the plugin that loaded the
+     * texture releases it.
      *
      * @param texture The texture, or null if the skybox should be untextured.
      */
-    public void setSkyboxTexture(Texture texture) {
-        if (skyboxTexture != null) {
-            GraphicsManager.getDeletionQueue().add(skyboxTexture);
-        }
+    public void setSkyboxTexture(TextureHandle texture) {
         skyboxTexture = texture;
     }
 }

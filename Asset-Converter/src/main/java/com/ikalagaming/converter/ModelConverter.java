@@ -1,6 +1,7 @@
 package com.ikalagaming.converter;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.Textures;
 import com.ikalagaming.graphics.exceptions.ModelException;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
@@ -355,7 +356,8 @@ public class ModelConverter {
         List<Material> materialList = new ArrayList<>();
         for (int i = 0; aiMaterials != null && i < numMaterials; ++i) {
             AIMaterial aiMaterial = AIMaterial.create(aiMaterials.get(i));
-            Material material = ModelConverter.processMaterial(aiMaterial, modelDir);
+            Material material =
+                    ModelConverter.processMaterial(aiMaterial, modelDir, request.pluginName());
             // TODO(ches) don't populate the material cache yet, return these as results and prompt
             request.materialCache().addMaterial(material);
             materialList.add(material);
@@ -568,10 +570,12 @@ public class ModelConverter {
      *
      * @param aiMaterial The material to process.
      * @param modelDir The directory for the model, as a path from the resource directory.
+     * @param owner The plugin that owns the model, which will own the textures.
      * @return The material that we have processed.
      */
     private static Material processMaterial(
-            @NonNull AIMaterial aiMaterial, @NonNull String modelDir) {
+            @NonNull AIMaterial aiMaterial, @NonNull String modelDir, @NonNull String owner) {
+        final Textures textures = GraphicsManager.forPlugin(owner).textures();
         // TODO(ches) load these through converter or loader utils for this plugin
         Material material = new Material();
 
@@ -592,8 +596,7 @@ public class ModelConverter {
         String texturePath = aiTexturePath.dataString();
         if (!texturePath.isEmpty()) {
             texturePath = modelDir + File.separator + new File(texturePath).getName();
-            material.setTexture(
-                    GraphicsManager.getRenderInstance().getTextureLoader().load(texturePath));
+            material.setTexture(textures.load(texturePath));
             material.getBaseColor().set(Material.DEFAULT_COLOR);
         }
 
@@ -612,8 +615,7 @@ public class ModelConverter {
         String normalMapPath = aiNormalMapPath.dataString();
         if (!normalMapPath.isEmpty()) {
             normalMapPath = modelDir + File.separator + new File(normalMapPath).getName();
-            material.setNormalMap(
-                    GraphicsManager.getRenderInstance().getTextureLoader().load(normalMapPath));
+            material.setNormalMap(textures.load(normalMapPath));
         }
 
         return material;

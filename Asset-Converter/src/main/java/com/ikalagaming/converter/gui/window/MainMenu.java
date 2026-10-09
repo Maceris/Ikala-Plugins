@@ -313,6 +313,8 @@ public class MainMenu extends GuiWindow {
                                 "textures/skybox.png")
                         .getAbsolutePath();
         scene.setSkyboxTexture(
-                GraphicsManager.getRenderInstance().getTextureLoader().load(texturePath));
+                GraphicsManager.forPlugin(ConverterPlugin.PLUGIN_NAME)
+                        .textures()
+                        .load(texturePath));
     }
 }

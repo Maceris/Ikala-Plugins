@@ -26,6 +26,9 @@ public class VulkanState {
     /** The global bindless texture array. */
     public BindlessTextures bindlessTextures = null;
 
+    /** Which plugin owns each texture handed out as a handle, by bindless slot. */
+    public TextureRegistry textureRegistry = null;
+
     /** For submitting work outside the frame, like texture uploads. */
     public ImmediateCommands immediateCommands = null;
 

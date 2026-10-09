@@ -1,13 +1,13 @@
-package com.ikalagaming.graphics;
-
-import com.ikalagaming.graphics.vulkan.ShaderVulkan;
+package com.ikalagaming.graphics.vulkan;
 
 import lombok.NonNull;
 
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-/** A queue of things that we want to delete. */
+/**
+ * A queue of GPU resources to delete on the render thread, which can be added to from any thread.
+ */
 public class DeletionQueue {
 
     /** The types of resources that the queue supports deleting. */
@@ -31,9 +31,9 @@ public class DeletionQueue {
     /**
      * Add a buffer to the queue to be deleted.
      *
-     * @param buffer The buffer handle.
+     * @param buffer The buffer.
      */
-    public void add(@NonNull Buffer buffer) {
+    public void add(@NonNull SharedBuffer buffer) {
         queue.add(new Entry(ResourceType.BUFFER, buffer));
     }
 
@@ -47,11 +47,12 @@ public class DeletionQueue {
     }
 
     /**
-     * Add a texture to the queue to be deleted.
+     * Add a texture to the queue to be deleted. It must already be removed from the {@link
+     * TextureRegistry}.
      *
-     * @param texture The texture handle.
+     * @param texture The texture.
      */
-    public void add(@NonNull Texture texture) {
+    public void add(@NonNull TextureInfoVulkan texture) {
         queue.add(new Entry(ResourceType.TEXTURE, texture));
     }
 

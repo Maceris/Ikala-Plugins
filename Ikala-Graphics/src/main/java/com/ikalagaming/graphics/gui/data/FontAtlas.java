@@ -4,7 +4,7 @@ import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.util.freetype.FreeType.*;
 
 import com.ikalagaming.graphics.GraphicsPlugin;
-import com.ikalagaming.graphics.TextureInfo;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.IkGuiInternal;
 import com.ikalagaming.launcher.PluginFolder;
@@ -213,7 +213,7 @@ public class FontAtlas {
      * The texture the atlas is uploaded to, set by the rendering backend. Only used by debug tools
      * to display the atlas, may be null.
      */
-    public TextureInfo texture;
+    public TextureHandle texture;
 
     public FontAtlas() {
         this(CACHE_SIZE);

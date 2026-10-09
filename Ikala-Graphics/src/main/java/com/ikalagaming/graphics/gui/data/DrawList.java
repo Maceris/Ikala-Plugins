@@ -2,7 +2,7 @@ package com.ikalagaming.graphics.gui.data;
 
 import static com.ikalagaming.graphics.gui.flags.DrawFlags.*;
 
-import com.ikalagaming.graphics.TextureInfo;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.IkGuiInternal;
 import com.ikalagaming.graphics.gui.flags.DrawFlags;
@@ -2380,12 +2380,12 @@ public class DrawList {
     }
 
     public void addImage(
-            @NonNull TextureInfo texture, float minX, float minY, float maxX, float maxY) {
+            @NonNull TextureHandle texture, float minX, float minY, float maxX, float maxY) {
         addImage(texture, minX, minY, maxX, maxY, 0, 0, 1, 1, Color.WHITE);
     }
 
     public void addImage(
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float minX,
             float minY,
             float maxX,
@@ -2398,7 +2398,7 @@ public class DrawList {
     }
 
     public void addImage(
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float minX,
             float minY,
             float maxX,
@@ -2427,7 +2427,7 @@ public class DrawList {
      * @param alphaRadius The radius for blending to transparent.
      */
     public void addImage(
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float minX,
             float minY,
             float maxX,
@@ -2455,7 +2455,7 @@ public class DrawList {
     }
 
     public void addImageQuad(
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float p1X,
             float p1Y,
             float p2X,
@@ -2468,7 +2468,7 @@ public class DrawList {
     }
 
     public void addImageQuad(
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float p1X,
             float p1Y,
             float p2X,
@@ -2482,7 +2482,7 @@ public class DrawList {
     }
 
     public void addImageQuad(
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float p1X,
             float p1Y,
             float p2X,
@@ -2531,7 +2531,7 @@ public class DrawList {
      * @param alphaRadius The radius for blending to transparent.
      */
     public void addImageQuad(
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float p1X,
             float p1Y,
             float p2X,
@@ -2576,7 +2576,7 @@ public class DrawList {
     }
 
     public void addImageRounded(
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float minX,
             float minY,
             float maxX,
@@ -2604,7 +2604,7 @@ public class DrawList {
     }
 
     public void addImageRounded(
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float minX,
             float minY,
             float maxX,
@@ -2651,7 +2651,7 @@ public class DrawList {
      * @see DrawFlags
      */
     public void addImageRounded(
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float minX,
             float minY,
             float maxX,

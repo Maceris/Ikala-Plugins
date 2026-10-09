@@ -1,6 +1,6 @@
 package com.ikalagaming.graphics.gui;
 
-import com.ikalagaming.graphics.TextureInfo;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.gui.callback.GuiInputTextCallback;
 import com.ikalagaming.graphics.gui.data.*;
 import com.ikalagaming.graphics.gui.enums.*;
@@ -1899,7 +1899,7 @@ class IkGuiDemo {
             ExampleImageViewerData data,
             float canvasWidth,
             float canvasHeight,
-            TextureInfo texture,
+            TextureHandle texture,
             int imageWidth,
             int imageHeight) {
         final IkIO io = IkGui.getIO();
@@ -1972,17 +1972,17 @@ class IkGuiDemo {
         }
         IkGui.textWrapped(
                 "Below we are displaying the font texture (which is the only texture we have access"
-                        + " to in this demo). Use the 'TextureInfo' type to pass your own textures."
+                        + " to in this demo). Use the 'TextureHandle' type to pass your own textures."
                         + " Hover the texture for a zoomed view!");
 
         // Below we are displaying the font texture because it is the only texture we have access
-        // to inside the demo! Any TextureInfo created by the rendering backend can be passed to
+        // to inside the demo! Any TextureHandle created by the rendering backend can be passed to
         // image(), imageButton() or DrawList.addImage(). You can use showMetricsWindow() to
         // inspect the draw data that are being passed to your renderer.
 
         // Grab the texture used by the font atlas, which the rendering backend sets
         final FontAtlas atlas = IkGui.getIO().fonts;
-        final TextureInfo texture = atlas.texture;
+        final TextureHandle texture = atlas.texture;
         if (texture == null) {
             IkGui.textDisabled("(The rendering backend hasn't set the font atlas texture yet.)");
             IkGui.treePop();

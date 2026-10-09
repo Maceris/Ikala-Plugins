@@ -2,7 +2,6 @@ package com.ikalagaming.graphics.graph;
 
 import static org.lwjgl.vulkan.VK10.*;
 
-import com.ikalagaming.graphics.Buffer;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.vulkan.SharedBuffer;
 import com.ikalagaming.graphics.vulkan.VulkanState;
@@ -88,19 +87,19 @@ public class MeshData {
     private final int vertexCount;
 
     /** The buffer (UBO) we use to store the bone weight data. */
-    @Setter private Buffer boneWeightBuffer;
+    @Setter private SharedBuffer boneWeightBuffer;
 
     /** The buffer (UBO) we store vertex data in. */
-    private final Buffer vertexBuffer;
+    private final SharedBuffer vertexBuffer;
 
     /** The buffer (SSBO) we store post-animation values in. */
-    @Setter private Buffer animationTargetBuffer;
+    @Setter private SharedBuffer animationTargetBuffer;
 
     /** The buffer to store index data in. */
-    private final Buffer indexBuffer;
+    private final SharedBuffer indexBuffer;
 
     /** Used to store indirect draw commands. */
-    private final Buffer drawIndirectBuffer;
+    private final SharedBuffer drawIndirectBuffer;
 
     /**
      * @param aabbMin The minimum value (corner) of the axis-aligned bounding box.

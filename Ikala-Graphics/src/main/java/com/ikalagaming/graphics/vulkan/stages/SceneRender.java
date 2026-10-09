@@ -5,7 +5,6 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
-import com.ikalagaming.graphics.Texture;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
@@ -88,26 +87,9 @@ public class SceneRender implements RenderStage {
 
             materialData.putFloat(material.getSpecularTint());
             materialData.putFloat(material.getSubsurface());
-            materialData.putInt(bindlessIndex(material.getNormalMap()));
-            materialData.putInt(bindlessIndex(material.getTexture()));
+            materialData.putInt(state.textureRegistry.slotOrDefault(material.getNormalMap()));
+            materialData.putInt(state.textureRegistry.slotOrDefault(material.getTexture()));
         }
-    }
-
-    /**
-     * Look up the bindless slot of a material texture.
-     *
-     * @param texture The texture, which may be null.
-     * @return The bindless slot, or the default texture slot which the shader treats as having no
-     *     texture.
-     */
-    private static int bindlessIndex(Texture texture) {
-        if (texture == null) {
-            return ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX;
-        }
-        final int index = ((TextureInfoVulkan) texture.info()).bindlessIndex;
-        return index == TextureInfoVulkan.NO_BINDLESS_INDEX
-                ? ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX
-                : index;
     }
 
     /** The shader to use for rendering. */

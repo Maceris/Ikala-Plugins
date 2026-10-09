@@ -2,7 +2,7 @@ package com.ikalagaming.graphics.gui;
 
 import static com.ikalagaming.graphics.gui.IkGuiDemo.helpMarker;
 
-import com.ikalagaming.graphics.TextureInfo;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.gui.callback.GuiInputTextCallback;
 import com.ikalagaming.graphics.gui.data.*;
 import com.ikalagaming.graphics.gui.enums.*;
@@ -520,7 +520,7 @@ final class IkGuiDemoExamples {
     private static void showExampleAppImageViewer(IkBoolean open) {
         // We don't have access to other textures in this demo!
         final FontAtlas atlas = IkGui.getIO().fonts;
-        final TextureInfo texture = atlas.texture;
+        final TextureHandle texture = atlas.texture;
         final int textureWidth = FontAtlas.FONT_ATLAS_IMAGE_WIDTH;
         final int textureHeight = FontAtlas.FONT_ATLAS_IMAGE_HEIGHT;
         if (IkGui.begin("Example: Image Viewer", open)) {

@@ -52,7 +52,7 @@ public class PipelineManagerVulkan {
             new PipelineVulkan(new RenderStage[0], RenderConfig.ERROR_MASK);
 
     /** The texture we store the font atlas on. */
-    private Texture fontAtlas;
+    private TextureHandle fontAtlas;
 
     /** A mesh for rendering onto. */
     private QuadMesh quadMesh;
@@ -463,7 +463,10 @@ public class PipelineManagerVulkan {
         stageSkyboxRender.cleanup(state);
         stageSwapchainPresent.cleanup(state);
         cleanupShadowMaps(state);
-        GraphicsManager.getDeletionQueue().add(fontAtlas);
+        TextureInfoVulkan fontAtlasInfo = state.textureRegistry.remove(fontAtlas);
+        if (fontAtlasInfo != null) {
+            GraphicsManager.getDeletionQueue().add(fontAtlasInfo);
+        }
         fontAtlas = null;
         skybox.cleanup(state);
         skybox = null;
@@ -560,6 +563,7 @@ public class PipelineManagerVulkan {
                 GraphicsManager.getRenderInstance()
                         .getTextureLoader()
                         .load(
+                                GraphicsPlugin.PLUGIN_NAME,
                                 null,
                                 Format.R8G8B8A8_UNORM,
                                 FontAtlas.FONT_ATLAS_IMAGE_WIDTH,

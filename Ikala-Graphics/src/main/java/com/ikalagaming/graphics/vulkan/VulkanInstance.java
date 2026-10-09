@@ -274,7 +274,7 @@ public class VulkanInstance {
 
     private int renderConfig;
     private PipelineVulkan pipeline;
-    private TextureLoader textureLoader;
+    private TextureLoaderVulkan textureLoader;
     private ShaderMap shaderMap;
     private PipelineManagerVulkan pipelineManager;
 
@@ -376,6 +376,8 @@ public class VulkanInstance {
         pipelineManager.cleanup(state);
         // Queues them up for deletion below
         shaderMap.clearAll();
+        // Whatever plugins didn't release
+        state.textureRegistry.removeAll().forEach(textureLoader::delete);
 
         DeletionQueue.Entry nextEntry = GraphicsManager.getDeletionQueue().pop();
         while (nextEntry != null) {
@@ -386,9 +388,10 @@ public class VulkanInstance {
         for (int i = 0; i < GraphicsManager.MAX_FRAMES_IN_FLIGHT; i++) {
             state.runDeferredFrees(i);
         }
-        ((TextureLoaderVulkan) textureLoader).cleanup();
+        textureLoader.cleanup();
         state.bindlessTextures.cleanup(state);
         state.bindlessTextures = null;
+        state.textureRegistry = null;
         state.immediateCommands.cleanup(state);
         state.immediateCommands = null;
         // Created in initializeGui()
@@ -1027,8 +1030,7 @@ public class VulkanInstance {
                 var shader = (ShaderVulkan) entry.resource();
                 shader.free();
             }
-            case TEXTURE ->
-                    ((TextureLoaderVulkan) textureLoader).delete((Texture) entry.resource());
+            case TEXTURE -> textureLoader.delete((TextureInfoVulkan) entry.resource());
         }
     }
 
@@ -1047,7 +1049,7 @@ public class VulkanInstance {
      *
      * @return The texture loader.
      */
-    public TextureLoader getTextureLoader() {
+    public TextureLoaderVulkan getTextureLoader() {
         return textureLoader;
     }
 
@@ -1139,6 +1141,7 @@ public class VulkanInstance {
 
         state.immediateCommands = new ImmediateCommands(state);
         state.bindlessTextures = new BindlessTextures(state);
+        state.textureRegistry = new TextureRegistry(state.bindlessTextures.getCapacity());
         textureLoader = new TextureLoaderVulkan(state);
         shaderMap = new ShaderMap();
         initializeShaders();

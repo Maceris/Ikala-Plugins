@@ -5,8 +5,7 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
-import com.ikalagaming.graphics.Texture;
-import com.ikalagaming.graphics.TextureInfo;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.WindowManager;
@@ -46,7 +45,7 @@ public class GuiRender implements RenderStage {
     @NonNull @Setter private ShaderVulkan shader;
 
     /** The font atlas texture. */
-    private final Texture fontAtlas;
+    private final TextureHandle fontAtlas;
 
     /** VkDescriptorSetLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorSetLayout;
@@ -69,7 +68,7 @@ public class GuiRender implements RenderStage {
      * @param shader The shader to render the GUI with.
      * @param fontAtlas The font atlas texture.
      */
-    public GuiRender(final @NonNull ShaderVulkan shader, final @NonNull Texture fontAtlas) {
+    public GuiRender(final @NonNull ShaderVulkan shader, final @NonNull TextureHandle fontAtlas) {
         this.shader = shader;
         this.fontAtlas = fontAtlas;
         this.descriptorSetLayout = VK_NULL_HANDLE;
@@ -250,7 +249,11 @@ public class GuiRender implements RenderStage {
         }
         frameData.guiFontStaging.ensureCapacity(totalSize, state);
 
-        final var atlas = (TextureInfoVulkan) fontAtlas.info();
+        final TextureInfoVulkan atlas = state.textureRegistry.resolve(fontAtlas);
+        if (atlas == null) {
+            log.error("The font atlas texture was released, can't upload glyphs");
+            return;
+        }
         final long staging = frameData.guiFontStaging.allocationInfo.pMappedData();
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -331,9 +334,7 @@ public class GuiRender implements RenderStage {
         uniformData.putFloat(ShaderBindings.GUI.UNIFORM_BUFFER_SCALE_OFFSET, 2.0f / width);
         uniformData.putFloat(
                 ShaderBindings.GUI.UNIFORM_BUFFER_SCALE_OFFSET + Float.BYTES, 2.0f / height);
-        uniformData.putInt(
-                ShaderBindings.GUI.UNIFORM_BUFFER_FONT_TEXTURE_OFFSET,
-                ((TextureInfoVulkan) fontAtlas.info()).bindlessIndex);
+        uniformData.putInt(ShaderBindings.GUI.UNIFORM_BUFFER_FONT_TEXTURE_OFFSET, fontAtlas.slot());
         uniformData.putFloat(
                 ShaderBindings.GUI.UNIFORM_BUFFER_DISPLAY_POSITION_OFFSET,
                 drawData.displayPosition.x);
@@ -417,7 +418,7 @@ public class GuiRender implements RenderStage {
                             detailOffset);
         }
 
-        final int fallback = ((TextureInfoVulkan) fontAtlas.info()).bindlessIndex;
+        final int fallback = fontAtlas.slot();
         ByteBuffer textureIndices =
                 MemoryUtil.memByteBuffer(
                         frameData.guiTextureIndices.allocationInfo.pMappedData(),
@@ -425,7 +426,7 @@ public class GuiRender implements RenderStage {
         textureIndices.putInt(0, fallback);
         for (int i = 0; i < drawData.textures.size(); ++i) {
             textureIndices.putInt(
-                    i * Integer.BYTES, getBindlessIndex(drawData.textures.get(i), fallback));
+                    i * Integer.BYTES, getBindlessIndex(state, drawData.textures.get(i), fallback));
         }
 
         return offsets;
@@ -463,20 +464,18 @@ public class GuiRender implements RenderStage {
     /**
      * Look up the bindless slot for a texture used by the GUI.
      *
+     * @param state The Vulkan state.
      * @param texture The texture.
-     * @param fallback The slot to use if the texture can't be used.
+     * @param fallback The slot to use if the texture was released.
      * @return The bindless slot.
      */
-    private static int getBindlessIndex(@NonNull TextureInfo texture, int fallback) {
-        if (!(texture instanceof TextureInfoVulkan info)) {
-            log.warn("Can't render non-Vulkan texture {} in the GUI", texture);
+    private static int getBindlessIndex(
+            @NonNull VulkanState state, @NonNull TextureHandle texture, int fallback) {
+        if (!state.textureRegistry.isValid(texture)) {
+            log.warn("Can't render texture {} in the GUI, it was released", texture);
             return fallback;
         }
-        if (info.bindlessIndex == TextureInfoVulkan.NO_BINDLESS_INDEX) {
-            log.warn("Can't render texture {} in the GUI, it has no bindless slot", texture);
-            return fallback;
-        }
-        return info.bindlessIndex;
+        return texture.slot();
     }
 
     /**

@@ -1,6 +1,6 @@
 package com.ikalagaming.graphics.graph;
 
-import com.ikalagaming.graphics.Texture;
+import com.ikalagaming.graphics.TextureHandle;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -65,10 +65,10 @@ public class Material {
     private float subsurface;
 
     /** The handle for the normal map texture, which might be null. */
-    private Texture normalMap;
+    private TextureHandle normalMap;
 
     /** The handle for the texture, which might be null. */
-    private Texture texture;
+    private TextureHandle texture;
 
     /** Create a default material with no texture. */
     public Material() {

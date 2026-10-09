@@ -5,7 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.ikalagaming.graphics.TextureInfo;
+import com.ikalagaming.graphics.Format;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.gui.data.Context;
 import com.ikalagaming.graphics.gui.data.IkBoolean;
 import com.ikalagaming.graphics.gui.data.TableColumnSortSpecs;
@@ -54,7 +55,7 @@ class IkGuiDemoExamplesTest {
         context.io.displaySize.set(1600, 1200);
         context.io.mouseInsideWindow = true;
         // A stand-in for the texture the rendering backend sets, for the image viewer
-        context.io.fonts.texture = new TextureInfo() {};
+        context.io.fonts.texture = new TextureHandle(5, 0, 1, 1, Format.R8G8B8A8_UNORM);
     }
 
     @AfterEach

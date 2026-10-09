@@ -5,8 +5,7 @@ import static org.lwjgl.util.vma.Vma.*;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.Format;
-import com.ikalagaming.graphics.Texture;
-import com.ikalagaming.graphics.TextureLoader;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -24,15 +23,15 @@ import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 
 /**
- * Loads textures onto the GPU. Every texture is registered in the bindless texture array, so the
- * bindless and non-bindless variants behave the same.
+ * Loads textures onto the GPU. Every texture is registered in the bindless texture array, and in
+ * the {@link TextureRegistry} under the plugin that owns it.
  *
  * <p>Textures end up in {@link VK13#VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL}, ready to be sampled. When
- * data is provided, mipmaps are generated if the format supports it, matching the OpenGL backend.
- * Must be used from the render thread.
+ * data is provided, mipmaps are generated if the format supports it. Must be used from the render
+ * thread.
  */
 @Slf4j
-public class TextureLoaderVulkan implements TextureLoader {
+public class TextureLoaderVulkan {
 
     /** The Vulkan state. */
     private final VulkanState state;
@@ -41,7 +40,7 @@ public class TextureLoaderVulkan implements TextureLoader {
     private long sampler;
 
     /** A 1x1 white texture that lives in the default bindless slot. */
-    private Texture defaultTexture;
+    private TextureInfoVulkan defaultTexture;
 
     /**
      * Whether a format can be cleared with vkCmdClearColorImage, which rules out compressed and
@@ -160,10 +159,10 @@ public class TextureLoaderVulkan implements TextureLoader {
 
         ByteBuffer white = MemoryUtil.memAlloc(4);
         white.put(0, new byte[] {-1, -1, -1, -1});
-        defaultTexture = load(white, Format.R8G8B8A8_UNORM, 1, 1);
+        defaultTexture = createTexture(white, Format.R8G8B8A8_UNORM, 1, 1);
         MemoryUtil.memFree(white);
 
-        final int defaultIndex = ((TextureInfoVulkan) defaultTexture.info()).bindlessIndex;
+        final int defaultIndex = defaultTexture.bindlessIndex;
         if (defaultIndex != ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX) {
             log.error(
                     "Default texture ended up in bindless slot {} instead of {}",
@@ -177,8 +176,7 @@ public class TextureLoaderVulkan implements TextureLoader {
      * the shared sampler must already be destroyed.
      */
     public void cleanup() {
-        var defaultInfo = (TextureInfoVulkan) defaultTexture.info();
-        defaultInfo.destroy(state);
+        defaultTexture.destroy(state);
         defaultTexture = null;
         vkDestroySampler(state.device.logical, sampler, null);
         sampler = VK_NULL_HANDLE;
@@ -207,13 +205,51 @@ public class TextureLoaderVulkan implements TextureLoader {
         }
     }
 
-    @Override
-    public Texture loadBindless(ByteBuffer buffer, @NonNull Format format, int width, int height) {
-        return load(buffer, format, width, height);
+    /**
+     * Load a texture to the GPU from a byte buffer.
+     *
+     * @param owner The name of the plugin that owns the texture.
+     * @param buffer The data to load. If null, we allocate texture memory but don't fill it with
+     *     anything meaningful.
+     * @param format The format of the image data.
+     * @param width The width of the texture, in pixels.
+     * @param height The height of the texture, in pixels.
+     * @return The handle for the texture.
+     * @throws TextureException If the format is not supported, or there are no bindless slots left.
+     */
+    public TextureHandle load(
+            @NonNull String owner,
+            ByteBuffer buffer,
+            @NonNull Format format,
+            int width,
+            int height) {
+        TextureInfoVulkan info = createTexture(buffer, format, width, height);
+        if (info.bindlessIndex == ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX) {
+            // Out of slots, since the default texture already has that slot. Never handed out, so
+            // the GPU isn't using it yet.
+            info.destroy(state);
+            final String error =
+                    SafeResourceLoader.format(
+                            "Out of bindless texture slots, the limit is {}",
+                            state.bindlessTextures.getCapacity());
+            throw new TextureException(error);
+        }
+        return state.textureRegistry.add(owner, info, width, height, format);
     }
 
-    @Override
-    public Texture load(ByteBuffer buffer, @NonNull Format format, int width, int height) {
+    /**
+     * Create a texture, fill it, and register it in the bindless array, without giving out a
+     * handle.
+     *
+     * @param buffer The data to load, or null to leave the contents undefined.
+     * @param format The format of the image data.
+     * @param width The width of the texture, in pixels.
+     * @param height The height of the texture, in pixels.
+     * @return The texture. Its slot is the default texture's slot if the array was full.
+     * @throws TextureException If the format is not supported.
+     */
+    private TextureInfoVulkan createTexture(
+            ByteBuffer buffer, @NonNull Format format, int width, int height) {
         final int vkFormat = format.getVkFormat();
 
         final int features;
@@ -250,7 +286,7 @@ public class TextureLoaderVulkan implements TextureLoader {
         }
 
         state.bindlessTextures.register(state, info);
-        return new Texture(width, height, info);
+        return info;
     }
 
     /**
@@ -503,14 +539,16 @@ public class TextureLoaderVulkan implements TextureLoader {
                 });
     }
 
-    @Override
-    public Texture loadBindless(@NonNull String texturePath) {
-        return load(texturePath);
-    }
-
-    @Override
-    public Texture load(@NonNull String texturePath) {
-        Texture result;
+    /**
+     * Load a texture to the GPU from an image file.
+     *
+     * @param owner The name of the plugin that owns the texture.
+     * @param texturePath The full path to the texture.
+     * @return The handle for the texture.
+     * @throws TextureException If the image can't be read, or the texture can't be created.
+     */
+    public TextureHandle load(@NonNull String owner, @NonNull String texturePath) {
+        TextureHandle result;
         try (MemoryStack stack = MemoryStack.stackPush()) {
             IntBuffer width = stack.mallocInt(1);
             IntBuffer height = stack.mallocInt(1);
@@ -528,7 +566,7 @@ public class TextureLoaderVulkan implements TextureLoader {
             }
 
             try {
-                result = load(buffer, Format.R8G8B8A8_UNORM, width.get(0), height.get(0));
+                result = load(owner, buffer, Format.R8G8B8A8_UNORM, width.get(0), height.get(0));
             } finally {
                 STBImage.stbi_image_free(buffer);
             }
@@ -539,10 +577,9 @@ public class TextureLoaderVulkan implements TextureLoader {
     /**
      * Destroy a texture and release its bindless slot, once no frame in flight can be using it.
      *
-     * @param texture The texture to delete.
+     * @param info The texture to delete, already removed from the {@link TextureRegistry}.
      */
-    public void delete(@NonNull Texture texture) {
-        var info = (TextureInfoVulkan) texture.info();
+    public void delete(@NonNull TextureInfoVulkan info) {
         state.bindlessTextures.release(state, info);
         state.deferFree(() -> info.destroy(state));
     }

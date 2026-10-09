@@ -2,7 +2,8 @@ package com.ikalagaming.graphics.gui.data;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.ikalagaming.graphics.TextureInfo;
+import com.ikalagaming.graphics.Format;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.util.Color;
 
@@ -202,8 +203,8 @@ class DrawListTest {
 
     @Test
     void testImages() {
-        TextureInfo first = new TextureInfo() {};
-        TextureInfo second = new TextureInfo() {};
+        TextureHandle first = new TextureHandle(1, 0, 1, 1, Format.R8G8B8A8_UNORM);
+        TextureHandle second = new TextureHandle(2, 0, 1, 1, Format.R8G8B8A8_UNORM);
         DrawTextures drawData = IkGui.getContext().drawTextures;
         drawData.clear();
         Command[] commands =

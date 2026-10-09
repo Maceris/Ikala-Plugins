@@ -3,12 +3,10 @@ package com.ikalagaming.graphics.vulkan;
 import static org.lwjgl.util.vma.Vma.vmaDestroyImage;
 import static org.lwjgl.vulkan.VK13.*;
 
-import com.ikalagaming.graphics.TextureInfo;
-
 import lombok.NonNull;
 
 /** Tracks handles for a texture, but does not handle the lifetimes. */
-public class TextureInfoVulkan implements TextureInfo {
+public class TextureInfoVulkan {
 
     /** The value of {@link #bindlessIndex} when the texture has no slot. */
     public static final int NO_BINDLESS_INDEX = -1;

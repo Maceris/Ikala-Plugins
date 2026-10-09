@@ -1,6 +1,6 @@
 package com.ikalagaming.graphics.gui;
 
-import com.ikalagaming.graphics.TextureInfo;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.gui.callback.GuiInputTextCallback;
 import com.ikalagaming.graphics.gui.data.*;
 import com.ikalagaming.graphics.gui.enums.*;
@@ -3148,7 +3148,7 @@ public class IkGui {
      * @param width The width of the image.
      * @param height The height of the image.
      */
-    public static void image(@NonNull TextureInfo texture, float width, float height) {
+    public static void image(@NonNull TextureHandle texture, float width, float height) {
         IkGuiImplMiscWidgets.image(texture, width, height, 0.0f, 0.0f, 1.0f, 1.0f);
     }
 
@@ -3158,7 +3158,7 @@ public class IkGui {
      * @param texture The texture to display.
      * @param size The size of the image.
      */
-    public static void image(@NonNull TextureInfo texture, @NonNull Vector2f size) {
+    public static void image(@NonNull TextureHandle texture, @NonNull Vector2f size) {
         IkGuiImplMiscWidgets.image(texture, size.x, size.y, 0.0f, 0.0f, 1.0f, 1.0f);
     }
 
@@ -3174,7 +3174,7 @@ public class IkGui {
      * @param v1 The texture v coordinate at the bottom.
      */
     public static void image(
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float width,
             float height,
             float u0,
@@ -3193,7 +3193,7 @@ public class IkGui {
      * @param uv1 The texture coordinates at the bottom right.
      */
     public static void image(
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             @NonNull Vector2f size,
             @NonNull Vector2f uv0,
             @NonNull Vector2f uv1) {
@@ -3210,7 +3210,7 @@ public class IkGui {
      * @return True if the button was pressed.
      */
     public static boolean imageButton(
-            @NonNull String id, @NonNull TextureInfo texture, float width, float height) {
+            @NonNull String id, @NonNull TextureHandle texture, float width, float height) {
         return IkGuiImplMiscWidgets.imageButton(
                 id, texture, width, height, 0.0f, 0.0f, 1.0f, 1.0f, Color.CLEAR, Color.WHITE);
     }
@@ -3224,7 +3224,7 @@ public class IkGui {
      * @return True if the button was pressed.
      */
     public static boolean imageButton(
-            @NonNull String id, @NonNull TextureInfo texture, @NonNull Vector2f size) {
+            @NonNull String id, @NonNull TextureHandle texture, @NonNull Vector2f size) {
         return IkGuiImplMiscWidgets.imageButton(
                 id, texture, size.x, size.y, 0.0f, 0.0f, 1.0f, 1.0f, Color.CLEAR, Color.WHITE);
     }
@@ -3244,7 +3244,7 @@ public class IkGui {
      */
     public static boolean imageButton(
             @NonNull String id,
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float width,
             float height,
             float u0,
@@ -3267,7 +3267,7 @@ public class IkGui {
      */
     public static boolean imageButton(
             @NonNull String id,
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             @NonNull Vector2f size,
             @NonNull Vector2f uv0,
             @NonNull Vector2f uv1) {
@@ -3292,7 +3292,7 @@ public class IkGui {
      */
     public static boolean imageButton(
             @NonNull String id,
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float width,
             float height,
             float u0,
@@ -3319,7 +3319,7 @@ public class IkGui {
      */
     public static boolean imageButton(
             @NonNull String id,
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             @NonNull Vector2f size,
             @NonNull Vector2f uv0,
             @NonNull Vector2f uv1,
@@ -3339,7 +3339,7 @@ public class IkGui {
      * @param background The background color drawn behind the image.
      */
     public static void imageWithBackground(
-            @NonNull TextureInfo texture, float width, float height, int background) {
+            @NonNull TextureHandle texture, float width, float height, int background) {
         IkGuiImplMiscWidgets.imageWithBackground(
                 texture, width, height, 0.0f, 0.0f, 1.0f, 1.0f, background, Color.WHITE);
     }
@@ -3359,7 +3359,7 @@ public class IkGui {
      * @param tint The color to multiply the image by.
      */
     public static void imageWithBackground(
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float width,
             float height,
             float u0,
@@ -3384,7 +3384,7 @@ public class IkGui {
      * @param tint The color to multiply the image by.
      */
     public static void imageWithBackground(
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             @NonNull Vector2f size,
             @NonNull Vector2f uv0,
             @NonNull Vector2f uv1,

@@ -1,6 +1,6 @@
 package com.ikalagaming.graphics.gui.data;
 
-import com.ikalagaming.graphics.TextureInfo;
+import com.ikalagaming.graphics.TextureHandle;
 
 import lombok.NonNull;
 
@@ -17,10 +17,10 @@ import java.util.Map;
  */
 public class DrawTextures {
     /** The textures used this frame, in order of their indices. */
-    public final List<TextureInfo> textures;
+    public final List<TextureHandle> textures;
 
     /** Look up the index of a texture in {@link #textures}, by identity. */
-    private final Map<TextureInfo, Integer> textureIndices;
+    private final Map<TextureHandle, Integer> textureIndices;
 
     public DrawTextures() {
         textures = new ArrayList<>();
@@ -34,7 +34,7 @@ public class DrawTextures {
      * @param texture The texture.
      * @return The index of the texture in {@link #textures}.
      */
-    public int register(@NonNull TextureInfo texture) {
+    public int register(@NonNull TextureHandle texture) {
         return textureIndices.computeIfAbsent(
                 texture,
                 newTexture -> {

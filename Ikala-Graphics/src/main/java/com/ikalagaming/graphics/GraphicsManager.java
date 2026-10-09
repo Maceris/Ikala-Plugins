@@ -11,16 +11,22 @@ import com.ikalagaming.graphics.gui.data.IkIO;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.DeletionQueue;
+import com.ikalagaming.graphics.vulkan.TextureRegistry;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.launcher.events.Shutdown;
+import com.ikalagaming.plugins.Plugin;
+import com.ikalagaming.plugins.PluginManager;
 
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.glfw.GLFWErrorCallback;
 
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 
@@ -129,6 +135,9 @@ public class GraphicsManager {
     /** A queue used to delete resources. */
     @Getter private static final DeletionQueue deletionQueue = new DeletionQueue();
 
+    /** The graphics context for each plugin that asked for one, by plugin name. */
+    private static final Map<String, GraphicsContext> contexts = new ConcurrentHashMap<>();
+
     /** The settings to use for rendering. Should be set up before creating a window. */
     @Getter private static final GraphicsSettings settings = new GraphicsSettings();
 
@@ -174,6 +183,89 @@ public class GraphicsManager {
 
         lastFPSTime = glfwGetTime();
         return true;
+    }
+
+    /**
+     * Fetch the graphics context for the currently loaded instance of a plugin. Everything created
+     * through it is owned by that plugin instance, and is released when it unloads.
+     *
+     * @param pluginName The name of the plugin, as it appears in its plugin.yml.
+     * @return The plugin's graphics context.
+     */
+    public static GraphicsContext forPlugin(@NonNull String pluginName) {
+        // Look this up before touching the map, so we never wait on the plugin lock inside it
+        final Plugin current = loadedInstance(pluginName);
+        GraphicsContext[] replaced = {null};
+        GraphicsContext context =
+                contexts.compute(
+                        pluginName,
+                        (name, existing) -> {
+                            if (existing != null && existing.belongsTo(current)) {
+                                return existing;
+                            }
+                            replaced[0] = existing;
+                            return new GraphicsContext(name, current);
+                        });
+        if (replaced[0] != null) {
+            // An older instance of the plugin, whose unload we haven't processed yet
+            release(replaced[0]);
+        }
+        return context;
+    }
+
+    /**
+     * Release everything an unloaded plugin owned and close its context. If the plugin was already
+     * loaded again and has a new context, that context is left alone. Safe to call from any thread,
+     * since the resources are deleted on the render thread later.
+     *
+     * @param pluginName The name of the plugin that unloaded.
+     */
+    static void pluginUnloaded(@NonNull String pluginName) {
+        final Plugin current = loadedInstance(pluginName);
+        GraphicsContext[] stale = {null};
+        contexts.computeIfPresent(
+                pluginName,
+                (name, existing) -> {
+                    if (current != null && existing.belongsTo(current)) {
+                        return existing;
+                    }
+                    stale[0] = existing;
+                    return null;
+                });
+        if (stale[0] != null) {
+            release(stale[0]);
+        }
+    }
+
+    /**
+     * Close a context and queue up deletion of everything it owns.
+     *
+     * @param context The context to release.
+     */
+    private static void release(@NonNull GraphicsContext context) {
+        context.close();
+        if (renderInstance == null) {
+            return;
+        }
+        TextureRegistry registry = renderInstance.getState().textureRegistry;
+        if (registry == null) {
+            return;
+        }
+        var textures = registry.removeAllOwnedBy(context.getOwnerKey());
+        textures.forEach(deletionQueue::add);
+        if (!textures.isEmpty()) {
+            log.debug("Released {} textures owned by {}", textures.size(), context.getOwnerKey());
+        }
+    }
+
+    /**
+     * Find the currently loaded instance of a plugin.
+     *
+     * @param pluginName The plugin name.
+     * @return The plugin, or null if it isn't loaded.
+     */
+    private static Plugin loadedInstance(@NonNull String pluginName) {
+        return PluginManager.getInstance().getPlugin(pluginName).orElse(null);
     }
 
     /**
@@ -272,6 +364,9 @@ public class GraphicsManager {
         if (!initialized.get()) {
             return;
         }
+        // The renderer releases every texture as it cleans up
+        contexts.values().forEach(GraphicsContext::close);
+        contexts.clear();
         if (scene != null) {
             // Queues everything up for deletion, which the renderer processes as it cleans up
             scene.cleanup();

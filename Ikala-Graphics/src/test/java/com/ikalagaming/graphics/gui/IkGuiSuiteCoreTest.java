@@ -11,7 +11,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.ikalagaming.graphics.TextureInfo;
+import com.ikalagaming.graphics.Format;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.gui.data.DrawList;
 import com.ikalagaming.graphics.gui.data.ErrorRecoveryState;
 import com.ikalagaming.graphics.gui.data.IkBoolean;
@@ -3185,7 +3186,7 @@ class IkGuiSuiteCoreTest {
      */
     @Test
     void testLayoutBaselineAndCursorMax() {
-        final TextureInfo texture = new TextureInfo() {};
+        final TextureHandle texture = new TextureHandle(6, 0, 1, 1, Format.R8G8B8A8_UNORM);
         ctx.setGui(
                 () -> {
                     final var g = ctx.context;

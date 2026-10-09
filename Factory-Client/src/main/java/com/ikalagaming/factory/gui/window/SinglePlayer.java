@@ -155,6 +155,8 @@ public class SinglePlayer extends GuiWindow {
                         .getAbsolutePath();
         GraphicsManager.getScene()
                 .setSkyboxTexture(
-                        GraphicsManager.getRenderInstance().getTextureLoader().load(texturePath));
+                        GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME)
+                                .textures()
+                                .load(texturePath));
     }
 }

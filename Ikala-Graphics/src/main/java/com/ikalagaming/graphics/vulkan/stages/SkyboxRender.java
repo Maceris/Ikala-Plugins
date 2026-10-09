@@ -5,7 +5,7 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
-import com.ikalagaming.graphics.Texture;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.*;
@@ -121,7 +121,7 @@ public class SkyboxRender implements RenderStage {
                 hasFilter ? frameData.preFilterTexture : frameData.finalTexture;
         final TextureInfoVulkan depth = frameData.gBuffer.depth();
 
-        updateUniforms(scene, frameData);
+        updateUniforms(scene, vulkanState, frameData);
 
         final int width = Math.min(window.getWidth(), vulkanState.realSize.width());
         final int height = Math.min(window.getHeight(), vulkanState.realSize.height());
@@ -259,9 +259,11 @@ public class SkyboxRender implements RenderStage {
      * Write the uniforms for the current frame.
      *
      * @param scene The scene.
+     * @param state The Vulkan state.
      * @param frameData The data for the current frame.
      */
-    private void updateUniforms(@NonNull Scene scene, @NonNull PerFrameData frameData) {
+    private void updateUniforms(
+            @NonNull Scene scene, @NonNull VulkanState state, @NonNull PerFrameData frameData) {
         ByteBuffer uniformData =
                 MemoryUtil.memByteBuffer(
                         frameData.skyboxUniforms.allocationInfo.pMappedData(),
@@ -278,16 +280,12 @@ public class SkyboxRender implements RenderStage {
         viewMatrix.get(ShaderBindings.Skybox.VIEW_MATRIX_OFFSET, uniformData);
         scene.getSkyboxDiffuse().get(ShaderBindings.Skybox.DIFFUSE_OFFSET, uniformData);
 
-        Texture texture = scene.getSkyboxTexture();
-        int textureIndex = TextureInfoVulkan.NO_BINDLESS_INDEX;
-        if (texture != null) {
-            textureIndex = ((TextureInfoVulkan) texture.info()).bindlessIndex;
-        }
-        final boolean hasTexture = textureIndex != TextureInfoVulkan.NO_BINDLESS_INDEX;
+        TextureHandle texture = scene.getSkyboxTexture();
+        final boolean hasTexture = state.textureRegistry.isValid(texture);
         uniformData.putInt(ShaderBindings.Skybox.HAS_TEXTURE_OFFSET, hasTexture ? 1 : 0);
         uniformData.putInt(
                 ShaderBindings.Skybox.TEXTURE_INDEX_OFFSET,
-                hasTexture ? textureIndex : ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX);
+                state.textureRegistry.slotOrDefault(texture));
     }
 
     private void createPipelineLayout(@NonNull VulkanState state) {

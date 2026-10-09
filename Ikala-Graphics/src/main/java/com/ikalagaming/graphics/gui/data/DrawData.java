@@ -1,6 +1,6 @@
 package com.ikalagaming.graphics.gui.data;
 
-import com.ikalagaming.graphics.TextureInfo;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.gui.IkGuiInternal;
 
 import lombok.NonNull;
@@ -32,7 +32,7 @@ public class DrawData {
      * this list, and each rendering backend is responsible for mapping those indices to their own
      * texture handles. This list is shared between the draw data of all viewports.
      */
-    public final List<TextureInfo> textures;
+    public final List<TextureHandle> textures;
 
     /** The shared texture registry that {@link #textures} belongs to. */
     private final DrawTextures sharedTextures;
@@ -94,7 +94,7 @@ public class DrawData {
      * @param texture The texture.
      * @return The index of the texture in {@link #textures}.
      */
-    public int registerTexture(@NonNull TextureInfo texture) {
+    public int registerTexture(@NonNull TextureHandle texture) {
         return sharedTextures.register(texture);
     }
 

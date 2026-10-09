@@ -4,8 +4,6 @@ import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.util.vma.Vma.*;
 import static org.lwjgl.vulkan.VK13.*;
 
-import com.ikalagaming.graphics.Buffer;
-
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.PointerBuffer;
@@ -24,7 +22,7 @@ import java.nio.LongBuffer;
  * VmaAllocationInfo#pMappedData()} without staging or flushing.
  */
 @Slf4j
-public class SharedBuffer implements Buffer {
+public class SharedBuffer {
 
     /** The smallest size {@link #ensureCapacity(long, VulkanState)} makes a buffer. */
     public static final long MIN_CAPACITY = 1024;

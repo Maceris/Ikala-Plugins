@@ -40,6 +40,7 @@ public class GraphicsPlugin extends Plugin {
     public Set<Listener> getListeners() {
         if (listeners == null) {
             listeners = Collections.synchronizedSet(new HashSet<>());
+            listeners.add(new GraphicsPluginListener());
         }
 
         return listeners;

@@ -1,6 +1,6 @@
 package com.ikalagaming.graphics.gui;
 
-import com.ikalagaming.graphics.TextureInfo;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.gui.data.*;
 import com.ikalagaming.graphics.gui.enums.ColorType;
 import com.ikalagaming.graphics.gui.flags.ButtonFlags;
@@ -325,7 +325,7 @@ class IkGuiImplMiscWidgets {
      * @param v1 The texture v coordinate at the bottom.
      */
     public static void image(
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float width,
             float height,
             float u0,
@@ -353,7 +353,7 @@ class IkGuiImplMiscWidgets {
      */
     public static boolean imageButton(
             @NonNull String stringID,
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float width,
             float height,
             float u0,
@@ -398,7 +398,7 @@ class IkGuiImplMiscWidgets {
      */
     static boolean imageButtonEx(
             int id,
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float width,
             float height,
             float u0,
@@ -484,7 +484,7 @@ class IkGuiImplMiscWidgets {
      * @param tint The color to multiply the image by.
      */
     public static void imageWithBackground(
-            @NonNull TextureInfo texture,
+            @NonNull TextureHandle texture,
             float width,
             float height,
             float u0,

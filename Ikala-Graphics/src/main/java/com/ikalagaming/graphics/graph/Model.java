@@ -2,7 +2,6 @@ package com.ikalagaming.graphics.graph;
 
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
-import com.ikalagaming.graphics.Buffer;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.scene.AnimationState;
 import com.ikalagaming.graphics.scene.Entity;
@@ -125,13 +124,13 @@ public class Model {
     private final List<MeshData> meshDataList;
 
     /** Stores all the animations. */
-    @Setter private Buffer animationBuffer;
+    @Setter private SharedBuffer animationBuffer;
 
     /** Used to store animation states, for animated models. */
-    @Setter private Buffer entityAnimationOffsetsBuffer;
+    @Setter private SharedBuffer entityAnimationOffsetsBuffer;
 
     /** Used to store model matrices for rendering entities. */
-    @Setter private Buffer modelMatricesBuffer;
+    @Setter private SharedBuffer modelMatricesBuffer;
 
     /**
      * The highest buffer size (measured in entity count), for animation state and destination
@@ -149,7 +148,7 @@ public class Model {
      * Used to store material overrides. Organized by entity, where each entity will have N integer
      * values, where N is the number of meshes that the model has.
      */
-    @Setter private Buffer materialOverridesBuffer;
+    @Setter private SharedBuffer materialOverridesBuffer;
 
     /**
      * Used to signal that material overrides have changed and need to be computed and uploaded

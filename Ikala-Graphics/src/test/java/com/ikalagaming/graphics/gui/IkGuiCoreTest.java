@@ -6,7 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.ikalagaming.graphics.TextureInfo;
+import com.ikalagaming.graphics.Format;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.gui.data.Context;
 import com.ikalagaming.graphics.gui.data.DrawData;
 import com.ikalagaming.graphics.gui.data.IkBoolean;
@@ -663,7 +664,7 @@ class IkGuiCoreTest {
 
     @Test
     void testImageWidgets() {
-        final TextureInfo texture = new TextureInfo() {};
+        final TextureHandle texture = new TextureHandle(3, 0, 1, 1, Format.R8G8B8A8_UNORM);
         final boolean[] pressed = new boolean[1];
         final Vector2f imageMin = new Vector2f();
         final Vector2f imageMax = new Vector2f();
@@ -725,7 +726,7 @@ class IkGuiCoreTest {
                     IkGui.end();
                 };
         // A stand-in for the texture the rendering backend sets, so the images demo is shown
-        context.io.fonts.texture = new TextureInfo() {};
+        context.io.fonts.texture = new TextureHandle(4, 0, 1, 1, Format.R8G8B8A8_UNORM);
         frames(4, ui);
 
         Window window = IkGuiInternal.findWindowByName("IkGui Demo Window");

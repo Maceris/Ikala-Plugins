@@ -2,9 +2,7 @@ package com.ikalagaming.graphics.graph;
 
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
-import com.ikalagaming.graphics.Buffer;
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.Texture;
 import com.ikalagaming.graphics.vulkan.SharedBuffer;
 import com.ikalagaming.graphics.vulkan.VulkanState;
 
@@ -35,7 +33,7 @@ public class MaterialCache {
 
     @Getter @Setter private boolean dirty;
 
-    @Getter private final Buffer materialBuffer;
+    @Getter private final SharedBuffer materialBuffer;
 
     /** Set up a new cache with a default material. */
     public MaterialCache(@NonNull VulkanState state) {
@@ -117,22 +115,11 @@ public class MaterialCache {
     }
 
     /**
-     * Queue up deletion of the material buffer and every texture used by the materials. The cache
-     * should not be used afterward.
+     * Queue up deletion of the material buffer. The cache should not be used afterward. Material
+     * textures belong to the plugins that loaded them, so they are not deleted here.
      */
     @Synchronized
     public void cleanup() {
-        // Materials can share textures, so only delete each one once
-        Set<Texture> textures = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (Material material : materialsList) {
-            if (material.getTexture() != null) {
-                textures.add(material.getTexture());
-            }
-            if (material.getNormalMap() != null) {
-                textures.add(material.getNormalMap());
-            }
-        }
-        textures.forEach(GraphicsManager.getDeletionQueue()::add);
         GraphicsManager.getDeletionQueue().add(materialBuffer);
         materialsList.clear();
         materialLookup.clear();

@@ -1,9 +1,10 @@
 package com.ikalagaming.factory.gui.window;
 
+import com.ikalagaming.factory.FactoryClientPlugin;
 import com.ikalagaming.factory.gui.DefaultWindows;
 import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.Texture;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.gui.component.Button;
 import com.ikalagaming.graphics.gui.component.GuiWindow;
@@ -115,7 +116,7 @@ public class BiomeDebug extends GuiWindow {
      * @param image The image to turn into a texture.
      * @return The generated texture.
      */
-    private Texture generateTexture(@NonNull BufferedImage image) {
+    private TextureHandle generateTexture(@NonNull BufferedImage image) {
         int[] rgbValues =
                 image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
         byte[] rgba = intARGBtoByteRGBA(rgbValues);
@@ -124,8 +125,8 @@ public class BiomeDebug extends GuiWindow {
         buffer.put(rgba);
         buffer.rewind();
 
-        return GraphicsManager.getRenderInstance()
-                .getTextureLoader()
+        return GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME)
+                .textures()
                 .load(buffer, Format.R8G8B8A8_UNORM, image.getWidth(), image.getHeight());
     }
 
@@ -135,7 +136,9 @@ public class BiomeDebug extends GuiWindow {
             long seed = RandomGen.generateSeed();
 
             if (temperatureMap.getTexture() != null) {
-                GraphicsManager.getDeletionQueue().add(temperatureMap.getTexture());
+                GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME)
+                        .textures()
+                        .release(temperatureMap.getTexture());
                 temperatureMap.setTexture(null);
             }
             int w = 400;
@@ -154,7 +157,9 @@ public class BiomeDebug extends GuiWindow {
             temperatureMap.setTexture(generateTexture(tempImage));
 
             if (heightMap.getTexture() != null) {
-                GraphicsManager.getDeletionQueue().add(heightMap.getTexture());
+                GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME)
+                        .textures()
+                        .release(heightMap.getTexture());
                 heightMap.setTexture(null);
             }
             BufferedImage heightImage =
@@ -171,7 +176,9 @@ public class BiomeDebug extends GuiWindow {
             heightMap.setTexture(generateTexture(heightImage));
 
             if (erosionMap.getTexture() != null) {
-                GraphicsManager.getDeletionQueue().add(erosionMap.getTexture());
+                GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME)
+                        .textures()
+                        .release(erosionMap.getTexture());
                 erosionMap.setTexture(null);
             }
             BufferedImage erosionImage =
@@ -188,7 +195,9 @@ public class BiomeDebug extends GuiWindow {
             erosionMap.setTexture(generateTexture(erosionImage));
 
             if (vegetationMap.getTexture() != null) {
-                GraphicsManager.getDeletionQueue().add(vegetationMap.getTexture());
+                GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME)
+                        .textures()
+                        .release(vegetationMap.getTexture());
                 vegetationMap.setTexture(null);
             }
             BufferedImage vegetationImage =
@@ -205,7 +214,9 @@ public class BiomeDebug extends GuiWindow {
             vegetationMap.setTexture(generateTexture(vegetationImage));
 
             if (weirdnessMap.getTexture() != null) {
-                GraphicsManager.getDeletionQueue().add(weirdnessMap.getTexture());
+                GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME)
+                        .textures()
+                        .release(weirdnessMap.getTexture());
                 weirdnessMap.setTexture(null);
             }
             BufferedImage weirdnessImage =
