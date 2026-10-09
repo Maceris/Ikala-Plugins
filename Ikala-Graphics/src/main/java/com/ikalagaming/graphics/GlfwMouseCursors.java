@@ -3,7 +3,7 @@ package com.ikalagaming.graphics;
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.system.MemoryUtil.NULL;
 
-import com.ikalagaming.graphics.frontend.gui.enums.MouseCursor;
+import com.ikalagaming.graphics.gui.enums.MouseCursor;
 
 import lombok.NonNull;
 import org.lwjgl.glfw.GLFWErrorCallback;

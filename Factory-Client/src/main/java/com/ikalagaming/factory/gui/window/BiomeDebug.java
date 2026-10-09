@@ -1,16 +1,16 @@
 package com.ikalagaming.factory.gui.window;
 
 import com.ikalagaming.factory.gui.DefaultWindows;
+import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.Texture;
 import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.frontend.Format;
-import com.ikalagaming.graphics.frontend.Texture;
-import com.ikalagaming.graphics.frontend.gui.component.Button;
-import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
-import com.ikalagaming.graphics.frontend.gui.component.Image;
-import com.ikalagaming.graphics.frontend.gui.component.Text;
-import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
-import com.ikalagaming.graphics.frontend.gui.util.Alignment;
+import com.ikalagaming.graphics.gui.component.Button;
+import com.ikalagaming.graphics.gui.component.GuiWindow;
+import com.ikalagaming.graphics.gui.component.Image;
+import com.ikalagaming.graphics.gui.component.Text;
+import com.ikalagaming.graphics.gui.flags.WindowFlags;
+import com.ikalagaming.graphics.gui.util.Alignment;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.random.RandomGen;
 

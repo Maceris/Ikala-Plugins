@@ -7,11 +7,11 @@ import com.ikalagaming.factory.gui.*;
 import com.ikalagaming.factory.gui.window.*;
 import com.ikalagaming.factory.saves.UserDataUtil;
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.frontend.gui.WindowManager;
-import com.ikalagaming.graphics.frontend.gui.windows.GraphicsDebug;
-import com.ikalagaming.graphics.frontend.gui.windows.IkGuiDemo;
-import com.ikalagaming.graphics.frontend.gui.windows.IkScriptDebugger;
-import com.ikalagaming.graphics.frontend.gui.windows.ScriptMonitor;
+import com.ikalagaming.graphics.gui.WindowManager;
+import com.ikalagaming.graphics.gui.windows.GraphicsDebug;
+import com.ikalagaming.graphics.gui.windows.IkGuiDemo;
+import com.ikalagaming.graphics.gui.windows.IkScriptDebugger;
+import com.ikalagaming.graphics.gui.windows.ScriptMonitor;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 

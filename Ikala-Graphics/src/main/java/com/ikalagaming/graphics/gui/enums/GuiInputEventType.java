@@ -1,0 +1,12 @@
+package com.ikalagaming.graphics.gui.enums;
+
+public enum GuiInputEventType {
+    FOCUS,
+    KEY,
+    MOUSE_POSITION,
+    MOUSE_WHEEL,
+    MOUSE_BUTTON,
+    MOUSE_VIEWPORT,
+    NONE,
+    TEXT,
+}

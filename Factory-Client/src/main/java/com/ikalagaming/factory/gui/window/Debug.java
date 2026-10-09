@@ -4,11 +4,11 @@ import static com.ikalagaming.factory.gui.DefaultWindows.DEBUG;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.frontend.gui.IkGui;
-import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
-import com.ikalagaming.graphics.frontend.gui.enums.Condition;
-import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
-import com.ikalagaming.graphics.frontend.gui.util.Alignment;
+import com.ikalagaming.graphics.gui.IkGui;
+import com.ikalagaming.graphics.gui.component.GuiWindow;
+import com.ikalagaming.graphics.gui.enums.Condition;
+import com.ikalagaming.graphics.gui.flags.WindowFlags;
+import com.ikalagaming.graphics.gui.util.Alignment;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;

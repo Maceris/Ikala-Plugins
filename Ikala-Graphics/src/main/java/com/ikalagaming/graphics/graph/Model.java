@@ -2,16 +2,12 @@ package com.ikalagaming.graphics.graph;
 
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 
+import com.ikalagaming.graphics.Buffer;
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.backend.base.State;
-import com.ikalagaming.graphics.backend.opengl.BufferOpenGL;
-import com.ikalagaming.graphics.backend.opengl.BufferUtilOpenGL;
-import com.ikalagaming.graphics.backend.vulkan.SharedBuffer;
-import com.ikalagaming.graphics.backend.vulkan.VulkanState;
-import com.ikalagaming.graphics.frontend.BackendType;
-import com.ikalagaming.graphics.frontend.Buffer;
 import com.ikalagaming.graphics.scene.AnimationState;
 import com.ikalagaming.graphics.scene.Entity;
+import com.ikalagaming.graphics.vulkan.SharedBuffer;
+import com.ikalagaming.graphics.vulkan.VulkanState;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -174,21 +170,12 @@ public class Model {
         this.entityAnimationOffsetsBuffer = null;
         this.maxAnimatedBufferCapacity = 0;
         this.entitiesLastFrame = 0;
-        if (GraphicsManager.getBackendType() == BackendType.OPENGL) {
-            this.modelMatricesBuffer =
-                    BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.SHADER_STORAGE);
-            this.materialOverridesBuffer =
-                    BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.SHADER_STORAGE);
-        } else {
-            // TODO(ches) handle these buffers better
-            State state = GraphicsManager.getRenderInstance().getState();
-            this.modelMatricesBuffer =
-                    SharedBuffer.allocate(
-                            0, (VulkanState) state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-            this.materialOverridesBuffer =
-                    SharedBuffer.allocate(
-                            0, (VulkanState) state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-        }
+        // TODO(ches) handle these buffers better
+        final VulkanState state = GraphicsManager.getRenderInstance().getState();
+        this.modelMatricesBuffer =
+                SharedBuffer.allocate(0, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+        this.materialOverridesBuffer =
+                SharedBuffer.allocate(0, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
         this.materialOverridesDirty = true;
     }
 

@@ -60,7 +60,6 @@ dependencies {
 	implementation "org.joml:joml:${jomlVersion}"
 	implementation "org.lwjgl:lwjgl:${lwjglVersion}"
 	implementation "org.lwjgl:lwjgl-glfw:${lwjglVersion}"
-	implementation "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
 	implementation "org.lwjgl:lwjgl-shaderc:${lwjglVersion}"
 	implementation "org.lwjgl:lwjgl-vma:${lwjglVersion}"
 	implementation "org.lwjgl:lwjgl-vulkan:${lwjglVersion}"
@@ -69,7 +68,6 @@ dependencies {
 
 	runtimeOnly "org.lwjgl:lwjgl:${lwjglVersion}:natives-windows"
 	runtimeOnly "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-windows"
-	runtimeOnly "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-windows"
 	runtimeOnly "org.lwjgl:lwjgl-shaderc:${lwjglVersion}:natives-windows"
 	runtimeOnly "org.lwjgl:lwjgl-vma:${lwjglVersion}:natives-windows"
 	runtimeOnly "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-windows"
@@ -77,7 +75,6 @@ dependencies {
 
 	runtimeOnly "org.lwjgl:lwjgl:${lwjglVersion}:natives-macos-arm64"
 	runtimeOnly "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-macos-arm64"
-	runtimeOnly "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-macos-arm64"
 	runtimeOnly "org.lwjgl:lwjgl-shaderc:${lwjglVersion}:natives-macos-arm64"
 	runtimeOnly "org.lwjgl:lwjgl-vma:${lwjglVersion}:natives-macos-arm64"
 	runtimeOnly "org.lwjgl:lwjgl-vulkan:${lwjglVersion}:natives-macos-arm64"
@@ -87,7 +84,6 @@ dependencies {
 	library "org.joml:joml:${jomlVersion}"
 	library "org.lwjgl:lwjgl:${lwjglVersion}"
 	library "org.lwjgl:lwjgl-glfw:${lwjglVersion}"
-	library "org.lwjgl:lwjgl-opengl:${lwjglVersion}"
 	library "org.lwjgl:lwjgl-shaderc:${lwjglVersion}"
 	library "org.lwjgl:lwjgl-vma:${lwjglVersion}"
 	library "org.lwjgl:lwjgl-vulkan:${lwjglVersion}"
@@ -96,7 +92,6 @@ dependencies {
 
 	library "org.lwjgl:lwjgl:${lwjglVersion}:natives-windows"
 	library "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-windows"
-	library "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-windows"
 	library "org.lwjgl:lwjgl-shaderc:${lwjglVersion}:natives-windows"
 	library "org.lwjgl:lwjgl-vma:${lwjglVersion}:natives-windows"
 	library "org.lwjgl:lwjgl-stb:${lwjglVersion}:natives-windows"
@@ -104,7 +99,6 @@ dependencies {
 
 	library "org.lwjgl:lwjgl:${lwjglVersion}:natives-macos-arm64"
 	library "org.lwjgl:lwjgl-glfw:${lwjglVersion}:natives-macos-arm64"
-	library "org.lwjgl:lwjgl-opengl:${lwjglVersion}:natives-macos-arm64"
 	library "org.lwjgl:lwjgl-shaderc:${lwjglVersion}:natives-macos-arm64"
 	library "org.lwjgl:lwjgl-vma:${lwjglVersion}:natives-macos-arm64"
 	library "org.lwjgl:lwjgl-vulkan:${lwjglVersion}:natives-macos-arm64"

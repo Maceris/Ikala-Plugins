@@ -1,14 +1,14 @@
 package com.ikalagaming.graphics.scene;
 
+import com.ikalagaming.graphics.Buffer;
+import com.ikalagaming.graphics.DeletionQueue;
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.backend.base.State;
-import com.ikalagaming.graphics.frontend.Buffer;
-import com.ikalagaming.graphics.frontend.DeletionQueue;
-import com.ikalagaming.graphics.frontend.Texture;
+import com.ikalagaming.graphics.Texture;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
+import com.ikalagaming.graphics.vulkan.VulkanState;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -76,10 +76,11 @@ public class Scene {
     /**
      * Set up a new scene.
      *
+     * @param state The Vulkan state.
      * @param width The screen width, in pixels.
      * @param height The screen height, in pixels.
      */
-    public Scene(@NonNull State state, int width, int height) {
+    public Scene(@NonNull VulkanState state, int width, int height) {
         modelMap = new ConcurrentHashMap<>();
         projection = new Projection(width, height);
         materialCache = new MaterialCache(state);

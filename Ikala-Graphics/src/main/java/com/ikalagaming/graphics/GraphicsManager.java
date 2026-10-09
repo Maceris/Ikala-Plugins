@@ -4,16 +4,14 @@ import static org.lwjgl.glfw.GLFW.glfwGetTime;
 import static org.lwjgl.glfw.GLFW.glfwSetErrorCallback;
 import static org.lwjgl.glfw.GLFW.glfwTerminate;
 
-import com.ikalagaming.graphics.backend.opengl.OpenGLInstance;
-import com.ikalagaming.graphics.backend.vulkan.VulkanInstance;
 import com.ikalagaming.graphics.events.WindowCreated;
-import com.ikalagaming.graphics.frontend.*;
-import com.ikalagaming.graphics.frontend.gui.IkGui;
-import com.ikalagaming.graphics.frontend.gui.WindowManager;
-import com.ikalagaming.graphics.frontend.gui.data.IkIO;
-import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
+import com.ikalagaming.graphics.gui.IkGui;
+import com.ikalagaming.graphics.gui.WindowManager;
+import com.ikalagaming.graphics.gui.data.IkIO;
+import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.VulkanInstance;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.launcher.events.Shutdown;
 
@@ -45,7 +43,7 @@ public class GraphicsManager {
      *
      * @return The rendering instance.
      */
-    @Getter private static Instance renderInstance;
+    @Getter private static VulkanInstance renderInstance;
 
     /**
      * The camera manager.
@@ -131,8 +129,6 @@ public class GraphicsManager {
     /** A queue used to delete resources. */
     @Getter private static final DeletionQueue deletionQueue = new DeletionQueue();
 
-    @Getter private static final BackendType backendType = BackendType.OPENGL;
-
     /** The settings to use for rendering. Should be set up before creating a window. */
     @Getter private static final GraphicsSettings settings = new GraphicsSettings();
 
@@ -158,15 +154,7 @@ public class GraphicsManager {
         log.debug("Window created");
         new WindowCreated(window.getWindowHandle()).fire();
 
-        /*
-         * TODO(ches) honestly, we will probably just port to Vulkan and throw away OpenGL. Macs are stuck at like
-         *  OpenGL 4.1, which is honestly not even worth using as a fallback.
-         */
-        renderInstance =
-                switch (backendType) {
-                    case OPENGL -> new OpenGLInstance();
-                    case VULKAN -> new VulkanInstance();
-                };
+        renderInstance = new VulkanInstance();
 
         if (!renderInstance.initialize(window)) {
             return false;
@@ -201,7 +189,6 @@ public class GraphicsManager {
     private static void render() {
         renderInstance.render(scene, window);
 
-        window.update();
         ++framesSinceLastCalculation;
 
         final double currentTime = glfwGetTime();

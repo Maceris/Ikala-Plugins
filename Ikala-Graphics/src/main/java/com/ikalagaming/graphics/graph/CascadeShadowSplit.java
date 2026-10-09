@@ -1,7 +1,5 @@
 package com.ikalagaming.graphics.graph;
 
-import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.frontend.BackendType;
 import com.ikalagaming.graphics.scene.Projection;
 import com.ikalagaming.graphics.scene.Scene;
 
@@ -74,9 +72,8 @@ public class CascadeShadowSplit {
         final float farClip = Projection.Z_FAR;
         final float clipRange = farClip - nearClip;
 
-        // Clip space depth is [0, 1] in Vulkan and [-1, 1] in OpenGL
-        final boolean zeroToOneDepth = GraphicsManager.getBackendType() == BackendType.VULKAN;
-        final float nearZ = zeroToOneDepth ? 0.0f : -1.0f;
+        // Vulkan clip space depth is [0, 1]
+        final float nearZ = 0.0f;
 
         // Calculate orthographic projection matrix for each cascade
         float lastSplitDistance = 0.0f;
@@ -135,8 +132,7 @@ public class CascadeShadowSplit {
              */
             Matrix4f lightViewMatrix = new Matrix4f().lookAt(eye, frustumCenter, up);
             Matrix4f lightOrthoMatrix =
-                    new Matrix4f()
-                            .ortho(-radius, radius, -radius, radius, 0, 2 * radius, zeroToOneDepth);
+                    new Matrix4f().ortho(-radius, radius, -radius, radius, 0, 2 * radius, true);
 
             // Store split distance and matrix in cascade
             CascadeShadowSplit cascadeShadowSplit = cascadeShadowSplits[i];

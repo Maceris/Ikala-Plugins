@@ -1,9 +1,9 @@
 package com.ikalagaming.factory.gui.component.menu;
 
-import com.ikalagaming.graphics.frontend.gui.component.Button;
-import com.ikalagaming.graphics.frontend.gui.component.Component;
-import com.ikalagaming.graphics.frontend.gui.component.Text;
-import com.ikalagaming.graphics.frontend.gui.util.Alignment;
+import com.ikalagaming.graphics.gui.component.Button;
+import com.ikalagaming.graphics.gui.component.Component;
+import com.ikalagaming.graphics.gui.component.Text;
+import com.ikalagaming.graphics.gui.util.Alignment;
 
 import lombok.NonNull;
 

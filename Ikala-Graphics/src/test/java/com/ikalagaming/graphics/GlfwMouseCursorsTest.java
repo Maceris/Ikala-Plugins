@@ -5,7 +5,7 @@ import static org.lwjgl.glfw.GLFW.GLFW_CURSOR_DISABLED;
 import static org.lwjgl.glfw.GLFW.GLFW_CURSOR_HIDDEN;
 import static org.lwjgl.glfw.GLFW.GLFW_CURSOR_NORMAL;
 
-import com.ikalagaming.graphics.frontend.gui.enums.MouseCursor;
+import com.ikalagaming.graphics.gui.enums.MouseCursor;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

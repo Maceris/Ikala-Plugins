@@ -1,0 +1,394 @@
+package com.ikalagaming.graphics.gui.util;
+
+import lombok.NonNull;
+import org.joml.Vector4f;
+
+public class Color {
+
+    public static final int BLACK = rgba(0, 0, 0, 255);
+    public static final int CLEAR = rgba(0, 0, 0, 0);
+    public static final int WHITE = rgba(255, 255, 255, 255);
+
+    /**
+     * Add the new alpha channel to the existing alpha in the provided color and return the result.
+     *
+     * @param color The color we want to modify, in RGBA format.
+     * @param alpha The alpha to add to the existing alpha.
+     * @return The new color in RGBA format.
+     */
+    public static int addAlpha(int color, int alpha) {
+        final int originalAlpha = color & 0xFF;
+        final int newAlpha = MathUtil.clamp((long) originalAlpha + alpha, 0, 255);
+        return (color & 0xFFFFFF00) | newAlpha;
+    }
+
+    /**
+     * Multiply the alpha component of a color by a float value.
+     *
+     * @param color The color we want to modify, in RGBA format.
+     * @param alpha The alpha to multiply with the existing alpha.
+     * @return The new color value in RGBA format.
+     */
+    public static int multiplyAlpha(int color, float alpha) {
+        final float originalAlpha = (color & 0xFF) / 255.0f;
+        final float newAlpha = MathUtil.clamp(originalAlpha * alpha, 0.0f, 1.0f);
+        final int newAlphaInt = (int) (newAlpha * 255);
+
+        return (color & 0xFFFFFF00) | newAlphaInt;
+    }
+
+    /**
+     * Convert components to our color representation.
+     *
+     * @param r The red component, in the range 0-255 inclusive.
+     * @param g The green component, in the range 0-255 inclusive.
+     * @param b The blue component, in the range 0-255 inclusive.
+     * @param a The alpha component, in the range 0-255 inclusive.
+     * @return The color in RGBA format.
+     */
+    public static int rgba(int r, int g, int b, int a) {
+        return intToColor(r, g, b, a);
+    }
+
+    /**
+     * Convert components to our color representation, with an alpha of 255.
+     *
+     * @param r The red component, in the range 0-255 inclusive.
+     * @param g The green component, in the range 0-255 inclusive.
+     * @param b The blue component, in the range 0-255 inclusive.
+     * @return The color in RGBA format.
+     */
+    public static int rgb(int r, int g, int b) {
+        return intToColor(r, g, b, 255);
+    }
+
+    /**
+     * Convert components to our color representation.
+     *
+     * @param r The red component, in the range 0-1 inclusive.
+     * @param g The green component, in the range 0-1 inclusive.
+     * @param b The blue component, in the range 0-1 inclusive.
+     * @param a The alpha component, in the range 0-1 inclusive.
+     * @return The color in RGBA format.
+     */
+    public static int rgba(float r, float g, float b, float a) {
+        return intToColor(
+                (int) (r * 255.0f), (int) (g * 255.0f), (int) (b * 255.0f), (int) (a * 255.0f));
+    }
+
+    /**
+     * Convert components to our color representation, with an alpha of 1.
+     *
+     * @param r The red component, in the range 0-1 inclusive.
+     * @param g The green component, in the range 0-1 inclusive.
+     * @param b The blue component, in the range 0-1 inclusive.
+     * @return The color in RGBA format.
+     */
+    public static int rgb(float r, float g, float b) {
+        return intToColor((int) (r * 255.0f), (int) (g * 255.0f), (int) (b * 255.0f), 255);
+    }
+
+    public static int rgba(@NonNull String hex) {
+        return rgbaToColor(hex);
+    }
+
+    public static int rgb(@NonNull String hex) {
+        return rgbToColor(hex);
+    }
+
+    public static int rgba(@NonNull Vector4f color) {
+        return rgba(color.x, color.y, color.z, color.w);
+    }
+
+    public static int rgb(@NonNull Vector4f color) {
+        return rgb(color.x, color.y, color.z);
+    }
+
+    public static int hsla(float h, float s, float l, float a) {
+        return hslToColor(h, s, l, a);
+    }
+
+    public static int hsl(float h, float s, float l) {
+        return hslToColor(h, s, l, 1.0f);
+    }
+
+    public static int hsla(int h, int s, int l, int a) {
+        return hslToColor(h / 360.0f, s / 100.0f, l / 100.0f, a);
+    }
+
+    public static int hsl(int h, int s, int l) {
+        return hslToColor(h / 360.0f, s / 100.0f, l / 100.0f, 1.0f);
+    }
+
+    public static int hsva(float h, float s, float l, float a) {
+        return hsvToColor(h, s, l, a);
+    }
+
+    public static int hsv(float h, float s, float l) {
+        return hsvToColor(h, s, l, 1.0f);
+    }
+
+    public static int hsva(int h, int s, int l, int a) {
+        return hsvToColor(h / 360.0f, s / 100.0f, l / 100.0f, a);
+    }
+
+    public static int hsv(int h, int s, int l) {
+        return hsvToColor(h / 360.0f, s / 100.0f, l / 100.0f, 1.0f);
+    }
+
+    private static int intToColor(int r, int g, int b, int a) {
+        return MathUtil.clamp(r, 0, 255) << 24
+                | MathUtil.clamp(g, 0, 255) << 16
+                | MathUtil.clamp(b, 0, 255) << 8
+                | MathUtil.clamp(a, 0, 255);
+    }
+
+    private static int floatToColor(float r, float g, float b, float a) {
+        return intToColor(
+                Math.round(r * 255.0f),
+                Math.round(g * 255.0f),
+                Math.round(b * 255.0f),
+                Math.round(a * 255.0f));
+    }
+
+    private static int rgbToColor(@NonNull String hex) {
+        int r = Integer.parseInt(hex.substring(1, 3), 16);
+        int g = Integer.parseInt(hex.substring(3, 5), 16);
+        int b = Integer.parseInt(hex.substring(5, 7), 16);
+        int a = 255;
+        return intToColor(r, g, b, a);
+    }
+
+    private static int rgbaToColor(@NonNull String hex) {
+        int r = Integer.parseInt(hex.substring(1, 3), 16);
+        int g = Integer.parseInt(hex.substring(3, 5), 16);
+        int b = Integer.parseInt(hex.substring(5, 7), 16);
+        int a = Integer.parseInt(hex.substring(7, 9), 16);
+        return intToColor(r, g, b, a);
+    }
+
+    private static int hslToColor(float h, float s, float l, float a) {
+        float r;
+        float g;
+        float b;
+        if (s == 0.0f) {
+            r = l;
+            g = l;
+            b = l;
+        } else {
+            float q = l < 0.5f ? l * (1 + s) : l + s - l * s;
+            float p = 2 * l - q;
+            r = hue2rgb(p, q, h + (1f / 3));
+            g = hue2rgb(p, q, h);
+            b = hue2rgb(p, q, h - (1f / 3));
+        }
+        return floatToColor(r, g, b, a);
+    }
+
+    /**
+     * Convert hsv floats ([0-1],[0-1],[0-1]) to rgb floats ([0-1],[0-1],[0-1]), from Foley and van
+     * Dam p593. Also, <a
+     * href="http://en.wikipedia.org/wiki/HSL_and_HSV">http://en.wikipedia.org/wiki/HSL_and_HSV</a>
+     * and ImGui source.
+     *
+     * @param in The HSV values.
+     * @param out The RGB values.
+     * @return Whether we were successful. False if in/out aren't non-null arrays of size >= 3.
+     */
+    public static boolean hsvToColor(float[] in, float[] out) {
+        final int H = 0;
+        final int S = 1;
+        final int V = 2;
+
+        final int R = 0;
+        final int G = 1;
+        final int B = 2;
+        if (in == null || out == null || in.length < 3 || out.length < 3) {
+            return false;
+        }
+
+        if (in[S] == 0.0f) {
+            out[R] = in[V];
+            out[G] = in[V];
+            out[B] = in[V];
+        } else {
+            final float h = (in[H] % 1.0f) / (60.0f / 360.0f);
+            final int i = (int) h;
+            final float f = h - i;
+            final float p = in[V] * (1.0f - in[S]);
+            final float q = in[V] * (1.0f - in[S] * f);
+            final float t = in[V] * (1.0f - in[S] * (1.0f - f));
+
+            switch (i) {
+                case 0:
+                    out[R] = in[V];
+                    out[G] = t;
+                    out[B] = p;
+                    break;
+                case 1:
+                    out[R] = q;
+                    out[G] = in[V];
+                    out[B] = p;
+                    break;
+                case 2:
+                    out[R] = p;
+                    out[G] = in[V];
+                    out[B] = t;
+                    break;
+                case 3:
+                    out[R] = p;
+                    out[G] = q;
+                    out[B] = in[V];
+                    break;
+                case 4:
+                    out[R] = t;
+                    out[G] = p;
+                    out[B] = in[V];
+                    break;
+                case 5:
+                default:
+                    out[R] = in[V];
+                    out[G] = p;
+                    out[B] = q;
+                    break;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Convert hsv floats ([0-1],[0-1],[0-1]) to rgb floats ([0-1],[0-1],[0-1]), from Foley and van
+     * Dam p593. Also, <a
+     * href="http://en.wikipedia.org/wiki/HSL_and_HSV">http://en.wikipedia.org/wiki/HSL_and_HSV</a>
+     * and ImGui source.
+     *
+     * @param h Hue.
+     * @param s Saturation.
+     * @param v Value.
+     * @param a Alpha.
+     * @return The color in RGBA format.
+     */
+    private static int hsvToColor(float h, float s, float v, float a) {
+        float r;
+        float g;
+        float b;
+        if (s == 0.0f) {
+            r = v;
+            g = v;
+            b = v;
+        } else {
+            h = (h % 1.0f) / (60.0f / 360.0f);
+            final int i = (int) h;
+            final float f = h - i;
+            final float p = v * (1.0f - s);
+            final float q = v * (1.0f - s * f);
+            final float t = v * (1.0f - s * (1.0f - f));
+
+            switch (i) {
+                case 0:
+                    r = v;
+                    g = t;
+                    b = p;
+                    break;
+                case 1:
+                    r = q;
+                    g = v;
+                    b = p;
+                    break;
+                case 2:
+                    r = p;
+                    g = v;
+                    b = t;
+                    break;
+                case 3:
+                    r = p;
+                    g = q;
+                    b = v;
+                    break;
+                case 4:
+                    r = t;
+                    g = p;
+                    b = v;
+                    break;
+                case 5:
+                default:
+                    r = v;
+                    g = p;
+                    b = q;
+                    break;
+            }
+        }
+        return floatToColor(r, g, b, a);
+    }
+
+    private static float hue2rgb(float p, float q, float t) {
+        if (t < 0.0f) {
+            t += 1;
+        }
+        if (t > 1.0f) {
+            t -= 1;
+        }
+        if (t < (1f / 6)) {
+            return p + (q - p) * 6 * t;
+        }
+        if (t < (1f / 2)) {
+            return q;
+        }
+        if (t < (2f / 3)) {
+            return p + (q - p) * ((2f / 3) - t) * 6;
+        }
+        return p;
+    }
+
+    /**
+     * Convert rgb floats ([0-1],[0-1],[0-1]) to hsv floats ([0-1],[0-1],[0-1]), from Foley and van
+     * Dam p592 Optimized <a
+     * href="http://lolengine.net/blog/2013/01/13/fast-rgb-to-hsv">http://lolengine.net/blog/2013/01/13/fast-rgb-to-hsv</a>,
+     * based on ImGui source.
+     *
+     * @param in The RGB values.
+     * @param out The HSV values.
+     * @return If we modified the out values, i.e. if we were successful.
+     */
+    public static boolean rgbTohsv(float[] in, float[] out) {
+        final int H = 0;
+        final int S = 1;
+        final int V = 2;
+
+        final int R = 0;
+        final int G = 1;
+        final int B = 2;
+        if (in == null || out == null || in.length < 3 || out.length < 3) {
+            return false;
+        }
+
+        float r = in[R];
+        float g = in[G];
+        float b = in[B];
+
+        float k = 0.0f;
+        if (g < b) {
+            float temp = b;
+            b = g;
+            g = temp;
+            k = -1.0f;
+        }
+        if (r < g) {
+            float temp = g;
+            g = r;
+            r = temp;
+            k = -2.0f / 6.0f - k;
+        }
+
+        final float chroma = r - Math.min(g, b);
+        out[H] = Math.abs(k + (g - b) / (6.0f * chroma + 1e-20f));
+        out[S] = chroma / (r + 1e-20f);
+        out[V] = r;
+        return true;
+    }
+
+    /** Private constructor so this is not instantiated. */
+    private Color() {
+        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    }
+}

@@ -8,9 +8,9 @@ import com.ikalagaming.converter.gui.window.Debug;
 import com.ikalagaming.converter.gui.window.MainMenu;
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.frontend.gui.WindowManager;
-import com.ikalagaming.graphics.frontend.gui.windows.GraphicsDebug;
-import com.ikalagaming.graphics.frontend.gui.windows.IkGuiDemo;
+import com.ikalagaming.graphics.gui.WindowManager;
+import com.ikalagaming.graphics.gui.windows.GraphicsDebug;
+import com.ikalagaming.graphics.gui.windows.IkGuiDemo;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 

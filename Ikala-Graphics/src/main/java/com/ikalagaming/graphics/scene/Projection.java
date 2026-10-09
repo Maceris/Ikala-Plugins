@@ -1,14 +1,11 @@
 package com.ikalagaming.graphics.scene;
 
-import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.frontend.BackendType;
-
 import lombok.Getter;
 import org.joml.Matrix4f;
 
 /**
  * A projection matrix. More specifically a symmetric perspective projection frustum transformation
- * for a right-handed coordinate system using OpenGL's NDC z range of [-1..+1], and its inverse.
+ * for a right-handed coordinate system using Vulkan's NDC z range of [0..+1], and its inverse.
  */
 @Getter
 public class Projection {
@@ -54,13 +51,9 @@ public class Projection {
      * @param height The new height of the screen in pixels.
      */
     public void updateProjMatrix(int width, int height) {
-        // OpenGL clip space depth is [-1, 1], Vulkan is [0, 1]
+        // Vulkan clip space depth is [0, 1]
         projectionMatrix.setPerspective(
-                Projection.FOV,
-                (float) width / height,
-                Projection.Z_NEAR,
-                Projection.Z_FAR,
-                GraphicsManager.getBackendType() == BackendType.VULKAN);
+                Projection.FOV, (float) width / height, Projection.Z_NEAR, Projection.Z_FAR, true);
         inverseProjectionMatrix.set(projectionMatrix).invert();
     }
 }

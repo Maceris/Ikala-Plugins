@@ -1,6 +1,6 @@
 package com.ikalagaming.graphics.scene;
 
-import com.ikalagaming.graphics.frontend.Material;
+import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.Model;
 
 import lombok.Getter;

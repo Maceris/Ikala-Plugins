@@ -1,7 +1,6 @@
 package com.ikalagaming.graphics;
 
 import com.ikalagaming.event.Listener;
-import com.ikalagaming.graphics.frontend.GraphicsSettings;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;

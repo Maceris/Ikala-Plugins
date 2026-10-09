@@ -5,15 +5,13 @@ import static org.lwjgl.system.MemoryUtil.NULL;
 
 import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.graphics.exceptions.WindowCreationException;
-import com.ikalagaming.graphics.frontend.BackendType;
-import com.ikalagaming.graphics.frontend.GraphicsSettings;
-import com.ikalagaming.graphics.frontend.gui.IkGui;
-import com.ikalagaming.graphics.frontend.gui.data.IkIO;
-import com.ikalagaming.graphics.frontend.gui.data.PlatformIO;
-import com.ikalagaming.graphics.frontend.gui.enums.Key;
-import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
-import com.ikalagaming.graphics.frontend.gui.flags.BackendFlags;
-import com.ikalagaming.graphics.frontend.gui.flags.ConfigFlags;
+import com.ikalagaming.graphics.gui.IkGui;
+import com.ikalagaming.graphics.gui.data.IkIO;
+import com.ikalagaming.graphics.gui.data.PlatformIO;
+import com.ikalagaming.graphics.gui.enums.Key;
+import com.ikalagaming.graphics.gui.enums.MouseButton;
+import com.ikalagaming.graphics.gui.flags.BackendFlags;
+import com.ikalagaming.graphics.gui.flags.ConfigFlags;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.plugins.config.ConfigManager;
@@ -36,7 +34,7 @@ import java.nio.IntBuffer;
 import java.util.Map;
 import java.util.function.Consumer;
 
-/** Provides convenience methods for an OpenGL window. */
+/** Provides convenience methods for a GLFW window. */
 @Slf4j
 @Getter
 public class Window {
@@ -57,19 +55,7 @@ public class Window {
             glfwWindowHint(GLFW_SAMPLES, 4);
         }
 
-        if (BackendType.OPENGL == GraphicsManager.getBackendType()) {
-            glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
-            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-            if (settings.compatibleProfile) {
-                glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
-            } else {
-                glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-                glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
-            }
-        } else if (BackendType.VULKAN == GraphicsManager.getBackendType()) {
-            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        }
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     }
 
     /** The width of the largest monitor we could find, in pixels. */
@@ -155,8 +141,7 @@ public class Window {
             log.debug("We are replacing a GLFWErrorCallback, hope that's fine");
         }
 
-        if (BackendType.VULKAN == GraphicsManager.getBackendType()
-                && !GLFWVulkan.glfwVulkanSupported()) {
+        if (!GLFWVulkan.glfwVulkanSupported()) {
             final String error = "GLFW cannot find the Vulkan loader";
             log.warn(error);
             throw new WindowCreationException(error);
@@ -219,16 +204,6 @@ public class Window {
         }
 
         setCallbacks();
-
-        if (BackendType.OPENGL == GraphicsManager.getBackendType()) {
-            glfwMakeContextCurrent(windowHandle);
-
-            if (settings.targetFPS > 0) {
-                glfwSwapInterval(0);
-            } else {
-                glfwSwapInterval(1);
-            }
-        }
 
         if (glfwGetPlatform() != GLFW_PLATFORM_COCOA) {
             setWindowIcon();
@@ -550,13 +525,6 @@ public class Window {
             glfwSetWindowIcon(windowHandle, iconBuffer);
 
             STBImage.stbi_image_free(buffer);
-        }
-    }
-
-    /** Render the window. */
-    public void update() {
-        if (GraphicsManager.getBackendType() == BackendType.OPENGL) {
-            glfwSwapBuffers(windowHandle);
         }
     }
 

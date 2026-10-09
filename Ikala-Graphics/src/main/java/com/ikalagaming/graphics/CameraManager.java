@@ -7,9 +7,9 @@ import static org.lwjgl.glfw.GLFW.GLFW_KEY_S;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_SPACE;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_W;
 
-import com.ikalagaming.graphics.frontend.gui.IkGui;
-import com.ikalagaming.graphics.frontend.gui.data.IkIO;
-import com.ikalagaming.graphics.frontend.gui.enums.MouseButton;
+import com.ikalagaming.graphics.gui.IkGui;
+import com.ikalagaming.graphics.gui.data.IkIO;
+import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.scene.Camera;
 
 import lombok.Getter;

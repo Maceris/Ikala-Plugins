@@ -2,15 +2,10 @@ package com.ikalagaming.graphics.graph;
 
 import static org.lwjgl.vulkan.VK10.*;
 
+import com.ikalagaming.graphics.Buffer;
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.backend.base.State;
-import com.ikalagaming.graphics.backend.opengl.BufferOpenGL;
-import com.ikalagaming.graphics.backend.opengl.BufferUtilOpenGL;
-import com.ikalagaming.graphics.backend.vulkan.SharedBuffer;
-import com.ikalagaming.graphics.backend.vulkan.VulkanState;
-import com.ikalagaming.graphics.frontend.BackendType;
-import com.ikalagaming.graphics.frontend.Buffer;
-import com.ikalagaming.graphics.frontend.Material;
+import com.ikalagaming.graphics.vulkan.SharedBuffer;
+import com.ikalagaming.graphics.vulkan.VulkanState;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -138,28 +133,20 @@ public class MeshData {
         this.animationTargetBuffer = null;
 
         // TODO(ches) handle these buffers better
-        if (GraphicsManager.getBackendType() == BackendType.OPENGL) {
-            this.vertexBuffer = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.UNIFORM);
-            this.indexBuffer = BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.INDEXES);
-            this.drawIndirectBuffer =
-                    BufferUtilOpenGL.createBuffer(BufferOpenGL.Type.DRAW_INDIRECT);
-        } else {
-            State state = GraphicsManager.getRenderInstance().getState();
+        final VulkanState state = GraphicsManager.getRenderInstance().getState();
 
-            // Vertices are also read as storage by the animation compute shader
-            this.vertexBuffer =
-                    SharedBuffer.allocate(
-                            (long) vertexData.length * Float.BYTES,
-                            (VulkanState) state,
-                            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-            this.indexBuffer =
-                    SharedBuffer.allocate(
-                            (long) indices.length * Integer.BYTES,
-                            (VulkanState) state,
-                            VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
-            this.drawIndirectBuffer =
-                    SharedBuffer.allocate(
-                            0, (VulkanState) state, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
-        }
+        // Vertices are also read as storage by the animation compute shader
+        this.vertexBuffer =
+                SharedBuffer.allocate(
+                        (long) vertexData.length * Float.BYTES,
+                        state,
+                        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+        this.indexBuffer =
+                SharedBuffer.allocate(
+                        (long) indices.length * Integer.BYTES,
+                        state,
+                        VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+        this.drawIndirectBuffer =
+                SharedBuffer.allocate(0, state, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
     }
 }

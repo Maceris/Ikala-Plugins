@@ -1,0 +1,54 @@
+package com.ikalagaming.graphics;
+
+import lombok.NonNull;
+
+import java.nio.ByteBuffer;
+
+/** Defines the methods that are required for dealing with textures in each backend. */
+public interface TextureLoader {
+    /**
+     * Load a texture to the GPU from a byte buffer. This will be a bindless texture.
+     *
+     * @param buffer The data to load. If null, we allocate texture memory but don't fill it with
+     *     anything meaningful.
+     * @param format The format of the image data.
+     * @param width The width of the texture, in pixels.
+     * @param height The height of the texture, in pixels.
+     * @return The corresponding texture handle.
+     * @see #load(ByteBuffer, Format, int, int)
+     */
+    Texture loadBindless(
+            ByteBuffer buffer, @NonNull Format format, final int width, final int height);
+
+    /**
+     * Load a texture to the GPU from a byte buffer.
+     *
+     * @param buffer The data to load. If null, we allocate texture memory but don't fill it with
+     *     anything meaningful.
+     * @param format The format of the image data.
+     * @param width The width of the texture, in pixels.
+     * @param height The height of the texture, in pixels.
+     * @return The corresponding texture handle.
+     * @see #loadBindless(ByteBuffer, Format, int, int)
+     */
+    Texture load(ByteBuffer buffer, @NonNull Format format, final int width, final int height);
+
+    /**
+     * Load a texture to the GPU from a file.
+     *
+     * @param texturePath The full path to the texture.
+     * @return The corresponding texture handle.
+     * @see #load(String)
+     */
+    Texture loadBindless(@NonNull String texturePath);
+
+    // TODO(ches) swap to only bindless
+    /**
+     * Load a texture to the GPU from a file.
+     *
+     * @param texturePath The full path to the texture.
+     * @return The corresponding texture handle.
+     * @see #loadBindless(String)
+     */
+    Texture load(@NonNull String texturePath);
+}

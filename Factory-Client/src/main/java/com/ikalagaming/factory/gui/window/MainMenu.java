@@ -5,11 +5,11 @@ import static com.ikalagaming.factory.gui.DefaultWindows.SINGLE_PLAYER;
 
 import com.ikalagaming.factory.FactoryClientPlugin;
 import com.ikalagaming.graphics.Window;
-import com.ikalagaming.graphics.frontend.gui.WindowManager;
-import com.ikalagaming.graphics.frontend.gui.component.Button;
-import com.ikalagaming.graphics.frontend.gui.component.GuiWindow;
-import com.ikalagaming.graphics.frontend.gui.flags.WindowFlags;
-import com.ikalagaming.graphics.frontend.gui.util.Alignment;
+import com.ikalagaming.graphics.gui.WindowManager;
+import com.ikalagaming.graphics.gui.component.Button;
+import com.ikalagaming.graphics.gui.component.GuiWindow;
+import com.ikalagaming.graphics.gui.flags.WindowFlags;
+import com.ikalagaming.graphics.gui.util.Alignment;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.SafeResourceLoader;
 

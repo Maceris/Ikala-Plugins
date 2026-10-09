@@ -2,7 +2,7 @@ package com.ikalagaming.converter;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.exceptions.ModelException;
-import com.ikalagaming.graphics.frontend.Material;
+import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
