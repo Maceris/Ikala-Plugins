@@ -52,8 +52,47 @@ class TextureRegistryTest {
         assertEquals(new TextureHandle(3, 0, 4, 2, Format.R8G8B8A8_UNORM), handle);
         assertTrue(registry.isValid(handle));
         assertSame(info, registry.resolve(handle));
-        assertEquals(3, registry.slotOrDefault(handle));
         assertEquals(OWNER_A, registry.ownerOf(handle));
+    }
+
+    @Test
+    void pendingUntilMarkedResident() {
+        TextureHandle handle = add(OWNER_A, inSlot(3));
+
+        assertFalse(registry.isResident(handle));
+        assertEquals(
+                ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX,
+                registry.slotOrDefault(handle),
+                "Shaders must not sample a slot whose upload hasn't been recorded");
+
+        assertTrue(registry.markResident(handle));
+
+        assertTrue(registry.isResident(handle));
+        assertEquals(3, registry.slotOrDefault(handle));
+    }
+
+    @Test
+    void pendingTextureCanBeReleased() {
+        TextureInfoVulkan info = inSlot(3);
+        TextureHandle handle = add(OWNER_A, info);
+
+        assertSame(info, registry.remove(handle));
+
+        assertFalse(registry.markResident(handle), "A late upload can't revive a released texture");
+        assertFalse(registry.isResident(handle));
+    }
+
+    @Test
+    void reusedSlotStartsPending() {
+        TextureHandle oldHandle = add(OWNER_A, inSlot(3));
+        registry.markResident(oldHandle);
+        registry.remove(oldHandle);
+
+        TextureHandle newHandle = add(OWNER_B, inSlot(3));
+
+        assertFalse(registry.isResident(newHandle));
+        assertFalse(registry.markResident(oldHandle), "A stale handle can't mark the new texture");
+        assertFalse(registry.isResident(newHandle));
     }
 
     @Test

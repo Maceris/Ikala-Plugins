@@ -12,6 +12,7 @@ import org.lwjgl.vulkan.*;
 import java.nio.LongBuffer;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * The global array of bindless textures. Every stage that samples textures binds the same
@@ -36,6 +37,12 @@ public class BindlessTextures {
 
     /** The number of slots in the array. */
     @Getter private final int capacity;
+
+    /**
+     * Guards {@link #freeSlots} and {@link #nextUnusedSlot}, since slots are reserved from any
+     * thread that loads a texture.
+     */
+    private final ReentrantLock slotLock = new ReentrantLock();
 
     /** Slots that were released and can be handed out again. */
     private final Deque<Integer> freeSlots = new ArrayDeque<>();
@@ -146,8 +153,8 @@ public class BindlessTextures {
     }
 
     /**
-     * Give a texture a slot in the array and write its descriptor. The slot is stored in {@link
-     * TextureInfoVulkan#bindlessIndex}.
+     * Give a texture a slot in the array and write its descriptor, on the render thread. The slot
+     * is stored in {@link TextureInfoVulkan#bindlessIndex}.
      *
      * @param state The Vulkan state.
      * @param texture The texture, which must have a view and sampler.
@@ -155,20 +162,57 @@ public class BindlessTextures {
      *     out of slots.
      */
     public int register(@NonNull VulkanState state, @NonNull TextureInfoVulkan texture) {
-        final int slot;
-        if (!freeSlots.isEmpty()) {
-            slot = freeSlots.pop();
-        } else if (nextUnusedSlot < capacity) {
-            slot = nextUnusedSlot;
-            nextUnusedSlot += 1;
-        } else {
-            log.error("Ran out of bindless texture slots, the limit is {}", capacity);
-            texture.bindlessIndex = ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX;
+        if (!takeSlot(texture)) {
             return texture.bindlessIndex;
         }
-        texture.bindlessIndex = slot;
         update(state, texture);
-        return slot;
+        return texture.bindlessIndex;
+    }
+
+    /**
+     * Give a texture a slot in the array without writing its descriptor yet. Safe from any thread.
+     * The descriptor must be written with {@link #update(VulkanState, TextureInfoVulkan)} on the
+     * render thread before any shader samples the slot. The slot is stored in {@link
+     * TextureInfoVulkan#bindlessIndex}.
+     *
+     * @param texture The texture.
+     * @return The slot, or {@link ShaderBindings.BindlessTextures#DEFAULT_TEXTURE_INDEX} if we ran
+     *     out of slots.
+     */
+    public int reserve(@NonNull TextureInfoVulkan texture) {
+        takeSlot(texture);
+        return texture.bindlessIndex;
+    }
+
+    /**
+     * Take a free slot and store it in the texture. The default texture is the first thing
+     * registered, so it gets {@link ShaderBindings.BindlessTextures#DEFAULT_TEXTURE_INDEX} as a
+     * real slot. Once that is taken, the same index means we ran out.
+     *
+     * @param texture The texture.
+     * @return True if a slot was taken, false if there were none left, in which case the texture
+     *     gets the default texture's index.
+     */
+    private boolean takeSlot(@NonNull TextureInfoVulkan texture) {
+        int slot = -1;
+        slotLock.lock();
+        try {
+            if (!freeSlots.isEmpty()) {
+                slot = freeSlots.pop();
+            } else if (nextUnusedSlot < capacity) {
+                slot = nextUnusedSlot;
+                nextUnusedSlot += 1;
+            }
+        } finally {
+            slotLock.unlock();
+        }
+        if (slot < 0) {
+            log.error("Ran out of bindless texture slots, the limit is {}", capacity);
+            texture.bindlessIndex = ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX;
+            return false;
+        }
+        texture.bindlessIndex = slot;
+        return true;
     }
 
     /**
@@ -185,12 +229,21 @@ public class BindlessTextures {
                 || slot == ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX) {
             return;
         }
-        state.deferFree(() -> freeSlots.push(slot));
+        state.deferFree(
+                () -> {
+                    slotLock.lock();
+                    try {
+                        freeSlots.push(slot);
+                    } finally {
+                        slotLock.unlock();
+                    }
+                });
     }
 
     /**
-     * Rewrite the descriptor for a texture that already has a slot, such as after its view was
-     * recreated.
+     * Write the descriptor for a texture that already has a slot, such as one from {@link
+     * #reserve(TextureInfoVulkan)} or after its view was recreated. Render thread only, since the
+     * descriptor set must be externally synchronized.
      *
      * @param state The Vulkan state.
      * @param texture The texture, which must have a view, sampler, and slot.

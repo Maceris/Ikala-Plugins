@@ -426,7 +426,7 @@ public class GuiRender implements RenderStage {
         textureIndices.putInt(0, fallback);
         for (int i = 0; i < drawData.textures.size(); ++i) {
             textureIndices.putInt(
-                    i * Integer.BYTES, getBindlessIndex(state, drawData.textures.get(i), fallback));
+                    i * Integer.BYTES, getBindlessIndex(state, drawData.textures.get(i)));
         }
 
         return offsets;
@@ -466,16 +466,15 @@ public class GuiRender implements RenderStage {
      *
      * @param state The Vulkan state.
      * @param texture The texture.
-     * @param fallback The slot to use if the texture was released.
-     * @return The bindless slot.
+     * @return The bindless slot, or the default white texture while the texture is still loading or
+     *     after it was released.
      */
     private static int getBindlessIndex(
-            @NonNull VulkanState state, @NonNull TextureHandle texture, int fallback) {
+            @NonNull VulkanState state, @NonNull TextureHandle texture) {
         if (!state.textureRegistry.isValid(texture)) {
             log.warn("Can't render texture {} in the GUI, it was released", texture);
-            return fallback;
         }
-        return texture.slot();
+        return state.textureRegistry.slotOrDefault(texture);
     }
 
     /**

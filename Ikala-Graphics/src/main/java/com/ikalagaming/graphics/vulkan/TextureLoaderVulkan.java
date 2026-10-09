@@ -5,6 +5,7 @@ import static org.lwjgl.util.vma.Vma.*;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.Format;
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -27,8 +28,9 @@ import java.nio.LongBuffer;
  * the {@link TextureRegistry} under the plugin that owns it.
  *
  * <p>Textures end up in {@link VK13#VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL}, ready to be sampled. When
- * data is provided, mipmaps are generated if the format supports it. Must be used from the render
- * thread.
+ * data is provided, mipmaps are generated if the format supports it. {@link #load(String,
+ * ByteBuffer, Format, int, int)} queues the upload and works from any thread; everything else is
+ * for the render thread.
  */
 @Slf4j
 public class TextureLoaderVulkan {
@@ -206,15 +208,18 @@ public class TextureLoaderVulkan {
     }
 
     /**
-     * Load a texture to the GPU from a byte buffer.
+     * Start loading a texture from a byte buffer. Safe from any thread: the image is created and
+     * the data staged right away, and the render thread records the upload at the start of a later
+     * frame. Until then the handle is {@link TextureRegistry.State#PENDING}, and shaders see the
+     * default texture.
      *
-     * @param owner The name of the plugin that owns the texture.
-     * @param buffer The data to load. If null, we allocate texture memory but don't fill it with
-     *     anything meaningful.
+     * @param owner The owner key the texture is tracked under.
+     * @param buffer The data to load, from its position to its limit. If null, the texture is
+     *     cleared to transparent black where the format allows, or left undefined otherwise.
      * @param format The format of the image data.
      * @param width The width of the texture, in pixels.
      * @param height The height of the texture, in pixels.
-     * @return The handle for the texture.
+     * @return The handle for the texture, pending until uploaded.
      * @throws TextureException If the format is not supported, or there are no bindless slots left.
      */
     public TextureHandle load(
@@ -223,10 +228,14 @@ public class TextureLoaderVulkan {
             @NonNull Format format,
             int width,
             int height) {
-        TextureInfoVulkan info = createTexture(buffer, format, width, height);
-        if (info.bindlessIndex == ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX) {
-            // Out of slots, since the default texture already has that slot. Never handed out, so
-            // the GPU isn't using it yet.
+        final int mipLevels = mipLevels(buffer != null, format, width, height);
+        TextureInfoVulkan info =
+                createImage(format.getVkFormat(), width, height, mipLevels, mipLevels > 1);
+
+        if (state.bindlessTextures.reserve(info)
+                == ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX) {
+            // Out of slots, since the default texture already has that slot. Never used by the
+            // GPU, so it can go right away.
             info.destroy(state);
             final String error =
                     SafeResourceLoader.format(
@@ -234,29 +243,96 @@ public class TextureLoaderVulkan {
                             state.bindlessTextures.getCapacity());
             throw new TextureException(error);
         }
-        return state.textureRegistry.add(owner, info, width, height, format);
+        TextureHandle handle = state.textureRegistry.add(owner, info, width, height, format);
+
+        final StagingRing.Staging staging;
+        try {
+            staging = buffer == null ? null : state.stagingRing.stage(state, buffer);
+        } catch (RuntimeException e) {
+            // Nothing was queued, so go through the normal deletion path
+            TextureInfoVulkan removed = state.textureRegistry.remove(handle);
+            if (removed != null) {
+                GraphicsManager.getDeletionQueue().add(removed);
+            }
+            throw e;
+        }
+        state.textureUploads.add(
+                new TextureUploads.Request(
+                        handle, info, staging, width, height, mipLevels, canClearColor(format)));
+        return handle;
     }
 
     /**
-     * Create a texture, fill it, and register it in the bindless array, without giving out a
-     * handle.
+     * Create a texture and upload it before returning, waiting on the GPU. For textures the
+     * renderer needs immediately, like the GUI font atlas. Render thread only.
      *
-     * @param buffer The data to load, or null to leave the contents undefined.
+     * @param owner The owner key the texture is tracked under.
+     * @param buffer The data to load, or null to clear the texture instead.
      * @param format The format of the image data.
      * @param width The width of the texture, in pixels.
      * @param height The height of the texture, in pixels.
-     * @return The texture. Its slot is the default texture's slot if the array was full.
+     * @return The handle for the texture, already resident.
+     * @throws TextureException If the format is not supported, or there are no bindless slots left.
+     */
+    public TextureHandle loadNow(
+            @NonNull String owner,
+            ByteBuffer buffer,
+            @NonNull Format format,
+            int width,
+            int height) {
+        TextureInfoVulkan info = createTexture(buffer, format, width, height);
+        if (info.bindlessIndex == ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX) {
+            info.destroy(state);
+            final String error =
+                    SafeResourceLoader.format(
+                            "Out of bindless texture slots, the limit is {}",
+                            state.bindlessTextures.getCapacity());
+            throw new TextureException(error);
+        }
+        TextureHandle handle = state.textureRegistry.add(owner, info, width, height, format);
+        state.textureRegistry.markResident(handle);
+        return handle;
+    }
+
+    /**
+     * Record the commands for a queued upload: copy or clear level 0, generate the other mip
+     * levels, and move the image to the read only layout. Render thread only.
+     *
+     * @param commandBuffer The command buffer to record into.
+     * @param request The upload.
+     */
+    void recordUpload(
+            @NonNull VkCommandBuffer commandBuffer, @NonNull TextureUploads.Request request) {
+        if (request.staging() == null) {
+            recordInitializeEmpty(commandBuffer, request.info(), request.clear());
+            return;
+        }
+        recordCopy(
+                commandBuffer,
+                request.info(),
+                request.staging().buffer(),
+                request.staging().offset(),
+                request.width(),
+                request.height(),
+                request.mipLevels());
+    }
+
+    /**
+     * Check that a format can be used for textures, and work out how many mip levels to generate.
+     *
+     * @param hasData Whether there is data to generate mips from.
+     * @param format The format.
+     * @param width The width in pixels.
+     * @param height The height in pixels.
+     * @return The number of mip levels.
      * @throws TextureException If the format is not supported.
      */
-    private TextureInfoVulkan createTexture(
-            ByteBuffer buffer, @NonNull Format format, int width, int height) {
-        final int vkFormat = format.getVkFormat();
-
+    private int mipLevels(boolean hasData, @NonNull Format format, int width, int height) {
         final int features;
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkFormatProperties formatProperties = VkFormatProperties.calloc(stack);
             vkGetPhysicalDeviceFormatProperties(
-                    state.device.physical.physicalDevice, vkFormat, formatProperties);
+                    state.device.physical.physicalDevice, format.getVkFormat(), formatProperties);
             features = formatProperties.optimalTilingFeatures();
         }
         final int requiredFeatures =
@@ -273,16 +349,33 @@ public class TextureLoaderVulkan {
                 VK_FORMAT_FEATURE_BLIT_SRC_BIT
                         | VK_FORMAT_FEATURE_BLIT_DST_BIT
                         | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
-        final boolean generateMips = buffer != null && (features & mipFeatures) == mipFeatures;
-        final int mipLevels =
-                generateMips ? 32 - Integer.numberOfLeadingZeros(Math.max(width, height)) : 1;
+        final boolean generateMips = hasData && (features & mipFeatures) == mipFeatures;
+        return generateMips ? 32 - Integer.numberOfLeadingZeros(Math.max(width, height)) : 1;
+    }
 
-        TextureInfoVulkan info = createImage(vkFormat, width, height, mipLevels, generateMips);
+    /**
+     * Create a texture, fill it while waiting on the GPU, and register it in the bindless array,
+     * without giving out a handle. Render thread only.
+     *
+     * @param buffer The data to load, or null to clear the texture instead.
+     * @param format The format of the image data.
+     * @param width The width of the texture, in pixels.
+     * @param height The height of the texture, in pixels.
+     * @return The texture. Its slot is the default texture's slot if the array was full.
+     * @throws TextureException If the format is not supported.
+     */
+    private TextureInfoVulkan createTexture(
+            ByteBuffer buffer, @NonNull Format format, int width, int height) {
+        final int mipLevels = mipLevels(buffer != null, format, width, height);
+        TextureInfoVulkan info =
+                createImage(format.getVkFormat(), width, height, mipLevels, mipLevels > 1);
 
         if (buffer != null) {
             upload(info, buffer, width, height, mipLevels);
         } else {
-            initializeEmpty(info, canClearColor(format));
+            final boolean clear = canClearColor(format);
+            state.immediateCommands.submit(
+                    state, commandBuffer -> recordInitializeEmpty(commandBuffer, info, clear));
         }
 
         state.bindlessTextures.register(state, info);
@@ -376,43 +469,65 @@ public class TextureLoaderVulkan {
 
         state.immediateCommands.submit(
                 state,
-                commandBuffer -> {
-                    try (MemoryStack stack = MemoryStack.stackPush()) {
-                        VkImageMemoryBarrier2.Buffer barriers =
-                                VkImageMemoryBarrier2.calloc(1, stack);
-                        transferBarrier(
-                                barriers.get(0),
-                                info.texture,
-                                VK_IMAGE_LAYOUT_UNDEFINED,
-                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                colorRange(stack, 0, mipLevels));
-                        recordBarriers(commandBuffer, barriers, stack);
-
-                        VkBufferImageCopy.Buffer region = VkBufferImageCopy.calloc(1, stack);
-                        region.get(0)
-                                .bufferOffset(0)
-                                // Zero means tightly packed
-                                .bufferRowLength(0)
-                                .bufferImageHeight(0)
-                                .imageSubresource(
-                                        layers ->
-                                                layers.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
-                                                        .mipLevel(0)
-                                                        .layerCount(1))
-                                .imageExtent(e -> e.set(width, height, 1));
-                        vkCmdCopyBufferToImage(
-                                commandBuffer,
-                                staging.buffer,
-                                info.texture,
-                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                region);
-
-                        generateMips(commandBuffer, info.texture, width, height, mipLevels);
-                    }
-                });
+                commandBuffer ->
+                        recordCopy(
+                                commandBuffer, info, staging.buffer, 0, width, height, mipLevels));
 
         // The submission has finished, so nothing is using the staging buffer
         SharedBuffer.free(staging, state);
+    }
+
+    /**
+     * Record copying staged data into the first mip level, generating the rest of the mip levels,
+     * and moving the image to the read only layout.
+     *
+     * @param commandBuffer The command buffer to record into.
+     * @param info The texture.
+     * @param source The VkBuffer holding the tightly packed pixel data.
+     * @param sourceOffset The offset of the data in the buffer, in bytes.
+     * @param width The width in pixels.
+     * @param height The height in pixels.
+     * @param mipLevels The number of mip levels in the image.
+     */
+    private void recordCopy(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull TextureInfoVulkan info,
+            long source,
+            long sourceOffset,
+            int width,
+            int height,
+            int mipLevels) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkImageMemoryBarrier2.Buffer barriers = VkImageMemoryBarrier2.calloc(1, stack);
+            transferBarrier(
+                    barriers.get(0),
+                    info.texture,
+                    VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    colorRange(stack, 0, mipLevels));
+            recordBarriers(commandBuffer, barriers, stack);
+
+            VkBufferImageCopy.Buffer region = VkBufferImageCopy.calloc(1, stack);
+            region.get(0)
+                    .bufferOffset(sourceOffset)
+                    // Zero means tightly packed
+                    .bufferRowLength(0)
+                    .bufferImageHeight(0)
+                    .imageSubresource(
+                            layers ->
+                                    layers.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                            .mipLevel(0)
+                                            .layerCount(1))
+                    .imageExtent(e -> e.set(width, height, 1));
+            vkCmdCopyBufferToImage(
+                    commandBuffer,
+                    source,
+                    info.texture,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    region);
+
+            generateMips(commandBuffer, info.texture, width, height, mipLevels);
+        }
     }
 
     /**
@@ -501,50 +616,50 @@ public class TextureLoaderVulkan {
     }
 
     /**
-     * Move a texture with no data to the read only layout, clearing it to transparent black if the
-     * format allows so that sampling it doesn't show garbage. Waits for the GPU to finish.
+     * Record moving a texture with no data to the read only layout, clearing it to transparent
+     * black if the format allows so that sampling it doesn't show garbage.
      *
+     * @param commandBuffer The command buffer to record into.
      * @param info The texture, which has a single mip level.
      * @param clear Whether to clear the image first.
      */
-    private void initializeEmpty(@NonNull TextureInfoVulkan info, boolean clear) {
-        state.immediateCommands.submit(
-                state,
-                commandBuffer -> {
-                    try (MemoryStack stack = MemoryStack.stackPush()) {
-                        VkImageMemoryBarrier2.Buffer barrier =
-                                VkImageMemoryBarrier2.calloc(1, stack);
-                        int layout = VK_IMAGE_LAYOUT_UNDEFINED;
-                        if (clear) {
-                            transferBarrier(
-                                    barrier.get(0),
-                                    info.texture,
-                                    layout,
-                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                    colorRange(stack, 0, 1));
-                            recordBarriers(commandBuffer, barrier, stack);
-                            layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    private void recordInitializeEmpty(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull TextureInfoVulkan info,
+            boolean clear) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkImageMemoryBarrier2.Buffer barrier = VkImageMemoryBarrier2.calloc(1, stack);
+            int layout = VK_IMAGE_LAYOUT_UNDEFINED;
+            if (clear) {
+                transferBarrier(
+                        barrier.get(0),
+                        info.texture,
+                        layout,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        colorRange(stack, 0, 1));
+                recordBarriers(commandBuffer, barrier, stack);
+                layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
-                            vkCmdClearColorImage(
-                                    commandBuffer,
-                                    info.texture,
-                                    layout,
-                                    VkClearColorValue.calloc(stack),
-                                    colorRange(stack, 0, 1));
-                        }
-                        readOnlyBarrier(
-                                barrier.get(0), info.texture, layout, colorRange(stack, 0, 1));
-                        recordBarriers(commandBuffer, barrier, stack);
-                    }
-                });
+                vkCmdClearColorImage(
+                        commandBuffer,
+                        info.texture,
+                        layout,
+                        VkClearColorValue.calloc(stack),
+                        colorRange(stack, 0, 1));
+            }
+            readOnlyBarrier(barrier.get(0), info.texture, layout, colorRange(stack, 0, 1));
+            recordBarriers(commandBuffer, barrier, stack);
+        }
     }
 
     /**
-     * Load a texture to the GPU from an image file.
+     * Start loading a texture from an image file. Safe from any thread: the file is decoded on the
+     * calling thread, and the upload happens as in {@link #load(String, ByteBuffer, Format, int,
+     * int)}.
      *
-     * @param owner The name of the plugin that owns the texture.
+     * @param owner The owner key the texture is tracked under.
      * @param texturePath The full path to the texture.
-     * @return The handle for the texture.
+     * @return The handle for the texture, pending until uploaded.
      * @throws TextureException If the image can't be read, or the texture can't be created.
      */
     public TextureHandle load(@NonNull String owner, @NonNull String texturePath) {

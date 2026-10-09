@@ -29,6 +29,12 @@ public class VulkanState {
     /** Which plugin owns each texture handed out as a handle, by bindless slot. */
     public TextureRegistry textureRegistry = null;
 
+    /** Where upload data waits for the render thread to copy it to the GPU. */
+    public StagingRing stagingRing = null;
+
+    /** Texture uploads waiting for the render thread. */
+    public TextureUploads textureUploads = null;
+
     /** For submitting work outside the frame, like texture uploads. */
     public ImmediateCommands immediateCommands = null;
 

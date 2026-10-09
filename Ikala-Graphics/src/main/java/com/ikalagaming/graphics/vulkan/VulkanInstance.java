@@ -376,7 +376,8 @@ public class VulkanInstance {
         pipelineManager.cleanup(state);
         // Queues them up for deletion below
         shaderMap.clearAll();
-        // Whatever plugins didn't release
+        // Uploads that never happened, then whatever plugins didn't release
+        state.textureUploads.clear(state);
         state.textureRegistry.removeAll().forEach(textureLoader::delete);
 
         DeletionQueue.Entry nextEntry = GraphicsManager.getDeletionQueue().pop();
@@ -392,6 +393,9 @@ public class VulkanInstance {
         state.bindlessTextures.cleanup(state);
         state.bindlessTextures = null;
         state.textureRegistry = null;
+        state.textureUploads = null;
+        state.stagingRing.cleanup(state);
+        state.stagingRing = null;
         state.immediateCommands.cleanup(state);
         state.immediateCommands = null;
         // Created in initializeGui()
@@ -1142,6 +1146,8 @@ public class VulkanInstance {
         state.immediateCommands = new ImmediateCommands(state);
         state.bindlessTextures = new BindlessTextures(state);
         state.textureRegistry = new TextureRegistry(state.bindlessTextures.getCapacity());
+        state.stagingRing = new StagingRing(state);
+        state.textureUploads = new TextureUploads();
         textureLoader = new TextureLoaderVulkan(state);
         shaderMap = new ShaderMap();
         initializeShaders();
@@ -1386,8 +1392,9 @@ public class VulkanInstance {
      */
     public void processResources() {
         DeletionQueue.Entry toDelete = GraphicsManager.getDeletionQueue().pop();
-        if (toDelete != null) {
+        while (toDelete != null) {
             deleteResource(toDelete);
+            toDelete = GraphicsManager.getDeletionQueue().pop();
         }
     }
 
@@ -1476,6 +1483,9 @@ public class VulkanInstance {
                             .flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
             checkError(vkBeginCommandBuffer(commandBuffer, commandBufferBeginInfo));
         }
+
+        // Before anything that could sample the textures
+        state.textureUploads.record(state, commandBuffer, textureLoader);
 
         // This will record the command buffer
         pipeline.render(scene, windowInfo.window, state);

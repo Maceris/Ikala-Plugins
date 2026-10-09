@@ -18,10 +18,23 @@ import javax.annotation.Nullable;
  * <p>Each slot has a generation that goes up whenever its texture is removed, so a handle to a
  * removed texture never resolves to whatever texture takes the slot next.
  *
- * <p>Plugins are unloaded from the event dispatcher thread while the main thread renders, so every
- * method holds {@link #lock}. Nothing else is called while holding it.
+ * <p>A texture starts out {@link State#PENDING} while its upload is queued, and becomes {@link
+ * State#RESIDENT} once the render thread has recorded the upload. Shaders only ever see resident
+ * textures, see {@link #slotOrDefault(TextureHandle)}.
+ *
+ * <p>Textures are loaded from any thread, and plugins are unloaded from the event dispatcher thread
+ * while the main thread renders, so every method holds {@link #lock}. Nothing else is called while
+ * holding it.
  */
 public class TextureRegistry {
+
+    /** Where a texture is in its lifetime. */
+    public enum State {
+        /** The upload is queued, so shaders must not sample the slot yet. */
+        PENDING,
+        /** Uploaded, or at least recorded before any draw that could use it. */
+        RESIDENT
+    }
 
     /** Guards every field below. */
     private final ReentrantLock lock = new ReentrantLock();
@@ -38,6 +51,9 @@ public class TextureRegistry {
     /** The handle that was given out for each slot, or null if no handle owns the slot. */
     private final TextureHandle[] handles;
 
+    /** The state of the texture in each slot, or null if no handle owns the slot. */
+    private final State[] states;
+
     /**
      * Create an empty registry.
      *
@@ -48,10 +64,11 @@ public class TextureRegistry {
         owners = new String[capacity];
         generations = new int[capacity];
         handles = new TextureHandle[capacity];
+        states = new State[capacity];
     }
 
     /**
-     * Track a texture that already has a bindless slot.
+     * Track a texture that already has a bindless slot. It starts out {@link State#PENDING}.
      *
      * @param owner The name of the plugin that owns the texture.
      * @param info The texture, registered with {@link BindlessTextures}.
@@ -81,6 +98,7 @@ public class TextureRegistry {
             infos[slot] = info;
             owners[slot] = owner;
             handles[slot] = handle;
+            states[slot] = State.PENDING;
             return handle;
         } finally {
             lock.unlock();
@@ -97,6 +115,41 @@ public class TextureRegistry {
         lock.lock();
         try {
             return isValidLocked(handle);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Whether a handle refers to a live texture that shaders can sample.
+     *
+     * @param handle The handle to check.
+     * @return True if the texture is valid and resident.
+     */
+    public boolean isResident(@Nullable TextureHandle handle) {
+        lock.lock();
+        try {
+            return isValidLocked(handle) && states[handle.slot()] == State.RESIDENT;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Mark a texture as resident, once its upload is recorded before anything that could sample it.
+     * Does nothing if the handle is stale.
+     *
+     * @param handle The texture.
+     * @return True if the texture was marked, false if the handle was null or stale.
+     */
+    public boolean markResident(@Nullable TextureHandle handle) {
+        lock.lock();
+        try {
+            if (!isValidLocked(handle)) {
+                return false;
+            }
+            states[handle.slot()] = State.RESIDENT;
+            return true;
         } finally {
             lock.unlock();
         }
@@ -121,12 +174,13 @@ public class TextureRegistry {
      * The bindless slot a shader should sample for a handle.
      *
      * @param handle The handle.
-     * @return The handle's slot, or the default texture's slot if the handle is null or stale.
+     * @return The handle's slot, or the default texture's slot if the handle is null, stale, or not
+     *     resident yet.
      */
     public int slotOrDefault(@Nullable TextureHandle handle) {
         lock.lock();
         try {
-            return isValidLocked(handle)
+            return isValidLocked(handle) && states[handle.slot()] == State.RESIDENT
                     ? handle.slot()
                     : ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX;
         } finally {
@@ -251,6 +305,7 @@ public class TextureRegistry {
         infos[slot] = null;
         owners[slot] = null;
         handles[slot] = null;
+        states[slot] = null;
         generations[slot] += 1;
         return info;
     }

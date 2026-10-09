@@ -562,7 +562,7 @@ public class PipelineManagerVulkan {
         this.fontAtlas =
                 GraphicsManager.getRenderInstance()
                         .getTextureLoader()
-                        .load(
+                        .loadNow(
                                 GraphicsPlugin.PLUGIN_NAME,
                                 null,
                                 Format.R8G8B8A8_UNORM,
