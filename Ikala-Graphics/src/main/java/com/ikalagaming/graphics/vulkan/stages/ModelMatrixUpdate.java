@@ -14,6 +14,8 @@ import com.ikalagaming.graphics.vulkan.VulkanState;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Matrix4f;
+import org.joml.Vector3dc;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
@@ -115,9 +117,11 @@ public class ModelMatrixUpdate implements RenderStage {
                         frameData.animationOffsets.allocationInfo.pMappedData(), poseCount);
 
         final MaterialCache materialCache = scene.getMaterialCache();
+        final Vector3dc origin = scene.getCamera().getPosition();
+        final Matrix4f scratch = new Matrix4f();
         frameData.modelDrawInfo.forEach(
                 (model, info) -> {
-                    writeModelMatrices(model, info, matrices);
+                    writeModelMatrices(model, info, origin, scratch, matrices);
                     writeMaterialOverrides(model, info, overrides, materialCache);
                     Poses poses = modelPoses.get(model);
                     if (poses != null) {
@@ -158,19 +162,23 @@ public class ModelMatrixUpdate implements RenderStage {
     }
 
     /**
-     * Write the model matrices for every entity of a model.
+     * Write the model matrices for every entity of a model, in render space.
      *
      * @param model The model.
      * @param info Where the model's data goes.
+     * @param origin The world position of the render space origin, the camera position.
+     * @param scratch A matrix to do math in, so we don't allocate one per entity.
      * @param matrices The mapped model matrix buffer.
      */
     private static void writeModelMatrices(
             @NonNull Model model,
             @NonNull PerFrameData.ModelDrawInfo info,
+            @NonNull Vector3dc origin,
+            @NonNull Matrix4f scratch,
             @NonNull FloatBuffer matrices) {
         int matrixIndex = info.firstMatrix();
         for (Entity entity : model.getEntitiesList()) {
-            entity.getModelMatrix()
+            entity.getRenderMatrix(origin, scratch)
                     .get(matrixIndex * PipelineManagerVulkan.MODEL_MATRIX_SIZE, matrices);
             matrixIndex += 1;
         }

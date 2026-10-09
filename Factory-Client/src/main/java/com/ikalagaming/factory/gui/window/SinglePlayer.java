@@ -25,6 +25,7 @@ import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
+import org.joml.Vector3d;
 import org.joml.Vector3f;
 
 /** The screen for selecting a single player game to play. */
@@ -138,9 +139,7 @@ public class SinglePlayer extends GuiWindow {
                 .getPointLights()
                 .add(
                         new PointLight(
-                                new Vector3f(1.0f, 0.0f, 0.0f),
-                                new Vector3f(2.0f, 1.1f, 0.0f),
-                                1.0f));
+                                new Vector3f(1.0f, 0.0f, 0.0f), new Vector3d(2.0, 1.1, 0.0), 1.0f));
         var pipeline =
                 RenderConfig.builder().withAnimation().withScene().withSkybox().withGui().build();
         GraphicsManager.swapPipeline(pipeline);

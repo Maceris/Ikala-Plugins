@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
+import org.joml.Vector3d;
 import org.joml.Vector3f;
 
 /** A point light. */
@@ -21,12 +22,12 @@ public class PointLight {
     @NonNull private Vector3f color;
 
     /**
-     * The position of the point light.
+     * The position of the point light, in world space.
      *
      * @param position The new position.
      * @return The current position.
      */
-    @NonNull private Vector3f position;
+    @NonNull private Vector3d position;
 
     /**
      * The intensity of the point light, measured in candela per square meter (cd/m^2). Point lights

@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
+import org.joml.Vector3d;
 import org.joml.Vector3f;
 
 /**
@@ -26,12 +27,12 @@ public class Box {
     @NonNull private Vector3f color;
 
     /**
-     * The position of the center of the box.
+     * The position of the center of the box, in world space.
      *
      * @param position The new position.
      * @return The current position.
      */
-    @NonNull private Vector3f position;
+    @NonNull private Vector3d position;
 
     /**
      * The x, y, and z scale of the box.

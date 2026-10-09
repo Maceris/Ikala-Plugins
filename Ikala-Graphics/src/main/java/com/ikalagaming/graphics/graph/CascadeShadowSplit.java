@@ -91,7 +91,7 @@ public class CascadeShadowSplit {
                 new Vector3f(-1.0f, -1.0f, 1.0f) //
             };
 
-            // Project frustum corners into world space
+            // Project frustum corners into render space, world space relative to the camera
             Matrix4f invertedCamera = (new Matrix4f(projectionMatrix).mul(viewMatrix)).invert();
             for (int j = 0; j < frustumCorners.length; ++j) {
                 Vector4f invCorner = new Vector4f(frustumCorners[j], 1.0f).mul(invertedCamera);

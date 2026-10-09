@@ -23,6 +23,7 @@ import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Vector3d;
 import org.joml.Vector3f;
 
 import java.util.Objects;
@@ -108,7 +109,6 @@ public class MainMenu extends GuiWindow {
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
-            ball.updateModelMatrix();
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.0f, 0.90f, 0.60f, 1.0f);
@@ -126,7 +126,6 @@ public class MainMenu extends GuiWindow {
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
-            ball.updateModelMatrix();
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.35f, 0.75f, 0.95f, 1.0f);
@@ -143,7 +142,6 @@ public class MainMenu extends GuiWindow {
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
-            ball.updateModelMatrix();
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.35f, 0.75f, 0.95f, 1.0f);
@@ -161,7 +159,6 @@ public class MainMenu extends GuiWindow {
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
-            ball.updateModelMatrix();
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(1.0f, 0.95f, 0.f, 1.0f);
@@ -178,7 +175,6 @@ public class MainMenu extends GuiWindow {
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
-            ball.updateModelMatrix();
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.10f, 0.10f, 0.95f, 1.0f);
@@ -195,7 +191,6 @@ public class MainMenu extends GuiWindow {
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
-            ball.updateModelMatrix();
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.75f, 0.65f, 0.50f, 1.0f);
@@ -213,7 +208,6 @@ public class MainMenu extends GuiWindow {
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
-            ball.updateModelMatrix();
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.75f, 0.65f, 0.50f, 1.0f);
@@ -231,7 +225,6 @@ public class MainMenu extends GuiWindow {
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
-            ball.updateModelMatrix();
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.95f, 0.20f, 0.20f, 1.0f);
@@ -249,7 +242,6 @@ public class MainMenu extends GuiWindow {
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
-            ball.updateModelMatrix();
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.95f, 0.20f, 0.20f, 1.0f);
@@ -267,7 +259,6 @@ public class MainMenu extends GuiWindow {
             Entity ball = new Entity(name, ballModel);
             ball.setScale(0.003f);
             ball.setPosition(i, 0, zPos);
-            ball.updateModelMatrix();
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(1.0f, 1.0f, 1.0f, 1.0f);
@@ -289,16 +280,12 @@ public class MainMenu extends GuiWindow {
                 .getPointLights()
                 .add(
                         new PointLight(
-                                new Vector3f(1.0f, 0.1f, 0.1f),
-                                new Vector3f(8.5f, 2.0f, 7.5f),
-                                4f));
+                                new Vector3f(1.0f, 0.1f, 0.1f), new Vector3d(8.5, 2.0, 7.5), 4f));
         scene.getSceneLights()
                 .getPointLights()
                 .add(
                         new PointLight(
-                                new Vector3f(0.1f, 0.1f, 1.0f),
-                                new Vector3f(1.7f, 2.0f, 7.5f),
-                                4f));
+                                new Vector3f(0.1f, 0.1f, 1.0f), new Vector3d(1.7, 2.0, 7.5), 4f));
 
         var pipeline =
                 RenderConfig.builder().withAnimation().withScene().withSkybox().withGui().build();

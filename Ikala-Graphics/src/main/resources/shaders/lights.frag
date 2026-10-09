@@ -219,10 +219,10 @@ vec3 calcLightColor(vec3 baseColor, Material material, vec3 lightColor, float li
     return brdf * lightColor * lightScaling * lightIntensity;
 }
 
-vec3 calcPointLight(vec3 baseColor, Material material, PointLight light, vec3 viewPosition, vec3 worldPosition,
+vec3 calcPointLight(vec3 baseColor, Material material, PointLight light, vec3 viewPosition, vec3 renderPosition,
     vec3 normal, vec3 tangent, vec3 bitangent)
 {
-    vec3 directionToLight = light.position - worldPosition;
+    vec3 directionToLight = light.position - renderPosition;
     vec3 toLightDirection  = normalize(directionToLight);
     float intensity = scaleIntensity(length(directionToLight)) * light.intensity;
 
@@ -230,10 +230,10 @@ vec3 calcPointLight(vec3 baseColor, Material material, PointLight light, vec3 vi
                    normal, tangent, bitangent);
 }
 
-vec3 calcSpotLight(vec3 baseColor, Material material, SpotLight light, vec3 viewPosition, vec3 worldPosition,
+vec3 calcSpotLight(vec3 baseColor, Material material, SpotLight light, vec3 viewPosition, vec3 renderPosition,
     vec3 normal, vec3 tangent, vec3 bitangent)
 {
-    vec3 directionToLight = light.pointLight.position - worldPosition;
+    vec3 directionToLight = light.pointLight.position - renderPosition;
     vec3 toLightDirection  = normalize(directionToLight);
     vec3 fromLightDirection  = -toLightDirection;
     float spotAlpha = dot(fromLightDirection, normalize(light.coneDirection));
@@ -286,8 +286,8 @@ float textureProj(vec4 shadowCoord, vec2 offset, int idx) {
     return shadow;
 }
 
-float calcShadow(vec4 worldPosition, int idx) {
-    vec4 shadowMapPosition = cascadeShadowSplits[idx].projViewMatrix * worldPosition;
+float calcShadow(vec4 renderPosition, int idx) {
+    vec4 shadowMapPosition = cascadeShadowSplits[idx].projViewMatrix * renderPosition;
     float shadow = 1.0;
     vec4 ndc = shadowMapPosition / shadowMapPosition.w;
     // The shadow maps aren't drawn with a flipped viewport, and Vulkan depth is already [0, 1]
@@ -317,7 +317,8 @@ void main()
     vec4 clip = vec4(outTextCoord.x * 2.0 - 1.0, 1.0 - outTextCoord.y * 2.0, depth, 1.0);
     vec4 viewW = invProjectionMatrix * clip;
     vec3 viewPosition = viewW.xyz / viewW.w;
-    vec4 worldPosition = invViewMatrix * vec4(viewPosition, 1);
+    // Render space is world space moved so the camera is at the origin
+    vec4 renderPosition = invViewMatrix * vec4(viewPosition, 1);
 
     // The splits get further away (more negative in view space), so use the last one we're past
     int cascadeIndex = 0;
@@ -327,20 +328,20 @@ void main()
         }
     }
     // Only the directional light casts shadows
-    float shadowFactor = calcShadow(worldPosition, cascadeIndex);
+    float shadowFactor = calcShadow(renderPosition, cascadeIndex);
     vec3 color = calcDirLight(baseColor.xyz, material, directionalLight, viewPosition, normal, tangent, bitangent)
         * shadowFactor;
 
     for (int i = 0; i < pointLightCount; ++i) {
         if (pointLights[i].intensity > 0) {
-            color += calcPointLight(baseColor.xyz, material, pointLights[i], viewPosition, worldPosition.xyz, normal,
+            color += calcPointLight(baseColor.xyz, material, pointLights[i], viewPosition, renderPosition.xyz, normal,
                 tangent, bitangent);
         }
     }
 
     for (int i = 0; i < spotLightCount; ++i) {
         if (spotLights[i].pointLight.intensity > 0) {
-            color += calcSpotLight(baseColor.xyz, material, spotLights[i], viewPosition, worldPosition.xyz, normal,
+            color += calcSpotLight(baseColor.xyz, material, spotLights[i], viewPosition, renderPosition.xyz, normal,
                 tangent, bitangent);
         }
     }

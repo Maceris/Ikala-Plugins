@@ -3,9 +3,14 @@ package com.ikalagaming.graphics.scene;
 import lombok.Getter;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
+import org.joml.Vector3d;
 import org.joml.Vector3f;
 
-/** Represents a camera in the world space. */
+/**
+ * A camera in the world. Its position is in double precision, so it stays exact far from the
+ * origin. Rendering happens in render space, which is world space moved so that the camera sits at
+ * the origin, so the view matrix only rotates.
+ */
 public class Camera {
     /** A constant value used to clamp rotation, pre-calculated for convenience. */
     private static final float TWO_PI = (float) Math.PI * 2;
@@ -30,18 +35,18 @@ public class Camera {
     private final Vector3f temp;
 
     /**
-     * The inverse of the view matrix.
+     * The inverse of the view matrix, which converts view space back to render space.
      *
      * @return The inverse view matrix.
      */
     @Getter private final Matrix4f invViewMatrix;
 
     /**
-     * The position of the camera.
+     * The position of the camera in world space, which is the origin of render space.
      *
      * @return The position vector.
      */
-    @Getter private final Vector3f position;
+    @Getter private final Vector3d position;
 
     /**
      * The rotation of the camera.
@@ -51,7 +56,8 @@ public class Camera {
     @Getter private final Vector2f rotation;
 
     /**
-     * The view matrix.
+     * The view matrix, which converts render space (world space relative to the camera) to view
+     * space. It only rotates, since the camera is at the origin of render space.
      *
      * @return The current view matrix.
      */
@@ -60,7 +66,7 @@ public class Camera {
     /** Creates a new camera with default values. */
     public Camera() {
         temp = new Vector3f();
-        position = new Vector3f();
+        position = new Vector3d();
         viewMatrix = new Matrix4f();
         invViewMatrix = new Matrix4f();
         rotation = new Vector2f();
@@ -149,22 +155,18 @@ public class Camera {
         rotation.y %= Camera.TWO_PI;
         rotation.y = (rotation.y + Camera.TWO_PI) % Camera.TWO_PI;
 
-        viewMatrix
-                .identity()
-                .rotateX(rotation.x)
-                .rotateY(rotation.y)
-                .translate(-position.x, -position.y, -position.z);
+        viewMatrix.identity().rotateX(rotation.x).rotateY(rotation.y);
         invViewMatrix.set(viewMatrix).invert();
     }
 
     /**
      * Set the position of the camera.
      *
-     * @param x The new x position.
-     * @param y The new y position.
-     * @param z The new z position.
+     * @param x The new x position, in world space.
+     * @param y The new y position, in world space.
+     * @param z The new z position, in world space.
      */
-    public void setPosition(float x, float y, float z) {
+    public void setPosition(double x, double y, double z) {
         position.set(x, y, z);
         recalculate();
     }

@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
+import org.joml.Vector3d;
 import org.joml.Vector3f;
 
 /**
@@ -31,7 +32,7 @@ public class Line {
      * @param position1 The first position.
      * @return The first position.
      */
-    @NonNull private Vector3f position1;
+    @NonNull private Vector3d position1;
 
     /**
      * The second point on the line.
@@ -39,7 +40,7 @@ public class Line {
      * @param position2 The second position.
      * @return The second position.
      */
-    @NonNull private Vector3f position2;
+    @NonNull private Vector3d position2;
 
     /**
      * Text to show above the line, which will be the same color as the line. May be null if not

@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
+import org.joml.Vector3d;
 import org.joml.Vector3f;
 
 /**
@@ -24,12 +25,12 @@ public class Text {
     @NonNull private Vector3f color;
 
     /**
-     * The position of the center of the text.
+     * The position of the center of the text, in world space.
      *
      * @param position The new position.
      * @return The current position.
      */
-    @NonNull private Vector3f position;
+    @NonNull private Vector3d position;
 
     /**
      * Text to show.

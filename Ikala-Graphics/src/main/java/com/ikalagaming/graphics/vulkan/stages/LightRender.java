@@ -17,6 +17,7 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
+import org.joml.Vector3dc;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 import org.lwjgl.system.MemoryStack;
@@ -349,9 +350,10 @@ public class LightRender implements RenderStage {
                         frameData.lightPointLights.allocationInfo.pMappedData(),
                         lightsToRender * POINT_LIGHT_FLOATS);
         final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
+        final Vector3dc origin = scene.getCamera().getPosition();
         Vector4f lightPosition = new Vector4f();
         for (int i = 0; i < lightsToRender; ++i) {
-            putPointLight(lightBuffer, pointLights.get(i), viewMatrix, lightPosition);
+            putPointLight(lightBuffer, pointLights.get(i), viewMatrix, origin, lightPosition);
         }
         return lightsToRender;
     }
@@ -385,11 +387,12 @@ public class LightRender implements RenderStage {
                         frameData.lightSpotLights.allocationInfo.pMappedData(),
                         lightsToRender * SPOT_LIGHT_FLOATS);
         final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
+        final Vector3dc origin = scene.getCamera().getPosition();
         Vector4f lightPosition = new Vector4f();
         Vector4f lightDirection = new Vector4f();
         for (int i = 0; i < lightsToRender; ++i) {
             SpotLight light = spotLights.get(i);
-            putPointLight(lightBuffer, light.getPointLight(), viewMatrix, lightPosition);
+            putPointLight(lightBuffer, light.getPointLight(), viewMatrix, origin, lightPosition);
             // Matches OpenGL, which transforms the direction like a position
             lightDirection.set(light.getConeDirection(), 1);
             lightDirection.mul(viewMatrix);
@@ -406,16 +409,24 @@ public class LightRender implements RenderStage {
      *
      * @param buffer The buffer to write into.
      * @param light The light.
-     * @param viewMatrix The camera view matrix.
+     * @param viewMatrix The camera view matrix, from render space to view space.
+     * @param origin The world position of the render space origin, the camera position.
      * @param scratch A vector to do math in, so we don't allocate one per light.
      */
     private static void putPointLight(
             @NonNull FloatBuffer buffer,
             @NonNull PointLight light,
             @NonNull Matrix4f viewMatrix,
+            @NonNull Vector3dc origin,
             @NonNull Vector4f scratch) {
         final float padding = 0.0f;
-        scratch.set(light.getPosition(), 1);
+        // Relative to the camera in double precision first, so it stays exact far from the origin
+        final Vector3dc position = light.getPosition();
+        scratch.set(
+                (float) (position.x() - origin.x()),
+                (float) (position.y() - origin.y()),
+                (float) (position.z() - origin.z()),
+                1);
         scratch.mul(viewMatrix);
         buffer.put(scratch.x);
         buffer.put(scratch.y);

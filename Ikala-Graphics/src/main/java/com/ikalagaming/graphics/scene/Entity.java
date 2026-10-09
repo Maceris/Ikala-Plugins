@@ -8,7 +8,9 @@ import lombok.NonNull;
 import lombok.Setter;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
-import org.joml.Vector3f;
+import org.joml.Quaternionfc;
+import org.joml.Vector3d;
+import org.joml.Vector3dc;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,18 +45,11 @@ public class Entity {
     @Setter private AnimationState animationState;
 
     /**
-     * The combined translation, rotation, and scale transformations.
+     * The position in world space, in double precision so it stays exact far from the origin.
      *
-     * @return The model matrix.
+     * @return The position.
      */
-    private final Matrix4f modelMatrix;
-
-    /**
-     * The transformation matrix.
-     *
-     * @return The position matrix.
-     */
-    private final Vector3f position;
+    private final Vector3d position;
 
     /**
      * The rotation, as a quaternion to prevent gimbal lock.
@@ -96,8 +91,7 @@ public class Entity {
     public Entity(@NonNull String id, @NonNull Model model) {
         entityID = id;
         this.model = model;
-        modelMatrix = new Matrix4f();
-        position = new Vector3f();
+        position = new Vector3d();
         rotation = new Quaternionf();
         delta = new Quaternionf();
         scale = 1;
@@ -118,8 +112,7 @@ public class Entity {
     }
 
     /**
-     * Add to the rotation. {@link #updateModelMatrix()} must be called once transformations are
-     * done, or they won't be reflected.
+     * Add to the rotation.
      *
      * @param x The x component of the rotation axis.
      * @param y The y component of the rotation axis.
@@ -132,20 +125,18 @@ public class Entity {
     }
 
     /**
-     * Set the position. {@link #updateModelMatrix()} must be called once transformations are done,
-     * or they won't be reflected.
+     * Set the position.
      *
-     * @param x The new x position.
-     * @param y The new y position.
-     * @param z The new z position.
+     * @param x The new x position, in world space.
+     * @param y The new y position, in world space.
+     * @param z The new z position, in world space.
      */
-    public final void setPosition(float x, float y, float z) {
+    public final void setPosition(double x, double y, double z) {
         position.set(x, y, z);
     }
 
     /**
-     * Set the rotation. {@link #updateModelMatrix()} must be called once transformations are done,
-     * or they won't be reflected.
+     * Set the rotation.
      *
      * @param x The x component of the rotation axis.
      * @param y The y component of the rotation axis.
@@ -156,8 +147,46 @@ public class Entity {
         rotation.fromAxisAngleRad(x, y, z, angle);
     }
 
-    /** Update the model matrix based on the current position, rotation, and scale. */
-    public void updateModelMatrix() {
-        modelMatrix.translationRotateScale(position, rotation, scale);
+    /**
+     * Calculate the model matrix in render space, which is world space moved so that the origin is
+     * at {@code origin}. The position is made relative in double precision before converting to
+     * float, so entities near the origin stay exact however far they are from the world origin.
+     *
+     * @param origin The world position of the render space origin, usually the camera position.
+     * @param dest Where to store the matrix.
+     * @return The destination matrix.
+     */
+    public Matrix4f getRenderMatrix(@NonNull Vector3dc origin, @NonNull Matrix4f dest) {
+        return renderMatrix(position, origin, rotation, scale, dest);
+    }
+
+    /**
+     * Calculate a model matrix in render space, making the position relative to the origin in
+     * double precision before converting to float.
+     *
+     * @param position The world position.
+     * @param origin The world position of the render space origin.
+     * @param rotation The rotation.
+     * @param scale The uniform scale.
+     * @param dest Where to store the matrix.
+     * @return The destination matrix.
+     */
+    public static Matrix4f renderMatrix(
+            @NonNull Vector3dc position,
+            @NonNull Vector3dc origin,
+            @NonNull Quaternionfc rotation,
+            float scale,
+            @NonNull Matrix4f dest) {
+        return dest.translationRotateScale(
+                (float) (position.x() - origin.x()),
+                (float) (position.y() - origin.y()),
+                (float) (position.z() - origin.z()),
+                rotation.x(),
+                rotation.y(),
+                rotation.z(),
+                rotation.w(),
+                scale,
+                scale,
+                scale);
     }
 }
