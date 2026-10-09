@@ -219,10 +219,11 @@ vec3 calcLightColor(vec3 baseColor, Material material, vec3 lightColor, float li
     return brdf * lightColor * lightScaling * lightIntensity;
 }
 
-vec3 calcPointLight(vec3 baseColor, Material material, PointLight light, vec3 viewPosition, vec3 renderPosition,
+// Light positions and directions, the surface position, and the normals are all in view space
+vec3 calcPointLight(vec3 baseColor, Material material, PointLight light, vec3 viewPosition,
     vec3 normal, vec3 tangent, vec3 bitangent)
 {
-    vec3 directionToLight = light.position - renderPosition;
+    vec3 directionToLight = light.position - viewPosition;
     vec3 toLightDirection  = normalize(directionToLight);
     float intensity = scaleIntensity(length(directionToLight)) * light.intensity;
 
@@ -230,10 +231,10 @@ vec3 calcPointLight(vec3 baseColor, Material material, PointLight light, vec3 vi
                    normal, tangent, bitangent);
 }
 
-vec3 calcSpotLight(vec3 baseColor, Material material, SpotLight light, vec3 viewPosition, vec3 renderPosition,
+vec3 calcSpotLight(vec3 baseColor, Material material, SpotLight light, vec3 viewPosition,
     vec3 normal, vec3 tangent, vec3 bitangent)
 {
-    vec3 directionToLight = light.pointLight.position - renderPosition;
+    vec3 directionToLight = light.pointLight.position - viewPosition;
     vec3 toLightDirection  = normalize(directionToLight);
     vec3 fromLightDirection  = -toLightDirection;
     float spotAlpha = dot(fromLightDirection, normalize(light.coneDirection));
@@ -334,15 +335,15 @@ void main()
 
     for (int i = 0; i < pointLightCount; ++i) {
         if (pointLights[i].intensity > 0) {
-            color += calcPointLight(baseColor.xyz, material, pointLights[i], viewPosition, renderPosition.xyz, normal,
-                tangent, bitangent);
+            color += calcPointLight(baseColor.xyz, material, pointLights[i], viewPosition, normal, tangent,
+                bitangent);
         }
     }
 
     for (int i = 0; i < spotLightCount; ++i) {
         if (spotLights[i].pointLight.intensity > 0) {
-            color += calcSpotLight(baseColor.xyz, material, spotLights[i], viewPosition, renderPosition.xyz, normal,
-                tangent, bitangent);
+            color += calcSpotLight(baseColor.xyz, material, spotLights[i], viewPosition, normal, tangent,
+                bitangent);
         }
     }
     vec3 ambient = ambientLight.intensity * ambientLight.color;

@@ -262,7 +262,7 @@ public class LightRender implements RenderStage {
         uniformData.putFloat(
                 offset + ShaderBindings.Light.AmbientLight.INTENSITY, ambientLight.getIntensity());
 
-        // The light direction is in view space, like OpenGL
+        // The light direction is in view space, like the other lights and the normals
         DirectionalLight dirLight = scene.getSceneLights().getDirLight();
         Vector4f auxDir = new Vector4f(dirLight.getDirection(), 0);
         auxDir.mul(scene.getCamera().getViewMatrix());
@@ -393,8 +393,9 @@ public class LightRender implements RenderStage {
         for (int i = 0; i < lightsToRender; ++i) {
             SpotLight light = spotLights.get(i);
             putPointLight(lightBuffer, light.getPointLight(), viewMatrix, origin, lightPosition);
-            // Matches OpenGL, which transforms the direction like a position
-            lightDirection.set(light.getConeDirection(), 1);
+            // A direction, so w is 0 and the camera translation (none in render space) never
+            // applies
+            lightDirection.set(light.getConeDirection(), 0);
             lightDirection.mul(viewMatrix);
             lightBuffer.put(lightDirection.x);
             lightBuffer.put(lightDirection.y);
