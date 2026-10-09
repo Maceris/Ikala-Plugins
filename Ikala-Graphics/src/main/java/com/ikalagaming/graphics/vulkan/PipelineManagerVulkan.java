@@ -71,6 +71,8 @@ public class PipelineManagerVulkan {
 
     private final AnimationRender stageAnimationRender;
     private final FilterRender stageFilterRender;
+
+    private final DebugRender stageDebugRender;
     private final GuiRender stageGuiRender;
     private final LightRender stageLightRender;
     private final ModelMatrixUpdate stageModelMatrixUpdate;
@@ -108,6 +110,8 @@ public class PipelineManagerVulkan {
         stageAnimationRender.initialize(state);
         stageFilterRender = new FilterRender(shaders.getShader(RenderStage.Type.FILTER), quadMesh);
         stageFilterRender.initialize(state);
+        stageDebugRender = new DebugRender(shaders.getShader(RenderStage.Type.DEBUG));
+        stageDebugRender.initialize(state);
         stageSwapchainPresent = new SwapchainPresent();
         stageSwapchainPresent.initialize(state);
     }
@@ -137,6 +141,11 @@ public class PipelineManagerVulkan {
         }
         if (RenderConfig.hasFilterStage(configuration)) {
             stages.add(stageFilterRender);
+        }
+        if (RenderConfig.hasDebugStage(configuration)
+                && RenderConfig.hasSceneStage(configuration)) {
+            // After filters so they don't distort the lines, depth tested against the scene
+            stages.add(stageDebugRender);
         }
         if (RenderConfig.hasGuiStage(configuration)) {
             stages.add(stageGuiRender);
@@ -389,6 +398,9 @@ public class PipelineManagerVulkan {
                         SharedBuffer.allocate(
                                 DEFERRED_UNTIL_LATER, state, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
                 state.perFrameData[i].modelDrawInfo = new HashMap<>();
+                state.perFrameData[i].debugVertices =
+                        SharedBuffer.allocate(
+                                DEFERRED_UNTIL_LATER, state, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
                 state.perFrameData[i].skyboxUniforms =
                         SharedBuffer.allocate(
                                 ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
@@ -455,6 +467,7 @@ public class PipelineManagerVulkan {
         }
         stageAnimationRender.cleanup(state);
         stageFilterRender.cleanup(state);
+        stageDebugRender.cleanup(state);
         stageGuiRender.cleanup(state);
         stageLightRender.cleanup(state);
         stageModelMatrixUpdate.cleanup(state);
@@ -539,6 +552,8 @@ public class PipelineManagerVulkan {
         data.modelDrawInfo = null;
         SharedBuffer.free(data.skyboxUniforms, state);
         data.skyboxUniforms = null;
+        SharedBuffer.free(data.debugVertices, state);
+        data.debugVertices = null;
         SharedBuffer.free(data.filterUniforms, state);
         data.filterUniforms = null;
         SharedBuffer.free(data.materials, state);

@@ -13,6 +13,7 @@ import com.ikalagaming.graphics.gui.enums.Condition;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.gui.util.Alignment;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 
 import lombok.NonNull;
@@ -24,6 +25,13 @@ public class GraphicsDebug extends GuiWindow {
 
     private final Checkbox fogEnabled;
     private final Checkbox wireframeEnabled;
+
+    private final Checkbox showPointLights;
+    private final Checkbox showSpotLights;
+    private final Checkbox showDirectionalLight;
+    private final Checkbox showEntityBounds;
+    private final Checkbox showShadowCascades;
+    private final Checkbox freezeObserver;
     private final Slider fogDensity;
     private final Slider directionalLightX;
     private final Slider directionalLightY;
@@ -38,6 +46,12 @@ public class GraphicsDebug extends GuiWindow {
 
         fogEnabled = new Checkbox("Fog enabled", false);
         wireframeEnabled = new Checkbox("Wireframe enabled", false);
+        showPointLights = new Checkbox("Point lights", false);
+        showSpotLights = new Checkbox("Spot lights", false);
+        showDirectionalLight = new Checkbox("Directional light", false);
+        showEntityBounds = new Checkbox("Entity bounds", false);
+        showShadowCascades = new Checkbox("Shadow cascades", false);
+        freezeObserver = new Checkbox("Freeze observer", false);
         fogDensity = new Slider("Fog Density", 0, 0, 1);
         directionalLightX = new Slider("Directional Light X", 0, -1, 1);
         directionalLightY = new Slider("Directional Light Y", 0, -1, 1);
@@ -47,6 +61,12 @@ public class GraphicsDebug extends GuiWindow {
         addChild(fogEnabled);
         addChild(fogDensity);
         addChild(wireframeEnabled);
+        addChild(showPointLights);
+        addChild(showSpotLights);
+        addChild(showDirectionalLight);
+        addChild(showEntityBounds);
+        addChild(showShadowCascades);
+        addChild(freezeObserver);
         addChild(directionalLightX);
         addChild(directionalLightY);
         addChild(directionalLightZ);
@@ -125,6 +145,7 @@ public class GraphicsDebug extends GuiWindow {
                 IkGui.text(
                         String.format(
                                 flagString, "Wireframe", RenderConfig.sceneIsWireframe(config)));
+                IkGui.text(String.format(flagString, "Debug", RenderConfig.hasDebugStage(config)));
             }
 
             if (IkGui.collapsingHeader("Camera")) {
@@ -161,9 +182,67 @@ public class GraphicsDebug extends GuiWindow {
                     IkGui.endDisabled();
                 }
             }
+
+            if (IkGui.collapsingHeader("Debug Visualization")) {
+                showPointLights.draw(width, height);
+                showSpotLights.draw(width, height);
+                showDirectionalLight.draw(width, height);
+                showEntityBounds.draw(width, height);
+                showShadowCascades.draw(width, height);
+                freezeObserver.draw(width, height);
+                IkGui.textWrapped(
+                        "Culling, level of detail and streaming use the observer, so freeze it to"
+                                + " inspect them from outside.");
+            }
         }
 
         IkGui.end();
+    }
+
+    /**
+     * Apply changes to the debug visualization checkboxes. Turning any visualizer on adds the debug
+     * stage to the pipeline.
+     *
+     * @param scene The scene.
+     */
+    private void handleDebugInput(@NonNull Scene scene) {
+        DebugVisualizers visualizers = scene.getDebugVisualizers();
+        boolean changed = false;
+        if (showPointLights.checkResult()) {
+            visualizers.setPointLights(showPointLights.getState());
+            changed = true;
+        }
+        if (showSpotLights.checkResult()) {
+            visualizers.setSpotLights(showSpotLights.getState());
+            changed = true;
+        }
+        if (showDirectionalLight.checkResult()) {
+            visualizers.setDirectionalLight(showDirectionalLight.getState());
+            changed = true;
+        }
+        if (showEntityBounds.checkResult()) {
+            visualizers.setEntityBounds(showEntityBounds.getState());
+            changed = true;
+        }
+        if (showShadowCascades.checkResult()) {
+            visualizers.setShadowCascades(showShadowCascades.getState());
+            changed = true;
+        }
+        if (freezeObserver.checkResult()) {
+            if (freezeObserver.getState()) {
+                scene.freezeObserver();
+            } else {
+                scene.unfreezeObserver();
+            }
+            visualizers.setObserverFrustum(freezeObserver.getState());
+            changed = true;
+        }
+        if (changed && visualizers.anyEnabled()) {
+            final int config = GraphicsManager.getPipelineConfig();
+            if (!RenderConfig.hasDebugStage(config)) {
+                GraphicsManager.swapPipeline(RenderConfig.builder(config).withDebug().build());
+            }
+        }
     }
 
     @Override
@@ -184,6 +263,7 @@ public class GraphicsDebug extends GuiWindow {
             }
             GraphicsManager.swapPipeline(builder.build());
         }
+        handleDebugInput(scene);
         DirectionalLight directionalLight = scene.getSceneLights().getDirLight();
         Vector3f directionalLightDir = directionalLight.getDirection();
         if (fogDensity.checkResult()) {

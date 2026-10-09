@@ -8,6 +8,7 @@ import lombok.NonNull;
 public interface RenderStage {
     enum Type {
         ANIMATION,
+        DEBUG,
         FILTER,
         GUI,
         LIGHT,

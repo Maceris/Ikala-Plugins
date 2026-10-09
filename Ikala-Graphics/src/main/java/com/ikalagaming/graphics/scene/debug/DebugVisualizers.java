@@ -1,0 +1,74 @@
+package com.ikalagaming.graphics.scene.debug;
+
+import lombok.Getter;
+import lombok.Setter;
+
+/**
+ * Which built-in debug visualizations to draw. The renderer reads these every frame, and they only
+ * show when the debug stage is part of the pipeline.
+ */
+@Getter
+@Setter
+public class DebugVisualizers {
+    /**
+     * Mark each point light's position, and its range with a sphere.
+     *
+     * @param pointLights Whether to show point lights.
+     * @return Whether point lights are shown.
+     */
+    private volatile boolean pointLights;
+
+    /**
+     * Show each spot light's cone.
+     *
+     * @param spotLights Whether to show spot lights.
+     * @return Whether spot lights are shown.
+     */
+    private volatile boolean spotLights;
+
+    /**
+     * Show an arrow in front of the camera, pointing the way the directional light travels.
+     *
+     * @param directionalLight Whether to show the directional light.
+     * @return Whether the directional light is shown.
+     */
+    private volatile boolean directionalLight;
+
+    /**
+     * Show a box around each mesh of each entity.
+     *
+     * @param entityBounds Whether to show entity bounds.
+     * @return Whether entity bounds are shown.
+     */
+    private volatile boolean entityBounds;
+
+    /**
+     * Show the area each shadow cascade covers.
+     *
+     * @param shadowCascades Whether to show the shadow cascades.
+     * @return Whether the shadow cascades are shown.
+     */
+    private volatile boolean shadowCascades;
+
+    /**
+     * Show the observer's frustum while it is frozen.
+     *
+     * @param observerFrustum Whether to show the frozen observer.
+     * @return Whether the frozen observer is shown.
+     */
+    private volatile boolean observerFrustum;
+
+    /**
+     * Whether any visualizer is turned on.
+     *
+     * @return True if at least one visualizer is on.
+     */
+    public boolean anyEnabled() {
+        return pointLights
+                || spotLights
+                || directionalLight
+                || entityBounds
+                || shadowCascades
+                || observerFrustum;
+    }
+}

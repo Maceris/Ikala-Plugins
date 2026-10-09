@@ -29,6 +29,7 @@ public class RenderConfig {
     public static final int SKYBOX_ENABLED_MASK = 0b0000_1000_0000_0000_0000_0000_0000_0000;
     public static final int FILTER_ENABLED_MASK = 0b0000_0100_0000_0000_0000_0000_0000_0000;
     public static final int GUI_ENABLED_MASK = 0b0000_0010_0000_0000_0000_0000_0000_0000;
+    public static final int DEBUG_ENABLED_MASK = 0b0000_0001_0000_0000_0000_0000_0000_0000;
     public static final int TRANSPARENCY_PASS_MASK = 0b0000_0000_0000_1000_0000_0000_0000_0000;
     public static final int SCENE_WIREFRAME_MASK = 0b0000_0000_0000_0000_1000_0000_0000_0000;
 
@@ -194,6 +195,36 @@ public class RenderConfig {
         }
 
         /**
+         * Toggle drawing debug shapes.
+         *
+         * @return The builder.
+         */
+        public ConfigBuilder toggleDebug() {
+            currentValue ^= DEBUG_ENABLED_MASK;
+            return this;
+        }
+
+        /**
+         * Enable drawing debug shapes, which needs the scene stage.
+         *
+         * @return The builder.
+         */
+        public ConfigBuilder withDebug() {
+            currentValue |= DEBUG_ENABLED_MASK;
+            return this;
+        }
+
+        /**
+         * Disable drawing debug shapes.
+         *
+         * @return The builder.
+         */
+        public ConfigBuilder withoutDebug() {
+            currentValue &= (~DEBUG_ENABLED_MASK);
+            return this;
+        }
+
+        /**
          * Toggle between rendering the scene in wireframe and normal solid rendering.
          *
          * @return The builder.
@@ -346,6 +377,17 @@ public class RenderConfig {
      */
     public static boolean hasTransparencyPass(final int configuration) {
         return (configuration & TRANSPARENCY_PASS_MASK) != 0;
+    }
+
+    /**
+     * Check if the provided configuration draws debug shapes. They are only drawn along with the
+     * scene stage, since they are depth tested against the scene.
+     *
+     * @param configuration The configuration.
+     * @return True if the debug stage should run.
+     */
+    public static boolean hasDebugStage(final int configuration) {
+        return (configuration & DEBUG_ENABLED_MASK) != 0;
     }
 
     /**

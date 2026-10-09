@@ -68,6 +68,9 @@ public class PerFrameData {
 
     public SharedBuffer skyboxUniforms;
 
+    /** Line vertices for debug shapes, see {@link DebugGeometry}. */
+    public SharedBuffer debugVertices;
+
     /** Uniforms for the filter stage, which give filters access to the g-buffer. */
     public SharedBuffer filterUniforms;
 

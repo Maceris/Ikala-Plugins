@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics;
 
+import com.ikalagaming.graphics.scene.debug.DebugShape;
 import com.ikalagaming.plugins.Plugin;
 
 import lombok.Getter;
@@ -7,6 +8,7 @@ import lombok.NonNull;
 
 import java.lang.ref.WeakReference;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import javax.annotation.Nullable;
 
 /**
@@ -48,6 +50,9 @@ public final class GraphicsContext {
     /** Texture loading and releasing for this context. */
     private final Textures textures;
 
+    /** Debug shape drawing for this context. */
+    private final DebugDraw debug;
+
     /** Whether the plugin was unloaded. */
     private volatile boolean closed;
 
@@ -62,6 +67,7 @@ public final class GraphicsContext {
         ownerKey = owner + "#" + NEXT_ID.incrementAndGet();
         this.plugin = new WeakReference<>(plugin);
         textures = new Textures(this);
+        debug = new DebugDraw(this);
         closed = false;
     }
 
@@ -74,6 +80,28 @@ public final class GraphicsContext {
     public Textures textures() {
         checkOpen();
         return textures;
+    }
+
+    /**
+     * Draw wireframe shapes into the scene for debugging, owned by this plugin.
+     *
+     * @return The debug drawing API for this plugin.
+     * @throws IllegalStateException If the plugin was unloaded.
+     */
+    public DebugDraw debug() {
+        checkOpen();
+        return debug;
+    }
+
+    /**
+     * Hand every debug shape this context wants drawn this frame to a consumer. Render thread only.
+     *
+     * @param consumer Receives each shape.
+     */
+    void collectDebugShapes(@NonNull Consumer<DebugShape> consumer) {
+        if (!closed) {
+            debug.collect(consumer);
+        }
     }
 
     /**
@@ -98,6 +126,7 @@ public final class GraphicsContext {
     /** Mark the context as unusable, because the plugin was unloaded. */
     void close() {
         closed = true;
+        debug.release();
     }
 
     /**

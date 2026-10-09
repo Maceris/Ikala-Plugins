@@ -11,6 +11,7 @@ import com.ikalagaming.graphics.gui.data.IkIO;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.debug.DebugShape;
 import com.ikalagaming.graphics.vulkan.DeletionQueue;
 import com.ikalagaming.graphics.vulkan.TextureRegistry;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
@@ -28,6 +29,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import javax.annotation.Nullable;
 
 /** Provides utilities for handling graphics. */
@@ -256,6 +258,16 @@ public class GraphicsManager {
         if (!textures.isEmpty()) {
             log.debug("Released {} textures owned by {}", textures.size(), context.getOwnerKey());
         }
+    }
+
+    /**
+     * Hand every debug shape that plugins want drawn this frame to a consumer, emptying their
+     * queues of immediate shapes. Render thread only.
+     *
+     * @param consumer Receives each shape.
+     */
+    public static void collectDebugShapes(@NonNull Consumer<DebugShape> consumer) {
+        contexts.values().forEach(context -> context.collectDebugShapes(consumer));
     }
 
     /**

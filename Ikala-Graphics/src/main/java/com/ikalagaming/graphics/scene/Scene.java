@@ -5,11 +5,13 @@ import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
+import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
 import com.ikalagaming.graphics.vulkan.DeletionQueue;
 import com.ikalagaming.graphics.vulkan.SharedBuffer;
 import com.ikalagaming.graphics.vulkan.VulkanState;
 
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -74,6 +76,17 @@ public class Scene {
     private final Vector4f skyboxDiffuse;
 
     /**
+     * Which built-in debug visualizations to draw.
+     *
+     * @return The debug visualization settings.
+     */
+    private final DebugVisualizers debugVisualizers;
+
+    /** The observer while it is frozen, or null while it follows the camera. */
+    @Getter(AccessLevel.NONE)
+    private volatile Observer frozenObserver;
+
+    /**
      * Set up a new scene.
      *
      * @param state The Vulkan state.
@@ -88,6 +101,42 @@ public class Scene {
         camera = new Camera();
         fog = new Fog();
         skyboxDiffuse = new Vector4f(0.65f, 0.65f, 0.65f, 1f);
+        debugVisualizers = new DebugVisualizers();
+        frozenObserver = null;
+    }
+
+    /**
+     * The point of view for deciding what is visible, which level of detail to draw, and what to
+     * stream in. Follows the camera unless it was frozen.
+     *
+     * @return The observer.
+     * @see Observer
+     */
+    public Observer getObserver() {
+        Observer frozen = frozenObserver;
+        return frozen != null ? frozen : new Observer(camera, projection);
+    }
+
+    /**
+     * Stop the observer following the camera, keeping its current point of view until {@link
+     * #unfreezeObserver()}. Lets the camera inspect culling and streaming decisions from outside.
+     */
+    public void freezeObserver() {
+        frozenObserver = new Observer(camera, projection);
+    }
+
+    /** Make the observer follow the camera again. */
+    public void unfreezeObserver() {
+        frozenObserver = null;
+    }
+
+    /**
+     * Whether the observer is frozen.
+     *
+     * @return True if the observer is not following the camera.
+     */
+    public boolean isObserverFrozen() {
+        return frozenObserver != null;
     }
 
     /**
