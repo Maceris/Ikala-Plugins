@@ -2,14 +2,18 @@ package com.ikalagaming.graphics.ui;
 
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.IkGuiInternal;
-import com.ikalagaming.graphics.gui.data.Style;
 import com.ikalagaming.graphics.gui.enums.Condition;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.gui.util.RectFloat;
+import com.ikalagaming.graphics.ui.style.ComputedStyle;
+import com.ikalagaming.graphics.ui.style.Style;
+import com.ikalagaming.graphics.ui.style.StyleKey;
 
 import lombok.Getter;
 import lombok.NonNull;
 import org.joml.Vector2f;
+
+import java.util.List;
 
 /**
  * The root of a piece of retained UI, drawn as one IkGui window. Its anchors and sizing place the
@@ -59,6 +63,12 @@ public class Surface {
 
     /** Extra IkGui window flags. */
     private int extraFlags;
+
+    /** The style classes, in order; later ones win. */
+    private List<String> classes = List.of();
+
+    /** The surface's own style, which wins over its classes. */
+    private Style inline = Style.EMPTY;
 
     /**
      * Whether the surface is drawn. -- GETTER -- Whether the surface is drawn.
@@ -143,6 +153,29 @@ public class Surface {
      */
     public Surface movable() {
         movable = true;
+        return this;
+    }
+
+    /**
+     * Set the style classes of the window, replacing any already set. The theme's {@code surface}
+     * type style applies first.
+     *
+     * @param names The class names.
+     * @return This surface.
+     */
+    public Surface classes(@NonNull String... names) {
+        classes = List.of(names);
+        return this;
+    }
+
+    /**
+     * Set the window's own style, which wins over its classes.
+     *
+     * @param style The style.
+     * @return This surface.
+     */
+    public Surface style(@NonNull Style style) {
+        inline = style;
         return this;
     }
 
@@ -282,12 +315,31 @@ public class Surface {
      * @param engine The layout engine.
      */
     void draw(@NonNull RectFloat viewport, @NonNull UiFrame frame, @NonNull LayoutEngine engine) {
-        final Style style = IkGui.getStyle();
-        final RectFloat window = place(viewport, frame.context(), style.variable.windowPadding);
+        final LayoutContext layoutContext = frame.context();
+        final float fontPixels = layoutContext.fontSize() * layoutContext.scale();
+        final ComputedStyle style = layoutContext.theme().compute("surface", classes, inline);
+        final Insets padding = style.insets(StyleKey.PADDING);
+        final Vector2f windowPadding =
+                padding == null
+                        ? new Vector2f(IkGui.getStyle().variable.windowPadding)
+                        : new Vector2f(
+                                padding.left().resolve(0, layoutContext.scale(), fontPixels),
+                                padding.top().resolve(0, layoutContext.scale(), fontPixels));
+        final RectFloat window = place(viewport, layoutContext, windowPadding);
         final Condition condition = movable ? Condition.ONCE : Condition.ALWAYS;
         IkGui.setNextWindowPos(window.getLeft(), window.getTop(), condition);
         IkGui.setNextWindowSize(window.getWidth(), window.getHeight(), condition);
+        // The window reads its colors, borders and padding when it begins
+        final IkGuiStyler.Pushed pushed =
+                IkGuiStyler.push(
+                        IkGuiStyler.pushes(
+                                IkGuiStyler.Kind.SURFACE,
+                                style,
+                                padding,
+                                layoutContext.scale(),
+                                fontPixels));
         final boolean open = IkGui.begin(windowName(), windowFlags());
+        pushed.pop();
         switch (layer) {
             case BACKGROUND ->
                     IkGuiInternal.bringWindowToDisplayBack(IkGuiInternal.getCurrentWindow());

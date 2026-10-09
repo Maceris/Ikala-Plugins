@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.ui;
 
+import com.ikalagaming.graphics.ui.style.ActiveTheme;
+
 import lombok.NonNull;
 
 import java.util.function.Consumer;
@@ -26,5 +28,15 @@ public record UiFrame(
         if (action != null) {
             events.accept(action);
         }
+    }
+
+    /**
+     * The active theme, for drawing code that reads tokens directly, like {@link Immediate}
+     * content.
+     *
+     * @return The theme.
+     */
+    public ActiveTheme theme() {
+        return context.theme();
     }
 }

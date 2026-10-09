@@ -47,13 +47,23 @@ public class Immediate extends Node<Immediate> {
     }
 
     @Override
+    public String styleType() {
+        return "immediate";
+    }
+
+    @Override
     protected void submit(@NonNull UiFrame frame) {
+        IkGuiStyler.Pushed pushed = IkGuiStyler.push(IkGuiStyler.Kind.CHILD, this, frame);
         IkGui.setCursorScreenPos(rect.getLeft(), rect.getTop());
-        if (IkGui.beginChild(
-                "immediate",
-                rect.getWidth(),
-                rect.getHeight(),
-                border ? ChildFlags.BORDERS : ChildFlags.NONE)) {
+        boolean open =
+                IkGui.beginChild(
+                        "immediate",
+                        rect.getWidth(),
+                        rect.getHeight(),
+                        border ? ChildFlags.BORDERS : ChildFlags.NONE);
+        // The child window has read its colors, the content uses its own
+        pushed.pop();
+        if (open) {
             content.accept(frame);
         }
         IkGui.endChild();

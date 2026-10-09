@@ -46,8 +46,15 @@ public class Label extends Node<Label> {
     }
 
     @Override
+    public String styleType() {
+        return "label";
+    }
+
+    @Override
     protected void submit(@NonNull UiFrame frame) {
+        IkGuiStyler.Pushed pushed = IkGuiStyler.push(IkGuiStyler.Kind.LABEL, this, frame);
         IkGui.setCursorScreenPos(rect.getLeft(), rect.getTop());
         IkGui.textUnformatted(text);
+        pushed.pop();
     }
 }

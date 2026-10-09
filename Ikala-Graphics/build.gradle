@@ -56,6 +56,8 @@ idea {
 dependencies {
 	compileOnly project(':Ikala-Core')
 	compileOnly project(':Random')
+	// Ikala-Core includes SnakeYAML, so it is there at runtime without shipping it again
+	compileOnly "org.yaml:snakeyaml:${snakeYamlVersion}"
 	
 	implementation "org.joml:joml:${jomlVersion}"
 	implementation "org.lwjgl:lwjgl:${lwjglVersion}"

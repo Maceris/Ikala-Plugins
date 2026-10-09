@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.ui;
 
+import com.ikalagaming.graphics.ui.style.ActiveTheme;
+
 import lombok.NonNull;
 
 /**
@@ -11,13 +13,42 @@ import lombok.NonNull;
  * @param framePaddingX IkGui's frame padding around widget text, horizontally, in pixels.
  * @param framePaddingY IkGui's frame padding around widget text, vertically, in pixels.
  * @param text Measures text.
+ * @param theme The theme nodes are styled with.
  */
 public record LayoutContext(
         float scale,
         float fontSize,
         float framePaddingX,
         float framePaddingY,
-        @NonNull TextMeasurer text) {
+        @NonNull TextMeasurer text,
+        @NonNull ActiveTheme theme) {
+
+    /**
+     * Create a layout context without a theme, so IkGui's own style is used.
+     *
+     * @param scale Pixels per UI unit.
+     * @param fontSize The default font size in UI units.
+     * @param framePaddingX IkGui's frame padding around widget text, horizontally, in pixels.
+     * @param framePaddingY IkGui's frame padding around widget text, vertically, in pixels.
+     * @param text Measures text.
+     */
+    public LayoutContext(
+            float scale,
+            float fontSize,
+            float framePaddingX,
+            float framePaddingY,
+            @NonNull TextMeasurer text) {
+        this(scale, fontSize, framePaddingX, framePaddingY, text, ActiveTheme.EMPTY);
+    }
+
+    /**
+     * IkGui's frame padding as insets, for widgets the theme doesn't pad.
+     *
+     * @return The frame padding, in UI units.
+     */
+    public Insets framePadding() {
+        return Insets.symmetric(Length.u(framePaddingX / scale), Length.u(framePaddingY / scale));
+    }
 
     /** Measures how much space text takes. */
     @FunctionalInterface

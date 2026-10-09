@@ -2,6 +2,8 @@ package com.ikalagaming.graphics.ui;
 
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.util.RectFloat;
+import com.ikalagaming.graphics.ui.style.ComputedStyle;
+import com.ikalagaming.graphics.ui.style.Style;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -46,13 +48,32 @@ public abstract class Node<S extends Node<S>> {
     /** How the height is decided. */
     Sizing height = Sizing.fit();
 
-    /** Space between the edges and the content. */
-    Insets padding = Insets.NONE;
+    /** Space between the edges and the content, or null to use the style's. */
+    Insets padding;
+
+    /** The style classes, in order; later ones win. */
+    List<String> classes = List.of();
+
+    /** The node's own style, which wins over its classes. */
+    Style inline = Style.EMPTY;
+
+    /**
+     * The style computed by the last layout, for drawing.
+     *
+     * @return The computed style.
+     */
+    @Getter ComputedStyle style = ComputedStyle.EMPTY;
+
+    /** The padding the last layout used: the node's own, the style's, or the default. */
+    Insets resolvedPadding = Insets.NONE;
+
+    /** Whether this node sets its own font size, rather than using its parent's. */
+    boolean ownFont;
 
     /** Where the node sits when its parent is an {@link Overlay}. */
     Anchors anchors = Anchors.topLeft();
 
-    /** The font size in UI units, or null to use the parent's. */
+    /** The font size in UI units, or null to use the style's or the parent's. */
     Float fontSize;
 
     /**
@@ -152,6 +173,79 @@ public abstract class Node<S extends Node<S>> {
     }
 
     /**
+     * Set the style classes, replacing any already set. Classes come from the theme; later ones win
+     * over earlier ones.
+     *
+     * @param names The class names.
+     * @return This node.
+     */
+    public S classes(@NonNull String... names) {
+        classes = List.of(names);
+        markDirty();
+        return self();
+    }
+
+    /**
+     * The style classes, in order.
+     *
+     * @return The class names.
+     */
+    public List<String> getClasses() {
+        return classes;
+    }
+
+    /**
+     * Set the node's own style, which wins over its classes and type defaults. Explicit setters
+     * like {@link #padding(Insets)} still win over it.
+     *
+     * @param newStyle The style.
+     * @return This node.
+     */
+    public S style(@NonNull Style newStyle) {
+        inline = newStyle;
+        markDirty();
+        return self();
+    }
+
+    /**
+     * The name of this kind of node in themes, such as {@code button}. Theme type defaults are
+     * looked up by it.
+     *
+     * @return The type name.
+     */
+    public String styleType() {
+        return "node";
+    }
+
+    /**
+     * The padding to use when neither the node nor its style sets any.
+     *
+     * @param context The layout context.
+     * @return The default padding.
+     */
+    protected Insets defaultPadding(@NonNull LayoutContext context) {
+        return Insets.NONE;
+    }
+
+    /**
+     * The padding the last layout used.
+     *
+     * @return The padding.
+     */
+    public Insets getResolvedPadding() {
+        return resolvedPadding;
+    }
+
+    /**
+     * The font size the last layout used, in pixels.
+     *
+     * @return The font size.
+     */
+    public float getFontPixels() {
+        return fontPixels;
+    }
+
+    /**
      * Set where the node sits when its parent is an {@link Overlay}.
      *
      * @param newAnchors The anchors.
@@ -229,7 +323,7 @@ public abstract class Node<S extends Node<S>> {
             return;
         }
         IkGui.pushID(id);
-        boolean pushedFont = fontSize != null;
+        boolean pushedFont = ownFont;
         if (pushedFont) {
             IkGui.pushFontSize(Math.round(fontPixels));
         }

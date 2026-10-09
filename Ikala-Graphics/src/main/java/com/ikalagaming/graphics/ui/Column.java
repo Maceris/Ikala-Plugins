@@ -13,4 +13,9 @@ public class Column extends Flex<Column> {
     public Column(@NonNull String id) {
         super(id, Axis.Y);
     }
+
+    @Override
+    public String styleType() {
+        return "column";
+    }
 }

@@ -13,4 +13,9 @@ public class Row extends Flex<Row> {
     public Row(@NonNull String id) {
         super(id, Axis.X);
     }
+
+    @Override
+    public String styleType() {
+        return "row";
+    }
 }

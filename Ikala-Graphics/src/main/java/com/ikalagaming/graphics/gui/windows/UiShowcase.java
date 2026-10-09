@@ -21,6 +21,7 @@ import com.ikalagaming.graphics.ui.Overlay;
 import com.ikalagaming.graphics.ui.Row;
 import com.ikalagaming.graphics.ui.Sizing;
 import com.ikalagaming.graphics.ui.Surface;
+import com.ikalagaming.graphics.ui.style.StyleKey;
 
 import lombok.NonNull;
 
@@ -50,14 +51,9 @@ public final class UiShowcase {
         @Override
         protected void draw(
                 @NonNull DrawList drawList, @NonNull RectFloat bounds, @NonNull ItemState state) {
-            int background;
-            if (state.held()) {
-                background = Color.rgba(0.85f, 0.55f, 0.15f, 1.0f);
-            } else if (state.hovered() || state.focused()) {
-                background = Color.rgba(0.35f, 0.45f, 0.65f, 1.0f);
-            } else {
-                background = Color.rgba(0.20f, 0.22f, 0.28f, 1.0f);
-            }
+            // The theme's "custom" type gives the colors for each state
+            int background = color(StyleKey.BACKGROUND, state, Color.rgba(0.2f, 0.22f, 0.28f, 1f));
+            int accent = color(StyleKey.ACCENT, state, Color.rgba(0.8f, 0.8f, 0.85f, 1f));
             float rounding = bounds.getWidth() * 0.15f;
             drawList.addRectFilled(
                     bounds.getLeft(),
@@ -68,10 +64,7 @@ public final class UiShowcase {
                     rounding);
             // An icon placeholder
             drawList.addCircleFilled(
-                    bounds.getCenterX(),
-                    bounds.getCenterY(),
-                    bounds.getWidth() * 0.25f,
-                    Color.rgba(0.80f, 0.80f, 0.85f, 1.0f));
+                    bounds.getCenterX(), bounds.getCenterY(), bounds.getWidth() * 0.25f, accent);
             if (count > 0) {
                 int fontSize = IkGui.getFontSize();
                 drawList.addText(
@@ -112,6 +105,8 @@ public final class UiShowcase {
                         .padding(Insets.all(4))
                         .align(Align.STRETCH)
                         .add(
+                                new Label("theme-title", "Theme classes").classes("title"),
+                                themeRow(),
                                 new Label("grow-title", "Row: fixed 80, then grow 1 : 2"),
                                 growRow(),
                                 new Label("justify-title", "Justify: start, center, end, between"),
@@ -133,6 +128,22 @@ public final class UiShowcase {
                 .width(Sizing.fixed(520))
                 .movable()
                 .content(content);
+    }
+
+    /**
+     * A row showing a few of the default theme's classes.
+     *
+     * @return The row.
+     */
+    private static Row themeRow() {
+        return new Row("theme")
+                .gap(8)
+                .align(Align.CENTER)
+                .add(
+                        new Button("normal", "Normal"),
+                        new Button("danger", "Danger").classes("danger"),
+                        new Label("muted", "Muted text").classes("muted"),
+                        new Label("error", "Error text").classes("error-text"));
     }
 
     /**
@@ -185,6 +196,7 @@ public final class UiShowcase {
     private static Overlay overlay() {
         Length inset = Length.u(4);
         return new Overlay("overlay")
+                .classes("panel")
                 .height(Sizing.fixed(90))
                 .add(
                         new Label("top-left", "top left")

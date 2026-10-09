@@ -1,5 +1,8 @@
 package com.ikalagaming.graphics.ui;
 
+import com.ikalagaming.graphics.ui.style.ComputedStyle;
+import com.ikalagaming.graphics.ui.style.StyleKey;
+
 import lombok.NonNull;
 
 import java.util.ArrayList;
@@ -62,7 +65,7 @@ public final class LayoutEngine {
         // The content of a scroll is laid out on its own, but keeps the scroll's font
         float inherited =
                 root.parent != null ? root.parent.fontPixels : context.fontSize() * context.scale();
-        resolveFonts(root, inherited, context);
+        resolveStyles(root, inherited, context);
         for (Axis axis : Axis.values()) {
             fit(root, axis, context);
             root.size[axis.index()] = axis == Axis.X ? width : height;
@@ -83,7 +86,7 @@ public final class LayoutEngine {
      * @param out Receives the width at 0 and the height at 1, including the root's padding.
      */
     public static void fitSize(@NonNull Node<?> root, @NonNull LayoutContext context, float[] out) {
-        resolveFonts(root, context.fontSize() * context.scale(), context);
+        resolveStyles(root, context.fontSize() * context.scale(), context);
         for (Axis axis : Axis.values()) {
             fit(root, axis, context);
             out[axis.index()] = root.fit[axis.index()];
@@ -91,16 +94,37 @@ public final class LayoutEngine {
     }
 
     /**
-     * Work out every node's font size in pixels.
+     * Work out every node's style, padding, gap and font size, top-down. A node's own setters win
+     * over its style, and nodes without a font size use their parent's.
      *
      * @param node The node.
      * @param inherited The parent's font size in pixels.
      * @param context The layout context.
      */
-    private static void resolveFonts(Node<?> node, float inherited, LayoutContext context) {
-        node.fontPixels = node.fontSize != null ? node.fontSize * context.scale() : inherited;
+    private static void resolveStyles(Node<?> node, float inherited, LayoutContext context) {
+        ComputedStyle style = context.theme().compute(node.styleType(), node.classes, node.inline);
+        node.style = style;
+
+        Insets padding = node.padding != null ? node.padding : style.insets(StyleKey.PADDING);
+        node.resolvedPadding = padding != null ? padding : node.defaultPadding(context);
+
+        if (node instanceof Flex<?> flex) {
+            Length gap = flex.gap != null ? flex.gap : style.length(StyleKey.GAP);
+            flex.resolvedGap = gap != null ? gap : Length.ZERO;
+        }
+
+        Float styleFont = style.number(StyleKey.FONT_SIZE);
+        if (node.fontSize != null) {
+            node.fontPixels = node.fontSize * context.scale();
+        } else if (styleFont != null) {
+            node.fontPixels = styleFont * context.scale();
+        } else {
+            node.fontPixels = inherited;
+        }
+        node.ownFont = node.fontSize != null || styleFont != null;
+
         for (Node<?> child : node.children) {
-            resolveFonts(child, node.fontPixels, context);
+            resolveStyles(child, node.fontPixels, context);
         }
     }
 
@@ -333,8 +357,8 @@ public final class LayoutEngine {
         if (node.children.isEmpty() || node instanceof Scroll) {
             return;
         }
-        float left = x + resolve(node.padding.left(), node.size[0], node, context);
-        float top = y + resolve(node.padding.top(), node.size[1], node, context);
+        float left = x + resolve(node.resolvedPadding.left(), node.size[0], node, context);
+        float top = y + resolve(node.resolvedPadding.top(), node.size[1], node, context);
         float[] start = {left, top};
         float[] available = {
             node.size[0] - paddingSum(node, Axis.X, node.size[0], context),
@@ -381,7 +405,7 @@ public final class LayoutEngine {
             Flex<?> flex, float[] start, float[] available, LayoutContext context) {
         int main = flex.mainAxis.index();
         int cross = flex.mainAxis.other().index();
-        float gap = resolve(flex.gap, available[main], flex, context);
+        float gap = resolve(flex.resolvedGap, available[main], flex, context);
 
         int count = 0;
         float total = 0;
@@ -437,7 +461,7 @@ public final class LayoutEngine {
                 ++count;
             }
         }
-        return Math.max(0, count - 1) * resolve(flex.gap, 0, flex, context);
+        return Math.max(0, count - 1) * resolve(flex.resolvedGap, 0, flex, context);
     }
 
     /**
@@ -461,7 +485,7 @@ public final class LayoutEngine {
      * @return The total padding in pixels.
      */
     private static float paddingSum(Node<?> node, Axis axis, float parent, LayoutContext context) {
-        Insets padding = node.padding;
+        Insets padding = node.resolvedPadding;
         return axis == Axis.X
                 ? resolve(padding.left(), parent, node, context)
                         + resolve(padding.right(), parent, node, context)

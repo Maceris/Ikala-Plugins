@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.gui.IkGuiInternal;
 import com.ikalagaming.graphics.gui.data.DrawList;
 import com.ikalagaming.graphics.gui.data.IkBoolean;
 import com.ikalagaming.graphics.gui.util.RectFloat;
+import com.ikalagaming.graphics.ui.style.StyleKey;
 
 import lombok.NonNull;
 
@@ -66,6 +67,34 @@ public abstract class CustomItem<S extends CustomItem<S>> extends Node<S> {
      */
     protected abstract void draw(
             @NonNull DrawList drawList, @NonNull RectFloat bounds, @NonNull ItemState state);
+
+    @Override
+    public String styleType() {
+        return "custom";
+    }
+
+    /**
+     * A style value for an interaction state, for drawing.
+     *
+     * @param key The property.
+     * @param state The item's state this frame.
+     * @return The value from the computed style, or null if the theme doesn't set it.
+     */
+    protected Object style(@NonNull StyleKey key, @NonNull ItemState state) {
+        return style.get(key, state.styleStates());
+    }
+
+    /**
+     * A color for an interaction state, for drawing.
+     *
+     * @param key A color property.
+     * @param state The item's state this frame.
+     * @param fallback The color to use if the theme doesn't set one.
+     * @return The packed color.
+     */
+    protected int color(@NonNull StyleKey key, @NonNull ItemState state, int fallback) {
+        return style(key, state) instanceof Integer color ? color : fallback;
+    }
 
     @Override
     protected final void submit(@NonNull UiFrame frame) {

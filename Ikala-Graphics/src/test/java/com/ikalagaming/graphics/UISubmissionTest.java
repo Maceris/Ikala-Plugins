@@ -24,6 +24,10 @@ import com.ikalagaming.graphics.ui.Length;
 import com.ikalagaming.graphics.ui.Sizing;
 import com.ikalagaming.graphics.ui.Surface;
 import com.ikalagaming.graphics.ui.UiManager;
+import com.ikalagaming.graphics.ui.style.Style;
+import com.ikalagaming.graphics.ui.style.StyleKey;
+import com.ikalagaming.graphics.ui.style.StyleState;
+import com.ikalagaming.graphics.ui.style.Theme;
 
 import lombok.NonNull;
 import org.junit.jupiter.api.AfterEach;
@@ -40,6 +44,7 @@ class UISubmissionTest {
 
     private static final class Slot extends CustomItem<Slot> {
         ItemState lastState;
+        int lastBackground;
 
         Slot(String id) {
             super(id);
@@ -51,6 +56,7 @@ class UISubmissionTest {
         protected void draw(
                 @NonNull DrawList drawList, @NonNull RectFloat bounds, @NonNull ItemState state) {
             lastState = state;
+            lastBackground = color(StyleKey.BACKGROUND, state, 0);
             drawList.addRectFilled(
                     bounds.getLeft(), bounds.getTop(), bounds.getRight(), bounds.getBottom(), -1);
         }
@@ -323,6 +329,52 @@ class UISubmissionTest {
         frames(3);
 
         assertEquals(false, context.io.wantCaptureKeyboard, "Camera keys work again");
+    }
+
+    @Test
+    void themesStyleNodesAndBalanceTheirPushes() {
+        Theme theme =
+                Theme.builder("test")
+                        .type(
+                                "custom",
+                                Style.builder()
+                                        .color(StyleKey.BACKGROUND, 0x112233FF)
+                                        .state(
+                                                StyleState.HOVERED,
+                                                Style.builder()
+                                                        .color(StyleKey.BACKGROUND, 0x445566FF)
+                                                        .build())
+                                        .build())
+                        .type(
+                                "button",
+                                Style.builder().color(StyleKey.BACKGROUND, 0xFF0000FF).build())
+                        .build();
+        manager.useTheme(owner, theme);
+        show(menu("menu"));
+        frames(2);
+        assertEquals(0x112233FF, slot.lastBackground);
+        assertTrue(context.colorStack.isEmpty(), "Every pushed color was popped");
+
+        RectFloat rect = slot.getRect();
+        context.io.addMousePosEvent(rect.getCenterX(), rect.getCenterY());
+        frames(2);
+
+        assertEquals(0x445566FF, slot.lastBackground, "The hovered state's color");
+        assertTrue(context.colorStack.isEmpty());
+    }
+
+    @Test
+    void unloadingDropsThatPluginsTheme() {
+        Theme theme = Theme.builder("test").build();
+        manager.useTheme(owner, theme);
+        show(menu("menu"));
+        frame();
+        assertEquals(theme, manager.getActiveTheme().getTheme());
+
+        manager.removeAllOwnedBy(owner);
+        frames(2);
+
+        assertEquals(manager.getDefaultTheme(), manager.getActiveTheme().getTheme());
     }
 
     @Test

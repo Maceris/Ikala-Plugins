@@ -2,9 +2,15 @@ package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.ui.Surface;
 import com.ikalagaming.graphics.ui.UiManager;
+import com.ikalagaming.graphics.ui.style.Theme;
+import com.ikalagaming.graphics.ui.style.ThemeException;
+import com.ikalagaming.graphics.ui.style.ThemeLoader;
+import com.ikalagaming.launcher.PluginFolder;
+import com.ikalagaming.launcher.PluginFolder.ResourceType;
 
 import lombok.NonNull;
 
+import java.io.File;
 import java.util.function.Supplier;
 
 /**
@@ -74,6 +80,42 @@ public final class UI {
     public void remove(@NonNull String id) {
         context.checkOpen();
         manager.get().post(() -> manager.get().remove(context, id));
+    }
+
+    /**
+     * Replace the theme for all retained UI, until this plugin unloads or chooses another. Meant
+     * for the plugin that owns the game's look, like a game client.
+     *
+     * @param theme The theme, or null to go back to the default.
+     */
+    public void useTheme(Theme theme) {
+        context.checkOpen();
+        manager.get().post(() -> manager.get().useTheme(context, theme));
+    }
+
+    /**
+     * Add this plugin's own tokens and classes on top of the theme, until it unloads. Prefix the
+     * names with the plugin, like {@code converter.error}, so they don't clash with others.
+     *
+     * @param extension A theme holding the tokens and classes.
+     */
+    public void addStyles(@NonNull Theme extension) {
+        context.checkOpen();
+        manager.get().post(() -> manager.get().addStyles(context, extension));
+    }
+
+    /**
+     * Load a theme from this plugin's data folder. Its styles may use the default theme's tokens.
+     *
+     * @param path The path within the plugin's data folder.
+     * @return The theme.
+     * @throws ThemeException If the theme is broken.
+     * @throws java.io.UncheckedIOException If it can't be read.
+     */
+    public Theme loadTheme(@NonNull String path) {
+        context.checkOpen();
+        File file = PluginFolder.getResource(context.getOwner(), ResourceType.DATA, path);
+        return ThemeLoader.load(file.toPath(), manager.get().getDefaultTheme());
     }
 
     /**

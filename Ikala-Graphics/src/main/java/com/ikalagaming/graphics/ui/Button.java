@@ -77,14 +77,24 @@ public class Button extends Node<Button> {
     }
 
     @Override
+    public String styleType() {
+        return "button";
+    }
+
+    @Override
+    protected Insets defaultPadding(@NonNull LayoutContext context) {
+        return context.framePadding();
+    }
+
+    @Override
     protected void measure(@NonNull LayoutContext context, float[] out) {
+        // The padding is added by the layout and becomes IkGui's frame padding
         context.text().measure(text, fontPixels, out);
-        out[0] += 2 * context.framePaddingX();
-        out[1] += 2 * context.framePaddingY();
     }
 
     @Override
     protected void submit(@NonNull UiFrame frame) {
+        IkGuiStyler.Pushed pushed = IkGuiStyler.push(IkGuiStyler.Kind.BUTTON, this, frame);
         IkGui.setCursorScreenPos(rect.getLeft(), rect.getTop());
         // ### keeps the ID the same when the text changes
         if (IkGui.button(text + "###button", rect.getWidth(), rect.getHeight())) {
@@ -93,5 +103,6 @@ public class Button extends Node<Button> {
         if (autofocus) {
             IkGui.setItemDefaultFocus();
         }
+        pushed.pop();
     }
 }

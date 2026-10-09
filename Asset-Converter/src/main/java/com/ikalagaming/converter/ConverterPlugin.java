@@ -92,6 +92,7 @@ public class ConverterPlugin extends Plugin {
         UI ui = graphics.ui();
         ui.show(new MainMenu(ui, () -> setInspectorVisible(true)).build());
         // Shown once so later toggles only change its visibility, and keep its state
+        ui.addStyles(AssetInspectorWindow.styles());
         ui.show(new AssetInspectorWindow(ui).build());
         ui.setVisible(AssetInspectorWindow.SURFACE_ID, false);
 

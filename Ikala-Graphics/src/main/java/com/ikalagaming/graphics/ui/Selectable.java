@@ -83,7 +83,13 @@ public class Selectable extends Node<Selectable> {
     }
 
     @Override
+    public String styleType() {
+        return "selectable";
+    }
+
+    @Override
     protected void submit(@NonNull UiFrame frame) {
+        IkGuiStyler.Pushed pushed = IkGuiStyler.push(IkGuiStyler.Kind.SELECTABLE, this, frame);
         IkGui.setCursorScreenPos(rect.getLeft(), rect.getTop());
         // ### keeps the ID the same when the text changes
         if (IkGui.selectable(
@@ -94,5 +100,6 @@ public class Selectable extends Node<Selectable> {
                 rect.getHeight())) {
             frame.fire(onClick);
         }
+        pushed.pop();
     }
 }

@@ -16,7 +16,10 @@ public abstract class Flex<S extends Flex<S>> extends Container<S> {
     final Axis mainAxis;
 
     /** Space between neighboring children. */
-    Length gap = Length.ZERO;
+    Length gap;
+
+    /** The gap the last layout used: the container's own, the style's, or none. */
+    Length resolvedGap = Length.ZERO;
 
     /** Where children sit across the line. */
     Align align = Align.START;

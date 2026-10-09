@@ -16,4 +16,9 @@ public class Overlay extends Container<Overlay> {
     public Overlay(@NonNull String id) {
         super(id);
     }
+
+    @Override
+    public String styleType() {
+        return "overlay";
+    }
 }

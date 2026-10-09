@@ -1,5 +1,9 @@
 package com.ikalagaming.graphics.ui;
 
+import com.ikalagaming.graphics.gui.IkGui;
+import com.ikalagaming.graphics.gui.data.DrawList;
+import com.ikalagaming.graphics.ui.style.StyleKey;
+
 import lombok.NonNull;
 
 /**
@@ -54,6 +58,56 @@ public abstract class Container<S extends Container<S>> extends Node<S> {
             markDirty();
         }
         return self();
+    }
+
+    @Override
+    protected void submit(@NonNull UiFrame frame) {
+        drawPanel(frame);
+        super.submit(frame);
+    }
+
+    /**
+     * Draw the container's background and border, if its style sets them, so a container can be a
+     * panel.
+     *
+     * @param frame Details about the current frame.
+     */
+    protected final void drawPanel(@NonNull UiFrame frame) {
+        Integer background = style.color(StyleKey.BACKGROUND);
+        Integer border = style.color(StyleKey.BORDER);
+        Length borderSize = style.length(StyleKey.BORDER_SIZE);
+        if (background == null && (border == null || borderSize == null)) {
+            return;
+        }
+        Length roundingLength = style.length(StyleKey.ROUNDING);
+        float rounding =
+                roundingLength == null
+                        ? 0
+                        : roundingLength.resolve(0, frame.context().scale(), fontPixels);
+        DrawList drawList = IkGui.getWindowDrawList();
+        if (background != null) {
+            drawList.addRectFilled(
+                    rect.getLeft(),
+                    rect.getTop(),
+                    rect.getRight(),
+                    rect.getBottom(),
+                    background,
+                    rounding);
+        }
+        if (border != null && borderSize != null) {
+            float thickness = borderSize.resolve(0, frame.context().scale(), fontPixels);
+            if (thickness > 0) {
+                drawList.addRect(
+                        rect.getLeft(),
+                        rect.getTop(),
+                        rect.getRight(),
+                        rect.getBottom(),
+                        border,
+                        rounding,
+                        com.ikalagaming.graphics.gui.flags.DrawFlags.NONE,
+                        thickness);
+            }
+        }
     }
 
     /**

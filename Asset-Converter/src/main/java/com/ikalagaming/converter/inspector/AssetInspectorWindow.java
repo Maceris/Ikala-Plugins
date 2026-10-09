@@ -24,6 +24,9 @@ import com.ikalagaming.graphics.ui.Sizing;
 import com.ikalagaming.graphics.ui.Surface;
 import com.ikalagaming.graphics.ui.TextInput;
 import com.ikalagaming.graphics.ui.UiFrame;
+import com.ikalagaming.graphics.ui.style.ActiveTheme;
+import com.ikalagaming.graphics.ui.style.Theme;
+import com.ikalagaming.graphics.ui.style.Token;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -47,17 +50,29 @@ public class AssetInspectorWindow {
     /** How many bytes of a section the hex preview shows. */
     private static final int PREVIEW_BYTES = 512;
 
-    /** Error text. */
+    /** Error text, if the theme has no {@code converter.error} token. */
     private static final int ERROR_COLOR = Color.rgba(1.0f, 0.35f, 0.35f, 1.0f);
 
-    /** Warning text. */
+    /** Warning text, if the theme has no {@code converter.warning} token. */
     private static final int WARNING_COLOR = Color.rgba(1.0f, 0.85f, 0.3f, 1.0f);
 
-    /** Offsets in the hex preview. */
+    /** Offsets in the hex preview, if the theme has no {@code converter.offset} token. */
     private static final int OFFSET_COLOR = Color.rgba(0.6f, 0.6f, 0.7f, 1.0f);
 
-    /** Good news text. */
+    /** Good news text, if the theme has no {@code converter.ok} token. */
     private static final int OK_COLOR = Color.rgba(0.45f, 0.9f, 0.45f, 1.0f);
+
+    /** Error text this frame, from the theme. */
+    private int errorColor = ERROR_COLOR;
+
+    /** Warning text this frame, from the theme. */
+    private int warningColor = WARNING_COLOR;
+
+    /** Hex preview offsets this frame, from the theme. */
+    private int offsetColor = OFFSET_COLOR;
+
+    /** Good news text this frame, from the theme. */
+    private int okColor = OK_COLOR;
 
     /** What is being browsed and shown. */
     private final AssetInspector inspector;
@@ -94,6 +109,22 @@ public class AssetInspectorWindow {
         summary = new Label("summary", "");
         status = new Label("status", "");
         refresh();
+    }
+
+    /**
+     * The converter's own theme tokens for the inspector's colors, to add with {@code
+     * UI.addStyles}. They point at the default theme's tokens, so a game theme that changes those
+     * changes the inspector too.
+     *
+     * @return The theme extension.
+     */
+    public static Theme styles() {
+        return Theme.builder("converter")
+                .token("converter.error", new Token("color.error-text"))
+                .token("converter.warning", new Token("color.warning"))
+                .token("converter.ok", new Token("color.ok"))
+                .token("converter.offset", "#9999B3FF")
+                .build();
     }
 
     /**
@@ -303,6 +334,11 @@ public class AssetInspectorWindow {
      * @param frame The current frame, for firing actions.
      */
     private void drawDetails(UiFrame frame) {
+        ActiveTheme theme = frame.theme();
+        errorColor = theme.color("converter.error", ERROR_COLOR);
+        warningColor = theme.color("converter.warning", WARNING_COLOR);
+        offsetColor = theme.color("converter.offset", OFFSET_COLOR);
+        okColor = theme.color("converter.ok", OK_COLOR);
         AssetValidator.Inspection inspection = inspector.getInspection();
         if (inspection == null) {
             return;
@@ -317,13 +353,13 @@ public class AssetInspectorWindow {
         String problemsTitle = "Problems (" + inspection.problems().size() + ")###problems";
         if (IkGui.collapsingHeader(problemsTitle, TreeNodeFlags.DEFAULT_OPEN)) {
             if (inspection.problems().isEmpty()) {
-                IkGui.textColored(OK_COLOR, "None");
+                IkGui.textColored(okColor, "None");
             }
             for (AssetValidator.Problem problem : inspection.problems()) {
                 IkGui.textColored(
                         problem.severity() == AssetValidator.Severity.ERROR
-                                ? ERROR_COLOR
-                                : WARNING_COLOR,
+                                ? errorColor
+                                : warningColor,
                         problem.toString());
             }
         }
@@ -333,7 +369,7 @@ public class AssetInspectorWindow {
                     "Section " + entry.index() + " (" + SectionTag.toString(entry.tag()) + ")";
             if (IkGui.collapsingHeader(previewTitle + "###preview", TreeNodeFlags.DEFAULT_OPEN)) {
                 if (entry.section() == null) {
-                    IkGui.textColored(ERROR_COLOR, "The payload is outside the file");
+                    IkGui.textColored(errorColor, "The payload is outside the file");
                 } else {
                     drawHex(entry.section().data());
                 }
@@ -346,7 +382,7 @@ public class AssetInspectorWindow {
      *
      * @param data The section payload.
      */
-    private static void drawHex(ByteBuffer data) {
+    private void drawHex(ByteBuffer data) {
         int columns = HexDump.BYTES_PER_LINE + 2;
         if (!IkGui.beginTable(
                 "hex", columns, TableFlags.SIZING_FIXED_FIT | TableFlags.BORDERS_INNER_V)) {
@@ -355,7 +391,7 @@ public class AssetInspectorWindow {
         for (HexDump.Line line : HexDump.lines(data, PREVIEW_BYTES)) {
             IkGui.tableNextRow();
             IkGui.tableNextColumn();
-            IkGui.textColored(OFFSET_COLOR, line.offsetText());
+            IkGui.textColored(offsetColor, line.offsetText());
             for (int i = 0; i < HexDump.BYTES_PER_LINE; ++i) {
                 IkGui.tableNextColumn();
                 if (i < line.bytes().length) {
@@ -458,20 +494,20 @@ public class AssetInspectorWindow {
             IkGui.textUnformatted(Long.toUnsignedString(entry.length()));
             IkGui.tableNextColumn();
             if (entry.actualCrc() == null) {
-                IkGui.textColored(ERROR_COLOR, "out of bounds");
+                IkGui.textColored(errorColor, "out of bounds");
             } else if (entry.crcMatches()) {
-                IkGui.textColored(OK_COLOR, String.format("%08X ok", entry.storedCrc()));
+                IkGui.textColored(okColor, String.format("%08X ok", entry.storedCrc()));
             } else {
                 // The expected value is in the problems list, which has room for it
-                IkGui.textColored(ERROR_COLOR, String.format("%08X bad", entry.actualCrc()));
+                IkGui.textColored(errorColor, String.format("%08X bad", entry.actualCrc()));
             }
             IkGui.tableNextColumn();
             if (entry.known()) {
                 IkGui.textUnformatted("yes");
             } else if (entry.isRequired()) {
-                IkGui.textColored(ERROR_COLOR, "no");
+                IkGui.textColored(errorColor, "no");
             } else {
-                IkGui.textColored(WARNING_COLOR, "no, skipped");
+                IkGui.textColored(warningColor, "no, skipped");
             }
         }
         IkGui.endTable();

@@ -62,13 +62,23 @@ public class Scroll extends Container<Scroll> {
     }
 
     @Override
+    public String styleType() {
+        return "scroll";
+    }
+
+    @Override
     protected void submit(@NonNull UiFrame frame) {
+        IkGuiStyler.Pushed pushed = IkGuiStyler.push(IkGuiStyler.Kind.CHILD, this, frame);
         IkGui.setCursorScreenPos(rect.getLeft(), rect.getTop());
-        if (IkGui.beginChild(
-                "scroll",
-                rect.getWidth(),
-                rect.getHeight(),
-                border ? ChildFlags.BORDERS : ChildFlags.NONE)) {
+        boolean open =
+                IkGui.beginChild(
+                        "scroll",
+                        rect.getWidth(),
+                        rect.getHeight(),
+                        border ? ChildFlags.BORDERS : ChildFlags.NONE);
+        // The child window has read its colors, its content uses their own
+        pushed.pop();
+        if (open) {
             if (!children.isEmpty()) {
                 Node<?> content = children.getFirst();
                 // The cursor already includes the scroll offset

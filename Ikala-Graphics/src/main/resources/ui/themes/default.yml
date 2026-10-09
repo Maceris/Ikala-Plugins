@@ -1,0 +1,106 @@
+# The default theme for retained UI. Its colors and sizes match IkGui's dark style, so retained UI
+# looks like the rest of IkGui until a game supplies its own theme.
+#
+# Token names are free-form. This theme names colors by role (text, panel, accent) rather than by
+# hue, and spacing as a small scale of steps, so a theme can change them without renaming anything.
+name: default
+
+tokens:
+  color.text: "#FFFFFFFF"
+  color.text-muted: "#808080FF"
+  color.window: "#0F0F0FF0"
+  color.panel: "#1F2533FF"
+  color.border: "#6E6E8080"
+  color.transparent: "#00000000"
+
+  # The accent at a few strengths: resting, hovered and pressed
+  color.accent: "#4296FA66"
+  color.accent-hovered: "#4296FAFF"
+  color.accent-pressed: "#0F87FAFF"
+  color.accent-selected: "#4296FA4F"
+  color.accent-highlight: "#4296FACC"
+
+  color.field: "#294A7A8A"
+  color.field-active: "#4296FAAB"
+
+  color.error: "#C2363DFF"
+  color.error-hovered: "#E04B52FF"
+  color.error-pressed: "#A12A30FF"
+  color.error-text: "#FF5959FF"
+  color.warning: "#FFD94DFF"
+  color.ok: "#73E673FF"
+
+  spacing.small: 4
+  spacing.medium: 8
+  spacing.large: 16
+  corner-radius: 0
+  corner-radius.panel: 6
+  font-size.title: 18
+
+  # IkGui's frame padding around widget text: 3 units above and below, 4 either side
+  padding.widget: [3, 4]
+
+variants:
+  compact:
+    spacing.medium: 6
+    spacing.large: 12
+
+types:
+  surface:
+    background: $color.window
+    border: $color.border
+    borderSize: 1
+    rounding: $corner-radius
+    padding: $spacing.medium
+  button:
+    background: $color.accent
+    text: $color.text
+    rounding: $corner-radius
+    borderSize: 0
+    padding: $padding.widget
+    hovered: { background: $color.accent-hovered }
+    held: { background: $color.accent-pressed }
+  text-input:
+    background: $color.field
+    text: $color.text
+    rounding: $corner-radius
+    borderSize: 0
+    padding: $padding.widget
+    hovered: { background: $color.accent }
+    held: { background: $color.field-active }
+  selectable:
+    text: $color.text
+    selected: { background: $color.accent-selected }
+    hovered: { background: $color.accent-highlight }
+    held: { background: $color.accent-hovered }
+  label:
+    text: $color.text
+  scroll:
+    background: $color.transparent
+    rounding: $corner-radius
+  immediate:
+    background: $color.transparent
+    rounding: $corner-radius
+  custom:
+    background: $color.panel
+    accent: $color.accent-hovered
+    rounding: $corner-radius.panel
+    hovered: { background: "#2E3A52FF" }
+    focused: { background: "#2E3A52FF" }
+    held: { background: $color.accent-pressed }
+
+classes:
+  title:
+    fontSize: $font-size.title
+  muted:
+    text: $color.text-muted
+  panel:
+    background: $color.panel
+    rounding: $corner-radius.panel
+    padding: $spacing.medium
+  danger:
+    background: $color.error
+    hovered: { background: $color.error-hovered }
+    held: { background: $color.error-pressed }
+  error-text:
+    text: $color.error-text

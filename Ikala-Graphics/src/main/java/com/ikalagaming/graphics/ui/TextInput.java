@@ -75,15 +75,26 @@ public class TextInput extends Node<TextInput> {
     }
 
     @Override
+    public String styleType() {
+        return "text-input";
+    }
+
+    @Override
+    protected Insets defaultPadding(@NonNull LayoutContext context) {
+        return context.framePadding();
+    }
+
+    @Override
     protected void measure(@NonNull LayoutContext context, float[] out) {
-        // Any text is one line tall; the width comes from the sizing
+        // Any text is one line tall; the width comes from the sizing, and the padding is added by
+        // the layout
         context.text().measure(" ", fontPixels, out);
         out[0] = 0;
-        out[1] += 2 * context.framePaddingY();
     }
 
     @Override
     protected void submit(@NonNull UiFrame frame) {
+        IkGuiStyler.Pushed pushed = IkGuiStyler.push(IkGuiStyler.Kind.TEXT_INPUT, this, frame);
         IkGui.setCursorScreenPos(rect.getLeft(), rect.getTop());
         IkGui.setNextItemWidth(rect.getWidth());
         boolean entered = IkGui.inputText("##input", buffer, InputTextFlags.ENTER_RETURNS_TRUE);
@@ -96,5 +107,6 @@ public class TextInput extends Node<TextInput> {
                 frame.fire(() -> action.accept(text));
             }
         }
+        pushed.pop();
     }
 }

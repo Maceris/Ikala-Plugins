@@ -6,9 +6,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ikalagaming.graphics.gui.util.RectFloat;
+import com.ikalagaming.graphics.ui.style.Style;
+import com.ikalagaming.graphics.ui.style.StyleKey;
+import com.ikalagaming.graphics.ui.style.Theme;
 
 import lombok.NonNull;
 import org.junit.jupiter.api.Test;
+
+import java.util.Set;
 
 class LayoutEngineTest {
 
@@ -258,5 +263,79 @@ class LayoutEngineTest {
 
         first.remove(box);
         new Column("second").add(box);
+    }
+
+    private static LayoutContext themed(Theme theme) {
+        return new LayoutContext(1, 10, 4, 3, MEASURER, theme.activate(Set.of()));
+    }
+
+    @Test
+    void classesSetPaddingGapAndFontSize() {
+        Theme theme =
+                Theme.builder("test")
+                        .token("spacing", 5)
+                        .styleClass(
+                                "roomy",
+                                Style.builder()
+                                        .token(StyleKey.PADDING, "spacing")
+                                        .token(StyleKey.GAP, "spacing")
+                                        .set(StyleKey.FONT_SIZE, 20f)
+                                        .build())
+                        .build();
+        Label first = new Label("first", "ab");
+        Label second = new Label("second", "ab");
+        Column column = new Column("column").classes("roomy").add(first, second);
+        Overlay root = new Overlay("root").add(column);
+
+        engine.layout(root, 0, 0, 500, 500, themed(theme));
+
+        // Labels inherit the 20 pixel font: 2 characters are 20 wide and 20 tall
+        assertRect(5, 5, 25, 25, first);
+        assertRect(5, 30, 25, 50, second);
+        assertRect(0, 0, 30, 55, column);
+    }
+
+    @Test
+    void explicitSettersWinOverTheStyle() {
+        Theme theme =
+                Theme.builder("test")
+                        .type(
+                                "column",
+                                Style.builder().set(StyleKey.PADDING, Insets.all(9)).build())
+                        .build();
+        Box box = new Box("box", 10, 10);
+        Column column = new Column("column").padding(Insets.all(2)).add(box);
+
+        engine.layout(column, 0, 0, 100, 100, themed(theme));
+
+        assertEquals(2, box.getRect().getLeft(), 1e-3);
+    }
+
+    @Test
+    void buttonsWithoutAThemeUseIkGuisFramePadding() {
+        Button button = new Button("button", "abcd");
+        Overlay root = new Overlay("root").add(button);
+
+        engine.layout(root, 0, 0, 500, 500, SCALE_2);
+
+        // 4 characters at 20 pixels, plus 4 by 3 pixels of frame padding each side
+        assertRect(0, 0, 48, 26, button);
+    }
+
+    @Test
+    void changingTheThemeLaysOutAgain() {
+        Theme wide =
+                Theme.builder("wide")
+                        .type("row", Style.builder().set(StyleKey.GAP, Length.u(10)).build())
+                        .build();
+        Box a = new Box("a", 10, 10);
+        Box b = new Box("b", 10, 10);
+        Row row = new Row("row").add(a, b);
+
+        engine.layout(row, 0, 0, 100, 100, SCALE_1);
+        assertEquals(10, b.getRect().getLeft(), 1e-3);
+
+        assertTrue(engine.layout(row, 0, 0, 100, 100, themed(wide)));
+        assertEquals(20, b.getRect().getLeft(), 1e-3);
     }
 }
