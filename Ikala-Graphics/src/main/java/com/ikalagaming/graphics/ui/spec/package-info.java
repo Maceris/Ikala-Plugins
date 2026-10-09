@@ -15,8 +15,10 @@
  *   <li>a resource bundle for {@code @KEY} text.
  * </ul>
  *
- * Anything missing is reported before anything is shown. Plugins add node types with {@code
- * registerNodeType}, and the editor rebuilds open specs when their files change.
+ * A handler can also be an action that works with scripts: {@code resume(tag, value)} resumes the
+ * script that opened the spec, and {@code script(file.iks#label)} starts one. Anything missing is
+ * reported before anything is shown. Plugins add node types with {@code registerNodeType}, and the
+ * editor rebuilds open specs when their files change.
  *
  * <p>Everything a plugin supplies is released when it unloads: its specs are closed and stop
  * listening to observables, its node types are removed, and other plugins' specs built from those

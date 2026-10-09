@@ -147,6 +147,20 @@ public final class SpecKeys {
     /** Anchor preset: bottom right corner. */
     public static final String BOTTOM_RIGHT = "bottom-right";
 
+    // Handler actions
+
+    /** A handler that resumes the script that opened the spec: {@code resume(tag, value)}. */
+    public static final String RESUME = "resume";
+
+    /** A handler that starts a script file: {@code script(file.iks#label)}. */
+    public static final String SCRIPT = "script";
+
+    /** Separates a script file from the label to start at. */
+    public static final String SCRIPT_LABEL = "#";
+
+    /** The global a script started by a handler gets the event through. */
+    public static final String EVENT = "event";
+
     /**
      * The path of a key under a path, for messages, like {@code surface.width}.
      *

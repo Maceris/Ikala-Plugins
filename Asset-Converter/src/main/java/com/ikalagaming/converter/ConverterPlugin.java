@@ -16,6 +16,8 @@ import com.ikalagaming.graphics.gui.windows.IkGuiDemo;
 import com.ikalagaming.graphics.ui.spec.Observable;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
+import com.ikalagaming.scripting.HostClass;
+import com.ikalagaming.scripting.ScriptManager;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -93,6 +95,11 @@ public class ConverterPlugin extends Plugin {
         guiManager.addWindow(graphics, IkGuiDemo.WINDOW_NAME, new IkGuiDemo());
         guiManager.addWindow(graphics, GraphicsDebug.WINDOW_NAME, new GraphicsDebug());
         UI ui = graphics.ui();
+        // Scripts get the converter's text, and its functions through the converter global
+        ui.setScriptBundle(getResourceBundle());
+        ScriptManager.unregisterGlobal(ConverterScripts.GLOBAL);
+        ScriptManager.registerGlobal(
+                ConverterScripts.GLOBAL, getName(), owner -> HostClass.of(ConverterScripts.class));
         // This is the editor, so UI spec files are reloaded when they change
         GraphicsManager.getUiManager().setHotReload(true);
         Observable<Integer> sampleCount =

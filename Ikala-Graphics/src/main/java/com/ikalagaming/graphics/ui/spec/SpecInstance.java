@@ -10,6 +10,11 @@ import com.ikalagaming.graphics.ui.UiManager;
 import com.ikalagaming.graphics.ui.style.Style;
 import com.ikalagaming.graphics.ui.style.StyleParser;
 import com.ikalagaming.graphics.ui.style.ThemeException;
+import com.ikalagaming.launcher.PluginFolder;
+import com.ikalagaming.launcher.PluginFolder.ResourceType;
+import com.ikalagaming.scripting.ScriptLaunch;
+import com.ikalagaming.scripting.ScriptManager;
+import com.ikalagaming.scripting.interpreter.ScriptRuntime;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -17,6 +22,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.RecordComponent;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -28,6 +35,7 @@ import java.util.ResourceBundle;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.regex.Matcher;
 
 /**
  * A spec that has been opened: its surface, its nodes, and the listeners keeping them up to date.
@@ -474,6 +482,21 @@ public final class SpecInstance {
     }
 
     /**
+     * Read a field of an object without caching, for values handed out of the spec, like a script's
+     * event: a map key, a record component, or a getter.
+     *
+     * @param item The object.
+     * @param field The field name.
+     * @return The value, or null if there is no such field.
+     */
+    static Object readField(@NonNull Object item, @NonNull String field) {
+        if (item instanceof Map<?, ?> map) {
+            return map.get(field);
+        }
+        return accessorFor(item.getClass(), field).apply(item);
+    }
+
+    /**
      * Find how to read a field of a class.
      *
      * @param type The class.
@@ -721,6 +744,13 @@ public final class SpecInstance {
      * @throws SpecException If no such handler was supplied.
      */
     Consumer<String> handler(Scope scope, String name, String where, Node<?> node) {
+        SpecAction action = SpecAction.parse(name, where);
+        if (action instanceof SpecAction.Resume resume) {
+            return resumeAction(scope, resume, where);
+        }
+        if (action instanceof SpecAction.RunScript run) {
+            return scriptAction(scope, run, where);
+        }
         Consumer<SpecEvent> handler = bindings.handler(name);
         if (handler == null) {
             throw new SpecException(where + ": no handler '" + name + "' in the bindings");
@@ -730,6 +760,76 @@ public final class SpecInstance {
             if (!closed) {
                 handler.accept(new SpecEvent(node, value, item));
             }
+        };
+    }
+
+    /**
+     * Make a {@code resume(tag, value)} action, which resumes the script that opened the spec.
+     *
+     * @param scope The scope, for bindings in the value.
+     * @param action The action.
+     * @param where Where it is, for messages.
+     * @return Runs the action with an event's value.
+     * @throws SpecException If no script opened the spec.
+     */
+    private Consumer<String> resumeAction(Scope scope, SpecAction.Resume action, String where) {
+        ScriptRuntime opener = bindings.script();
+        if (opener == null) {
+            throw new SpecException(
+                    where + ": " + RESUME + "(...) needs a spec opened by a script, to resume");
+        }
+        String written = action.value();
+        Matcher binding = written == null ? null : SpecAction.BINDING.matcher(written);
+        Object literal = written == null || binding.matches() ? null : SpecAction.literal(written);
+        String bound = binding != null && binding.matches() ? binding.group(1).trim() : null;
+        return value -> {
+            if (closed) {
+                return;
+            }
+            Object resumed;
+            if (written == null) {
+                resumed = value;
+            } else if (bound != null) {
+                resumed = lookup(scope, bound);
+            } else {
+                resumed = literal;
+            }
+            ScriptManager.resume(opener, action.tag(), resumed);
+        };
+    }
+
+    /**
+     * Make a {@code script(file#label)} action, which starts a script owned by the spec's plugin,
+     * with the event as the global {@code event}.
+     *
+     * @param scope The scope, for the repeat item.
+     * @param action The action.
+     * @param where Where it is, for messages.
+     * @return Runs the action with an event's value.
+     * @throws SpecException If the script file doesn't exist.
+     */
+    private Consumer<String> scriptAction(Scope scope, SpecAction.RunScript action, String where) {
+        Path folder = bindings.scriptFolder();
+        if (folder == null) {
+            folder = PluginFolder.getResource(owner.getOwner(), ResourceType.SCRIPTS, "").toPath();
+        }
+        folder = folder.toAbsolutePath().normalize();
+        Path file = folder.resolve(action.file()).normalize();
+        if (!file.startsWith(folder) || !Files.isRegularFile(file)) {
+            throw new SpecException(
+                    where + ": no script '" + action.file() + "' in the plugin's scripts folder");
+        }
+        String plugin = owner.getOwner();
+        Object item = scope.item();
+        return value -> {
+            if (closed) {
+                return;
+            }
+            ScriptManager.start(
+                    ScriptLaunch.file(file)
+                            .owner(plugin)
+                            .at(action.label())
+                            .global(EVENT, new ScriptEvent(value, item)));
         };
     }
 

@@ -279,6 +279,8 @@ public class IkScriptDebugger extends GuiWindow {
         if (IkGui.button("Resume")) {
             yielded = false;
             yieldTag = null;
+            // An await returns null, since there is no value to resume it with here
+            runtime.resumeWith(null);
         }
         IkGui.setItemTooltip("Resume after the script yields");
         IkGui.endDisabled();
@@ -846,7 +848,10 @@ public class IkScriptDebugger extends GuiWindow {
     /** Compile the script, and set up a runtime to step through if it worked. */
     void compile() {
         final String text = source.get();
-        compileResult = IkalaScriptCompiler.compile(CharStreams.fromString(text));
+        // The standard globals, like Math, so scripts compile the same as when run normally
+        compileResult =
+                IkalaScriptCompiler.compile(
+                        CharStreams.fromString(text), ScriptManager.globalsFor(null).keySet());
         attemptedLines = List.of(text.split("\n", -1));
         syntaxTreeText =
                 compileResult.syntaxTree() == null
@@ -894,7 +899,8 @@ public class IkScriptDebugger extends GuiWindow {
             runtime = null;
             return;
         }
-        runtime = new ScriptRuntime(compileResult.runtime().get().getInstructions());
+        runtime = compileResult.runtime().get().copyProgram();
+        ScriptManager.globalsFor(null).forEach(runtime::setGlobal);
         runtime.setYieldHandler(
                 (script, tag) -> {
                     yielded = true;

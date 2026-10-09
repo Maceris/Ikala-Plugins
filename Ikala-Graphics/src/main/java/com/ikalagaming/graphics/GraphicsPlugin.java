@@ -4,6 +4,7 @@ import com.ikalagaming.event.Listener;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
+import com.ikalagaming.scripting.ScriptManager;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -25,6 +26,9 @@ public class GraphicsPlugin extends Plugin {
 
     /** The name of the plugin. */
     public static final String PLUGIN_NAME = "Ikala-Graphics";
+
+    /** The global scripts use the retained UI through. */
+    public static final String SCRIPT_UI_GLOBAL = "ui";
 
     /**
      * The resource bundle for the Graphics plugin.
@@ -57,6 +61,7 @@ public class GraphicsPlugin extends Plugin {
          * The tick stage removes itself once graphics have shut down. Removing it here could stop the main thread
          * from ever ticking again to do the cleanup.
          */
+        ScriptManager.unregisterGlobal(GraphicsPlugin.SCRIPT_UI_GLOBAL);
         GraphicsManager.requestShutdown();
         return true;
     }
@@ -71,6 +76,12 @@ public class GraphicsPlugin extends Plugin {
             return false;
         }
         Launcher.addMainThreadStage(GraphicsManager::tick);
+        // Each plugin's scripts get that plugin's UI, so what they open is owned by the plugin
+        ScriptManager.unregisterGlobal(GraphicsPlugin.SCRIPT_UI_GLOBAL);
+        ScriptManager.registerGlobal(
+                GraphicsPlugin.SCRIPT_UI_GLOBAL,
+                GraphicsPlugin.PLUGIN_NAME,
+                owner -> owner == null ? null : GraphicsManager.forPlugin(owner).ui().scripts());
         return true;
     }
 

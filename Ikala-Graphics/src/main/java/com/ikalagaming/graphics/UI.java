@@ -2,6 +2,7 @@ package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.ui.Surface;
 import com.ikalagaming.graphics.ui.UiManager;
+import com.ikalagaming.graphics.ui.script.ScriptUi;
 import com.ikalagaming.graphics.ui.spec.NodeFactory;
 import com.ikalagaming.graphics.ui.spec.SpecBindings;
 import com.ikalagaming.graphics.ui.spec.SpecException;
@@ -17,6 +18,8 @@ import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import lombok.NonNull;
 
 import java.io.File;
+import java.util.ResourceBundle;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 /**
@@ -34,6 +37,12 @@ public final class UI {
 
     /** Finds the UI manager, looked up when needed so contexts can exist before graphics starts. */
     private final Supplier<UiManager> manager;
+
+    /** The UI this plugin's scripts get as {@code ui}, made when first asked for. */
+    private final AtomicReference<ScriptUi> scripts = new AtomicReference<>();
+
+    /** Text for {@code @KEY} values in specs scripts open, or null for none. */
+    private volatile ResourceBundle scriptBundle;
 
     /**
      * Create the UI API for a context.
@@ -164,6 +173,35 @@ public final class UI {
     public void registerNodeType(@NonNull String name, @NonNull NodeFactory factory) {
         context.checkOpen();
         manager.get().getNodeTypes().register(context, name, factory);
+    }
+
+    /**
+     * The UI this plugin's scripts get as the global {@code ui}. Specs they open are owned by this
+     * plugin.
+     *
+     * @return The script UI.
+     */
+    public ScriptUi scripts() {
+        context.checkOpen();
+        return scripts.updateAndGet(
+                existing ->
+                        existing != null
+                                ? existing
+                                : new ScriptUi(
+                                        context,
+                                        manager,
+                                        this::loadSpec,
+                                        () -> scriptBundle,
+                                        null));
+    }
+
+    /**
+     * Set the text for {@code @KEY} values in specs this plugin's scripts open.
+     *
+     * @param bundle The resource bundle, or null for none.
+     */
+    public void setScriptBundle(ResourceBundle bundle) {
+        scriptBundle = bundle;
     }
 
     /**

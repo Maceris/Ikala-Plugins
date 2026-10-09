@@ -109,6 +109,7 @@ dependencies {
 
 	// Testing
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
+	testImplementation "org.awaitility:awaitility:${awaitilityVersion}"
 	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 	testCompileOnly project(':Ikala-Core')
 	testRuntimeOnly project(':Ikala-Core')
