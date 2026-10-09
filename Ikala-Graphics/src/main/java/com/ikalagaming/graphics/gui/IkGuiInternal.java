@@ -634,6 +634,16 @@ public class IkGuiInternal {
     }
 
     /**
+     * Draw the navigation cursor around an item if it has nav focus, for custom widgets.
+     *
+     * @param bb The bounding box of the item.
+     * @param id The ID of the item.
+     */
+    public static void renderNavCursor(@NonNull RectFloat bb, int id) {
+        IkGuiImplNav.renderNavCursor(bb, id, NavRenderCursorFlags.NONE, -1.0f);
+    }
+
+    /**
      * Push an exact ID on the ID stack of the current window, without combining it with the current
      * ID stack.
      *

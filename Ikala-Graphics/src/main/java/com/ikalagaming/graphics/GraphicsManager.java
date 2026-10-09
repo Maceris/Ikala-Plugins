@@ -12,6 +12,7 @@ import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugShape;
+import com.ikalagaming.graphics.ui.UiManager;
 import com.ikalagaming.graphics.vulkan.DeletionQueue;
 import com.ikalagaming.graphics.vulkan.TextureRegistry;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
@@ -134,6 +135,17 @@ public class GraphicsManager {
      */
     @Getter private static final WindowManager windowManager = new WindowManager();
 
+    /**
+     * The retained UI surfaces, drawn along with the GUI windows.
+     *
+     * @return The UI manager.
+     */
+    @Getter private static final UiManager uiManager = new UiManager();
+
+    static {
+        windowManager.setUiManager(uiManager);
+    }
+
     /** A queue used to delete resources. */
     @Getter private static final DeletionQueue deletionQueue = new DeletionQueue();
 
@@ -247,6 +259,7 @@ public class GraphicsManager {
     private static void release(@NonNull GraphicsContext context) {
         context.close();
         int windows = windowManager.removeAllOwnedBy(context);
+        uiManager.removeAllOwnedBy(context);
         if (windows > 0) {
             log.debug("Removed {} windows owned by {}", windows, context.getOwnerKey());
         }
@@ -425,6 +438,9 @@ public class GraphicsManager {
         }
 
         window.pollEvents();
+        uiManager.setContentScale(window.getContentScale());
+        // Button clicks and the like from the last frame, run here rather than mid-render
+        uiManager.dispatchEvents();
 
         ModelLoader.loadModel();
 

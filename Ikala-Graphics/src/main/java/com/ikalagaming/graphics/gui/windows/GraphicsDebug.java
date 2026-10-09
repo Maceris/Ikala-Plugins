@@ -35,6 +35,7 @@ public class GraphicsDebug extends GuiWindow {
     private final Checkbox showTangents;
     private final Slider normalLength;
     private final Checkbox freezeObserver;
+    private final Checkbox showUiShowcase;
     private final Slider fogDensity;
     private final Slider directionalLightX;
     private final Slider directionalLightY;
@@ -58,6 +59,7 @@ public class GraphicsDebug extends GuiWindow {
         showTangents = new Checkbox("Tangents", false);
         normalLength = new Slider("Normal length", 0.1f, 0.01f, 1f);
         freezeObserver = new Checkbox("Freeze observer", false);
+        showUiShowcase = new Checkbox("UI showcase", false);
         fogDensity = new Slider("Fog Density", 0, 0, 1);
         directionalLightX = new Slider("Directional Light X", 0, -1, 1);
         directionalLightY = new Slider("Directional Light Y", 0, -1, 1);
@@ -76,6 +78,7 @@ public class GraphicsDebug extends GuiWindow {
         addChild(showTangents);
         addChild(normalLength);
         addChild(freezeObserver);
+        addChild(showUiShowcase);
         addChild(directionalLightX);
         addChild(directionalLightY);
         addChild(directionalLightZ);
@@ -206,6 +209,10 @@ public class GraphicsDebug extends GuiWindow {
                         "Culling, level of detail and streaming use the observer, so freeze it to"
                                 + " inspect them from outside.");
             }
+
+            if (IkGui.collapsingHeader("Retained UI")) {
+                showUiShowcase.draw(width, height);
+            }
         }
 
         IkGui.end();
@@ -287,6 +294,9 @@ public class GraphicsDebug extends GuiWindow {
             GraphicsManager.swapPipeline(builder.build());
         }
         handleDebugInput(scene);
+        if (showUiShowcase.checkResult()) {
+            UiShowcase.setShown(showUiShowcase.getState());
+        }
         DirectionalLight directionalLight = scene.getSceneLights().getDirLight();
         Vector3f directionalLightDir = directionalLight.getDirection();
         if (fogDensity.checkResult()) {

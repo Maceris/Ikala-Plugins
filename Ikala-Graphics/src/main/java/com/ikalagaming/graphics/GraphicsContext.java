@@ -53,6 +53,9 @@ public final class GraphicsContext {
     /** Debug shape drawing for this context. */
     private final DebugDraw debug;
 
+    /** Retained UI for this context. */
+    private final UI ui;
+
     /** Whether the plugin was unloaded. */
     private volatile boolean closed;
 
@@ -68,6 +71,7 @@ public final class GraphicsContext {
         this.plugin = new WeakReference<>(plugin);
         textures = new Textures(this);
         debug = new DebugDraw(this);
+        ui = new UI(this, GraphicsManager::getUiManager);
         closed = false;
     }
 
@@ -91,6 +95,17 @@ public final class GraphicsContext {
     public DebugDraw debug() {
         checkOpen();
         return debug;
+    }
+
+    /**
+     * Build and show retained UI owned by this plugin.
+     *
+     * @return The UI API for this plugin.
+     * @throws IllegalStateException If the plugin was unloaded.
+     */
+    public UI ui() {
+        checkOpen();
+        return ui;
     }
 
     /**

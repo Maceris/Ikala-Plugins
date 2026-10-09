@@ -366,6 +366,50 @@ public class Window {
         return glfwGetKey(windowHandle, keyCode) == GLFW_PRESS;
     }
 
+    /**
+     * The window's content scale, which the OS sets from the monitor's DPI and the user's display
+     * scaling setting.
+     *
+     * @return The horizontal content scale, where 1 is 96 DPI on Windows.
+     */
+    public float getContentScale() {
+        float[] x = new float[1];
+        float[] y = new float[1];
+        glfwGetWindowContentScale(windowHandle, x, y);
+        return x[0];
+    }
+
+    /**
+     * Send the first connected gamepad's state to IkGui, and tell IkGui whether there is one.
+     *
+     * @param io The IkGui IO to send key events to.
+     */
+    private static void updateGamepad(@NonNull IkIO io) {
+        io.backendFlags &= ~BackendFlags.HAS_GAMEPAD;
+        for (int joystick = GLFW_JOYSTICK_1; joystick <= GLFW_JOYSTICK_LAST; ++joystick) {
+            if (!glfwJoystickIsGamepad(joystick)) {
+                continue;
+            }
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                GLFWGamepadState state = GLFWGamepadState.malloc(stack);
+                if (!glfwGetGamepadState(joystick, state)) {
+                    continue;
+                }
+                byte[] buttons = new byte[GLFW_GAMEPAD_BUTTON_LAST + 1];
+                float[] axes = new float[GLFW_GAMEPAD_AXIS_LAST + 1];
+                for (int i = 0; i < buttons.length; ++i) {
+                    buttons[i] = state.buttons(i);
+                }
+                for (int i = 0; i < axes.length; ++i) {
+                    axes[i] = state.axes(i);
+                }
+                io.backendFlags |= BackendFlags.HAS_GAMEPAD;
+                GamepadInput.apply(buttons, axes, io::addKeyAnalogEvent);
+            }
+            return;
+        }
+    }
+
     /** Poll for events and process input. */
     public void pollEvents() {
         if (IkGui.getContext() != null) {
@@ -384,6 +428,9 @@ public class Window {
             }
         }
         glfwPollEvents();
+        if (IkGui.getContext() != null) {
+            updateGamepad(IkGui.getIO());
+        }
     }
 
     /**

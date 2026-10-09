@@ -1,23 +1,24 @@
 package com.ikalagaming.converter.gui.window;
 
-import static com.ikalagaming.converter.gui.DefaultWindows.MAIN_MENU;
-
 import com.ikalagaming.converter.ConverterPlugin;
 import com.ikalagaming.converter.ModelConverter;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
-import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.UI;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.Model;
-import com.ikalagaming.graphics.gui.WindowManager;
-import com.ikalagaming.graphics.gui.component.Button;
-import com.ikalagaming.graphics.gui.component.GuiWindow;
-import com.ikalagaming.graphics.gui.flags.WindowFlags;
-import com.ikalagaming.graphics.gui.util.Alignment;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.scene.lights.PointLight;
+import com.ikalagaming.graphics.ui.Align;
+import com.ikalagaming.graphics.ui.Anchors;
+import com.ikalagaming.graphics.ui.Button;
+import com.ikalagaming.graphics.ui.Column;
+import com.ikalagaming.graphics.ui.Justify;
+import com.ikalagaming.graphics.ui.Layer;
+import com.ikalagaming.graphics.ui.Sizing;
+import com.ikalagaming.graphics.ui.Surface;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -28,55 +29,75 @@ import org.joml.Vector3f;
 
 import java.util.Objects;
 
-/** The main menu we start up the game showing. */
+/**
+ * The main menu we start up showing, built as retained UI: a full-screen surface with a centered
+ * column of buttons that a mouse, keyboard or gamepad can use.
+ */
 @Slf4j
-public class MainMenu extends GuiWindow {
-    private final WindowManager windowManager;
-    private final Button sphereDemoButton;
-    private final Button modelLoaderButton;
+public class MainMenu {
+    /** The ID of the main menu surface. */
+    public static final String SURFACE_ID = "converter/main-menu";
 
-    public MainMenu(@NonNull WindowManager windowManager) {
-        super(
-                MAIN_MENU.getName(),
-                WindowFlags.NO_SCROLLBAR
-                        | WindowFlags.NO_SCROLL_WITH_MOUSE
-                        | WindowFlags.NO_RESIZE
-                        | WindowFlags.NO_TITLE_BAR
-                        | WindowFlags.NO_DECORATION);
-        this.windowManager = windowManager;
-        setScale(1.0f, 0.98f);
-        setDisplacement(0.0f, 0.02f);
+    /** The width of the menu buttons, in UI units. */
+    private static final float BUTTON_WIDTH = 240;
 
+    /** The height of the menu buttons, in UI units. */
+    private static final float BUTTON_HEIGHT = 40;
+
+    /** The UI the menu is shown through. */
+    private final UI ui;
+
+    /**
+     * Create the main menu.
+     *
+     * @param ui The converter plugin's UI.
+     */
+    public MainMenu(@NonNull UI ui) {
+        this.ui = ui;
+    }
+
+    /**
+     * Build the menu surface, ready to show.
+     *
+     * @return The surface.
+     */
+    public Surface build() {
         var textSphereDemo =
                 SafeResourceLoader.getString(
                         "MENU_MAIN_SPHERE_DEMO", ConverterPlugin.getResourceBundle());
-        sphereDemoButton = new Button(textSphereDemo);
-        sphereDemoButton.setAlignment(Alignment.CENTER);
-        sphereDemoButton.setDisplacement(0.0f, -0.15f);
-        sphereDemoButton.setScale(0.10f, 0.10f);
-
         var textModelLoader =
                 SafeResourceLoader.getString(
                         "MENU_MAIN_MODEL_LOADER", ConverterPlugin.getResourceBundle());
-        modelLoaderButton = new Button(textModelLoader);
-        modelLoaderButton.setAlignment(Alignment.CENTER);
-        modelLoaderButton.setScale(0.10f, 0.10f);
 
-        addChild(sphereDemoButton);
-        addChild(modelLoaderButton);
+        Column buttons =
+                new Column("buttons")
+                        .gap(12)
+                        .add(
+                                new Button("sphere-demo", textSphereDemo)
+                                        .width(Sizing.fixed(BUTTON_WIDTH))
+                                        .height(Sizing.fixed(BUTTON_HEIGHT))
+                                        .autofocus(true)
+                                        .onClick(this::startSphereDemo),
+                                new Button("model-loader", textModelLoader)
+                                        .width(Sizing.fixed(BUTTON_WIDTH))
+                                        .height(Sizing.fixed(BUTTON_HEIGHT))
+                                        .onClick(
+                                                () -> {
+                                                    // TODO(ches) model loading UI
+                                                }));
+        Column content =
+                new Column("content").justify(Justify.CENTER).align(Align.CENTER).add(buttons);
+
+        return ui.surface(SURFACE_ID)
+                .anchors(Anchors.fill())
+                .layer(Layer.BACKGROUND)
+                .content(content);
     }
 
-    @Override
-    public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
-        if (sphereDemoButton.checkResult()) {
-            windowManager.hide(MAIN_MENU.getName());
-            loadSphereDemo();
-            return true;
-        }
-        if (modelLoaderButton.checkResult()) {
-            // TODO(ches) model loading UI
-        }
-        return false;
+    /** Hide the menu and load the sphere demo. */
+    private void startSphereDemo() {
+        ui.setVisible(SURFACE_ID, false);
+        loadSphereDemo();
     }
 
     private void loadSphereDemo() {

@@ -3,7 +3,6 @@ package com.ikalagaming.converter;
 import static com.ikalagaming.converter.gui.DefaultWindows.*;
 
 import com.ikalagaming.converter.gui.DebugToolbar;
-import com.ikalagaming.converter.gui.DefaultWindows;
 import com.ikalagaming.converter.gui.window.Debug;
 import com.ikalagaming.converter.gui.window.MainMenu;
 import com.ikalagaming.event.Listener;
@@ -19,7 +18,6 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
-import java.util.stream.Stream;
 
 /** Used for asset conversion for the graphics plugin. */
 @Slf4j
@@ -75,11 +73,10 @@ public class ConverterPlugin extends Plugin {
     public boolean onEnable() {
         guiManager = GraphicsManager.getWindowManager();
         var graphics = GraphicsManager.forPlugin(getName());
-        guiManager.addWindow(graphics, MAIN_MENU.getName(), new MainMenu(guiManager));
         guiManager.addWindow(graphics, DEBUG.getName(), new Debug());
         guiManager.addWindow(graphics, IkGuiDemo.WINDOW_NAME, new IkGuiDemo());
         guiManager.addWindow(graphics, GraphicsDebug.WINDOW_NAME, new GraphicsDebug());
-        Stream.of(MAIN_MENU).map(DefaultWindows::getName).forEach(guiManager::show);
+        graphics.ui().show(new MainMenu(graphics.ui()).build());
 
         guiManager.setToolbar(graphics, new DebugToolbar(guiManager));
         return true;

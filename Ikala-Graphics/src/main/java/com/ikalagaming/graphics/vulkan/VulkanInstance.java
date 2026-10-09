@@ -22,6 +22,7 @@ import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.IkIO;
+import com.ikalagaming.graphics.gui.flags.ConfigFlags;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -1205,6 +1206,8 @@ public class VulkanInstance {
 
         IkIO ikIO = IkGui.getIO();
         ikIO.iniFilename = null;
+        // Tab, arrow keys and gamepads move between items, so menus work without a mouse
+        ikIO.configFlags |= ConfigFlags.NAV_ENABLE_KEYBOARD | ConfigFlags.NAV_ENABLE_GAMEPAD;
         ikIO.displaySize.set(window.getWidth(), window.getHeight());
         window.setupIkGuiPlatformIO();
     }

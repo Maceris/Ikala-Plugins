@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.gui.component.GuiWindow;
 import com.ikalagaming.graphics.gui.component.MainToolbar;
 import com.ikalagaming.graphics.gui.windows.IkGuiDemo;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.ui.UiManager;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -41,6 +42,9 @@ public class WindowManager {
     /** The toolbar, if any. */
     private final AtomicReference<Owned<MainToolbar>> toolbar;
 
+    /** Retained UI surfaces, drawn after the windows, or null for none. */
+    private volatile UiManager uiManager;
+
     public WindowManager() {
         windows = new ConcurrentHashMap<>();
         toolbar = new AtomicReference<>();
@@ -72,6 +76,15 @@ public class WindowManager {
                     name,
                     previous.owner().getOwner());
         }
+    }
+
+    /**
+     * Set the retained UI surfaces to draw after the windows.
+     *
+     * @param manager The UI manager, or null for none.
+     */
+    public void setUiManager(UiManager manager) {
+        uiManager = manager;
     }
 
     /**
@@ -177,6 +190,11 @@ public class WindowManager {
                 .map(Owned::value)
                 .filter(Component::isVisible)
                 .forEach(window -> window.draw(width, height));
+
+        final UiManager currentUi = uiManager;
+        if (currentUi != null) {
+            currentUi.draw();
+        }
 
         MainToolbar currentToolbar = getToolbar();
         if (currentToolbar != null) {

@@ -2602,28 +2602,16 @@ public class IkGui {
     }
 
     /**
-     * Get the current font size in points, as set by the user or the style. Text is rasterized at
-     * this size scaled by the DPI, so on screens with a DPI scale other than 1 this is not the
-     * on-screen size. Use {@link #getFontSizeInPixels()} for layout, like sizing widgets relative
-     * to the text (Dear ImGui's GetFontSize() returns pixels).
+     * Get the current font size, as set by the user or the style, which is the size fonts are
+     * pushed and set with. A line of text is taller than this because of line spacing, so use
+     * {@link #getTextLineHeight()} for layout, like sizing widgets relative to the text (Dear
+     * ImGui's GetFontSize() is closer to the line height).
      *
-     * @return The font size, in points.
-     * @see #getFontSizeInPixels()
+     * @return The font size.
+     * @see #getTextLineHeight()
      */
     public static int getFontSize() {
         return context.fontSize;
-    }
-
-    /**
-     * Get the current font size in pixels, which is the height of a line of text on screen. This is
-     * what Dear ImGui's GetFontSize() returns, so use it for layout, like sizing widgets relative
-     * to the text. It differs from {@link #getFontSize()} by the DPI scale.
-     *
-     * @return The font size, in pixels.
-     * @see #getFontSize()
-     */
-    public static float getFontSizeInPixels() {
-        return IkGuiInternal.getFontSize();
     }
 
     /**
