@@ -74,13 +74,14 @@ public class ConverterPlugin extends Plugin {
     @Override
     public boolean onEnable() {
         guiManager = GraphicsManager.getWindowManager();
-        guiManager.addWindow(MAIN_MENU.getName(), new MainMenu(guiManager));
-        guiManager.addWindow(DEBUG.getName(), new Debug());
-        guiManager.addWindow(IkGuiDemo.WINDOW_NAME, new IkGuiDemo());
-        guiManager.addWindow(GraphicsDebug.WINDOW_NAME, new GraphicsDebug());
+        var graphics = GraphicsManager.forPlugin(getName());
+        guiManager.addWindow(graphics, MAIN_MENU.getName(), new MainMenu(guiManager));
+        guiManager.addWindow(graphics, DEBUG.getName(), new Debug());
+        guiManager.addWindow(graphics, IkGuiDemo.WINDOW_NAME, new IkGuiDemo());
+        guiManager.addWindow(graphics, GraphicsDebug.WINDOW_NAME, new GraphicsDebug());
         Stream.of(MAIN_MENU).map(DefaultWindows::getName).forEach(guiManager::show);
 
-        guiManager.setToolbar(new DebugToolbar(guiManager));
+        guiManager.setToolbar(graphics, new DebugToolbar(guiManager));
         return true;
     }
 }

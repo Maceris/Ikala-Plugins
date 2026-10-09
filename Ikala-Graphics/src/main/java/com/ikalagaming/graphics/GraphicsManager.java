@@ -246,6 +246,10 @@ public class GraphicsManager {
      */
     private static void release(@NonNull GraphicsContext context) {
         context.close();
+        int windows = windowManager.removeAllOwnedBy(context);
+        if (windows > 0) {
+            log.debug("Removed {} windows owned by {}", windows, context.getOwnerKey());
+        }
         if (renderInstance == null) {
             return;
         }

@@ -61,17 +61,18 @@ public class FactoryClientPlugin extends Plugin {
     public boolean onEnable() {
         UserDataUtil.createUserDataFolder();
         guiManager = GraphicsManager.getWindowManager();
-        guiManager.addWindow(BIOME_DEBUG.getName(), new BiomeDebug());
-        guiManager.addWindow(MAIN_MENU.getName(), new MainMenu(guiManager));
-        guiManager.addWindow(SINGLE_PLAYER.getName(), new SinglePlayer(guiManager));
-        guiManager.addWindow(DEBUG.getName(), new Debug());
-        guiManager.addWindow(IkGuiDemo.WINDOW_NAME, new IkGuiDemo());
-        guiManager.addWindow(GraphicsDebug.WINDOW_NAME, new GraphicsDebug());
-        guiManager.addWindow(IkScriptDebugger.WINDOW_NAME, new IkScriptDebugger());
-        guiManager.addWindow(ScriptMonitor.WINDOW_NAME, new ScriptMonitor());
+        var graphics = GraphicsManager.forPlugin(getName());
+        guiManager.addWindow(graphics, BIOME_DEBUG.getName(), new BiomeDebug());
+        guiManager.addWindow(graphics, MAIN_MENU.getName(), new MainMenu(guiManager));
+        guiManager.addWindow(graphics, SINGLE_PLAYER.getName(), new SinglePlayer(guiManager));
+        guiManager.addWindow(graphics, DEBUG.getName(), new Debug());
+        guiManager.addWindow(graphics, IkGuiDemo.WINDOW_NAME, new IkGuiDemo());
+        guiManager.addWindow(graphics, GraphicsDebug.WINDOW_NAME, new GraphicsDebug());
+        guiManager.addWindow(graphics, IkScriptDebugger.WINDOW_NAME, new IkScriptDebugger());
+        guiManager.addWindow(graphics, ScriptMonitor.WINDOW_NAME, new ScriptMonitor());
         Stream.of(MAIN_MENU).map(DefaultWindows::getName).forEach(guiManager::show);
 
-        guiManager.setToolbar(new DebugToolbar(guiManager));
+        guiManager.setToolbar(graphics, new DebugToolbar(guiManager));
         return true;
     }
 
