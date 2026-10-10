@@ -15,6 +15,7 @@ import com.ikalagaming.graphics.scene.debug.DebugShape;
 import com.ikalagaming.graphics.ui.UiManager;
 import com.ikalagaming.graphics.vulkan.DeletionQueue;
 import com.ikalagaming.graphics.vulkan.GeometryArena;
+import com.ikalagaming.graphics.vulkan.InstanceTable;
 import com.ikalagaming.graphics.vulkan.TextureRegistry;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
 import com.ikalagaming.launcher.Launcher;
@@ -266,6 +267,15 @@ public class GraphicsManager {
         }
         if (renderInstance == null) {
             return;
+        }
+        InstanceTable instances = renderInstance.getState().instances;
+        if (instances != null) {
+            var removed = instances.getRegistry().removeAllOwnedBy(context.getOwnerKey());
+            removed.forEach(instances::retire);
+            if (!removed.isEmpty()) {
+                log.debug(
+                        "Removed {} instances owned by {}", removed.size(), context.getOwnerKey());
+            }
         }
         GeometryArena geometry = renderInstance.getState().geometry;
         if (geometry != null) {

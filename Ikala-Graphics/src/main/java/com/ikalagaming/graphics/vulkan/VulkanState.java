@@ -38,6 +38,9 @@ public class VulkanState {
     /** The shared vertex and index buffers every scene mesh lives in. */
     public GeometryArena geometry = null;
 
+    /** Everything placed in the scene, kept on the GPU across frames. */
+    public InstanceTable instances = null;
+
     /** For submitting work outside the frame, like texture uploads. */
     public ImmediateCommands immediateCommands = null;
 

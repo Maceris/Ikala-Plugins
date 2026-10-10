@@ -16,7 +16,6 @@ import com.ikalagaming.graphics.gui.component.GuiWindow;
 import com.ikalagaming.graphics.gui.component.ScrollBox;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.gui.util.Alignment;
-import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
@@ -129,8 +128,9 @@ public class SinglePlayer extends GuiWindow {
                                 GraphicsManager.getScene().getMaterialCache(),
                                 false));
         GraphicsManager.getScene().addModel(cubeModel);
-        Entity cube = new Entity("TheCube", cubeModel);
-        GraphicsManager.getScene().addEntity(cube);
+        GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME)
+                .instances()
+                .place(cubeModel, 0, 0, 0);
         GraphicsManager.getScene()
                 .getSceneLights()
                 .setAmbientLight(new AmbientLight(new Vector3f(1.0f, 1.0f, 1.0f), 0.6f));

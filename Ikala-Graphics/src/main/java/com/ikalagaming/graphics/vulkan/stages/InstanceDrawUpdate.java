@@ -5,8 +5,8 @@ import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
-import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.InstanceRegistry;
 import com.ikalagaming.graphics.vulkan.MeshRegistry;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
@@ -15,29 +15,81 @@ import com.ikalagaming.graphics.vulkan.VulkanState;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.joml.Matrix4f;
-import org.joml.Vector3dc;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
-import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
-import java.util.HashMap;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
- * Packs the model matrices, material overrides, animation poses, and indirect draw commands for
- * every model in the scene into this frame's buffers. Unlike OpenGL, we can't overwrite a model's
- * buffers while an earlier frame may still be drawing with them, so everything is rebuilt each
- * frame instead.
+ * Lists the instances to draw this frame and writes their draw commands. Each model's instances are
+ * listed back to back by their instance table slot, which the instance transform stage turns into
+ * model matrices on the GPU; the material overrides, animation poses and indirect draw commands go
+ * into this frame's buffers in the same order.
+ *
+ * <p>The transforms themselves stay on the GPU, in the persistent instance table, so this costs a
+ * few integers per instance and no matrix math. Culling on the GPU replaces the list later.
  */
 @Slf4j
-public class ModelMatrixUpdate implements RenderStage {
+public class InstanceDrawUpdate implements RenderStage {
 
     /** The size of a VkDrawIndexedIndirectCommand in bytes. */
     public static final int DRAW_COMMAND_SIZE = 5 * Integer.BYTES;
+
+    /** One model's instances this frame, collected while the instance registry is locked. */
+    private static final class ModelInstances {
+        /** The slot of each instance. */
+        private int[] slots = new int[16];
+
+        /** The material index override of each mesh of each instance, 0 for none. */
+        private int[] overrides = new int[16];
+
+        /** The animation matrix offset of each instance, or -1 for the bind pose. */
+        private int[] animationOffsets = new int[16];
+
+        /** How many instances there are. */
+        private int count;
+
+        /** How many meshes the model has. */
+        private final int meshCount;
+
+        /**
+         * Start collecting a model's instances.
+         *
+         * @param meshCount How many meshes the model has.
+         */
+        ModelInstances(int meshCount) {
+            this.meshCount = meshCount;
+            overrides = new int[16 * Math.max(1, meshCount)];
+        }
+
+        /**
+         * Add an instance.
+         *
+         * @param slot Its slot.
+         * @param materials Its material overrides.
+         * @param animationOffset Its animation matrix offset, or -1.
+         * @param materialCache Looks up material indices.
+         */
+        void add(int slot, Material[] materials, int animationOffset, MaterialCache materialCache) {
+            if (count == slots.length) {
+                slots = Arrays.copyOf(slots, count * 2);
+                animationOffsets = Arrays.copyOf(animationOffsets, count * 2);
+                overrides = Arrays.copyOf(overrides, count * 2 * Math.max(1, meshCount));
+            }
+            slots[count] = slot;
+            animationOffsets[count] = animationOffset;
+            for (int mesh = 0; mesh < meshCount; ++mesh) {
+                Material material = mesh < materials.length ? materials[mesh] : null;
+                // Index 0 is the default material, which the shader treats as no override
+                overrides[count * meshCount + mesh] =
+                        material == null ? 0 : materialCache.getMaterialIndex(material);
+            }
+            count += 1;
+        }
+    }
 
     @Override
     public void render(
@@ -47,30 +99,48 @@ public class ModelMatrixUpdate implements RenderStage {
             int renderConfig) {
         PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
         frameData.modelDrawInfo.clear();
+        frameData.instanceCount = 0;
 
-        // Work out where everything goes first, so the buffers only need resizing once
+        // Collect each model's instances first, so the buffers only need resizing once
+        final InstanceRegistry instances = vulkanState.instances.getRegistry();
+        final MaterialCache materialCache = scene.getMaterialCache();
+        final Map<Model, ModelInstances> collected = new LinkedHashMap<>();
+        for (Model model : scene.getModelMap().values()) {
+            final ModelInstances modelInstances =
+                    new ModelInstances(model.getMeshDataList().size());
+            instances.visit(
+                    model,
+                    (slot, materials, animation) ->
+                            modelInstances.add(
+                                    slot,
+                                    materials,
+                                    model.isAnimated()
+                                            ? Model.getAnimationMatrixOffset(animation)
+                                            : -1,
+                                    materialCache));
+            if (modelInstances.count > 0) {
+                collected.put(model, modelInstances);
+            }
+        }
+
+        // Work out where everything goes
         int matrixCount = 0;
         int overrideCount = 0;
         int commandCount = 0;
         int poseCount = 0;
-        Map<Model, Poses> modelPoses = new HashMap<>();
-        for (Model model : scene.getModelMap().values()) {
-            final int entityCount = model.getEntitiesList().size();
-            if (entityCount == 0) {
-                model.setEntitiesLastFrame(0);
-                continue;
-            }
-            model.setEntitiesLastFrame(entityCount);
-
+        Map<Model, Poses> modelPoses = new LinkedHashMap<>();
+        for (var entry : collected.entrySet()) {
+            final Model model = entry.getKey();
+            final ModelInstances modelInstances = entry.getValue();
+            final int count = modelInstances.count;
             int modelPoseCount = 0;
             if (model.isAnimated()) {
-                Poses poses = findPoses(model);
+                Poses poses = findPoses(modelInstances);
                 modelPoses.put(model, poses);
                 modelPoseCount = poses.matrixOffsets().length;
             }
-
             final int meshCount = model.getMeshDataList().size();
-            final int commandsPerMesh = model.isAnimated() ? entityCount : 1;
+            final int commandsPerMesh = model.isAnimated() ? count : 1;
             frameData.modelDrawInfo.put(
                     model,
                     new PerFrameData.ModelDrawInfo(
@@ -80,15 +150,17 @@ public class ModelMatrixUpdate implements RenderStage {
                             commandsPerMesh,
                             poseCount,
                             modelPoseCount));
-            matrixCount += entityCount;
-            overrideCount += entityCount * meshCount;
+            matrixCount += count;
+            overrideCount += count * meshCount;
             commandCount += commandsPerMesh * meshCount;
             poseCount += modelPoseCount;
         }
 
+        // Written on the GPU by the instance transform stage
         frameData.sceneModelMatrices.ensureCapacity(
                 (long) matrixCount * PipelineManagerVulkan.MODEL_MATRIX_SIZE * Float.BYTES,
                 vulkanState);
+        frameData.instanceList.ensureCapacity((long) matrixCount * Integer.BYTES, vulkanState);
         frameData.sceneMaterialOverrides.ensureCapacity(
                 (long) overrideCount * Integer.BYTES, vulkanState);
         frameData.sceneDrawCommands.ensureCapacity(
@@ -98,12 +170,12 @@ public class ModelMatrixUpdate implements RenderStage {
         if (frameData.modelDrawInfo.isEmpty()) {
             return;
         }
+        frameData.instanceCount = matrixCount;
 
         // The buffers are host coherent and the GPU is done with this frame's copies
-        FloatBuffer matrices =
-                MemoryUtil.memFloatBuffer(
-                        frameData.sceneModelMatrices.allocationInfo.pMappedData(),
-                        matrixCount * PipelineManagerVulkan.MODEL_MATRIX_SIZE);
+        IntBuffer list =
+                MemoryUtil.memIntBuffer(
+                        frameData.instanceList.allocationInfo.pMappedData(), matrixCount);
         IntBuffer overrides =
                 MemoryUtil.memIntBuffer(
                         frameData.sceneMaterialOverrides.allocationInfo.pMappedData(),
@@ -112,124 +184,78 @@ public class ModelMatrixUpdate implements RenderStage {
                 MemoryUtil.memByteBuffer(
                         frameData.sceneDrawCommands.allocationInfo.pMappedData(),
                         commandCount * DRAW_COMMAND_SIZE);
-
         IntBuffer animationOffsets =
                 MemoryUtil.memIntBuffer(
                         frameData.animationOffsets.allocationInfo.pMappedData(), poseCount);
 
-        final MaterialCache materialCache = scene.getMaterialCache();
         final MeshRegistry meshes = vulkanState.geometry.getRegistry();
-        final Vector3dc origin = scene.getCamera().getPosition();
-        final Matrix4f scratch = new Matrix4f();
         frameData.modelDrawInfo.forEach(
                 (model, info) -> {
-                    writeModelMatrices(model, info, origin, scratch, matrices);
-                    writeMaterialOverrides(model, info, overrides, materialCache);
+                    final ModelInstances modelInstances = collected.get(model);
+                    list.put(info.firstMatrix(), modelInstances.slots, 0, modelInstances.count);
+                    overrides.put(
+                            info.firstOverride(),
+                            modelInstances.overrides,
+                            0,
+                            modelInstances.count * modelInstances.meshCount);
                     Poses poses = modelPoses.get(model);
                     if (poses != null) {
                         animationOffsets.put(info.firstPose(), poses.matrixOffsets());
                     }
-                    writeDrawCommands(model, info, poses, meshes, commands);
+                    writeDrawCommands(model, info, modelInstances.count, poses, meshes, commands);
                 });
     }
 
     /**
-     * Which pose each entity of an animated model is in.
+     * Which pose each instance of an animated model is in.
      *
      * @param matrixOffsets The animation matrix offset of each distinct pose, or -1 for the bind
      *     pose.
-     * @param entityPoses The index into the poses for each entity.
+     * @param instancePoses The index into the poses for each instance.
      */
-    private record Poses(int[] matrixOffsets, int[] entityPoses) {}
+    private record Poses(int[] matrixOffsets, int[] instancePoses) {}
 
     /**
-     * Group the entities of an animated model by pose. Entities on the same frame of the same
-     * animation end up with identical vertices, so they share one copy, and every entity that isn't
-     * animating shares the bind pose.
+     * Group the instances of an animated model by pose. Instances on the same frame of the same
+     * animation end up with identical vertices, so they share one copy, and every instance that
+     * isn't animating shares the bind pose.
      *
-     * @param model The animated model.
+     * @param modelInstances The animated model's instances.
      * @return The poses.
      */
-    private static Poses findPoses(@NonNull Model model) {
-        List<Entity> entities = model.getEntitiesList();
+    private static Poses findPoses(@NonNull ModelInstances modelInstances) {
         Map<Integer, Integer> poseByOffset = new LinkedHashMap<>();
-        int[] entityPoses = new int[entities.size()];
-        for (int i = 0; i < entities.size(); ++i) {
-            final int offset = Model.getAnimationMatrixOffset(entities.get(i));
-            entityPoses[i] = poseByOffset.computeIfAbsent(offset, ignored -> poseByOffset.size());
+        int[] instancePoses = new int[modelInstances.count];
+        for (int i = 0; i < modelInstances.count; ++i) {
+            final int offset = modelInstances.animationOffsets[i];
+            instancePoses[i] = poseByOffset.computeIfAbsent(offset, ignored -> poseByOffset.size());
         }
         int[] matrixOffsets = new int[poseByOffset.size()];
         poseByOffset.forEach((offset, pose) -> matrixOffsets[pose] = offset);
-        return new Poses(matrixOffsets, entityPoses);
-    }
-
-    /**
-     * Write the model matrices for every entity of a model, in render space.
-     *
-     * @param model The model.
-     * @param info Where the model's data goes.
-     * @param origin The world position of the render space origin, the camera position.
-     * @param scratch A matrix to do math in, so we don't allocate one per entity.
-     * @param matrices The mapped model matrix buffer.
-     */
-    private static void writeModelMatrices(
-            @NonNull Model model,
-            @NonNull PerFrameData.ModelDrawInfo info,
-            @NonNull Vector3dc origin,
-            @NonNull Matrix4f scratch,
-            @NonNull FloatBuffer matrices) {
-        int matrixIndex = info.firstMatrix();
-        for (Entity entity : model.getEntitiesList()) {
-            entity.getRenderMatrix(origin, scratch)
-                    .get(matrixIndex * PipelineManagerVulkan.MODEL_MATRIX_SIZE, matrices);
-            matrixIndex += 1;
-        }
-    }
-
-    /**
-     * Write the material overrides for every entity of a model, one per mesh, in entity order.
-     * Index 0 is the default material, which the shader treats as no override.
-     *
-     * @param model The model.
-     * @param info Where the model's data goes.
-     * @param overrides The mapped material override buffer.
-     * @param materialCache The cache to look material indices up in.
-     */
-    private static void writeMaterialOverrides(
-            @NonNull Model model,
-            @NonNull PerFrameData.ModelDrawInfo info,
-            @NonNull IntBuffer overrides,
-            @NonNull MaterialCache materialCache) {
-        int overrideIndex = info.firstOverride();
-        for (Entity entity : model.getEntitiesList()) {
-            for (Material material : entity.getMaterialOverrides()) {
-                overrides.put(overrideIndex, materialCache.getMaterialIndex(material));
-                overrideIndex += 1;
-            }
-        }
+        return new Poses(matrixOffsets, instancePoses);
     }
 
     /**
      * Write the indirect draw commands for each mesh of a model. Indices come from the shared index
-     * buffer. Animated models draw each entity separately from the animation output, which has a
+     * buffer. Animated models draw each instance separately from the animation output, which has a
      * copy of the vertices for each pose back to back. Everything else is one instanced draw from
      * the shared vertex buffer. Meshes that aren't resident yet get commands that draw nothing, so
      * every mesh keeps its place.
      *
      * @param model The model.
      * @param info Where the model's data goes.
-     * @param poses The pose of each entity, null if the model isn't animated.
+     * @param count How many instances the model has.
+     * @param poses The pose of each instance, null if the model isn't animated.
      * @param meshes Where each mesh is in the shared buffers.
      * @param commands The mapped draw command buffer.
      */
     private static void writeDrawCommands(
             @NonNull Model model,
             @NonNull PerFrameData.ModelDrawInfo info,
+            int count,
             Poses poses,
             @NonNull MeshRegistry meshes,
             @NonNull ByteBuffer commands) {
-        List<Entity> entities = model.getEntitiesList();
-
         int position = info.firstCommand() * DRAW_COMMAND_SIZE;
         for (MeshData mesh : model.getMeshDataList()) {
             final MeshRegistry.Location location = meshes.locate(mesh.getMesh());
@@ -237,9 +263,9 @@ public class ModelMatrixUpdate implements RenderStage {
             final int firstIndex = location == null ? 0 : location.firstIndex();
 
             if (poses != null) {
-                for (int i = 0; i < entities.size(); ++i) {
-                    // The vertices of this entity's pose, with this entity's model matrix
-                    final int vertexOffset = poses.entityPoses()[i] * mesh.getVertexCount();
+                for (int i = 0; i < count; ++i) {
+                    // The vertices of this instance's pose, with this instance's model matrix
+                    final int vertexOffset = poses.instancePoses()[i] * mesh.getVertexCount();
                     writeCommand(
                             commands,
                             position,
@@ -255,7 +281,7 @@ public class ModelMatrixUpdate implements RenderStage {
                         commands,
                         position,
                         indexCount,
-                        location == null ? 0 : entities.size(),
+                        location == null ? 0 : count,
                         firstIndex,
                         location == null ? 0 : location.vertexOffset(),
                         0);

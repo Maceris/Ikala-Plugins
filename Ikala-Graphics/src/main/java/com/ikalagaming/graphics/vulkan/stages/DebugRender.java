@@ -311,7 +311,7 @@ public class DebugRender implements RenderStage {
         pushConstants.putFloat(NORMALS_LENGTH_OFFSET, visualizers.getNormalLength());
         pushConstants.putInt(NORMALS_MODE_OFFSET, mode);
 
-        // Written by the model matrix update stage this frame, still mapped
+        // Written by the instance draw update stage this frame, still mapped
         ByteBuffer commands =
                 MemoryUtil.memByteBuffer(
                         frameData.sceneDrawCommands.allocationInfo.pMappedData(),
@@ -336,7 +336,7 @@ public class DebugRender implements RenderStage {
                 for (int i = 0; i < info.commandCount(); ++i) {
                     final int position =
                             (info.firstCommand() + meshIndex * info.commandCount() + i)
-                                    * ModelMatrixUpdate.DRAW_COMMAND_SIZE;
+                                    * InstanceDrawUpdate.DRAW_COMMAND_SIZE;
                     final int instanceCount = commands.getInt(position + Integer.BYTES);
                     final int vertexOffset = commands.getInt(position + 3 * Integer.BYTES);
                     final int firstInstance = commands.getInt(position + 4 * Integer.BYTES);

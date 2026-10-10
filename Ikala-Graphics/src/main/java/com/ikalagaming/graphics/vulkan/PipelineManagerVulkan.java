@@ -75,7 +75,8 @@ public class PipelineManagerVulkan {
     private final DebugRender stageDebugRender;
     private final GuiRender stageGuiRender;
     private final LightRender stageLightRender;
-    private final ModelMatrixUpdate stageModelMatrixUpdate;
+    private final InstanceDrawUpdate stageInstanceDrawUpdate;
+    private final InstanceTransform stageInstanceTransform;
     private final SceneRender stageSceneRender;
     private final ShadowRender stageShadowRender;
     private final SkyboxRender stageSkyboxRender;
@@ -94,8 +95,11 @@ public class PipelineManagerVulkan {
         skybox = new SkyboxModel(state);
         quadMesh = QuadMesh.getInstance(state);
 
-        stageModelMatrixUpdate = new ModelMatrixUpdate();
-        stageModelMatrixUpdate.initialize(state);
+        stageInstanceDrawUpdate = new InstanceDrawUpdate();
+        stageInstanceDrawUpdate.initialize(state);
+        stageInstanceTransform =
+                new InstanceTransform(shaders.getShader(RenderStage.Type.INSTANCES));
+        stageInstanceTransform.initialize(state);
         stageSceneRender = new SceneRender(shaders.getShader(RenderStage.Type.SCENE));
         stageSceneRender.initialize(state);
         stageGuiRender = new GuiRender(shaders.getShader(RenderStage.Type.GUI), fontAtlas);
@@ -127,7 +131,8 @@ public class PipelineManagerVulkan {
         }
 
         if (RenderConfig.hasSceneStage(configuration)) {
-            stages.add(stageModelMatrixUpdate);
+            stages.add(stageInstanceDrawUpdate);
+            stages.add(stageInstanceTransform);
         }
         if (RenderConfig.hasAnimationStage(configuration)) {
             stages.add(stageAnimationRender);
@@ -395,6 +400,8 @@ public class PipelineManagerVulkan {
                                 ShaderBindings.Scene.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
                 state.perFrameData[i].sceneModelMatrices =
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
+                state.perFrameData[i].instanceList =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].sceneMaterialOverrides =
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].sceneDrawCommands =
@@ -473,7 +480,8 @@ public class PipelineManagerVulkan {
         stageDebugRender.cleanup(state);
         stageGuiRender.cleanup(state);
         stageLightRender.cleanup(state);
-        stageModelMatrixUpdate.cleanup(state);
+        stageInstanceDrawUpdate.cleanup(state);
+        stageInstanceTransform.cleanup(state);
         stageSceneRender.cleanup(state);
         stageShadowRender.cleanup(state);
         stageSkyboxRender.cleanup(state);
@@ -551,6 +559,8 @@ public class PipelineManagerVulkan {
         data.sceneUniforms = null;
         SharedBuffer.free(data.sceneModelMatrices, state);
         data.sceneModelMatrices = null;
+        SharedBuffer.free(data.instanceList, state);
+        data.instanceList = null;
         SharedBuffer.free(data.sceneMaterialOverrides, state);
         data.sceneMaterialOverrides = null;
         SharedBuffer.free(data.sceneDrawCommands, state);

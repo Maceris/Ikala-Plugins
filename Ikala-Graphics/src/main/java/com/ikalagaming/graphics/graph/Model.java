@@ -1,12 +1,7 @@
 package com.ikalagaming.graphics.graph;
 
-import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-
-import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.scene.AnimationState;
-import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.vulkan.SharedBuffer;
-import com.ikalagaming.graphics.vulkan.VulkanState;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -24,15 +19,13 @@ public class Model {
     private static final int MATRIX_SIZE_IN_BYTES = 4 * 4 * Float.BYTES;
 
     /**
-     * Find where an entity's current animation frame starts in the model's animation buffer, as an
-     * index of 4x4 matrices, which is how the animation shaders read it.
+     * Find where an instance's current animation frame starts in the model's animation buffer, as
+     * an index of 4x4 matrices, which is how the animation shaders read it.
      *
-     * @param entity The entity.
-     * @return The index of the first bone matrix of the current frame, or -1 if the entity isn't
-     *     animating.
+     * @param state The instance's animation state, or null if it isn't animating.
+     * @return The index of the first bone matrix of the current frame, or -1 if it isn't animating.
      */
-    public static int getAnimationMatrixOffset(@NonNull Entity entity) {
-        AnimationState state = entity.getAnimationState();
+    public static int getAnimationMatrixOffset(AnimationState state) {
         if (state == null || state.getCurrentAnimation() == null) {
             return -1;
         }
@@ -41,9 +34,6 @@ public class Model {
         return animation.offset() / MATRIX_SIZE_IN_BYTES
                 + state.getCurrentFrameIndex() * animation.boneCount();
     }
-
-    /** The maximum number of entities that a model can have. */
-    public static final int MAX_ENTITIES = 1024;
 
     /**
      * A named animation.
@@ -110,13 +100,6 @@ public class Model {
     private final List<Animation> animationList;
 
     /**
-     * A list of entities that use this model.
-     *
-     * @return The list of entities.
-     */
-    private final List<Entity> entitiesList;
-
-    /**
      * A list of mesh data for this model.
      *
      * @return The list of mesh data.
@@ -129,32 +112,11 @@ public class Model {
     /** Used to store animation states, for animated models. */
     @Setter private SharedBuffer entityAnimationOffsetsBuffer;
 
-    /** Used to store model matrices for rendering entities. */
-    @Setter private SharedBuffer modelMatricesBuffer;
-
     /**
-     * The highest buffer size (measured in entity count), for animation state and destination
-     * buffers. This will be doubled if we need more, but not all of it needs to be used.
+     * The highest buffer size (measured in poses), for animation state and destination buffers.
+     * This will be doubled if we need more, but not all of it needs to be used.
      */
     @Setter private int maxAnimatedBufferCapacity;
-
-    /**
-     * How many entities the model had last frame, used to determine how long we can cache draw
-     * command buffers and material overrides.
-     */
-    @Setter private int entitiesLastFrame;
-
-    /**
-     * Used to store material overrides. Organized by entity, where each entity will have N integer
-     * values, where N is the number of meshes that the model has.
-     */
-    @Setter private SharedBuffer materialOverridesBuffer;
-
-    /**
-     * Used to signal that material overrides have changed and need to be computed and uploaded
-     * again.
-     */
-    @Setter private boolean materialOverridesDirty;
 
     /**
      * Create a new model.
@@ -162,20 +124,11 @@ public class Model {
      * @param id The model ID.
      */
     public Model(@NonNull String id) {
-        entitiesList = new ArrayList<>();
         this.id = id;
         this.meshDataList = new ArrayList<>();
         this.animationList = new ArrayList<>();
         this.entityAnimationOffsetsBuffer = null;
         this.maxAnimatedBufferCapacity = 0;
-        this.entitiesLastFrame = 0;
-        // TODO(ches) handle these buffers better
-        final VulkanState state = GraphicsManager.getRenderInstance().getState();
-        this.modelMatricesBuffer =
-                SharedBuffer.allocate(0, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-        this.materialOverridesBuffer =
-                SharedBuffer.allocate(0, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-        this.materialOverridesDirty = true;
     }
 
     /**

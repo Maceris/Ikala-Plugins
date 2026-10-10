@@ -9,6 +9,7 @@ import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
 import com.ikalagaming.graphics.vulkan.DeletionQueue;
 import com.ikalagaming.graphics.vulkan.GeometryArena;
+import com.ikalagaming.graphics.vulkan.InstanceTable;
 import com.ikalagaming.graphics.vulkan.SharedBuffer;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
 import com.ikalagaming.graphics.vulkan.VulkanState;
@@ -19,7 +20,6 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector4f;
 
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
@@ -142,39 +142,6 @@ public class Scene {
     }
 
     /**
-     * Add an entity to the scene. The model must have a valid model that is in the scene, but this
-     * will handle adding the entity to the model's entity list.
-     *
-     * @param entity The entity to add.
-     * @see #addModel(Model)
-     */
-    public void addEntity(@NonNull Entity entity) {
-        Model model = entity.getModel();
-        List<Entity> entityList = model.getEntitiesList();
-        // TODO(ches) handle duplicate entities
-
-        if (entityList.size() >= Model.MAX_ENTITIES) {
-            log.error(
-                    "Reached limit ({}) of entities for model {}",
-                    Model.MAX_ENTITIES,
-                    model.getId());
-            return;
-        }
-        model.getEntitiesList().add(entity);
-    }
-
-    /**
-     * Remove an entity from the scene.
-     *
-     * @param entity The entity to add.
-     * @see #addModel(Model)
-     */
-    public void removeEntity(@NonNull Entity entity) {
-        Model model = entity.getModel();
-        model.getEntitiesList().remove(entity);
-    }
-
-    /**
      * Add a model to the model map. A different model already added with the same ID is replaced,
      * and its GPU resources are released.
      *
@@ -188,8 +155,8 @@ public class Scene {
     }
 
     /**
-     * Queue up deletion of a model's GPU resources: its meshes in the shared geometry buffers, and
-     * its own buffers.
+     * Queue up deletion of a model's GPU resources: its instances, its meshes in the shared
+     * geometry buffers, and its own buffers.
      *
      * @param model The model.
      */
@@ -203,10 +170,13 @@ public class Scene {
                 };
         VulkanInstance renderer = GraphicsManager.getRenderInstance();
         GeometryArena geometry = renderer == null ? null : renderer.getState().geometry;
+        InstanceTable instances = renderer == null ? null : renderer.getState().instances;
+        if (instances != null) {
+            // Whichever plugins placed them, the scene no longer draws them
+            instances.getRegistry().removeAllOf(model).forEach(instances::retire);
+        }
         delete.accept(model.getAnimationBuffer());
         delete.accept(model.getEntityAnimationOffsetsBuffer());
-        delete.accept(model.getModelMatricesBuffer());
-        delete.accept(model.getMaterialOverridesBuffer());
         for (MeshData mesh : model.getMeshDataList()) {
             delete.accept(mesh.getBoneWeightBuffer());
             delete.accept(mesh.getAnimationTargetBuffer());

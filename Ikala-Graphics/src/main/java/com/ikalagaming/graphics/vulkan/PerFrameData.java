@@ -32,7 +32,22 @@ public class PerFrameData {
     public SharedBuffer lightPointLights;
     public SharedBuffer lightSpotLights;
     public SharedBuffer sceneUniforms;
+
+    /**
+     * The model matrix of every instance drawn this frame, in the order of {@link #instanceList},
+     * relative to the camera. Written on the GPU by the instance transform stage.
+     */
     public SharedBuffer sceneModelMatrices;
+
+    /**
+     * The instance table slot of every instance drawn this frame, model by model, written by the
+     * instance draw update stage. Draws index it the way they index {@link #sceneModelMatrices}.
+     */
+    public SharedBuffer instanceList;
+
+    /** How many entries {@link #instanceList} has this frame. */
+    public int instanceCount;
+
     public SharedBuffer sceneMaterialOverrides;
 
     /** Indirect draw commands for every mesh in the scene this frame, packed back to back. */
@@ -40,7 +55,7 @@ public class PerFrameData {
 
     /**
      * Where each model's data starts in the packed scene buffers this frame. Filled out by the
-     * model matrix update stage, and only contains models that have entities to draw.
+     * instance draw update stage, and only contains models that have instances to draw.
      */
     public Map<Model, ModelDrawInfo> modelDrawInfo;
 

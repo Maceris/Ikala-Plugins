@@ -3,11 +3,12 @@ package com.ikalagaming.converter.gui.window;
 import com.ikalagaming.converter.ConverterPlugin;
 import com.ikalagaming.converter.ModelConverter;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.InstanceHandle;
+import com.ikalagaming.graphics.Instances;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.UI;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.Model;
-import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.scene.lights.PointLight;
@@ -19,6 +20,7 @@ import com.ikalagaming.launcher.PluginFolder;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Quaternionf;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
 
@@ -118,14 +120,13 @@ public class MainMenu {
         scene.getMaterialCache().setDirty(true);
         scene.addModel(ballModel);
 
-        final String ballNameFormatString = "ball_%s_%d";
+        final Instances instances =
+                GraphicsManager.forPlugin(ConverterPlugin.PLUGIN_NAME).instances();
         float zPos = 0;
 
         for (int i = 0; i <= 10; ++i) {
-            String name = String.format(ballNameFormatString, "anisotropic", i);
-            Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.003f);
-            ball.setPosition(i, 0, zPos);
+            InstanceHandle ball =
+                    instances.place(ballModel, new Vector3d(i, 0, zPos), new Quaternionf(), 0.003f);
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.0f, 0.90f, 0.60f, 1.0f);
@@ -133,32 +134,26 @@ public class MainMenu {
             customMaterial.setRoughness(0.40f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            scene.addEntity(ball);
-            ball.setMaterialOverride(customMaterial, 0);
+            instances.setMaterial(ball, 0, customMaterial);
         }
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
-            String name = String.format(ballNameFormatString, "clearcoat", i);
-            Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.003f);
-            ball.setPosition(i, 0, zPos);
+            InstanceHandle ball =
+                    instances.place(ballModel, new Vector3d(i, 0, zPos), new Quaternionf(), 0.003f);
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.35f, 0.75f, 0.95f, 1.0f);
             customMaterial.setClearcoat(0.1f * i);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            scene.addEntity(ball);
-            ball.setMaterialOverride(customMaterial, 0);
+            instances.setMaterial(ball, 0, customMaterial);
         }
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
-            String name = String.format(ballNameFormatString, "clearcoatGloss", i);
-            Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.003f);
-            ball.setPosition(i, 0, zPos);
+            InstanceHandle ball =
+                    instances.place(ballModel, new Vector3d(i, 0, zPos), new Quaternionf(), 0.003f);
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.35f, 0.75f, 0.95f, 1.0f);
@@ -166,48 +161,39 @@ public class MainMenu {
             customMaterial.setRoughness(0.40f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            scene.addEntity(ball);
-            ball.setMaterialOverride(customMaterial, 0);
+            instances.setMaterial(ball, 0, customMaterial);
         }
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
-            String name = String.format(ballNameFormatString, "metallic", i);
-            Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.003f);
-            ball.setPosition(i, 0, zPos);
+            InstanceHandle ball =
+                    instances.place(ballModel, new Vector3d(i, 0, zPos), new Quaternionf(), 0.003f);
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(1.0f, 0.95f, 0.f, 1.0f);
             customMaterial.setMetallic(0.1f * i);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            scene.addEntity(ball);
-            ball.setMaterialOverride(customMaterial, 0);
+            instances.setMaterial(ball, 0, customMaterial);
         }
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
-            String name = String.format(ballNameFormatString, "roughness", i);
-            Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.003f);
-            ball.setPosition(i, 0, zPos);
+            InstanceHandle ball =
+                    instances.place(ballModel, new Vector3d(i, 0, zPos), new Quaternionf(), 0.003f);
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.10f, 0.10f, 0.95f, 1.0f);
             customMaterial.setRoughness(0.1f * i);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            scene.addEntity(ball);
-            ball.setMaterialOverride(customMaterial, 0);
+            instances.setMaterial(ball, 0, customMaterial);
         }
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
-            String name = String.format(ballNameFormatString, "sheen", i);
-            Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.003f);
-            ball.setPosition(i, 0, zPos);
+            InstanceHandle ball =
+                    instances.place(ballModel, new Vector3d(i, 0, zPos), new Quaternionf(), 0.003f);
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.75f, 0.65f, 0.50f, 1.0f);
@@ -215,16 +201,13 @@ public class MainMenu {
             customMaterial.setRoughness(1.0f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            scene.addEntity(ball);
-            ball.setMaterialOverride(customMaterial, 0);
+            instances.setMaterial(ball, 0, customMaterial);
         }
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
-            String name = String.format(ballNameFormatString, "sheenTint", i);
-            Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.003f);
-            ball.setPosition(i, 0, zPos);
+            InstanceHandle ball =
+                    instances.place(ballModel, new Vector3d(i, 0, zPos), new Quaternionf(), 0.003f);
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.75f, 0.65f, 0.50f, 1.0f);
@@ -232,16 +215,13 @@ public class MainMenu {
             customMaterial.setRoughness(1.0f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            scene.addEntity(ball);
-            ball.setMaterialOverride(customMaterial, 0);
+            instances.setMaterial(ball, 0, customMaterial);
         }
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
-            String name = String.format(ballNameFormatString, "specular", i);
-            Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.003f);
-            ball.setPosition(i, 0, zPos);
+            InstanceHandle ball =
+                    instances.place(ballModel, new Vector3d(i, 0, zPos), new Quaternionf(), 0.003f);
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.95f, 0.20f, 0.20f, 1.0f);
@@ -249,16 +229,13 @@ public class MainMenu {
             customMaterial.setRoughness(0.40f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            scene.addEntity(ball);
-            ball.setMaterialOverride(customMaterial, 0);
+            instances.setMaterial(ball, 0, customMaterial);
         }
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
-            String name = String.format(ballNameFormatString, "specularTint", i);
-            Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.003f);
-            ball.setPosition(i, 0, zPos);
+            InstanceHandle ball =
+                    instances.place(ballModel, new Vector3d(i, 0, zPos), new Quaternionf(), 0.003f);
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(0.95f, 0.20f, 0.20f, 1.0f);
@@ -266,24 +243,20 @@ public class MainMenu {
             customMaterial.setRoughness(0.40f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            scene.addEntity(ball);
-            ball.setMaterialOverride(customMaterial, 0);
+            instances.setMaterial(ball, 0, customMaterial);
         }
         zPos += 1;
 
         for (int i = 0; i <= 10; ++i) {
-            String name = String.format(ballNameFormatString, "subsurface", i);
-            Entity ball = new Entity(name, ballModel);
-            ball.setScale(0.003f);
-            ball.setPosition(i, 0, zPos);
+            InstanceHandle ball =
+                    instances.place(ballModel, new Vector3d(i, 0, zPos), new Quaternionf(), 0.003f);
 
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(1.0f, 1.0f, 1.0f, 1.0f);
             customMaterial.setRoughness(0.40f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
-            scene.addEntity(ball);
-            ball.setMaterialOverride(customMaterial, 0);
+            instances.setMaterial(ball, 0, customMaterial);
         }
 
         scene.getSceneLights()

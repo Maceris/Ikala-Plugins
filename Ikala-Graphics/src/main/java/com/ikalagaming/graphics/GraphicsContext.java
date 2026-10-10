@@ -53,6 +53,9 @@ public final class GraphicsContext {
     /** Mesh registering and releasing for this context. */
     private final Meshes meshes;
 
+    /** Placing models in the scene for this context. */
+    private final Instances instances;
+
     /** Debug shape drawing for this context. */
     private final DebugDraw debug;
 
@@ -74,6 +77,7 @@ public final class GraphicsContext {
         this.plugin = new WeakReference<>(plugin);
         textures = new Textures(this);
         meshes = new Meshes(this);
+        instances = new Instances(this);
         debug = new DebugDraw(this);
         ui = new UI(this, GraphicsManager::getUiManager);
         closed = false;
@@ -99,6 +103,17 @@ public final class GraphicsContext {
     public Meshes meshes() {
         checkOpen();
         return meshes;
+    }
+
+    /**
+     * Place models in the scene, owned by this plugin.
+     *
+     * @return The instances API for this plugin.
+     * @throws IllegalStateException If the plugin was unloaded.
+     */
+    public Instances instances() {
+        checkOpen();
+        return instances;
     }
 
     /**

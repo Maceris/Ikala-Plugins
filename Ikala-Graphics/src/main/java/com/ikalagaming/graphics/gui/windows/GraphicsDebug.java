@@ -15,6 +15,8 @@ import com.ikalagaming.graphics.gui.util.Alignment;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
+import com.ikalagaming.graphics.vulkan.InstanceRegistry;
+import com.ikalagaming.graphics.vulkan.VulkanInstance;
 
 import lombok.NonNull;
 import org.joml.Vector3f;
@@ -53,7 +55,7 @@ public class GraphicsDebug extends GuiWindow {
         showPointLights = new Checkbox("Point lights", false);
         showSpotLights = new Checkbox("Spot lights", false);
         showDirectionalLight = new Checkbox("Directional light", false);
-        showEntityBounds = new Checkbox("Entity bounds", false);
+        showEntityBounds = new Checkbox("Instance bounds", false);
         showShadowCascades = new Checkbox("Shadow cascades", false);
         showNormals = new Checkbox("Normals", false);
         showTangents = new Checkbox("Tangents", false);
@@ -115,22 +117,26 @@ public class GraphicsDebug extends GuiWindow {
 
                 long triangles = 0;
                 int meshes = 0;
-                int entities = 0;
+                int instances = 0;
+                final VulkanInstance renderer = GraphicsManager.getRenderInstance();
+                final InstanceRegistry registry =
+                        renderer == null || renderer.getState().instances == null
+                                ? null
+                                : renderer.getState().instances.getRegistry();
                 for (Model model : scene.getModelMap().values()) {
                     meshes += model.getMeshDataList().size();
-                    int meshEntities = model.getEntitiesList().size();
-                    meshes += model.getMeshDataList().size();
-                    entities += meshEntities;
+                    int modelInstances = registry == null ? 0 : registry.countOf(model);
+                    instances += modelInstances;
                     int meshTriangles = 0;
                     for (MeshData mesh : model.getMeshDataList()) {
                         meshTriangles += mesh.getIndices().length / 3;
                     }
-                    triangles += (long) meshTriangles * meshEntities;
+                    triangles += (long) meshTriangles * modelInstances;
                 }
 
                 IkGui.text(String.format("Models loaded: %,d", scene.getModelMap().size()));
                 IkGui.text(String.format("Meshes loaded: %,d", meshes));
-                IkGui.text(String.format("Entities: %,d", entities));
+                IkGui.text(String.format("Instances: %,d", instances));
                 IkGui.text(String.format("Triangles: %,d", triangles));
             }
 

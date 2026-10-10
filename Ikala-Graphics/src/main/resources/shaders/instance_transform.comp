@@ -1,0 +1,83 @@
+#version 460
+#extension GL_EXT_buffer_reference : require
+
+// Turns instances into model matrices in render space, which is world space moved so the camera
+// is at the origin. Each thread takes one entry of this frame's instance list, reads that slot of
+// the instance table, and writes the matrix at the same position in the list, so draws index the
+// matrices exactly as they index the list.
+
+// One instance in the table, see InstanceTable for the layout. World positions are split into a
+// high and a low float so they stay exact relative to the camera however far from the origin.
+struct Instance {
+    // xyz: high part of the world position, w: uniform scale
+    vec4 positionHigh;
+    // xyz: low part of the world position
+    vec4 positionLow;
+    // Quaternion x, y, z, w
+    vec4 rotation;
+    // x: flags, the rest reserved
+    uvec4 info;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Instances {
+    Instance instances[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Slots {
+    uint slots[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) writeonly buffer Matrices {
+    mat4 matrices[];
+};
+
+layout(push_constant) uniform Constants {
+    Instances table;
+    Slots list;
+    Matrices matrices;
+    // The camera's world position, split the same way as the instances' positions
+    vec4 cameraHigh;
+    vec4 cameraLow;
+    // How many entries the list has
+    uint count;
+};
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+    // Groups of 64, so the last group can run past the end of the list
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= count) {
+        return;
+    }
+    Instance instance = table.instances[list.slots[index]];
+
+    // Subtract the high parts first: for anything near the camera they are close, so the
+    // difference is exact, and the low parts add back what the high parts couldn't hold
+    vec3 translation = (instance.positionHigh.xyz - cameraHigh.xyz)
+        + (instance.positionLow.xyz - cameraLow.xyz);
+    float scale = instance.positionHigh.w;
+    vec4 q = instance.rotation;
+
+    // The same as JOML's Matrix4f.translationRotateScale, column by column
+    float dqx = q.x + q.x;
+    float dqy = q.y + q.y;
+    float dqz = q.z + q.z;
+    float q00 = dqx * q.x;
+    float q11 = dqy * q.y;
+    float q22 = dqz * q.z;
+    float q01 = dqx * q.y;
+    float q02 = dqx * q.z;
+    float q03 = dqx * q.w;
+    float q12 = dqy * q.z;
+    float q13 = dqy * q.w;
+    float q23 = dqz * q.w;
+
+    mat4 model;
+    model[0] = vec4(scale - (q11 + q22) * scale, (q01 + q23) * scale, (q02 - q13) * scale, 0.0);
+    model[1] = vec4((q01 - q23) * scale, scale - (q22 + q00) * scale, (q12 + q03) * scale, 0.0);
+    model[2] = vec4((q02 + q13) * scale, (q12 - q03) * scale, scale - (q11 + q00) * scale, 0.0);
+    model[3] = vec4(translation, 1.0);
+    matrices.matrices[index] = model;
+}

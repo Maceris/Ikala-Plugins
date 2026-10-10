@@ -6,6 +6,45 @@ import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 /** Bindings and buffer positions for Vulkan shaders. */
 public class ShaderBindings {
 
+    /** Instance transform shader variables, see {@code instance_transform.comp}. */
+    public static class Instances {
+        /*
+         * Push constant offsets. Every buffer is passed by device address. The vec4s are aligned to
+         * 16 bytes, so they start after the three addresses plus padding.
+         */
+
+        /** Device address of the instance table. */
+        public static final int PUSH_CONSTANT_TABLE_OFFSET = 0;
+
+        /** Device address of this frame's instance list. */
+        public static final int PUSH_CONSTANT_LIST_OFFSET = Long.BYTES;
+
+        /** Device address of this frame's model matrices. */
+        public static final int PUSH_CONSTANT_MATRICES_OFFSET = 2 * Long.BYTES;
+
+        /** The high part of the camera's world position, a vec4. */
+        public static final int PUSH_CONSTANT_CAMERA_HIGH_OFFSET = 4 * Long.BYTES;
+
+        /** The low part of the camera's world position, a vec4. */
+        public static final int PUSH_CONSTANT_CAMERA_LOW_OFFSET =
+                PUSH_CONSTANT_CAMERA_HIGH_OFFSET + 4 * Float.BYTES;
+
+        /** How many entries the instance list has. */
+        public static final int PUSH_CONSTANT_COUNT_OFFSET =
+                PUSH_CONSTANT_CAMERA_LOW_OFFSET + 4 * Float.BYTES;
+
+        /** The size of the push constants in bytes. */
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_COUNT_OFFSET + Integer.BYTES;
+
+        /** The number of instances each compute workgroup handles. */
+        public static final int WORKGROUP_SIZE = 64;
+
+        /** Private constructor so this class is not instantiated. */
+        private Instances() {
+            cutItOut();
+        }
+    }
+
     /** Animation shader variables. */
     public static class Animation {
         /*

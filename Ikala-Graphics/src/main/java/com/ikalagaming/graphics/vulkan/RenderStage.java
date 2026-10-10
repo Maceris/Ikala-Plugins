@@ -12,6 +12,7 @@ public interface RenderStage {
         DEBUG_NORMALS,
         FILTER,
         GUI,
+        INSTANCES,
         LIGHT,
         SCENE,
         SHADOW,

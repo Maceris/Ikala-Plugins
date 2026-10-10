@@ -311,13 +311,13 @@ public class SceneRender implements RenderStage {
 
                 final long commandOffset =
                         (long) (info.firstCommand() + meshIndex * info.commandCount())
-                                * ModelMatrixUpdate.DRAW_COMMAND_SIZE;
+                                * InstanceDrawUpdate.DRAW_COMMAND_SIZE;
                 vkCmdDrawIndexedIndirect(
                         commandBuffer,
                         frameData.sceneDrawCommands.buffer,
                         commandOffset,
                         info.commandCount(),
-                        ModelMatrixUpdate.DRAW_COMMAND_SIZE);
+                        InstanceDrawUpdate.DRAW_COMMAND_SIZE);
                 meshIndex += 1;
             }
         }

@@ -381,6 +381,7 @@ public class VulkanInstance {
         state.textureUploads.clear(state);
         state.textureRegistry.removeAll().forEach(textureLoader::delete);
         state.geometry.cleanup(state);
+        state.instances.cleanup(state);
 
         DeletionQueue.Entry nextEntry = GraphicsManager.getDeletionQueue().pop();
         while (nextEntry != null) {
@@ -397,6 +398,7 @@ public class VulkanInstance {
         state.textureRegistry = null;
         state.textureUploads = null;
         state.geometry = null;
+        state.instances = null;
         state.stagingRing.cleanup(state);
         state.stagingRing = null;
         state.immediateCommands.cleanup(state);
@@ -1152,6 +1154,7 @@ public class VulkanInstance {
         state.stagingRing = new StagingRing(state);
         state.textureUploads = new TextureUploads();
         state.geometry = new GeometryArena(state, MeshData.VERTEX_SIZE_IN_BYTES);
+        state.instances = new InstanceTable(state);
         textureLoader = new TextureLoaderVulkan(state);
         shaderMap = new ShaderMap();
         initializeShaders();
@@ -1162,6 +1165,18 @@ public class VulkanInstance {
 
         createSynchronizationInfo();
         return true;
+    }
+
+    /** Set up the instance transform shader. */
+    private void initializeInstanceShader() {
+        List<ShaderVulkan.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+        shaderModuleDataList.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/instance_transform.comp",
+                        ShaderVulkan.Type.COMPUTE,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(
+                RenderStage.Type.INSTANCES, new ShaderVulkan(shaderModuleDataList, state));
     }
 
     /** Set up the animation shader and uniforms. */
@@ -1331,6 +1346,7 @@ public class VulkanInstance {
      */
     private void initializeShaders() {
         initializeAnimationShader();
+        initializeInstanceShader();
         initializeShadowShader();
         initializeSceneShader();
         initializeLightShader();
@@ -1506,6 +1522,7 @@ public class VulkanInstance {
         // Before anything that could sample the textures or draw the meshes
         state.textureUploads.record(state, commandBuffer, textureLoader);
         state.geometry.record(state, commandBuffer);
+        state.instances.record(state, commandBuffer);
 
         // This will record the command buffer
         pipeline.render(scene, windowInfo.window, state);

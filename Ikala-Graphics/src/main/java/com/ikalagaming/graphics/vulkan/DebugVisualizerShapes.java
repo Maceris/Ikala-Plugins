@@ -1,10 +1,10 @@
 package com.ikalagaming.graphics.vulkan;
 
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.gui.util.Color;
-import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugArrow;
 import com.ikalagaming.graphics.scene.debug.DebugBox;
@@ -166,29 +166,37 @@ public final class DebugVisualizerShapes {
     }
 
     private static void entityBounds(@NonNull Scene scene, @NonNull Consumer<DebugShape> out) {
+        final VulkanInstance renderer = GraphicsManager.getRenderInstance();
+        if (renderer == null || renderer.getState().instances == null) {
+            return;
+        }
+        final InstanceRegistry instances = renderer.getState().instances.getRegistry();
         Vector3d center = new Vector3d();
         Vector3d halfExtents = new Vector3d();
         Quaterniond rotation = new Quaterniond();
         for (Model model : scene.getModelMap().values()) {
-            for (Entity entity : model.getEntitiesList()) {
-                rotation.set(entity.getRotation());
-                final double scale = entity.getScale();
-                for (MeshData mesh : model.getMeshDataList()) {
-                    Vector3fc min = mesh.getAabbMin();
-                    Vector3fc max = mesh.getAabbMax();
-                    center.set(
-                            (min.x() + max.x()) * 0.5 * scale,
-                            (min.y() + max.y()) * 0.5 * scale,
-                            (min.z() + max.z()) * 0.5 * scale);
-                    rotation.transform(center);
-                    center.add(entity.getPosition());
-                    halfExtents.set(
-                            (max.x() - min.x()) * 0.5 * scale,
-                            (max.y() - min.y()) * 0.5 * scale,
-                            (max.z() - min.z()) * 0.5 * scale);
-                    out.accept(new DebugBox(center, halfExtents, rotation, BOUNDS_COLOR, false));
-                }
-            }
+            instances.visitTransforms(
+                    model,
+                    (slot, alive, position, instanceRotation, scale) -> {
+                        rotation.set(instanceRotation);
+                        for (MeshData mesh : model.getMeshDataList()) {
+                            Vector3fc min = mesh.getAabbMin();
+                            Vector3fc max = mesh.getAabbMax();
+                            center.set(
+                                    (min.x() + max.x()) * 0.5 * scale,
+                                    (min.y() + max.y()) * 0.5 * scale,
+                                    (min.z() + max.z()) * 0.5 * scale);
+                            rotation.transform(center);
+                            center.add(position);
+                            halfExtents.set(
+                                    (max.x() - min.x()) * 0.5 * scale,
+                                    (max.y() - min.y()) * 0.5 * scale,
+                                    (max.z() - min.z()) * 0.5 * scale);
+                            out.accept(
+                                    new DebugBox(
+                                            center, halfExtents, rotation, BOUNDS_COLOR, false));
+                        }
+                    });
         }
     }
 
