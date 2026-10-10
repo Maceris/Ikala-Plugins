@@ -20,11 +20,13 @@ import com.ikalagaming.graphics.gui.util.Alignment;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
+import com.ikalagaming.graphics.vulkan.ClusterMath;
 import com.ikalagaming.graphics.vulkan.FilterView;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
 import com.ikalagaming.graphics.vulkan.InstanceRegistry;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
 import com.ikalagaming.graphics.vulkan.stages.InstanceDrawUpdate;
+import com.ikalagaming.graphics.vulkan.stages.LightCull;
 
 import lombok.NonNull;
 import org.joml.Vector3f;
@@ -68,6 +70,12 @@ public class GraphicsDebug extends GuiWindow {
 
     /** The benchmark view distance picked, in sections. */
     private final int[] benchmarkRadius = {12};
+
+    /** How many torches the benchmark scatters over its world. */
+    private final int[] benchmarkLights = {0};
+
+    /** The most torches the benchmark slider offers. */
+    private static final int MAX_BENCHMARK_LIGHTS = 8000;
 
     /** Whether the benchmark leaves its world in place when it finishes. */
     private final IkBoolean benchmarkKeepWorld = new IkBoolean(false);
@@ -225,6 +233,10 @@ public class GraphicsDebug extends GuiWindow {
 
             if (IkGui.collapsingHeader("Frame timing")) {
                 drawTimings();
+            }
+
+            if (IkGui.collapsingHeader("Lights")) {
+                drawLights(scene);
             }
 
             if (IkGui.collapsingHeader("Benchmark")) {
@@ -531,6 +543,51 @@ public class GraphicsDebug extends GuiWindow {
         IkGui.endTable();
     }
 
+    /**
+     * Show how the lights were sorted into clusters, and the heat map toggle.
+     *
+     * @param scene The scene.
+     */
+    private static void drawLights(@NonNull Scene scene) {
+        IkGui.text(
+                String.format(
+                        "Point and spot lights: %,d", scene.getLightRegistry().getLightCount()));
+        final VulkanInstance renderer = GraphicsManager.getRenderInstance();
+        if (renderer != null) {
+            final LightCull.Stats stats = renderer.getState().lightStats;
+            IkGui.text(
+                    String.format(
+                            "Clusters: %d x %d x %d out to %.0f m",
+                            ClusterMath.X, ClusterMath.Y, ClusterMath.Z, scene.getViewDistance()));
+            IkGui.text(
+                    String.format(
+                            "Busiest cluster: %,d lights (%,d at most are listed)",
+                            stats.busiest(), ClusterMath.MAX_LIGHTS_PER_CLUSTER));
+            IkGui.text(
+                    String.format(
+                            "Listed across all clusters: %,d (%.1f per cluster)",
+                            stats.listed(), stats.listed() / (double) ClusterMath.COUNT));
+            if (stats.overflowing() > 0) {
+                IkGui.textColored(
+                        1,
+                        0.4f,
+                        0.4f,
+                        1,
+                        String.format(
+                                "%,d clusters touch too many lights; some are dropped",
+                                stats.overflowing()));
+            }
+        }
+        final DebugVisualizers visualizers = scene.getDebugVisualizers();
+        if (IkGui.checkbox("Cluster heat map", visualizers.isClusterHeatMap())) {
+            visualizers.setClusterHeatMap(!visualizers.isClusterHeatMap());
+        }
+        IkGui.setItemTooltip(
+                "Tint each pixel by how many lights its cluster lists, from blue for one to red for "
+                        + DebugVisualizers.HEAT_MAP_FULL
+                        + " or more.");
+    }
+
     /** Run the gate benchmark and show what it found. */
     private void drawBenchmark() {
         IkGui.textWrapped(
@@ -541,6 +598,8 @@ public class GraphicsDebug extends GuiWindow {
                         + " ms.");
         IkGui.combo("Recipe", benchmarkRecipe, RECIPE_NAMES);
         IkGui.sliderInt("Radius (sections)", benchmarkRadius, 6, 24);
+        IkGui.sliderInt("Lights", benchmarkLights, 0, MAX_BENCHMARK_LIGHTS);
+        IkGui.setItemTooltip("Torches scattered over the ground, to measure many lights.");
         IkGui.checkbox("Keep world", benchmarkKeepWorld);
         IkGui.sameLine();
         final boolean uiHidden = GraphicsManager.getUiManager().isSurfacesHidden();
@@ -554,6 +613,7 @@ public class GraphicsDebug extends GuiWindow {
             GateBenchmark.start(
                     SyntheticTerrain.Recipe.values()[benchmarkRecipe.get()],
                     benchmarkRadius[0],
+                    benchmarkLights[0],
                     benchmarkKeepWorld.get());
         }
         IkGui.sameLine();
@@ -578,9 +638,10 @@ public class GraphicsDebug extends GuiWindow {
         final GateScene.LoadStats load = results.load();
         IkGui.text(
                 String.format(
-                        "%s at radius %d: %s",
+                        "%s at radius %d with %,d lights: %s",
                         results.recipe(),
                         results.radius(),
+                        results.lights(),
                         results.passed() ? "passed" : "failed"));
         IkGui.text(
                 String.format(

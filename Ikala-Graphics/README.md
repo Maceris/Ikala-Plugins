@@ -36,6 +36,7 @@ These are Java system properties, given before `-jar`:
 | --- | --- | --- |
 | `-Dikala.benchmark=<recipe>` | not set | Runs the benchmark at startup. `<recipe>` is the world: `TERRAIN` (hills, caves, plants and trees, tuned to the expected load), `CHECKERBOARD` (a block in every other cell, the worst case for face culling) or `CAVES` (rock full of caves under a solid roof, the worst case for occlusion). |
 | `-Dikala.benchmark.radius=<sections>` | `12` | The view distance, in 16-block sections. |
+| `-Dikala.benchmark.lights=<count>` | `0` | Scatters this many torches (point lights reaching 10 m) over the ground, the same ones every run, to measure many lights. |
 | `-Dikala.benchmark.keep=true` | `false` | Keeps the world once the run finishes, so you can fly around it, and hides plugin menus that would cover it. Without this, the app closes when the run finishes. |
 
 For example, from the asset editor's folder:
@@ -48,7 +49,7 @@ java -Dikala.benchmark=TERRAIN -Dikala.benchmark.radius=12 -jar Ikala-Core-0.6.0
 
 Results are logged, shown in the Graphics Debug window, and added to `benchmark-results.txt` in the
 working directory. Each entry has:
-- the world, radius, seed and resolution;
+- the world, radius, light count, seed and resolution;
 - the load: sections in range, sections with content, placements and triangles;
 - the average, 95th percentile and worst time for the whole GPU frame, the CPU, and each render stage;
 - whether it passed.
@@ -57,6 +58,9 @@ working directory. Each entry has:
 
 - **Frame timing** shows each render stage's GPU time and the CPU time, over the last 120 frames, at any
   time.
-- **Benchmark** picks the recipe and radius and has Run and Stop buttons.
+- **Lights** shows how many lights there are, how they were sorted into clusters (the busiest cluster, and
+  whether any had more lights than it can list), and a *Cluster heat map* that tints each pixel by how many
+  lights can reach it.
+- **Benchmark** picks the recipe, radius and number of lights, and has Run and Stop buttons.
   - *Keep world* leaves the finished world in place, and *Remove world* takes it away.
   - *Hide plugin UI* hides plugin menus so the scene behind them can be seen.

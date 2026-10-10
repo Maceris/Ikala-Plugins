@@ -1208,6 +1208,14 @@ public class VulkanInstance {
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(
                 RenderStage.Type.DEPTH_PYRAMID, new ShaderVulkan(pyramidModules, state));
+
+        List<ShaderVulkan.ShaderModuleData> lightCullModules = new ArrayList<>();
+        lightCullModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/light_cull.comp",
+                        ShaderVulkan.Type.COMPUTE,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(RenderStage.Type.LIGHT_CULL, new ShaderVulkan(lightCullModules, state));
     }
 
     /** Set up the animation shader and uniforms. */

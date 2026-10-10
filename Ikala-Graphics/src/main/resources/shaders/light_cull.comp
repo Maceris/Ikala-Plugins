@@ -1,0 +1,175 @@
+#version 460
+#extension GL_EXT_buffer_reference : require
+
+// Sorts the point lights and spotlights into clusters of the view, so the light stage only looks at
+// the lights that can reach each pixel. Each thread takes one cluster, builds its view space box,
+// and tests every light against it, the lights read in batches through shared memory.
+//
+// ClusterMath has the grid and the tests in Java, with tests; keep them in step. lights.frag finds
+// a pixel's cluster the same way.
+
+const uint CLUSTERS_X = 16;
+const uint CLUSTERS_Y = 9;
+const uint CLUSTERS_Z = 24;
+const uint CLUSTER_COUNT = CLUSTERS_X * CLUSTERS_Y * CLUSTERS_Z;
+const uint MAX_LIGHTS_PER_CLUSTER = 256;
+const float FIRST_SLICE_DEPTH = 1.0;
+
+// Must match LightType.getShaderValue()
+const uint LIGHT_TYPE_SPOT = 1;
+
+const uint GROUP_SIZE = 64;
+
+// A point light or spotlight, with the position and direction in view space
+struct Light {
+    vec3 position;
+    float range;
+    vec3 color;
+    float intensity;
+    vec3 direction;
+    float cosOuter;
+    float cosInner;
+    uint type;
+    vec2 _padding;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Lights {
+    Light lights[];
+};
+
+// How many lights each cluster has, CLUSTER_COUNT of them, then MAX_LIGHTS_PER_CLUSTER light
+// indices for each cluster
+layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer Clusters {
+    uint clusterData[];
+};
+
+// For the debug window, read back on the CPU
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer Stats {
+    // The most lights any cluster touches, including any past MAX_LIGHTS_PER_CLUSTER
+    uint busiest;
+    // How many clusters touch more lights than they can list
+    uint overflowing;
+    // How many lights are listed across all clusters
+    uint listed;
+};
+
+layout(push_constant) uniform Constants {
+    mat4 inverseProjection;
+    Lights lightBuffer;
+    Clusters clusters;
+    Stats stats;
+    uint lightCount;
+    // (CLUSTERS_Z - 1) / ln(viewDistance / FIRST_SLICE_DEPTH)
+    float logScale;
+    // The far plane, where the last slice ends
+    float farPlane;
+};
+
+layout(local_size_x = GROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+// Each batch of lights: position and range, then direction and the cosine of the outer angle, which
+// is below -1 for point lights so the cone test passes
+shared vec4 batchSpheres[GROUP_SIZE];
+shared vec4 batchCones[GROUP_SIZE];
+
+float sliceStart(uint slice) {
+    return slice == 0 ? 0.0 : FIRST_SLICE_DEPTH * exp(float(slice - 1) / logScale);
+}
+
+float sliceEnd(uint slice) {
+    return slice == CLUSTERS_Z - 1 ? farPlane : sliceStart(slice + 1);
+}
+
+// The view space ray through a point on the screen, reaching one metre in front of the camera
+vec3 ray(float u, float v) {
+    // The same flip as lights.frag: the scene is drawn y up, the screen counts y down
+    vec4 point = inverseProjection * vec4(u * 2.0 - 1.0, 1.0 - v * 2.0, 0.5, 1.0);
+    vec3 direction = point.xyz / point.w;
+    return direction / -direction.z;
+}
+
+bool sphereTouchesBox(vec3 center, float radius, vec3 boxMin, vec3 boxMax) {
+    vec3 outside = max(max(boxMin - center, vec3(0)), center - boxMax);
+    return dot(outside, outside) <= radius * radius;
+}
+
+// Against the sphere around the box: inside the cone's angle, and not behind the light
+bool coneTouchesBox(vec3 position, vec3 direction, float cosOuter, vec3 boxMin, vec3 boxMax) {
+    if (cosOuter < -1.0) {
+        return true;
+    }
+    vec3 toCenter = (boxMin + boxMax) * 0.5 - position;
+    float radius = length(boxMax - boxMin) * 0.5;
+    float along = dot(toCenter, direction);
+    float sinOuter = sqrt(max(0.0, 1.0 - cosOuter * cosOuter));
+    float across = sqrt(max(0.0, dot(toCenter, toCenter) - along * along));
+    float distance = cosOuter * across - along * sinOuter;
+    // A cone wider than a half sphere also reaches behind the light
+    bool behind = cosOuter >= 0.0 && along < -radius;
+    return distance <= radius && !behind;
+}
+
+void main() {
+    uint cluster = gl_GlobalInvocationID.x;
+    bool inGrid = cluster < CLUSTER_COUNT;
+
+    vec3 boxMin = vec3(1e30);
+    vec3 boxMax = vec3(-1e30);
+    if (inGrid) {
+        uint x = cluster % CLUSTERS_X;
+        uint y = (cluster / CLUSTERS_X) % CLUSTERS_Y;
+        uint z = cluster / (CLUSTERS_X * CLUSTERS_Y);
+        float near = sliceStart(z);
+        float far = sliceEnd(z);
+        for (uint cornerY = y; cornerY <= y + 1; ++cornerY) {
+            for (uint cornerX = x; cornerX <= x + 1; ++cornerX) {
+                vec3 direction = ray(float(cornerX) / CLUSTERS_X, float(cornerY) / CLUSTERS_Y);
+                boxMin = min(boxMin, min(direction * near, direction * far));
+                boxMax = max(boxMax, max(direction * near, direction * far));
+            }
+        }
+    }
+
+    uint count = 0;
+    for (uint first = 0; first < lightCount; first += GROUP_SIZE) {
+        // Every thread loads one light of the batch, even past the last cluster
+        uint load = first + gl_LocalInvocationID.x;
+        if (load < lightCount) {
+            Light light = lightBuffer.lights[load];
+            bool spot = light.type == LIGHT_TYPE_SPOT && light.intensity > 0;
+            batchSpheres[gl_LocalInvocationID.x] =
+                vec4(light.position, light.intensity > 0 ? light.range : -1.0);
+            batchCones[gl_LocalInvocationID.x] =
+                vec4(light.direction, spot ? light.cosOuter : -2.0);
+        }
+        barrier();
+
+        if (inGrid) {
+            uint batchSize = min(GROUP_SIZE, lightCount - first);
+            for (uint i = 0; i < batchSize; ++i) {
+                vec4 sphere = batchSpheres[i];
+                vec4 cone = batchCones[i];
+                if (sphere.w > 0.0
+                        && sphereTouchesBox(sphere.xyz, sphere.w, boxMin, boxMax)
+                        && coneTouchesBox(sphere.xyz, cone.xyz, cone.w, boxMin, boxMax)) {
+                    if (count < MAX_LIGHTS_PER_CLUSTER) {
+                        clusters.clusterData[CLUSTER_COUNT + cluster * MAX_LIGHTS_PER_CLUSTER + count] =
+                            first + i;
+                    }
+                    count += 1;
+                }
+            }
+        }
+        barrier();
+    }
+
+    if (inGrid) {
+        uint listed = min(count, MAX_LIGHTS_PER_CLUSTER);
+        clusters.clusterData[cluster] = listed;
+        atomicMax(stats.busiest, count);
+        atomicAdd(stats.listed, listed);
+        if (count > MAX_LIGHTS_PER_CLUSTER) {
+            atomicAdd(stats.overflowing, 1);
+        }
+    }
+}

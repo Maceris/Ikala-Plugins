@@ -179,6 +179,70 @@ public class ShaderBindings {
         }
     }
 
+    /**
+     * Light culling shader variables, see {@code light_cull.comp}. Every buffer is passed by
+     * address.
+     */
+    public static class LightCull {
+        /** The inverse of the projection matrix. */
+        public static final int PUSH_CONSTANT_INVERSE_PROJECTION_OFFSET = 0;
+
+        /** The address of the lights buffer. */
+        public static final int PUSH_CONSTANT_LIGHTS_OFFSET = 4 * 4 * Float.BYTES;
+
+        /** The address of the cluster buffer. */
+        public static final int PUSH_CONSTANT_CLUSTERS_OFFSET =
+                PUSH_CONSTANT_LIGHTS_OFFSET + Long.BYTES;
+
+        /** The address of the stats buffer. */
+        public static final int PUSH_CONSTANT_STATS_OFFSET =
+                PUSH_CONSTANT_CLUSTERS_OFFSET + Long.BYTES;
+
+        /** How many lights are in the lights buffer. */
+        public static final int PUSH_CONSTANT_LIGHT_COUNT_OFFSET =
+                PUSH_CONSTANT_STATS_OFFSET + Long.BYTES;
+
+        /**
+         * The scale from the log of a depth to a slice, see {@link ClusterMath#logScale(double)}.
+         */
+        public static final int PUSH_CONSTANT_LOG_SCALE_OFFSET =
+                PUSH_CONSTANT_LIGHT_COUNT_OFFSET + Integer.BYTES;
+
+        /** The far plane, where the last slice ends. */
+        public static final int PUSH_CONSTANT_FAR_PLANE_OFFSET =
+                PUSH_CONSTANT_LOG_SCALE_OFFSET + Float.BYTES;
+
+        /** The size of the push constants in bytes. */
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_FAR_PLANE_OFFSET + Float.BYTES;
+
+        /** How many clusters each workgroup handles. */
+        public static final int WORKGROUP_SIZE = 64;
+
+        /**
+         * The size of the cluster buffer: a light count for each cluster, then room for each
+         * cluster's light indices.
+         */
+        public static final long CLUSTERS_BUFFER_SIZE =
+                (long) ClusterMath.COUNT * (1 + ClusterMath.MAX_LIGHTS_PER_CLUSTER) * Integer.BYTES;
+
+        /** The busiest cluster's light count in the stats buffer. */
+        public static final int STATS_BUSIEST = 0;
+
+        /** How many clusters overflowed, in the stats buffer. */
+        public static final int STATS_OVERFLOWING = 1;
+
+        /** How many lights were listed across every cluster, in the stats buffer. */
+        public static final int STATS_LISTED = 2;
+
+        /** How many uints the stats buffer holds. */
+        public static final int STATS_COUNT = 3;
+
+        /** Private constructor so this class is not instantiated. */
+        private LightCull() {
+            cutItOut();
+        }
+    }
+
     /** Animation shader variables. */
     public static class Animation {
         /*
@@ -534,6 +598,9 @@ public class ShaderBindings {
         public static final int LIGHT_COUNT_OFFSET =
                 DIRECTIONAL_LIGHT_OFFSET + DirectionalLight.SIZEOF;
 
+        /** The offset into the uniforms for whether to tint pixels by their cluster's lights. */
+        public static final int CLUSTER_HEAT_MAP_OFFSET = LIGHT_COUNT_OFFSET + Integer.BYTES;
+
         /**
          * The offset into the uniforms for the environmental fog. Structs start on a 16 byte
          * boundary under std140 rules.
@@ -541,7 +608,7 @@ public class ShaderBindings {
          * @see ShaderUniforms.Light.Fog
          */
         public static final int FOG_OFFSET =
-                (int) SharedBuffer.align(LIGHT_COUNT_OFFSET + Integer.BYTES);
+                (int) SharedBuffer.align(CLUSTER_HEAT_MAP_OFFSET + Integer.BYTES);
 
         /** The offset into the uniforms for the cascade shadows array. */
         public static final int CASCADE_SHADOWS_OFFSET = FOG_OFFSET + Fog.SIZEOF;
@@ -574,10 +641,17 @@ public class ShaderBindings {
         public static final int SHADOW_MAP_0_INDEX_OFFSET =
                 BASE_COLOR_SAMPLER_INDEX_OFFSET + 5 * Integer.BYTES;
 
-        /** The size of the uniforms buffer. */
-        public static final int UNIFORMS_BUFFER_SIZE =
+        /**
+         * The offset into the uniforms for the scale from the log of a depth to a cluster slice,
+         * see {@link ClusterMath#logScale(double)}.
+         */
+        public static final int CLUSTER_LOG_SCALE_OFFSET =
                 SHADOW_MAP_0_INDEX_OFFSET
                         + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT * Integer.BYTES;
+
+        /** The size of the uniforms buffer, padded out to 16 bytes under std140 rules. */
+        public static final int UNIFORMS_BUFFER_SIZE =
+                (int) SharedBuffer.align(CLUSTER_LOG_SCALE_OFFSET + Float.BYTES);
 
         /** Uniforms buffer binding. */
         public static final int UNIFORMS_BINDING = 0;
@@ -587,6 +661,9 @@ public class ShaderBindings {
 
         /** Binding for the materials buffer. */
         public static final int MATERIALS_BINDING = 2;
+
+        /** Binding for the cluster buffer that light culling fills. */
+        public static final int CLUSTERS_BINDING = 3;
 
         /** Private constructor so this class is not instantiated. */
         private Light() {

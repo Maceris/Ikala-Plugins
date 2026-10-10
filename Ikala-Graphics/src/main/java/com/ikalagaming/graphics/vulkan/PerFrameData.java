@@ -33,6 +33,21 @@ public class PerFrameData {
     /** The point lights and spotlights, in view space, read by the light stage. */
     public SharedBuffer lights;
 
+    /** How many lights the light cull stage wrote into {@link #lights} this frame. */
+    public int lightCount;
+
+    /**
+     * Each cluster's light count and light indices, written by the light cull stage and read by the
+     * light stage. See {@link ShaderBindings.LightCull#CLUSTERS_BUFFER_SIZE}.
+     */
+    public SharedBuffer lightClusters;
+
+    /**
+     * What light culling found, for the debug window. Host coherent, read back and cleared once
+     * this frame's fence has been waited on.
+     */
+    public SharedBuffer lightClusterStats;
+
     public SharedBuffer sceneUniforms;
 
     /**

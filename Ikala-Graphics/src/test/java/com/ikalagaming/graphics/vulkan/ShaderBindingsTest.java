@@ -20,7 +20,9 @@ class ShaderBindingsTest {
         assertEquals(128, ShaderBindings.Light.AMBIENT_LIGHT_OFFSET);
         // DirectionalLight {vec3 color; float pad; vec3 direction; float intensity;}
         assertEquals(144, ShaderBindings.Light.DIRECTIONAL_LIGHT_OFFSET);
+        // int lightCount, int clusterHeatMap
         assertEquals(176, ShaderBindings.Light.LIGHT_COUNT_OFFSET);
+        assertEquals(180, ShaderBindings.Light.CLUSTER_HEAT_MAP_OFFSET);
         // Fog {vec3 color; float density; int enabled; vec3 pad;} starts on a 16 byte boundary
         assertEquals(192, ShaderBindings.Light.FOG_OFFSET);
         assertEquals(32, ShaderBindings.Light.Fog.PADDING);
@@ -32,7 +34,9 @@ class ShaderBindingsTest {
         assertEquals(480, ShaderBindings.Light.BASE_COLOR_SAMPLER_INDEX_OFFSET);
         assertEquals(496, ShaderBindings.Light.DEPTH_SAMPLER_INDEX_OFFSET);
         assertEquals(500, ShaderBindings.Light.SHADOW_MAP_0_INDEX_OFFSET);
-        assertEquals(512, ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
+        // float clusterLogScale, then padded to 16 bytes
+        assertEquals(512, ShaderBindings.Light.CLUSTER_LOG_SCALE_OFFSET);
+        assertEquals(528, ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
     }
 
     @Test
@@ -48,6 +52,22 @@ class ShaderBindingsTest {
         assertEquals(48, ShaderBindings.Light.LightStruct.COS_INNER);
         assertEquals(52, ShaderBindings.Light.LightStruct.TYPE);
         assertEquals(64, ShaderBindings.Light.LightStruct.SIZEOF);
+    }
+
+    @Test
+    void testLightCullOffsets() {
+        // mat4 inverseProjection, 3 buffer addresses, uint lightCount, float logScale, float far
+        assertEquals(0, ShaderBindings.LightCull.PUSH_CONSTANT_INVERSE_PROJECTION_OFFSET);
+        assertEquals(64, ShaderBindings.LightCull.PUSH_CONSTANT_LIGHTS_OFFSET);
+        assertEquals(72, ShaderBindings.LightCull.PUSH_CONSTANT_CLUSTERS_OFFSET);
+        assertEquals(80, ShaderBindings.LightCull.PUSH_CONSTANT_STATS_OFFSET);
+        assertEquals(88, ShaderBindings.LightCull.PUSH_CONSTANT_LIGHT_COUNT_OFFSET);
+        assertEquals(92, ShaderBindings.LightCull.PUSH_CONSTANT_LOG_SCALE_OFFSET);
+        assertEquals(96, ShaderBindings.LightCull.PUSH_CONSTANT_FAR_PLANE_OFFSET);
+        assertEquals(100, ShaderBindings.LightCull.PUSH_CONSTANTS_SIZE);
+        assertTrue(ShaderBindings.LightCull.PUSH_CONSTANTS_SIZE <= 128);
+        // 3,456 clusters, each a count and 256 indices
+        assertEquals(3456L * 257 * 4, ShaderBindings.LightCull.CLUSTERS_BUFFER_SIZE);
     }
 
     @Test

@@ -92,6 +92,22 @@ public class Scene {
      */
     private final DebugVisualizers debugVisualizers;
 
+    /**
+     * How far the view reaches by default, in metres: twelve 16 m sections.
+     *
+     * @see #getViewDistance()
+     */
+    public static final double DEFAULT_VIEW_DISTANCE = 12 * 16;
+
+    /**
+     * How far the view reaches, in metres. Lights are sorted into clusters out to here; later the
+     * shadows and level of detail follow it too. Things past it can still be drawn, out to the far
+     * plane.
+     *
+     * @return The view distance.
+     */
+    private volatile double viewDistance;
+
     /** The observer while it is frozen, or null while it follows the camera. */
     @Getter(AccessLevel.NONE)
     private volatile Observer frozenObserver;
@@ -108,6 +124,7 @@ public class Scene {
         materialCache = new MaterialCache();
         sceneLights = new SceneLights();
         lightRegistry = new LightRegistry();
+        viewDistance = DEFAULT_VIEW_DISTANCE;
         camera = new Camera();
         fog = new Fog();
         skyboxDiffuse = new Vector4f(0.65f, 0.65f, 0.65f, 1f);
@@ -207,6 +224,19 @@ public class Scene {
         modelMap.clear();
         materialCache.cleanup();
         setSkyboxTexture(null);
+    }
+
+    /**
+     * Change how far the view reaches.
+     *
+     * @param viewDistance The view distance, in metres, kept within the far plane.
+     * @throws IllegalArgumentException If it isn't positive.
+     */
+    public void setViewDistance(double viewDistance) {
+        if (viewDistance <= 0) {
+            throw new IllegalArgumentException("The view distance must be positive");
+        }
+        this.viewDistance = Math.min(viewDistance, Projection.Z_FAR);
     }
 
     /**

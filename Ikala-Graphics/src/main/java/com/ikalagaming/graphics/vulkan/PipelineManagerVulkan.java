@@ -75,6 +75,10 @@ public class PipelineManagerVulkan {
     private final DebugRender stageDebugRender;
     private final GuiRender stageGuiRender;
     private final LightRender stageLightRender;
+
+    /** Sorts the lights into clusters for the light stage. */
+    private final LightCull stageLightCull;
+
     private final InstanceDrawUpdate stageInstanceDrawUpdate;
     private final InstanceTransform stageInstanceTransform;
     private final InstanceCull stageInstanceCull;
@@ -128,6 +132,8 @@ public class PipelineManagerVulkan {
                         shaders.getShader(RenderStage.Type.SHADOW),
                         shaders.getShader(RenderStage.Type.SHADOW_BAKED));
         stageShadowRender.initialize(state);
+        stageLightCull = new LightCull(shaders.getShader(RenderStage.Type.LIGHT_CULL));
+        stageLightCull.initialize(state);
         stageLightRender = new LightRender(shaders.getShader(RenderStage.Type.LIGHT), quadMesh);
         stageLightRender.initialize(state);
         stageAnimationRender = new AnimationRender(shaders.getShader(RenderStage.Type.ANIMATION));
@@ -171,6 +177,7 @@ public class PipelineManagerVulkan {
             stages.add(stageDepthPyramidBuild);
             stages.add(stageInstanceCullLate);
             stages.add(stageSceneRender.getLate());
+            stages.add(stageLightCull);
             stages.add(stageLightRender);
         }
         if (RenderConfig.hasSkyboxStage(configuration)) {
@@ -424,6 +431,14 @@ public class PipelineManagerVulkan {
                                 ShaderBindings.Light.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
                 state.perFrameData[i].lights =
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
+                state.perFrameData[i].lightClusters =
+                        SharedBuffer.allocateDeviceLocal(
+                                ShaderBindings.LightCull.CLUSTERS_BUFFER_SIZE, state, STORAGE);
+                state.perFrameData[i].lightClusterStats =
+                        SharedBuffer.allocate(
+                                (long) ShaderBindings.LightCull.STATS_COUNT * Integer.BYTES,
+                                state,
+                                STORAGE);
                 state.perFrameData[i].sceneUniforms =
                         SharedBuffer.allocate(
                                 ShaderBindings.Scene.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
@@ -516,6 +531,7 @@ public class PipelineManagerVulkan {
         stageDebugRender.cleanup(state);
         stageGuiRender.cleanup(state);
         stageLightRender.cleanup(state);
+        stageLightCull.cleanup(state);
         stageInstanceDrawUpdate.cleanup(state);
         stageInstanceTransform.cleanup(state);
         stageInstanceCull.cleanup(state);
@@ -594,6 +610,10 @@ public class PipelineManagerVulkan {
         data.lightUniforms = null;
         SharedBuffer.free(data.lights, state);
         data.lights = null;
+        SharedBuffer.free(data.lightClusters, state);
+        data.lightClusters = null;
+        SharedBuffer.free(data.lightClusterStats, state);
+        data.lightClusterStats = null;
         SharedBuffer.free(data.sceneUniforms, state);
         data.sceneUniforms = null;
         SharedBuffer.free(data.sceneModelMatrices, state);

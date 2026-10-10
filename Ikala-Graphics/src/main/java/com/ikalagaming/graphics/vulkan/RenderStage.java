@@ -22,6 +22,7 @@ public interface RenderStage {
         GUI,
         INSTANCES,
         LIGHT,
+        LIGHT_CULL,
         SCENE,
         SCENE_BAKED,
         SHADOW,

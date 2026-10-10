@@ -102,6 +102,21 @@ public class DebugVisualizers {
     private volatile boolean occlusionDisabled;
 
     /**
+     * Tint each pixel by how many lights its cluster lists, from blue for a few to red for {@link
+     * #HEAT_MAP_FULL} or more. Drawn by the light stage, so {@link #anyEnabled()} ignores it.
+     *
+     * @param clusterHeatMap Whether to show the heat map.
+     * @return Whether the heat map is shown.
+     */
+    private volatile boolean clusterHeatMap;
+
+    /**
+     * How many lights in one cluster show as full red on the cluster heat map. Must match
+     * HEAT_MAP_FULL in lights.frag.
+     */
+    public static final int HEAT_MAP_FULL = 32;
+
+    /**
      * Whether any visualizer is turned on.
      *
      * @return True if at least one visualizer is on.

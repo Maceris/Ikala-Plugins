@@ -5,6 +5,21 @@ const int NUM_CASCADES = 3;
 // Must match LightType.getShaderValue()
 const uint LIGHT_TYPE_POINT = 0;
 const uint LIGHT_TYPE_SPOT = 1;
+
+// The cluster grid lights are sorted into by light_cull.comp. ClusterMath has it in Java; keep them
+// in step.
+const uint CLUSTERS_X = 16;
+const uint CLUSTERS_Y = 9;
+const uint CLUSTERS_Z = 24;
+const uint CLUSTER_COUNT = CLUSTERS_X * CLUSTERS_Y * CLUSTERS_Z;
+const uint MAX_LIGHTS_PER_CLUSTER = 256;
+const float FIRST_SLICE_DEPTH = 1.0;
+
+// How many lights in one cluster show as full red on the heat map. Must match
+// DebugVisualizers.HEAT_MAP_FULL.
+const float HEAT_MAP_FULL = 32.0;
+// How much of the heat map color covers the lit color
+const float HEAT_MAP_OPACITY = 0.6;
 const float BIAS = 0.0005;
 const float SHADOW_FACTOR = 0.35;
 const float PI = 3.1415926535897932384626433832795;
@@ -79,6 +94,8 @@ layout(set = 0, binding = 0) uniform Uniforms {
     AmbientLight ambientLight;
     DirectionalLight directionalLight;
     int lightCount;
+    // Nonzero to tint each pixel by how many lights its cluster lists
+    int clusterHeatMap;
     Fog fog;
     CascadeShadow cascadeShadowSplits[NUM_CASCADES];
 
@@ -90,6 +107,8 @@ layout(set = 0, binding = 0) uniform Uniforms {
     int shadowMap0Index;
     int shadowMap1Index;
     int shadowMap2Index;
+    // (CLUSTERS_Z - 1) / ln(viewDistance / FIRST_SLICE_DEPTH)
+    float clusterLogScale;
 };
 
 layout(std430, set = 0, binding = 1) readonly buffer Lights {
@@ -98,6 +117,12 @@ layout(std430, set = 0, binding = 1) readonly buffer Lights {
 
 layout(std430, set = 0, binding = 2) readonly buffer Materials {
     Material materials[];
+};
+
+// How many lights each cluster lists, CLUSTER_COUNT of them, then MAX_LIGHTS_PER_CLUSTER light
+// indices for each cluster
+layout(std430, set = 0, binding = 3) readonly buffer Clusters {
+    uint clusterData[];
 };
 
 layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
@@ -261,6 +286,24 @@ vec3 calcFog(vec3 pos, vec3 color, Fog fog, vec3 ambientLight, DirectionalLight 
     return resultColor;
 }
 
+// The cluster a pixel is in, from where it is on the screen and how far in front of the camera
+uint findCluster(vec2 screen, float depth) {
+    uint slice = 0;
+    if (depth >= FIRST_SLICE_DEPTH) {
+        slice = min(1 + uint(floor(log(depth / FIRST_SLICE_DEPTH) * clusterLogScale)), CLUSTERS_Z - 1);
+    }
+    uvec2 tile = min(uvec2(screen * vec2(CLUSTERS_X, CLUSTERS_Y)), uvec2(CLUSTERS_X - 1, CLUSTERS_Y - 1));
+    return tile.x + CLUSTERS_X * (tile.y + CLUSTERS_Y * slice);
+}
+
+// From blue for one light, through green, to red at HEAT_MAP_FULL or more
+vec3 heatColor(uint count) {
+    float heat = clamp(float(count) / HEAT_MAP_FULL, 0.0, 1.0);
+    return heat < 0.5
+        ? mix(vec3(0, 0, 1), vec3(0, 1, 0), heat * 2.0)
+        : mix(vec3(0, 1, 0), vec3(1, 0, 0), heat * 2.0 - 1.0);
+}
+
 float textureProj(vec4 shadowCoord, vec2 offset, int idx) {
     float shadow = 1.0;
 
@@ -326,16 +369,23 @@ void main()
     vec3 color = calcDirLight(baseColor.xyz, material, directionalLight, viewPosition, normal, tangent, bitangent)
         * shadowFactor;
 
-    for (int i = 0; i < lightCount; ++i) {
-        if (lights[i].intensity > 0) {
-            color += calcLight(baseColor.xyz, material, lights[i], viewPosition, normal, tangent, bitangent);
-        }
+    // Only the lights light_cull.comp found can reach this pixel's cluster
+    uint cluster = findCluster(outTextCoord, -viewPosition.z);
+    uint clusterLights = clusterData[cluster];
+    uint firstIndex = CLUSTER_COUNT + cluster * MAX_LIGHTS_PER_CLUSTER;
+    for (uint i = 0; i < clusterLights; ++i) {
+        Light light = lights[clusterData[firstIndex + i]];
+        color += calcLight(baseColor.xyz, material, light, viewPosition, normal, tangent, bitangent);
     }
     vec3 ambient = ambientLight.intensity * ambientLight.color;
     vec3 finalColor = ambient + color;
 
     if (fog.enabled == 1 && fog.density > 0) {
         finalColor = calcFog(viewPosition, finalColor, fog, ambientLight.color, directionalLight);
+    }
+
+    if (clusterHeatMap != 0 && clusterLights > 0) {
+        finalColor = mix(finalColor, heatColor(clusterLights), HEAT_MAP_OPACITY);
     }
 
     fragColor.a = baseColor.a;

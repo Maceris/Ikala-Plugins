@@ -3,11 +3,11 @@ package com.ikalagaming.graphics.scene.lights;
 /**
  * How far point and spot lights reach.
  *
- * <p>A light falls off with the inverse square of the distance, windowed so that it reaches exactly zero
- * at its range: {@code intensity / d^2 · clamp(1 − (d / range)^4, 0, 1)}. Without a range given, a
- * light reaches as far as its un-windowed light stays above {@link #CUTOFF}, which is {@code
- * sqrt(intensity / CUTOFF)}. Every range is kept between {@link #MIN_RANGE} and {@link #MAX_RANGE}
- * so a light only ever touches a bounded part of the view.
+ * <p>A light falls off with the inverse square of the distance, windowed so that it reaches exactly
+ * zero at its range: {@code intensity / d^2 · clamp(1 − (d / range)^4, 0, 1)}. Without a range
+ * given, a light reaches as far as its un-windowed light stays above {@link #CUTOFF}, which is
+ * {@code sqrt(intensity / CUTOFF)}. Every range is kept between {@link #MIN_RANGE} and {@link
+ * #MAX_RANGE} so a light only ever touches a bounded part of the view.
  */
 public final class LightRange {
 

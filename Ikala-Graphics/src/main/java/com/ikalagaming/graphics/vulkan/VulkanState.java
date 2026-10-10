@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshKind;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakeSources;
+import com.ikalagaming.graphics.vulkan.stages.LightCull;
 
 import lombok.NonNull;
 import org.lwjgl.vulkan.*;
@@ -51,6 +52,9 @@ public class VulkanState {
 
     /** How long each part of a frame takes on the GPU and CPU. */
     public FrameTimings frameTimings = null;
+
+    /** What light culling found in the latest frame read back, for the debug window. */
+    public volatile LightCull.Stats lightStats = LightCull.Stats.NONE;
 
     /**
      * The geometry buffers a kind of mesh lives in.

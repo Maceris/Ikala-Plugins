@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.benchmark;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
+import com.ikalagaming.graphics.LightHandle;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.SectionHandle;
@@ -29,6 +30,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SplittableRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.Nullable;
@@ -40,11 +42,11 @@ import javax.annotation.Nullable;
  * CPU. The gate passes if the GPU's 95th percentile frame is within {@link #GPU_BUDGET_MS}.
  *
  * <p>Run it from the Graphics Debug window, or at startup with {@code -Dikala.benchmark=TERRAIN}
- * (and {@code -Dikala.benchmark.radius=12}), which closes the app when done unless {@code
- * -Dikala.benchmark.keep=true} keeps the world to look around in. Results are logged, shown in
- * Graphics Debug, and added to {@value #RESULTS_FILE}. Everything it made is released when it
- * finishes or is stopped, unless it was asked to keep the world, which then stays to look around in
- * until {@link #removeWorld()}.
+ * (and {@code -Dikala.benchmark.radius=12}, and {@code -Dikala.benchmark.lights=1000} to scatter
+ * torches over it), which closes the app when done unless {@code -Dikala.benchmark.keep=true} keeps
+ * the world to look around in. Results are logged, shown in Graphics Debug, and added to {@value
+ * #RESULTS_FILE}. Everything it made is released when it finishes or is stopped, unless it was
+ * asked to keep the world, which then stays to look around in until {@link #removeWorld()}.
  *
  * <p>Driven from the render thread once per frame through {@link #update(Scene)}; starting and
  * stopping are safe from the render thread.
@@ -79,6 +81,15 @@ public final class GateBenchmark {
     /** The property that starts a run at startup. */
     public static final String PROPERTY = "ikala.benchmark";
 
+    /** The color of the torches scattered over the world: a warm white. */
+    private static final Vector3f TORCH_COLOR = new Vector3f(1, 0.85f, 0.6f);
+
+    /** How bright each torch is, which with the default range reaches 10 m. */
+    private static final float TORCH_INTENSITY = 1;
+
+    /** How high above the ground each torch is, in metres. */
+    private static final double TORCH_HEIGHT = 1.5;
+
     /** Where a run is. */
     public enum Phase {
         /** Laying out the world and composing its sections, on a worker. */
@@ -100,6 +111,7 @@ public final class GateBenchmark {
      *
      * @param recipe The world.
      * @param radius The view distance, in sections.
+     * @param lights How many torches were scattered over the world.
      * @param load How heavy the scene was.
      * @param buildMilliseconds How long laying out and composing took.
      * @param bakeMilliseconds How long until every section was resident, after composing.
@@ -112,6 +124,7 @@ public final class GateBenchmark {
     public record Results(
             SyntheticTerrain.@NonNull Recipe recipe,
             int radius,
+            int lights,
             GateScene.@NonNull LoadStats load,
             long buildMilliseconds,
             long bakeMilliseconds,
@@ -136,6 +149,15 @@ public final class GateBenchmark {
     /** The view distance, in sections. */
     private final int radius;
 
+    /** How many torches to scatter over the world. */
+    private final int lightCount;
+
+    /** The torches, guarded by {@link #sectionsLock} since a worker places them. */
+    private final List<LightHandle> lights = new ArrayList<>();
+
+    /** The scene's view distance before the run set its own. */
+    private double previousViewDistance = Double.NaN;
+
     /** The context everything is made under. */
     private final GraphicsContext graphics;
 
@@ -152,7 +174,7 @@ public final class GateBenchmark {
      */
     @Nullable private static MeshData[] blockMeshes;
 
-    /** Guards {@link #sections}, which a worker adds to while building. */
+    /** Guards {@link #sections} and {@link #lights}, which a worker adds to while building. */
     private final ReentrantLock sectionsLock = new ReentrantLock();
 
     /** The sections composed. */
@@ -208,11 +230,17 @@ public final class GateBenchmark {
      *
      * @param recipe The world.
      * @param radius The view distance, in sections.
+     * @param lightCount How many torches to scatter over the world.
      * @param keepWorld Whether to leave the world in place when the run finishes.
      */
-    private GateBenchmark(SyntheticTerrain.@NonNull Recipe recipe, int radius, boolean keepWorld) {
+    private GateBenchmark(
+            SyntheticTerrain.@NonNull Recipe recipe,
+            int radius,
+            int lightCount,
+            boolean keepWorld) {
         this.recipe = recipe;
         this.radius = radius;
+        this.lightCount = lightCount;
         this.keepWorld = keepWorld;
         this.graphics = GraphicsManager.forPlugin(GraphicsPlugin.PLUGIN_NAME);
     }
@@ -222,14 +250,15 @@ public final class GateBenchmark {
      *
      * @param recipe The world.
      * @param radius The view distance, in sections.
+     * @param lights How many torches to scatter over the world, to measure many lights.
      * @param keepWorld Whether to leave the world in place when the run finishes, to look around in
      *     with the camera, the debug views and a frozen observer.
      */
     public static void start(
-            SyntheticTerrain.@NonNull Recipe recipe, int radius, boolean keepWorld) {
+            SyntheticTerrain.@NonNull Recipe recipe, int radius, int lights, boolean keepWorld) {
         stop();
         removeWorld();
-        current = new GateBenchmark(recipe, radius, keepWorld);
+        current = new GateBenchmark(recipe, radius, Math.max(0, lights), keepWorld);
         current.begin();
     }
 
@@ -339,6 +368,7 @@ public final class GateBenchmark {
                 start(
                         SyntheticTerrain.Recipe.valueOf(recipe.trim().toUpperCase()),
                         Integer.getInteger(PROPERTY + ".radius", 12),
+                        Integer.getInteger(PROPERTY + ".lights", 0),
                         keep);
             }
         }
@@ -355,7 +385,7 @@ public final class GateBenchmark {
 
     /** Register the blocks, then lay out and compose the world on a worker. */
     private void begin() {
-        log.info("Gate benchmark: {} at radius {}", recipe, radius);
+        log.info("Gate benchmark: {} at radius {} with {} lights", recipe, radius, lightCount);
         final Scene scene = GraphicsManager.getScene();
         if (blockMeshes == null) {
             blockMeshes = BlockMeshes.create();
@@ -420,6 +450,7 @@ public final class GateBenchmark {
                     sectionsLock.unlock();
                 }
             }
+            placeLights(terrain);
             load = layout.load();
             cameraPosition = new Vector3d(0.5, terrain.cameraY(), 0.5);
             buildMilliseconds = (System.nanoTime() - start) / 1_000_000;
@@ -433,6 +464,40 @@ public final class GateBenchmark {
             log.error("Gate benchmark failed to build", e);
             failure = e.getMessage();
             phase = Phase.STOPPED;
+        }
+    }
+
+    /**
+     * Scatter torches over the ground within the view distance, the same ones every run. On a
+     * worker.
+     *
+     * @param terrain The world.
+     */
+    private void placeLights(@NonNull SyntheticTerrain terrain) {
+        final SplittableRandom random = new SplittableRandom(SEED);
+        final double reach = (double) radius * SyntheticTerrain.SECTION;
+        for (int i = 0; i < lightCount && phase == Phase.BUILDING; ++i) {
+            // Evenly over the disc, so the far edge isn't sparser than the middle
+            final double distance = reach * Math.sqrt(random.nextDouble());
+            final double angle = 2 * Math.PI * random.nextDouble();
+            final int x = (int) Math.floor(distance * Math.cos(angle));
+            final int z = (int) Math.floor(distance * Math.sin(angle));
+            int y = terrain.maxY();
+            while (y > terrain.minY() && terrain.block(x, y, z) == SyntheticTerrain.AIR) {
+                --y;
+            }
+            final LightHandle light =
+                    graphics.lights()
+                            .point(
+                                    new Vector3d(x + 0.5, y + 1 + TORCH_HEIGHT, z + 0.5),
+                                    TORCH_COLOR,
+                                    TORCH_INTENSITY);
+            sectionsLock.lock();
+            try {
+                lights.add(light);
+            } finally {
+                sectionsLock.unlock();
+            }
         }
     }
 
@@ -510,6 +575,8 @@ public final class GateBenchmark {
                 RenderConfig.builder().withAnimation().withScene().withSkybox().withGui().build());
         previousSun = scene.getSceneLights().getDirLight();
         previousAmbient = scene.getSceneLights().getAmbientLight();
+        previousViewDistance = scene.getViewDistance();
+        scene.setViewDistance((double) radius * SyntheticTerrain.SECTION);
         scene.getSceneLights().setDirLight(new DirectionalLight(SUN_COLOR, SUN_DIRECTION, 3));
         scene.getSceneLights().setAmbientLight(new AmbientLight(new Vector3f(1, 1, 1), 0.25f));
     }
@@ -563,6 +630,7 @@ public final class GateBenchmark {
                 new Results(
                         recipe,
                         radius,
+                        lightCount,
                         load,
                         buildMilliseconds,
                         bakeMilliseconds,
@@ -602,10 +670,11 @@ public final class GateBenchmark {
         final GateScene.LoadStats load = results.load();
         out.append(
                 String.format(
-                        "%s gate benchmark: %s at radius %d, seed %d, %d x %d, %s%n",
+                        "%s gate benchmark: %s at radius %d with %,d lights, seed %d, %d x %d, %s%n",
                         LocalDateTime.now().withNano(0),
                         results.recipe(),
                         results.radius(),
+                        results.lights(),
                         SEED,
                         results.width(),
                         results.height(),
@@ -650,12 +719,19 @@ public final class GateBenchmark {
             scene.getSceneLights().setDirLight(previousSun);
             scene.getSceneLights().setAmbientLight(previousAmbient);
         }
+        if (scene != null && !Double.isNaN(previousViewDistance)) {
+            scene.setViewDistance(previousViewDistance);
+        }
         sectionsLock.lock();
         try {
             for (SectionHandle section : sections) {
                 graphics.sections().remove(section);
             }
             sections.clear();
+            for (LightHandle light : lights) {
+                graphics.lights().remove(light);
+            }
+            lights.clear();
         } finally {
             sectionsLock.unlock();
         }
