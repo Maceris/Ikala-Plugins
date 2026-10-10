@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
@@ -229,6 +230,64 @@ public final class SpecProperties {
         }
         String name = SpecValues.name(value, where(key));
         return scope.handler(name, where(key), node);
+    }
+
+    /**
+     * An event handler property for events that can happen to different nodes, like a child of a
+     * canvas being dragged.
+     *
+     * @param key The property name, like {@code onMove}.
+     * @return Runs the handler with the node the event happened to and the event's value, or null
+     *     if the property isn't set.
+     * @throws SpecException If the named handler wasn't supplied.
+     */
+    public BiConsumer<Node<?>, String> nodeHandler(@NonNull String key) {
+        Object value = raw(key);
+        if (value == null) {
+            return null;
+        }
+        String name = SpecValues.name(value, where(key));
+        return scope.nodeHandler(name, where(key));
+    }
+
+    /**
+     * Bind a piece of text that isn't a property of this node, like an edge's classes, with the
+     * same {@code {name}} bindings as {@link #text}.
+     *
+     * @param value The text as written.
+     * @param where Where it is, for messages.
+     * @param apply Receives the filled in text; called now and on the render thread after changes.
+     */
+    public void bindText(
+            @NonNull String value, @NonNull String where, @NonNull Consumer<String> apply) {
+        TextTemplate template = TextTemplate.parse(value, where);
+        scope.bind(template, where, () -> apply.accept(scope.render(template)));
+    }
+
+    /**
+     * Bind a property to any value, not only text: a literal, or a single {@code {name}} binding
+     * whose value is passed as it is, like a texture.
+     *
+     * @param key The property name.
+     * @param apply Receives the value; called now and on the render thread after changes. Not
+     *     called if the property isn't set.
+     */
+    public void value(@NonNull String key, @NonNull Consumer<Object> apply) {
+        Object value = raw(key);
+        if (value == null) {
+            return;
+        }
+        if (!(value instanceof String text)) {
+            apply.accept(value);
+            return;
+        }
+        TextTemplate template = TextTemplate.parse(text, where(key));
+        if (!template.isSingleBinding()) {
+            apply.accept(text);
+            return;
+        }
+        String name = template.parts().getFirst().text();
+        scope.bind(template, where(key), () -> apply.accept(scope.lookup(name)));
     }
 
     /**

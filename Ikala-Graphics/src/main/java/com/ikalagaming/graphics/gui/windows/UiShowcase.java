@@ -33,6 +33,9 @@ public final class UiShowcase {
     /** The ID of the showcase surface. */
     public static final String SURFACE_ID = "graphics/ui-showcase";
 
+    /** Whether the container showcase's styles were added yet. */
+    private static boolean stylesAdded;
+
     /** An inventory-style slot that counts how often it was activated. */
     private static final class Slot extends CustomItem<Slot> {
         /** Slot size in UI units. */
@@ -86,9 +89,15 @@ public final class UiShowcase {
     public static void setShown(boolean shown) {
         UI ui = GraphicsManager.forPlugin(GraphicsPlugin.PLUGIN_NAME).ui();
         if (shown) {
+            if (!stylesAdded) {
+                ui.addStyles(ContainerShowcase.styles());
+                stylesAdded = true;
+            }
             ui.show(build(ui));
+            ui.show(ContainerShowcase.build(ui));
         } else {
             ui.remove(SURFACE_ID);
+            ui.remove(ContainerShowcase.SURFACE_ID);
         }
     }
 

@@ -75,6 +75,11 @@ public final class PluginSide {
                   children:
                     - { type: testplugin.slot, id: slot }
                     - { type: label, id: value, text: "{value.name}" }
+                    - type: virtual-grid
+                      id: lazy
+                      height: 100
+                      cell: [40, 20]
+                      repeat: { list: items, as: v, template: row }
                   repeat: { list: items, as: v, template: row, key: "{v.name}" }
                 """;
         SpecInstance.open(

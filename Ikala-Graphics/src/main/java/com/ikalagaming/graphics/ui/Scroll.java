@@ -67,6 +67,11 @@ public class Scroll extends Container<Scroll> {
     }
 
     @Override
+    boolean laysOutOwnContent() {
+        return true;
+    }
+
+    @Override
     protected void submit(@NonNull UiFrame frame) {
         IkGuiStyler.Pushed pushed = IkGuiStyler.push(IkGuiStyler.Kind.CHILD, this, frame);
         IkGui.setCursorScreenPos(rect.getLeft(), rect.getTop());

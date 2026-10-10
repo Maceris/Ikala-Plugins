@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.ui.Container;
 import com.ikalagaming.graphics.ui.Node;
 import com.ikalagaming.graphics.ui.Surface;
 import com.ikalagaming.graphics.ui.UiManager;
+import com.ikalagaming.graphics.ui.VirtualGrid;
 import com.ikalagaming.graphics.ui.style.Style;
 import com.ikalagaming.graphics.ui.style.StyleParser;
 import com.ikalagaming.graphics.ui.style.ThemeException;
@@ -33,6 +34,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.ResourceBundle;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -100,7 +102,7 @@ public final class SpecInstance {
             Surface surface,
             Node<?> root,
             List<Subscription> subscriptions,
-            List<Repeat> repeats,
+            List<Listening> repeats,
             Set<GraphicsContext> typeOwners) {}
 
     /**
@@ -259,7 +261,7 @@ public final class SpecInstance {
      */
     private static void release(Build old) {
         old.subscriptions().forEach(Subscription::close);
-        old.repeats().forEach(Repeat::close);
+        old.repeats().forEach(Listening::close);
     }
 
     /**
@@ -300,7 +302,7 @@ public final class SpecInstance {
      */
     private Build build(UiSpec from) {
         List<Subscription> subscriptions = new ArrayList<>();
-        List<Repeat> repeats = new ArrayList<>();
+        List<Listening> repeats = new ArrayList<>();
         Set<GraphicsContext> typeOwners = new HashSet<>();
         Build[] holder = new Build[1];
         Scope scope = new Scope(this, holder, Map.of(), null, subscriptions, repeats, typeOwners);
@@ -309,7 +311,7 @@ public final class SpecInstance {
             root = node(from.content(), scope);
         } catch (RuntimeException e) {
             subscriptions.forEach(Subscription::close);
-            repeats.forEach(Repeat::close);
+            repeats.forEach(Listening::close);
             throw e;
         }
 
@@ -359,6 +361,19 @@ public final class SpecInstance {
         common(node, properties);
         properties.checkAllUsed();
 
+        if (node instanceof VirtualGrid grid) {
+            if (!spec.children().isEmpty()) {
+                throw new SpecException(
+                        spec.path()
+                                + ": a virtual grid makes its cells from a repeat, not children");
+            }
+            if (spec.repeat() != null) {
+                VirtualRepeat cells = new VirtualRepeat(grid, spec.repeat(), scope);
+                scope.repeats().add(cells);
+                cells.start();
+            }
+            return node;
+        }
         if (!spec.children().isEmpty() || spec.repeat() != null) {
             if (!(node instanceof Container<?> container)) {
                 throw new SpecException(
@@ -440,6 +455,10 @@ public final class SpecInstance {
                             .toArray(String[]::new));
         }
         properties.flag(VISIBLE, true, node::visible);
+        if (properties.has(POSITION)) {
+            float[] position = SpecValues.numbers(properties.raw(POSITION), 2, at(path, POSITION));
+            node.position(position[0], position[1]);
+        }
 
         Style style = Style.EMPTY;
         if (properties.has(STYLE)) {
@@ -554,7 +573,7 @@ public final class SpecInstance {
             Map<String, Object> items,
             Object item,
             List<Subscription> subscriptions,
-            List<Repeat> repeats,
+            List<Listening> repeats,
             Set<GraphicsContext> typeOwners) {
 
         /**
@@ -598,6 +617,17 @@ public final class SpecInstance {
          */
         Consumer<String> handler(String name, String where, Node<?> node) {
             return instance.handler(this, name, where, node);
+        }
+
+        /**
+         * Find a named handler for events that can happen to different nodes.
+         *
+         * @param name The handler name.
+         * @param where Where it is, for messages.
+         * @return Runs the handler with the node and the event's value.
+         */
+        BiConsumer<Node<?>, String> nodeHandler(String name, String where) {
+            return instance.nodeHandler(this, name, where);
         }
 
         /**
@@ -744,19 +774,36 @@ public final class SpecInstance {
      * @throws SpecException If no such handler was supplied.
      */
     Consumer<String> handler(Scope scope, String name, String where, Node<?> node) {
+        BiConsumer<Node<?>, String> handler = nodeHandler(scope, name, where);
+        return value -> handler.accept(node, value);
+    }
+
+    /**
+     * Find a named handler for events that can happen to different nodes, like a child of a canvas
+     * being moved.
+     *
+     * @param scope The scope, for the repeat item.
+     * @param name The handler name.
+     * @param where Where it is, for messages.
+     * @return Runs the handler with the node the event happened to and the event's value.
+     * @throws SpecException If no such handler was supplied.
+     */
+    BiConsumer<Node<?>, String> nodeHandler(Scope scope, String name, String where) {
         SpecAction action = SpecAction.parse(name, where);
         if (action instanceof SpecAction.Resume resume) {
-            return resumeAction(scope, resume, where);
+            Consumer<String> run = resumeAction(scope, resume, where);
+            return (node, value) -> run.accept(value);
         }
-        if (action instanceof SpecAction.RunScript run) {
-            return scriptAction(scope, run, where);
+        if (action instanceof SpecAction.RunScript script) {
+            Consumer<String> run = scriptAction(scope, script, where);
+            return (node, value) -> run.accept(value);
         }
         Consumer<SpecEvent> handler = bindings.handler(name);
         if (handler == null) {
             throw new SpecException(where + ": no handler '" + name + "' in the bindings");
         }
         Object item = scope.item();
-        return value -> {
+        return (node, value) -> {
             if (!closed) {
                 handler.accept(new SpecEvent(node, value, item));
             }
@@ -847,7 +894,119 @@ public final class SpecInstance {
      * Fills a container with one node per item of an observable list, keeping the nodes of items
      * that are still there when the list changes.
      */
-    final class Repeat {
+    /** Something built from a spec that listens to observables, and stops when closed. */
+    interface Listening {
+        /** Stop listening and drop what it made. */
+        void close();
+    }
+
+    /**
+     * Makes a virtual grid's cells from an observable list, one per item, only while they are
+     * shown. Each cell's listeners are closed when the grid releases it.
+     */
+    final class VirtualRepeat implements Listening, VirtualGrid.Factory {
+        /** The grid to fill. */
+        private final VirtualGrid grid;
+
+        /** What to repeat. */
+        private final NodeSpec.RepeatSpec spec;
+
+        /** The grid's scope. */
+        private final Scope scope;
+
+        /** The list. */
+        private final ObservableList<?> list;
+
+        /** The items the cells are made from now. */
+        private List<?> items = List.of();
+
+        /** The listeners of each made cell, by index. */
+        private final Map<Integer, List<Subscription>> cells = new HashMap<>();
+
+        /** Listens to the list. */
+        private Subscription subscription;
+
+        /**
+         * Create the cells of a virtual grid.
+         *
+         * @param grid The grid to fill.
+         * @param spec What to repeat.
+         * @param scope The grid's scope.
+         * @throws SpecException If the list wasn't supplied.
+         */
+        VirtualRepeat(VirtualGrid grid, NodeSpec.RepeatSpec spec, Scope scope) {
+            this.grid = grid;
+            this.spec = spec;
+            this.scope = scope;
+            list = bindings.list(spec.list());
+            if (list == null) {
+                throw new SpecException(
+                        spec.path() + ".list: no list '" + spec.list() + "' in the bindings");
+            }
+        }
+
+        /** Show the list now, and follow its changes. */
+        void start() {
+            items = list.get();
+            grid.items(items.size(), this);
+            Build[] holder = scope.build();
+            subscription =
+                    list.subscribe(
+                            changed ->
+                                    manager.post(
+                                            () -> {
+                                                if (!closed && holder[0] == build) {
+                                                    // Cells show items by index, so they are all
+                                                    // made again
+                                                    items = changed;
+                                                    grid.count(changed.size());
+                                                    grid.refresh();
+                                                }
+                                            }));
+        }
+
+        @Override
+        public Node<?> create(int index) {
+            if (closed || index >= items.size()) {
+                return null;
+            }
+            Object item = items.get(index);
+            List<Subscription> listeners = new ArrayList<>();
+            NodeSpec template = spec.item();
+            NodeSpec indexed =
+                    new NodeSpec(
+                            template.type(),
+                            template.id() + "#" + index,
+                            template.properties(),
+                            template.children(),
+                            template.repeat(),
+                            template.path());
+            Node<?> node = node(indexed, itemScope(scope, spec.alias(), item, listeners));
+            cells.put(index, listeners);
+            return node;
+        }
+
+        @Override
+        public void release(int index, @NonNull Node<?> node) {
+            List<Subscription> listeners = cells.remove(index);
+            if (listeners != null) {
+                listeners.forEach(Subscription::close);
+            }
+        }
+
+        @Override
+        public void close() {
+            if (subscription != null) {
+                subscription.close();
+            }
+            grid.releaseAll();
+            cells.values().forEach(listeners -> listeners.forEach(Subscription::close));
+            cells.clear();
+            items = List.of();
+        }
+    }
+
+    final class Repeat implements Listening {
         /**
          * One item's node.
          *
@@ -986,7 +1145,8 @@ public final class SpecInstance {
         }
 
         /** Stop listening and drop the items. */
-        void close() {
+        @Override
+        public void close() {
             if (subscription != null) {
                 subscription.close();
             }

@@ -7,6 +7,7 @@ import lombok.NonNull;
 
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -200,6 +201,10 @@ public final class Style {
             case LENGTH -> value instanceof Length;
             case INSETS -> value instanceof Insets;
             case NUMBER -> value instanceof Float;
+            case NUMBERS ->
+                    value instanceof List<?> list
+                            && list.stream().allMatch(Float.class::isInstance);
+            case WORDS -> value instanceof String;
         };
     }
 }

@@ -24,7 +24,29 @@ public enum StyleKey {
     /** Space between the children of a row or column. */
     GAP("gap", ValueType.LENGTH),
     /** The font size, in UI units. */
-    FONT_SIZE("fontSize", ValueType.NUMBER);
+    FONT_SIZE("fontSize", ValueType.NUMBER),
+    /** The color of a line, like a link between nodes on a canvas. */
+    LINE("line", ValueType.COLOR),
+    /** How thick a line is. */
+    LINE_SIZE("lineSize", ValueType.LENGTH),
+    /** A dash pattern for lines: on and off lengths in UI units, like {@code [6, 4]}. */
+    DASH("dash", ValueType.NUMBERS),
+    /** How many parallel lines a line is drawn as. */
+    STROKES("strokes", ValueType.NUMBER),
+    /** The space between parallel lines. */
+    STROKE_GAP("strokeGap", ValueType.LENGTH),
+    /** How lines turn corners: {@code sharp}, {@code round 6} or {@code chamfer 4}. */
+    CORNER("corner", ValueType.WORDS),
+    /** How links are routed: {@code straight}, {@code curve} or {@code orthogonal}. */
+    ROUTE("route", ValueType.WORDS),
+    /** Arrowheads on links: {@code none}, {@code end}, {@code start} or {@code both}. */
+    ARROW("arrow", ValueType.WORDS),
+    /** The shape of a graph node's frame: {@code rect}, {@code rounded}, {@code octagon}... */
+    SHAPE("shape", ValueType.WORDS),
+    /** The color of a glow around something, faded to transparent. */
+    GLOW("glow", ValueType.COLOR),
+    /** How far a glow reaches. */
+    GLOW_SIZE("glowSize", ValueType.LENGTH);
 
     /** The kinds of value a property takes. */
     public enum ValueType {
@@ -35,7 +57,11 @@ public enum StyleKey {
         /** {@link com.ikalagaming.graphics.ui.Insets}. */
         INSETS,
         /** A plain number, as a Float. */
-        NUMBER
+        NUMBER,
+        /** A list of numbers, as an unmodifiable list of Floats. */
+        NUMBERS,
+        /** A keyword, possibly with arguments, like {@code round 6}, as a String. */
+        WORDS
     }
 
     /**

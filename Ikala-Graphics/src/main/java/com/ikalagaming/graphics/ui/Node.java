@@ -73,6 +73,12 @@ public abstract class Node<S extends Node<S>> {
     /** Where the node sits when its parent is an {@link Overlay}. */
     Anchors anchors = Anchors.topLeft();
 
+    /** Where the node sits when its parent is a {@link Canvas}, in UI units. */
+    float positionX;
+
+    /** Where the node sits when its parent is a {@link Canvas}, in UI units. */
+    float positionY;
+
     /** The font size in UI units, or null to use the style's or the parent's. */
     Float fontSize;
 
@@ -88,6 +94,9 @@ public abstract class Node<S extends Node<S>> {
 
     /** The font size in pixels, from the last layout. */
     float fontPixels;
+
+    /** Pixels per UI unit, from the last layout, which includes a canvas's zoom. */
+    float scale = 1;
 
     /** The content size from the fit passes, including padding, in pixels. */
     final float[] fit = new float[2];
@@ -237,6 +246,16 @@ public abstract class Node<S extends Node<S>> {
     }
 
     /**
+     * Pixels per UI unit in the last layout: the UI scale, times the zoom of any canvas the node is
+     * on. For drawing code that sizes things in UI units.
+     *
+     * @return The scale.
+     */
+    public float getScale() {
+        return scale;
+    }
+
+    /**
      * The font size the last layout used, in pixels.
      *
      * @return The font size.
@@ -255,6 +274,49 @@ public abstract class Node<S extends Node<S>> {
         anchors = newAnchors;
         markDirty();
         return self();
+    }
+
+    /**
+     * Set where the node sits when its parent is a {@link Canvas}: its top left, in the canvas's UI
+     * units, before zooming. Other parents ignore it.
+     *
+     * @param x The left edge.
+     * @param y The top edge.
+     * @return This node.
+     */
+    public S position(float x, float y) {
+        positionX = x;
+        positionY = y;
+        markDirty();
+        return self();
+    }
+
+    /**
+     * Where the node sits when its parent is a canvas, horizontally.
+     *
+     * @return The left edge, in UI units.
+     */
+    public float getPositionX() {
+        return positionX;
+    }
+
+    /**
+     * Where the node sits when its parent is a canvas, vertically.
+     *
+     * @return The top edge, in UI units.
+     */
+    public float getPositionY() {
+        return positionY;
+    }
+
+    /**
+     * Whether this node lays out its own children while it is submitted, like a scroll that needs
+     * its view size first. The layout engine leaves the children of such nodes alone.
+     *
+     * @return True if the children are laid out by the node itself.
+     */
+    boolean laysOutOwnContent() {
+        return false;
     }
 
     /**
@@ -341,8 +403,8 @@ public abstract class Node<S extends Node<S>> {
      */
     final Node<?> clean() {
         dirty = false;
-        // A scroll lays out its own content, which stays dirty until then
-        if (!(this instanceof Scroll)) {
+        // Scrolls and canvases lay out their own content, which stays dirty until then
+        if (!laysOutOwnContent()) {
             children.forEach(Node::clean);
         }
         return this;

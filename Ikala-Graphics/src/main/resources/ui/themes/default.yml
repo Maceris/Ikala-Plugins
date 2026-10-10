@@ -81,6 +81,30 @@ types:
   immediate:
     background: $color.transparent
     rounding: $corner-radius
+  grid:
+    gap: $spacing.small
+  virtual-grid:
+    background: $color.transparent
+    rounding: $corner-radius
+  canvas:
+    background: $color.transparent
+    # Also the color of the background grid lines
+    border: $color.border
+    rounding: $corner-radius
+  # Links between the children of a canvas, lit up while the mouse is over a node they connect
+  edge:
+    line: $color.text-muted
+    lineSize: 2
+    related: { line: $color.warning, lineSize: 3 }
+  graph-node:
+    background: $color.panel
+    border: $color.border
+    borderSize: 2
+    accent: $color.warning
+    text: $color.text
+    hovered: { border: $color.accent-hovered }
+    focused: { border: $color.accent-hovered }
+    held: { background: $color.accent-pressed }
   custom:
     background: $color.panel
     accent: $color.accent-hovered

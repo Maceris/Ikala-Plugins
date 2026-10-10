@@ -19,7 +19,9 @@ public enum StyleState {
     /** The item has keyboard or gamepad focus. */
     FOCUSED("focused"),
     /** The item is selected, like a chosen row in a list. */
-    SELECTED("selected");
+    SELECTED("selected"),
+    /** The item is related to what the mouse is over, like a link of the hovered graph node. */
+    RELATED("related");
 
     /**
      * The name used in theme files.

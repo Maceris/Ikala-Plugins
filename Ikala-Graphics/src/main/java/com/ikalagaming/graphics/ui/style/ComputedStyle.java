@@ -7,6 +7,7 @@ import lombok.NonNull;
 
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -116,6 +117,29 @@ public final class ComputedStyle {
      */
     public Float number(@NonNull StyleKey key) {
         return (Float) get(key);
+    }
+
+    /**
+     * A list of numbers in a set of states.
+     *
+     * @param key A numbers property.
+     * @param active The states that apply.
+     * @return The numbers, or null if they are not set.
+     */
+    @SuppressWarnings("unchecked")
+    public List<Float> numbers(@NonNull StyleKey key, @NonNull Set<StyleState> active) {
+        return (List<Float>) get(key, active);
+    }
+
+    /**
+     * A keyword, with any arguments, in a set of states.
+     *
+     * @param key A words property.
+     * @param active The states that apply.
+     * @return The words, or null if they are not set.
+     */
+    public String words(@NonNull StyleKey key, @NonNull Set<StyleState> active) {
+        return (String) get(key, active);
     }
 
     @Override

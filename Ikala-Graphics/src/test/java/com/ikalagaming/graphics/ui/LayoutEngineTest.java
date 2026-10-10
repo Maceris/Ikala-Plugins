@@ -338,4 +338,127 @@ class LayoutEngineTest {
         assertTrue(engine.layout(row, 0, 0, 100, 100, themed(wide)));
         assertEquals(20, b.getRect().getLeft(), 1e-3);
     }
+
+    private static Box[] boxes(int count, float width, float height) {
+        Box[] made = new Box[count];
+        for (int i = 0; i < count; ++i) {
+            made[i] = new Box("box" + i, width, height);
+        }
+        return made;
+    }
+
+    @Test
+    void gridsWithFixedColumnsFillRowsInOrder() {
+        Box[] cells = boxes(7, 10, 10);
+        Grid grid =
+                new Grid("grid").columns(3).cellSize(10, 10).gap(2).width(Sizing.fit()).add(cells);
+        Overlay root = new Overlay("root").add(grid);
+
+        engine.layout(root, 0, 0, 500, 500, SCALE_1);
+
+        // Three columns of 10 with two gaps of 2, and three rows for seven cells
+        assertRect(0, 0, 34, 34, grid);
+        assertRect(0, 0, 10, 10, cells[0]);
+        assertRect(24, 0, 34, 10, cells[2]);
+        assertRect(12, 12, 22, 22, cells[4]);
+        assertRect(0, 24, 10, 34, cells[6]);
+        assertEquals(3, grid.getResolvedColumns());
+    }
+
+    @Test
+    void gridsFitAsManyColumnsAsTheWidthAllows() {
+        Box[] cells = boxes(10, 10, 10);
+        Grid grid = new Grid("grid").cellSize(10, 10).add(cells);
+        Column root = new Column("root").add(grid);
+
+        engine.layout(root, 0, 0, 45, 500, SCALE_1);
+
+        assertEquals(4, grid.getResolvedColumns());
+        // Ten cells in rows of four take three rows
+        assertEquals(30, grid.getRect().getHeight(), 1e-3);
+        assertRect(0, 10, 10, 20, cells[4]);
+
+        // Wider, and they fit in one row
+        engine.layout(root, 0, 0, 200, 500, SCALE_1);
+        assertEquals(10, grid.getResolvedColumns());
+        assertEquals(10, grid.getRect().getHeight(), 1e-3);
+    }
+
+    @Test
+    void gridCellsAreAsBigAsTheLargestChild() {
+        Box wide = new Box("wide", 8, 3);
+        Box tall = new Box("tall", 5, 6);
+        Box small = new Box("small", 2, 2);
+        Grid grid = new Grid("grid").columns(2).width(Sizing.fit()).add(wide, tall, small);
+        Overlay root = new Overlay("root").add(grid);
+
+        engine.layout(root, 0, 0, 500, 500, SCALE_1);
+
+        // Cells are 8 wide and 6 tall, and children keep their own size inside them
+        assertRect(0, 0, 16, 12, grid);
+        assertRect(8, 0, 13, 6, tall);
+        assertRect(0, 6, 2, 8, small);
+    }
+
+    @Test
+    void growingChildrenFillTheirCell() {
+        Box grows = new Box("grows", 1, 1).width(Sizing.grow()).height(Sizing.grow());
+        Box fits = new Box("fits", 4, 4);
+        Grid grid = new Grid("grid").columns(2).cellSize(20, 20).add(grows, fits);
+        Overlay root = new Overlay("root").add(grid);
+
+        engine.layout(root, 0, 0, 500, 500, SCALE_1);
+
+        assertRect(0, 0, 20, 20, grows);
+        assertRect(20, 0, 24, 4, fits);
+    }
+
+    @Test
+    void gridRowAndColumnGapsOverrideTheGap() {
+        Box[] cells = boxes(4, 10, 10);
+        Grid grid =
+                new Grid("grid")
+                        .columns(2)
+                        .cellSize(10, 10)
+                        .gap(1)
+                        .columnGap(Length.u(5))
+                        .width(Sizing.fit())
+                        .add(cells);
+        Overlay root = new Overlay("root").add(grid);
+
+        engine.layout(root, 0, 0, 500, 500, SCALE_2);
+
+        // At scale 2: cells of 20, a column gap of 10, and a row gap of 2. The boxes measure 10
+        // pixels whatever the scale, and keep that size inside their cells.
+        assertRect(30, 22, 40, 32, cells[3]);
+        assertRect(0, 0, 50, 42, grid);
+    }
+
+    @Test
+    void gridGapsComeFromTheTheme() {
+        Theme spaced =
+                Theme.builder("spaced")
+                        .type("grid", Style.builder().set(StyleKey.GAP, Length.u(3)).build())
+                        .build();
+        Box[] cells = boxes(2, 10, 10);
+        Grid grid = new Grid("grid").columns(2).cellSize(10, 10).add(cells);
+        Overlay root = new Overlay("root").add(grid);
+
+        engine.layout(root, 0, 0, 500, 500, themed(spaced));
+
+        assertEquals(13, cells[1].getRect().getLeft(), 1e-3);
+    }
+
+    @Test
+    void hiddenGridChildrenTakeNoCell() {
+        Box[] cells = boxes(3, 10, 10);
+        cells[1].visible(false);
+        Grid grid = new Grid("grid").columns(2).cellSize(10, 10).add(cells);
+        Overlay root = new Overlay("root").add(grid);
+
+        engine.layout(root, 0, 0, 500, 500, SCALE_1);
+
+        assertRect(10, 0, 20, 10, cells[2]);
+        assertEquals(10, grid.getRect().getHeight(), 1e-3);
+    }
 }

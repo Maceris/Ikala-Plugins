@@ -84,6 +84,9 @@ public final class SpecKeys {
     /** An inline style. */
     public static final String STYLE = "style";
 
+    /** Where a node sits on a canvas: {@code [x, y]} in UI units. */
+    public static final String POSITION = "position";
+
     // Surface-only properties
 
     /** How the surface stacks with other windows. */
@@ -146,6 +149,23 @@ public final class SpecKeys {
 
     /** Anchor preset: bottom right corner. */
     public static final String BOTTOM_RIGHT = "bottom-right";
+
+    // Canvas edges
+
+    /** A canvas's links between its children. */
+    public static final String EDGES = "edges";
+
+    /** The child an edge leaves. */
+    public static final String FROM = "from";
+
+    /** The child an edge enters. */
+    public static final String TO = "to";
+
+    /** Where an edge leaves and enters: {@code [bottom, top]}. */
+    public static final String PORTS = "ports";
+
+    /** How an edge is routed. */
+    public static final String ROUTE = "route";
 
     // Handler actions
 

@@ -138,6 +138,46 @@ public final class SpecValues {
     }
 
     /**
+     * Read a fixed number of numbers, written as a list like {@code [10, 20]}.
+     *
+     * @param value The YAML value.
+     * @param count How many numbers there must be.
+     * @param path Where it is, for messages.
+     * @return The numbers.
+     * @throws SpecException If it isn't a list of that many numbers.
+     */
+    public static float[] numbers(Object value, int count, @NonNull String path) {
+        if (!(value instanceof List<?> items) || items.size() != count) {
+            throw new SpecException(path + ": expected a list of " + count + " numbers");
+        }
+        float[] result = new float[count];
+        for (int i = 0; i < count; ++i) {
+            result[i] = number(items.get(i), path + "[" + i + "]");
+        }
+        return result;
+    }
+
+    /**
+     * Read a fixed number of lengths, written as a list like {@code [48, "2em"]}.
+     *
+     * @param value The YAML value.
+     * @param count How many lengths there must be.
+     * @param path Where it is, for messages.
+     * @return The lengths.
+     * @throws SpecException If it isn't a list of that many lengths.
+     */
+    public static Length[] lengths(Object value, int count, @NonNull String path) {
+        if (!(value instanceof List<?> items) || items.size() != count) {
+            throw new SpecException(path + ": expected a list of " + count + " lengths");
+        }
+        Length[] result = new Length[count];
+        for (int i = 0; i < count; ++i) {
+            result[i] = length(items.get(i), path + "[" + i + "]");
+        }
+        return result;
+    }
+
+    /**
      * Read a yes or no.
      *
      * @param value The YAML value.

@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.ui.Length;
 
 import lombok.NonNull;
 
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -28,6 +29,8 @@ final class StyleValues {
             case LENGTH -> length(value);
             case INSETS -> insets(value);
             case NUMBER -> number(value);
+            case NUMBERS -> numbers(value);
+            case WORDS -> words(value);
         };
     }
 
@@ -164,6 +167,35 @@ final class StyleValues {
             }
         }
         throw new IllegalArgumentException("not a number: " + value);
+    }
+
+    /**
+     * Convert a list of numbers: a YAML list, one number, or numbers separated by spaces.
+     *
+     * @param value The value.
+     * @return The numbers, which can't be modified.
+     */
+    private static List<Float> numbers(Object value) {
+        if (value instanceof List<?> list) {
+            return list.stream().map(StyleValues::number).toList();
+        }
+        if (value instanceof String text && text.trim().contains(" ")) {
+            return Arrays.stream(text.trim().split("\\s+")).map(StyleValues::number).toList();
+        }
+        return List.of(number(value));
+    }
+
+    /**
+     * Convert a keyword, with any arguments after it, like {@code round 6}.
+     *
+     * @param value The value.
+     * @return The words, with single spaces between them.
+     */
+    private static String words(Object value) {
+        if (value instanceof String text && !text.isBlank()) {
+            return String.join(" ", text.trim().split("\\s+"));
+        }
+        throw new IllegalArgumentException("not a keyword: " + value);
     }
 
     /** Static helpers only. */
