@@ -9,7 +9,9 @@ import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.scene.Fog;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.graphics.scene.lights.*;
+import com.ikalagaming.graphics.scene.lights.AmbientLight;
+import com.ikalagaming.graphics.scene.lights.DirectionalLight;
+import com.ikalagaming.graphics.scene.lights.LightRegistry;
 import com.ikalagaming.graphics.vulkan.*;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 
@@ -25,10 +27,8 @@ import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
 
 import java.nio.ByteBuffer;
-import java.nio.FloatBuffer;
 import java.nio.LongBuffer;
 import java.util.Arrays;
-import java.util.List;
 
 /**
  * Handles rendering the lighting for a scene, given the g-buffer, lighting, and shadow information.
@@ -39,17 +39,9 @@ import java.util.List;
 @Slf4j
 public class LightRender implements RenderStage {
 
-    /** Floats in a point light struct: position, padding, color, and intensity. */
-    private static final int POINT_LIGHT_FLOATS = 3 + 1 + 3 + 1;
-
-    /** Floats in a spotlight struct: a point light, cone direction, and cutoff. */
-    private static final int SPOT_LIGHT_FLOATS = POINT_LIGHT_FLOATS + 3 + 1;
-
     /** The storage buffer bindings in the descriptor set, in the order we update them. */
     private static final int[] STORAGE_BINDINGS = {
-        ShaderBindings.Light.POINT_LIGHT_BINDING,
-        ShaderBindings.Light.SPOT_LIGHT_BINDING,
-        ShaderBindings.Light.MATERIALS_BINDING
+        ShaderBindings.Light.LIGHTS_BINDING, ShaderBindings.Light.MATERIALS_BINDING
     };
 
     /** The shader to use for rendering. */
@@ -145,15 +137,12 @@ public class LightRender implements RenderStage {
         final TextureInfoVulkan target =
                 hasFilter ? frameData.preFilterTexture : frameData.finalTexture;
 
-        final int pointLightCount = updatePointLights(scene, vulkanState, frameData);
-        final int spotLightCount = updateSpotLights(scene, vulkanState, frameData);
-        updateUniforms(scene, frameData, pointLightCount, spotLightCount);
+        final int lightCount = updateLights(scene, vulkanState, frameData);
+        updateUniforms(scene, frameData, lightCount);
         SceneRender.writeStorageBindings(
                 vulkanState,
                 descriptorSets[vulkanState.frameIndex],
-                new SharedBuffer[] {
-                    frameData.lightPointLights, frameData.lightSpotLights, frameData.materials
-                },
+                new SharedBuffer[] {frameData.lights, frameData.materials},
                 STORAGE_BINDINGS,
                 writtenBuffers[vulkanState.frameIndex]);
 
@@ -236,14 +225,10 @@ public class LightRender implements RenderStage {
      *
      * @param scene The scene.
      * @param frameData The data for the current frame.
-     * @param pointLightCount How many point lights are in the buffer.
-     * @param spotLightCount How many spotlights are in the buffer.
+     * @param lightCount How many lights are in the lights buffer.
      */
     private static void updateUniforms(
-            @NonNull Scene scene,
-            @NonNull PerFrameData frameData,
-            int pointLightCount,
-            int spotLightCount) {
+            @NonNull Scene scene, @NonNull PerFrameData frameData, int lightCount) {
         ByteBuffer uniformData =
                 MemoryUtil.memByteBuffer(
                         frameData.lightUniforms.allocationInfo.pMappedData(),
@@ -273,8 +258,7 @@ public class LightRender implements RenderStage {
         uniformData.putFloat(
                 offset + ShaderBindings.Light.DirectionalLight.INTENSITY, dirLight.getIntensity());
 
-        uniformData.putInt(ShaderBindings.Light.POINT_LIGHT_COUNT_OFFSET, pointLightCount);
-        uniformData.putInt(ShaderBindings.Light.SPOT_LIGHT_COUNT_OFFSET, spotLightCount);
+        uniformData.putInt(ShaderBindings.Light.LIGHT_COUNT_OFFSET, lightCount);
 
         Fog fog = scene.getFog();
         offset = ShaderBindings.Light.FOG_OFFSET;
@@ -321,122 +305,101 @@ public class LightRender implements RenderStage {
     }
 
     /**
-     * Write the point lights, in view space, into this frame's buffer.
+     * Write the point lights and spotlights, in view space, into this frame's buffer.
      *
      * @param scene The scene to fetch lights from.
      * @param state The Vulkan state.
      * @param frameData The data for the current frame.
-     * @return How many point lights were written.
+     * @return How many lights were written.
      */
-    private static int updatePointLights(
+    private static int updateLights(
             @NonNull Scene scene, @NonNull VulkanState state, @NonNull PerFrameData frameData) {
-        List<PointLight> pointLights = scene.getSceneLights().getPointLights();
-        if (pointLights.size() > PipelineVulkan.MAX_LIGHTS_SUPPORTED) {
-            log.warn(
-                    "Only {} point lights are supported but there are {} in the scene",
-                    PipelineVulkan.MAX_LIGHTS_SUPPORTED,
-                    pointLights.size());
-        }
-        final int lightsToRender =
-                Math.min(PipelineVulkan.MAX_LIGHTS_SUPPORTED, pointLights.size());
-        frameData.lightPointLights.ensureCapacity(
-                (long) lightsToRender * POINT_LIGHT_FLOATS * Float.BYTES, state);
-        if (lightsToRender == 0) {
+        final LightRegistry registry = scene.getLightRegistry();
+        // Lights added after this are left for the next frame, so the buffer can't overflow
+        final int capacity = registry.getLightCount();
+        frameData.lights.ensureCapacity(
+                (long) Math.max(capacity, 1) * ShaderBindings.Light.LightStruct.SIZEOF, state);
+        if (capacity == 0) {
             return 0;
         }
 
-        FloatBuffer lightBuffer =
-                MemoryUtil.memFloatBuffer(
-                        frameData.lightPointLights.allocationInfo.pMappedData(),
-                        lightsToRender * POINT_LIGHT_FLOATS);
+        final ByteBuffer buffer =
+                MemoryUtil.memByteBuffer(
+                        frameData.lights.allocationInfo.pMappedData(),
+                        capacity * ShaderBindings.Light.LightStruct.SIZEOF);
         final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
         final Vector3dc origin = scene.getCamera().getPosition();
-        Vector4f lightPosition = new Vector4f();
-        for (int i = 0; i < lightsToRender; ++i) {
-            putPointLight(lightBuffer, pointLights.get(i), viewMatrix, origin, lightPosition);
-        }
-        return lightsToRender;
+        final Vector4f scratch = new Vector4f();
+        final int[] written = {0};
+        registry.visit(
+                light -> {
+                    if (written[0] < capacity) {
+                        putLight(
+                                buffer,
+                                written[0] * ShaderBindings.Light.LightStruct.SIZEOF,
+                                light,
+                                viewMatrix,
+                                origin,
+                                scratch);
+                        written[0] += 1;
+                    }
+                });
+        return written[0];
     }
 
     /**
-     * Write the spotlights, in view space, into this frame's buffer.
-     *
-     * @param scene The scene to fetch lights from.
-     * @param state The Vulkan state.
-     * @param frameData The data for the current frame.
-     * @return How many spotlights were written.
-     */
-    private static int updateSpotLights(
-            @NonNull Scene scene, @NonNull VulkanState state, @NonNull PerFrameData frameData) {
-        List<SpotLight> spotLights = scene.getSceneLights().getSpotLights();
-        if (spotLights.size() > PipelineVulkan.MAX_LIGHTS_SUPPORTED) {
-            log.warn(
-                    "Only {} spotlights are supported but there are {} in the scene",
-                    PipelineVulkan.MAX_LIGHTS_SUPPORTED,
-                    spotLights.size());
-        }
-        final int lightsToRender = Math.min(PipelineVulkan.MAX_LIGHTS_SUPPORTED, spotLights.size());
-        frameData.lightSpotLights.ensureCapacity(
-                (long) lightsToRender * SPOT_LIGHT_FLOATS * Float.BYTES, state);
-        if (lightsToRender == 0) {
-            return 0;
-        }
-
-        FloatBuffer lightBuffer =
-                MemoryUtil.memFloatBuffer(
-                        frameData.lightSpotLights.allocationInfo.pMappedData(),
-                        lightsToRender * SPOT_LIGHT_FLOATS);
-        final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
-        final Vector3dc origin = scene.getCamera().getPosition();
-        Vector4f lightPosition = new Vector4f();
-        Vector4f lightDirection = new Vector4f();
-        for (int i = 0; i < lightsToRender; ++i) {
-            SpotLight light = spotLights.get(i);
-            putPointLight(lightBuffer, light.getPointLight(), viewMatrix, origin, lightPosition);
-            // A direction, so w is 0 and the camera translation (none in render space) never
-            // applies
-            lightDirection.set(light.getConeDirection(), 0);
-            lightDirection.mul(viewMatrix);
-            lightBuffer.put(lightDirection.x);
-            lightBuffer.put(lightDirection.y);
-            lightBuffer.put(lightDirection.z);
-            lightBuffer.put(light.getCutOff());
-        }
-        return lightsToRender;
-    }
-
-    /**
-     * Put a point light struct into a buffer, with the position converted to view space.
+     * Put a light struct into the lights buffer, with the position and direction converted to view
+     * space.
      *
      * @param buffer The buffer to write into.
+     * @param offset Where the struct starts, in bytes.
      * @param light The light.
      * @param viewMatrix The camera view matrix, from render space to view space.
      * @param origin The world position of the render space origin, the camera position.
      * @param scratch A vector to do math in, so we don't allocate one per light.
      */
-    private static void putPointLight(
-            @NonNull FloatBuffer buffer,
-            @NonNull PointLight light,
+    private static void putLight(
+            @NonNull ByteBuffer buffer,
+            int offset,
+            @NonNull LightRegistry.View light,
             @NonNull Matrix4f viewMatrix,
             @NonNull Vector3dc origin,
             @NonNull Vector4f scratch) {
-        final float padding = 0.0f;
         // Relative to the camera in double precision first, so it stays exact far from the origin
-        final Vector3dc position = light.getPosition();
+        final Vector3dc position = light.position();
         scratch.set(
                 (float) (position.x() - origin.x()),
                 (float) (position.y() - origin.y()),
                 (float) (position.z() - origin.z()),
                 1);
         scratch.mul(viewMatrix);
-        buffer.put(scratch.x);
-        buffer.put(scratch.y);
-        buffer.put(scratch.z);
-        buffer.put(padding);
-        buffer.put(light.getColor().x);
-        buffer.put(light.getColor().y);
-        buffer.put(light.getColor().z);
-        buffer.put(light.getIntensity());
+        putVector(buffer, offset + ShaderBindings.Light.LightStruct.POSITION, scratch);
+        buffer.putFloat(offset + ShaderBindings.Light.LightStruct.RANGE, light.range());
+        light.color().get(offset + ShaderBindings.Light.LightStruct.COLOR, buffer);
+        buffer.putFloat(offset + ShaderBindings.Light.LightStruct.INTENSITY, light.intensity());
+
+        // A direction, so w is 0 and the camera translation (none in render space) never applies
+        scratch.set(light.direction(), 0);
+        scratch.mul(viewMatrix);
+        putVector(buffer, offset + ShaderBindings.Light.LightStruct.DIRECTION, scratch);
+        buffer.putFloat(offset + ShaderBindings.Light.LightStruct.COS_OUTER, light.cosOuter());
+        buffer.putFloat(offset + ShaderBindings.Light.LightStruct.COS_INNER, light.cosInner());
+        buffer.putInt(
+                offset + ShaderBindings.Light.LightStruct.TYPE, light.type().getShaderValue());
+    }
+
+    /**
+     * Put the x, y and z of a vector into a buffer.
+     *
+     * @param buffer The buffer.
+     * @param offset Where x goes, in bytes.
+     * @param vector The vector.
+     */
+    private static void putVector(
+            @NonNull ByteBuffer buffer, int offset, @NonNull Vector4f vector) {
+        buffer.putFloat(offset, vector.x);
+        buffer.putFloat(offset + Float.BYTES, vector.y);
+        buffer.putFloat(offset + 2 * Float.BYTES, vector.z);
     }
 
     private void createPipelineLayout(@NonNull VulkanState state) {

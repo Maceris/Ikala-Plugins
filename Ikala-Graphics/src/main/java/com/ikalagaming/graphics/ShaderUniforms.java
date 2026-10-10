@@ -163,17 +163,14 @@ public class ShaderUniforms {
         /** A sampler for the normal values. */
         public static final String NORMAL_SAMPLER = "normalSampler";
 
-        /** How many point lights we have in the point light SSBO. */
-        public static final String POINT_LIGHT_COUNT = "pointLightCount";
+        /** How many lights are in the lights buffer. */
+        public static final String LIGHT_COUNT = "lightCount";
 
         /**
          * The prefix for shadow maps. There are several of these numbered uniforms, based on the
          * shadow map cascade count.
          */
         public static final String SHADOW_MAP_PREFIX = "shadowMap_";
-
-        /** How many spotlights we have in the spotlight SSBO. */
-        public static final String SPOT_LIGHT_COUNT = "spotLightCount";
 
         /** Sampler for the tangent values. */
         public static final String TANGENT_SAMPLER = "tangentSampler";

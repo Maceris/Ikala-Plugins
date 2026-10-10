@@ -10,9 +10,6 @@ import org.lwjgl.vulkan.VkCommandBuffer;
 @RequiredArgsConstructor
 public class PipelineVulkan {
 
-    /** How many lights of each type (spot, point) that are currently supported. */
-    public static final int MAX_LIGHTS_SUPPORTED = 1000;
-
     /** The list of render stages that this renderer uses. */
     private final RenderStage[] renderStages;
 

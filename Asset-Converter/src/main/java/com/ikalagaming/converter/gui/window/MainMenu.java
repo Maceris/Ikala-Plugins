@@ -5,13 +5,13 @@ import com.ikalagaming.converter.ModelConverter;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.InstanceHandle;
 import com.ikalagaming.graphics.Instances;
+import com.ikalagaming.graphics.Lights;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.UI;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
-import com.ikalagaming.graphics.scene.lights.PointLight;
 import com.ikalagaming.graphics.ui.spec.Observable;
 import com.ikalagaming.graphics.ui.spec.SpecBindings;
 import com.ikalagaming.graphics.ui.spec.SpecInstance;
@@ -266,16 +266,11 @@ public class MainMenu {
                                 new Vector3f(0.247f, -0.848f, 0.785f),
                                 4f));
 
-        scene.getSceneLights()
-                .getPointLights()
-                .add(
-                        new PointLight(
-                                new Vector3f(1.0f, 0.1f, 0.1f), new Vector3d(8.5, 2.0, 7.5), 4f));
-        scene.getSceneLights()
-                .getPointLights()
-                .add(
-                        new PointLight(
-                                new Vector3f(0.1f, 0.1f, 1.0f), new Vector3d(1.7, 2.0, 7.5), 4f));
+        // The demo has always lit to 10 m; brighter lights would otherwise reach further
+        final float lightRange = 10;
+        final Lights lights = GraphicsManager.forPlugin(ConverterPlugin.PLUGIN_NAME).lights();
+        lights.point(new Vector3d(8.5, 2.0, 7.5), new Vector3f(1.0f, 0.1f, 0.1f), 4f, lightRange);
+        lights.point(new Vector3d(1.7, 2.0, 7.5), new Vector3f(0.1f, 0.1f, 1.0f), 4f, lightRange);
 
         var pipeline =
                 RenderConfig.builder().withAnimation().withScene().withSkybox().withGui().build();

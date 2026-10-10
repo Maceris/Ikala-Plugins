@@ -2,7 +2,9 @@
 #extension GL_EXT_nonuniform_qualifier : enable
 
 const int NUM_CASCADES = 3;
-const float MAX_LIGHT_DISTANCE = 10;
+// Must match LightType.getShaderValue()
+const uint LIGHT_TYPE_POINT = 0;
+const uint LIGHT_TYPE_SPOT = 1;
 const float BIAS = 0.0005;
 const float SHADOW_FACTOR = 0.35;
 const float PI = 3.1415926535897932384626433832795;
@@ -16,18 +18,17 @@ struct AmbientLight
     float intensity;
 };
 
-struct PointLight {
+// A point light or spotlight, with the position and direction in view space
+struct Light {
     vec3 position;
-	float _padding;
+    float range;
     vec3 color;
     float intensity;
-};
-
-struct SpotLight
-{
-    PointLight pointLight;
-    vec3 coneDirection;
-    float cutoff;
+    vec3 direction;
+    float cosOuter;
+    float cosInner;
+    uint type;
+    vec2 _padding;
 };
 
 struct DirectionalLight
@@ -77,8 +78,7 @@ layout(set = 0, binding = 0) uniform Uniforms {
 
     AmbientLight ambientLight;
     DirectionalLight directionalLight;
-    int pointLightCount;
-    int spotLightCount;
+    int lightCount;
     Fog fog;
     CascadeShadow cascadeShadowSplits[NUM_CASCADES];
 
@@ -92,15 +92,11 @@ layout(set = 0, binding = 0) uniform Uniforms {
     int shadowMap2Index;
 };
 
-layout(std430, set = 0, binding = 1) readonly buffer PointLights {
-    PointLight pointLights[];
+layout(std430, set = 0, binding = 1) readonly buffer Lights {
+    Light lights[];
 };
 
-layout(std430, set = 0, binding = 2) readonly buffer SpotLights {
-    SpotLight spotLights[];
-};
-
-layout(std430, set = 0, binding = 3) readonly buffer Materials {
+layout(std430, set = 0, binding = 2) readonly buffer Materials {
     Material materials[];
 };
 
@@ -202,12 +198,13 @@ vec3 disneyBRDF(vec3 baseColor, Material material, vec3 toViewDirection, vec3 to
         + clearcoat;
 }
 
-float scaleIntensity(float distance) {
+// Inverse square, windowed to reach exactly zero at the light's range. Matches LightRange.falloff.
+float scaleIntensity(float distance, float range) {
     float attenuation = 1.0f / sqr(distance);
-        float ratio = distance / MAX_LIGHT_DISTANCE;
-        float r2 = sqr(ratio);
-        float cutoff = clamp(1 - sqr(r2), 0.0, 1.0);
-        return attenuation * cutoff;
+    float ratio = distance / range;
+    float r2 = sqr(ratio);
+    float cutoff = clamp(1 - sqr(r2), 0.0, 1.0);
+    return attenuation * cutoff;
 }
 
 vec3 calcLightColor(vec3 baseColor, Material material, vec3 lightColor, float lightIntensity, vec3 viewPosition,
@@ -220,34 +217,30 @@ vec3 calcLightColor(vec3 baseColor, Material material, vec3 lightColor, float li
 }
 
 // Light positions and directions, the surface position, and the normals are all in view space
-vec3 calcPointLight(vec3 baseColor, Material material, PointLight light, vec3 viewPosition,
+vec3 calcLight(vec3 baseColor, Material material, Light light, vec3 viewPosition,
     vec3 normal, vec3 tangent, vec3 bitangent)
 {
     vec3 directionToLight = light.position - viewPosition;
-    vec3 toLightDirection  = normalize(directionToLight);
-    float intensity = scaleIntensity(length(directionToLight)) * light.intensity;
-
-    return calcLightColor(baseColor, material, light.color, intensity, viewPosition, toLightDirection,
-                   normal, tangent, bitangent);
-}
-
-vec3 calcSpotLight(vec3 baseColor, Material material, SpotLight light, vec3 viewPosition,
-    vec3 normal, vec3 tangent, vec3 bitangent)
-{
-    vec3 directionToLight = light.pointLight.position - viewPosition;
-    vec3 toLightDirection  = normalize(directionToLight);
-    vec3 fromLightDirection  = -toLightDirection;
-    float spotAlpha = dot(fromLightDirection, normalize(light.coneDirection));
-
-    float intensity = scaleIntensity(length(directionToLight)) * light.pointLight.intensity;
-    if (spotAlpha > light.cutoff) {
-        intensity *= (1.0 - (1.0 - spotAlpha)/(1.0 - light.cutoff));
-    }
-    else {
+    float distance = length(directionToLight);
+    if (distance >= light.range) {
         return vec3(0);
     }
+    vec3 toLightDirection  = normalize(directionToLight);
+    float intensity = scaleIntensity(distance, light.range) * light.intensity;
 
-    return calcLightColor(baseColor, material, light.pointLight.color, intensity, viewPosition, toLightDirection,
+    if (light.type == LIGHT_TYPE_SPOT) {
+        float spotAlpha = dot(-toLightDirection, normalize(light.direction));
+        if (spotAlpha <= light.cosOuter) {
+            return vec3(0);
+        }
+        // Full strength inside the inner angle, fading linearly to nothing at the outer angle
+        float fadeWidth = light.cosInner - light.cosOuter;
+        if (fadeWidth > 0) {
+            intensity *= clamp((spotAlpha - light.cosOuter) / fadeWidth, 0.0, 1.0);
+        }
+    }
+
+    return calcLightColor(baseColor, material, light.color, intensity, viewPosition, toLightDirection,
                    normal, tangent, bitangent);
 }
 
@@ -333,17 +326,9 @@ void main()
     vec3 color = calcDirLight(baseColor.xyz, material, directionalLight, viewPosition, normal, tangent, bitangent)
         * shadowFactor;
 
-    for (int i = 0; i < pointLightCount; ++i) {
-        if (pointLights[i].intensity > 0) {
-            color += calcPointLight(baseColor.xyz, material, pointLights[i], viewPosition, normal, tangent,
-                bitangent);
-        }
-    }
-
-    for (int i = 0; i < spotLightCount; ++i) {
-        if (spotLights[i].pointLight.intensity > 0) {
-            color += calcSpotLight(baseColor.xyz, material, spotLights[i], viewPosition, normal, tangent,
-                bitangent);
+    for (int i = 0; i < lightCount; ++i) {
+        if (lights[i].intensity > 0) {
+            color += calcLight(baseColor.xyz, material, lights[i], viewPosition, normal, tangent, bitangent);
         }
     }
     vec3 ambient = ambientLight.intensity * ambientLight.color;

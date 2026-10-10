@@ -422,9 +422,7 @@ public class PipelineManagerVulkan {
                 state.perFrameData[i].lightUniforms =
                         SharedBuffer.allocate(
                                 ShaderBindings.Light.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
-                state.perFrameData[i].lightPointLights =
-                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
-                state.perFrameData[i].lightSpotLights =
+                state.perFrameData[i].lights =
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].sceneUniforms =
                         SharedBuffer.allocate(
@@ -594,10 +592,8 @@ public class PipelineManagerVulkan {
         data.guiFontStaging = null;
         SharedBuffer.free(data.lightUniforms, state);
         data.lightUniforms = null;
-        SharedBuffer.free(data.lightPointLights, state);
-        data.lightPointLights = null;
-        SharedBuffer.free(data.lightSpotLights, state);
-        data.lightSpotLights = null;
+        SharedBuffer.free(data.lights, state);
+        data.lights = null;
         SharedBuffer.free(data.sceneUniforms, state);
         data.sceneUniforms = null;
         SharedBuffer.free(data.sceneModelMatrices, state);

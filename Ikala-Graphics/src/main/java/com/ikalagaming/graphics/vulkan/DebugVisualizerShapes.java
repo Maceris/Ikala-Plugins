@@ -15,8 +15,8 @@ import com.ikalagaming.graphics.scene.debug.DebugLine;
 import com.ikalagaming.graphics.scene.debug.DebugShape;
 import com.ikalagaming.graphics.scene.debug.DebugSphere;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
-import com.ikalagaming.graphics.scene.lights.PointLight;
-import com.ikalagaming.graphics.scene.lights.SpotLight;
+import com.ikalagaming.graphics.scene.lights.LightRegistry;
+import com.ikalagaming.graphics.scene.lights.LightType;
 
 import lombok.NonNull;
 import org.joml.Matrix4d;
@@ -30,12 +30,6 @@ import java.util.function.Consumer;
 
 /** Makes the shapes for the built-in debug visualizers that are turned on. */
 public final class DebugVisualizerShapes {
-
-    /**
-     * How far point and spot lights reach. Must match MAX_LIGHT_DISTANCE in lights.frag, where the
-     * falloff reaches zero.
-     */
-    public static final double LIGHT_RANGE = 10;
 
     /** Half the length of each arm of the cross marking a light's position. */
     private static final double LIGHT_MARKER_SIZE = 0.25;
@@ -82,15 +76,17 @@ public final class DebugVisualizerShapes {
             @NonNull PerFrameData frameData,
             @NonNull Consumer<DebugShape> consumer) {
         final DebugVisualizers settings = scene.getDebugVisualizers();
-        if (settings.isPointLights()) {
-            for (PointLight light : scene.getSceneLights().getPointLights()) {
-                pointLight(light, consumer);
-            }
-        }
-        if (settings.isSpotLights()) {
-            for (SpotLight light : scene.getSceneLights().getSpotLights()) {
-                spotLight(light, consumer);
-            }
+        if (settings.isPointLights() || settings.isSpotLights()) {
+            scene.getLightRegistry()
+                    .visit(
+                            light -> {
+                                if (light.type() == LightType.POINT && settings.isPointLights()) {
+                                    pointLight(light, consumer);
+                                } else if (light.type() == LightType.SPOT
+                                        && settings.isSpotLights()) {
+                                    spotLight(light, consumer);
+                                }
+                            });
         }
         if (settings.isDirectionalLight()) {
             directionalLight(scene, consumer);
@@ -110,25 +106,40 @@ public final class DebugVisualizerShapes {
         return Color.rgba(color.x(), color.y(), color.z(), 1.0f);
     }
 
-    private static void pointLight(@NonNull PointLight light, @NonNull Consumer<DebugShape> out) {
-        final int color = colorOf(light.getColor());
-        final Vector3dc position = light.getPosition();
+    /**
+     * A point light's position and the sphere it reaches. The registry is locked, so the shapes
+     * copy what they need.
+     *
+     * @param light The light.
+     * @param out Receives the shapes.
+     */
+    private static void pointLight(
+            @NonNull LightRegistry.View light, @NonNull Consumer<DebugShape> out) {
+        final int color = colorOf(light.color());
+        final Vector3d position = new Vector3d(light.position());
         marker(position, color, out);
-        out.accept(new DebugSphere(position, LIGHT_RANGE, color));
+        out.accept(new DebugSphere(position, light.range(), color));
     }
 
-    private static void spotLight(@NonNull SpotLight light, @NonNull Consumer<DebugShape> out) {
-        final PointLight pointLight = light.getPointLight();
-        final int color = colorOf(pointLight.getColor());
-        final Vector3dc position = pointLight.getPosition();
-        final Vector3fc direction = light.getConeDirection();
+    /**
+     * A spotlight's position and the cone it reaches. The registry is locked, so the shapes copy
+     * what they need.
+     *
+     * @param light The light.
+     * @param out Receives the shapes.
+     */
+    private static void spotLight(
+            @NonNull LightRegistry.View light, @NonNull Consumer<DebugShape> out) {
+        final int color = colorOf(light.color());
+        final Vector3d position = new Vector3d(light.position());
+        final Vector3fc direction = light.direction();
         marker(position, color, out);
         out.accept(
                 new DebugCone(
                         position,
                         new Vector3d(direction.x(), direction.y(), direction.z()),
-                        LIGHT_RANGE,
-                        Math.acos(light.getCutOff()),
+                        light.range(),
+                        Math.acos(light.cosOuter()),
                         color));
     }
 

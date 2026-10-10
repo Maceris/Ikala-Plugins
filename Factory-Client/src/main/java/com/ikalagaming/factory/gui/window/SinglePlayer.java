@@ -19,7 +19,6 @@ import com.ikalagaming.graphics.gui.util.Alignment;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
-import com.ikalagaming.graphics.scene.lights.PointLight;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -134,12 +133,9 @@ public class SinglePlayer extends GuiWindow {
         GraphicsManager.getScene()
                 .getSceneLights()
                 .setAmbientLight(new AmbientLight(new Vector3f(1.0f, 1.0f, 1.0f), 0.6f));
-        GraphicsManager.getScene()
-                .getSceneLights()
-                .getPointLights()
-                .add(
-                        new PointLight(
-                                new Vector3f(1.0f, 0.0f, 0.0f), new Vector3d(2.0, 1.1, 0.0), 1.0f));
+        GraphicsManager.forPlugin(FactoryClientPlugin.PLUGIN_NAME)
+                .lights()
+                .point(new Vector3d(2.0, 1.1, 0.0), new Vector3f(1.0f, 0.0f, 0.0f), 1.0f);
         var pipeline =
                 RenderConfig.builder().withAnimation().withScene().withSkybox().withGui().build();
         GraphicsManager.swapPipeline(pipeline);

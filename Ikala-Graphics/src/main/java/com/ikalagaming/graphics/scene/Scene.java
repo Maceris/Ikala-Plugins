@@ -6,6 +6,7 @@ import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
+import com.ikalagaming.graphics.scene.lights.LightRegistry;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
 import com.ikalagaming.graphics.vulkan.DeletionQueue;
 import com.ikalagaming.graphics.vulkan.GeometryArena;
@@ -68,6 +69,14 @@ public class Scene {
     private final SceneLights sceneLights;
 
     /**
+     * The point lights and spotlights plugins placed, through {@link
+     * com.ikalagaming.graphics.Lights}.
+     *
+     * @return The light registry.
+     */
+    private final LightRegistry lightRegistry;
+
+    /**
      * The texture of the skybox, which may be null if we want the sky to be just a single diffuse
      * color.
      */
@@ -98,6 +107,7 @@ public class Scene {
         projection = new Projection(width, height);
         materialCache = new MaterialCache();
         sceneLights = new SceneLights();
+        lightRegistry = new LightRegistry();
         camera = new Camera();
         fog = new Fog();
         skyboxDiffuse = new Vector4f(0.65f, 0.65f, 0.65f, 1f);

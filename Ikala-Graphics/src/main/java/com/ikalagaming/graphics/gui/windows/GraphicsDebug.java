@@ -156,11 +156,8 @@ public class GraphicsDebug extends GuiWindow {
                 IkGui.text(String.format("FPS: %d", GraphicsManager.getLastFPS()));
                 IkGui.text(
                         String.format(
-                                "Point lights: %,d",
-                                scene.getSceneLights().getPointLights().size()));
-                IkGui.text(
-                        String.format(
-                                "Spot lights: %,d", scene.getSceneLights().getSpotLights().size()));
+                                "Point and spot lights: %,d",
+                                scene.getLightRegistry().getLightCount()));
                 IkGui.text(
                         String.format(
                                 "Materials loaded: %,d",

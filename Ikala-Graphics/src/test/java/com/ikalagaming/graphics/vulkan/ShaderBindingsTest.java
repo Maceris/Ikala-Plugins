@@ -20,8 +20,7 @@ class ShaderBindingsTest {
         assertEquals(128, ShaderBindings.Light.AMBIENT_LIGHT_OFFSET);
         // DirectionalLight {vec3 color; float pad; vec3 direction; float intensity;}
         assertEquals(144, ShaderBindings.Light.DIRECTIONAL_LIGHT_OFFSET);
-        assertEquals(176, ShaderBindings.Light.POINT_LIGHT_COUNT_OFFSET);
-        assertEquals(180, ShaderBindings.Light.SPOT_LIGHT_COUNT_OFFSET);
+        assertEquals(176, ShaderBindings.Light.LIGHT_COUNT_OFFSET);
         // Fog {vec3 color; float density; int enabled; vec3 pad;} starts on a 16 byte boundary
         assertEquals(192, ShaderBindings.Light.FOG_OFFSET);
         assertEquals(32, ShaderBindings.Light.Fog.PADDING);
@@ -34,6 +33,21 @@ class ShaderBindingsTest {
         assertEquals(496, ShaderBindings.Light.DEPTH_SAMPLER_INDEX_OFFSET);
         assertEquals(500, ShaderBindings.Light.SHADOW_MAP_0_INDEX_OFFSET);
         assertEquals(512, ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
+    }
+
+    @Test
+    void testLightStructOffsets() {
+        // Light {vec3 position; float range; vec3 color; float intensity; vec3 direction;
+        // float cosOuter; float cosInner; uint type; vec2 pad;} under std430
+        assertEquals(0, ShaderBindings.Light.LightStruct.POSITION);
+        assertEquals(12, ShaderBindings.Light.LightStruct.RANGE);
+        assertEquals(16, ShaderBindings.Light.LightStruct.COLOR);
+        assertEquals(28, ShaderBindings.Light.LightStruct.INTENSITY);
+        assertEquals(32, ShaderBindings.Light.LightStruct.DIRECTION);
+        assertEquals(44, ShaderBindings.Light.LightStruct.COS_OUTER);
+        assertEquals(48, ShaderBindings.Light.LightStruct.COS_INNER);
+        assertEquals(52, ShaderBindings.Light.LightStruct.TYPE);
+        assertEquals(64, ShaderBindings.Light.LightStruct.SIZEOF);
     }
 
     @Test

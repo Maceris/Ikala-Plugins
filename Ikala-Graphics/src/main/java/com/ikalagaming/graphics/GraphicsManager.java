@@ -266,6 +266,12 @@ public class GraphicsManager {
         if (windows > 0) {
             log.debug("Removed {} windows owned by {}", windows, context.getOwnerKey());
         }
+        if (scene != null) {
+            int lights = scene.getLightRegistry().removeAllOwnedBy(context.getOwnerKey());
+            if (lights > 0) {
+                log.debug("Removed {} lights owned by {}", lights, context.getOwnerKey());
+            }
+        }
         if (renderInstance == null) {
             return;
         }

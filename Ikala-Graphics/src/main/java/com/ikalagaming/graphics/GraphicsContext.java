@@ -56,6 +56,9 @@ public final class GraphicsContext {
     /** Placing models in the scene for this context. */
     private final Instances instances;
 
+    /** Places point lights and spotlights for this plugin. */
+    private final Lights lights;
+
     /** The sections API for this plugin. */
     private final Sections sections;
 
@@ -81,6 +84,7 @@ public final class GraphicsContext {
         textures = new Textures(this);
         meshes = new Meshes(this);
         instances = new Instances(this);
+        lights = new Lights(this);
         sections = new Sections(this);
         debug = new DebugDraw(this);
         ui = new UI(this, GraphicsManager::getUiManager);
@@ -118,6 +122,17 @@ public final class GraphicsContext {
     public Instances instances() {
         checkOpen();
         return instances;
+    }
+
+    /**
+     * Place point lights and spotlights in the scene, owned by this plugin.
+     *
+     * @return The lights API for this plugin.
+     * @throws IllegalStateException If the plugin was unloaded.
+     */
+    public Lights lights() {
+        checkOpen();
+        return lights;
     }
 
     /**

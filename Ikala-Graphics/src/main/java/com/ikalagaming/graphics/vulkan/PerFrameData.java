@@ -29,8 +29,10 @@ public class PerFrameData {
     public SharedBuffer guiFontStaging;
 
     public SharedBuffer lightUniforms;
-    public SharedBuffer lightPointLights;
-    public SharedBuffer lightSpotLights;
+
+    /** The point lights and spotlights, in view space, read by the light stage. */
+    public SharedBuffer lights;
+
     public SharedBuffer sceneUniforms;
 
     /**

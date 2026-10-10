@@ -438,6 +438,46 @@ public class ShaderBindings {
         }
 
         /**
+         * Offsets into the light struct of the lights buffer, one per point light or spotlight,
+         * following std430 rules.
+         *
+         * @author Ches Burks
+         */
+        public static class LightStruct {
+            /** The position in view space. */
+            public static final int POSITION = 0;
+
+            /** How far the light reaches. */
+            public static final int RANGE = 3 * Float.BYTES;
+
+            /** The color. */
+            public static final int COLOR = 4 * Float.BYTES;
+
+            /** The intensity. */
+            public static final int INTENSITY = 7 * Float.BYTES;
+
+            /** Which way a spotlight points, in view space. */
+            public static final int DIRECTION = 8 * Float.BYTES;
+
+            /** The cosine of the angle from a spotlight's axis where it ends. */
+            public static final int COS_OUTER = 11 * Float.BYTES;
+
+            /** The cosine of the angle from a spotlight's axis where it starts to fade. */
+            public static final int COS_INNER = 12 * Float.BYTES;
+
+            /** The light's {@link com.ikalagaming.graphics.scene.lights.LightType} shader value. */
+            public static final int TYPE = 13 * Float.BYTES;
+
+            /** The size of the struct in bytes, padded out to a multiple of 16. */
+            public static final int SIZEOF = 16 * Float.BYTES;
+
+            /** Private constructor so this class is not instantiated. */
+            private LightStruct() {
+                cutItOut();
+            }
+        }
+
+        /**
          * Offsets into the fog struct.
          *
          * @author Ches Burks
@@ -490,14 +530,9 @@ public class ShaderBindings {
         public static final int DIRECTIONAL_LIGHT_OFFSET =
                 AMBIENT_LIGHT_OFFSET + AmbientLight.SIZEOF;
 
-        /**
-         * The offset into the uniforms for how many point lights we have in the point light SSBO.
-         */
-        public static final int POINT_LIGHT_COUNT_OFFSET =
+        /** The offset into the uniforms for how many lights are in the lights buffer. */
+        public static final int LIGHT_COUNT_OFFSET =
                 DIRECTIONAL_LIGHT_OFFSET + DirectionalLight.SIZEOF;
-
-        /** The offset into the uniforms for how many spotlights we have in the spotlight SSBO. */
-        public static final int SPOT_LIGHT_COUNT_OFFSET = POINT_LIGHT_COUNT_OFFSET + Integer.BYTES;
 
         /**
          * The offset into the uniforms for the environmental fog. Structs start on a 16 byte
@@ -506,7 +541,7 @@ public class ShaderBindings {
          * @see ShaderUniforms.Light.Fog
          */
         public static final int FOG_OFFSET =
-                (int) SharedBuffer.align(SPOT_LIGHT_COUNT_OFFSET + Integer.BYTES);
+                (int) SharedBuffer.align(LIGHT_COUNT_OFFSET + Integer.BYTES);
 
         /** The offset into the uniforms for the cascade shadows array. */
         public static final int CASCADE_SHADOWS_OFFSET = FOG_OFFSET + Fog.SIZEOF;
@@ -547,14 +582,11 @@ public class ShaderBindings {
         /** Uniforms buffer binding. */
         public static final int UNIFORMS_BINDING = 0;
 
-        /** The point light buffer binding. */
-        public static final int POINT_LIGHT_BINDING = 1;
-
-        /** The spotlight buffer binding. */
-        public static final int SPOT_LIGHT_BINDING = 2;
+        /** The lights buffer binding, holding the point lights and spotlights. */
+        public static final int LIGHTS_BINDING = 1;
 
         /** Binding for the materials buffer. */
-        public static final int MATERIALS_BINDING = 3;
+        public static final int MATERIALS_BINDING = 2;
 
         /** Private constructor so this class is not instantiated. */
         private Light() {
