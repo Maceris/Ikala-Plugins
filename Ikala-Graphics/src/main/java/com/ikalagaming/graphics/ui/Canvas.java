@@ -536,6 +536,7 @@ public class Canvas extends Container<Canvas> {
      * @param windowHovered Whether the mouse is over the canvas.
      */
     private void handleInput(@NonNull UiFrame frame, Vector2f mouse, boolean windowHovered) {
+        final int panID = IkGui.getID("pan");
         float scrollX = IkGui.getScrollX();
         float scrollY = IkGui.getScrollY();
         Vector2f delta = IkGui.getIO().mouseDelta;
@@ -550,9 +551,17 @@ public class Canvas extends Container<Canvas> {
                 dragging = hoveredChild;
             } else if (hoveredChild == null && !IkGui.isAnyItemHovered()) {
                 panning = true;
+                // Claim the drag, or IkGui would drag the surface's window along with the view
+                IkGuiInternal.setActiveID(panID, IkGuiInternal.getCurrentWindow());
             }
         }
+        if (panning) {
+            IkGuiInternal.keepAliveID(panID);
+        }
         if (!IkGui.isMouseDown(MouseButton.LEFT)) {
+            if (panning && IkGui.getContext().activeID == panID) {
+                IkGuiInternal.clearActiveID();
+            }
             if (dragging != null) {
                 Node<?> moved = dragging;
                 MoveListener listener = onMoved;

@@ -219,6 +219,28 @@ class UICanvasTest {
     }
 
     @Test
+    void panningDoesNotMoveAMovableSurface() {
+        Canvas canvas = new Canvas("canvas").add(node("a", 0, 0), node("b", 200, 100));
+        manager.add(
+                owner,
+                new Surface("graph")
+                        .anchors(Anchors.topLeft())
+                        .width(Sizing.fixed(600))
+                        .height(Sizing.fixed(400))
+                        .movable()
+                        .content(canvas));
+        frames(3);
+        RectFloat before = canvas.getRect();
+
+        drag(MouseButton.LEFT, 500, 350, 540, 380);
+        frames(2);
+
+        RectFloat after = canvas.getRect();
+        assertEquals(before.getLeft(), after.getLeft(), 1e-3, "The surface stayed put");
+        assertEquals(before.getTop(), after.getTop(), 1e-3, "The surface stayed put");
+    }
+
+    @Test
     void draggingAChildMovesItInsteadOfClickingIt() {
         int[] clicks = new int[1];
         Button a = node("a", 0, 0);
