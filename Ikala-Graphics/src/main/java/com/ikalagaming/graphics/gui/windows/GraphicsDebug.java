@@ -19,6 +19,7 @@ import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.vulkan.FilterView;
 import com.ikalagaming.graphics.vulkan.InstanceRegistry;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
+import com.ikalagaming.graphics.vulkan.stages.InstanceDrawUpdate;
 
 import lombok.NonNull;
 import org.joml.Vector3f;
@@ -40,6 +41,7 @@ public class GraphicsDebug extends GuiWindow {
     private final Slider normalLength;
     private final Checkbox freezeObserver;
     private final Checkbox disableCulling;
+    private final Checkbox disableOcclusion;
     private final Checkbox showUiShowcase;
     private final Slider fogDensity;
     private final Slider directionalLightX;
@@ -80,6 +82,7 @@ public class GraphicsDebug extends GuiWindow {
         normalLength = new Slider("Normal length", 0.1f, 0.01f, 1f);
         freezeObserver = new Checkbox("Freeze observer", false);
         disableCulling = new Checkbox("Draw everything (no culling)", false);
+        disableOcclusion = new Checkbox("Draw hidden things (no occlusion culling)", false);
         showUiShowcase = new Checkbox("UI showcase", false);
         fogDensity = new Slider("Fog Density", 0, 0, 1);
         directionalLightX = new Slider("Directional Light X", 0, -1, 1);
@@ -106,6 +109,7 @@ public class GraphicsDebug extends GuiWindow {
         addChild(normalLength);
         addChild(freezeObserver);
         addChild(disableCulling);
+        addChild(disableOcclusion);
         addChild(showUiShowcase);
         addChild(directionalLightX);
         addChild(directionalLightY);
@@ -167,13 +171,25 @@ public class GraphicsDebug extends GuiWindow {
                         renderer == null || renderer.getState().instances == null
                                 ? new int[0]
                                 : renderer.getState().instances.getDrawnCounts();
-                if (drawn.length > 0) {
+                if (drawn.length == InstanceDrawUpdate.COUNTER_COUNT) {
                     StringBuilder shadows = new StringBuilder();
-                    for (int i = 1; i < drawn.length; ++i) {
-                        shadows.append(i == 1 ? "" : " / ").append(String.format("%,d", drawn[i]));
+                    for (int i = InstanceDrawUpdate.LIST_FIRST_CASCADE;
+                            i < InstanceDrawUpdate.LIST_COUNT;
+                            ++i) {
+                        shadows.append(i == InstanceDrawUpdate.LIST_FIRST_CASCADE ? "" : " / ")
+                                .append(String.format("%,d", drawn[i]));
                     }
                     // Counted per mesh, so a model with several meshes counts more than once
-                    IkGui.text(String.format("Meshes drawn: %,d", drawn[0]));
+                    final int early = drawn[InstanceDrawUpdate.LIST_SCENE_EARLY];
+                    final int late = drawn[InstanceDrawUpdate.LIST_SCENE_LATE];
+                    IkGui.text(
+                            String.format(
+                                    "Meshes drawn: %,d (%,d early, %,d late)",
+                                    early + late, early, late));
+                    IkGui.text(
+                            String.format(
+                                    "Meshes hidden by occlusion: %,d",
+                                    drawn[InstanceDrawUpdate.COUNTER_OCCLUDED]));
                     IkGui.text("Meshes in shadow cascades: " + shadows);
                 }
                 IkGui.text(String.format("Triangles: %,d", triangles));
@@ -251,6 +267,7 @@ public class GraphicsDebug extends GuiWindow {
                 normalLength.draw(width, height);
                 freezeObserver.draw(width, height);
                 disableCulling.draw(width, height);
+                disableOcclusion.draw(width, height);
                 IkGui.textWrapped(
                         "Culling, level of detail and streaming use the observer, so freeze it to"
                                 + " inspect them from outside.");
@@ -321,6 +338,9 @@ public class GraphicsDebug extends GuiWindow {
         }
         if (disableCulling.checkResult()) {
             visualizers.setCullingDisabled(disableCulling.getState());
+        }
+        if (disableOcclusion.checkResult()) {
+            visualizers.setOcclusionDisabled(disableOcclusion.getState());
         }
         if (changed && visualizers.anyEnabled()) {
             final int config = GraphicsManager.getPipelineConfig();

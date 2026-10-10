@@ -41,6 +41,9 @@ public class VulkanState {
     /** Everything placed in the scene, kept on the GPU across frames. */
     public InstanceTable instances = null;
 
+    /** The depth pyramid the scene is culled against, sized with the g-buffer. */
+    public DepthPyramid depthPyramid = null;
+
     /** For submitting work outside the frame, like texture uploads. */
     public ImmediateCommands immediateCommands = null;
 

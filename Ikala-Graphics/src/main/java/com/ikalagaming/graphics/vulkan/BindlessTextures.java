@@ -80,7 +80,8 @@ public class BindlessTextures {
                     .binding(ShaderBindings.BindlessTextures.BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
                     .descriptorCount(capacity)
-                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
+                    // Compute reads the depth buffer to build the depth pyramid
+                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT);
 
             VkDescriptorSetLayoutCreateInfo layoutCreateInfo =
                     VkDescriptorSetLayoutCreateInfo.calloc(stack)

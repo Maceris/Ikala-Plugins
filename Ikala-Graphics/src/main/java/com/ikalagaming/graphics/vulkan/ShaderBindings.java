@@ -74,13 +74,57 @@ public class ShaderBindings {
         /** How many instance slots there are. */
         public static final int PUSH_CONSTANT_SLOT_COUNT_OFFSET = 9 * Long.BYTES;
 
-        /** How many mesh slots there are, which is how many commands each pass has. */
+        /** How many mesh slots there are, which is how many commands each list has. */
         public static final int PUSH_CONSTANT_MESH_SLOT_COUNT_OFFSET =
                 PUSH_CONSTANT_SLOT_COUNT_OFFSET + Integer.BYTES;
 
-        /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE =
+        /** Device address of the visibility history, aligned to 8 after the two counts. */
+        public static final int PUSH_CONSTANT_HISTORY_OFFSET =
                 PUSH_CONSTANT_MESH_SLOT_COUNT_OFFSET + Integer.BYTES;
+
+        /** Device address of this frame's occlusion view, see {@link #VIEW_SIZE}. */
+        public static final int PUSH_CONSTANT_VIEW_OFFSET =
+                PUSH_CONSTANT_HISTORY_OFFSET + Long.BYTES;
+
+        /** Which phase this is, {@link #PHASE_EARLY} or {@link #PHASE_LATE}. */
+        public static final int PUSH_CONSTANT_PHASE_OFFSET = PUSH_CONSTANT_VIEW_OFFSET + Long.BYTES;
+
+        /** The size of the push constants in bytes. */
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_PHASE_OFFSET + Integer.BYTES;
+
+        /** The phase that culls the shadow cascades, and the scene by last frame's history. */
+        public static final int PHASE_EARLY = 0;
+
+        /** The phase that culls the scene against the depth pyramid. */
+        public static final int PHASE_LATE = 1;
+
+        /*
+         * The occlusion view (std430): mat4 projectionView; ivec2 size; int levels; uint flags;
+         */
+
+        /** The pyramid's projection × view matrix, moved into render space. */
+        public static final int VIEW_MATRIX_OFFSET = 0;
+
+        /** The size of the depth buffer the pyramid was built from, two ints. */
+        public static final int VIEW_DEPTH_SIZE_OFFSET = 4 * 4 * Float.BYTES;
+
+        /** How many levels the pyramid has. */
+        public static final int VIEW_LEVELS_OFFSET = VIEW_DEPTH_SIZE_OFFSET + 2 * Integer.BYTES;
+
+        /** The flags, {@link #FLAG_OCCLUSION} and {@link #FLAG_PYRAMID_VALID}. */
+        public static final int VIEW_FLAGS_OFFSET = VIEW_LEVELS_OFFSET + Integer.BYTES;
+
+        /** The size of the occlusion view in bytes. */
+        public static final int VIEW_SIZE = VIEW_FLAGS_OFFSET + Integer.BYTES;
+
+        /** Set in the view flags when the scene is culled by occlusion. */
+        public static final int FLAG_OCCLUSION = 1;
+
+        /** Set in the view flags when the pyramid holds a depth buffer. */
+        public static final int FLAG_PYRAMID_VALID = 2;
+
+        /** The binding of the depth pyramid, every level, in set 0. */
+        public static final int PYRAMID_BINDING = 0;
 
         /** How many planes each pass's frustum has. */
         public static final int PLANES_PER_PASS = 6;
@@ -90,6 +134,38 @@ public class ShaderBindings {
 
         /** Private constructor so this class is not instantiated. */
         private Cull() {
+            cutItOut();
+        }
+    }
+
+    /** Depth pyramid shader variables, see {@code depth_pyramid.comp}. */
+    public static class DepthPyramid {
+        /** The size of what is read, two ints. */
+        public static final int PUSH_CONSTANT_SOURCE_SIZE_OFFSET = 0;
+
+        /** The size of the level being written, two ints. */
+        public static final int PUSH_CONSTANT_DESTINATION_SIZE_OFFSET = 2 * Integer.BYTES;
+
+        /** The level being written. */
+        public static final int PUSH_CONSTANT_LEVEL_OFFSET = 4 * Integer.BYTES;
+
+        /** The bindless index of this frame's depth buffer. */
+        public static final int PUSH_CONSTANT_DEPTH_INDEX_OFFSET = 5 * Integer.BYTES;
+
+        /** The size of the push constants in bytes. */
+        public static final int PUSH_CONSTANTS_SIZE = 6 * Integer.BYTES;
+
+        /** The binding of the level being written, in set 0. */
+        public static final int DESTINATION_BINDING = 0;
+
+        /** The binding of every level, to read the one before, in set 0. */
+        public static final int PYRAMID_BINDING = 1;
+
+        /** The width and height of each compute workgroup, in texels. */
+        public static final int WORKGROUP_SIZE = 8;
+
+        /** Private constructor so this class is not instantiated. */
+        private DepthPyramid() {
             cutItOut();
         }
     }

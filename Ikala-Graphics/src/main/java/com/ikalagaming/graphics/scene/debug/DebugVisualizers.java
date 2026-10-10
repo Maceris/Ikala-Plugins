@@ -93,6 +93,15 @@ public class DebugVisualizers {
     private volatile boolean cullingDisabled;
 
     /**
+     * Whether occlusion culling is turned off, so everything inside the view is drawn, to compare
+     * against. Not a visualizer, so {@link #anyEnabled()} ignores it.
+     *
+     * @param occlusionDisabled Whether to draw hidden things too.
+     * @return Whether hidden things are drawn too.
+     */
+    private volatile boolean occlusionDisabled;
+
+    /**
      * Whether any visualizer is turned on.
      *
      * @return True if at least one visualizer is on.

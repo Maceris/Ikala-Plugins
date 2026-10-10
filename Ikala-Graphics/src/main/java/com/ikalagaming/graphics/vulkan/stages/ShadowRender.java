@@ -134,8 +134,12 @@ public class ShadowRender implements RenderStage {
                         .get(
                                 ShaderBindings.Shadow.PUSH_CONSTANT_PROJECTION_VIEW_MATRIX_OFFSET,
                                 pushConstants);
-                // The scene is culled pass 0, the cascades after it
-                renderCascade(commandBuffer, vulkanState, shadowMaps[i], 1 + i, pushConstants);
+                renderCascade(
+                        commandBuffer,
+                        vulkanState,
+                        shadowMaps[i],
+                        InstanceDrawUpdate.LIST_FIRST_CASCADE + i,
+                        pushConstants);
             }
 
             transitionShadowMaps(
@@ -158,14 +162,14 @@ public class ShadowRender implements RenderStage {
      * @param commandBuffer The command buffer to record into.
      * @param state The Vulkan state.
      * @param shadowMap The shadow map to render into, as a depth attachment.
-     * @param pass Which culled pass the cascade is, to find its draw commands.
+     * @param list Which visible list the cascade is, to find its draw commands.
      * @param pushConstants The push constants, with the cascade's matrix already filled out.
      */
     private void renderCascade(
             @NonNull VkCommandBuffer commandBuffer,
             @NonNull VulkanState state,
             @NonNull TextureInfoVulkan shadowMap,
-            int pass,
+            int list,
             @NonNull ByteBuffer pushConstants) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
         final int width = CascadeShadowSplit.SHADOW_MAP_WIDTH;
@@ -225,7 +229,7 @@ public class ShadowRender implements RenderStage {
                     vkCmdDrawIndexedIndirect(
                             commandBuffer,
                             frameData.sceneDrawCommands.buffer,
-                            (long) pass
+                            (long) list
                                     * frameData.meshSlotCount
                                     * InstanceDrawUpdate.DRAW_COMMAND_SIZE,
                             frameData.meshSlotCount,

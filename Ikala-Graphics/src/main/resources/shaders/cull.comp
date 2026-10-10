@@ -1,11 +1,18 @@
 #version 460
 #extension GL_EXT_buffer_reference : require
 
-// Decides what every pass draws. Each thread takes one instance slot and one pass (the scene, then
-// each shadow cascade), tests the bounds of each of the instance's meshes against that pass's
-// frustum, and for each visible one adds the instance to that mesh's draw command and writes
-// (slot, material) into the pass's visible list. The CPU set aside room in the list for every
-// instance of every mesh, so nothing can overflow.
+// Decides what every pass draws. Each thread takes one instance slot and one pass, tests the bounds
+// of each of the instance's meshes against that pass's frustum, and for each visible one adds the
+// instance to that mesh's draw command and writes (slot, material) into a visible list. The CPU set
+// aside room in each list for every instance of every mesh, so nothing can overflow.
+//
+// The scene is culled in two phases, around the depth pyramid:
+// - Early, with the shadow cascades: the scene draws what was visible last frame, by the history
+//   kept for each mesh of each instance.
+// - Late, after the pyramid is built from what the early draws left in the depth buffer: everything
+//   in the frustum is tested against the pyramid, what is visible and wasn't drawn early is drawn
+//   now, and the history is updated for next frame.
+// DepthPyramidMath has the occlusion test in Java, with tests.
 
 // See InstanceTable for the layout
 struct Instance {
@@ -79,6 +86,26 @@ layout(buffer_reference, std430, buffer_reference_align = 4) buffer Counters {
     uint counters[];
 };
 
+// Whether each mesh of each instance was visible last frame, indexed like the overrides
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer History {
+    uint history[];
+};
+
+// What the occlusion test needs
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer View {
+    // The projection x view matrix the pyramid was drawn with, moved into render space
+    mat4 projectionView;
+    // The size of the depth buffer the pyramid was built from
+    ivec2 size;
+    // How many levels the pyramid has
+    int levels;
+    // FLAG_OCCLUSION and FLAG_PYRAMID_VALID
+    uint flags;
+};
+
+// Every level of the depth pyramid, the farthest depth under each texel
+layout(set = 0, binding = 0) uniform sampler2D pyramid;
+
 layout(push_constant) uniform Constants {
     Instances table;
     ModelMeshes modelMeshes;
@@ -91,8 +118,12 @@ layout(push_constant) uniform Constants {
     Counters counters;
     // How many instance slots there are
     uint slotCount;
-    // How many mesh slots there are, which is how many commands each pass has
+    // How many mesh slots there are, which is how many commands each list has
     uint meshSlotCount;
+    History history;
+    View view;
+    // PHASE_EARLY or PHASE_LATE
+    uint phase;
 };
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
@@ -102,6 +133,27 @@ const uint FLAG_ALIVE = 1;
 
 // A model mesh whose mesh isn't registered
 const uint NO_MESH = 0xFFFFFFFFu;
+
+// The phases, see the top
+const uint PHASE_EARLY = 0;
+const uint PHASE_LATE = 1;
+
+// The visible lists and their draw commands, see InstanceDrawUpdate
+const uint LIST_SCENE_EARLY = 0;
+const uint LIST_SCENE_LATE = 1;
+const uint LIST_FIRST_CASCADE = 2;
+const uint LIST_COUNT = 5;
+
+// The counter of meshes the occlusion test hid, after one counter per list
+const uint COUNTER_OCCLUDED = LIST_COUNT;
+
+// Set in the view flags when the scene is culled by occlusion
+const uint FLAG_OCCLUSION = 1;
+// Set in the view flags when the pyramid holds a depth buffer
+const uint FLAG_PYRAMID_VALID = 2;
+
+// How far in front of the eye in clip space w a box's corners must be for it to be projected
+const float MIN_CLIP_W = 1e-5;
 
 // Whether a box is at least partly inside all six planes of a pass
 bool inFrustum(uint pass, vec3 center, vec3 extents)
@@ -118,9 +170,74 @@ bool inFrustum(uint pass, vec3 center, vec3 extents)
     return true;
 }
 
+// The pixel a screen coordinate falls in, kept on screen
+int toPixel(float coordinate, int size)
+{
+    return int(clamp(floor(coordinate), 0.0, float(size - 1)));
+}
+
+// The pyramid texel a depth pixel is under at a level, along one axis
+int texelAt(int pixel, int size, int level)
+{
+    return min(pixel >> (level + 1), max(1, size >> (level + 1)) - 1);
+}
+
+// Whether a render space box is hidden behind what the pyramid saw
+bool occluded(vec3 center, vec3 extents)
+{
+    vec2 low = vec2(1e30);
+    vec2 high = vec2(-1e30);
+    float nearest = 1e30;
+    for (int i = 0; i < 8; ++i) {
+        vec3 sides = vec3(
+            (i & 1) == 0 ? -1.0 : 1.0, (i & 2) == 0 ? -1.0 : 1.0, (i & 4) == 0 ? -1.0 : 1.0);
+        vec4 clip = view.projectionView * vec4(center + extents * sides, 1.0);
+        // Reaching behind the eye, it may be all around it
+        if (clip.w <= MIN_CLIP_W) {
+            return false;
+        }
+        vec3 ndc = clip.xyz / clip.w;
+        low = min(low, ndc.xy);
+        high = max(high, ndc.xy);
+        nearest = min(nearest, ndc.z);
+    }
+
+    // Device y points up and pixel rows go down
+    ivec2 size = view.size;
+    int x0 = toPixel((low.x * 0.5 + 0.5) * float(size.x), size.x);
+    int x1 = toPixel((high.x * 0.5 + 0.5) * float(size.x), size.x);
+    int y0 = toPixel((0.5 - high.y * 0.5) * float(size.y), size.y);
+    int y1 = toPixel((0.5 - low.y * 0.5) * float(size.y), size.y);
+
+    // The finest level where the rectangle is under at most 2 x 2 texels
+    int level = 0;
+    while (level < view.levels - 1
+            && (texelAt(x1, size.x, level) - texelAt(x0, size.x, level) > 1
+                || texelAt(y1, size.y, level) - texelAt(y0, size.y, level) > 1)) {
+        level += 1;
+    }
+    float farthest = 0.0;
+    for (int y = texelAt(y0, size.y, level); y <= texelAt(y1, size.y, level); ++y) {
+        for (int x = texelAt(x0, size.x, level); x <= texelAt(x1, size.x, level); ++x) {
+            farthest = max(farthest, texelFetch(pyramid, ivec2(x, y), level).r);
+        }
+    }
+    return nearest > farthest;
+}
+
+// Add an instance's mesh to the draw command for that mesh in a list
+void draw(uint list, uint meshSlot, uint slot, uint material)
+{
+    uint command = list * meshSlotCount + meshSlot;
+    uint index = atomicAdd(commands.commands[command].instanceCount, 1u);
+    visible.visible[commands.commands[command].firstInstance + index] = uvec2(slot, material);
+    atomicAdd(counters.counters[list], 1u);
+}
+
 void main()
 {
     uint slot = gl_GlobalInvocationID.x;
+    // Early, the scene then each cascade; late, only the scene
     uint pass = gl_GlobalInvocationID.y;
     if (slot >= slotCount) {
         return;
@@ -149,17 +266,37 @@ void main()
         vec3 localExtents = (mesh.aabbMax.xyz - mesh.aabbMin.xyz) * 0.5;
         vec3 center = (model * vec4(localCenter, 1.0)).xyz;
         vec3 extents = absolute * localExtents;
-        if (!inFrustum(pass, center, extents)) {
-            continue;
-        }
-
-        uint material = overrides.overrides[instance.info.w + i];
+        bool inView = inFrustum(pass, center, extents);
+        uint entry = instance.info.w + i;
+        uint material = overrides.overrides[entry];
         if (material == 0) {
             material = modelMesh.material;
         }
-        uint command = pass * meshSlotCount + modelMesh.slot;
-        uint index = atomicAdd(commands.commands[command].instanceCount, 1u);
-        visible.visible[commands.commands[command].firstInstance + index] = uvec2(slot, material);
-        atomicAdd(counters.counters[pass], 1u);
+
+        if (phase == PHASE_EARLY) {
+            if (!inView) {
+                continue;
+            }
+            if (pass == 0) {
+                // With occlusion on, what wasn't visible last frame waits for the late test
+                if ((view.flags & FLAG_OCCLUSION) == 0 || history.history[entry] != 0) {
+                    draw(LIST_SCENE_EARLY, modelMesh.slot, slot, material);
+                }
+            } else {
+                draw(LIST_FIRST_CASCADE + pass - 1, modelMesh.slot, slot, material);
+            }
+            continue;
+        }
+
+        bool seen = inView;
+        if (seen && (view.flags & FLAG_PYRAMID_VALID) != 0 && occluded(center, extents)) {
+            seen = false;
+            atomicAdd(counters.counters[COUNTER_OCCLUDED], 1u);
+        }
+        bool drawnEarly = history.history[entry] != 0;
+        history.history[entry] = seen ? 1u : 0u;
+        if (seen && !drawnEarly) {
+            draw(LIST_SCENE_LATE, modelMesh.slot, slot, material);
+        }
     }
 }

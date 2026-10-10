@@ -1167,7 +1167,7 @@ public class VulkanInstance {
         return true;
     }
 
-    /** Set up the instance transform and culling shaders. */
+    /** Set up the instance transform, culling and depth pyramid shaders. */
     private void initializeInstanceShader() {
         List<ShaderVulkan.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
@@ -1185,6 +1185,15 @@ public class VulkanInstance {
                         ShaderVulkan.Type.COMPUTE,
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(RenderStage.Type.CULL, new ShaderVulkan(cullModules, state));
+
+        List<ShaderVulkan.ShaderModuleData> pyramidModules = new ArrayList<>();
+        pyramidModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/depth_pyramid.comp",
+                        ShaderVulkan.Type.COMPUTE,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(
+                RenderStage.Type.DEPTH_PYRAMID, new ShaderVulkan(pyramidModules, state));
     }
 
     /** Set up the animation shader and uniforms. */

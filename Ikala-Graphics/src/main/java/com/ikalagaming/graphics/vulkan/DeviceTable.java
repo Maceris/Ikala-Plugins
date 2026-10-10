@@ -211,7 +211,8 @@ public final class DeviceTable {
     }
 
     /**
-     * Make earlier frames' reads and copies finish before tables are written.
+     * Make earlier frames' reads and copies finish before tables are written, and the writes of
+     * tables shaders keep up themselves visible to the copy when one grows.
      *
      * @param commandBuffer The frame's command buffer.
      * @param stack The stack to allocate on.
@@ -224,7 +225,7 @@ public final class DeviceTable {
                         | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
                         | VK_PIPELINE_STAGE_2_COPY_BIT
                         | VK_PIPELINE_STAGE_2_CLEAR_BIT,
-                VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                 VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT,
                 VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT,
                 stack);
@@ -243,7 +244,7 @@ public final class DeviceTable {
                 VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT,
                 VK_ACCESS_2_TRANSFER_WRITE_BIT,
                 VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT,
-                VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+                VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                 stack);
     }
 

@@ -44,28 +44,41 @@ public class PerFrameData {
 
     /**
      * What each pass draws: (instance slot, material) pairs, grouped by mesh, which draws find by
-     * their first instance. The first {@link #passCount} regions are filled by the culling pass,
-     * one per pass; after them come the CPU-written groups of {@link #modelDrawInfo}.
+     * their first instance. The first regions are filled by the culling pass, one per visible list
+     * (see {@code InstanceDrawUpdate.LIST_COUNT}); after them come the CPU-written groups of {@link
+     * #modelDrawInfo}.
      */
     public SharedBuffer visibleInstances;
 
     /** The frustum planes of each pass this frame, for the culling pass. */
     public SharedBuffer cullFrusta;
 
-    /** How many instances each pass drew, counted by the culling pass and read back later. */
+    /**
+     * How many meshes each visible list drew, then how many the occlusion test hid, counted by the
+     * culling pass and read back later.
+     */
     public SharedBuffer cullCounters;
 
-    /** How many passes are culled: the scene, then each shadow cascade. */
-    public int passCount;
+    /**
+     * What the occlusion test needs this frame: the matrix that projects onto the depth pyramid,
+     * its size, and the flags. See {@code ShaderBindings.Cull.VIEW_SIZE}.
+     */
+    public SharedBuffer cullView;
+
+    /** Whether the scene is culled against the depth pyramid this frame. */
+    public boolean occlusion;
+
+    /** Whether the depth pyramid is built this frame, rather than kept from before. */
+    public boolean buildPyramid;
 
     /**
-     * How many mesh slots there are this frame, which is how many draw commands each culled pass
-     * has, starting at {@code pass * meshSlotCount} in {@link #sceneDrawCommands}.
+     * How many mesh slots there are this frame, which is how many draw commands each visible list
+     * has, starting at {@code list * meshSlotCount} in {@link #sceneDrawCommands}.
      */
     public int meshSlotCount;
 
     /**
-     * Indirect draw commands this frame: one per mesh slot per culled pass, which the culling pass
+     * Indirect draw commands this frame: one per mesh slot per visible list, which the culling pass
      * fills in, then the CPU-written commands of {@link #modelDrawInfo}.
      */
     public SharedBuffer sceneDrawCommands;

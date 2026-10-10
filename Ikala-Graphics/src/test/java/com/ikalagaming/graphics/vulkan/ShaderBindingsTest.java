@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.vulkan;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -33,6 +34,23 @@ class ShaderBindingsTest {
         assertEquals(496, ShaderBindings.Light.DEPTH_SAMPLER_INDEX_OFFSET);
         assertEquals(500, ShaderBindings.Light.SHADOW_MAP_0_INDEX_OFFSET);
         assertEquals(512, ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
+    }
+
+    @Test
+    void testCullOffsets() {
+        // 9 buffer addresses, 2 counts, 2 more addresses, the phase
+        assertEquals(72, ShaderBindings.Cull.PUSH_CONSTANT_SLOT_COUNT_OFFSET);
+        assertEquals(80, ShaderBindings.Cull.PUSH_CONSTANT_HISTORY_OFFSET);
+        assertEquals(88, ShaderBindings.Cull.PUSH_CONSTANT_VIEW_OFFSET);
+        assertEquals(96, ShaderBindings.Cull.PUSH_CONSTANT_PHASE_OFFSET);
+        assertEquals(100, ShaderBindings.Cull.PUSH_CONSTANTS_SIZE);
+        // The guaranteed minimum push constant space
+        assertTrue(ShaderBindings.Cull.PUSH_CONSTANTS_SIZE <= 128);
+        // View {mat4 projectionView; ivec2 size; int levels; uint flags;}
+        assertEquals(64, ShaderBindings.Cull.VIEW_DEPTH_SIZE_OFFSET);
+        assertEquals(72, ShaderBindings.Cull.VIEW_LEVELS_OFFSET);
+        assertEquals(76, ShaderBindings.Cull.VIEW_FLAGS_OFFSET);
+        assertEquals(80, ShaderBindings.Cull.VIEW_SIZE);
     }
 
     @Test

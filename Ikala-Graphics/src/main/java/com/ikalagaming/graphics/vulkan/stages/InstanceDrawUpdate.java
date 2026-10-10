@@ -10,6 +10,7 @@ import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Observer;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
+import com.ikalagaming.graphics.vulkan.DepthPyramid;
 import com.ikalagaming.graphics.vulkan.FrustumPlanes;
 import com.ikalagaming.graphics.vulkan.InstanceTable;
 import com.ikalagaming.graphics.vulkan.MeshRegistry;
@@ -40,10 +41,15 @@ import java.util.Map;
  * meshes and models, not instances:
  *
  * <ul>
- *   <li>One draw command per mesh slot per pass, with its instance count at zero and its first
- *       instance pointing at the room set aside for that mesh's visible instances.
+ *   <li>One draw command per mesh slot per visible list, with its instance count at zero and its
+ *       first instance pointing at the room set aside for that mesh's visible instances.
  *   <li>The frustum planes of each pass: the scene, from the observer, then each shadow cascade.
+ *   <li>The occlusion view: whether the scene is culled against the depth pyramid, and how to
+ *       project onto it.
  * </ul>
+ *
+ * <p>There are more visible lists than passes, since the scene is culled in two phases, see {@code
+ * cull.comp}: the early scene list, the late scene list, then a list for each cascade.
  *
  * <p>Models culling can't draw, animated ones, get CPU-written commands and visible entries after
  * the culled ones, as do all models while the normal or tangent lines are shown.
@@ -57,8 +63,27 @@ public class InstanceDrawUpdate implements RenderStage {
     /** The size of one visible instance entry: its slot and its material. */
     public static final int VISIBLE_ENTRY_SIZE = 2 * Integer.BYTES;
 
-    /** How many passes are culled: the scene, then each shadow cascade. */
+    /** How many frusta are culled against: the scene, then each shadow cascade. */
     public static final int PASS_COUNT = 1 + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT;
+
+    /** The visible list of what the scene draws before the depth pyramid is built. */
+    public static final int LIST_SCENE_EARLY = 0;
+
+    /** The visible list of what the scene draws after the occlusion test. */
+    public static final int LIST_SCENE_LATE = 1;
+
+    /** The visible list of the first shadow cascade, the others following it. */
+    public static final int LIST_FIRST_CASCADE = 2;
+
+    /** How many visible lists there are, each with its own draw commands. */
+    public static final int LIST_COUNT =
+            LIST_FIRST_CASCADE + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT;
+
+    /** The counter of meshes the occlusion test hid, after one counter per list. */
+    public static final int COUNTER_OCCLUDED = LIST_COUNT;
+
+    /** How many counters the culling pass keeps. */
+    public static final int COUNTER_COUNT = COUNTER_OCCLUDED + 1;
 
     /** One model's instances, collected while the instance registry is locked. */
     private static final class ModelInstances {
@@ -136,7 +161,6 @@ public class InstanceDrawUpdate implements RenderStage {
         final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
         final InstanceTable instances = vulkanState.instances;
         frameData.modelDrawInfo.clear();
-        frameData.passCount = PASS_COUNT;
         readCounters(frameData, instances);
 
         // Culling needs the cascades before the shadow stage draws them
@@ -181,9 +205,9 @@ public class InstanceDrawUpdate implements RenderStage {
             }
         }
 
-        // Lay out the listed models after the culled passes
-        final int culledCommands = PASS_COUNT * meshSlots;
-        int visibleCount = PASS_COUNT * culledEntries;
+        // Lay out the listed models after the culled lists
+        final int culledCommands = LIST_COUNT * meshSlots;
+        int visibleCount = LIST_COUNT * culledEntries;
         int commandCount = culledCommands;
         int poseCount = 0;
         final Map<Model, Poses> modelPoses = new LinkedHashMap<>();
@@ -223,7 +247,7 @@ public class InstanceDrawUpdate implements RenderStage {
         frameData.cullFrusta.ensureCapacity(
                 (long) PASS_COUNT * ShaderBindings.Cull.PLANES_PER_PASS * 4 * Float.BYTES,
                 vulkanState);
-        frameData.cullCounters.ensureCapacity((long) PASS_COUNT * Integer.BYTES, vulkanState);
+        frameData.cullCounters.ensureCapacity((long) COUNTER_COUNT * Integer.BYTES, vulkanState);
 
         // The buffers are host coherent and the GPU is done with this frame's copies
         final ByteBuffer commands =
@@ -232,6 +256,7 @@ public class InstanceDrawUpdate implements RenderStage {
                         Math.max(1, commandCount) * DRAW_COMMAND_SIZE);
         writeCulledCommands(commands, meshes, meshSlots, firstVisible, culledEntries);
         writeFrusta(scene, frameData, visualizers.isCullingDisabled());
+        writeOcclusionView(scene, window, vulkanState, frameData, visualizers);
 
         if (listed.isEmpty()) {
             return;
@@ -290,57 +315,57 @@ public class InstanceDrawUpdate implements RenderStage {
     }
 
     /**
-     * Read back how many instances each pass drew the last time this frame's buffers were used,
-     * then clear the counters for the culling pass.
+     * Read back how many meshes each list drew, and how many were hidden, the last time this
+     * frame's buffers were used, then clear the counters for the culling pass.
      *
      * @param frameData This frame's data, which the GPU is done with.
      * @param instances Where to note the counts.
      */
     private static void readCounters(
             @NonNull PerFrameData frameData, @NonNull InstanceTable instances) {
-        if (frameData.cullCounters.allocationInfo.size() < (long) PASS_COUNT * Integer.BYTES) {
+        if (frameData.cullCounters.allocationInfo.size() < (long) COUNTER_COUNT * Integer.BYTES) {
             return;
         }
         IntBuffer counters =
                 MemoryUtil.memIntBuffer(
-                        frameData.cullCounters.allocationInfo.pMappedData(), PASS_COUNT);
-        int[] counts = new int[PASS_COUNT];
+                        frameData.cullCounters.allocationInfo.pMappedData(), COUNTER_COUNT);
+        int[] counts = new int[COUNTER_COUNT];
         counters.get(0, counts);
         instances.setDrawnCounts(counts);
-        for (int i = 0; i < PASS_COUNT; ++i) {
+        for (int i = 0; i < COUNTER_COUNT; ++i) {
             counters.put(i, 0);
         }
     }
 
     /**
-     * Write the draw command of every mesh slot for every culled pass, with no instances yet.
+     * Write the draw command of every mesh slot for every culled list, with no instances yet.
      *
      * @param commands The mapped draw command buffer.
      * @param meshes Where each mesh is.
      * @param meshSlots How many mesh slots there are.
-     * @param firstVisible Where each mesh slot's room starts in a pass's visible list.
-     * @param passEntries How many visible entries each pass has room for.
+     * @param firstVisible Where each mesh slot's room starts in a visible list.
+     * @param listEntries How many visible entries each list has room for.
      */
     private static void writeCulledCommands(
             @NonNull ByteBuffer commands,
             @NonNull MeshRegistry meshes,
             int meshSlots,
             int @NonNull [] firstVisible,
-            int passEntries) {
+            int listEntries) {
         meshes.visitAll(
                 (slot, resident, generation, vertexOffset, firstIndex, indexCount, min, max) -> {
                     if (slot >= meshSlots) {
                         return;
                     }
-                    for (int pass = 0; pass < PASS_COUNT; ++pass) {
+                    for (int list = 0; list < LIST_COUNT; ++list) {
                         writeCommand(
                                 commands,
-                                (pass * meshSlots + slot) * DRAW_COMMAND_SIZE,
+                                (list * meshSlots + slot) * DRAW_COMMAND_SIZE,
                                 resident ? indexCount : 0,
                                 0,
                                 firstIndex,
                                 vertexOffset,
-                                pass * passEntries + firstVisible[slot]);
+                                list * listEntries + firstVisible[slot]);
                     }
                 });
     }
@@ -379,6 +404,61 @@ public class InstanceDrawUpdate implements RenderStage {
             FrustumPlanes.extract(cascade, out);
             planes.put((1 + i) * out.length, out);
         }
+    }
+
+    /**
+     * Decide whether the scene is culled against the depth pyramid this frame, and whether the
+     * pyramid is built from this frame's depth, then write what the occlusion test needs.
+     *
+     * <p>The pyramid is built every frame unless the observer is frozen, when it keeps the one it
+     * saw last so the frozen view keeps culling the same, wherever the camera goes. Until a pyramid
+     * has been built, as after a resize, the occlusion test lets everything through.
+     *
+     * @param scene The scene.
+     * @param window The window, whose size the scene is drawn at.
+     * @param state The Vulkan state.
+     * @param frameData This frame's data.
+     * @param visualizers The debug switches.
+     */
+    private static void writeOcclusionView(
+            @NonNull Scene scene,
+            @NonNull Window window,
+            @NonNull VulkanState state,
+            @NonNull PerFrameData frameData,
+            @NonNull DebugVisualizers visualizers) {
+        final DepthPyramid pyramid = state.depthPyramid;
+        frameData.occlusion =
+                !visualizers.isCullingDisabled() && !visualizers.isOcclusionDisabled();
+        frameData.buildPyramid = frameData.occlusion && !scene.isObserverFrozen();
+        if (frameData.buildPyramid) {
+            // The same size the scene draws at, the g-buffer can be bigger than the window
+            final Observer observer = scene.getObserver();
+            pyramid.markBuilt(
+                    Math.min(window.getWidth(), frameData.gBuffer.width()),
+                    Math.min(window.getHeight(), frameData.gBuffer.height()),
+                    observer.getPosition(),
+                    new Matrix4f(observer.getProjectionMatrix()).mul(observer.getViewMatrix()));
+        }
+
+        final ByteBuffer view =
+                MemoryUtil.memByteBuffer(
+                        frameData.cullView.allocationInfo.pMappedData(),
+                        ShaderBindings.Cull.VIEW_SIZE);
+        pyramid.projectionFrom(scene.getCamera().getPosition(), new Matrix4f())
+                .get(ShaderBindings.Cull.VIEW_MATRIX_OFFSET, view);
+        view.putInt(ShaderBindings.Cull.VIEW_DEPTH_SIZE_OFFSET, pyramid.getDepthWidth());
+        view.putInt(
+                ShaderBindings.Cull.VIEW_DEPTH_SIZE_OFFSET + Integer.BYTES,
+                pyramid.getDepthHeight());
+        view.putInt(ShaderBindings.Cull.VIEW_LEVELS_OFFSET, pyramid.getLevels());
+        int flags = 0;
+        if (frameData.occlusion) {
+            flags |= ShaderBindings.Cull.FLAG_OCCLUSION;
+        }
+        if (pyramid.isValid()) {
+            flags |= ShaderBindings.Cull.FLAG_PYRAMID_VALID;
+        }
+        view.putInt(ShaderBindings.Cull.VIEW_FLAGS_OFFSET, flags);
     }
 
     /**

@@ -78,6 +78,8 @@ public class PipelineManagerVulkan {
     private final InstanceDrawUpdate stageInstanceDrawUpdate;
     private final InstanceTransform stageInstanceTransform;
     private final InstanceCull stageInstanceCull;
+    private final InstanceCull stageInstanceCullLate;
+    private final DepthPyramidBuild stageDepthPyramidBuild;
     private final SceneRender stageSceneRender;
     private final ShadowRender stageShadowRender;
     private final SkyboxRender stageSkyboxRender;
@@ -101,8 +103,17 @@ public class PipelineManagerVulkan {
         stageInstanceTransform =
                 new InstanceTransform(shaders.getShader(RenderStage.Type.INSTANCES));
         stageInstanceTransform.initialize(state);
-        stageInstanceCull = new InstanceCull(shaders.getShader(RenderStage.Type.CULL));
+        stageInstanceCull =
+                new InstanceCull(
+                        shaders.getShader(RenderStage.Type.CULL), ShaderBindings.Cull.PHASE_EARLY);
         stageInstanceCull.initialize(state);
+        stageInstanceCullLate =
+                new InstanceCull(
+                        shaders.getShader(RenderStage.Type.CULL), ShaderBindings.Cull.PHASE_LATE);
+        stageInstanceCullLate.initialize(state);
+        stageDepthPyramidBuild =
+                new DepthPyramidBuild(shaders.getShader(RenderStage.Type.DEPTH_PYRAMID));
+        stageDepthPyramidBuild.initialize(state);
         stageSceneRender = new SceneRender(shaders.getShader(RenderStage.Type.SCENE));
         stageSceneRender.initialize(state);
         stageGuiRender = new GuiRender(shaders.getShader(RenderStage.Type.GUI), fontAtlas);
@@ -149,7 +160,11 @@ public class PipelineManagerVulkan {
             stages.add(stageShadowRender);
         }
         if (RenderConfig.hasSceneStage(configuration)) {
+            // Draw what was visible last frame, test the rest against what that drew, draw those
             stages.add(stageSceneRender);
+            stages.add(stageDepthPyramidBuild);
+            stages.add(stageInstanceCullLate);
+            stages.add(stageSceneRender.getLate());
             stages.add(stageLightRender);
         }
         if (RenderConfig.hasSkyboxStage(configuration)) {
@@ -368,6 +383,8 @@ public class PipelineManagerVulkan {
             VkExtent3D imageExtent = VkExtent3D.calloc(stack);
             imageExtent.set(window.getWidth(), window.getHeight(), 1);
             state.realSize.set(window.getWidth(), window.getHeight(), 1);
+            state.depthPyramid = new DepthPyramid(state);
+            state.depthPyramid.resize(state, window.getWidth(), window.getHeight());
 
             // SharedBuffer adds device address and transfer destination usage to all of these
             final int STORAGE = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
@@ -412,6 +429,8 @@ public class PipelineManagerVulkan {
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].cullCounters =
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
+                state.perFrameData[i].cullView =
+                        SharedBuffer.allocate(ShaderBindings.Cull.VIEW_SIZE, state, STORAGE);
                 state.perFrameData[i].visibleInstances =
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 // Filled in by the culling pass as well as read as draws
@@ -496,11 +515,15 @@ public class PipelineManagerVulkan {
         stageInstanceDrawUpdate.cleanup(state);
         stageInstanceTransform.cleanup(state);
         stageInstanceCull.cleanup(state);
+        stageInstanceCullLate.cleanup(state);
+        stageDepthPyramidBuild.cleanup(state);
         stageSceneRender.cleanup(state);
         stageShadowRender.cleanup(state);
         stageSkyboxRender.cleanup(state);
         stageSwapchainPresent.cleanup(state);
         cleanupShadowMaps(state);
+        state.depthPyramid.cleanup(state);
+        state.depthPyramid = null;
         TextureInfoVulkan fontAtlasInfo = state.textureRegistry.remove(fontAtlas);
         if (fontAtlasInfo != null) {
             GraphicsManager.getDeletionQueue().add(fontAtlasInfo);
@@ -577,6 +600,8 @@ public class PipelineManagerVulkan {
         data.cullFrusta = null;
         SharedBuffer.free(data.cullCounters, state);
         data.cullCounters = null;
+        SharedBuffer.free(data.cullView, state);
+        data.cullView = null;
         SharedBuffer.free(data.visibleInstances, state);
         data.visibleInstances = null;
         SharedBuffer.free(data.sceneDrawCommands, state);
@@ -723,6 +748,7 @@ public class PipelineManagerVulkan {
                 cleanupIntermediaryTextures(state, state.perFrameData[i]);
                 createIntermediaryTextures(state, state.perFrameData[i], imageExtent);
             }
+            state.depthPyramid.resize(state, newWidth, newHeight);
         }
     }
 }

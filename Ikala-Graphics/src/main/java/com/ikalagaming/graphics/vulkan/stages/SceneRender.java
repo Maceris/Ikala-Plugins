@@ -14,6 +14,7 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.*;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -27,8 +28,11 @@ import java.nio.LongBuffer;
 import java.util.Arrays;
 
 /**
- * Handles rendering of scene geometry to the g-buffer. The g-buffer is left in the read only layout
- * for the light stage.
+ * Handles rendering of scene geometry to the g-buffer, in two halves around the depth pyramid. This
+ * stage is the early half: it clears the g-buffer, draws what the early culling pass listed, and
+ * leaves the depth readable for the pyramid. {@link #getLate()} is the late half: it draws what the
+ * late culling pass found, and the animated models, on top, then leaves the g-buffer in the read
+ * only layout for the light stage.
  */
 @Slf4j
 public class SceneRender implements RenderStage {
@@ -94,6 +98,14 @@ public class SceneRender implements RenderStage {
 
     /** The shader to use for rendering. */
     @NonNull @Setter private ShaderVulkan shader;
+
+    /**
+     * The late half of the scene pass, which shares this stage's pipelines and descriptor sets, so
+     * it is only initialized and cleaned up through this stage. -- GETTER -- The late half.
+     *
+     * @return The stage that draws the late half.
+     */
+    @Getter private final RenderStage late = this::renderLate;
 
     /** VkDescriptorSetLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorSetLayout;
@@ -175,74 +187,139 @@ public class SceneRender implements RenderStage {
         updateUniforms(scene, frameData);
         updateBindings(vulkanState, frameData);
 
-        // The g-buffer can be bigger than the window, but not smaller
-        final int width = Math.min(window.getWidth(), gBuffer.width());
-        final int height = Math.min(window.getHeight(), gBuffer.height());
-
         try (MemoryStack stack = MemoryStack.stackPush()) {
             transitionForRendering(commandBuffer, gBuffer, stack);
-
             // Cleared to zero like OpenGL, the material index clears to the default material
-            VkRenderingAttachmentInfo.Buffer colorAttachments =
-                    VkRenderingAttachmentInfo.calloc(GBuffer.TEXTURE_COUNT, stack);
-            for (int i = 0; i < GBuffer.TEXTURE_COUNT; i++) {
-                colorAttachments
-                        .get(i)
-                        .sType$Default()
-                        .imageView(gBuffer.textures()[i].view)
-                        .imageLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
-                        .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
-                        .storeOp(VK_ATTACHMENT_STORE_OP_STORE);
-            }
-            VkRenderingAttachmentInfo depthAttachment =
-                    VkRenderingAttachmentInfo.calloc(stack)
-                            .sType$Default()
-                            .imageView(gBuffer.depth().view)
-                            .imageLayout(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL)
-                            .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
-                            .storeOp(VK_ATTACHMENT_STORE_OP_STORE);
-            depthAttachment.clearValue().depthStencil().depth(1.0f);
+            drawList(
+                    commandBuffer,
+                    window,
+                    vulkanState,
+                    renderConfig,
+                    VK_ATTACHMENT_LOAD_OP_CLEAR,
+                    InstanceDrawUpdate.LIST_SCENE_EARLY,
+                    false,
+                    stack);
+            transitionForPyramid(commandBuffer, gBuffer, stack);
+        }
+    }
 
-            VkRenderingInfo renderingInfo =
-                    VkRenderingInfo.calloc(stack)
-                            .sType$Default()
-                            .renderArea(area -> area.extent().set(width, height))
-                            .layerCount(1)
-                            .pColorAttachments(colorAttachments)
-                            .pDepthAttachment(depthAttachment);
-            vkCmdBeginRendering(commandBuffer, renderingInfo);
-
-            if ((frameData.meshSlotCount > 0 || !frameData.modelDrawInfo.isEmpty())
-                    && width > 0
-                    && height > 0) {
-                drawModels(commandBuffer, scene, vulkanState, renderConfig, width, height, stack);
-            }
-
-            vkCmdEndRendering(commandBuffer);
-
+    /**
+     * Draw the late half of the scene pass on top of the early half, then leave the g-buffer ready
+     * for the light stage.
+     *
+     * @param scene The scene.
+     * @param window The window.
+     * @param vulkanState The Vulkan state.
+     * @param renderConfig The render configuration.
+     */
+    private void renderLate(
+            Scene scene,
+            @NonNull Window window,
+            @NonNull VulkanState vulkanState,
+            int renderConfig) {
+        final VkCommandBuffer commandBuffer =
+                vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
+        final GBuffer gBuffer = vulkanState.perFrameData[vulkanState.frameIndex].gBuffer;
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            transitionForLate(commandBuffer, gBuffer, stack);
+            drawList(
+                    commandBuffer,
+                    window,
+                    vulkanState,
+                    renderConfig,
+                    VK_ATTACHMENT_LOAD_OP_LOAD,
+                    InstanceDrawUpdate.LIST_SCENE_LATE,
+                    true,
+                    stack);
             transitionForReading(commandBuffer, gBuffer, stack);
         }
     }
 
     /**
-     * Record the scene pass's draws: one indirect draw for everything culling handled, then the
-     * animated models.
+     * Draw one of the scene's visible lists into the g-buffer, in its own rendering scope.
      *
      * @param commandBuffer The command buffer to record into.
-     * @param scene The scene.
+     * @param window The window, to find the size to render at.
+     * @param state The Vulkan state.
+     * @param renderConfig The render configuration, to pick wireframe or not.
+     * @param loadOp The VkAttachmentLoadOp: clear for the early half, load for the late one.
+     * @param list Which visible list to draw.
+     * @param listedModels Whether to also draw the animated models.
+     * @param stack The stack to allocate on.
+     */
+    private void drawList(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull Window window,
+            @NonNull VulkanState state,
+            int renderConfig,
+            int loadOp,
+            int list,
+            boolean listedModels,
+            @NonNull MemoryStack stack) {
+        final PerFrameData frameData = state.perFrameData[state.frameIndex];
+        final GBuffer gBuffer = frameData.gBuffer;
+        // The g-buffer can be bigger than the window, but not smaller
+        final int width = Math.min(window.getWidth(), gBuffer.width());
+        final int height = Math.min(window.getHeight(), gBuffer.height());
+
+        VkRenderingAttachmentInfo.Buffer colorAttachments =
+                VkRenderingAttachmentInfo.calloc(GBuffer.TEXTURE_COUNT, stack);
+        for (int i = 0; i < GBuffer.TEXTURE_COUNT; i++) {
+            colorAttachments
+                    .get(i)
+                    .sType$Default()
+                    .imageView(gBuffer.textures()[i].view)
+                    .imageLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+                    .loadOp(loadOp)
+                    .storeOp(VK_ATTACHMENT_STORE_OP_STORE);
+        }
+        VkRenderingAttachmentInfo depthAttachment =
+                VkRenderingAttachmentInfo.calloc(stack)
+                        .sType$Default()
+                        .imageView(gBuffer.depth().view)
+                        .imageLayout(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL)
+                        .loadOp(loadOp)
+                        .storeOp(VK_ATTACHMENT_STORE_OP_STORE);
+        depthAttachment.clearValue().depthStencil().depth(1.0f);
+
+        VkRenderingInfo renderingInfo =
+                VkRenderingInfo.calloc(stack)
+                        .sType$Default()
+                        .renderArea(area -> area.extent().set(width, height))
+                        .layerCount(1)
+                        .pColorAttachments(colorAttachments)
+                        .pDepthAttachment(depthAttachment);
+        vkCmdBeginRendering(commandBuffer, renderingInfo);
+
+        final boolean anyListed = listedModels && !frameData.modelDrawInfo.isEmpty();
+        if ((frameData.meshSlotCount > 0 || anyListed) && width > 0 && height > 0) {
+            drawModels(commandBuffer, state, renderConfig, width, height, list, anyListed, stack);
+        }
+
+        vkCmdEndRendering(commandBuffer);
+    }
+
+    /**
+     * Record one visible list's draws: one indirect draw for everything culling handled, then the
+     * animated models if asked.
+     *
+     * @param commandBuffer The command buffer to record into.
      * @param state The Vulkan state.
      * @param renderConfig The render configuration, to pick wireframe or not.
      * @param width The width to render in pixels.
      * @param height The height to render in pixels.
+     * @param list Which visible list to draw.
+     * @param listedModels Whether to also draw the animated models.
      * @param stack The stack to allocate on.
      */
     private void drawModels(
             @NonNull VkCommandBuffer commandBuffer,
-            @NonNull Scene scene,
             @NonNull VulkanState state,
             int renderConfig,
             int width,
             int height,
+            int list,
+            boolean listedModels,
             @NonNull MemoryStack stack) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
 
@@ -277,16 +354,18 @@ public class SceneRender implements RenderStage {
         vertexBuffers.put(0, state.geometry.getVertices().buffer);
         vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffers, vertexOffsets);
 
-        // Everything culling handled: the scene pass's commands, one per mesh slot
+        // Everything culling handled: the list's commands, one per mesh slot
         if (frameData.meshSlotCount > 0) {
             vkCmdDrawIndexedIndirect(
                     commandBuffer,
                     frameData.sceneDrawCommands.buffer,
-                    0,
+                    (long) list * frameData.meshSlotCount * InstanceDrawUpdate.DRAW_COMMAND_SIZE,
                     frameData.meshSlotCount,
                     InstanceDrawUpdate.DRAW_COMMAND_SIZE);
         }
-        drawListedModels(commandBuffer, state, frameData, vertexBuffers, vertexOffsets);
+        if (listedModels) {
+            drawListedModels(commandBuffer, state, frameData, vertexBuffers, vertexOffsets);
+        }
     }
 
     /**
@@ -402,6 +481,78 @@ public class SceneRender implements RenderStage {
         VkDependencyInfo dependencyInfo =
                 VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barriers);
         vkCmdPipelineBarrier2(commandBuffer, dependencyInfo);
+    }
+
+    /**
+     * Move the depth to the read only layout after the early half, so the depth pyramid can be
+     * built from it. The bindless descriptor it is read through expects that layout.
+     *
+     * @param commandBuffer The command buffer to record into.
+     * @param gBuffer The g-buffer.
+     * @param stack The stack to allocate on.
+     */
+    private static void transitionForPyramid(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull GBuffer gBuffer,
+            @NonNull MemoryStack stack) {
+        VkImageMemoryBarrier2.Buffer barriers = VkImageMemoryBarrier2.calloc(1, stack);
+        imageBarrier(
+                barriers.get(0),
+                gBuffer.depth().texture,
+                VK_IMAGE_ASPECT_DEPTH_BIT,
+                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
+                        | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+        vkCmdPipelineBarrier2(
+                commandBuffer,
+                VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barriers));
+    }
+
+    /**
+     * Get the g-buffer ready for the late half to draw on top of the early half: the depth goes
+     * back to being an attachment once the pyramid is built, and the colors are kept.
+     *
+     * @param commandBuffer The command buffer to record into.
+     * @param gBuffer The g-buffer.
+     * @param stack The stack to allocate on.
+     */
+    private static void transitionForLate(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull GBuffer gBuffer,
+            @NonNull MemoryStack stack) {
+        VkImageMemoryBarrier2.Buffer barriers =
+                VkImageMemoryBarrier2.calloc(GBuffer.TEXTURE_COUNT + 1, stack);
+        for (int i = 0; i < GBuffer.TEXTURE_COUNT; i++) {
+            imageBarrier(
+                    barriers.get(i),
+                    gBuffer.textures()[i].texture,
+                    VK_IMAGE_ASPECT_COLOR_BIT,
+                    VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                    VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        }
+        imageBarrier(
+                barriers.get(GBuffer.TEXTURE_COUNT),
+                gBuffer.depth().texture,
+                VK_IMAGE_ASPECT_DEPTH_BIT,
+                VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                VK_ACCESS_2_NONE,
+                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
+                        | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT
+                        | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+                VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+        vkCmdPipelineBarrier2(
+                commandBuffer,
+                VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barriers));
     }
 
     /**

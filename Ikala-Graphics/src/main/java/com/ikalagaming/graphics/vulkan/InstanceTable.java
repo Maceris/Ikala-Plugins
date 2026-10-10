@@ -28,6 +28,9 @@ import javax.annotation.Nullable;
  *   <li>The model mesh list: for each model with instances, its meshes, as mesh table slots with
  *       their generations and the meshes' own materials.
  *   <li>The override list: for each instance, the material override of each mesh, 0 for none.
+ *   <li>The visibility history: for each mesh of each instance, indexed like the override list,
+ *       whether it was visible last frame. Only the culling shader writes it; it is grown and
+ *       cleared here.
  * </ul>
  *
  * <p>Only the entries that changed are copied in, at the start of a frame, so a scene that isn't
@@ -87,6 +90,9 @@ public class InstanceTable {
     /** The size of one material override entry, in bytes. */
     public static final int OVERRIDE_SIZE = Integer.BYTES;
 
+    /** The size of one visibility history entry, in bytes. */
+    public static final int HISTORY_SIZE = Integer.BYTES;
+
     /** How many slots the instance table starts out holding. */
     public static final int INITIAL_SLOTS = 1024;
 
@@ -135,6 +141,13 @@ public class InstanceTable {
     @Getter private final DeviceTable overrides;
 
     /**
+     * The visibility history, one entry per override. -- GETTER -- The visibility history.
+     *
+     * @return The visibility history.
+     */
+    @Getter private final DeviceTable history;
+
+    /**
      * What the tables held after the last upload. Render thread only. -- GETTER -- What the tables
      * held after the last upload.
      *
@@ -143,8 +156,9 @@ public class InstanceTable {
     @Getter private Snapshot snapshot = new Snapshot(List.of(), 0);
 
     /**
-     * How many instances each pass drew, as last read back from the GPU, scene first. -- GETTER --
-     * How many instances each pass drew.
+     * How many meshes each visible list drew, as last read back from the GPU, then how many the
+     * occlusion test hid, see {@code InstanceDrawUpdate}. -- GETTER -- How many meshes each list
+     * drew.
      *
      * @return The counts, or an empty array before any are read back. Don't change it.
      */
@@ -162,6 +176,7 @@ public class InstanceTable {
         instances = new DeviceTable(state, "instance", ENTRY_SIZE, INITIAL_SLOTS);
         modelMeshes = new DeviceTable(state, "model mesh", MODEL_MESH_SIZE, 256);
         overrides = new DeviceTable(state, "material override", OVERRIDE_SIZE, 1024);
+        history = new DeviceTable(state, "visibility history", HISTORY_SIZE, 1024);
     }
 
     /**
@@ -254,9 +269,9 @@ public class InstanceTable {
     }
 
     /**
-     * Note how many instances each pass drew, as read back from the GPU.
+     * Note how many meshes each list drew, and how many were hidden, as read back from the GPU.
      *
-     * @param counts The counts, scene first.
+     * @param counts The counts.
      */
     public void setDrawnCounts(int @NonNull [] counts) {
         drawnCounts = counts.clone();
@@ -283,6 +298,8 @@ public class InstanceTable {
         final DeviceTable.Entries instanceEntries = new DeviceTable.Entries(ENTRY_SIZE);
         final DeviceTable.Entries meshEntries = new DeviceTable.Entries(MODEL_MESH_SIZE);
         final DeviceTable.Entries overrideEntries = new DeviceTable.Entries(OVERRIDE_SIZE);
+        // The culling shader writes the history, it only needs to be big enough
+        final DeviceTable.Entries historyEntries = new DeviceTable.Entries(HISTORY_SIZE);
         final List<ModelCount> models = new ArrayList<>();
         try (MemoryStack stack = MemoryStack.stackPush()) {
             final InstanceRegistry.Capacities capacities =
@@ -337,7 +354,8 @@ public class InstanceTable {
             final boolean work =
                     instances.hasWork(capacities.slots(), instanceEntries)
                             || modelMeshes.hasWork(capacities.modelMeshes(), meshEntries)
-                            || overrides.hasWork(capacities.overrides(), overrideEntries);
+                            || overrides.hasWork(capacities.overrides(), overrideEntries)
+                            || history.hasWork(capacities.overrides(), historyEntries);
             if (!work) {
                 return;
             }
@@ -345,11 +363,13 @@ public class InstanceTable {
             instances.record(state, commandBuffer, capacities.slots(), instanceEntries, stack);
             modelMeshes.record(state, commandBuffer, capacities.modelMeshes(), meshEntries, stack);
             overrides.record(state, commandBuffer, capacities.overrides(), overrideEntries, stack);
+            history.record(state, commandBuffer, capacities.overrides(), historyEntries, stack);
             DeviceTable.barrierAfter(commandBuffer, stack);
         } finally {
             instanceEntries.free();
             meshEntries.free();
             overrideEntries.free();
+            historyEntries.free();
         }
     }
 
@@ -363,5 +383,6 @@ public class InstanceTable {
         instances.cleanup(state);
         modelMeshes.cleanup(state);
         overrides.cleanup(state);
+        history.cleanup(state);
     }
 }
