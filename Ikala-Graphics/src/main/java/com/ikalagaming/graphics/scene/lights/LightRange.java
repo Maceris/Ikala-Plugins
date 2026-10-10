@@ -18,11 +18,11 @@ public final class LightRange {
      */
     public static final float CUTOFF = 0.01f;
 
-    /** The shortest a light can reach, in metres: one block. */
+    /** The shortest a light can reach, in meters: one block. */
     public static final float MIN_RANGE = 1;
 
     /**
-     * The farthest a light can reach, in metres: four 16 m sections, a third of the default 12
+     * The farthest a light can reach, in meters: four 16 m sections, a third of the default 12
      * section view distance.
      */
     public static final float MAX_RANGE = 4.0f * 16;
@@ -31,7 +31,7 @@ public final class LightRange {
      * The range of a light given only its intensity.
      *
      * @param intensity The light's intensity.
-     * @return How far it reaches, in metres.
+     * @return How far it reaches, in meters.
      */
     public static float defaultRange(float intensity) {
         return clamp((float) Math.sqrt(Math.max(intensity, 0) / CUTOFF));
@@ -40,7 +40,7 @@ public final class LightRange {
     /**
      * Keep a range within the limits.
      *
-     * @param range The range, in metres.
+     * @param range The range, in meters.
      * @return The range clamped to [{@link #MIN_RANGE}, {@link #MAX_RANGE}].
      */
     public static float clamp(float range) {
@@ -53,8 +53,8 @@ public final class LightRange {
     /**
      * How much of a light's intensity arrives at a distance, as lights.frag works it out.
      *
-     * @param distance The distance from the light, in metres.
-     * @param range The light's range, in metres.
+     * @param distance The distance from the light, in meters.
+     * @param range The light's range, in meters.
      * @return The scale on the light's intensity.
      */
     public static float falloff(float distance, float range) {

@@ -67,7 +67,7 @@ public final class Lights {
      * @param position The world position.
      * @param color The color.
      * @param intensity The intensity.
-     * @param range How far it reaches in metres, or NaN to follow the intensity.
+     * @param range How far it reaches in meters, or NaN to follow the intensity.
      * @return The handle.
      * @throws IllegalStateException If the plugin was unloaded, or graphics isn't running.
      */
@@ -109,7 +109,7 @@ public final class Lights {
      * @param intensity The intensity.
      * @param innerAngle The angle from the axis where the light starts to fade, in degrees.
      * @param outerAngle The angle from the axis where the light ends, in degrees.
-     * @param range How far it reaches in metres, or NaN to follow the intensity.
+     * @param range How far it reaches in meters, or NaN to follow the intensity.
      * @return The handle.
      * @throws IllegalArgumentException If the direction is zero or the angles out of range.
      * @throws IllegalStateException If the plugin was unloaded, or graphics isn't running.
@@ -205,7 +205,7 @@ public final class Lights {
      * Change how far a light reaches.
      *
      * @param light The light.
-     * @param range The range in metres, or NaN to follow the intensity again.
+     * @param range The range in meters, or NaN to follow the intensity again.
      */
     public void setRange(@Nullable LightHandle light, float range) {
         LightRegistry registry = registryOrNull();
@@ -245,7 +245,7 @@ public final class Lights {
      * How far a light reaches, after its default and the limits are applied.
      *
      * @param light The light.
-     * @return The range in metres, or NaN if the handle is null or stale.
+     * @return The range in meters, or NaN if the handle is null or stale.
      */
     public float getRange(@Nullable LightHandle light) {
         LightRegistry registry = registryOrNull();
@@ -279,7 +279,7 @@ public final class Lights {
     /**
      * Warn about a range that will be clamped.
      *
-     * @param range The range asked for, in metres, or NaN for the default.
+     * @param range The range asked for, in meters, or NaN for the default.
      * @return The same range; the registry clamps it.
      */
     private float checkRange(float range) {

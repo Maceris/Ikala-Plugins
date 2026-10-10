@@ -93,14 +93,14 @@ public class Scene {
     private final DebugVisualizers debugVisualizers;
 
     /**
-     * How far the view reaches by default, in metres: twelve 16 m sections.
+     * How far the view reaches by default, in meters: twelve 16 m sections.
      *
      * @see #getViewDistance()
      */
-    public static final double DEFAULT_VIEW_DISTANCE = 12 * 16;
+    public static final double DEFAULT_VIEW_DISTANCE = 12.0f * 16;
 
     /**
-     * How far the view reaches, in metres. Lights are sorted into clusters out to here; later the
+     * How far the view reaches, in meters. Lights are sorted into clusters out to here; later the
      * shadows and level of detail follow it too. Things past it can still be drawn, out to the far
      * plane.
      *
@@ -229,7 +229,7 @@ public class Scene {
     /**
      * Change how far the view reaches.
      *
-     * @param viewDistance The view distance, in metres, kept within the far plane.
+     * @param viewDistance The view distance, in meters, kept within the far plane.
      * @throws IllegalArgumentException If it isn't positive.
      */
     public void setViewDistance(double viewDistance) {

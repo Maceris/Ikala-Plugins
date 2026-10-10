@@ -40,8 +40,8 @@ public final class ClusterMath {
     public static final int MAX_LIGHTS_PER_CLUSTER = 256;
 
     /**
-     * Where the first slice ends, in metres. Exponential slices starting at the near plane would
-     * spend half of them on the first metre, where little is lit, so the first slice takes all of
+     * Where the first slice ends, in meters. Exponential slices starting at the near plane would
+     * spend half of them on the first meter, where little is lit, so the first slice takes all of
      * it.
      */
     public static final float FIRST_SLICE_DEPTH = 1;
@@ -50,7 +50,7 @@ public final class ClusterMath {
      * The scale from the log of a depth to a slice, for a view distance: the slices after the first
      * evenly divide the log of the depth range they cover.
      *
-     * @param viewDistance How far the view reaches, in metres.
+     * @param viewDistance How far the view reaches, in meters.
      * @return The scale, {@code (Z - 1) / ln(viewDistance / FIRST_SLICE_DEPTH)}.
      */
     public static float logScale(double viewDistance) {
@@ -62,7 +62,7 @@ public final class ClusterMath {
     /**
      * Which slice a depth is in.
      *
-     * @param depth The distance in front of the camera, in metres.
+     * @param depth The distance in front of the camera, in meters.
      * @param logScale From {@link #logScale(double)}.
      * @return The slice, from 0 to {@code Z - 1}.
      */
@@ -79,7 +79,7 @@ public final class ClusterMath {
      *
      * @param slice The slice.
      * @param logScale From {@link #logScale(double)}.
-     * @return The depth of its near edge, in metres.
+     * @return The depth of its near edge, in meters.
      */
     public static float sliceStart(int slice, float logScale) {
         if (slice == 0) {
@@ -94,7 +94,7 @@ public final class ClusterMath {
      *
      * @param slice The slice.
      * @param logScale From {@link #logScale(double)}.
-     * @return The depth of its far edge, in metres.
+     * @return The depth of its far edge, in meters.
      */
     public static float sliceEnd(int slice, float logScale) {
         return slice == Z - 1 ? Projection.Z_FAR : sliceStart(slice + 1, logScale);
@@ -151,7 +151,7 @@ public final class ClusterMath {
     }
 
     /**
-     * The view space ray through a point on the screen, scaled to reach one metre in front of the
+     * The view space ray through a point on the screen, scaled to reach one meter in front of the
      * camera.
      *
      * @param u How far across the screen, from 0 at the left to 1 at the right.

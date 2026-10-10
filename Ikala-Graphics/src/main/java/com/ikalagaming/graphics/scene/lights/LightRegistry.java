@@ -78,7 +78,7 @@ public class LightRegistry {
         /**
          * How far the light reaches.
          *
-         * @return The range, in metres.
+         * @return The range, in meters.
          */
         float range();
 
@@ -182,7 +182,7 @@ public class LightRegistry {
      * @param position The world position.
      * @param color The color.
      * @param intensity The intensity.
-     * @param range How far it reaches in metres, or NaN to follow the intensity.
+     * @param range How far it reaches in meters, or NaN to follow the intensity.
      * @return The handle.
      * @throws IllegalStateException If the registry is full.
      */
@@ -218,7 +218,7 @@ public class LightRegistry {
      * @param direction Which way it points.
      * @param color The color.
      * @param intensity The intensity.
-     * @param range How far it reaches in metres, or NaN to follow the intensity.
+     * @param range How far it reaches in meters, or NaN to follow the intensity.
      * @param innerAngle The angle from the axis where it starts to fade, in degrees.
      * @param outerAngle The angle from the axis where it ends, in degrees.
      * @return The handle.
@@ -354,7 +354,7 @@ public class LightRegistry {
      *
      * @param owner The key of the plugin asking, which must own it.
      * @param handle The light.
-     * @param range The range in metres, or NaN to follow the intensity again.
+     * @param range The range in meters, or NaN to follow the intensity again.
      * @return False if the handle was stale or owned by another plugin.
      */
     public boolean setRange(@NonNull String owner, @Nullable LightHandle handle, float range) {
@@ -425,7 +425,7 @@ public class LightRegistry {
      * How far a light reaches, after its default and the limits are applied.
      *
      * @param handle The light.
-     * @return The range in metres, or NaN if the handle is null or stale.
+     * @return The range in meters, or NaN if the handle is null or stale.
      */
     public float getRange(@Nullable LightHandle handle) {
         lock.lock();

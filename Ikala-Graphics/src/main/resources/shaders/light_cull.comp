@@ -80,7 +80,7 @@ float sliceEnd(uint slice) {
     return slice == CLUSTERS_Z - 1 ? farPlane : sliceStart(slice + 1);
 }
 
-// The view space ray through a point on the screen, reaching one metre in front of the camera
+// The view space ray through a point on the screen, reaching one meter in front of the camera
 vec3 ray(float u, float v) {
     // The same flip as lights.frag: the scene is drawn y up, the screen counts y down
     vec4 point = inverseProjection * vec4(u * 2.0 - 1.0, 1.0 - v * 2.0, 0.5, 1.0);

@@ -32,7 +32,7 @@ class ClusterMathTest {
     @Test
     void slicesGrowWithDepthAndCoverTheViewDistance() {
         assertEquals(0, ClusterMath.slice(0.01f, LOG_SCALE));
-        assertEquals(0, ClusterMath.slice(0.99f, LOG_SCALE), "The first slice is the first metre");
+        assertEquals(0, ClusterMath.slice(0.99f, LOG_SCALE), "The first slice is the first meter");
         assertEquals(1, ClusterMath.slice(1, LOG_SCALE));
         int previous = 0;
         for (float depth = 0.05f; depth < Projection.Z_FAR; depth *= 1.01f) {
@@ -132,7 +132,7 @@ class ClusterMathTest {
         Vector3f beside = new Vector3f(max.x + 2, center.y, center.z);
         assertTrue(ClusterMath.sphereTouchesBox(beside, 2.01f, min, max));
         assertFalse(ClusterMath.sphereTouchesBox(beside, 1.99f, min, max));
-        // A light a metre past its range from the box
+        // A light a meter past its range from the box
         Vector3f behindCamera = new Vector3f(0, 0, 10);
         float toBox = 10 + ClusterMath.sliceStart(z, LOG_SCALE);
         assertFalse(ClusterMath.sphereTouchesBox(behindCamera, toBox - 1, min, max));

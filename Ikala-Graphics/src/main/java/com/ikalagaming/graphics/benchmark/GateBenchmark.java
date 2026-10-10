@@ -87,7 +87,7 @@ public final class GateBenchmark {
     /** How bright each torch is, which with the default range reaches 10 m. */
     private static final float TORCH_INTENSITY = 1;
 
-    /** How high above the ground each torch is, in metres. */
+    /** How high above the ground each torch is, in meters. */
     private static final double TORCH_HEIGHT = 1.5;
 
     /** Where a run is. */
