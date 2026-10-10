@@ -276,6 +276,35 @@ class IkGuiCoreTest {
     }
 
     @Test
+    void testOnlyLeftClickingVoidClearsFocus() {
+        Runnable ui = fixedWindow("Focused", 50, 50, 200, 200, () -> IkGui.text("Contents"));
+        frames(2, ui);
+        Window window = IkGuiInternal.findWindowByName("Focused");
+
+        // Like Dear ImGui, a right click in the void only closes popups
+        for (MouseButton button : new MouseButton[] {MouseButton.RIGHT, MouseButton.LEFT}) {
+            // Focus the window by clicking its body
+            moveMouse(60, 200);
+            frame(ui);
+            context.io.addMouseButtonEvent(MouseButton.LEFT, true);
+            frame(ui);
+            context.io.addMouseButtonEvent(MouseButton.LEFT, false);
+            frame(ui);
+            assertSame(window, context.navFocusedWindow);
+
+            // Then click outside every window
+            moveMouse(800, 600);
+            frame(ui);
+            context.io.addMouseButtonEvent(button, true);
+            frame(ui);
+            context.io.addMouseButtonEvent(button, false);
+            frames(2, ui);
+            Window expected = button == MouseButton.LEFT ? null : window;
+            assertSame(expected, context.navFocusedWindow, button.toString());
+        }
+    }
+
+    @Test
     void testResizeGripResizesWindow() {
         Runnable ui = fixedWindow("Resizable", 0, 0, 200, 200, () -> IkGui.text("Contents"));
         frames(2, ui);

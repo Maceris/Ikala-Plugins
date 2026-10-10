@@ -53,6 +53,9 @@ public class CameraManager {
     /** The mouse sensitivity. Radians per pixel of mouse movement. */
     private float sensitivity;
 
+    /** Whether the right mouse button was turning the camera the last time it updated. */
+    private boolean wasTurning;
+
     /**
      * Create a new camera manager for the given window.
      *
@@ -82,6 +85,18 @@ public class CameraManager {
      * @param deltaTime The fractional part of a second since the last update.
      */
     public void updateCamera(float deltaTime) {
+        IkIO ikIO = IkGui.getIO();
+        final boolean turning = !ikIO.wantCaptureMouse && ikIO.getMouseDown(MouseButton.RIGHT);
+        if (turning && !wasTurning) {
+            /*
+             * Like Dear ImGui, IkGui only drops window focus for a left click in empty space, so
+             * the last window used would keep the keyboard and the movement keys would do nothing.
+             * Popups and modals capture the mouse, so we never get here with one open.
+             */
+            IkGui.setWindowFocus(null);
+        }
+        wasTurning = turning;
+
         if (window.isKeyPressed(GLFW_KEY_W)) {
             camera.moveForward(CameraManager.MOVE_SPEED_PER_SECOND * deltaTime);
         }
@@ -102,8 +117,7 @@ public class CameraManager {
         }
 
         // Update camera based on mouse
-        IkIO ikIO = IkGui.getIO();
-        if (!ikIO.wantCaptureMouse && ikIO.getMouseDown(MouseButton.RIGHT)) {
+        if (turning) {
             float deltaX = ikIO.mouseDelta.x * sensitivity;
             float deltaY = ikIO.mouseDelta.y * sensitivity;
             camera.addRotation(deltaY, deltaX);
