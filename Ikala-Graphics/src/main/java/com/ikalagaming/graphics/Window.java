@@ -88,6 +88,9 @@ public class Window {
     /** Whether we are currently fullscreen (borderless). */
     private boolean fullscreen;
 
+    /** Whether the OS cursor is over the window, from GLFW. */
+    private volatile boolean cursorInside;
+
     /** The resize function to call. */
     private final Consumer<Window> resizeFunc;
 
@@ -225,6 +228,28 @@ public class Window {
      */
     private static IkIO getIkGuiIO() {
         return IkGui.getContext() == null ? null : IkGui.getIO();
+    }
+
+    /**
+     * The IkGui IO to send the player's mouse and keyboard input to, unless UI automation is
+     * driving input, so the player's input doesn't fight it.
+     *
+     * @return The IO, or null if there is no context or automation is driving.
+     */
+    private static IkIO getPlayerInputIO() {
+        if (isAutomationDriving()) {
+            return null;
+        }
+        return getIkGuiIO();
+    }
+
+    /**
+     * Whether UI automation is driving input instead of the player.
+     *
+     * @return True while an automation run drives input.
+     */
+    private static boolean isAutomationDriving() {
+        return GraphicsManager.getUiManager().getAutomation().isDriving();
     }
 
     /**
@@ -429,7 +454,13 @@ public class Window {
         }
         glfwPollEvents();
         if (IkGui.getContext() != null) {
-            updateGamepad(IkGui.getIO());
+            final IkIO io = IkGui.getIO();
+            // Automation moves its own mouse, which counts as inside even when the real one isn't
+            final boolean driving = isAutomationDriving();
+            io.mouseInsideWindow = cursorInside || driving;
+            if (!driving) {
+                updateGamepad(io);
+            }
         }
     }
 
@@ -465,7 +496,7 @@ public class Window {
                     if (action != GLFW_PRESS && action != GLFW_RELEASE) {
                         return;
                     }
-                    final IkIO io = getIkGuiIO();
+                    final IkIO io = getPlayerInputIO();
                     if (io == null) {
                         return;
                     }
@@ -481,12 +512,15 @@ public class Window {
                         io.addFocusEvent(focused);
                     }
                 });
+        // GLFW only reports the cursor entering later, so start from where it is now
+        cursorInside = glfwGetWindowAttrib(windowHandle, GLFW_HOVERED) == GLFW_TRUE;
         glfwSetCursorEnterCallback(
                 windowHandle,
                 (window, entered) -> {
+                    cursorInside = entered;
                     final IkIO io = getIkGuiIO();
                     if (io != null) {
-                        io.mouseInsideWindow = entered;
+                        io.mouseInsideWindow = entered || isAutomationDriving();
                     }
                 });
         glfwSetCursorPosCallback(
@@ -494,7 +528,7 @@ public class Window {
                 (window, posX, posY) -> {
                     // Keep sending positions while the cursor is disabled, since the camera
                     // controls use the mouse delta from IkIO
-                    final IkIO io = getIkGuiIO();
+                    final IkIO io = getPlayerInputIO();
                     if (io != null) {
                         io.addMousePosEvent((float) posX, (float) posY);
                     }
@@ -507,7 +541,7 @@ public class Window {
                             || (action != GLFW_PRESS && action != GLFW_RELEASE)) {
                         return;
                     }
-                    final IkIO io = getIkGuiIO();
+                    final IkIO io = getPlayerInputIO();
                     if (io == null) {
                         return;
                     }
@@ -517,7 +551,7 @@ public class Window {
         glfwSetScrollCallback(
                 windowHandle,
                 (window, xOffset, yOffset) -> {
-                    final IkIO io = getIkGuiIO();
+                    final IkIO io = getPlayerInputIO();
                     if (io != null) {
                         io.addMouseWheelEvent((float) xOffset, (float) yOffset);
                     }
@@ -525,7 +559,7 @@ public class Window {
         glfwSetCharCallback(
                 windowHandle,
                 (window, codepoint) -> {
-                    final IkIO io = getIkGuiIO();
+                    final IkIO io = getPlayerInputIO();
                     if (io != null) {
                         io.addInputCharacter(codepoint);
                     }

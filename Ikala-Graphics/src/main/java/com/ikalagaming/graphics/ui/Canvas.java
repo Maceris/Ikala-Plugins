@@ -211,6 +211,21 @@ public class Canvas extends Container<Canvas> {
         return this;
     }
 
+    @Override
+    public boolean scrollIntoView(@NonNull Node<?> target) {
+        Node<?> child = target;
+        while (child != null && child.parent != this) {
+            child = child.parent;
+        }
+        if (child == null || unit <= 0) {
+            return false;
+        }
+        centerOn(
+                child.positionX + child.rect.getWidth() / unit / 2,
+                child.positionY + child.rect.getHeight() / unit / 2);
+        return true;
+    }
+
     /**
      * Link two children, by their IDs. The link is drawn from the first to the second while both
      * are in the canvas, styled by the theme as an {@code edge}.

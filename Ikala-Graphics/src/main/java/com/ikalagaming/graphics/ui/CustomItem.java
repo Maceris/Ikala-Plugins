@@ -102,6 +102,7 @@ public abstract class CustomItem<S extends CustomItem<S>> extends Node<S> {
         final int id = IkGui.getID("item");
         IkGui.setCursorScreenPos(bounds.getLeft(), bounds.getTop());
         IkGuiInternal.itemSize(bounds.getWidth(), bounds.getHeight());
+        recordItem(id);
         if (!IkGuiInternal.itemAdd(bounds, id)) {
             return;
         }

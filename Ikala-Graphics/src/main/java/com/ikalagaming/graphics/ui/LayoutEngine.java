@@ -114,8 +114,8 @@ public final class LayoutEngine {
     }
 
     /**
-     * Work out how big a tree's content is, without placing it. Used to size surfaces that fit
-     * their content.
+     * Work out how big a tree wants to be, without placing it: its content's size, or its own fixed
+     * size. Used to size surfaces that fit their content.
      *
      * @param root The root node.
      * @param context The layout context.
@@ -125,7 +125,8 @@ public final class LayoutEngine {
         resolveStyles(root, context.fontSize() * context.scale(), context);
         for (Axis axis : Axis.values()) {
             fit(root, axis, context);
-            out[axis.index()] = root.fit[axis.index()];
+            // The root's own sizing counts too, so a fixed size root makes the surface that size
+            out[axis.index()] = preferred(root, axis, context);
         }
     }
 

@@ -51,6 +51,11 @@ public class TextInput extends Node<TextInput> {
         return buffer.get();
     }
 
+    @Override
+    public String getText() {
+        return buffer.get();
+    }
+
     /**
      * Replace the text. Render thread only once shown.
      *
@@ -98,6 +103,7 @@ public class TextInput extends Node<TextInput> {
         IkGui.setCursorScreenPos(rect.getLeft(), rect.getTop());
         IkGui.setNextItemWidth(rect.getWidth());
         boolean entered = IkGui.inputText("##input", buffer, InputTextFlags.ENTER_RETURNS_TRUE);
+        recordItem(IkGui.getItemID());
         boolean leftAfterEdit = IkGui.isItemDeactivatedAfterEdit();
         String text = buffer.get();
         if (entered || (leftAfterEdit && !text.equals(lastSubmitted))) {

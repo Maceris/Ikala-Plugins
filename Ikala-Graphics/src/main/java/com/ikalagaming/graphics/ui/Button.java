@@ -97,7 +97,9 @@ public class Button extends Node<Button> {
         IkGuiStyler.Pushed pushed = IkGuiStyler.push(IkGuiStyler.Kind.BUTTON, this, frame);
         IkGui.setCursorScreenPos(rect.getLeft(), rect.getTop());
         // ### keeps the ID the same when the text changes
-        if (IkGui.button(text + "###button", rect.getWidth(), rect.getHeight())) {
+        boolean clicked = IkGui.button(text + "###button", rect.getWidth(), rect.getHeight());
+        recordItem(IkGui.getItemID());
+        if (clicked) {
             frame.fire(onClick);
         }
         if (autofocus) {

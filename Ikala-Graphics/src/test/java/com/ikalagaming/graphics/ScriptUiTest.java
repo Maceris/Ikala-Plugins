@@ -293,6 +293,46 @@ public class ScriptUiTest {
     }
 
     @Test
+    void scriptsDriveTheUiThroughTest() {
+        start(
+                """
+                Object d = ui.open("dialogue");
+                d.set("line", "Did you bring the crystal?");
+                Object t = ui.test();
+                await(t.assertText("dialogue//line", "Did you bring the crystal?"));
+                await(t.click("dialogue//accept"));
+                out.add(await("pick"));
+                await(t.type("dialogue//name", "Ikala", true));
+                out.add(await("name"));
+                out.add(await(t.exists("dialogue//decline")));
+                out.add(await(t.exists("dialogue//nothing")));
+                d.close();
+                await(t.waitForGone("dialogue"));
+                out.add("done");
+                """);
+        framesUntil(() -> recorder.values().contains("done"));
+        assertEquals(List.of(1, "Ikala", true, false, "done"), recorder.values());
+    }
+
+    @Test
+    void aFailedCheckStopsTheScript() {
+        ScriptRuntime runtime =
+                start(
+                        """
+                        Object d = ui.open("dialogue");
+                        d.set("line", "Hello");
+                        await(ui.test().assertText("dialogue//line", "Goodbye"));
+                        out.add("not reached");
+                        """);
+        framesUntil(
+                () ->
+                        !ScriptManager.getRunningScripts().contains(runtime)
+                                && !ScriptManager.getYieldedScripts().containsKey(runtime));
+        frames(3);
+        assertTrue(recorder.values().isEmpty(), recorder.values().toString());
+    }
+
+    @Test
     void handlesAreDeadAfterClosing() {
         start(
                 """

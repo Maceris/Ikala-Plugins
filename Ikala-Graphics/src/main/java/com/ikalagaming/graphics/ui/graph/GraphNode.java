@@ -160,6 +160,11 @@ public class GraphNode extends CustomItem<GraphNode> {
     }
 
     @Override
+    public String getText() {
+        return label;
+    }
+
+    @Override
     public String styleType() {
         return "graph-node";
     }

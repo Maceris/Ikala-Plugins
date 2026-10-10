@@ -1,7 +1,10 @@
 package com.ikalagaming.graphics.ui;
 
 import com.ikalagaming.graphics.gui.IkGui;
+import com.ikalagaming.graphics.gui.IkGuiInternal;
+import com.ikalagaming.graphics.gui.data.Window;
 import com.ikalagaming.graphics.gui.flags.ChildFlags;
+import com.ikalagaming.graphics.gui.util.RectFloat;
 
 import lombok.NonNull;
 import org.joml.Vector2f;
@@ -17,6 +20,9 @@ import org.joml.Vector2f;
 public class Scroll extends Container<Scroll> {
     /** Whether to draw a border around the view. */
     private boolean border;
+
+    /** The child window from the last frame it was open, or null. */
+    private Window window;
 
     /**
      * Create a scroll that grows to fill its parent.
@@ -67,6 +73,27 @@ public class Scroll extends Container<Scroll> {
     }
 
     @Override
+    public boolean scrollIntoView(@NonNull Node<?> target) {
+        if (window == null) {
+            return false;
+        }
+        scrollWindowTo(window, target.rect);
+        return true;
+    }
+
+    /**
+     * Scroll a window so the middle of a rectangle is in the middle of its view, from the next
+     * frame.
+     *
+     * @param window The window.
+     * @param target The rectangle, in screen pixels, at the window's current scroll.
+     */
+    static void scrollWindowTo(@NonNull Window window, @NonNull RectFloat target) {
+        IkGuiInternal.setScrollFromPosX(window, target.getCenterX() - window.position.x, 0.5f);
+        IkGuiInternal.setScrollFromPosY(window, target.getCenterY() - window.position.y, 0.5f);
+    }
+
+    @Override
     boolean laysOutOwnContent() {
         return true;
     }
@@ -83,6 +110,7 @@ public class Scroll extends Container<Scroll> {
                         border ? ChildFlags.BORDERS : ChildFlags.NONE);
         // The child window has read its colors, its content uses their own
         pushed.pop();
+        window = open ? IkGuiInternal.getCurrentWindow() : null;
         if (open) {
             if (!children.isEmpty()) {
                 Node<?> content = children.getFirst();

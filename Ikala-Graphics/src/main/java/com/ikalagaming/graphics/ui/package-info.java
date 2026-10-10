@@ -19,5 +19,8 @@
  *
  * <p>Plugins show surfaces through {@code GraphicsContext.ui()}, which owns them, so they are
  * removed when the plugin unloads.
+ *
+ * <p>{@link com.ikalagaming.graphics.ui.automation} drives the UI like a player would, for tests
+ * and scripted checks.
  */
 package com.ikalagaming.graphics.ui;

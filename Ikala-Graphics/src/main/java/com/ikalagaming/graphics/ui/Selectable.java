@@ -92,12 +92,15 @@ public class Selectable extends Node<Selectable> {
         IkGuiStyler.Pushed pushed = IkGuiStyler.push(IkGuiStyler.Kind.SELECTABLE, this, frame);
         IkGui.setCursorScreenPos(rect.getLeft(), rect.getTop());
         // ### keeps the ID the same when the text changes
-        if (IkGui.selectable(
-                text + "###selectable",
-                selected,
-                SelectableFlags.NONE,
-                rect.getWidth(),
-                rect.getHeight())) {
+        boolean clicked =
+                IkGui.selectable(
+                        text + "###selectable",
+                        selected,
+                        SelectableFlags.NONE,
+                        rect.getWidth(),
+                        rect.getHeight());
+        recordItem(IkGui.getItemID());
+        if (clicked) {
             frame.fire(onClick);
         }
         pushed.pop();

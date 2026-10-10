@@ -41,6 +41,9 @@ public final class ScriptUi {
     /** Where specs' {@code script(...)} actions find files, or null for the scripts folder. */
     private final Path scriptFolder;
 
+    /** Drives the UI for the plugin's scripts. */
+    private final ScriptAutomation test;
+
     /**
      * Create the script UI for a plugin. Plugins get theirs from {@code UI.scripts()}.
      *
@@ -62,6 +65,17 @@ public final class ScriptUi {
         this.loader = loader;
         this.bundle = bundle;
         this.scriptFolder = scriptFolder;
+        test = new ScriptAutomation(owner, manager);
+    }
+
+    /**
+     * Drive the UI like a player would, to check it from a script: {@code
+     * await(ui.test().click("main-menu//about"))}.
+     *
+     * @return The automation.
+     */
+    public ScriptAutomation test() {
+        return test;
     }
 
     /**

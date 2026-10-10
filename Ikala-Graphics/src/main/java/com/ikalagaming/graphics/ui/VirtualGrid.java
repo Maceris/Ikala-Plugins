@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.ui;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.IkGuiInternal;
 import com.ikalagaming.graphics.gui.data.ListClipper;
+import com.ikalagaming.graphics.gui.data.Window;
 import com.ikalagaming.graphics.gui.flags.ChildFlags;
 import com.ikalagaming.graphics.ui.style.StyleKey;
 
@@ -13,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * A scrolling grid of cells that only creates the nodes it shows, for lists far too long to build
@@ -72,6 +74,15 @@ public class VirtualGrid extends Node<VirtualGrid> {
 
     /** The number of columns the last frame used. */
     private int resolvedColumns = 1;
+
+    /** The child window from the last frame it was open, or null. */
+    private Window window;
+
+    /** Where the first row starts in the child window when it isn't scrolled, in pixels. */
+    private float contentTop;
+
+    /** The distance from one row to the next in the last frame, in pixels. */
+    private float rowPitch;
 
     /**
      * Create an empty virtual grid that grows to fill its parent.
@@ -217,6 +228,41 @@ public class VirtualGrid extends Node<VirtualGrid> {
         return made.get(index);
     }
 
+    @Override
+    public List<Node<?>> getContentNodes() {
+        // In index order, so searches go through cells the way they are shown
+        return List.copyOf(new TreeMap<>(made).values());
+    }
+
+    @Override
+    public boolean scrollIntoView(@NonNull Node<?> target) {
+        for (Map.Entry<Integer, Node<?>> entry : made.entrySet()) {
+            for (Node<?> node = target; node != null; node = node.parent) {
+                if (node == entry.getValue()) {
+                    return scrollToCell(entry.getKey());
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Scroll so a cell's row is in the middle of the view, from the next frame, which makes the
+     * cell if it isn't made yet. Render thread only.
+     *
+     * @param index The cell index.
+     * @return True if the grid has been shown and has that cell, so it will scroll.
+     */
+    public boolean scrollToCell(int index) {
+        if (window == null || index < 0 || index >= count) {
+            return false;
+        }
+        int row = index / resolvedColumns;
+        float local = contentTop + row * rowPitch + rowPitch / 2 - window.scrollPosition.y;
+        IkGuiInternal.setScrollFromPosY(window, local, 0.5f);
+        return true;
+    }
+
     /**
      * How many cells have nodes right now. Render thread only.
      *
@@ -287,6 +333,7 @@ public class VirtualGrid extends Node<VirtualGrid> {
                         rect.getHeight(),
                         border ? ChildFlags.BORDERS : ChildFlags.NONE);
         pushed.pop();
+        window = open ? IkGuiInternal.getCurrentWindow() : null;
         if (open && count > 0) {
             submitCells(frame);
         }
@@ -319,6 +366,8 @@ public class VirtualGrid extends Node<VirtualGrid> {
         int rows = (count + resolvedColumns - 1) / resolvedColumns;
         float pitchX = width + space;
         float pitchY = height + space;
+        rowPitch = pitchY;
+        contentTop = start.y + window.scrollPosition.y - window.position.y;
 
         int firstRow = Integer.MAX_VALUE;
         int lastRow = -1;

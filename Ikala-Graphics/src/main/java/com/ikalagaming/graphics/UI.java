@@ -2,6 +2,7 @@ package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.ui.Surface;
 import com.ikalagaming.graphics.ui.UiManager;
+import com.ikalagaming.graphics.ui.automation.Steps;
 import com.ikalagaming.graphics.ui.script.ScriptUi;
 import com.ikalagaming.graphics.ui.spec.NodeFactory;
 import com.ikalagaming.graphics.ui.spec.SpecBindings;
@@ -19,7 +20,9 @@ import lombok.NonNull;
 
 import java.io.File;
 import java.util.ResourceBundle;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -202,6 +205,26 @@ public final class UI {
      */
     public void setScriptBundle(ResourceBundle bundle) {
         scriptBundle = bundle;
+    }
+
+    /**
+     * Drive the UI like a player would, for tests and scripted checks: find nodes and click them,
+     * type into them, wait for them and check their text. The run is owned by this plugin and
+     * cancelled when it unloads. Don't wait for the result on the render thread, which runs it.
+     *
+     * <pre>
+     * ui.automate(steps -&gt; steps.click("main-menu//about")
+     *         .waitForVisible("about")
+     *         .assertText("about//title", "About"));
+     * </pre>
+     *
+     * @param build Adds the steps.
+     * @return Finishes when the run does, or fails with a {@link
+     *     com.ikalagaming.graphics.ui.automation.UiAutomationException}.
+     */
+    public CompletableFuture<Void> automate(@NonNull Consumer<Steps> build) {
+        context.checkOpen();
+        return manager.get().getAutomation().run(context, build);
     }
 
     /**

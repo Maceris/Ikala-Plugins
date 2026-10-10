@@ -107,6 +107,15 @@ public abstract class Node<S extends Node<S>> {
     /** Where the node ended up, in screen pixels. */
     final RectFloat rect = new RectFloat();
 
+    /** The IkGui frame the node was last submitted in, or -1 if never. */
+    private int submittedFrame = -1;
+
+    /** Whether any of the node's rectangle could be seen when it was last submitted. */
+    private boolean submittedVisible;
+
+    /** The IkGui item ID the node last submitted, or 0 if it submits no item. */
+    private int itemID;
+
     /**
      * Create a node.
      *
@@ -143,6 +152,64 @@ public abstract class Node<S extends Node<S>> {
      */
     public List<Node<?>> getChildren() {
         return Collections.unmodifiableList(children);
+    }
+
+    /**
+     * The nodes below this one that exist right now: its children, plus nodes it makes itself, like
+     * the cells a virtual grid has made. Render thread only.
+     *
+     * @return The nodes, which can't be modified through this list.
+     */
+    public List<Node<?>> getContentNodes() {
+        return getChildren();
+    }
+
+    /**
+     * The text the node shows, for finding it by text. Render thread only.
+     *
+     * @return The text, or null if the node shows none of its own.
+     */
+    public String getText() {
+        return null;
+    }
+
+    /**
+     * Whether the node was submitted this frame with some of it inside its window's view, so it is
+     * on screen. Render thread only.
+     *
+     * @return True if the node can be seen this frame.
+     */
+    public boolean isShown() {
+        return submittedVisible && submittedFrame == IkGui.getFrameCount();
+    }
+
+    /**
+     * The IkGui item the node submitted, for checking what the mouse is over. Render thread only.
+     *
+     * @return The item ID, or 0 if the node submits no item.
+     */
+    public int getItemID() {
+        return itemID;
+    }
+
+    /**
+     * Remember the IkGui item this node just submitted.
+     *
+     * @param id The item ID.
+     */
+    protected final void recordItem(int id) {
+        itemID = id;
+    }
+
+    /**
+     * Scroll this node's view so that a node below it can be seen, if this node scrolls. Render
+     * thread only; the view moves on the next frame.
+     *
+     * @param target The node to bring into view.
+     * @return True if this node scrolls and will scroll to it.
+     */
+    public boolean scrollIntoView(@NonNull Node<?> target) {
+        return false;
     }
 
     /**
@@ -389,6 +456,8 @@ public abstract class Node<S extends Node<S>> {
         if (pushedFont) {
             IkGui.pushFontSize(Math.round(fontPixels));
         }
+        submittedFrame = IkGui.getFrameCount();
+        submittedVisible = IkGui.isRectVisible(rect);
         submit(frame);
         if (pushedFont) {
             IkGui.popFont();

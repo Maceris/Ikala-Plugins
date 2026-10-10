@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.Style;
 import com.ikalagaming.graphics.gui.data.Viewport;
 import com.ikalagaming.graphics.gui.util.RectFloat;
+import com.ikalagaming.graphics.ui.automation.UiAutomation;
 import com.ikalagaming.graphics.ui.spec.NodeTypes;
 import com.ikalagaming.graphics.ui.spec.SpecInstance;
 import com.ikalagaming.graphics.ui.spec.SpecLoader;
@@ -112,6 +113,9 @@ public class UiManager {
     /** Lays out the surfaces. */
     private final LayoutEngine engine = new LayoutEngine();
 
+    /** Drives the UI for tests and scripted checks. */
+    private final UiAutomation automation = new UiAutomation(this);
+
     /** Measures text through IkGui, at any font size. */
     private final LayoutContext.TextMeasurer measurer =
             (text, fontPixels, out) -> {
@@ -143,6 +147,15 @@ public class UiManager {
      */
     public UiManager(@NonNull Theme defaultTheme) {
         this.defaultTheme = defaultTheme;
+    }
+
+    /**
+     * Drives the UI like a player would, for tests and scripted checks.
+     *
+     * @return The automation.
+     */
+    public UiAutomation getAutomation() {
+        return automation;
     }
 
     /**
@@ -432,6 +445,7 @@ public class UiManager {
                             removeSpec(spec, surface);
                         }
                     }
+                    automation.cancelAllOwnedBy(owner);
                     if (themeOverride != null && themeOverride.owner() == owner) {
                         themeOverride = null;
                         themeChanged = true;
@@ -465,6 +479,21 @@ public class UiManager {
         return surfaces.size();
     }
 
+    /**
+     * The surfaces being drawn, in the order they were added. Render thread only.
+     *
+     * @return The visible surfaces.
+     */
+    public List<Surface> getShownSurfaces() {
+        List<Surface> shown = new ArrayList<>();
+        for (Entry entry : surfaces.values()) {
+            if (entry.surface().isVisible()) {
+                shown.add(entry.surface());
+            }
+        }
+        return shown;
+    }
+
     /** Run posted changes. Render thread only. */
     void runPending() {
         Runnable change;
@@ -483,6 +512,13 @@ public class UiManager {
      */
     public void draw() {
         runPending();
+        drawSurfaces();
+        // After submission, so automation sees where everything is this frame
+        automation.afterDraw(getShownSurfaces());
+    }
+
+    /** Lay out and submit every visible surface. */
+    private void drawSurfaces() {
         if (hotReload) {
             checkSpecFiles();
         }
@@ -582,18 +618,19 @@ public class UiManager {
      * rendering, so actions can do things like load models.
      */
     public void dispatchEvents() {
-        if (events.isEmpty()) {
-            return;
-        }
-        List<Runnable> fired = new ArrayList<>(events);
-        events.clear();
-        for (Runnable action : fired) {
-            try {
-                action.run();
-            } catch (RuntimeException e) {
-                log.warn("A UI action failed", e);
+        if (!events.isEmpty()) {
+            List<Runnable> fired = new ArrayList<>(events);
+            events.clear();
+            for (Runnable action : fired) {
+                try {
+                    action.run();
+                } catch (RuntimeException e) {
+                    log.warn("A UI action failed", e);
+                }
             }
         }
+        // Automation runs finish after the actions their clicks fired
+        automation.afterEvents();
     }
 
     /**
