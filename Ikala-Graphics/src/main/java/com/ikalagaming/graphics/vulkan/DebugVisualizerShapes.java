@@ -204,12 +204,6 @@ public final class DebugVisualizerShapes {
             @NonNull Scene scene,
             @NonNull CascadeShadowSplit[] cascades,
             @NonNull Consumer<DebugShape> out) {
-        // TEMP cascade freeze
-        if (TEMP_FREEZE && TEMP_CACHE != null) {
-            TEMP_CACHE.forEach(out);
-            return;
-        }
-        java.util.List<DebugShape> made = new java.util.ArrayList<>();
         final Vector3dc camera = scene.getCamera().getPosition();
         for (int i = 0; i < cascades.length; ++i) {
             if (cascades[i] == null) {
@@ -220,18 +214,11 @@ public final class DebugVisualizerShapes {
                     new Matrix4d(cascades[i].getProjViewMatrix())
                             .invert()
                             .translateLocal(camera.x(), camera.y(), camera.z());
-            DebugShape shape =
+            out.accept(
                     DebugFrustum.fromInverseProjectionView(
-                            inverse, CASCADE_COLORS[i % CASCADE_COLORS.length], true);
-            made.add(shape);
-            out.accept(shape);
+                            inverse, CASCADE_COLORS[i % CASCADE_COLORS.length], false));
         }
-        TEMP_CACHE = made;
     }
-
-    // TEMP cascade freeze
-    public static volatile boolean TEMP_FREEZE;
-    private static volatile java.util.List<DebugShape> TEMP_CACHE;
 
     private DebugVisualizerShapes() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
