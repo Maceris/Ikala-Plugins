@@ -380,6 +380,7 @@ public class VulkanInstance {
         // Uploads that never happened, then whatever plugins didn't release
         state.textureUploads.clear(state);
         state.textureRegistry.removeAll().forEach(textureLoader::delete);
+        state.geometry.cleanup(state);
 
         DeletionQueue.Entry nextEntry = GraphicsManager.getDeletionQueue().pop();
         while (nextEntry != null) {
@@ -395,6 +396,7 @@ public class VulkanInstance {
         state.bindlessTextures = null;
         state.textureRegistry = null;
         state.textureUploads = null;
+        state.geometry = null;
         state.stagingRing.cleanup(state);
         state.stagingRing = null;
         state.immediateCommands.cleanup(state);
@@ -1149,6 +1151,7 @@ public class VulkanInstance {
         state.textureRegistry = new TextureRegistry(state.bindlessTextures.getCapacity());
         state.stagingRing = new StagingRing(state);
         state.textureUploads = new TextureUploads();
+        state.geometry = new GeometryArena(state, MeshData.VERTEX_SIZE_IN_BYTES);
         textureLoader = new TextureLoaderVulkan(state);
         shaderMap = new ShaderMap();
         initializeShaders();
@@ -1249,79 +1252,57 @@ public class VulkanInstance {
     }
 
     /**
-     * Set up a model before rendering for the first time. For example, creating buffers. This must
-     * only be called once for a model, and only after it's fully loaded (e.g. animations set up).
+     * Set up a model's animation data before rendering it for the first time. Does nothing for
+     * models that aren't animated. Called once per model, after it is fully loaded, when its meshes
+     * are registered through {@link com.ikalagaming.graphics.Meshes#register(Model)}.
      *
      * @param model The model to set up.
      */
-    public void initializeModel(@NonNull Model model) {
-        if (model.isAnimated()) {
-            // Filled out later
-            model.setEntityAnimationOffsetsBuffer(
-                    SharedBuffer.allocate(0, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+    public void initializeAnimation(@NonNull Model model) {
+        if (!model.isAnimated()) {
+            return;
+        }
+        // Filled out later
+        model.setEntityAnimationOffsetsBuffer(
+                SharedBuffer.allocate(0, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 
-            int totalSize = 0;
-            for (Model.Animation animation : model.getAnimationList()) {
-                totalSize += animation.frameData().length;
-            }
-            SharedBuffer animationBuffer =
-                    SharedBuffer.allocate(totalSize, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-            model.setAnimationBuffer(animationBuffer);
+        int totalSize = 0;
+        for (Model.Animation animation : model.getAnimationList()) {
+            totalSize += animation.frameData().length;
+        }
+        SharedBuffer animationBuffer =
+                SharedBuffer.allocate(totalSize, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+        model.setAnimationBuffer(animationBuffer);
 
-            // NOTE(ches) memByteBuffer rejects the null mapping of an empty buffer
-            if (totalSize > 0) {
-                ByteBuffer animations =
-                        MemoryUtil.memByteBuffer(
-                                animationBuffer.allocationInfo.pMappedData(), totalSize);
-                for (Model.Animation animation : model.getAnimationList()) {
-                    animations.put(animation.frameData());
-                }
-            }
-
-            for (MeshData meshData : model.getMeshDataList()) {
-                // Filled out later. Written by the animation compute shader, read as vertices.
-                meshData.setAnimationTargetBuffer(
-                        SharedBuffer.allocate(
-                                0,
-                                state,
-                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-                                        | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT));
-
-                final byte[] boneWeights = meshData.getBoneWeightData();
-                SharedBuffer boneWeightBuffer =
-                        SharedBuffer.allocate(
-                                boneWeights.length, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-                meshData.setBoneWeightBuffer(boneWeightBuffer);
-                if (boneWeights.length > 0) {
+        // NOTE(ches) memByteBuffer rejects the null mapping of an empty buffer
+        if (totalSize > 0) {
+            ByteBuffer animations =
                     MemoryUtil.memByteBuffer(
-                                    boneWeightBuffer.allocationInfo.pMappedData(),
-                                    boneWeights.length)
-                            .put(boneWeights);
-                }
+                            animationBuffer.allocationInfo.pMappedData(), totalSize);
+            for (Model.Animation animation : model.getAnimationList()) {
+                animations.put(animation.frameData());
             }
         }
 
         for (MeshData meshData : model.getMeshDataList()) {
-            final int vertexSize = meshData.getVertexData().length * Float.BYTES;
-            final int indexSize = meshData.getIndices().length * Integer.BYTES;
+            // Filled out later. Written by the animation compute shader, read as vertices.
+            meshData.setAnimationTargetBuffer(
+                    SharedBuffer.allocate(
+                            0,
+                            state,
+                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+                                    | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT));
 
-            ByteBuffer vertexData = MemoryUtil.memAlloc(vertexSize);
-            ByteBuffer indexData = MemoryUtil.memAlloc(indexSize);
-
-            MemoryUtil.memCopy(meshData.getVertexData(), vertexData);
-            MemoryUtil.memCopy(meshData.getIndices(), indexData);
-
-            MemoryUtil.memCopy(
-                    MemoryUtil.memAddress(vertexData),
-                    ((SharedBuffer) meshData.getVertexBuffer()).allocationInfo.pMappedData(),
-                    vertexSize);
-            MemoryUtil.memCopy(
-                    MemoryUtil.memAddress(indexData),
-                    ((SharedBuffer) meshData.getIndexBuffer()).allocationInfo.pMappedData(),
-                    indexSize);
-
-            MemoryUtil.memFree(indexData);
-            MemoryUtil.memFree(vertexData);
+            final byte[] boneWeights = meshData.getBoneWeightData();
+            SharedBuffer boneWeightBuffer =
+                    SharedBuffer.allocate(
+                            boneWeights.length, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+            meshData.setBoneWeightBuffer(boneWeightBuffer);
+            if (boneWeights.length > 0) {
+                MemoryUtil.memByteBuffer(
+                                boneWeightBuffer.allocationInfo.pMappedData(), boneWeights.length)
+                        .put(boneWeights);
+            }
         }
     }
 
@@ -1519,9 +1500,12 @@ public class VulkanInstance {
                             .flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
             checkError(vkBeginCommandBuffer(commandBuffer, commandBufferBeginInfo));
         }
+        // Resources freed from here until the next frame starts may be used by this frame
+        state.recordingFrame = true;
 
-        // Before anything that could sample the textures
+        // Before anything that could sample the textures or draw the meshes
         state.textureUploads.record(state, commandBuffer, textureLoader);
+        state.geometry.record(state, commandBuffer);
 
         // This will record the command buffer
         pipeline.render(scene, windowInfo.window, state);
@@ -1580,6 +1564,7 @@ public class VulkanInstance {
         }
 
         state.frameIndex = (state.frameIndex + 1) % GraphicsManager.MAX_FRAMES_IN_FLIGHT;
+        state.recordingFrame = false;
         windowInfo.currentSwapchainIndex = VulkanState.WindowInfo.INVALID_SWAPCHAIN_INDEX;
     }
 

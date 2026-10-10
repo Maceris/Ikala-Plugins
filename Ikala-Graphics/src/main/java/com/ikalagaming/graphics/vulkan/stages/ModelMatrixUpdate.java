@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Entity;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.MeshRegistry;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
 import com.ikalagaming.graphics.vulkan.RenderStage;
@@ -117,6 +118,7 @@ public class ModelMatrixUpdate implements RenderStage {
                         frameData.animationOffsets.allocationInfo.pMappedData(), poseCount);
 
         final MaterialCache materialCache = scene.getMaterialCache();
+        final MeshRegistry meshes = vulkanState.geometry.getRegistry();
         final Vector3dc origin = scene.getCamera().getPosition();
         final Matrix4f scratch = new Matrix4f();
         frameData.modelDrawInfo.forEach(
@@ -127,7 +129,7 @@ public class ModelMatrixUpdate implements RenderStage {
                     if (poses != null) {
                         animationOffsets.put(info.firstPose(), poses.matrixOffsets());
                     }
-                    writeDrawCommands(model, info, poses, commands);
+                    writeDrawCommands(model, info, poses, meshes, commands);
                 });
     }
 
@@ -208,46 +210,83 @@ public class ModelMatrixUpdate implements RenderStage {
     }
 
     /**
-     * Write the indirect draw commands for each mesh of a model. Animated models draw each entity
-     * separately from the animation output, which has a copy of the vertices for each pose back to
-     * back. Everything else is one instanced draw.
+     * Write the indirect draw commands for each mesh of a model. Indices come from the shared index
+     * buffer. Animated models draw each entity separately from the animation output, which has a
+     * copy of the vertices for each pose back to back. Everything else is one instanced draw from
+     * the shared vertex buffer. Meshes that aren't resident yet get commands that draw nothing, so
+     * every mesh keeps its place.
      *
      * @param model The model.
      * @param info Where the model's data goes.
      * @param poses The pose of each entity, null if the model isn't animated.
+     * @param meshes Where each mesh is in the shared buffers.
      * @param commands The mapped draw command buffer.
      */
     private static void writeDrawCommands(
             @NonNull Model model,
             @NonNull PerFrameData.ModelDrawInfo info,
             Poses poses,
+            @NonNull MeshRegistry meshes,
             @NonNull ByteBuffer commands) {
         List<Entity> entities = model.getEntitiesList();
-        final int firstIndex = 0;
 
         int position = info.firstCommand() * DRAW_COMMAND_SIZE;
         for (MeshData mesh : model.getMeshDataList()) {
-            final int indexCount = mesh.getIndices().length;
+            final MeshRegistry.Location location = meshes.locate(mesh.getMesh());
+            final int indexCount = location == null ? 0 : mesh.getIndices().length;
+            final int firstIndex = location == null ? 0 : location.firstIndex();
 
             if (poses != null) {
                 for (int i = 0; i < entities.size(); ++i) {
                     // The vertices of this entity's pose, with this entity's model matrix
                     final int vertexOffset = poses.entityPoses()[i] * mesh.getVertexCount();
-                    commands.putInt(position, indexCount);
-                    commands.putInt(position + Integer.BYTES, 1);
-                    commands.putInt(position + 2 * Integer.BYTES, firstIndex);
-                    commands.putInt(position + 3 * Integer.BYTES, vertexOffset);
-                    commands.putInt(position + 4 * Integer.BYTES, i);
+                    writeCommand(
+                            commands,
+                            position,
+                            indexCount,
+                            location == null ? 0 : 1,
+                            firstIndex,
+                            vertexOffset,
+                            i);
                     position += DRAW_COMMAND_SIZE;
                 }
             } else {
-                commands.putInt(position, indexCount);
-                commands.putInt(position + Integer.BYTES, entities.size());
-                commands.putInt(position + 2 * Integer.BYTES, firstIndex);
-                commands.putInt(position + 3 * Integer.BYTES, 0);
-                commands.putInt(position + 4 * Integer.BYTES, 0);
+                writeCommand(
+                        commands,
+                        position,
+                        indexCount,
+                        location == null ? 0 : entities.size(),
+                        firstIndex,
+                        location == null ? 0 : location.vertexOffset(),
+                        0);
                 position += DRAW_COMMAND_SIZE;
             }
         }
+    }
+
+    /**
+     * Write one VkDrawIndexedIndirectCommand.
+     *
+     * @param commands The mapped draw command buffer.
+     * @param position Where the command goes, in bytes.
+     * @param indexCount The number of indices to draw.
+     * @param instanceCount The number of instances.
+     * @param firstIndex The first index in the index buffer.
+     * @param vertexOffset What is added to each index to find its vertex.
+     * @param firstInstance The first instance.
+     */
+    private static void writeCommand(
+            @NonNull ByteBuffer commands,
+            int position,
+            int indexCount,
+            int instanceCount,
+            int firstIndex,
+            int vertexOffset,
+            int firstInstance) {
+        commands.putInt(position, indexCount);
+        commands.putInt(position + Integer.BYTES, instanceCount);
+        commands.putInt(position + 2 * Integer.BYTES, firstIndex);
+        commands.putInt(position + 3 * Integer.BYTES, vertexOffset);
+        commands.putInt(position + 4 * Integer.BYTES, firstInstance);
     }
 }

@@ -270,6 +270,10 @@ public class SceneRender implements RenderStage {
         ByteBuffer pushConstants = stack.calloc(ShaderBindings.Scene.PUSH_CONSTANTS_SIZE);
         LongBuffer vertexBuffers = stack.callocLong(1);
         LongBuffer vertexOffsets = stack.callocLong(1);
+        // Every mesh's indices are in the shared index buffer, found by each command's first index
+        vkCmdBindIndexBuffer(
+                commandBuffer, state.geometry.getIndices().buffer, 0, VK_INDEX_TYPE_UINT32);
+        long boundVertices = VK_NULL_HANDLE;
 
         for (var entry : frameData.modelDrawInfo.entrySet()) {
             final Model model = entry.getKey();
@@ -293,19 +297,17 @@ public class SceneRender implements RenderStage {
                         0,
                         pushConstants);
 
-                final long vertexSource = SceneRender.vertexSource(model, mesh);
+                final long vertexSource = SceneRender.vertexSource(state, model, mesh);
                 if (vertexSource == VK_NULL_HANDLE) {
                     // An animated model the animation stage has not run for yet
                     meshIndex += 1;
                     continue;
                 }
-                vertexBuffers.put(0, vertexSource);
-                vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffers, vertexOffsets);
-                vkCmdBindIndexBuffer(
-                        commandBuffer,
-                        ((SharedBuffer) mesh.getIndexBuffer()).buffer,
-                        0,
-                        VK_INDEX_TYPE_UINT32);
+                if (vertexSource != boundVertices) {
+                    vertexBuffers.put(0, vertexSource);
+                    vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffers, vertexOffsets);
+                    boundVertices = vertexSource;
+                }
 
                 final long commandOffset =
                         (long) (info.firstCommand() + meshIndex * info.commandCount())
@@ -322,20 +324,22 @@ public class SceneRender implements RenderStage {
     }
 
     /**
-     * Find the buffer to read a mesh's vertices from. Animated models draw from the animation
-     * output, which has a copy of the vertices for each pose.
+     * Find the buffer to read a mesh's vertices from. Most meshes draw from the shared vertex
+     * buffer, at the offset in their draw commands. Animated models draw from the animation output,
+     * which has a copy of the vertices for each pose.
      *
+     * @param state The Vulkan state.
      * @param model The model the mesh belongs to.
      * @param mesh The mesh.
      * @return The VkBuffer, or VK_NULL_HANDLE if an animated model has no output yet.
      */
-    static long vertexSource(@NonNull Model model, @NonNull MeshData mesh) {
-        final var buffer =
-                (SharedBuffer)
-                        (model.isAnimated()
-                                ? mesh.getAnimationTargetBuffer()
-                                : mesh.getVertexBuffer());
-        return buffer.buffer;
+    static long vertexSource(
+            @NonNull VulkanState state, @NonNull Model model, @NonNull MeshData mesh) {
+        if (!model.isAnimated()) {
+            return state.geometry.getVertices().buffer;
+        }
+        final SharedBuffer target = mesh.getAnimationTargetBuffer();
+        return target == null ? VK_NULL_HANDLE : target.buffer;
     }
 
     /**

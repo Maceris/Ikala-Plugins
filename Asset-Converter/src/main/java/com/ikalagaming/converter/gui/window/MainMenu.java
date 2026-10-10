@@ -107,7 +107,7 @@ public class MainMenu {
                                 "models/shader_ball.obj",
                                 scene.getMaterialCache(),
                                 false));
-        GraphicsManager.getRenderInstance().initializeModel(ballModel);
+        GraphicsManager.forPlugin(ConverterPlugin.PLUGIN_NAME).meshes().register(ballModel);
 
         Material material = ballModel.getMeshDataList().get(0).getMaterial();
 

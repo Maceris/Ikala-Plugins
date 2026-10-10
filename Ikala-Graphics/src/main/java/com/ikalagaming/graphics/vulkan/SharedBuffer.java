@@ -17,9 +17,10 @@ import org.lwjgl.vulkan.VkBufferDeviceAddressInfo;
 import java.nio.LongBuffer;
 
 /**
- * Buffer that is shared between the CPU and the GPU. The memory is always host visible, host
- * coherent, and persistently mapped, so it can be written through {@link
- * VmaAllocationInfo#pMappedData()} without staging or flushing.
+ * Buffer that is shared between the CPU and the GPU. The memory is host visible, host coherent, and
+ * persistently mapped, so it can be written through {@link VmaAllocationInfo#pMappedData()} without
+ * staging or flushing, except for buffers made with {@link #allocateDeviceLocal(long, VulkanState,
+ * int)}, which only the GPU can fill.
  */
 @Slf4j
 public class SharedBuffer {
@@ -214,6 +215,47 @@ public class SharedBuffer {
                     createMapped(bufferSize, result.usage, state, result.allocationInfo, stack);
             result.buffer = created.buffer();
             result.allocation = created.allocation();
+            result.deviceAddress = getDeviceAddress(result.buffer, state, stack);
+            return result;
+        }
+    }
+
+    /**
+     * Allocate a buffer in device-local memory, which the CPU can't map. It is filled by copies
+     * recorded on the GPU, and is the fastest memory for the GPU to read. {@link
+     * #reallocate(SharedBuffer, long, VulkanState, boolean)} can't keep its contents, since they
+     * aren't mapped; copy them on the GPU instead.
+     *
+     * @param bufferSize The size of the buffer in bytes, must be positive.
+     * @param state The Vulkan state.
+     * @param usage The VkBufferUsageFlags for the buffer. {@link #BASE_USAGE} is always added.
+     * @return The new shared buffer.
+     */
+    public static SharedBuffer allocateDeviceLocal(
+            long bufferSize, @NonNull VulkanState state, int usage) {
+        SharedBuffer result = new SharedBuffer();
+        result.usage = usage | BASE_USAGE;
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkBufferCreateInfo bufferCreateInfo =
+                    VkBufferCreateInfo.calloc(stack)
+                            .sType$Default()
+                            .size(bufferSize)
+                            .usage(result.usage);
+            VmaAllocationCreateInfo allocationCreateInfo =
+                    VmaAllocationCreateInfo.calloc(stack)
+                            .usage(VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE);
+            LongBuffer longOutput = stack.callocLong(1);
+            PointerBuffer pointerOutput = stack.callocPointer(1);
+            checkError(
+                    vmaCreateBuffer(
+                            state.vmaAllocator,
+                            bufferCreateInfo,
+                            allocationCreateInfo,
+                            longOutput,
+                            pointerOutput,
+                            result.allocationInfo));
+            result.buffer = longOutput.get(0);
+            result.allocation = pointerOutput.get(0);
             result.deviceAddress = getDeviceAddress(result.buffer, state, stack);
             return result;
         }

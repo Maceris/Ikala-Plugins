@@ -156,10 +156,16 @@ public class AnimationRender implements RenderStage {
                         ShaderBindings.Animation.PUSH_CONSTANT_FIRST_POSE_OFFSET, info.firstPose());
 
                 for (MeshData meshData : model.getMeshDataList()) {
+                    final MeshRegistry.Location location =
+                            vulkanState.geometry.getRegistry().locate(meshData.getMesh());
+                    if (location == null) {
+                        // Not uploaded yet, and its draws draw nothing until it is
+                        continue;
+                    }
                     final int vertexCount = meshData.getVertexCount();
                     pushConstants.putLong(
                             ShaderBindings.Animation.PUSH_CONSTANT_MODEL_DATA_OFFSET,
-                            ((SharedBuffer) meshData.getVertexBuffer()).deviceAddress);
+                            vulkanState.geometry.vertexAddress(location));
                     pushConstants.putLong(
                             ShaderBindings.Animation.PUSH_CONSTANT_BONE_WEIGHTS_OFFSET,
                             ((SharedBuffer) meshData.getBoneWeightBuffer()).deviceAddress);

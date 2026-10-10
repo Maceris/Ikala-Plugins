@@ -8,7 +8,9 @@ import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.scene.lights.SceneLights;
 import com.ikalagaming.graphics.vulkan.DeletionQueue;
+import com.ikalagaming.graphics.vulkan.GeometryArena;
 import com.ikalagaming.graphics.vulkan.SharedBuffer;
+import com.ikalagaming.graphics.vulkan.VulkanInstance;
 import com.ikalagaming.graphics.vulkan.VulkanState;
 
 import lombok.AccessLevel;
@@ -173,20 +175,25 @@ public class Scene {
     }
 
     /**
-     * Add a model to the model map.
+     * Add a model to the model map. A different model already added with the same ID is replaced,
+     * and its GPU resources are released.
      *
      * @param model The model to add.
      */
     public void addModel(@NonNull Model model) {
-        modelMap.put(model.getId(), model);
+        Model previous = modelMap.put(model.getId(), model);
+        if (previous != null && previous != model) {
+            releaseResources(previous);
+        }
     }
 
     /**
-     * Queue up deletion of every GPU resource the scene owns, which are the model and material
-     * buffers. Textures belong to the plugins that loaded them. The scene should not be rendered
-     * afterward.
+     * Queue up deletion of a model's GPU resources: its meshes in the shared geometry buffers, and
+     * its own buffers.
+     *
+     * @param model The model.
      */
-    public void cleanup() {
+    private static void releaseResources(@NonNull Model model) {
         DeletionQueue deletionQueue = GraphicsManager.getDeletionQueue();
         Consumer<SharedBuffer> delete =
                 buffer -> {
@@ -194,18 +201,30 @@ public class Scene {
                         deletionQueue.add(buffer);
                     }
                 };
-        for (Model model : modelMap.values()) {
-            delete.accept(model.getAnimationBuffer());
-            delete.accept(model.getEntityAnimationOffsetsBuffer());
-            delete.accept(model.getModelMatricesBuffer());
-            delete.accept(model.getMaterialOverridesBuffer());
-            for (MeshData mesh : model.getMeshDataList()) {
-                delete.accept(mesh.getBoneWeightBuffer());
-                delete.accept(mesh.getVertexBuffer());
-                delete.accept(mesh.getAnimationTargetBuffer());
-                delete.accept(mesh.getIndexBuffer());
-                delete.accept(mesh.getDrawIndirectBuffer());
+        VulkanInstance renderer = GraphicsManager.getRenderInstance();
+        GeometryArena geometry = renderer == null ? null : renderer.getState().geometry;
+        delete.accept(model.getAnimationBuffer());
+        delete.accept(model.getEntityAnimationOffsetsBuffer());
+        delete.accept(model.getModelMatricesBuffer());
+        delete.accept(model.getMaterialOverridesBuffer());
+        for (MeshData mesh : model.getMeshDataList()) {
+            delete.accept(mesh.getBoneWeightBuffer());
+            delete.accept(mesh.getAnimationTargetBuffer());
+            if (geometry != null) {
+                // Whichever plugin registered it, the scene no longer draws it
+                geometry.release(mesh.getMesh());
             }
+        }
+    }
+
+    /**
+     * Queue up deletion of every GPU resource the scene owns, which are the models' meshes and
+     * buffers, and the material buffers. Textures belong to the plugins that loaded them. The scene
+     * should not be rendered afterward.
+     */
+    public void cleanup() {
+        for (Model model : modelMap.values()) {
+            releaseResources(model);
         }
         modelMap.clear();
         materialCache.cleanup();

@@ -204,6 +204,9 @@ public class ShadowRender implements RenderStage {
 
                 LongBuffer vertexBuffers = stack.callocLong(1);
                 LongBuffer vertexOffsets = stack.callocLong(1);
+                vkCmdBindIndexBuffer(
+                        commandBuffer, state.geometry.getIndices().buffer, 0, VK_INDEX_TYPE_UINT32);
+                long boundVertices = VK_NULL_HANDLE;
 
                 // TODO(ches) frustum culling, this is pretty excessive
                 for (var entry : frameData.modelDrawInfo.entrySet()) {
@@ -221,19 +224,17 @@ public class ShadowRender implements RenderStage {
 
                     int meshIndex = 0;
                     for (MeshData mesh : model.getMeshDataList()) {
-                        final long vertexSource = SceneRender.vertexSource(model, mesh);
+                        final long vertexSource = SceneRender.vertexSource(state, model, mesh);
                         if (vertexSource == VK_NULL_HANDLE) {
                             // An animated model the animation stage has not run for yet
                             meshIndex += 1;
                             continue;
                         }
-                        vertexBuffers.put(0, vertexSource);
-                        vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffers, vertexOffsets);
-                        vkCmdBindIndexBuffer(
-                                commandBuffer,
-                                ((SharedBuffer) mesh.getIndexBuffer()).buffer,
-                                0,
-                                VK_INDEX_TYPE_UINT32);
+                        if (vertexSource != boundVertices) {
+                            vertexBuffers.put(0, vertexSource);
+                            vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffers, vertexOffsets);
+                            boundVertices = vertexSource;
+                        }
 
                         final long commandOffset =
                                 (long) (info.firstCommand() + meshIndex * info.commandCount())

@@ -1,16 +1,17 @@
 package com.ikalagaming.graphics.graph;
 
-import static org.lwjgl.vulkan.VK10.*;
-
-import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.vulkan.SharedBuffer;
-import com.ikalagaming.graphics.vulkan.VulkanState;
 
 import lombok.Getter;
 import lombok.Setter;
 import org.joml.Vector3f;
 
-/** Raw mesh data that is loaded from a file, after some processing. */
+/**
+ * Raw mesh data that is loaded from a file, after some processing. The data stays on the CPU; once
+ * registered through {@link com.ikalagaming.graphics.Meshes}, the copy on the GPU is found through
+ * {@link #getMesh()}.
+ */
 @Getter
 public class MeshData {
 
@@ -89,17 +90,16 @@ public class MeshData {
     /** The buffer (UBO) we use to store the bone weight data. */
     @Setter private SharedBuffer boneWeightBuffer;
 
-    /** The buffer (UBO) we store vertex data in. */
-    private final SharedBuffer vertexBuffer;
+    /**
+     * The mesh in the GPU's shared geometry buffers, once registered.
+     *
+     * @param mesh The handle.
+     * @return The handle, or null if the mesh hasn't been registered.
+     */
+    @Setter private MeshHandle mesh;
 
     /** The buffer (SSBO) we store post-animation values in. */
     @Setter private SharedBuffer animationTargetBuffer;
-
-    /** The buffer to store index data in. */
-    private final SharedBuffer indexBuffer;
-
-    /** Used to store indirect draw commands. */
-    private final SharedBuffer drawIndirectBuffer;
 
     /**
      * @param aabbMin The minimum value (corner) of the axis-aligned bounding box.
@@ -130,22 +130,6 @@ public class MeshData {
         this.boneWeightData = boneWeightData;
         this.boneWeightBuffer = null;
         this.animationTargetBuffer = null;
-
-        // TODO(ches) handle these buffers better
-        final VulkanState state = GraphicsManager.getRenderInstance().getState();
-
-        // Vertices are also read as storage by the animation compute shader
-        this.vertexBuffer =
-                SharedBuffer.allocate(
-                        (long) vertexData.length * Float.BYTES,
-                        state,
-                        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-        this.indexBuffer =
-                SharedBuffer.allocate(
-                        (long) indices.length * Integer.BYTES,
-                        state,
-                        VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
-        this.drawIndirectBuffer =
-                SharedBuffer.allocate(0, state, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+        this.mesh = null;
     }
 }

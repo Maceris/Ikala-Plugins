@@ -260,10 +260,10 @@ public class DebugRender implements RenderStage {
                 vkCmdDraw(commandBuffer, depthTested.count(), 1, 0, 0);
             }
             if (visualizers.isNormals()) {
-                recordNormals(commandBuffer, scene, frameData, 0, visualizers, stack);
+                recordNormals(commandBuffer, vulkanState, scene, frameData, 0, visualizers, stack);
             }
             if (visualizers.isTangents()) {
-                recordNormals(commandBuffer, scene, frameData, 1, visualizers, stack);
+                recordNormals(commandBuffer, vulkanState, scene, frameData, 1, visualizers, stack);
             }
             if (onTop.count() > 0) {
                 vkCmdPushConstants(
@@ -286,6 +286,7 @@ public class DebugRender implements RenderStage {
      * update stage wrote, so animated entities line up with the pose they were drawn in.
      *
      * @param commandBuffer The command buffer, inside the rendering.
+     * @param state The Vulkan state.
      * @param scene The scene.
      * @param frameData The current frame's data.
      * @param mode 0 for normals, 1 for tangents.
@@ -294,6 +295,7 @@ public class DebugRender implements RenderStage {
      */
     private void recordNormals(
             @NonNull VkCommandBuffer commandBuffer,
+            @NonNull VulkanState state,
             @NonNull Scene scene,
             @NonNull PerFrameData frameData,
             int mode,
@@ -321,10 +323,11 @@ public class DebugRender implements RenderStage {
             pushConstants.putInt(NORMALS_FIRST_MATRIX_OFFSET, info.firstMatrix());
             int meshIndex = 0;
             for (MeshData mesh : model.getMeshDataList()) {
+                // The commands' vertex offsets are into the shared buffer or the animation output
                 final SharedBuffer vertices =
                         model.isAnimated()
                                 ? mesh.getAnimationTargetBuffer()
-                                : mesh.getVertexBuffer();
+                                : state.geometry.getVertices();
                 if (vertices == null || vertices.deviceAddress == VK_NULL_HANDLE) {
                     meshIndex += 1;
                     continue;

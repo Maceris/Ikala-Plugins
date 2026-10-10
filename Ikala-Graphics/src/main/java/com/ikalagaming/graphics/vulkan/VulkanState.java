@@ -35,6 +35,9 @@ public class VulkanState {
     /** Texture uploads waiting for the render thread. */
     public TextureUploads textureUploads = null;
 
+    /** The shared vertex and index buffers every scene mesh lives in. */
+    public GeometryArena geometry = null;
+
     /** For submitting work outside the frame, like texture uploads. */
     public ImmediateCommands immediateCommands = null;
 
@@ -119,13 +122,28 @@ public class VulkanState {
     }
 
     /**
-     * Free something once the current frame index comes around again, by which point no frame in
-     * flight can still be using it.
+     * Whether the render thread is recording the frame at {@link #frameIndex}, as opposed to
+     * between frames. Render thread only.
+     */
+    public boolean recordingFrame = false;
+
+    /**
+     * Free something once no frame that could be using it is still in flight. Render thread only.
+     *
+     * <p>While a frame is recording, that frame may use the resource, so it waits for this frame
+     * index's fence, which comes around again once every earlier frame is done too. Between frames,
+     * the newest frame using it is the one submitted last, so it waits for that frame's fence
+     * instead; waiting for the next frame's would free it while the last one still runs.
      *
      * @param free The code that frees the resource.
      */
     public void deferFree(@NonNull Runnable free) {
-        deferredFrees.get(frameIndex).add(free);
+        final int index =
+                recordingFrame
+                        ? frameIndex
+                        : (frameIndex + GraphicsManager.MAX_FRAMES_IN_FLIGHT - 1)
+                                % GraphicsManager.MAX_FRAMES_IN_FLIGHT;
+        deferredFrees.get(index).add(free);
     }
 
     /**

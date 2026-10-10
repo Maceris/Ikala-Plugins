@@ -50,6 +50,9 @@ public final class GraphicsContext {
     /** Texture loading and releasing for this context. */
     private final Textures textures;
 
+    /** Mesh registering and releasing for this context. */
+    private final Meshes meshes;
+
     /** Debug shape drawing for this context. */
     private final DebugDraw debug;
 
@@ -70,6 +73,7 @@ public final class GraphicsContext {
         ownerKey = owner + "#" + NEXT_ID.incrementAndGet();
         this.plugin = new WeakReference<>(plugin);
         textures = new Textures(this);
+        meshes = new Meshes(this);
         debug = new DebugDraw(this);
         ui = new UI(this, GraphicsManager::getUiManager);
         closed = false;
@@ -84,6 +88,17 @@ public final class GraphicsContext {
     public Textures textures() {
         checkOpen();
         return textures;
+    }
+
+    /**
+     * Register and release meshes owned by this plugin.
+     *
+     * @return The meshes API for this plugin.
+     * @throws IllegalStateException If the plugin was unloaded.
+     */
+    public Meshes meshes() {
+        checkOpen();
+        return meshes;
     }
 
     /**
