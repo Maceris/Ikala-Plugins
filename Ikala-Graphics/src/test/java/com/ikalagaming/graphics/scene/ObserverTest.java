@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ikalagaming.graphics.scene.debug.DebugFrustum;
-import com.ikalagaming.graphics.vulkan.VulkanState;
 
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
@@ -54,7 +53,7 @@ class ObserverTest {
     @Test
     void frozenObserverStaysPutWhileTheCameraMoves() {
         // The material buffer starts empty, so the scene never touches Vulkan
-        Scene scene = new Scene(new VulkanState(), 800, 600);
+        Scene scene = new Scene(800, 600);
         scene.getCamera().setPosition(1, 2, 3);
         assertFalse(scene.isObserverFrozen());
 

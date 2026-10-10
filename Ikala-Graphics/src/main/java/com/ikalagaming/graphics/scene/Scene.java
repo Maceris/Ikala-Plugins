@@ -12,7 +12,6 @@ import com.ikalagaming.graphics.vulkan.GeometryArena;
 import com.ikalagaming.graphics.vulkan.InstanceTable;
 import com.ikalagaming.graphics.vulkan.SharedBuffer;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
-import com.ikalagaming.graphics.vulkan.VulkanState;
 
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -91,14 +90,13 @@ public class Scene {
     /**
      * Set up a new scene.
      *
-     * @param state The Vulkan state.
      * @param width The screen width, in pixels.
      * @param height The screen height, in pixels.
      */
-    public Scene(@NonNull VulkanState state, int width, int height) {
+    public Scene(int width, int height) {
         modelMap = new ConcurrentHashMap<>();
         projection = new Projection(width, height);
-        materialCache = new MaterialCache(state);
+        materialCache = new MaterialCache();
         sceneLights = new SceneLights();
         camera = new Camera();
         fog = new Fog();

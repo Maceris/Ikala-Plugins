@@ -1,127 +1,152 @@
 package com.ikalagaming.graphics.graph;
 
-import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-
-import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.vulkan.SharedBuffer;
-import com.ikalagaming.graphics.vulkan.VulkanState;
-
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.Synchronized;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeSet;
+import javax.annotation.Nullable;
 
-/** A cache of materials so that we can reuse them. */
+/**
+ * The materials the renderer knows about, each at an index that shaders and GPU tables refer to.
+ *
+ * <p>A material keeps its index for as long as it is in the cache. Indices end up in places that
+ * aren't rewritten when the cache changes, like the instance table's material overrides and the
+ * vertices of baked sections, so removing a material never moves another. Its slot reads as the
+ * default material until a later material takes it, the lowest free slot first.
+ */
 public class MaterialCache {
 
-    /** The default material. */
+    /** The default material, always at index 0. */
     public static final Material DEFAULT_MATERIAL = new Material();
 
+    /** The material in each slot, null where one was removed and nothing has taken it since. */
+    private final List<Material> slots = new ArrayList<>();
+
+    /** Each material's slot. */
+    private final Map<Material, Integer> indices = new HashMap<>();
+
+    /** The slots freed by removals, to reuse lowest first. */
+    private final TreeSet<Integer> freeSlots = new TreeSet<>();
+
     /**
-     * The actual cache of materials.
+     * Whether the materials changed since the renderer last looked. -- GETTER -- Whether the
+     * materials changed. -- SETTER -- Note whether the materials changed.
      *
-     * @return The list of materials in the cache. This should not be modified directly, it will
-     *     break a lot of things.
-     * @see #addMaterial(Material)
-     * @see #removeMaterial(Material)
+     * @param dirty Whether they changed.
+     * @return True if they changed.
      */
-    private final List<Material> materialsList;
+    @Getter @Setter private volatile boolean dirty;
 
-    private final Map<Material, Integer> materialLookup;
-
-    @Getter @Setter private boolean dirty;
-
-    @Getter private final SharedBuffer materialBuffer;
-
-    /** Set up a new cache with a default material. */
-    public MaterialCache(@NonNull VulkanState state) {
-        materialsList = Collections.synchronizedList(new ArrayList<>());
-        materialLookup = Collections.synchronizedMap(new HashMap<>());
+    /** Set up a cache holding only the default material. */
+    public MaterialCache() {
         addMaterial(DEFAULT_MATERIAL);
         dirty = true;
-        materialBuffer = SharedBuffer.allocate(0, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
     }
 
     /**
-     * Add a new material to the cache and give an index to the material.
+     * Add a material, giving it an index. Adding one that is already in the cache does nothing.
      *
-     * @param material The material to add to the cache.
+     * @param material The material to add.
+     * @return Its index.
      * @see #getMaterialIndex(Material)
      */
     @Synchronized
-    public void addMaterial(@NonNull Material material) {
-        final int assignedIndex = materialsList.size();
-        materialsList.add(material);
-        materialLookup.put(material, assignedIndex);
+    public int addMaterial(@NonNull Material material) {
+        final Integer existing = indices.get(material);
+        if (existing != null) {
+            return existing;
+        }
+        final int index;
+        if (freeSlots.isEmpty()) {
+            index = slots.size();
+            slots.add(material);
+        } else {
+            index = freeSlots.pollFirst();
+            slots.set(index, material);
+        }
+        indices.put(material, index);
         dirty = true;
+        return index;
     }
 
     /**
-     * Remove a material from the cache. This will require any material indexes and buffers to need
-     * regenerating, and is expensive, should generally be avoided. The default material cannot be
+     * Remove a material. No other material's index changes; its slot reads as the default material
+     * until a later material takes it. Whatever still refers to the removed material's index should
+     * stop doing so first, or it will show whatever takes the slot. The default material can't be
      * removed.
      *
      * @param material The material to remove.
      */
     @Synchronized
     public void removeMaterial(@NonNull Material material) {
-        if (material == MaterialCache.DEFAULT_MATERIAL) {
+        if (material == DEFAULT_MATERIAL) {
             return;
         }
-        materialsList.remove(material);
-        materialLookup.clear();
-        for (int i = 0; i < materialsList.size(); ++i) {
-            materialLookup.put(materialsList.get(i), i);
+        final Integer index = indices.remove(material);
+        if (index == null) {
+            return;
         }
+        slots.set(index, null);
+        freeSlots.add(index);
         dirty = true;
     }
 
     /**
-     * Fetch the material at a given index. If an invalid index is provided, the default material is
-     * returned.
+     * Fetch the material at an index.
      *
-     * @param index The index to look up.
-     * @return The material at that index.
+     * @param index The index.
+     * @return The material there, or the default material if the index is out of range or its
+     *     material was removed.
      */
     @Synchronized
     public Material getMaterial(int index) {
-        if (index < 0 || index > materialsList.size()) {
-            return MaterialCache.DEFAULT_MATERIAL;
+        if (index < 0 || index >= slots.size()) {
+            return DEFAULT_MATERIAL;
         }
-        return materialsList.get(index);
+        final Material material = slots.get(index);
+        return material == null ? DEFAULT_MATERIAL : material;
     }
 
     /**
-     * Fetch the number of materials in the cache.
+     * How many indices are in use, which is one more than the highest. Slots of removed materials
+     * count, so every index handed out stays inside it.
      *
-     * @return The total number of materials.
+     * @return The number of slots.
      */
     @Synchronized
     public int getMaterialCount() {
-        return materialsList.size();
+        return slots.size();
     }
 
     /**
-     * Fetch the index of a material. Returns 0 if the material is not found.
+     * Fetch the index of a material.
      *
      * @param material The material to look for.
-     * @return The index of the material, or 0 if not found.
+     * @return Its index, or 0, the default material, if it is null or not in the cache.
      */
     @Synchronized
-    public int getMaterialIndex(Material material) {
-        return Optional.ofNullable(material).map(materialLookup::get).orElse(0);
+    public int getMaterialIndex(@Nullable Material material) {
+        if (material == null) {
+            return 0;
+        }
+        final Integer index = indices.get(material);
+        return index == null ? 0 : index;
     }
 
     /**
-     * Queue up deletion of the material buffer. The cache should not be used afterward. Material
-     * textures belong to the plugins that loaded them, so they are not deleted here.
+     * Forget every material, when the scene is torn down. The cache should not be used afterward.
+     * Material textures belong to the plugins that loaded them, so they are not deleted here.
      */
     @Synchronized
     public void cleanup() {
-        GraphicsManager.getDeletionQueue().add(materialBuffer);
-        materialsList.clear();
-        materialLookup.clear();
+        slots.clear();
+        indices.clear();
+        freeSlots.clear();
     }
 }
