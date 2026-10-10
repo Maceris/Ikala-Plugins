@@ -40,7 +40,7 @@ public class SceneRender implements RenderStage {
     private static final int[] STORAGE_BINDINGS = {
         ShaderBindings.Scene.MODEL_MATRICES_BINDING,
         ShaderBindings.Scene.MATERIALS_BINDING,
-        ShaderBindings.Scene.MATERIAL_OVERRIDES_BINDING
+        ShaderBindings.Scene.VISIBLE_BINDING
     };
 
     /**
@@ -212,7 +212,9 @@ public class SceneRender implements RenderStage {
                             .pDepthAttachment(depthAttachment);
             vkCmdBeginRendering(commandBuffer, renderingInfo);
 
-            if (!frameData.modelDrawInfo.isEmpty() && width > 0 && height > 0) {
+            if ((frameData.meshSlotCount > 0 || !frameData.modelDrawInfo.isEmpty())
+                    && width > 0
+                    && height > 0) {
                 drawModels(commandBuffer, scene, vulkanState, renderConfig, width, height, stack);
             }
 
@@ -223,7 +225,8 @@ public class SceneRender implements RenderStage {
     }
 
     /**
-     * Record the draws for every model that has entities.
+     * Record the scene pass's draws: one indirect draw for everything culling handled, then the
+     * animated models.
      *
      * @param commandBuffer The command buffer to record into.
      * @param scene The scene.
@@ -266,49 +269,61 @@ public class SceneRender implements RenderStage {
                         state.bindlessTextures.getDescriptorSet()),
                 null);
 
-        final MaterialCache materialCache = scene.getMaterialCache();
-        ByteBuffer pushConstants = stack.calloc(ShaderBindings.Scene.PUSH_CONSTANTS_SIZE);
         LongBuffer vertexBuffers = stack.callocLong(1);
         LongBuffer vertexOffsets = stack.callocLong(1);
         // Every mesh's indices are in the shared index buffer, found by each command's first index
         vkCmdBindIndexBuffer(
                 commandBuffer, state.geometry.getIndices().buffer, 0, VK_INDEX_TYPE_UINT32);
-        long boundVertices = VK_NULL_HANDLE;
+        vertexBuffers.put(0, state.geometry.getVertices().buffer);
+        vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffers, vertexOffsets);
 
+        // Everything culling handled: the scene pass's commands, one per mesh slot
+        if (frameData.meshSlotCount > 0) {
+            vkCmdDrawIndexedIndirect(
+                    commandBuffer,
+                    frameData.sceneDrawCommands.buffer,
+                    0,
+                    frameData.meshSlotCount,
+                    InstanceDrawUpdate.DRAW_COMMAND_SIZE);
+        }
+        drawListedModels(commandBuffer, state, frameData, vertexBuffers, vertexOffsets);
+    }
+
+    /**
+     * Draw the animated models from their CPU-written commands, which culling doesn't handle. The
+     * shared vertex buffer must already be bound, and is bound again afterward.
+     *
+     * @param commandBuffer The command buffer, inside the rendering.
+     * @param state The Vulkan state.
+     * @param frameData This frame's data.
+     * @param vertexBuffers A buffer to put the vertex buffer handle in.
+     * @param vertexOffsets The vertex buffer offsets, zero.
+     */
+    static void drawListedModels(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull VulkanState state,
+            @NonNull PerFrameData frameData,
+            @NonNull LongBuffer vertexBuffers,
+            @NonNull LongBuffer vertexOffsets) {
+        boolean rebound = false;
         for (var entry : frameData.modelDrawInfo.entrySet()) {
             final Model model = entry.getKey();
+            if (!model.isAnimated()) {
+                // Only listed for the normal and tangent lines
+                continue;
+            }
             final PerFrameData.ModelDrawInfo info = entry.getValue();
-            pushConstants.putInt(
-                    ShaderBindings.Scene.PUSH_CONSTANT_FIRST_MATRIX_OFFSET, info.firstMatrix());
-            pushConstants.putInt(
-                    ShaderBindings.Scene.PUSH_CONSTANT_FIRST_OVERRIDE_OFFSET, info.firstOverride());
-
             int meshIndex = 0;
             for (MeshData mesh : model.getMeshDataList()) {
-                pushConstants.putInt(
-                        ShaderBindings.Scene.PUSH_CONSTANT_MATERIAL_INDEX_OFFSET,
-                        materialCache.getMaterialIndex(mesh.getMaterial()));
-                pushConstants.putInt(
-                        ShaderBindings.Scene.PUSH_CONSTANT_MESH_INDEX_OFFSET, meshIndex);
-                vkCmdPushConstants(
-                        commandBuffer,
-                        pipelineLayout,
-                        VK_SHADER_STAGE_VERTEX_BIT,
-                        0,
-                        pushConstants);
-
                 final long vertexSource = SceneRender.vertexSource(state, model, mesh);
                 if (vertexSource == VK_NULL_HANDLE) {
-                    // An animated model the animation stage has not run for yet
+                    // The animation stage has not run for it yet
                     meshIndex += 1;
                     continue;
                 }
-                if (vertexSource != boundVertices) {
-                    vertexBuffers.put(0, vertexSource);
-                    vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffers, vertexOffsets);
-                    boundVertices = vertexSource;
-                }
-
+                vertexBuffers.put(0, vertexSource);
+                vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffers, vertexOffsets);
+                rebound = true;
                 final long commandOffset =
                         (long) (info.firstCommand() + meshIndex * info.commandCount())
                                 * InstanceDrawUpdate.DRAW_COMMAND_SIZE;
@@ -320,6 +335,10 @@ public class SceneRender implements RenderStage {
                         InstanceDrawUpdate.DRAW_COMMAND_SIZE);
                 meshIndex += 1;
             }
+        }
+        if (rebound) {
+            vertexBuffers.put(0, state.geometry.getVertices().buffer);
+            vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffers, vertexOffsets);
         }
     }
 
@@ -488,7 +507,7 @@ public class SceneRender implements RenderStage {
      */
     private void updateBindings(@NonNull VulkanState state, @NonNull PerFrameData frameData) {
         final SharedBuffer[] buffers = {
-            frameData.sceneModelMatrices, frameData.materials, frameData.sceneMaterialOverrides
+            frameData.sceneModelMatrices, frameData.materials, frameData.visibleInstances
         };
         writeStorageBindings(
                 state,
@@ -553,13 +572,6 @@ public class SceneRender implements RenderStage {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
-            VkPushConstantRange.Buffer pushConstantRanges = VkPushConstantRange.calloc(1, stack);
-            pushConstantRanges
-                    .get(0)
-                    .stageFlags(VK_SHADER_STAGE_VERTEX_BIT)
-                    .offset(0)
-                    .size(ShaderBindings.Scene.PUSH_CONSTANTS_SIZE);
-
             VkDescriptorSetLayoutBinding.Buffer bindings =
                     VkDescriptorSetLayoutBinding.calloc(4, stack);
             bindings.get(0)
@@ -578,7 +590,7 @@ public class SceneRender implements RenderStage {
                     .descriptorCount(1)
                     .stageFlags(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
             bindings.get(3)
-                    .binding(ShaderBindings.Scene.MATERIAL_OVERRIDES_BINDING)
+                    .binding(ShaderBindings.Scene.VISIBLE_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1)
                     .stageFlags(VK_SHADER_STAGE_VERTEX_BIT);
@@ -599,8 +611,7 @@ public class SceneRender implements RenderStage {
                             .pSetLayouts(
                                     stack.longs(
                                             descriptorSetLayout,
-                                            state.bindlessTextures.getDescriptorSetLayout()))
-                            .pPushConstantRanges(pushConstantRanges);
+                                            state.bindlessTextures.getDescriptorSetLayout()));
             checkError(
                     vkCreatePipelineLayout(
                             state.device.logical, pipelineLayoutCreateInfo, null, longOutput));

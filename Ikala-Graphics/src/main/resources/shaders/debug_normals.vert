@@ -14,17 +14,21 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Ver
     float vertexData[];
 };
 
-// The model matrices for this frame, in render space, written by the model matrix update stage
+// The model matrix of every instance slot this frame, in render space
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Matrices {
     mat4 modelMatrices[];
+};
+
+// Which instances to draw: (instance slot, material) each, found by gl_InstanceIndex
+layout(buffer_reference, std430, buffer_reference_align = 8) readonly buffer Visible {
+    uvec2 visible[];
 };
 
 layout(push_constant) uniform Constants {
     mat4 projectionViewMatrix;
     Vertices vertices;
     Matrices matrices;
-    // Where this model's matrices start, gl_InstanceIndex is added on like in the scene shader
-    uint firstMatrix;
+    Visible instances;
     // Added to the vertex index, which picks the pose for animated meshes
     uint vertexBase;
     // How long each line is, in world units
@@ -45,7 +49,8 @@ void main()
     vec3 direction = vec3(vertices.vertexData[directionBase], vertices.vertexData[directionBase + 1],
         vertices.vertexData[directionBase + 2]);
 
-    mat4 modelMatrix = matrices.modelMatrices[firstMatrix + gl_InstanceIndex];
+    // gl_InstanceIndex already includes the base instance
+    mat4 modelMatrix = matrices.modelMatrices[instances.visible[gl_InstanceIndex].x];
     vec4 renderPosition = modelMatrix * vec4(position, 1.0);
     if ((gl_VertexIndex & 1) == 1) {
         // Fine for uniform scale, which is all entities support

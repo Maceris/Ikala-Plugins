@@ -7,7 +7,6 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.MeshData;
-import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.*;
 import com.ikalagaming.graphics.vulkan.RenderStage;
@@ -99,8 +98,8 @@ public class ShadowRender implements RenderStage {
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
         final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
 
+        // Worked out by the instance draw update stage, since culling needs them first
         CascadeShadowSplit[] cascadeShadowSplits = frameData.cascadeShadowSplits;
-        CascadeShadowSplit.updateCascadeShadows(cascadeShadowSplits, scene);
 
         SceneRender.writeStorageBindings(
                 vulkanState,
@@ -126,13 +125,17 @@ public class ShadowRender implements RenderStage {
                     stack);
 
             ByteBuffer pushConstants = stack.calloc(ShaderBindings.Shadow.PUSH_CONSTANTS_SIZE);
+            pushConstants.putLong(
+                    ShaderBindings.Shadow.PUSH_CONSTANT_VISIBLE_OFFSET,
+                    frameData.visibleInstances.deviceAddress);
             for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
                 cascadeShadowSplits[i]
                         .getProjViewMatrix()
                         .get(
                                 ShaderBindings.Shadow.PUSH_CONSTANT_PROJECTION_VIEW_MATRIX_OFFSET,
                                 pushConstants);
-                renderCascade(commandBuffer, vulkanState, shadowMaps[i], pushConstants);
+                // The scene is culled pass 0, the cascades after it
+                renderCascade(commandBuffer, vulkanState, shadowMaps[i], 1 + i, pushConstants);
             }
 
             transitionShadowMaps(
@@ -155,12 +158,14 @@ public class ShadowRender implements RenderStage {
      * @param commandBuffer The command buffer to record into.
      * @param state The Vulkan state.
      * @param shadowMap The shadow map to render into, as a depth attachment.
+     * @param pass Which culled pass the cascade is, to find its draw commands.
      * @param pushConstants The push constants, with the cascade's matrix already filled out.
      */
     private void renderCascade(
             @NonNull VkCommandBuffer commandBuffer,
             @NonNull VulkanState state,
             @NonNull TextureInfoVulkan shadowMap,
+            int pass,
             @NonNull ByteBuffer pushConstants) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
         final int width = CascadeShadowSplit.SHADOW_MAP_WIDTH;
@@ -183,7 +188,7 @@ public class ShadowRender implements RenderStage {
                             .pDepthAttachment(depthAttachment);
             vkCmdBeginRendering(commandBuffer, renderingInfo);
 
-            if (!frameData.modelDrawInfo.isEmpty()) {
+            if (frameData.meshSlotCount > 0 || !frameData.modelDrawInfo.isEmpty()) {
                 vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
                 // Not flipped, so the light stage can use the shadow map coordinates as is
@@ -202,52 +207,32 @@ public class ShadowRender implements RenderStage {
                         stack.longs(descriptorSets[state.frameIndex]),
                         null);
 
+                vkCmdPushConstants(
+                        commandBuffer,
+                        pipelineLayout,
+                        VK_SHADER_STAGE_VERTEX_BIT,
+                        0,
+                        pushConstants);
                 LongBuffer vertexBuffers = stack.callocLong(1);
                 LongBuffer vertexOffsets = stack.callocLong(1);
                 vkCmdBindIndexBuffer(
                         commandBuffer, state.geometry.getIndices().buffer, 0, VK_INDEX_TYPE_UINT32);
-                long boundVertices = VK_NULL_HANDLE;
+                vertexBuffers.put(0, state.geometry.getVertices().buffer);
+                vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffers, vertexOffsets);
 
-                // TODO(ches) frustum culling, this is pretty excessive
-                for (var entry : frameData.modelDrawInfo.entrySet()) {
-                    final Model model = entry.getKey();
-                    final PerFrameData.ModelDrawInfo info = entry.getValue();
-                    pushConstants.putInt(
-                            ShaderBindings.Shadow.PUSH_CONSTANT_FIRST_MATRIX_OFFSET,
-                            info.firstMatrix());
-                    vkCmdPushConstants(
+                // Everything culling handled for this cascade, one command per mesh slot
+                if (frameData.meshSlotCount > 0) {
+                    vkCmdDrawIndexedIndirect(
                             commandBuffer,
-                            pipelineLayout,
-                            VK_SHADER_STAGE_VERTEX_BIT,
-                            0,
-                            pushConstants);
-
-                    int meshIndex = 0;
-                    for (MeshData mesh : model.getMeshDataList()) {
-                        final long vertexSource = SceneRender.vertexSource(state, model, mesh);
-                        if (vertexSource == VK_NULL_HANDLE) {
-                            // An animated model the animation stage has not run for yet
-                            meshIndex += 1;
-                            continue;
-                        }
-                        if (vertexSource != boundVertices) {
-                            vertexBuffers.put(0, vertexSource);
-                            vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffers, vertexOffsets);
-                            boundVertices = vertexSource;
-                        }
-
-                        final long commandOffset =
-                                (long) (info.firstCommand() + meshIndex * info.commandCount())
-                                        * InstanceDrawUpdate.DRAW_COMMAND_SIZE;
-                        vkCmdDrawIndexedIndirect(
-                                commandBuffer,
-                                frameData.sceneDrawCommands.buffer,
-                                commandOffset,
-                                info.commandCount(),
-                                InstanceDrawUpdate.DRAW_COMMAND_SIZE);
-                        meshIndex += 1;
-                    }
+                            frameData.sceneDrawCommands.buffer,
+                            (long) pass
+                                    * frameData.meshSlotCount
+                                    * InstanceDrawUpdate.DRAW_COMMAND_SIZE,
+                            frameData.meshSlotCount,
+                            InstanceDrawUpdate.DRAW_COMMAND_SIZE);
                 }
+                SceneRender.drawListedModels(
+                        commandBuffer, state, frameData, vertexBuffers, vertexOffsets);
             }
 
             vkCmdEndRendering(commandBuffer);

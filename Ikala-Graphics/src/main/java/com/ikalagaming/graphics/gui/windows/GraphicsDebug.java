@@ -37,6 +37,7 @@ public class GraphicsDebug extends GuiWindow {
     private final Checkbox showTangents;
     private final Slider normalLength;
     private final Checkbox freezeObserver;
+    private final Checkbox disableCulling;
     private final Checkbox showUiShowcase;
     private final Slider fogDensity;
     private final Slider directionalLightX;
@@ -61,6 +62,7 @@ public class GraphicsDebug extends GuiWindow {
         showTangents = new Checkbox("Tangents", false);
         normalLength = new Slider("Normal length", 0.1f, 0.01f, 1f);
         freezeObserver = new Checkbox("Freeze observer", false);
+        disableCulling = new Checkbox("Draw everything (no culling)", false);
         showUiShowcase = new Checkbox("UI showcase", false);
         fogDensity = new Slider("Fog Density", 0, 0, 1);
         directionalLightX = new Slider("Directional Light X", 0, -1, 1);
@@ -80,6 +82,7 @@ public class GraphicsDebug extends GuiWindow {
         addChild(showTangents);
         addChild(normalLength);
         addChild(freezeObserver);
+        addChild(disableCulling);
         addChild(showUiShowcase);
         addChild(directionalLightX);
         addChild(directionalLightY);
@@ -112,7 +115,7 @@ public class GraphicsDebug extends GuiWindow {
                                 "Spot lights: %,d", scene.getSceneLights().getSpotLights().size()));
                 IkGui.text(
                         String.format(
-                                "Materials loaded - %,d",
+                                "Materials loaded: %,d",
                                 GraphicsManager.getScene().getMaterialCache().getMaterialCount()));
 
                 long triangles = 0;
@@ -137,6 +140,19 @@ public class GraphicsDebug extends GuiWindow {
                 IkGui.text(String.format("Models loaded: %,d", scene.getModelMap().size()));
                 IkGui.text(String.format("Meshes loaded: %,d", meshes));
                 IkGui.text(String.format("Instances: %,d", instances));
+                final int[] drawn =
+                        renderer == null || renderer.getState().instances == null
+                                ? new int[0]
+                                : renderer.getState().instances.getDrawnCounts();
+                if (drawn.length > 0) {
+                    StringBuilder shadows = new StringBuilder();
+                    for (int i = 1; i < drawn.length; ++i) {
+                        shadows.append(i == 1 ? "" : " / ").append(String.format("%,d", drawn[i]));
+                    }
+                    // Counted per mesh, so a model with several meshes counts more than once
+                    IkGui.text(String.format("Meshes drawn: %,d", drawn[0]));
+                    IkGui.text("Meshes in shadow cascades: " + shadows);
+                }
                 IkGui.text(String.format("Triangles: %,d", triangles));
             }
 
@@ -211,6 +227,7 @@ public class GraphicsDebug extends GuiWindow {
                 showTangents.draw(width, height);
                 normalLength.draw(width, height);
                 freezeObserver.draw(width, height);
+                disableCulling.draw(width, height);
                 IkGui.textWrapped(
                         "Culling, level of detail and streaming use the observer, so freeze it to"
                                 + " inspect them from outside.");
@@ -272,6 +289,9 @@ public class GraphicsDebug extends GuiWindow {
             }
             visualizers.setObserverFrustum(freezeObserver.getState());
             changed = true;
+        }
+        if (disableCulling.checkResult()) {
+            visualizers.setCullingDisabled(disableCulling.getState());
         }
         if (changed && visualizers.anyEnabled()) {
             final int config = GraphicsManager.getPipelineConfig();

@@ -5,7 +5,6 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
-import com.ikalagaming.graphics.vulkan.InstanceTable;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 import com.ikalagaming.graphics.vulkan.ShaderBindings;
@@ -14,7 +13,6 @@ import com.ikalagaming.graphics.vulkan.VulkanState;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.joml.Vector3dc;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.VkCommandBuffer;
 import org.lwjgl.vulkan.VkComputePipelineCreateInfo;
@@ -27,12 +25,13 @@ import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
 
 /**
- * Turns every instance into a model matrix on the GPU, relative to the camera. Each slot of the
- * persistent {@link InstanceTable} gets its matrix at the same index of this frame's matrix buffer,
- * which the culling, scene, shadow and debug stages read.
+ * Culls every instance against every pass's frustum on the GPU and fills in the draw commands. For
+ * each instance and pass, each of the instance's meshes that may be visible is added to that mesh's
+ * draw command, and its slot and material written into the room set aside for that mesh in the
+ * pass's visible list. The scene and shadow stages then draw each pass with one indirect call.
  */
 @Slf4j
-public class InstanceTransform implements RenderStage {
+public class InstanceCull implements RenderStage {
 
     /** The shader to run. */
     @NonNull private final ShaderVulkan shader;
@@ -46,9 +45,9 @@ public class InstanceTransform implements RenderStage {
     /**
      * Set up the stage.
      *
-     * @param shader The instance transform compute shader.
+     * @param shader The culling compute shader.
      */
-    public InstanceTransform(@NonNull ShaderVulkan shader) {
+    public InstanceCull(@NonNull ShaderVulkan shader) {
         this.shader = shader;
         pipelineLayout = VK_NULL_HANDLE;
         pipeline = VK_NULL_HANDLE;
@@ -56,7 +55,7 @@ public class InstanceTransform implements RenderStage {
 
     @Override
     public void initialize(@NonNull VulkanState state) {
-        log.debug("Initializing instance transforms");
+        log.debug("Initializing instance culling");
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
             VkPushConstantRange.Buffer pushConstantRanges = VkPushConstantRange.calloc(1, stack);
@@ -64,7 +63,7 @@ public class InstanceTransform implements RenderStage {
                     .get(0)
                     .stageFlags(VK_SHADER_STAGE_COMPUTE_BIT)
                     .offset(0)
-                    .size(ShaderBindings.Instances.PUSH_CONSTANTS_SIZE);
+                    .size(ShaderBindings.Cull.PUSH_CONSTANTS_SIZE);
             // No descriptor sets, the buffers are all passed by device address
             VkPipelineLayoutCreateInfo layoutInfo =
                     VkPipelineLayoutCreateInfo.calloc(stack)
@@ -99,47 +98,66 @@ public class InstanceTransform implements RenderStage {
     public void render(
             Scene scene, @NonNull Window window, @NonNull VulkanState state, int renderConfig) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
-        final int count = frameData.instanceCount;
-        if (count == 0) {
+        final int slots = frameData.instanceCount;
+        if (slots == 0 || frameData.meshSlotCount == 0) {
             return;
         }
         final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
-        final Vector3dc camera = scene.getCamera().getPosition();
         try (MemoryStack stack = MemoryStack.stackPush()) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-            ByteBuffer constants = stack.calloc(ShaderBindings.Instances.PUSH_CONSTANTS_SIZE);
+            ByteBuffer constants = stack.calloc(ShaderBindings.Cull.PUSH_CONSTANTS_SIZE);
             constants.putLong(
-                    ShaderBindings.Instances.PUSH_CONSTANT_TABLE_OFFSET,
+                    ShaderBindings.Cull.PUSH_CONSTANT_INSTANCES_OFFSET,
                     state.instances.getInstances().getBuffer().deviceAddress);
             constants.putLong(
-                    ShaderBindings.Instances.PUSH_CONSTANT_MATRICES_OFFSET,
+                    ShaderBindings.Cull.PUSH_CONSTANT_MODEL_MESHES_OFFSET,
+                    state.instances.getModelMeshes().getBuffer().deviceAddress);
+            constants.putLong(
+                    ShaderBindings.Cull.PUSH_CONSTANT_OVERRIDES_OFFSET,
+                    state.instances.getOverrides().getBuffer().deviceAddress);
+            constants.putLong(
+                    ShaderBindings.Cull.PUSH_CONSTANT_MESHES_OFFSET,
+                    state.geometry.getMeshTable().getBuffer().deviceAddress);
+            constants.putLong(
+                    ShaderBindings.Cull.PUSH_CONSTANT_MATRICES_OFFSET,
                     frameData.sceneModelMatrices.deviceAddress);
-            final int high = ShaderBindings.Instances.PUSH_CONSTANT_CAMERA_HIGH_OFFSET;
-            constants.putFloat(high, InstanceTable.high(camera.x()));
-            constants.putFloat(high + Float.BYTES, InstanceTable.high(camera.y()));
-            constants.putFloat(high + 2 * Float.BYTES, InstanceTable.high(camera.z()));
-            final int low = ShaderBindings.Instances.PUSH_CONSTANT_CAMERA_LOW_OFFSET;
-            constants.putFloat(low, InstanceTable.low(camera.x()));
-            constants.putFloat(low + Float.BYTES, InstanceTable.low(camera.y()));
-            constants.putFloat(low + 2 * Float.BYTES, InstanceTable.low(camera.z()));
-            constants.putInt(ShaderBindings.Instances.PUSH_CONSTANT_COUNT_OFFSET, count);
+            constants.putLong(
+                    ShaderBindings.Cull.PUSH_CONSTANT_COMMANDS_OFFSET,
+                    frameData.sceneDrawCommands.deviceAddress);
+            constants.putLong(
+                    ShaderBindings.Cull.PUSH_CONSTANT_VISIBLE_OFFSET,
+                    frameData.visibleInstances.deviceAddress);
+            constants.putLong(
+                    ShaderBindings.Cull.PUSH_CONSTANT_FRUSTA_OFFSET,
+                    frameData.cullFrusta.deviceAddress);
+            constants.putLong(
+                    ShaderBindings.Cull.PUSH_CONSTANT_COUNTERS_OFFSET,
+                    frameData.cullCounters.deviceAddress);
+            constants.putInt(ShaderBindings.Cull.PUSH_CONSTANT_SLOT_COUNT_OFFSET, slots);
+            constants.putInt(
+                    ShaderBindings.Cull.PUSH_CONSTANT_MESH_SLOT_COUNT_OFFSET,
+                    frameData.meshSlotCount);
             vkCmdPushConstants(
                     commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
             final int groups =
-                    (count + ShaderBindings.Instances.WORKGROUP_SIZE - 1)
-                            / ShaderBindings.Instances.WORKGROUP_SIZE;
-            vkCmdDispatch(commandBuffer, groups, 1, 1);
+                    (slots + ShaderBindings.Cull.WORKGROUP_SIZE - 1)
+                            / ShaderBindings.Cull.WORKGROUP_SIZE;
+            vkCmdDispatch(commandBuffer, groups, frameData.passCount, 1);
 
-            // The culling pass and the scene, shadow and debug stages read the matrices
+            // Draws read the commands and visible lists, and the CPU reads the counters later
             VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack);
             barrier.get(0)
                     .sType$Default()
                     .srcStageMask(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
                     .srcAccessMask(VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT)
                     .dstStageMask(
-                            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT
-                                    | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT)
-                    .dstAccessMask(VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
+                            VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT
+                                    | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT
+                                    | VK_PIPELINE_STAGE_2_HOST_BIT)
+                    .dstAccessMask(
+                            VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT
+                                    | VK_ACCESS_2_SHADER_STORAGE_READ_BIT
+                                    | VK_ACCESS_2_HOST_READ_BIT);
             vkCmdPipelineBarrier2(
                     commandBuffer,
                     VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));

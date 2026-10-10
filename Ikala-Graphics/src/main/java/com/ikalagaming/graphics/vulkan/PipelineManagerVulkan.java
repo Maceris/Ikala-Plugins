@@ -77,6 +77,7 @@ public class PipelineManagerVulkan {
     private final LightRender stageLightRender;
     private final InstanceDrawUpdate stageInstanceDrawUpdate;
     private final InstanceTransform stageInstanceTransform;
+    private final InstanceCull stageInstanceCull;
     private final SceneRender stageSceneRender;
     private final ShadowRender stageShadowRender;
     private final SkyboxRender stageSkyboxRender;
@@ -100,6 +101,8 @@ public class PipelineManagerVulkan {
         stageInstanceTransform =
                 new InstanceTransform(shaders.getShader(RenderStage.Type.INSTANCES));
         stageInstanceTransform.initialize(state);
+        stageInstanceCull = new InstanceCull(shaders.getShader(RenderStage.Type.CULL));
+        stageInstanceCull.initialize(state);
         stageSceneRender = new SceneRender(shaders.getShader(RenderStage.Type.SCENE));
         stageSceneRender.initialize(state);
         stageGuiRender = new GuiRender(shaders.getShader(RenderStage.Type.GUI), fontAtlas);
@@ -133,6 +136,7 @@ public class PipelineManagerVulkan {
         if (RenderConfig.hasSceneStage(configuration)) {
             stages.add(stageInstanceDrawUpdate);
             stages.add(stageInstanceTransform);
+            stages.add(stageInstanceCull);
         }
         if (RenderConfig.hasAnimationStage(configuration)) {
             stages.add(stageAnimationRender);
@@ -400,14 +404,19 @@ public class PipelineManagerVulkan {
                                 ShaderBindings.Scene.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
                 state.perFrameData[i].sceneModelMatrices =
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
-                state.perFrameData[i].instanceList =
+                state.perFrameData[i].cullFrusta =
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
-                state.perFrameData[i].sceneMaterialOverrides =
+                state.perFrameData[i].cullCounters =
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
+                state.perFrameData[i].visibleInstances =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
+                // Filled in by the culling pass as well as read as draws
                 state.perFrameData[i].sceneDrawCommands =
                         SharedBuffer.allocate(
-                                DEFERRED_UNTIL_LATER, state, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
-                state.perFrameData[i].modelDrawInfo = new HashMap<>();
+                                DEFERRED_UNTIL_LATER,
+                                state,
+                                VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | STORAGE);
+                state.perFrameData[i].modelDrawInfo = new LinkedHashMap<>();
                 state.perFrameData[i].debugVertices =
                         SharedBuffer.allocate(
                                 DEFERRED_UNTIL_LATER, state, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
@@ -482,6 +491,7 @@ public class PipelineManagerVulkan {
         stageLightRender.cleanup(state);
         stageInstanceDrawUpdate.cleanup(state);
         stageInstanceTransform.cleanup(state);
+        stageInstanceCull.cleanup(state);
         stageSceneRender.cleanup(state);
         stageShadowRender.cleanup(state);
         stageSkyboxRender.cleanup(state);
@@ -559,10 +569,12 @@ public class PipelineManagerVulkan {
         data.sceneUniforms = null;
         SharedBuffer.free(data.sceneModelMatrices, state);
         data.sceneModelMatrices = null;
-        SharedBuffer.free(data.instanceList, state);
-        data.instanceList = null;
-        SharedBuffer.free(data.sceneMaterialOverrides, state);
-        data.sceneMaterialOverrides = null;
+        SharedBuffer.free(data.cullFrusta, state);
+        data.cullFrusta = null;
+        SharedBuffer.free(data.cullCounters, state);
+        data.cullCounters = null;
+        SharedBuffer.free(data.visibleInstances, state);
+        data.visibleInstances = null;
         SharedBuffer.free(data.sceneDrawCommands, state);
         data.sceneDrawCommands = null;
         data.modelDrawInfo = null;

@@ -9,18 +9,24 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ikalagaming.graphics.InstanceHandle;
+import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 
+import lombok.NonNull;
 import org.joml.Quaternionf;
+import org.joml.Quaternionfc;
 import org.joml.Vector3d;
+import org.joml.Vector3dc;
 import org.joml.Vector3f;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Bookkeeping for everything placed in the scene, without Vulkan. */
 class InstanceRegistryTest {
@@ -60,12 +66,53 @@ class InstanceRegistryTest {
         return registry.place(owner, model, new Vector3d(x, 0, 0), new Quaternionf(), 1);
     }
 
+    /** Everything one call to takeChanges reported. */
+    private static final class Recorded implements InstanceRegistry.Changes {
+        final List<Change> instances = new ArrayList<>();
+        final List<int[]> instanceLists = new ArrayList<>();
+        final Map<Integer, MeshHandle> modelMeshes = new LinkedHashMap<>();
+        final Map<Integer, Material> overrides = new LinkedHashMap<>();
+        final Map<Model, Integer> models = new LinkedHashMap<>();
+        InstanceRegistry.Capacities capacities;
+
+        @Override
+        public void instance(
+                int slot,
+                boolean alive,
+                @NonNull Vector3dc position,
+                @NonNull Quaternionfc rotation,
+                float scale,
+                int meshFirst,
+                int meshCount,
+                int overrideFirst) {
+            instances.add(new Change(slot, alive, new Vector3d(position), scale));
+            instanceLists.add(new int[] {meshFirst, meshCount, overrideFirst});
+        }
+
+        @Override
+        public void modelMesh(int index, MeshHandle mesh, Material material) {
+            modelMeshes.put(index, mesh);
+        }
+
+        @Override
+        public void override(int index, Material material) {
+            overrides.put(index, material);
+        }
+
+        @Override
+        public void model(@NonNull Model model, int instanceCount) {
+            models.put(model, instanceCount);
+        }
+    }
+
+    private Recorded take() {
+        Recorded recorded = new Recorded();
+        recorded.capacities = registry.takeChanges(recorded);
+        return recorded;
+    }
+
     private List<Change> takeChanged() {
-        List<Change> changes = new ArrayList<>();
-        registry.takeChanged(
-                (slot, alive, position, rotation, scale) ->
-                        changes.add(new Change(slot, alive, new Vector3d(position), scale)));
-        return changes;
+        return take().instances;
     }
 
     private int[] slotsOf(Model model) {
@@ -175,5 +222,59 @@ class InstanceRegistryTest {
         assertTrue(registry.getRotation(a, rotation));
         assertEquals(new Vector3d(1e9, -2, 3.5), position);
         assertEquals(turned, rotation);
+    }
+
+    @Test
+    void modelsListTheirMeshesOnceForAllTheirInstances() {
+        MeshHandle first = new MeshHandle(7, 2, 3, 3, new Vector3f(), new Vector3f());
+        ball.getMeshDataList().getFirst().setMesh(first);
+        InstanceHandle a = place("p", ball, 1);
+        Recorded recorded = take();
+        // Both meshes of the ball, the second not registered
+        assertEquals(2, recorded.modelMeshes.size());
+        int meshFirst = recorded.instanceLists.getFirst()[0];
+        assertSame(first, recorded.modelMeshes.get(meshFirst));
+        assertNull(recorded.modelMeshes.get(meshFirst + 1));
+        assertEquals(2, recorded.instanceLists.getFirst()[1]);
+        assertEquals(Map.of(ball, 1), recorded.models);
+
+        // A second instance shares the list, and every model is still reported
+        place("p", ball, 2);
+        recorded = take();
+        assertTrue(recorded.modelMeshes.isEmpty());
+        assertEquals(meshFirst, recorded.instanceLists.getFirst()[0]);
+        assertEquals(Map.of(ball, 2), take().models);
+
+        // The list goes with the last instance, and the next model can reuse it
+        registry.removeAllOf(ball);
+        take();
+        place("p", cube, 3);
+        recorded = take();
+        assertEquals(meshFirst, recorded.instanceLists.getFirst()[0]);
+        assertFalse(registry.isValid(a));
+    }
+
+    @Test
+    void overridesAreReportedPerMesh() {
+        InstanceHandle a = place("p", ball, 1);
+        Recorded recorded = take();
+        int overrideFirst = recorded.instanceLists.getFirst()[2];
+        // Placing writes every mesh's override, none yet
+        assertEquals(2, recorded.overrides.size());
+        assertTrue(recorded.overrides.containsKey(overrideFirst + 1));
+        assertNull(recorded.overrides.get(overrideFirst));
+
+        Material red = new Material();
+        registry.setMaterial("p", a, 1, red);
+        recorded = take();
+        assertTrue(recorded.instances.isEmpty(), "Only the overrides changed");
+        assertSame(red, recorded.overrides.get(overrideFirst + 1));
+
+        // Removed instances give their overrides back
+        registry.remove("p", a);
+        take();
+        InstanceHandle b = place("p", ball, 2);
+        assertEquals(overrideFirst, take().instanceLists.getFirst()[2]);
+        assertTrue(registry.isValid(b));
     }
 }

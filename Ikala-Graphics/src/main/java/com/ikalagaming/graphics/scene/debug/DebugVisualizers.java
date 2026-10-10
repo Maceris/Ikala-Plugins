@@ -83,6 +83,15 @@ public class DebugVisualizers {
     private volatile boolean observerFrustum;
 
     /**
+     * Whether culling is turned off, so everything is drawn, to compare against. Not a visualizer,
+     * so {@link #anyEnabled()} ignores it.
+     *
+     * @param cullingDisabled Whether to draw everything.
+     * @return Whether everything is drawn.
+     */
+    private volatile boolean cullingDisabled;
+
+    /**
      * Whether any visualizer is turned on.
      *
      * @return True if at least one visualizer is on.

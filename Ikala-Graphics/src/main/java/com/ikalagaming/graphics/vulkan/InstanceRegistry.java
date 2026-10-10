@@ -1,7 +1,9 @@
 package com.ikalagaming.graphics.vulkan;
 
 import com.ikalagaming.graphics.InstanceHandle;
+import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.graph.Material;
+import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.AnimationState;
 
@@ -18,6 +20,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.Nullable;
@@ -39,7 +42,7 @@ import javax.annotation.Nullable;
 public class InstanceRegistry {
 
     /**
-     * Receives a changed instance, to write into the GPU table.
+     * Receives an instance's transform, such as to draw its bounds.
      *
      * <p>Called with the registry locked, so it must not call back into the registry.
      */
@@ -80,8 +83,85 @@ public class InstanceRegistry {
         void visit(int slot, @NonNull Material[] materials, @Nullable AnimationState animation);
     }
 
+    /**
+     * Receives everything the GPU's copy needs this frame: each instance, model mesh list entry and
+     * material override that changed, and the instance count of every model, all from one locked
+     * snapshot so they agree with each other.
+     *
+     * <p>Called with the registry locked, so it must not call back into the registry.
+     */
+    public interface Changes {
+        /**
+         * An instance table entry changed.
+         *
+         * @param slot The slot.
+         * @param alive Whether the slot holds an instance. If not, the other values are zero.
+         * @param position The world position.
+         * @param rotation The rotation.
+         * @param scale The uniform scale.
+         * @param meshFirst Where its model's meshes start in the model mesh list.
+         * @param meshCount How many meshes its model has.
+         * @param overrideFirst Where its material overrides start in the override list.
+         */
+        void instance(
+                int slot,
+                boolean alive,
+                @NonNull Vector3dc position,
+                @NonNull Quaternionfc rotation,
+                float scale,
+                int meshFirst,
+                int meshCount,
+                int overrideFirst);
+
+        /**
+         * A model mesh list entry changed.
+         *
+         * @param index Where it is in the list.
+         * @param mesh The mesh, or null if the model's mesh isn't registered.
+         * @param material The mesh's own material, or null for the default.
+         */
+        void modelMesh(int index, @Nullable MeshHandle mesh, @Nullable Material material);
+
+        /**
+         * A material override changed.
+         *
+         * @param index Where it is in the override list.
+         * @param material The override, or null for none.
+         */
+        void override(int index, @Nullable Material material);
+
+        /**
+         * A model that has instances, and how many. Every such model is reported every time.
+         *
+         * @param model The model.
+         * @param instanceCount Its instance count.
+         */
+        void model(@NonNull Model model, int instanceCount);
+    }
+
+    /**
+     * How many entries the GPU tables must hold, read along with the changes.
+     *
+     * @param slots The instance table.
+     * @param modelMeshes The model mesh list.
+     * @param overrides The material override list.
+     */
+    public record Capacities(int slots, int modelMeshes, int overrides) {}
+
+    /**
+     * The instances of one model, and where its meshes are in the model mesh list.
+     *
+     * @param slots The slots of its instances, in the order they were placed.
+     * @param meshFirst Where its meshes start in the model mesh list.
+     * @param meshCount How many meshes it has.
+     */
+    private record ModelState(LinkedHashSet<Integer> slots, int meshFirst, int meshCount) {}
+
     /** How many slots to add when the table runs out. */
     private static final int SLOT_GROWTH = 256;
+
+    /** The most entries the model mesh and override lists can hold. */
+    private static final int MAX_LIST_ENTRIES = Integer.MAX_VALUE / 64;
 
     /** An empty transform, written for removed slots. */
     private static final Vector3dc ZERO = new Vector3d();
@@ -122,8 +202,23 @@ public class InstanceRegistry {
     /** Slots whose GPU copy is out of date. */
     private final BitSet changed = new BitSet();
 
-    /** The slots of each model's instances, in the order they were placed. */
-    private final Map<Model, LinkedHashSet<Integer>> byModel = new HashMap<>();
+    /** Each model that has instances. */
+    private final Map<Model, ModelState> byModel = new HashMap<>();
+
+    /** Hands out room in the model mesh list, one entry per mesh of each model with instances. */
+    private final RangeAllocator modelMeshes = new RangeAllocator(256, MAX_LIST_ENTRIES);
+
+    /** Hands out room in the override list, one entry per mesh of each instance. */
+    private final RangeAllocator overrides = new RangeAllocator(1024, MAX_LIST_ENTRIES);
+
+    /** Where each slot's material overrides start in the override list. */
+    private int[] overrideFirsts = new int[0];
+
+    /** Models whose model mesh list entries are out of date. */
+    private final Set<Model> changedModels = new LinkedHashSet<>();
+
+    /** Slots whose material overrides are out of date. */
+    private final BitSet changedOverrides = new BitSet();
 
     /** How many instances are placed and not removed. */
     private int liveCount;
@@ -153,9 +248,20 @@ public class InstanceRegistry {
             positions[slot].set(position);
             rotations[slot].set(rotation);
             scales[slot] = scale;
-            materials[slot] = new Material[model.getMeshDataList().size()];
+            final int meshCount = model.getMeshDataList().size();
+            materials[slot] = new Material[meshCount];
             animations[slot] = null;
-            byModel.computeIfAbsent(model, ignored -> new LinkedHashSet<>()).add(slot);
+            ModelState state = byModel.get(model);
+            if (state == null) {
+                state =
+                        new ModelState(
+                                new LinkedHashSet<>(), allocate(modelMeshes, meshCount), meshCount);
+                byModel.put(model, state);
+                changedModels.add(model);
+            }
+            state.slots().add(slot);
+            overrideFirsts[slot] = allocate(overrides, meshCount);
+            changedOverrides.set(slot);
             changed.set(slot);
             liveCount += 1;
             return handle;
@@ -228,6 +334,7 @@ public class InstanceRegistry {
                         "Mesh " + meshIndex + " of " + slotMaterials.length);
             }
             slotMaterials[meshIndex] = material;
+            changedOverrides.set(handle.slot());
             return true;
         } finally {
             lock.unlock();
@@ -377,9 +484,9 @@ public class InstanceRegistry {
         lock.lock();
         try {
             List<Integer> removed = new ArrayList<>();
-            LinkedHashSet<Integer> slots = byModel.get(model);
-            if (slots != null) {
-                for (int slot : List.copyOf(slots)) {
+            ModelState state = byModel.get(model);
+            if (state != null) {
+                for (int slot : List.copyOf(state.slots())) {
                     removed.add(removeLocked(slot));
                 }
             }
@@ -404,25 +511,60 @@ public class InstanceRegistry {
     }
 
     /**
-     * Hand every slot that changed since the last call to a writer, and forget the changes.
+     * Hand everything that changed since the last call to the GPU's copy, and forget the changes:
+     * instances that were placed, moved or removed, model mesh lists of models that got their first
+     * instance, and material overrides. Every model with instances is reported too, from the same
+     * snapshot, so the space set aside for each model's draws matches the instances culled.
      *
-     * @param writer Receives each changed slot, lowest first.
-     * @return How many slots changed.
+     * @param changes Receives the changes, each kind lowest index first.
+     * @return How big the GPU tables must be.
      */
-    public int takeChanged(@NonNull ChangeWriter writer) {
+    public Capacities takeChanges(@NonNull Changes changes) {
         lock.lock();
         try {
-            int count = 0;
             for (int slot = changed.nextSetBit(0); slot >= 0; slot = changed.nextSetBit(slot + 1)) {
-                if (handles[slot] != null) {
-                    writer.write(slot, true, positions[slot], rotations[slot], scales[slot]);
+                final InstanceHandle handle = handles[slot];
+                if (handle != null) {
+                    ModelState state = byModel.get(handle.model());
+                    changes.instance(
+                            slot,
+                            true,
+                            positions[slot],
+                            rotations[slot],
+                            scales[slot],
+                            state.meshFirst(),
+                            state.meshCount(),
+                            overrideFirsts[slot]);
                 } else {
-                    writer.write(slot, false, ZERO, IDENTITY, 0);
+                    changes.instance(slot, false, ZERO, IDENTITY, 0, 0, 0, 0);
                 }
-                count += 1;
             }
             changed.clear();
-            return count;
+            for (Model model : changedModels) {
+                ModelState state = byModel.get(model);
+                List<MeshData> meshes = model.getMeshDataList();
+                for (int i = 0; i < state.meshCount(); ++i) {
+                    MeshData mesh = meshes.get(i);
+                    // Animated models draw from their pose copies, which culling doesn't know
+                    changes.modelMesh(
+                            state.meshFirst() + i,
+                            model.isAnimated() ? null : mesh.getMesh(),
+                            mesh.getMaterial());
+                }
+            }
+            changedModels.clear();
+            for (int slot = changedOverrides.nextSetBit(0);
+                    slot >= 0;
+                    slot = changedOverrides.nextSetBit(slot + 1)) {
+                final Material[] slotMaterials = materials[slot];
+                for (int i = 0; i < slotMaterials.length; ++i) {
+                    changes.override(overrideFirsts[slot] + i, slotMaterials[i]);
+                }
+            }
+            changedOverrides.clear();
+            byModel.forEach((model, state) -> changes.model(model, state.slots().size()));
+            return new Capacities(
+                    handles.length, modelMeshes.getCapacity(), overrides.getCapacity());
         } finally {
             lock.unlock();
         }
@@ -438,14 +580,14 @@ public class InstanceRegistry {
     public int visit(@NonNull Model model, @NonNull InstanceVisitor visitor) {
         lock.lock();
         try {
-            LinkedHashSet<Integer> slots = byModel.get(model);
-            if (slots == null) {
+            ModelState state = byModel.get(model);
+            if (state == null) {
                 return 0;
             }
-            for (int slot : slots) {
+            for (int slot : state.slots()) {
                 visitor.visit(slot, materials[slot], animations[slot]);
             }
-            return slots.size();
+            return state.slots().size();
         } finally {
             lock.unlock();
         }
@@ -460,9 +602,9 @@ public class InstanceRegistry {
     public void visitTransforms(@NonNull Model model, @NonNull ChangeWriter visitor) {
         lock.lock();
         try {
-            LinkedHashSet<Integer> slots = byModel.get(model);
-            if (slots != null) {
-                for (int slot : slots) {
+            ModelState state = byModel.get(model);
+            if (state != null) {
+                for (int slot : state.slots()) {
                     visitor.write(slot, true, positions[slot], rotations[slot], scales[slot]);
                 }
             }
@@ -480,8 +622,8 @@ public class InstanceRegistry {
     public int countOf(@NonNull Model model) {
         lock.lock();
         try {
-            LinkedHashSet<Integer> slots = byModel.get(model);
-            return slots == null ? 0 : slots.size();
+            ModelState state = byModel.get(model);
+            return state == null ? 0 : state.slots().size();
         } finally {
             lock.unlock();
         }
@@ -553,6 +695,7 @@ public class InstanceRegistry {
             materials = Arrays.copyOf(materials, newLength);
             animations = Arrays.copyOf(animations, newLength);
             generations = Arrays.copyOf(generations, newLength);
+            overrideFirsts = Arrays.copyOf(overrideFirsts, newLength);
             for (int slot = oldLength; slot < newLength; ++slot) {
                 positions[slot] = new Vector3d();
                 rotations[slot] = new Quaternionf();
@@ -560,6 +703,22 @@ public class InstanceRegistry {
             }
         }
         return freeSlots.pollFirst();
+    }
+
+    /**
+     * Allocate room in one of the lists. The lock must be held.
+     *
+     * @param list The list's allocator.
+     * @param length How many entries.
+     * @return Where they start.
+     * @throws IllegalStateException If the list is full.
+     */
+    private static int allocate(RangeAllocator list, int length) {
+        final int first = list.allocate(length);
+        if (first < 0) {
+            throw new IllegalStateException("No room for " + length + " more list entries");
+        }
+        return first;
     }
 
     /**
@@ -596,11 +755,18 @@ public class InstanceRegistry {
      */
     private int removeLocked(int slot) {
         final InstanceHandle handle = handles[slot];
-        LinkedHashSet<Integer> slots = byModel.get(handle.model());
-        if (slots != null) {
-            slots.remove(slot);
-            if (slots.isEmpty()) {
-                byModel.remove(handle.model());
+        final Model model = handle.model();
+        final int meshCount = materials[slot].length;
+        // The entry written for the removed slot is not alive, so nothing reads these anymore
+        overrides.free(overrideFirsts[slot], meshCount);
+        changedOverrides.clear(slot);
+        ModelState state = byModel.get(model);
+        if (state != null) {
+            state.slots().remove(slot);
+            if (state.slots().isEmpty()) {
+                modelMeshes.free(state.meshFirst(), state.meshCount());
+                byModel.remove(model);
+                changedModels.remove(model);
             }
         }
         owners[slot] = null;

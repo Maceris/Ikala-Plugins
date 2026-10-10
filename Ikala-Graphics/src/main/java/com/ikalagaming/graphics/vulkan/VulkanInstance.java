@@ -1167,7 +1167,7 @@ public class VulkanInstance {
         return true;
     }
 
-    /** Set up the instance transform shader. */
+    /** Set up the instance transform and culling shaders. */
     private void initializeInstanceShader() {
         List<ShaderVulkan.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
         shaderModuleDataList.add(
@@ -1177,6 +1177,14 @@ public class VulkanInstance {
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(
                 RenderStage.Type.INSTANCES, new ShaderVulkan(shaderModuleDataList, state));
+
+        List<ShaderVulkan.ShaderModuleData> cullModules = new ArrayList<>();
+        cullModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/cull.comp",
+                        ShaderVulkan.Type.COMPUTE,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(RenderStage.Type.CULL, new ShaderVulkan(cullModules, state));
     }
 
     /** Set up the animation shader and uniforms. */
@@ -1521,8 +1529,9 @@ public class VulkanInstance {
 
         // Before anything that could sample the textures or draw the meshes
         state.textureUploads.record(state, commandBuffer, textureLoader);
+        // Instances first, so the mesh table recorded after covers every mesh they point at
+        state.instances.record(state, commandBuffer, scene.getMaterialCache());
         state.geometry.record(state, commandBuffer);
-        state.instances.record(state, commandBuffer);
 
         // This will record the command buffer
         pipeline.render(scene, windowInfo.window, state);

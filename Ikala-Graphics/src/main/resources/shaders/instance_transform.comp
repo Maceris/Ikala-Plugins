@@ -2,9 +2,8 @@
 #extension GL_EXT_buffer_reference : require
 
 // Turns instances into model matrices in render space, which is world space moved so the camera
-// is at the origin. Each thread takes one entry of this frame's instance list, reads that slot of
-// the instance table, and writes the matrix at the same position in the list, so draws index the
-// matrices exactly as they index the list.
+// is at the origin. Each thread takes one slot of the instance table and writes its matrix at the
+// same index, which is how culling and drawing look matrices up. Empty slots are skipped.
 
 // One instance in the table, see InstanceTable for the layout. World positions are split into a
 // high and a low float so they stay exact relative to the camera however far from the origin.
@@ -15,16 +14,12 @@ struct Instance {
     vec4 positionLow;
     // Quaternion x, y, z, w
     vec4 rotation;
-    // x: flags, the rest reserved
+    // x: flags, y: first model mesh, z: mesh count, w: first override
     uvec4 info;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Instances {
     Instance instances[];
-};
-
-layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Slots {
-    uint slots[];
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) writeonly buffer Matrices {
@@ -33,25 +28,30 @@ layout(buffer_reference, std430, buffer_reference_align = 16) writeonly buffer M
 
 layout(push_constant) uniform Constants {
     Instances table;
-    Slots list;
     Matrices matrices;
     // The camera's world position, split the same way as the instances' positions
     vec4 cameraHigh;
     vec4 cameraLow;
-    // How many entries the list has
+    // How many slots the table has
     uint count;
 };
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
+// Set in the flags of slots that hold an instance
+const uint FLAG_ALIVE = 1;
+
 void main()
 {
-    // Groups of 64, so the last group can run past the end of the list
+    // Groups of 64, so the last group can run past the end of the table
     uint index = gl_GlobalInvocationID.x;
     if (index >= count) {
         return;
     }
-    Instance instance = table.instances[list.slots[index]];
+    Instance instance = table.instances[index];
+    if ((instance.info.x & FLAG_ALIVE) == 0) {
+        return;
+    }
 
     // Subtract the high parts first: for anything near the camera they are close, so the
     // difference is exact, and the low parts add back what the high parts couldn't hold

@@ -48,10 +48,10 @@ public class DebugRender implements RenderStage {
     private static final int PUSH_CONSTANT_SIZE = 16 * Float.BYTES;
 
     /**
-     * The size of the normal line push constants: the projection × view matrix, the vertex and
-     * matrix buffer addresses, then the first matrix, vertex base, line length and mode.
+     * The size of the normal line push constants: the projection × view matrix, the vertex, matrix
+     * and instance list addresses, then the vertex base, line length and mode.
      */
-    private static final int NORMALS_PUSH_CONSTANT_SIZE = 16 * Float.BYTES + 2 * Long.BYTES + 16;
+    private static final int NORMALS_PUSH_CONSTANT_SIZE = 16 * Float.BYTES + 3 * Long.BYTES + 12;
 
     /** Where the vertex buffer address goes in the normal line push constants. */
     private static final int NORMALS_VERTICES_OFFSET = 16 * Float.BYTES;
@@ -59,11 +59,11 @@ public class DebugRender implements RenderStage {
     /** Where the model matrix buffer address goes in the normal line push constants. */
     private static final int NORMALS_MATRICES_OFFSET = NORMALS_VERTICES_OFFSET + Long.BYTES;
 
-    /** Where the first matrix index goes in the normal line push constants. */
-    private static final int NORMALS_FIRST_MATRIX_OFFSET = NORMALS_MATRICES_OFFSET + Long.BYTES;
+    /** Where the instance list address goes in the normal line push constants. */
+    private static final int NORMALS_INSTANCES_OFFSET = NORMALS_MATRICES_OFFSET + Long.BYTES;
 
     /** Where the vertex base goes in the normal line push constants. */
-    private static final int NORMALS_VERTEX_BASE_OFFSET = NORMALS_FIRST_MATRIX_OFFSET + 4;
+    private static final int NORMALS_VERTEX_BASE_OFFSET = NORMALS_INSTANCES_OFFSET + Long.BYTES;
 
     /** Where the line length goes in the normal line push constants. */
     private static final int NORMALS_LENGTH_OFFSET = NORMALS_VERTEX_BASE_OFFSET + 4;
@@ -308,6 +308,8 @@ public class DebugRender implements RenderStage {
         ByteBuffer pushConstants = stack.calloc(NORMALS_PUSH_CONSTANT_SIZE);
         projectionView.get(0, pushConstants);
         pushConstants.putLong(NORMALS_MATRICES_OFFSET, frameData.sceneModelMatrices.deviceAddress);
+        // Every model is listed while the lines are shown, and its commands find its entries here
+        pushConstants.putLong(NORMALS_INSTANCES_OFFSET, frameData.visibleInstances.deviceAddress);
         pushConstants.putFloat(NORMALS_LENGTH_OFFSET, visualizers.getNormalLength());
         pushConstants.putInt(NORMALS_MODE_OFFSET, mode);
 
@@ -320,7 +322,6 @@ public class DebugRender implements RenderStage {
         for (var entry : frameData.modelDrawInfo.entrySet()) {
             final Model model = entry.getKey();
             final PerFrameData.ModelDrawInfo info = entry.getValue();
-            pushConstants.putInt(NORMALS_FIRST_MATRIX_OFFSET, info.firstMatrix());
             int meshIndex = 0;
             for (MeshData mesh : model.getMeshDataList()) {
                 // The commands' vertex offsets are into the shared buffer or the animation output

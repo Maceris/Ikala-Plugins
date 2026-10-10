@@ -8,6 +8,7 @@ import org.joml.Vector3fc;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.List;
 import java.util.TreeSet;
 import java.util.concurrent.locks.ReentrantLock;
@@ -94,6 +95,42 @@ public class MeshRegistry {
 
     /** How many meshes are registered and not removed. */
     private int liveCount;
+
+    /** Slots whose GPU mesh table entry is out of date. */
+    private final BitSet changed = new BitSet();
+
+    /**
+     * Receives a mesh table entry that changed, to write into the GPU's copy.
+     *
+     * <p>Called with the registry locked, so it must not call back into the registry.
+     */
+    @FunctionalInterface
+    public interface EntryWriter {
+        /**
+         * Write one slot.
+         *
+         * @param slot The slot.
+         * @param resident Whether it holds a mesh that can be drawn. If not, the rest is zero.
+         * @param generation The slot's generation, which handles to its mesh match.
+         * @param vertexOffset Where its vertices start.
+         * @param firstIndex Where its indices start.
+         * @param indexCount How many indices it has.
+         * @param aabbMin The minimum corner of its bounding box.
+         * @param aabbMax The maximum corner of its bounding box.
+         */
+        void write(
+                int slot,
+                boolean resident,
+                int generation,
+                int vertexOffset,
+                int firstIndex,
+                int indexCount,
+                @NonNull Vector3fc aabbMin,
+                @NonNull Vector3fc aabbMax);
+    }
+
+    /** An empty bounding box corner, written for slots with no mesh. */
+    private static final Vector3fc ORIGIN = new Vector3f();
 
     /**
      * Create an empty registry.
@@ -207,6 +244,7 @@ public class MeshRegistry {
                 return false;
             }
             states[handle.slot()] = State.RESIDENT;
+            changed.set(handle.slot());
             return true;
         } finally {
             lock.unlock();
@@ -360,6 +398,86 @@ public class MeshRegistry {
     }
 
     /**
+     * How many slots the mesh table has.
+     *
+     * @return The slot count.
+     */
+    public int getSlotCapacity() {
+        lock.lock();
+        try {
+            return handles.length;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Hand every slot whose GPU entry changed since the last call to a writer, and forget the
+     * changes. A mesh's entry changes when it becomes resident and when it is removed.
+     *
+     * @param writer Receives each changed slot, lowest first.
+     * @return The slot count, which the GPU table must hold, read with the changes.
+     */
+    public int takeChanged(@NonNull EntryWriter writer) {
+        lock.lock();
+        try {
+            for (int slot = changed.nextSetBit(0); slot >= 0; slot = changed.nextSetBit(slot + 1)) {
+                final MeshHandle handle = handles[slot];
+                if (handle != null && states[slot] == State.RESIDENT) {
+                    writer.write(
+                            slot,
+                            true,
+                            generations[slot],
+                            vertexOffsets[slot],
+                            firstIndices[slot],
+                            handle.indexCount(),
+                            handle.aabbMin(),
+                            handle.aabbMax());
+                } else {
+                    writer.write(slot, false, generations[slot], 0, 0, 0, ORIGIN, ORIGIN);
+                }
+            }
+            changed.clear();
+            return handles.length;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Hand every slot to a writer as it is now, for building draw commands, which need each mesh's
+     * offsets whether or not its GPU entry changed.
+     *
+     * @param writer Receives every slot, lowest first. Slots without a resident mesh have zero
+     *     offsets and counts.
+     * @return The slot count.
+     */
+    public int visitAll(@NonNull EntryWriter writer) {
+        lock.lock();
+        try {
+            for (int slot = 0; slot < handles.length; ++slot) {
+                final MeshHandle handle = handles[slot];
+                if (handle != null && states[slot] == State.RESIDENT) {
+                    writer.write(
+                            slot,
+                            true,
+                            generations[slot],
+                            vertexOffsets[slot],
+                            firstIndices[slot],
+                            handle.indexCount(),
+                            handle.aabbMin(),
+                            handle.aabbMax());
+                } else {
+                    writer.write(slot, false, generations[slot], 0, 0, 0, ORIGIN, ORIGIN);
+                }
+            }
+            return handles.length;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
      * How many meshes are live.
      *
      * @return The number of registered meshes not yet removed.
@@ -478,6 +596,7 @@ public class MeshRegistry {
         handles[slot] = null;
         states[slot] = null;
         generations[slot] += 1;
+        changed.set(slot);
         liveCount -= 1;
         return new Retired(
                 slot,

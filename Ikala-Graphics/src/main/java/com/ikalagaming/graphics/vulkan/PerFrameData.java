@@ -34,37 +34,53 @@ public class PerFrameData {
     public SharedBuffer sceneUniforms;
 
     /**
-     * The model matrix of every instance drawn this frame, in the order of {@link #instanceList},
-     * relative to the camera. Written on the GPU by the instance transform stage.
+     * The model matrix of every instance slot this frame, relative to the camera. Written on the
+     * GPU by the instance transform stage.
      */
     public SharedBuffer sceneModelMatrices;
 
-    /**
-     * The instance table slot of every instance drawn this frame, model by model, written by the
-     * instance draw update stage. Draws index it the way they index {@link #sceneModelMatrices}.
-     */
-    public SharedBuffer instanceList;
-
-    /** How many entries {@link #instanceList} has this frame. */
+    /** How many instance slots there are this frame. */
     public int instanceCount;
 
-    public SharedBuffer sceneMaterialOverrides;
+    /**
+     * What each pass draws: (instance slot, material) pairs, grouped by mesh, which draws find by
+     * their first instance. The first {@link #passCount} regions are filled by the culling pass,
+     * one per pass; after them come the CPU-written groups of {@link #modelDrawInfo}.
+     */
+    public SharedBuffer visibleInstances;
 
-    /** Indirect draw commands for every mesh in the scene this frame, packed back to back. */
+    /** The frustum planes of each pass this frame, for the culling pass. */
+    public SharedBuffer cullFrusta;
+
+    /** How many instances each pass drew, counted by the culling pass and read back later. */
+    public SharedBuffer cullCounters;
+
+    /** How many passes are culled: the scene, then each shadow cascade. */
+    public int passCount;
+
+    /**
+     * How many mesh slots there are this frame, which is how many draw commands each culled pass
+     * has, starting at {@code pass * meshSlotCount} in {@link #sceneDrawCommands}.
+     */
+    public int meshSlotCount;
+
+    /**
+     * Indirect draw commands this frame: one per mesh slot per culled pass, which the culling pass
+     * fills in, then the CPU-written commands of {@link #modelDrawInfo}.
+     */
     public SharedBuffer sceneDrawCommands;
 
     /**
-     * Where each model's data starts in the packed scene buffers this frame. Filled out by the
-     * instance draw update stage, and only contains models that have instances to draw.
+     * Models drawn from CPU-written commands this frame, which culling doesn't handle: animated
+     * models, and every model while the normal or tangent lines are shown.
      */
     public Map<Model, ModelDrawInfo> modelDrawInfo;
 
     /**
-     * Where a model's data starts in the packed per-frame scene buffers.
+     * Where a model's CPU-written data starts in the packed per-frame scene buffers.
      *
-     * @param firstMatrix The index of the first model matrix in {@link #sceneModelMatrices}.
-     * @param firstOverride The index of the first material override in {@link
-     *     #sceneMaterialOverrides}.
+     * @param firstVisible Where its entries start in {@link #visibleInstances}: one group per mesh,
+     *     each with one entry per instance.
      * @param firstCommand The index of the first draw command in {@link #sceneDrawCommands}. Each
      *     mesh has {@code commandCount} commands, one mesh after another.
      * @param commandCount How many draw commands each mesh has.
@@ -74,12 +90,7 @@ public class PerFrameData {
      * @param poseCount For animated models, the number of distinct poses the entities are in.
      */
     public record ModelDrawInfo(
-            int firstMatrix,
-            int firstOverride,
-            int firstCommand,
-            int commandCount,
-            int firstPose,
-            int poseCount) {}
+            int firstVisible, int firstCommand, int commandCount, int firstPose, int poseCount) {}
 
     public SharedBuffer skyboxUniforms;
 

@@ -10,26 +10,23 @@ public class ShaderBindings {
     public static class Instances {
         /*
          * Push constant offsets. Every buffer is passed by device address. The vec4s are aligned to
-         * 16 bytes, so they start after the three addresses plus padding.
+         * 16 bytes, which the two addresses before them already are.
          */
 
         /** Device address of the instance table. */
         public static final int PUSH_CONSTANT_TABLE_OFFSET = 0;
 
-        /** Device address of this frame's instance list. */
-        public static final int PUSH_CONSTANT_LIST_OFFSET = Long.BYTES;
-
         /** Device address of this frame's model matrices. */
-        public static final int PUSH_CONSTANT_MATRICES_OFFSET = 2 * Long.BYTES;
+        public static final int PUSH_CONSTANT_MATRICES_OFFSET = Long.BYTES;
 
         /** The high part of the camera's world position, a vec4. */
-        public static final int PUSH_CONSTANT_CAMERA_HIGH_OFFSET = 4 * Long.BYTES;
+        public static final int PUSH_CONSTANT_CAMERA_HIGH_OFFSET = 2 * Long.BYTES;
 
         /** The low part of the camera's world position, a vec4. */
         public static final int PUSH_CONSTANT_CAMERA_LOW_OFFSET =
                 PUSH_CONSTANT_CAMERA_HIGH_OFFSET + 4 * Float.BYTES;
 
-        /** How many entries the instance list has. */
+        /** How many slots the instance table has. */
         public static final int PUSH_CONSTANT_COUNT_OFFSET =
                 PUSH_CONSTANT_CAMERA_LOW_OFFSET + 4 * Float.BYTES;
 
@@ -41,6 +38,58 @@ public class ShaderBindings {
 
         /** Private constructor so this class is not instantiated. */
         private Instances() {
+            cutItOut();
+        }
+    }
+
+    /** Culling shader variables, see {@code cull.comp}. Every buffer is passed by address. */
+    public static class Cull {
+        /** Device address of the instance table. */
+        public static final int PUSH_CONSTANT_INSTANCES_OFFSET = 0;
+
+        /** Device address of the model mesh list. */
+        public static final int PUSH_CONSTANT_MODEL_MESHES_OFFSET = Long.BYTES;
+
+        /** Device address of the material override list. */
+        public static final int PUSH_CONSTANT_OVERRIDES_OFFSET = 2 * Long.BYTES;
+
+        /** Device address of the mesh table. */
+        public static final int PUSH_CONSTANT_MESHES_OFFSET = 3 * Long.BYTES;
+
+        /** Device address of this frame's model matrices. */
+        public static final int PUSH_CONSTANT_MATRICES_OFFSET = 4 * Long.BYTES;
+
+        /** Device address of this frame's draw commands. */
+        public static final int PUSH_CONSTANT_COMMANDS_OFFSET = 5 * Long.BYTES;
+
+        /** Device address of this frame's visible instance list. */
+        public static final int PUSH_CONSTANT_VISIBLE_OFFSET = 6 * Long.BYTES;
+
+        /** Device address of this frame's frustum planes. */
+        public static final int PUSH_CONSTANT_FRUSTA_OFFSET = 7 * Long.BYTES;
+
+        /** Device address of this frame's per-pass counters. */
+        public static final int PUSH_CONSTANT_COUNTERS_OFFSET = 8 * Long.BYTES;
+
+        /** How many instance slots there are. */
+        public static final int PUSH_CONSTANT_SLOT_COUNT_OFFSET = 9 * Long.BYTES;
+
+        /** How many mesh slots there are, which is how many commands each pass has. */
+        public static final int PUSH_CONSTANT_MESH_SLOT_COUNT_OFFSET =
+                PUSH_CONSTANT_SLOT_COUNT_OFFSET + Integer.BYTES;
+
+        /** The size of the push constants in bytes. */
+        public static final int PUSH_CONSTANTS_SIZE =
+                PUSH_CONSTANT_MESH_SLOT_COUNT_OFFSET + Integer.BYTES;
+
+        /** How many planes each pass's frustum has. */
+        public static final int PLANES_PER_PASS = 6;
+
+        /** The number of instance slots each compute workgroup handles. */
+        public static final int WORKGROUP_SIZE = 64;
+
+        /** Private constructor so this class is not instantiated. */
+        private Cull() {
             cutItOut();
         }
     }
@@ -485,24 +534,6 @@ public class ShaderBindings {
             }
         }
 
-        /** Push constant offset for the index of the first model matrix of the model. */
-        public static final int PUSH_CONSTANT_FIRST_MATRIX_OFFSET = 0;
-
-        /** Push constant offset for the index of the first material override of the model. */
-        public static final int PUSH_CONSTANT_FIRST_OVERRIDE_OFFSET = Integer.BYTES;
-
-        /** Push constant offset for the index of the material assigned to the mesh. */
-        public static final int PUSH_CONSTANT_MATERIAL_INDEX_OFFSET = 2 * Integer.BYTES;
-
-        /**
-         * Push constant offset for the index of the mesh within the model, used to pick out a
-         * material override.
-         */
-        public static final int PUSH_CONSTANT_MESH_INDEX_OFFSET = 3 * Integer.BYTES;
-
-        /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE = 4 * Integer.BYTES;
-
         /** The offset into the uniforms for the position when projected onto the screen space. */
         public static final int PROJECTION_MATRIX_OFFSET = 0;
 
@@ -512,8 +543,11 @@ public class ShaderBindings {
         /** The binding point for the materials buffer. */
         public static final int MATERIALS_BINDING = 2;
 
-        /** The binding point for the material overrides buffer. */
-        public static final int MATERIAL_OVERRIDES_BINDING = 3;
+        /**
+         * The binding point for this frame's visible instance list, (instance slot, material) for
+         * each instance drawn.
+         */
+        public static final int VISIBLE_BINDING = 3;
 
         /** The binding point for the uniforms buffer. */
         public static final int UNIFORMS_BINDING = 0;
@@ -539,12 +573,11 @@ public class ShaderBindings {
         /** Push constant offset for the cascade's combined projection and view matrix. */
         public static final int PUSH_CONSTANT_PROJECTION_VIEW_MATRIX_OFFSET = 0;
 
-        /** Push constant offset for the index of the first model matrix of the model. */
-        public static final int PUSH_CONSTANT_FIRST_MATRIX_OFFSET = 4 * 4 * Float.BYTES;
+        /** Push constant offset for the device address of this frame's visible instance list. */
+        public static final int PUSH_CONSTANT_VISIBLE_OFFSET = 4 * 4 * Float.BYTES;
 
         /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE =
-                PUSH_CONSTANT_FIRST_MATRIX_OFFSET + Integer.BYTES;
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_VISIBLE_OFFSET + Long.BYTES;
 
         /** The binding point for the model matrices buffer. */
         public static final int MODEL_MATRICES_BINDING = 0;

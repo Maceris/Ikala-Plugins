@@ -40,15 +40,8 @@ layout(set = 0, binding = 0) uniform Uniforms {
     mat4 viewMatrix;
 };
 
-// Every model is packed into the same buffers each frame, and these change for every mesh
-layout(push_constant) uniform MeshConstants {
-    uint firstMatrix;
-    uint firstOverride;
-    uint materialIndex;
-    uint meshIndex;
-};
-
-layout(std430, set = 0, binding = 1) buffer Matrices {
+// The model matrix of every instance slot, relative to the camera
+layout(std430, set = 0, binding = 1) readonly buffer Matrices {
 	mat4 modelMatrices[];
 };
 
@@ -56,8 +49,10 @@ layout(std430, set = 0, binding = 2) readonly buffer Materials {
     Material materials[];
 };
 
-layout(std430, set = 0, binding = 3) readonly buffer MaterialOverrides {
-    uint materialOverrides[];
+// What this pass draws, written by the culling pass: (instance slot, material) per instance,
+// grouped by mesh. Each draw command's first instance points at its mesh's group.
+layout(std430, set = 0, binding = 3) readonly buffer Visible {
+    uvec2 visible[];
 };
 
 void main()
@@ -68,11 +63,10 @@ void main()
     vec4 initBitangent = vec4(bitangent, 0.0);
 
     // gl_InstanceIndex already includes the base instance, unlike gl_InstanceID in OpenGL
-    uint overrideIndex = firstOverride + gl_InstanceIndex + meshIndex;
-    uint override = materialOverrides[overrideIndex];
-    outMaterialIdx = override != 0 ? override : materialIndex;
+    uvec2 instance = visible[gl_InstanceIndex];
+    outMaterialIdx = instance.y;
 
-    mat4 modelMatrix =  modelMatrices[firstMatrix + gl_InstanceIndex];
+    mat4 modelMatrix = modelMatrices[instance.x];
     mat4 modelViewMatrix = viewMatrix * modelMatrix;
     outWorldPosition = modelMatrix * initPos;
     outViewPosition  = viewMatrix * outWorldPosition;

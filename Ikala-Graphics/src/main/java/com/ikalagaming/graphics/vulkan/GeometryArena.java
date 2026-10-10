@@ -101,6 +101,29 @@ public class GeometryArena {
      */
     @Getter private SharedBuffer indices;
 
+    /** The size of one mesh table entry, in bytes: offsets and counts, then the bounds. */
+    public static final int MESH_ENTRY_SIZE = 3 * 4 * Integer.BYTES;
+
+    /**
+     * Where a mesh table entry's uvec4 of vertex offset, first index, index count and generation
+     * starts.
+     */
+    public static final int MESH_INFO_OFFSET = 0;
+
+    /** Where a mesh table entry's minimum bounds corner starts, a vec4. */
+    public static final int MESH_MIN_OFFSET = 4 * Integer.BYTES;
+
+    /** Where a mesh table entry's maximum bounds corner starts, a vec4. */
+    public static final int MESH_MAX_OFFSET = 2 * 4 * Integer.BYTES;
+
+    /**
+     * Where each mesh is and how big it is, for the culling pass, one entry per mesh slot. --
+     * GETTER -- The GPU mesh table.
+     *
+     * @return The mesh table.
+     */
+    @Getter private final DeviceTable meshTable;
+
     /** Meshes waiting to be copied in, in the order they were registered. */
     private final Queue<Upload> uploads = new ConcurrentLinkedQueue<>();
 
@@ -116,6 +139,7 @@ public class GeometryArena {
     public GeometryArena(@NonNull VulkanState state, int vertexStride) {
         this.vertexStride = vertexStride;
         registry = new MeshRegistry(INITIAL_VERTICES, INITIAL_INDICES);
+        meshTable = new DeviceTable(state, "mesh", MESH_ENTRY_SIZE, 256);
         vertices =
                 SharedBuffer.allocateDeviceLocal(
                         (long) INITIAL_VERTICES * vertexStride, state, VERTEX_USAGE);
@@ -245,9 +269,94 @@ public class GeometryArena {
             final MeshRegistry.Retired free = retired;
             state.deferFree(() -> registry.free(free));
         }
-        if (uploads.isEmpty()) {
-            return;
+        if (!uploads.isEmpty()) {
+            recordUploads(state, commandBuffer);
         }
+        // After the uploads, which make meshes resident
+        recordMeshTable(state, commandBuffer);
+    }
+
+    /**
+     * Write a mesh table entry, in the layout the culling shader reads.
+     *
+     * @param out Where to write it, at its position, which is left unchanged.
+     * @param resident Whether the slot holds a mesh that can be drawn.
+     * @param generation The slot's generation.
+     * @param vertexOffset Where its vertices start.
+     * @param firstIndex Where its indices start.
+     * @param indexCount How many indices it has.
+     * @param aabbMin The minimum corner of its bounding box.
+     * @param aabbMax The maximum corner of its bounding box.
+     */
+    public static void writeMeshEntry(
+            @NonNull ByteBuffer out,
+            boolean resident,
+            int generation,
+            int vertexOffset,
+            int firstIndex,
+            int indexCount,
+            @NonNull Vector3fc aabbMin,
+            @NonNull Vector3fc aabbMax) {
+        final int base = out.position();
+        out.putInt(base + MESH_INFO_OFFSET, resident ? vertexOffset : 0);
+        out.putInt(base + MESH_INFO_OFFSET + Integer.BYTES, resident ? firstIndex : 0);
+        out.putInt(base + MESH_INFO_OFFSET + 2 * Integer.BYTES, resident ? indexCount : 0);
+        out.putInt(base + MESH_INFO_OFFSET + 3 * Integer.BYTES, generation);
+        out.putFloat(base + MESH_MIN_OFFSET, aabbMin.x());
+        out.putFloat(base + MESH_MIN_OFFSET + Float.BYTES, aabbMin.y());
+        out.putFloat(base + MESH_MIN_OFFSET + 2 * Float.BYTES, aabbMin.z());
+        out.putFloat(base + MESH_MAX_OFFSET, aabbMax.x());
+        out.putFloat(base + MESH_MAX_OFFSET + Float.BYTES, aabbMax.y());
+        out.putFloat(base + MESH_MAX_OFFSET + 2 * Float.BYTES, aabbMax.z());
+    }
+
+    /**
+     * Copy the mesh table entries that changed into the GPU's copy.
+     *
+     * @param state The Vulkan state.
+     * @param commandBuffer The frame's command buffer.
+     */
+    private void recordMeshTable(
+            @NonNull VulkanState state, @NonNull VkCommandBuffer commandBuffer) {
+        DeviceTable.Entries entries = new DeviceTable.Entries(MESH_ENTRY_SIZE);
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            final int capacity =
+                    registry.takeChanged(
+                            (slot,
+                                    resident,
+                                    generation,
+                                    vertexOffset,
+                                    firstIndex,
+                                    indexCount,
+                                    min,
+                                    max) ->
+                                    writeMeshEntry(
+                                            entries.next(slot),
+                                            resident,
+                                            generation,
+                                            vertexOffset,
+                                            firstIndex,
+                                            indexCount,
+                                            min,
+                                            max));
+            if (!meshTable.hasWork(capacity, entries)) {
+                return;
+            }
+            DeviceTable.barrierBefore(commandBuffer, stack);
+            meshTable.record(state, commandBuffer, capacity, entries, stack);
+            DeviceTable.barrierAfter(commandBuffer, stack);
+        } finally {
+            entries.free();
+        }
+    }
+
+    /**
+     * Grow the buffers if needed and record queued uploads up to the per-frame budget.
+     *
+     * @param state The Vulkan state.
+     * @param commandBuffer The frame's command buffer.
+     */
+    private void recordUploads(@NonNull VulkanState state, @NonNull VkCommandBuffer commandBuffer) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             // Earlier frames' copies and growth finish before these copies read or write
             memoryBarrier(
@@ -421,5 +530,6 @@ public class GeometryArena {
         retiring.clear();
         SharedBuffer.free(vertices, state);
         SharedBuffer.free(indices, state);
+        meshTable.cleanup(state);
     }
 }

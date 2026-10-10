@@ -1,0 +1,165 @@
+#version 460
+#extension GL_EXT_buffer_reference : require
+
+// Decides what every pass draws. Each thread takes one instance slot and one pass (the scene, then
+// each shadow cascade), tests the bounds of each of the instance's meshes against that pass's
+// frustum, and for each visible one adds the instance to that mesh's draw command and writes
+// (slot, material) into the pass's visible list. The CPU set aside room in the list for every
+// instance of every mesh, so nothing can overflow.
+
+// See InstanceTable for the layout
+struct Instance {
+    vec4 positionHigh;
+    vec4 positionLow;
+    vec4 rotation;
+    // x: flags, y: first model mesh, z: mesh count, w: first override
+    uvec4 info;
+};
+
+// One mesh of a model: its mesh table slot and generation, and the mesh's own material
+struct ModelMesh {
+    uint slot;
+    uint generation;
+    uint material;
+    uint unused;
+};
+
+// See GeometryArena for the layout
+struct Mesh {
+    // x: vertex offset, y: first index, z: index count (0 if it can't be drawn), w: generation
+    uvec4 info;
+    vec4 aabbMin;
+    vec4 aabbMax;
+};
+
+// VkDrawIndexedIndirectCommand
+struct Command {
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    int vertexOffset;
+    uint firstInstance;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Instances {
+    Instance instances[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer ModelMeshes {
+    ModelMesh modelMeshes[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Overrides {
+    uint overrides[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Meshes {
+    Mesh meshes[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Matrices {
+    mat4 matrices[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer Commands {
+    Command commands[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 8) writeonly buffer Visible {
+    uvec2 visible[];
+};
+
+// The frustum planes of each pass, six per pass, in render space. A point p is inside a plane
+// when dot(plane.xyz, p) + plane.w >= 0.
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Frusta {
+    vec4 planes[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer Counters {
+    uint counters[];
+};
+
+layout(push_constant) uniform Constants {
+    Instances table;
+    ModelMeshes modelMeshes;
+    Overrides overrides;
+    Meshes meshes;
+    Matrices matrices;
+    Commands commands;
+    Visible visible;
+    Frusta frusta;
+    Counters counters;
+    // How many instance slots there are
+    uint slotCount;
+    // How many mesh slots there are, which is how many commands each pass has
+    uint meshSlotCount;
+};
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// Set in the flags of slots that hold an instance
+const uint FLAG_ALIVE = 1;
+
+// A model mesh whose mesh isn't registered
+const uint NO_MESH = 0xFFFFFFFFu;
+
+// Whether a box is at least partly inside all six planes of a pass
+bool inFrustum(uint pass, vec3 center, vec3 extents)
+{
+    for (uint i = 0; i < 6; ++i) {
+        vec4 plane = frusta.planes[pass * 6 + i];
+        // The box's farthest corner along the plane normal decides
+        float distance = dot(plane.xyz, center) + plane.w;
+        float radius = dot(abs(plane.xyz), extents);
+        if (distance + radius < 0.0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void main()
+{
+    uint slot = gl_GlobalInvocationID.x;
+    uint pass = gl_GlobalInvocationID.y;
+    if (slot >= slotCount) {
+        return;
+    }
+    Instance instance = table.instances[slot];
+    if ((instance.info.x & FLAG_ALIVE) == 0) {
+        return;
+    }
+    mat4 model = matrices.matrices[slot];
+    // Transforming a box: the center moves, and the extents grow by the absolute rotation and scale
+    mat3 absolute = mat3(abs(model[0].xyz), abs(model[1].xyz), abs(model[2].xyz));
+
+    uint first = instance.info.y;
+    uint count = instance.info.z;
+    for (uint i = 0; i < count; ++i) {
+        ModelMesh modelMesh = modelMeshes.modelMeshes[first + i];
+        if (modelMesh.slot == NO_MESH) {
+            continue;
+        }
+        Mesh mesh = meshes.meshes[modelMesh.slot];
+        // A different mesh in the slot, or one that can't be drawn yet
+        if (mesh.info.w != modelMesh.generation || mesh.info.z == 0) {
+            continue;
+        }
+        vec3 localCenter = (mesh.aabbMin.xyz + mesh.aabbMax.xyz) * 0.5;
+        vec3 localExtents = (mesh.aabbMax.xyz - mesh.aabbMin.xyz) * 0.5;
+        vec3 center = (model * vec4(localCenter, 1.0)).xyz;
+        vec3 extents = absolute * localExtents;
+        if (!inFrustum(pass, center, extents)) {
+            continue;
+        }
+
+        uint material = overrides.overrides[instance.info.w + i];
+        if (material == 0) {
+            material = modelMesh.material;
+        }
+        uint command = pass * meshSlotCount + modelMesh.slot;
+        uint index = atomicAdd(commands.commands[command].instanceCount, 1u);
+        visible.visible[commands.commands[command].firstInstance + index] = uvec2(slot, material);
+        atomicAdd(counters.counters[pass], 1u);
+    }
+}
