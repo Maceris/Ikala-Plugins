@@ -1139,12 +1139,24 @@ class IkGuiDemo {
                                 vars.windowMenuButtonPosition.getIntValue(),
                                 new String[] {"None", "Left", "Right"}));
         // Not part of Dear ImGui
-        vars.windowAlphaRadius =
-                styleSlider("WindowAlphaRadius", vars.windowAlphaRadius, -12.0f, 12.0f, "%.0f");
+        final float[] edgeFade = {
+            vars.windowEdgeFade.x,
+            vars.windowEdgeFade.y,
+            vars.windowEdgeFade.z,
+            vars.windowEdgeFade.w
+        };
+        if (IkGui.sliderFloat4("WindowEdgeFade", edgeFade, 0.0f, 64.0f, "%.0f")) {
+            vars.windowEdgeFade.set(edgeFade[0], edgeFade[1], edgeFade[2], edgeFade[3]);
+        }
         IkGui.sameLine();
         helpMarker(
-                "Blends window edges to or from transparent. Positive values fade to a transparent"
-                        + " edge, negative values fade to a transparent center.");
+                "How far in from the left, top, right, and bottom edges the window background and"
+                        + " title bar fade from transparent. 0 is a hard edge. Widgets don't fade.");
+        if (IkGui.checkbox("WindowEdgeFadeInvert", vars.windowEdgeFadeInvert)) {
+            vars.windowEdgeFadeInvert = !vars.windowEdgeFadeInvert;
+        }
+        IkGui.sameLine();
+        helpMarker("Inverts the fade, so the fading edges are opaque and fade to transparent.");
 
         IkGui.separatorText("Widgets");
         vars.colorMarkerSize =

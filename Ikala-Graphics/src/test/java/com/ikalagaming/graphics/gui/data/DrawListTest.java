@@ -5,9 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.gui.IkGui;
+import com.ikalagaming.graphics.gui.flags.DrawFlags;
 import com.ikalagaming.graphics.gui.util.Color;
+import com.ikalagaming.graphics.gui.util.RectFloat;
 
 import org.joml.Vector2f;
+import org.joml.Vector4f;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,7 +34,8 @@ class DrawListTest {
             int detailCount,
             DrawList.ElementType type,
             DrawList.ElementStyle style,
-            float stroke) {}
+            float stroke,
+            int flags) {}
 
     private DrawList drawList;
 
@@ -78,7 +82,8 @@ class DrawListTest {
                             DrawList.ElementType.fromID(drawList.commandBuffer.getInt(offset + 16)),
                             DrawList.ElementStyle.fromID(
                                     drawList.commandBuffer.getInt(offset + 20)),
-                            drawList.commandBuffer.getFloat(offset + 24));
+                            drawList.commandBuffer.getFloat(offset + 24),
+                            drawList.commandBuffer.getInt(offset + 28));
         }
         return commands;
     }
@@ -244,8 +249,112 @@ class DrawListTest {
      */
     private int textureIndexOf(Command command) {
         final int offset = command.detailIndex() * DrawData.SIZE_OF_POINT_DETAIL;
-        // radius, alpha radius, then color or texture ID
+        // radius, edge fade, then color or texture ID
         return drawList.pointDetailBuffer.getInt(offset + 2 * Float.BYTES);
+    }
+
+    /**
+     * Read the edge fade out of a point detail of a command.
+     *
+     * @param command The command.
+     * @param detail Which of the command's details to read.
+     * @return The edge fade.
+     */
+    private float edgeFadeOf(Command command, int detail) {
+        final int offset = (command.detailIndex() + detail) * DrawData.SIZE_OF_POINT_DETAIL;
+        return drawList.pointDetailBuffer.getFloat(offset + Float.BYTES);
+    }
+
+    @Test
+    void testRectangleEdgeFade() {
+        final RectFloat window = new RectFloat(0, 0, 200, 100);
+        Command[] commands =
+                draw(
+                        list -> {
+                            // Faded on some edges, measured from a larger rect, and inverted
+                            list.addRectFilledFaded(
+                                    0,
+                                    20,
+                                    200,
+                                    100,
+                                    Color.WHITE,
+                                    4,
+                                    DrawFlags.ROUND_CORNERS_BOTTOM,
+                                    new Vector4f(0, 8, 16, -4),
+                                    window,
+                                    true);
+                            // No fade, so no fade rect and inverting does nothing
+                            list.addRectFilledFaded(
+                                    0,
+                                    0,
+                                    200,
+                                    20,
+                                    Color.WHITE,
+                                    4,
+                                    DrawFlags.ROUND_CORNERS_TOP,
+                                    new Vector4f(0, 0, 0, 0),
+                                    window,
+                                    true);
+                            // The same fade on every edge, measured from itself
+                            list.addRectFilled(0, 0, 10, 10, Color.WHITE, 0, 0, 3);
+                        });
+        assertEquals(3, commands.length);
+
+        assertCommand(commands[0], DrawList.ElementType.RECTANGLE, DrawList.ElementStyle.FILL, 2);
+        assertEquals(DrawList.COMMAND_FLAG_INVERT_EDGE_FADE, commands[0].flags());
+        // Left, top, right, bottom, with negative fades treated as hard edges
+        assertEquals(0, edgeFadeOf(commands[0], 0), 0.001f);
+        assertEquals(8, edgeFadeOf(commands[0], 1), 0.001f);
+        assertEquals(16, edgeFadeOf(commands[0], 2), 0.001f);
+        assertEquals(0, edgeFadeOf(commands[0], 3), 0.001f);
+        final float[] fadeRect = point(commands[0].pointIndex() + 1);
+        assertEquals(0, fadeRect[0], 0.001f);
+        assertEquals(0, fadeRect[1], 0.001f);
+        assertEquals(200, fadeRect[2], 0.001f);
+        assertEquals(100, fadeRect[3], 0.001f);
+
+        assertCommand(commands[1], DrawList.ElementType.RECTANGLE, DrawList.ElementStyle.FILL, 1);
+        assertEquals(0, commands[1].flags());
+
+        assertCommand(commands[2], DrawList.ElementType.RECTANGLE, DrawList.ElementStyle.FILL, 1);
+        assertEquals(0, commands[2].flags());
+        for (int i = 0; i < 4; ++i) {
+            assertEquals(3, edgeFadeOf(commands[2], i), 0.001f);
+        }
+    }
+
+    @Test
+    void testRectangleOutlineEdgeFade() {
+        Command[] commands =
+                draw(
+                        list -> {
+                            list.addRectFaded(
+                                    0,
+                                    0,
+                                    200,
+                                    100,
+                                    Color.WHITE,
+                                    4,
+                                    DrawFlags.ROUND_CORNERS_ALL,
+                                    1,
+                                    new Vector4f(0, 8, 0, 0),
+                                    null,
+                                    true);
+                            list.addRect(0, 0, 10, 10, Color.WHITE, 0, 0, 1);
+                        });
+        assertEquals(2, commands.length);
+
+        // No separate fade rect, so the fade is measured from the outline's own rectangle
+        assertCommand(commands[0], DrawList.ElementType.RECTANGLE, DrawList.ElementStyle.BORDER, 1);
+        assertEquals(DrawList.COMMAND_FLAG_INVERT_EDGE_FADE, commands[0].flags());
+        assertEquals(8, edgeFadeOf(commands[0], 1), 0.001f);
+
+        // Plain outlines don't fade
+        assertCommand(commands[1], DrawList.ElementType.RECTANGLE, DrawList.ElementStyle.BORDER, 1);
+        assertEquals(0, commands[1].flags());
+        for (int i = 0; i < 4; ++i) {
+            assertEquals(0, edgeFadeOf(commands[1], i), 0.001f);
+        }
     }
 
     @Test

@@ -14,6 +14,7 @@ import com.ikalagaming.util.IntArrayList;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
+import org.joml.Vector4f;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,12 +25,14 @@ public class Window {
     public boolean active;
 
     /**
-     * The radius for blending around the edges to/from transparent. 0 means no blending, positive
-     * numbers indicate the radius fading from an opaque (well, "regular" colored) center to fully
-     * transparent edge, negative numbers indicate an opaque (unmodified) edge fading to a
-     * transparent center. Window flags are used to specify which corners are involved.
+     * How far in from each edge, in pixels, the window background and title bar fade from
+     * transparent to their regular color, as (left, top, right, bottom). 0 means a hard edge.
+     * Locked in from the style for the frame when the window begins.
      */
-    public float alphaRadius;
+    public final Vector4f edgeFade;
+
+    /** Whether the edge fade is inverted, so the fading edges are opaque instead. */
+    public boolean edgeFadeInvert;
 
     /**
      * Whether the window is in the process of appearing after being hidden or inactive, or the
@@ -584,7 +587,8 @@ public class Window {
 
     public Window(@NonNull String name) {
         active = false;
-        alphaRadius = 0;
+        edgeFade = new Vector4f(0, 0, 0, 0);
+        edgeFadeInvert = false;
         appearing = false;
         autoFitFramesX = new IkByte();
         autoFitFramesY = new IkByte();

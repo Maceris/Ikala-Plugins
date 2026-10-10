@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.enums.StyleVariable;
 
 import org.joml.Vector2f;
+import org.joml.Vector4f;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -53,6 +54,31 @@ class StyleVariableTest {
                 IkGui.getStyleVarFloat2(variable, actual);
                 assertEquals(averageValue, actual.x, DELTA);
                 assertEquals(averageValue + 1, actual.y, DELTA);
+            } else if (variable.getDimensions() == 4) {
+                IkGui.getContext()
+                        .style
+                        .variable
+                        .setStyleVarFloat4(
+                                variable,
+                                averageValue,
+                                averageValue + 1,
+                                averageValue + 2,
+                                averageValue + 3);
+                Vector4f actual = new Vector4f(-10_000);
+                IkGui.getStyleVarFloat4(variable, actual);
+                assertEquals(averageValue, actual.x, DELTA);
+                assertEquals(averageValue + 1, actual.y, DELTA);
+                assertEquals(averageValue + 2, actual.z, DELTA);
+                assertEquals(averageValue + 3, actual.w, DELTA);
+
+                // Pushing and popping restores all 4 components
+                IkGui.pushStyleVarFloat4(variable, 1, 2, 3, 4);
+                IkGui.getStyleVarFloat4(variable, actual);
+                assertEquals(4, actual.w, DELTA);
+                IkGui.popStyleVar();
+                IkGui.getStyleVarFloat4(variable, actual);
+                assertEquals(averageValue, actual.x, DELTA);
+                assertEquals(averageValue + 3, actual.w, DELTA);
             } else {
                 fail("Unexpected dimensions");
             }

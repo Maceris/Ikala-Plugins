@@ -86,6 +86,43 @@ class IkGuiPopupTest {
         };
     }
 
+    @Test
+    void testEdgeFadeOnlyOnTopLevelWindows() {
+        context.style.variable.windowEdgeFade.set(0, 8, 8, 0);
+        final Window[] child = {null};
+        Runnable ui =
+                () -> {
+                    if (IkGui.beginMainMenuBar()) {
+                        IkGui.endMainMenuBar();
+                    }
+                    fixedWindow(
+                                    "Faded",
+                                    WindowFlags.NONE,
+                                    () -> {
+                                        IkGui.beginChild("Child", 100, 100);
+                                        child[0] = IkGuiInternal.getCurrentWindow();
+                                        IkGui.endChild();
+                                    })
+                            .run();
+                };
+        frames(2, ui);
+
+        final Window bar = IkGuiInternal.findWindowByName("##MainMenuBar");
+        assertNotNull(bar);
+        assertEquals(0, bar.edgeFade.lengthSquared(), DELTA);
+
+        final Window faded = IkGuiInternal.findWindowByName("Faded");
+        assertNotNull(faded);
+        assertEquals(8, faded.edgeFade.y, DELTA);
+        assertEquals(8, faded.edgeFade.z, DELTA);
+
+        assertNotNull(child[0]);
+        assertEquals(0, child[0].edgeFade.lengthSquared(), DELTA);
+
+        // The main menu bar restores the style it changed
+        assertEquals(8, context.style.variable.windowEdgeFade.y, DELTA);
+    }
+
     /**
      * Find the popup window that is open at a level of the popup stack.
      *

@@ -257,8 +257,11 @@ class IkGuiImplMenus {
         final int windowFlags =
                 WindowFlags.NO_SCROLLBAR | WindowFlags.NO_SAVED_SETTINGS | WindowFlags.MENU_BAR;
         final float height = IkGuiImplLayout.getFrameHeight();
+        // The main menu bar is part of the screen rather than a window, so it never fades
+        IkGuiImplUtils.pushStyleVarFloat4(StyleVariable.WINDOW_EDGE_FADE, 0.0f, 0.0f, 0.0f, 0.0f);
         final boolean isOpen =
                 beginViewportSideBar("##MainMenuBar", viewport, Direction.UP, height, windowFlags);
+        IkGuiImplUtils.popStyleVar();
         context.nextWindowData.menuBarOffsetMinValue.set(0.0f, 0.0f);
         if (!isOpen) {
             IkGuiImplWindows.end();

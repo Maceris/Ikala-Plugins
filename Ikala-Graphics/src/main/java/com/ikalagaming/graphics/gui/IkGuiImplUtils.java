@@ -1381,6 +1381,31 @@ class IkGuiImplUtils {
         target.set(getStyleVarRaw(variable, 0), getStyleVarRaw(variable, 1));
     }
 
+    public static void getStyleVarFloat4(
+            @NonNull StyleVariable variable, @NonNull Vector4f target) {
+        if (variable.getDimensions() != 4) {
+            IkGuiImplDebugTools.reportError(
+                    log,
+                    "Style variable {} has {} dimensions, trying to fetch 4 floats",
+                    variable,
+                    variable.getDimensions());
+            return;
+        }
+        if (variable.getExpectedType() != Float.class) {
+            IkGuiImplDebugTools.reportError(
+                    log,
+                    "Style variable {} is a {} value, trying to fetch as 4 floats",
+                    variable,
+                    variable.getExpectedType().getSimpleName());
+            return;
+        }
+        target.set(
+                getStyleVarRaw(variable, 0),
+                getStyleVarRaw(variable, 1),
+                getStyleVarRaw(variable, 2),
+                getStyleVarRaw(variable, 3));
+    }
+
     public static int getStyleVarInt(@NonNull StyleVariable variable) {
         if (variable.getDimensions() != 1) {
             IkGuiImplDebugTools.reportError(
@@ -1405,7 +1430,7 @@ class IkGuiImplUtils {
      * Fetch the current value of a style variable component.
      *
      * @param variable The style variable.
-     * @param component 0 for x (or single values), 1 for y.
+     * @param component 0 for x (or single values), 1 for y, 2 for z, 3 for w.
      * @return The value.
      */
     private static float getStyleVarRaw(@NonNull StyleVariable variable, int component) {
@@ -1455,9 +1480,10 @@ class IkGuiImplUtils {
                     style.tableAngledHeadersTextAlign.get(component);
             case TAB_ROUNDING -> style.tabRounding;
             case TOUCH_EXTRA_PADDING -> style.touchExtraPadding.get(component);
-            case WINDOW_ALPHA_RADIUS -> style.windowAlphaRadius;
             case WINDOW_BORDER_HOVER_PADDING -> style.windowBorderHoverPadding;
             case WINDOW_BORDER_SIZE -> style.windowBorderSize;
+            case WINDOW_EDGE_FADE -> style.windowEdgeFade.get(component);
+            case WINDOW_EDGE_FADE_INVERT -> style.windowEdgeFadeInvert ? 1 : 0;
             case WINDOW_MENU_BUTTON_POSITION -> style.windowMenuButtonPosition.getIntValue();
             case WINDOW_MIN_SIZE -> style.windowMinSize.get(component);
             case WINDOW_PADDING -> style.windowPadding.get(component);
@@ -1474,6 +1500,20 @@ class IkGuiImplUtils {
      * @param y The y component, ignored for single values.
      */
     private static void setStyleVarRaw(@NonNull StyleVariable variable, float x, float y) {
+        setStyleVarRaw(variable, x, y, 0, 0);
+    }
+
+    /**
+     * Set the current value of a style variable.
+     *
+     * @param variable The style variable.
+     * @param x The value for single values, or the x component.
+     * @param y The y component, ignored for single values.
+     * @param z The z component, ignored for single values and pairs.
+     * @param w The w component, ignored for single values and pairs.
+     */
+    private static void setStyleVarRaw(
+            @NonNull StyleVariable variable, float x, float y, float z, float w) {
         final StyleVariables style = context.style.variable;
         switch (variable) {
             case ALPHA -> style.alpha = x;
@@ -1520,9 +1560,10 @@ class IkGuiImplUtils {
             case TABLE_ANGLED_HEADERS_TEXT_ALIGN -> style.tableAngledHeadersTextAlign.set(x, y);
             case TAB_ROUNDING -> style.tabRounding = x;
             case TOUCH_EXTRA_PADDING -> style.touchExtraPadding.set(x, y);
-            case WINDOW_ALPHA_RADIUS -> style.windowAlphaRadius = x;
             case WINDOW_BORDER_HOVER_PADDING -> style.windowBorderHoverPadding = x;
             case WINDOW_BORDER_SIZE -> style.windowBorderSize = x;
+            case WINDOW_EDGE_FADE -> style.windowEdgeFade.set(x, y, z, w);
+            case WINDOW_EDGE_FADE_INVERT -> style.windowEdgeFadeInvert = x != 0;
             case WINDOW_MENU_BUTTON_POSITION ->
                     style.windowMenuButtonPosition = WindowMenuButtonPosition.fromInteger((int) x);
             case WINDOW_MIN_SIZE -> style.windowMinSize.set(x, y);
@@ -2132,7 +2173,7 @@ class IkGuiImplUtils {
             }
             // We stored the old values, so restore them
             StyleMod backup = context.styleVariableStack.pop();
-            setStyleVarRaw(backup.type(), backup.x(), backup.y());
+            setStyleVarRaw(backup.type(), backup.x(), backup.y(), backup.z(), backup.w());
         }
     }
 
@@ -2232,6 +2273,36 @@ class IkGuiImplUtils {
                     variable.getMaxValue());
         }
         pushStyleVarRaw(variable, x, y);
+    }
+
+    public static void pushStyleVarFloat4(
+            @NonNull StyleVariable variable, float x, float y, float z, float w) {
+        if (variable.getDimensions() != 4) {
+            IkGuiImplDebugTools.reportError(
+                    log,
+                    "Style variable {} has {} dimensions, 4 floats provided",
+                    variable,
+                    variable.getDimensions());
+            return;
+        }
+        if (variable.getExpectedType() != Float.class) {
+            IkGuiImplDebugTools.reportError(
+                    log,
+                    "Style variable {} expects {} values, Floats provided",
+                    variable,
+                    variable.getExpectedType().getSimpleName());
+            return;
+        }
+        for (float value : new float[] {x, y, z, w}) {
+            if (value < variable.getMinValue() || value > variable.getMaxValue()) {
+                log.warn(
+                        "Variable {} value outside the expected float range({}, {})",
+                        variable,
+                        variable.getMinValue(),
+                        variable.getMaxValue());
+            }
+        }
+        pushStyleVarRaw(variable, x, y, z, w);
     }
 
     /**
@@ -2352,10 +2423,27 @@ class IkGuiImplUtils {
      * @param y The new y component, ignored for single values.
      */
     private static void pushStyleVarRaw(@NonNull StyleVariable variable, float x, float y) {
+        pushStyleVarRaw(variable, x, y, 0, 0);
+    }
+
+    /**
+     * Back up the current value of a style variable onto the stack, then set the new value.
+     *
+     * @param variable The variable.
+     * @param x The new value, or x component.
+     * @param y The new y component, ignored for single values.
+     * @param z The new z component, ignored for single values and pairs.
+     * @param w The new w component, ignored for single values and pairs.
+     */
+    private static void pushStyleVarRaw(
+            @NonNull StyleVariable variable, float x, float y, float z, float w) {
+        final int dimensions = variable.getDimensions();
         final float oldX = getStyleVarRaw(variable, 0);
-        final float oldY = variable.getDimensions() == 2 ? getStyleVarRaw(variable, 1) : 0;
-        context.styleVariableStack.push(new StyleMod(variable, oldX, oldY));
-        setStyleVarRaw(variable, x, y);
+        final float oldY = dimensions >= 2 ? getStyleVarRaw(variable, 1) : 0;
+        final float oldZ = dimensions >= 4 ? getStyleVarRaw(variable, 2) : 0;
+        final float oldW = dimensions >= 4 ? getStyleVarRaw(variable, 3) : 0;
+        context.styleVariableStack.push(new StyleMod(variable, oldX, oldY, oldZ, oldW));
+        setStyleVarRaw(variable, x, y, z, w);
     }
 
     public static void resetMouseDragDelta(@NonNull MouseButton button) {
