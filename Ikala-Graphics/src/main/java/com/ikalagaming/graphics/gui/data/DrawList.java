@@ -15,6 +15,7 @@ import com.ikalagaming.util.IntArrayList;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
+import org.joml.Vector4fc;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -71,15 +72,20 @@ public class DrawList {
      * Details for one point.
      *
      * @param radius The radius for rounding.
-     * @param alphaRadius The radius for blending to transparent. 0 means no blending, positive
-     *     numbers indicate the radius fading from an opaque (well, "regular" colored) center to
-     *     fully transparent edge, negative numbers indicate an opaque (unmodified) edge fading to a
-     *     transparent center.
+     * @param edgeFade How far in from the edge, in pixels, the shape fades from transparent to its
+     *     regular color. 0 means a hard edge. Rectangles have one per edge, with the four details
+     *     holding the left, top, right, and bottom edges in order. Other shapes use the first
+     *     detail's fade for their whole outline.
      * @param colorOrTextureID The color (RGBA32) or texture ID.
      * @param tint The tint to modify by.
      */
-    private record SDFPointDetail(
-            float radius, float alphaRadius, int colorOrTextureID, int tint) {}
+    private record SDFPointDetail(float radius, float edgeFade, int colorOrTextureID, int tint) {}
+
+    /**
+     * Command flag that inverts the edge fade, so the faded edges are opaque and fade to
+     * transparent further in. Must line up with the shader.
+     */
+    public static final int COMMAND_FLAG_INVERT_EDGE_FADE = 1;
 
     /** Extra space around anti-aliased shapes, so the soft edge isn't clipped by the quad. */
     private static final float ANTI_ALIAS_PADDING = 1.0f;
@@ -116,7 +122,8 @@ public class DrawList {
      *   <li>Line (bezier) - 3 points (quadratic) or 4 points (cubic), the control points
      *   <li>Line (straight) - 2 points, the end points
      *   <li>Rectangle - 1 point: center, a = width, b = height. Textured rectangles have a second
-     *       point: (min u, min v) with a = max u, b = max v
+     *       point: (min u, min v) with a = max u, b = max v. Then optionally the rectangle the edge
+     *       fade is measured from, if it isn't this one: (min x, min y) with a = max x, b = max y
      *   <li>Polygon - at least 3 points in order, a = u, b = v, for textures. Otherwise ignored.
      *   <li>Text - 2 or 3 points: glyph top left position with a = cos and b = sin of the rotation,
      *       then (atlas x, atlas y) with a = width, b = height. The optional third point is a clip
@@ -126,7 +133,7 @@ public class DrawList {
     public ByteBuffer pointBuffer;
 
     /**
-     * float radius (for rounding), float alphaRadius (used to blend to transparent), int
+     * float radius (for rounding), float edgeFade (fading to transparent at the edges), int
      * colorOrTextureID, int tint. For textured elements, the texture ID is the index of the texture
      * in {@link DrawData#textures}, and the tint is multiplied with the texture color. Stored
      * generally starting on the top-left, and always ordered clockwise for polygons and in-order
@@ -136,7 +143,7 @@ public class DrawList {
 
     /**
      * int pointIndex, int detailIndex, int pointCount, int detailCount, int type, int style, float
-     * stroke (borders, line thickness).
+     * stroke (borders, line thickness), int flags (see COMMAND_FLAG_INVERT_EDGE_FADE).
      */
     public ByteBuffer commandBuffer;
 
@@ -182,20 +189,26 @@ public class DrawList {
     private TextTransform textTransform;
 
     /**
-     * Set up point details for four corners of a rectangle.
+     * Set up point details for the four corners and edges of a rectangle.
      *
      * @param textureID The texture ID or color to use.
      * @param rounding The rounding radius.
-     * @param alphaRadius The alpha radius.
+     * @param fadeLeft The edge fade of the left edge.
+     * @param fadeTop The edge fade of the top edge.
+     * @param fadeRight The edge fade of the right edge.
+     * @param fadeBottom The edge fade of the bottom edge.
      * @param drawFlagsRoundingCorners Draw flags for which corners need rounding.
      * @param tint Tint, for tinting textures.
      * @return The (four) point details for each of the corners (top left, top right, bottom right,
-     *     then bottom left).
+     *     then bottom left), which hold the fades for the left, top, right, and bottom edges.
      */
     private static SDFPointDetail[] getSdfPointDetails(
             int textureID,
             float rounding,
-            float alphaRadius,
+            float fadeLeft,
+            float fadeTop,
+            float fadeRight,
+            float fadeBottom,
             int drawFlagsRoundingCorners,
             int tint) {
         final float topLeftRadius =
@@ -207,20 +220,12 @@ public class DrawList {
         final float bottomRightRadius =
                 (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? rounding : 0;
 
-        final float topLeftAlphaRadius =
-                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_LEFT) != 0 ? alphaRadius : 0;
-        final float topRightAlphaRadius =
-                (drawFlagsRoundingCorners & ROUND_CORNERS_TOP_RIGHT) != 0 ? alphaRadius : 0;
-        final float bottomLeftAlphaRadius =
-                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_LEFT) != 0 ? alphaRadius : 0;
-        final float bottomRightAlphaRadius =
-                (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? alphaRadius : 0;
-
+        // Negative fades are meaningless, so treat them as hard edges
         return new SDFPointDetail[] {
-            new SDFPointDetail(topLeftRadius, topLeftAlphaRadius, textureID, tint),
-            new SDFPointDetail(topRightRadius, topRightAlphaRadius, textureID, tint),
-            new SDFPointDetail(bottomRightRadius, bottomRightAlphaRadius, textureID, tint),
-            new SDFPointDetail(bottomLeftRadius, bottomLeftAlphaRadius, textureID, tint),
+            new SDFPointDetail(topLeftRadius, Math.max(0, fadeLeft), textureID, tint),
+            new SDFPointDetail(topRightRadius, Math.max(0, fadeTop), textureID, tint),
+            new SDFPointDetail(bottomRightRadius, Math.max(0, fadeRight), textureID, tint),
+            new SDFPointDetail(bottomLeftRadius, Math.max(0, fadeBottom), textureID, tint),
         };
     }
 
@@ -443,12 +448,23 @@ public class DrawList {
 
         for (SDFPointDetail detail : details) {
             pointDetailBuffer.putFloat(detail.radius());
-            pointDetailBuffer.putFloat(detail.alphaRadius());
+            pointDetailBuffer.putFloat(detail.edgeFade());
             pointDetailBuffer.putInt(detail.colorOrTextureID());
             pointDetailBuffer.putInt(detail.tint());
         }
 
         return newDetailIndex / DrawData.SIZE_OF_POINT_DETAIL;
+    }
+
+    private void addCommand(
+            int pointIndex,
+            int detailIndex,
+            int pointCount,
+            int detailCount,
+            @NonNull ElementType type,
+            @NonNull ElementStyle style,
+            float stroke) {
+        addCommand(pointIndex, detailIndex, pointCount, detailCount, type, style, stroke, 0);
     }
 
     @Synchronized
@@ -459,7 +475,8 @@ public class DrawList {
             int detailCount,
             @NonNull ElementType type,
             @NonNull ElementStyle style,
-            float stroke) {
+            float stroke,
+            int flags) {
 
         if (commandBuffer.position() + DrawData.SIZE_OF_DRAW_COMMAND >= commandBuffer.limit()) {
             ByteBuffer newBuffer =
@@ -477,6 +494,7 @@ public class DrawList {
         commandBuffer.putInt(type.typeID);
         commandBuffer.putInt(style.styleID);
         commandBuffer.putFloat(stroke);
+        commandBuffer.putInt(flags);
     }
 
     public void pushClipRect(float minX, float minY, float maxX, float maxY) {
@@ -845,6 +863,87 @@ public class DrawList {
             float rounding,
             int drawFlagsRoundingCorners,
             float thickness) {
+        addRectFaded(
+                minX,
+                minY,
+                maxX,
+                maxY,
+                color,
+                rounding,
+                drawFlagsRoundingCorners,
+                thickness,
+                0,
+                0,
+                0,
+                0,
+                null,
+                false);
+    }
+
+    /**
+     * Add a (empty) rectangle whose outline fades with an edge fade, using the same fade as {@link
+     * #addRectFilledFaded}. This is for outlining a faded fill: the outline disappears along edges
+     * that fade and fades out near them along the other edges, or the reverse when the fade is
+     * inverted.
+     *
+     * @param minX Minimum X coordinate.
+     * @param minY Minimum Y coordinate.
+     * @param maxX Maximum X coordinate.
+     * @param maxY Maximum Y coordinate.
+     * @param color Color of the line.
+     * @param rounding Radius of the rounded corners, 0 indicates no rounding.
+     * @param drawFlagsRoundingCorners Draw flags indicating which corner(s) to round.
+     * @param thickness The thickness of the lines, in pixels.
+     * @param edgeFade How far in from each edge, in pixels, the fade goes from transparent to
+     *     opaque, as (left, top, right, bottom). 0 means a hard edge.
+     * @param fadeRect The rectangle the fade is measured from, or null to use this rectangle.
+     * @param invertFade Whether to invert the fade. This has no effect if no edges fade.
+     * @see DrawFlags
+     */
+    public void addRectFaded(
+            float minX,
+            float minY,
+            float maxX,
+            float maxY,
+            int color,
+            float rounding,
+            int drawFlagsRoundingCorners,
+            float thickness,
+            @NonNull Vector4fc edgeFade,
+            RectFloat fadeRect,
+            boolean invertFade) {
+        addRectFaded(
+                minX,
+                minY,
+                maxX,
+                maxY,
+                color,
+                rounding,
+                drawFlagsRoundingCorners,
+                thickness,
+                edgeFade.x(),
+                edgeFade.y(),
+                edgeFade.z(),
+                edgeFade.w(),
+                fadeRect,
+                invertFade);
+    }
+
+    private void addRectFaded(
+            float minX,
+            float minY,
+            float maxX,
+            float maxY,
+            int color,
+            float rounding,
+            int drawFlagsRoundingCorners,
+            float thickness,
+            float fadeLeft,
+            float fadeTop,
+            float fadeRight,
+            float fadeBottom,
+            RectFloat fadeRect,
+            boolean invertFade) {
 
         if (rounding < 0) {
             log.warn("Invalid rounding {} in addRect", rounding);
@@ -865,11 +964,28 @@ public class DrawList {
         final float height = maxY - minY;
 
         SDFPointDetail[] details =
-                getSdfPointDetails(color, rounding, 0, drawFlagsRoundingCorners, Color.CLEAR);
+                getSdfPointDetails(
+                        color,
+                        rounding,
+                        fadeLeft,
+                        fadeTop,
+                        fadeRight,
+                        fadeBottom,
+                        drawFlagsRoundingCorners,
+                        Color.CLEAR);
+        final boolean fades = fadeLeft > 0 || fadeTop > 0 || fadeRight > 0 || fadeBottom > 0;
 
         int pointIndex = addPoint(centerX, centerY, width, height);
+        int pointCount = 1;
+        if (fades && fadeRect != null) {
+            addPoint(
+                    fadeRect.getLeft(),
+                    fadeRect.getTop(),
+                    fadeRect.getRight(),
+                    fadeRect.getBottom());
+            ++pointCount;
+        }
         int detailIndex = addDetails(details);
-        final int pointCount = 1;
         final int detailCount = details.length;
 
         addCommand(
@@ -879,7 +995,8 @@ public class DrawList {
                 detailCount,
                 ElementType.RECTANGLE,
                 ElementStyle.BORDER,
-                thickness);
+                thickness,
+                fades && invertFade ? COMMAND_FLAG_INVERT_EDGE_FADE : 0);
     }
 
     public void addRectFilled(float minX, float minY, float maxX, float maxY, int color) {
@@ -910,7 +1027,82 @@ public class DrawList {
             int color,
             float rounding,
             int drawFlagsRoundingCorners,
-            float alphaRadius) {
+            float edgeFade) {
+        addRectFilledFaded(
+                minX,
+                minY,
+                maxX,
+                maxY,
+                color,
+                rounding,
+                drawFlagsRoundingCorners,
+                edgeFade,
+                edgeFade,
+                edgeFade,
+                edgeFade,
+                null,
+                false);
+    }
+
+    /**
+     * Add a filled rectangle that fades to transparent towards some of its edges.
+     *
+     * @param minX The left edge.
+     * @param minY The top edge.
+     * @param maxX The right edge.
+     * @param maxY The bottom edge.
+     * @param color The color.
+     * @param rounding The radius of the rounded corners.
+     * @param drawFlagsRoundingCorners Which corners to round.
+     * @param edgeFade How far in from each edge, in pixels, the rectangle fades from transparent to
+     *     its color, as (left, top, right, bottom). 0 means a hard edge.
+     * @param fadeRect The rectangle the fade is measured from, or null to use this rectangle. This
+     *     lets several rectangles fade as one shape, such as a window's title bar and background.
+     * @param invertFade Whether to invert the fade, so the fading edges are opaque and fade to
+     *     transparent further in. This has no effect if no edges fade.
+     * @see DrawFlags
+     */
+    public void addRectFilledFaded(
+            float minX,
+            float minY,
+            float maxX,
+            float maxY,
+            int color,
+            float rounding,
+            int drawFlagsRoundingCorners,
+            @NonNull Vector4fc edgeFade,
+            RectFloat fadeRect,
+            boolean invertFade) {
+        addRectFilledFaded(
+                minX,
+                minY,
+                maxX,
+                maxY,
+                color,
+                rounding,
+                drawFlagsRoundingCorners,
+                edgeFade.x(),
+                edgeFade.y(),
+                edgeFade.z(),
+                edgeFade.w(),
+                fadeRect,
+                invertFade);
+    }
+
+    private void addRectFilledFaded(
+            float minX,
+            float minY,
+            float maxX,
+            float maxY,
+            int color,
+            float rounding,
+            int drawFlagsRoundingCorners,
+            float fadeLeft,
+            float fadeTop,
+            float fadeRight,
+            float fadeBottom,
+            RectFloat fadeRect,
+            boolean invertFade) {
 
         if (rounding < 0) {
             log.warn("Invalid rounding {} in addRectFilled", rounding);
@@ -933,11 +1125,27 @@ public class DrawList {
 
         SDFPointDetail[] details =
                 getSdfPointDetails(
-                        color, rounding, alphaRadius, drawFlagsRoundingCorners, Color.CLEAR);
+                        color,
+                        rounding,
+                        fadeLeft,
+                        fadeTop,
+                        fadeRight,
+                        fadeBottom,
+                        drawFlagsRoundingCorners,
+                        Color.CLEAR);
+        final boolean fades = fadeLeft > 0 || fadeTop > 0 || fadeRight > 0 || fadeBottom > 0;
 
         int pointIndex = addPoint(centerX, centerY, width, height);
+        int pointCount = 1;
+        if (fades && fadeRect != null) {
+            addPoint(
+                    fadeRect.getLeft(),
+                    fadeRect.getTop(),
+                    fadeRect.getRight(),
+                    fadeRect.getBottom());
+            ++pointCount;
+        }
         int detailIndex = addDetails(details);
-        final int pointCount = 1;
         final int detailCount = details.length;
 
         addCommand(
@@ -947,7 +1155,8 @@ public class DrawList {
                 detailCount,
                 ElementType.RECTANGLE,
                 ElementStyle.FILL,
-                borderStroke);
+                borderStroke,
+                fades && invertFade ? COMMAND_FLAG_INVERT_EDGE_FADE : 0);
     }
 
     public void addRectFilledMultiColor(
@@ -1033,7 +1242,7 @@ public class DrawList {
             int colorUpperRight,
             int colorBottomRight,
             int colorBottomLeft,
-            float alphaRadius) {
+            float edgeFade) {
 
         if (rounding < 0) {
             log.warn("Invalid rounding {} in addRectFilledMultiColor", rounding);
@@ -1055,11 +1264,12 @@ public class DrawList {
         final float bottomRightRadius =
                 (drawFlagsRoundingCorners & ROUND_CORNERS_BOTTOM_RIGHT) != 0 ? rounding : 0;
 
+        final float fade = Math.max(0, edgeFade);
         SDFPointDetail[] details = {
-            new SDFPointDetail(topLeftRadius, alphaRadius, colorUpperLeft, Color.CLEAR),
-            new SDFPointDetail(topRightRadius, alphaRadius, colorUpperRight, Color.CLEAR),
-            new SDFPointDetail(bottomRightRadius, alphaRadius, colorBottomRight, Color.CLEAR),
-            new SDFPointDetail(bottomLeftRadius, alphaRadius, colorBottomLeft, Color.CLEAR),
+            new SDFPointDetail(topLeftRadius, fade, colorUpperLeft, Color.CLEAR),
+            new SDFPointDetail(topRightRadius, fade, colorUpperRight, Color.CLEAR),
+            new SDFPointDetail(bottomRightRadius, fade, colorBottomRight, Color.CLEAR),
+            new SDFPointDetail(bottomLeftRadius, fade, colorBottomLeft, Color.CLEAR),
         };
         if (!addScreenQuad(
                 minX - FILL_EDGE_PADDING,
@@ -1163,15 +1373,15 @@ public class DrawList {
             float p4X,
             float p4Y,
             int color,
-            float alphaRadius) {
+            float edgeFade) {
 
         final int borderStroke = 0;
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, alphaRadius, color, Color.CLEAR),
-            new SDFPointDetail(0, alphaRadius, color, Color.CLEAR),
-            new SDFPointDetail(0, alphaRadius, color, Color.CLEAR),
-            new SDFPointDetail(0, alphaRadius, color, Color.CLEAR),
+            new SDFPointDetail(0, Math.max(0, edgeFade), color, Color.CLEAR),
+            new SDFPointDetail(0, Math.max(0, edgeFade), color, Color.CLEAR),
+            new SDFPointDetail(0, Math.max(0, edgeFade), color, Color.CLEAR),
+            new SDFPointDetail(0, Math.max(0, edgeFade), color, Color.CLEAR),
         };
         if (!addBoundingQuad(ANTI_ALIAS_PADDING, p1X, p1Y, p2X, p2Y, p3X, p3Y, p4X, p4Y)) {
             return;
@@ -1250,12 +1460,12 @@ public class DrawList {
             float p3X,
             float p3Y,
             int color,
-            float alphaRadius) {
+            float edgeFade) {
 
         final int borderStroke = 0;
 
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, alphaRadius, color, Color.CLEAR),
+            new SDFPointDetail(0, Math.max(0, edgeFade), color, Color.CLEAR),
         };
         if (!addBoundingQuad(ANTI_ALIAS_PADDING, p1X, p1Y, p2X, p2Y, p3X, p3Y)) {
             return;
@@ -1364,9 +1574,9 @@ public class DrawList {
     }
 
     public void addCircleFilled(
-            float centerX, float centerY, float radius, int color, float alphaRadius) {
+            float centerX, float centerY, float radius, int color, float edgeFade) {
         SDFPointDetail[] details = {
-            new SDFPointDetail(0, alphaRadius, color, Color.CLEAR),
+            new SDFPointDetail(0, Math.max(0, edgeFade), color, Color.CLEAR),
         };
 
         final int borderStroke = 0;
@@ -1442,7 +1652,8 @@ public class DrawList {
      * @param radius The distance from the center to each corner.
      * @param color The color.
      * @param segmentCount The number of sides, at least 3.
-     * @param alphaRadius The radius for blending to transparent.
+     * @param edgeFade How far in from the edge, in pixels, the shape fades from transparent to its
+     *     color. 0 means a hard edge.
      */
     public void addNgonFilled(
             float centerX,
@@ -1450,7 +1661,7 @@ public class DrawList {
             float radius,
             int color,
             int segmentCount,
-            float alphaRadius) {
+            float edgeFade) {
         if (segmentCount < 3) {
             log.warn("Invalid segment count {} in addNgonFilled", segmentCount);
             return;
@@ -1461,7 +1672,7 @@ public class DrawList {
                 color,
                 ElementStyle.FILL,
                 0.0f,
-                alphaRadius);
+                edgeFade);
     }
 
     /**
@@ -2083,17 +2294,18 @@ public class DrawList {
      * @param points The points, in order.
      * @param pointCount The number of points to use from the array.
      * @param color The color.
-     * @param alphaRadius The radius for blending to transparent.
+     * @param edgeFade How far in from the edge, in pixels, the shape fades from transparent to its
+     *     color. 0 means a hard edge.
      */
     public void addConvexPolyFilled(
-            @NonNull Vector2f[] points, int pointCount, int color, float alphaRadius) {
+            @NonNull Vector2f[] points, int pointCount, int color, float edgeFade) {
         addPolygon(
                 toCoordinates(points, pointCount),
                 pointCount,
                 color,
                 ElementStyle.FILL,
                 0.0f,
-                alphaRadius);
+                edgeFade);
     }
 
     /**
@@ -2123,7 +2335,8 @@ public class DrawList {
      * @param color The color.
      * @param style Whether to fill or outline the polygon.
      * @param thickness The thickness of the outline.
-     * @param alphaRadius The radius for blending to transparent.
+     * @param edgeFade How far in from the edge, in pixels, the shape fades from transparent to its
+     *     color. 0 means a hard edge.
      */
     private void addPolygon(
             @NonNull float[] coordinates,
@@ -2131,7 +2344,7 @@ public class DrawList {
             int color,
             @NonNull ElementStyle style,
             float thickness,
-            float alphaRadius) {
+            float edgeFade) {
         if (pointCount < 3 || coordinates.length < pointCount * 2) {
             log.warn("Invalid polygon with {} points", pointCount);
             return;
@@ -2147,7 +2360,7 @@ public class DrawList {
             addPoint(coordinates[i * 2], coordinates[i * 2 + 1], 0, 0);
         }
         final int detailIndex =
-                addDetails(new SDFPointDetail(0.0f, alphaRadius, color, Color.CLEAR));
+                addDetails(new SDFPointDetail(0.0f, Math.max(0, edgeFade), color, Color.CLEAR));
 
         addCommand(
                 pointIndex,
@@ -2424,7 +2637,8 @@ public class DrawList {
      * @param maxU The texture coordinate at the right edge.
      * @param maxV The texture coordinate at the bottom edge.
      * @param tint The color to multiply the texture by.
-     * @param alphaRadius The radius for blending to transparent.
+     * @param edgeFade How far in from the edge, in pixels, the shape fades from transparent to its
+     *     color. 0 means a hard edge.
      */
     public void addImage(
             @NonNull TextureHandle texture,
@@ -2437,7 +2651,7 @@ public class DrawList {
             float maxU,
             float maxV,
             int tint,
-            float alphaRadius) {
+            float edgeFade) {
         addImageRounded(
                 texture,
                 minX,
@@ -2451,7 +2665,7 @@ public class DrawList {
                 tint,
                 0.0f,
                 ROUND_CORNERS_NONE,
-                alphaRadius);
+                edgeFade);
     }
 
     public void addImageQuad(
@@ -2528,7 +2742,8 @@ public class DrawList {
      * @param u4 The u texture coordinate of the fourth point.
      * @param v4 The v texture coordinate of the fourth point.
      * @param tint The color to multiply the texture by.
-     * @param alphaRadius The radius for blending to transparent.
+     * @param edgeFade How far in from the edge, in pixels, the shape fades from transparent to its
+     *     color. 0 means a hard edge.
      */
     public void addImageQuad(
             @NonNull TextureHandle texture,
@@ -2549,7 +2764,7 @@ public class DrawList {
             float u4,
             float v4,
             int tint,
-            float alphaRadius) {
+            float edgeFade) {
         if (!addBoundingQuad(ANTI_ALIAS_PADDING, p1X, p1Y, p2X, p2Y, p3X, p3Y, p4X, p4Y)) {
             return;
         }
@@ -2560,7 +2775,7 @@ public class DrawList {
         addPoint(p3X, p3Y, u3, v3);
         addPoint(p4X, p4Y, u4, v4);
         final int detailIndex =
-                addDetails(new SDFPointDetail(0.0f, alphaRadius, textureIndex, tint));
+                addDetails(new SDFPointDetail(0.0f, Math.max(0, edgeFade), textureIndex, tint));
 
         final int pointCount = 4;
         final int detailCount = 1;
@@ -2647,7 +2862,8 @@ public class DrawList {
      * @param tint The color to multiply the texture by.
      * @param rounding The radius of the rounded corners.
      * @param drawFlagsRoundingCorners Which corners to round.
-     * @param alphaRadius The radius for blending to transparent.
+     * @param edgeFade How far in from the edge, in pixels, the shape fades from transparent to its
+     *     color. 0 means a hard edge.
      * @see DrawFlags
      */
     public void addImageRounded(
@@ -2663,7 +2879,7 @@ public class DrawList {
             int tint,
             float rounding,
             int drawFlagsRoundingCorners,
-            float alphaRadius) {
+            float edgeFade) {
         if (rounding < 0) {
             log.warn("Invalid rounding {} in addImageRounded", rounding);
             return;
@@ -2679,7 +2895,14 @@ public class DrawList {
 
         SDFPointDetail[] details =
                 getSdfPointDetails(
-                        textureIndex, rounding, alphaRadius, drawFlagsRoundingCorners, tint);
+                        textureIndex,
+                        rounding,
+                        edgeFade,
+                        edgeFade,
+                        edgeFade,
+                        edgeFade,
+                        drawFlagsRoundingCorners,
+                        tint);
 
         // The rectangle, then the texture coordinates of the top left and bottom right
         int pointIndex = addPoint((minX + maxX) / 2, (minY + maxY) / 2, maxX - minX, maxY - minY);

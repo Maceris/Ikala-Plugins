@@ -3020,6 +3020,19 @@ public class IkGui {
     }
 
     /**
+     * Fetch the current style variable, inclusive of style mods, and store it in the target Vec4.
+     * If the variable is of a different type or cardinality, this won't work and the target won't
+     * be changed.
+     *
+     * @param variable The variable to read.
+     * @param target Where to store the values.
+     */
+    public static void getStyleVarFloat4(
+            @NonNull StyleVariable variable, @NonNull Vector4f target) {
+        IkGuiImplUtils.getStyleVarFloat4(variable, target);
+    }
+
+    /**
      * Fetch the current style variable, inclusive of style mods. If the variable is of a different
      * type or cardinality, this won't work and 0 will be returned.
      *
@@ -4827,6 +4840,11 @@ public class IkGui {
 
     public static void pushStyleVarFloat2(@NonNull StyleVariable variable, float x, float y) {
         IkGuiImplUtils.pushStyleVarFloat2(variable, x, y);
+    }
+
+    public static void pushStyleVarFloat4(
+            @NonNull StyleVariable variable, float x, float y, float z, float w) {
+        IkGuiImplUtils.pushStyleVarFloat4(variable, x, y, z, w);
     }
 
     public static void pushStyleVarInt(@NonNull StyleVariable variable, int value) {

@@ -13,6 +13,9 @@ const int ELEMENT_STYLE_FILL = 0;
 const int ELEMENT_STYLE_BORDER = 1;
 const int ELEMENT_STYLE_TEXTURE = 2;
 
+// Command flags
+const int COMMAND_FLAG_INVERT_EDGE_FADE = 1;
+
 const vec4 ERROR_COLOR =  vec4(1.0f, 0.0f, 0.0f, 1.0f);
 
 struct Point
@@ -24,7 +27,7 @@ struct Point
 struct PointDetail
 {
     float radius;
-    float alphaRadius;
+    float edgeFade;
     int colorOrTextureID;
     int tint;
 };
@@ -38,6 +41,7 @@ struct Command
     int type;
     int style;
     float stroke;
+    int flags;
 };
 
 layout(location = 0) flat in int quadID;
@@ -120,16 +124,15 @@ float coverage(float sdf) {
     return clamp(0.5f - sdf, 0.0f, 1.0f);
 }
 
-// Alpha multiplier for blending to transparent. Positive radius fades from an opaque center to a
-// transparent edge, negative fades from an opaque edge to a transparent center, 0 does nothing.
-float alphaRadiusMultiplier(float sdf, float alphaRadius) {
-    if (alphaRadius > 0) {
-        return clamp(-sdf / alphaRadius, 0.0f, 1.0f);
-    }
-    if (alphaRadius < 0) {
-        return 1.0f - clamp(sdf / alphaRadius, 0.0f, 1.0f);
-    }
-    return 1.0f;
+// Alpha multiplier for fading a shape out towards its edge, from transparent at the edge to opaque
+// edgeFade pixels inside. An edge fade of 0 (or less) does nothing.
+float edgeFadeMultiplier(float sdf, float edgeFade) {
+    return edgeFade > 0 ? smoothstep(0.0f, edgeFade, -sdf) : 1.0f;
+}
+
+// Apply the command's flags to an edge fade multiplier.
+float applyFadeFlags(Command command, float fade) {
+    return (command.flags & COMMAND_FLAG_INVERT_EDGE_FADE) != 0 ? 1.0f - fade : fade;
 }
 
 vec4 detailColor(PointDetail detail) {
@@ -137,11 +140,11 @@ vec4 detailColor(PointDetail detail) {
 }
 
 // Shade a closed shape given its signed distance, according to the command style.
-void shadeShape(Command command, float sdf, vec4 color, float alphaRadius) {
+void shadeShape(Command command, float sdf, vec4 color, float edgeFade) {
     switch (command.style) {
         case ELEMENT_STYLE_FILL:
             outColor = color;
-            outColor.a *= coverage(sdf) * alphaRadiusMultiplier(sdf, alphaRadius);
+            outColor.a *= coverage(sdf) * applyFadeFlags(command, edgeFadeMultiplier(sdf, edgeFade));
             break;
         case ELEMENT_STYLE_BORDER:
             outColor = color;
@@ -252,7 +255,7 @@ float sdBezierCubic(vec2 pos, vec2 p0, vec2 p1, vec2 p2, vec2 p3) {
 
 // Circles and ellipses.
 // Point 0: pos = center, misc = radius (x, y).
-// Detail 0: color and alpha radius.
+// Detail 0: color and edge fade.
 void draw_circle(Command command, vec2 fragPos) {
     if (command.pointCount != 1 || command.detailCount < 1) {
         outColor = ERROR_COLOR;
@@ -273,7 +276,7 @@ void draw_circle(Command command, vec2 fragPos) {
     }
 
     const PointDetail detail = pointDetails[command.detailIndex];
-    shadeShape(command, sdf, detailColor(detail), detail.alphaRadius);
+    shadeShape(command, sdf, detailColor(detail), detail.edgeFade);
 }
 
 // Arcs of a circle, drawn as a line with round caps.
@@ -396,15 +399,77 @@ vec4 rectangleColor(Command command, vec2 posRelative, vec2 halfSize) {
     return mix(mix(topLeft, topRight, uv.x), mix(bottomLeft, bottomRight, uv.x), uv.y);
 }
 
+// Pick which of two opposite edges a pixel fades towards: whichever it is further into the fade
+// of. An edge with a fade of 0 never fades. Outputs the distance from the chosen edge and its fade
+// width, which is 0 if neither edge fades.
+void chooseFadeEdge(float distanceToMin, float distanceToMax, float fadeMin, float fadeMax,
+        out float distance, out float fade, out bool useMin) {
+    const float progressMin = fadeMin > 0 ? distanceToMin / fadeMin : 1e20f;
+    const float progressMax = fadeMax > 0 ? distanceToMax / fadeMax : 1e20f;
+    useMin = progressMin <= progressMax;
+    distance = useMin ? distanceToMin : distanceToMax;
+    fade = useMin ? fadeMin : fadeMax;
+}
+
+// Alpha multiplier for a rectangle fading out towards some of its edges, from transparent at the
+// edge to opaque at the fade width inside. Each edge has its own fade width, 0 meaning a hard edge.
+// Where two fading edges meet the fade goes around the corner, following the larger of the corner
+// rounding and the fade widths, so there are no seams. The result is eased with smoothstep.
+// fadeMin, fadeMax: the top left and bottom right of the rectangle the fade is measured from.
+// fades: the fade widths of the left, top, right, and bottom edges.
+// radii: the rounding of the top left, top right, bottom right, and bottom left corners.
+float rectangleEdgeFade(vec2 fragPos, vec2 fadeMin, vec2 fadeMax, vec4 fades, vec4 radii) {
+    const vec2 distanceToMin = fragPos - fadeMin;
+    const vec2 distanceToMax = fadeMax - fragPos;
+    vec2 distance;
+    vec2 fade;
+    bool left;
+    bool top;
+    chooseFadeEdge(distanceToMin.x, distanceToMax.x, fades.x, fades.z, distance.x, fade.x, left);
+    chooseFadeEdge(distanceToMin.y, distanceToMax.y, fades.y, fades.w, distance.y, fade.y, top);
+
+    float linear;
+    if (fade.x <= 0 && fade.y <= 0) {
+        return 1.0f;
+    } else if (fade.y <= 0) {
+        linear = distance.x / fade.x;
+    } else if (fade.x <= 0) {
+        linear = distance.y / fade.y;
+    } else {
+        // Both edges at this corner fade. Measure from a rounded corner whose radius on each axis
+        // is at least that axis' fade width, so the fade is round and is transparent by the time
+        // the rectangle's own rounded corner cuts it off.
+        const float rounding = top ? (left ? radii.x : radii.y) : (left ? radii.w : radii.z);
+        const vec2 cornerRadius = max(vec2(rounding), fade);
+        const vec2 intoCorner = max(cornerRadius - distance, 0.0f) / cornerRadius;
+        const float cornerDistance = length(intoCorner);
+        if (cornerDistance <= 0) {
+            return 1.0f;
+        }
+        // Scale by a blend of the two axes based on direction, so along the straight edges this
+        // matches the single edge fade
+        const vec2 weight = intoCorner * intoCorner / (cornerDistance * cornerDistance);
+        linear = (1.0f - cornerDistance) * dot(weight, cornerRadius / fade);
+    }
+    return smoothstep(0.0f, 1.0f, linear);
+}
+
 // Rectangles with rounded corners.
 // Point 0: pos = center, misc = size.
-// Point 1 (optional, textures only): pos = (min u, min v), misc = (max u, max v).
-// Details 0-3: rounding, alpha radius, color (or texture index for the texture style), and tint,
-// for the top left, top right, bottom right, and bottom left corners. For the fill and border
-// styles the colors are blended bilinearly between the corners.
+// Point 1 (textures only): pos = (min u, min v), misc = (max u, max v).
+// The next point (optional): pos = top left, misc = bottom right of the rectangle the edge fade is
+// measured from, when it isn't this rectangle. This lets several rectangles fade as one shape, like
+// a window's title bar and background.
+// Details 0-3: rounding, color (or texture index for the texture style), and tint for the top left,
+// top right, bottom right, and bottom left corners, and the edge fade for the left, top, right, and
+// bottom edges. For the fill and border styles the colors are blended bilinearly between the
+// corners. The border style fades the same way as the fill, so it can outline a faded fill.
 // Stroke: border thickness for the border style.
+// Flags: COMMAND_FLAG_INVERT_EDGE_FADE inverts the edge fade, so the edges are opaque instead.
 void draw_rectangle(Command command, vec2 fragPos) {
-    if (command.pointCount < 1 || command.pointCount > 2 || command.detailCount != 4) {
+    const int fadeRectIndex = command.style == ELEMENT_STYLE_TEXTURE ? 2 : 1;
+    if (command.pointCount < 1 || command.pointCount > fadeRectIndex + 1
+            || command.detailCount != 4) {
         outColor = ERROR_COLOR;
         return;
     }
@@ -416,64 +481,33 @@ void draw_rectangle(Command command, vec2 fragPos) {
     // Fragment position relative to the sdf (center) point.
     const vec2 posRelative = fragPos - pos;
     const vec2 halfSize = vec2(size.x / 2, size.y / 2);
-    PointDetail detail0 = pointDetails[command.detailIndex];    //top left
-    PointDetail detail1 = pointDetails[command.detailIndex + 1];//top right
-    PointDetail detail2 = pointDetails[command.detailIndex + 2];//bottom right
-    PointDetail detail3 = pointDetails[command.detailIndex + 3];//bottom left
+    const PointDetail detail0 = pointDetails[command.detailIndex];    //top left, left edge
+    const PointDetail detail1 = pointDetails[command.detailIndex + 1];//top right, top edge
+    const PointDetail detail2 = pointDetails[command.detailIndex + 2];//bottom right, right edge
+    const PointDetail detail3 = pointDetails[command.detailIndex + 3];//bottom left, bottom edge
 
-    detail0 = posRelative.y < 0 ? detail0 : detail3;
-    detail1 = posRelative.y < 0 ? detail1 : detail2;
-    PointDetail relevantDetail = posRelative.x < 0 ? detail0 : detail1;
+    const PointDetail leftDetail = posRelative.y < 0 ? detail0 : detail3;
+    const PointDetail rightDetail = posRelative.y < 0 ? detail1 : detail2;
+    const PointDetail relevantDetail = posRelative.x < 0 ? leftDetail : rightDetail;
     const float relevantRadius = relevantDetail.radius;
 
     const vec2 d = abs(posRelative) - halfSize + relevantRadius;
     const float sdf = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - relevantRadius;
 
-    vec2 alphaD = abs(posRelative) - halfSize;
-    // Now find which corner is second closest, unless we are actually strictly diagonal
-    const bool moreVerticalThanHorizontal = alphaD.y > alphaD.x;
-    PointDetail adjacentDetail = relevantDetail;
-    if (alphaD.x != alphaD.y) {
-        // Reset the detail ordering
-        detail0 = pointDetails[command.detailIndex];    //top left
-        detail1 = pointDetails[command.detailIndex + 1];//top right
-        detail2 = pointDetails[command.detailIndex + 2];//bottom right
-        detail3 = pointDetails[command.detailIndex + 3];//bottom left
-
-         if (posRelative.y < 0 && posRelative.x < 0) {
-            // Top left
-            adjacentDetail = moreVerticalThanHorizontal ? detail1 : detail3;
-         }
-         else if (posRelative.y < 0 && posRelative.x >= 0) {
-            // Top right
-            adjacentDetail = moreVerticalThanHorizontal ? detail0 : detail2;
-         }
-         else if (posRelative.y >= 0 && posRelative.x >= 0) {
-            // Bottom right
-            adjacentDetail = moreVerticalThanHorizontal ? detail3 : detail1;
-         }
-         else {
-            // Bottom left
-            adjacentDetail = moreVerticalThanHorizontal ? detail2 : detail0;
-         }
+    const vec4 fades = vec4(detail0.edgeFade, detail1.edgeFade, detail2.edgeFade, detail3.edgeFade);
+    float fadeMul = 1.0f;
+    if (any(greaterThan(fades, vec4(0.0f)))) {
+        vec2 fadeMin = pos - halfSize;
+        vec2 fadeMax = pos + halfSize;
+        if (command.pointCount > fadeRectIndex) {
+            const Point fadeRect = points[command.pointIndex + fadeRectIndex];
+            fadeMin = fadeRect.pos;
+            fadeMax = fadeRect.misc;
+        }
+        const vec4 radii = vec4(detail0.radius, detail1.radius, detail2.radius, detail3.radius);
+        fadeMul = applyFadeFlags(command,
+            rectangleEdgeFade(fragPos, fadeMin, fadeMax, fades, radii));
     }
-    const float roundedRadius = max(abs(relevantDetail.alphaRadius), abs(adjacentDetail.alphaRadius));
-    alphaD = alphaD + roundedRadius;
-    const float alphaSdf = length(max(alphaD, 0.0)) + min(max(alphaD.x, alphaD.y), 0.0) - roundedRadius;
-
-    //TODO(ches) Fix the sharp line at non-rounded half-quadrants
-    float relevantAlphaRadius = relevantDetail.alphaRadius;
-    if (relevantAlphaRadius == 0 && adjacentDetail.alphaRadius != 0) {
-        relevantAlphaRadius = adjacentDetail.alphaRadius;
-    }
-    float alphaMul = 1.0f;
-    if (relevantAlphaRadius > 0) {
-        alphaMul = clamp(-(alphaSdf / roundedRadius), 0, 1);
-    }
-    else if (relevantAlphaRadius < 0) {
-        alphaMul = 1 - clamp(-(alphaSdf / roundedRadius), 0, 1);
-    }
-    // else 0, leave at 1.0f
 
     // Hard-edged fills (solid and textured) use the half-open fill rule, and the rounded shape for
     // the corners.
@@ -483,7 +517,7 @@ void draw_rectangle(Command command, vec2 fragPos) {
         case ELEMENT_STYLE_FILL:
             if (filled) {
                 outColor = rectangleColor(command, posRelative, halfSize);
-                outColor.a *= alphaMul;
+                outColor.a *= fadeMul;
             }
             else {
                 outColor = vec4(0, 0, 0, 0);
@@ -492,6 +526,7 @@ void draw_rectangle(Command command, vec2 fragPos) {
         case ELEMENT_STYLE_BORDER:
             if (sdf >= -(borderStroke / 2) && sdf <= (borderStroke / 2)) {
                 outColor = rectangleColor(command, posRelative, halfSize);
+                outColor.a *= fadeMul;
             }
             else {
                 outColor = vec4(0, 0, 0, 0);
@@ -508,7 +543,7 @@ void draw_rectangle(Command command, vec2 fragPos) {
                 }
                 outColor = sampleTexture(relevantDetail.colorOrTextureID, uv)
                     * intToColor(uint(relevantDetail.tint));
-                outColor.a *= alphaMul;
+                outColor.a *= fadeMul;
             }
             else {
                 outColor = vec4(0, 0, 0, 0);
@@ -522,7 +557,7 @@ void draw_rectangle(Command command, vec2 fragPos) {
 
 // Arbitrary polygons, convex or concave, with points in order.
 // Points: at least 3, pos = the vertices.
-// Detail 0: color and alpha radius.
+// Detail 0: color and edge fade.
 // Stroke: border thickness for the border style.
 float cross2d(vec2 a, vec2 b) {
     return a.x * b.y - a.y * b.x;
@@ -616,7 +651,7 @@ vec4 triangleColor(Command command, vec2 pos) {
 
 // Arbitrary polygons, convex or concave, with points in order.
 // Points: at least 3, pos = the vertices, misc = texture coordinates for the texture style.
-// Detail 0: color (or texture index for the texture style), alpha radius, and tint.
+// Detail 0: color (or texture index for the texture style), edge fade, and tint.
 // Details 1-2 (optional, triangles only): colors for the second and third vertices, so the color
 // is blended between the vertices. Detail 0 is then the color of the first vertex.
 // Stroke: border thickness for the border style.
@@ -630,14 +665,15 @@ void draw_polygon(Command command, vec2 fragPos) {
     if (command.style == ELEMENT_STYLE_TEXTURE) {
         const vec2 uv = polygonUV(command, fragPos);
         outColor = sampleTexture(detail.colorOrTextureID, uv) * intToColor(uint(detail.tint));
-        outColor.a *= coverage(sdf) * alphaRadiusMultiplier(sdf, detail.alphaRadius);
+        outColor.a *= coverage(sdf)
+            * applyFadeFlags(command, edgeFadeMultiplier(sdf, detail.edgeFade));
         return;
     }
     vec4 color = detailColor(detail);
     if (command.pointCount == 3 && command.detailCount >= 3) {
         color = triangleColor(command, fragPos);
     }
-    shadeShape(command, sdf, color, detail.alphaRadius);
+    shadeShape(command, sdf, color, detail.edgeFade);
 }
 
 // Points: glyph top left with misc = (cos, sin) of the rotation, then the glyph location in the

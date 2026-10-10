@@ -11,4 +11,4 @@ import lombok.NonNull;
  * @param x The first variable.
  * @param y The second variable, 0 by convention if unused.
  */
-public record StyleMod(@NonNull StyleVariable type, float x, float y) {}
+public record StyleMod(@NonNull StyleVariable type, float x, float y, float z, float w) {}

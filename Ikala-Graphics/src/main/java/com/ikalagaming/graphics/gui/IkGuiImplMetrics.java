@@ -2198,6 +2198,7 @@ class IkGuiImplMetrics {
         final int type = commands.getInt(offset + 4 * Integer.BYTES);
         final int style = commands.getInt(offset + 5 * Integer.BYTES);
         final float stroke = commands.getFloat(offset + 6 * Integer.BYTES);
+        final int commandFlags = commands.getInt(offset + 6 * Integer.BYTES + Float.BYTES);
 
         String typeName;
         try {
@@ -2259,7 +2260,14 @@ class IkGuiImplMetrics {
         }
 
         IkGui.text(String.format("Point Index: %d, Detail Index: %d", pointIndex, detailIndex));
-        IkGui.text(String.format("Stroke: %f", stroke));
+        IkGui.text(
+                String.format(
+                        "Stroke: %f, Flags: 0x%X%s",
+                        stroke,
+                        commandFlags,
+                        (commandFlags & DrawList.COMMAND_FLAG_INVERT_EDGE_FADE) != 0
+                                ? " (invert edge fade)"
+                                : ""));
         final ByteBuffer points = drawList.pointBuffer;
         // Coarsely clip the lines of points and details, since there can be many of them. Each
         // one is a single line, so they all have the same height.
@@ -2297,7 +2305,7 @@ class IkGuiImplMetrics {
                                 : "";
                 IkGui.bulletText(
                         String.format(
-                                "Detail %d: radius %.2f, alpha radius %.2f, color/texture 0x%08X%s,"
+                                "Detail %d: radius %.2f, edge fade %.2f, color/texture 0x%08X%s,"
                                         + " tint 0x%08X",
                                 d,
                                 details.getFloat(detailOffset),

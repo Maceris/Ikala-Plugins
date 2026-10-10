@@ -10,6 +10,7 @@ import com.ikalagaming.graphics.gui.flags.TreeNodeFlags;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector2f;
+import org.joml.Vector4f;
 
 @Slf4j
 public class StyleVariables {
@@ -172,14 +173,6 @@ public class StyleVariables {
     public final Vector2f touchExtraPadding;
 
     /**
-     * The radius for blending around the edges to/from transparent. 0 means no blending, positive
-     * numbers indicate the radius fading from an opaque (well, "regular" colored) center to fully
-     * transparent edge, negative numbers indicate an opaque (unmodified) edge fading to a
-     * transparent center. Values between 0 and 12.
-     */
-    public float windowAlphaRadius;
-
-    /**
      * Extra space around the border of a window that counts as still hovering over the window, to
      * make resizing easier.
      */
@@ -187,6 +180,19 @@ public class StyleVariables {
 
     /** Values between 0 and 1. */
     public float windowBorderSize;
+
+    /**
+     * How far in from each edge, in pixels, the background and title bar of top level windows fade
+     * from transparent to their regular color, as (left, top, right, bottom). 0 means a hard edge.
+     * Widgets inside the window, child windows and popups don't fade. Values between 0 and 64.
+     */
+    public final Vector4f windowEdgeFade;
+
+    /**
+     * Invert the window edge fade, so the fading edges are opaque and fade to transparent further
+     * in. This has no effect on edges that don't fade.
+     */
+    public boolean windowEdgeFadeInvert;
 
     public @NonNull WindowMenuButtonPosition windowMenuButtonPosition;
     public final Vector2f windowMinSize;
@@ -302,9 +308,10 @@ public class StyleVariables {
         tableAngledHeadersTextAlign = new Vector2f(0.5f, 0.0f);
         tabRounding = 4;
         touchExtraPadding = new Vector2f(0, 0);
-        windowAlphaRadius = 0;
         windowBorderHoverPadding = 4;
         windowBorderSize = 1;
+        windowEdgeFade = new Vector4f(0, 0, 0, 0);
+        windowEdgeFadeInvert = false;
         windowMenuButtonPosition = WindowMenuButtonPosition.LEFT;
         windowMinSize = new Vector2f(32, 32);
         windowPadding = new Vector2f(8, 8);
@@ -393,9 +400,10 @@ public class StyleVariables {
         tableAngledHeadersTextAlign.set(other.tableAngledHeadersTextAlign);
         tabRounding = other.tabRounding;
         touchExtraPadding.set(other.touchExtraPadding);
-        windowAlphaRadius = other.windowAlphaRadius;
         windowBorderHoverPadding = other.windowBorderHoverPadding;
         windowBorderSize = other.windowBorderSize;
+        windowEdgeFade.set(other.windowEdgeFade);
+        windowEdgeFadeInvert = other.windowEdgeFadeInvert;
         windowMenuButtonPosition = other.windowMenuButtonPosition;
         windowMinSize.set(other.windowMinSize);
         windowPadding.set(other.windowPadding);
@@ -536,9 +544,6 @@ public class StyleVariables {
             case TAB_ROUNDING:
                 tabRounding = value;
                 break;
-            case WINDOW_ALPHA_RADIUS:
-                windowAlphaRadius = value;
-                break;
             case WINDOW_BORDER_HOVER_PADDING:
                 windowBorderHoverPadding = value;
                 break;
@@ -589,6 +594,9 @@ public class StyleVariables {
                 } catch (IllegalArgumentException ignored) {
                     IkGuiInternal.reportError(log, "Invalid color button position value {}", value);
                 }
+                break;
+            case WINDOW_EDGE_FADE_INVERT:
+                windowEdgeFadeInvert = value != 0;
                 break;
             case WINDOW_MENU_BUTTON_POSITION:
                 try {
@@ -683,6 +691,47 @@ public class StyleVariables {
                 IkGuiInternal.reportError(
                         log,
                         "Trying to set 2 float values for unexpected style variable {}",
+                        variable);
+                break;
+        }
+    }
+
+    public void setStyleVarFloat4(
+            @NonNull StyleVariable variable, float x, float y, float z, float w) {
+        if (variable.getDimensions() != 4) {
+            IkGuiInternal.reportError(
+                    log,
+                    "Style variable {} has {} dimensions, 4 floats provided",
+                    variable,
+                    variable.getDimensions());
+            return;
+        }
+        if (variable.getExpectedType() != Float.class) {
+            IkGuiInternal.reportError(
+                    log,
+                    "Style variable {} expects {} values, Floats provided",
+                    variable,
+                    variable.getExpectedType().getSimpleName());
+            return;
+        }
+        for (float value : new float[] {x, y, z, w}) {
+            if (value < variable.getMinValue() || value > variable.getMaxValue()) {
+                log.warn(
+                        "Variable {} value outside the expected float range({}, {})",
+                        variable,
+                        variable.getMinValue(),
+                        variable.getMaxValue());
+            }
+        }
+
+        switch (variable) {
+            case WINDOW_EDGE_FADE:
+                windowEdgeFade.set(x, y, z, w);
+                break;
+            default:
+                IkGuiInternal.reportError(
+                        log,
+                        "Trying to set 4 float values for unexpected style variable {}",
                         variable);
                 break;
         }

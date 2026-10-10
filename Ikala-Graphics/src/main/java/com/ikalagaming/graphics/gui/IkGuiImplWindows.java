@@ -729,7 +729,23 @@ class IkGuiImplWindows {
                                 ? style.popupRounding
                                 : style.windowRounding;
             }
-            window.alphaRadius = style.windowAlphaRadius;
+            // Only top level windows fade at the edges, not child windows, popups or tooltips that
+            // are part of something else, or windows whose background is the platform window
+            final boolean edgeFadeAllowed =
+                    (windowFlags
+                                            & (WindowFlags.INTERNAL_CHILD_WINDOW
+                                                    | WindowFlags.INTERNAL_TOOLTIP))
+                                    == 0
+                            && ((windowFlags & WindowFlags.INTERNAL_POPUP) == 0
+                                    || (windowFlags & WindowFlags.INTERNAL_MODAL) != 0)
+                            && !window.dockIsActive
+                            && !window.rootWindowDockTree.viewportOwned;
+            if (edgeFadeAllowed) {
+                window.edgeFade.set(style.windowEdgeFade);
+            } else {
+                window.edgeFade.set(0, 0, 0, 0);
+            }
+            window.edgeFadeInvert = style.windowEdgeFadeInvert;
 
             // Apply window focus (new and reactivated windows are moved to front)
             boolean wantFocus = false;
@@ -2906,7 +2922,9 @@ class IkGuiImplWindows {
         final float borderSize = window.borderSize;
         final int borderColor = IkGuiImplUtils.getColorWithGlobalAlpha(ColorType.BORDER);
         if (borderSize > 0.0f && (window.flags & WindowFlags.NO_BACKGROUND) == 0) {
-            window.drawList.addRect(
+            // The border fades with the background, so edges that fade have no border (or only
+            // they have one, when the fade is inverted)
+            window.drawList.addRectFaded(
                     window.position.x,
                     window.position.y,
                     window.position.x + window.size.x,
@@ -2914,7 +2932,10 @@ class IkGuiImplWindows {
                     borderColor,
                     window.rounding,
                     DrawFlags.ROUND_CORNERS_ALL,
-                    borderSize);
+                    borderSize,
+                    window.edgeFade,
+                    null,
+                    window.edgeFadeInvert);
         } else if (borderSize > 0.0f) {
             if ((window.flagsAsChildWindow & ChildFlags.RESIZE_X) != 0) {
                 renderWindowOuterSingleBorder(window, 1, borderColor, borderSize);
@@ -2950,12 +2971,17 @@ class IkGuiImplWindows {
                 && (window.flags & WindowFlags.NO_TITLE_BAR) == 0
                 && !window.dockIsActive) {
             final float y = window.position.y + window.titleBarHeight - 1;
-            window.drawList.addRectFilled(
+            window.drawList.addRectFilledFaded(
                     window.position.x + borderSize * 0.5f,
                     y,
                     window.position.x + window.size.x - borderSize * 0.5f,
                     y + frameBorderSize,
-                    borderColor);
+                    borderColor,
+                    0.0f,
+                    DrawFlags.ROUND_CORNERS_NONE,
+                    window.edgeFade,
+                    window.getRect(),
+                    window.edgeFadeInvert);
         }
     }
 
@@ -2990,6 +3016,8 @@ class IkGuiImplWindows {
         // reappearing frame.
         final float windowRounding = window.rounding;
         final float windowBorderSize = window.borderSize;
+        // The backgrounds fade at the edges of the whole window, so they fade as one shape
+        final RectFloat windowRect = window.getRect();
         if (window.collapsed) {
             // Title bar only
             int titleBarColor =
@@ -3001,7 +3029,7 @@ class IkGuiImplWindows {
                 // No alpha
                 titleBarColor |= 0xFF;
             }
-            window.drawList.addRectFilled(
+            window.drawList.addRectFilledFaded(
                     titleBarRect.getLeft(),
                     titleBarRect.getTop(),
                     titleBarRect.getRight(),
@@ -3009,9 +3037,11 @@ class IkGuiImplWindows {
                     titleBarColor,
                     windowRounding,
                     DrawFlags.ROUND_CORNERS_ALL,
-                    window.alphaRadius);
+                    window.edgeFade,
+                    titleBarRect,
+                    window.edgeFadeInvert);
             if (windowBorderSize > 0.0f) {
-                window.drawList.addRect(
+                window.drawList.addRectFaded(
                         titleBarRect.getLeft(),
                         titleBarRect.getTop(),
                         titleBarRect.getRight(),
@@ -3019,7 +3049,10 @@ class IkGuiImplWindows {
                         IkGuiImplUtils.getColorWithGlobalAlpha(ColorType.BORDER),
                         windowRounding,
                         DrawFlags.ROUND_CORNERS_ALL,
-                        windowBorderSize);
+                        windowBorderSize,
+                        window.edgeFade,
+                        titleBarRect,
+                        window.edgeFadeInvert);
             }
         } else {
             // Window background
@@ -3092,7 +3125,7 @@ class IkGuiImplWindows {
                     } else {
                         backgroundDrawList = window.drawList;
                     }
-                    backgroundDrawList.addRectFilled(
+                    backgroundDrawList.addRectFilledFaded(
                             backgroundRect.getLeft(),
                             backgroundRect.getTop(),
                             backgroundRect.getRight(),
@@ -3100,7 +3133,9 @@ class IkGuiImplWindows {
                             backgroundColor,
                             windowRounding,
                             roundingFlags,
-                            window.alphaRadius);
+                            window.edgeFade,
+                            windowRect,
+                            window.edgeFadeInvert);
                     if (window.dockIsActive) {
                         backgroundDrawList.channelsSetCurrent(
                                 IkGuiImplDocking.DOCKING_HOST_DRAW_CHANNEL_FG);
@@ -3118,7 +3153,7 @@ class IkGuiImplWindows {
                                 titleBarIsHighlight
                                         ? ColorType.TITLE_BACKGROUND_ACTIVE
                                         : ColorType.TITLE_BACKGROUND);
-                window.drawList.addRectFilled(
+                window.drawList.addRectFilledFaded(
                         titleBarRect.getLeft(),
                         titleBarRect.getTop(),
                         titleBarRect.getRight(),
@@ -3126,7 +3161,9 @@ class IkGuiImplWindows {
                         titleBarColor,
                         windowRounding,
                         DrawFlags.ROUND_CORNERS_TOP,
-                        window.alphaRadius);
+                        window.edgeFade,
+                        windowRect,
+                        window.edgeFadeInvert);
             }
 
             // Menu bar
@@ -3135,22 +3172,31 @@ class IkGuiImplWindows {
                 // Soft clipping, in particular child windows don't have a minimum size covering
                 // the menu bar so this is useful for them
                 menuBarRect.clipWith(window.rectOuter);
-                window.drawList.addRectFilled(
+                // The menu bar is part of the window background, so it fades with it
+                window.drawList.addRectFilledFaded(
                         menuBarRect.getLeft(),
                         menuBarRect.getTop(),
                         menuBarRect.getRight(),
                         menuBarRect.getBottom(),
                         IkGuiImplUtils.getColorWithGlobalAlpha(ColorType.MENU_BAR_BACKGROUND),
                         (flags & WindowFlags.NO_TITLE_BAR) != 0 ? windowRounding : 0.0f,
-                        DrawFlags.ROUND_CORNERS_TOP);
+                        DrawFlags.ROUND_CORNERS_TOP,
+                        window.edgeFade,
+                        windowRect,
+                        window.edgeFadeInvert);
                 if (style.frameBorderSize > 0.0f
                         && menuBarRect.getBottom() < window.position.y + window.size.y) {
-                    window.drawList.addRectFilled(
+                    window.drawList.addRectFilledFaded(
                             menuBarRect.getLeft() + windowBorderSize * 0.5f,
                             menuBarRect.getBottom(),
                             menuBarRect.getRight() - windowBorderSize * 0.5f,
                             menuBarRect.getBottom() + style.frameBorderSize,
-                            IkGuiImplUtils.getColorWithGlobalAlpha(ColorType.BORDER));
+                            IkGuiImplUtils.getColorWithGlobalAlpha(ColorType.BORDER),
+                            0.0f,
+                            DrawFlags.ROUND_CORNERS_NONE,
+                            window.edgeFade,
+                            windowRect,
+                            window.edgeFadeInvert);
                 }
             }
 
