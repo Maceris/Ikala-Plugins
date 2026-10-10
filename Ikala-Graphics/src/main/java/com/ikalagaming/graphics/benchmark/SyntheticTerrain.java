@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.benchmark;
 
+import com.ikalagaming.graphics.Sections;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.bake.Face;
 import com.ikalagaming.graphics.bake.Faces;
@@ -21,8 +22,8 @@ import java.util.Arrays;
  */
 public final class SyntheticTerrain {
 
-    /** The size of a section along each axis, in blocks. */
-    public static final int SECTION = 16;
+    /** The size of a section along each axis, in blocks, see {@link Sections#SECTION_SIZE}. */
+    public static final int SECTION = Sections.SECTION_SIZE;
 
     /** No block. */
     public static final byte AIR = 0;
@@ -47,6 +48,18 @@ public final class SyntheticTerrain {
 
     /** How many block types there are, air included. */
     public static final int BLOCK_TYPES = 7;
+
+    /**
+     * How much of a tree's blob of leaves is left open, so it is ragged like a real canopy rather
+     * than a solid box, whose inside faces baking removes.
+     */
+    private static final double LEAF_GAPS = 0.3;
+
+    /** How many layers of leaves each tree's blob has. */
+    private static final int LEAF_LAYERS = 6;
+
+    /** How far apart trees and glass panes are, in blocks: each takes one cell of this size. */
+    private static final int TREE_SPACING = 9;
 
     /** What the world is made of. */
     public enum Recipe {
@@ -230,23 +243,27 @@ public final class SyntheticTerrain {
                 return PLANT;
             }
         }
-        // A blob of leaves on a few columns, a pane of glass on fewer
-        final int cellX = Math.floorDiv(x, 12);
-        final int cellZ = Math.floorDiv(z, 12);
+        // A ragged blob of leaves on a few columns, a pane of glass on fewer
+        final int cellX = Math.floorDiv(x, TREE_SPACING);
+        final int cellZ = Math.floorDiv(z, TREE_SPACING);
         final double tree = hash(cellX, 0, cellZ, 2);
         if (tree < 0.9) {
-            final int treeX = cellX * 12 + 4;
-            final int treeZ = cellZ * 12 + 4;
+            final int treeX = cellX * TREE_SPACING + 4;
+            final int treeZ = cellZ * TREE_SPACING + 4;
             final int top = (int) Math.floor(height(treeX, treeZ)) + 4;
-            if (Math.abs(x - treeX) <= 3 && Math.abs(z - treeZ) <= 3 && y >= top && y <= top + 3) {
+            if (Math.abs(x - treeX) <= 3
+                    && Math.abs(z - treeZ) <= 3
+                    && y >= top
+                    && y < top + LEAF_LAYERS
+                    && hash(x, y, z, 3) >= LEAF_GAPS) {
                 return LEAVES;
             }
         } else if (tree > 0.95) {
-            final int wallZ = cellZ * 12 + 6;
-            final int base = (int) Math.floor(height(cellX * 12 + 6, wallZ)) + 1;
+            final int wallZ = cellZ * TREE_SPACING + 4;
+            final int base = (int) Math.floor(height(cellX * TREE_SPACING + 4, wallZ)) + 1;
             if (z == wallZ
-                    && x >= cellX * 12 + 2
-                    && x < cellX * 12 + 10
+                    && x >= cellX * TREE_SPACING + 1
+                    && x < cellX * TREE_SPACING + TREE_SPACING - 1
                     && y >= base
                     && y < base + 4) {
                 return GLASS;

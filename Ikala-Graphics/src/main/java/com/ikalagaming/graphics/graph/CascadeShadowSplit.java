@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.graph;
 
+import com.ikalagaming.graphics.Sections;
 import com.ikalagaming.graphics.scene.Projection;
 import com.ikalagaming.graphics.scene.Scene;
 
@@ -49,9 +50,9 @@ public class CascadeShadowSplit {
 
     /**
      * How much further than a cascade's sphere its shadow map reaches toward the sun, in meters:
-     * four 16 m sections, so terrain and trees standing outside the slice still cast into it.
+     * four sections, so terrain and trees standing outside the slice still cast into it.
      */
-    public static final float CASTER_REACH = 4.0f * 16;
+    public static final float CASTER_REACH = 4.0f * Sections.SECTION_SIZE;
 
     /**
      * What each cascade's radius is rounded up to, in meters, so rounding error in the slice's

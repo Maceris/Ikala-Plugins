@@ -35,7 +35,10 @@ class FacesTest {
     @Test
     void materialDecides() {
         BakeSource stone = BakeFixtures.cube().source();
-        BakeSource leaves =
+        Material leafMaterial = BakeFixtures.material(Material.Transparency.CUTOUT);
+        BakeSource leaves = BakeFixtures.cube().source(leafMaterial);
+        BakeSource sameLeaves = BakeFixtures.cube().source(leafMaterial);
+        BakeSource otherLeaves =
                 BakeFixtures.cube().source(BakeFixtures.material(Material.Transparency.CUTOUT));
         Material glassMaterial = BakeFixtures.material(Material.Transparency.TRANSLUCENT);
         BakeSource glass = BakeFixtures.cube().source(glassMaterial);
@@ -46,7 +49,9 @@ class FacesTest {
 
         assertFalse(hides(stone, Face.POS_X, leaves), "Stone shows through leaves");
         assertTrue(hides(leaves, Face.POS_X, stone), "Leaves against stone are hidden");
-        assertFalse(hides(leaves, Face.POS_X, leaves), "Leaves show through leaves");
+        assertTrue(hides(leaves, Face.POS_X, sameLeaves), "No face inside a blob of one leaf");
+        assertFalse(hides(leaves, Face.POS_X, otherLeaves), "Two kinds of leaves keep their faces");
+        assertFalse(hides(glass, Face.POS_X, leaves), "Glass shows through leaves");
         assertFalse(hides(stone, Face.POS_X, glass), "Stone shows through glass");
         assertTrue(hides(glass, Face.POS_X, sameGlass), "No face between panes of one glass");
         assertFalse(hides(glass, Face.POS_X, otherGlass), "Two kinds of glass keep their faces");

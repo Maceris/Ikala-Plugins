@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.scene;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.Sections;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -93,11 +94,11 @@ public class Scene {
     private final DebugVisualizers debugVisualizers;
 
     /**
-     * How far the view reaches by default, in meters: twelve 16 m sections.
+     * How far the view reaches by default, in meters: twelve sections.
      *
      * @see #getViewDistance()
      */
-    public static final double DEFAULT_VIEW_DISTANCE = 12.0f * 16;
+    public static final double DEFAULT_VIEW_DISTANCE = 12.0f * Sections.SECTION_SIZE;
 
     /**
      * How far the view reaches, in meters. Lights are sorted into clusters out to here; later the

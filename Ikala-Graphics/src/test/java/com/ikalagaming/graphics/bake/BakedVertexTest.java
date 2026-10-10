@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ikalagaming.graphics.Sections;
+
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
@@ -12,6 +14,20 @@ import java.util.Random;
 
 /** Packing the baked vertex. */
 class BakedVertexTest {
+
+    @Test
+    void positionsReachASectionPastTheOrigin() {
+        // A section's meshes may hang past its far side by up to another section, and an int16
+        // position reaches 32,768 steps either way
+        final int furthest = 2 * Sections.SECTION_SIZE * BakedVertex.STEPS_PER_UNIT;
+        assertTrue(
+                furthest <= -Short.MIN_VALUE,
+                "Sections of "
+                        + Sections.SECTION_SIZE
+                        + " m need fewer than "
+                        + BakedVertex.STEPS_PER_UNIT
+                        + " steps per meter");
+    }
 
     @Test
     void positionsOnTheGridAreExact() {

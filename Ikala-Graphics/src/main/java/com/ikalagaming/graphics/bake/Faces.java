@@ -1,7 +1,5 @@
 package com.ikalagaming.graphics.bake;
 
-import com.ikalagaming.graphics.graph.Material;
-
 import lombok.NonNull;
 
 import java.util.Objects;
@@ -19,7 +17,10 @@ import javax.annotation.Nullable;
  *   <li>An opaque neighbor hides anything.
  *   <li>A translucent neighbor only hides the same translucent material, so glass next to glass has
  *       no face between them, but glass in front of stone still shows the stone.
- *   <li>A cut out neighbor hides nothing, since you can see through its holes.
+ *   <li>A cut out neighbor only hides the same cut out material, so a blob of leaves has no faces
+ *       inside it, but stone seen through the leaves' holes still shows. The faces inside would
+ *       only show through the holes, and where two blocks meet they sit on the outer faces' edges,
+ *       where they flicker through as single pixels.
  * </ul>
  */
 public final class Faces {
@@ -101,9 +102,8 @@ public final class Faces {
     private static boolean blocksSight(@NonNull BakeSource neighbor, @NonNull BakeSource hidden) {
         return switch (neighbor.getTransparency()) {
             case OPAQUE -> true;
-            case CUTOUT -> false;
-            case TRANSLUCENT ->
-                    hidden.getTransparency() == Material.Transparency.TRANSLUCENT
+            case CUTOUT, TRANSLUCENT ->
+                    hidden.getTransparency() == neighbor.getTransparency()
                             && Objects.equals(neighbor.getMaterial(), hidden.getMaterial());
         };
     }

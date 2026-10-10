@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.scene.lights;
 
+import com.ikalagaming.graphics.Sections;
+
 /**
  * How far point and spot lights reach.
  *
@@ -22,10 +24,10 @@ public final class LightRange {
     public static final float MIN_RANGE = 1;
 
     /**
-     * The farthest a light can reach, in meters: four 16 m sections, a third of the default 12
-     * section view distance.
+     * The farthest a light can reach, in meters: four sections, a third of the default 12 section
+     * view distance.
      */
-    public static final float MAX_RANGE = 4.0f * 16;
+    public static final float MAX_RANGE = 4.0f * Sections.SECTION_SIZE;
 
     /**
      * The range of a light given only its intensity.

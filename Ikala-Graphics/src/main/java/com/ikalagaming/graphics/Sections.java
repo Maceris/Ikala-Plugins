@@ -37,6 +37,14 @@ import javax.annotation.Nullable;
  */
 public final class Sections {
 
+    /**
+     * The size of a section along each axis, in meters, which is also blocks at one meter a block.
+     * The view distance, light ranges and shadow reach are counted in sections, so changing this
+     * scales them too. Baked vertex positions must still reach past a section, see {@link
+     * com.ikalagaming.graphics.bake.BakedVertex#STEPS_PER_UNIT}.
+     */
+    public static final int SECTION_SIZE = 16;
+
     /** The context these sections belong to. */
     private final GraphicsContext context;
 
