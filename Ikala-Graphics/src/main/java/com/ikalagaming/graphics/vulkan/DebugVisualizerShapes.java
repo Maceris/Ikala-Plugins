@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.gui.util.Color;
+import com.ikalagaming.graphics.scene.Projection;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugArrow;
 import com.ikalagaming.graphics.scene.debug.DebugBox;
@@ -57,6 +58,16 @@ public final class DebugVisualizerShapes {
     /** Colors for each shadow cascade, nearest first. */
     private static final int[] CASCADE_COLORS = {
         Color.rgba(255, 64, 64, 255), Color.rgba(64, 255, 64, 255), Color.rgba(64, 64, 255, 255),
+    };
+
+    /**
+     * Colors for the slice of the camera's view each shadow cascade is fit around, lighter versions
+     * of the cascade colors.
+     */
+    private static final int[] CASCADE_SLICE_COLORS = {
+        Color.rgba(255, 176, 176, 255),
+        Color.rgba(176, 255, 176, 255),
+        Color.rgba(176, 176, 255, 255),
     };
 
     /**
@@ -205,10 +216,31 @@ public final class DebugVisualizerShapes {
             @NonNull CascadeShadowSplit[] cascades,
             @NonNull Consumer<DebugShape> out) {
         final Vector3dc camera = scene.getCamera().getPosition();
+        // The cascades are fit around the camera's view, not the observer's
+        final Matrix4d inverseCamera =
+                new Matrix4d(scene.getProjection().getProjectionMatrix())
+                        .mul(new Matrix4d(scene.getCamera().getViewMatrix()))
+                        .invert()
+                        .translateLocal(camera.x(), camera.y(), camera.z());
+        final DebugFrustum view = DebugFrustum.fromInverseProjectionView(inverseCamera, 0, false);
+        final double depthRange = Projection.Z_FAR - Projection.Z_NEAR;
+
+        // Each slice starts where the last one ended
+        double sliceNear = 0;
         for (int i = 0; i < cascades.length; ++i) {
             if (cascades[i] == null) {
                 continue;
             }
+            // The split distance is the view space z of the far end, so negative
+            double sliceFar = (-cascades[i].getSplitDistance() - Projection.Z_NEAR) / depthRange;
+            out.accept(
+                    view.slice(
+                            sliceNear,
+                            sliceFar,
+                            CASCADE_SLICE_COLORS[i % CASCADE_SLICE_COLORS.length],
+                            false));
+            sliceNear = sliceFar;
+
             // The cascades are in render space, so move them back to world space
             Matrix4d inverse =
                     new Matrix4d(cascades[i].getProjViewMatrix())

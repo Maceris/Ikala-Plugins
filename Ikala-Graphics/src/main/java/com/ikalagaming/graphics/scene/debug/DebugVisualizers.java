@@ -43,7 +43,8 @@ public class DebugVisualizers {
     private volatile boolean entityBounds;
 
     /**
-     * Show the area each shadow cascade covers.
+     * Show the area each shadow cascade covers, and in a lighter color the slice of the camera's
+     * view it was fit around.
      *
      * @param shadowCascades Whether to show the shadow cascades.
      * @return Whether the shadow cascades are shown.

@@ -60,4 +60,27 @@ public record DebugFrustum(@NonNull Vector3dc[] corners, int color, boolean onTo
         }
         return new DebugFrustum(corners, color, onTop);
     }
+
+    /**
+     * Cut out the part of this frustum between two fractions of the way along its edges, from the
+     * near face (0) to the far face (1). For a perspective frustum a fraction is linear in view
+     * depth, not in clip space depth.
+     *
+     * @param nearFraction How far along the edges the near face of the slice is.
+     * @param farFraction How far along the edges the far face of the slice is.
+     * @param color The packed RGBA color of the slice.
+     * @param onTop Whether to draw the slice over everything instead of depth testing.
+     * @return The slice.
+     */
+    public DebugFrustum slice(double nearFraction, double farFraction, int color, boolean onTop) {
+        final int faceCorners = CORNER_COUNT / 2;
+        Vector3dc[] sliced = new Vector3dc[CORNER_COUNT];
+        for (int i = 0; i < faceCorners; ++i) {
+            Vector3dc near = corners[i];
+            Vector3dc far = corners[i + faceCorners];
+            sliced[i] = near.lerp(far, nearFraction, new Vector3d());
+            sliced[i + faceCorners] = near.lerp(far, farFraction, new Vector3d());
+        }
+        return new DebugFrustum(sliced, color, onTop);
+    }
 }

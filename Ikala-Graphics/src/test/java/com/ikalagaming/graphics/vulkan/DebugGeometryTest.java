@@ -126,6 +126,30 @@ class DebugGeometryTest {
     }
 
     @Test
+    void frustumSliceFollowsTheEdges() {
+        // A perspective frustum in view space, 1 deep at the near plane and 10 at the far plane
+        Matrix4d projection = new Matrix4d().setPerspective(Math.PI / 2, 1, 1, 10, true);
+        DebugFrustum frustum =
+                DebugFrustum.fromInverseProjectionView(projection.invert(), COLOR, false);
+
+        // A third and two thirds of the way along the edges are 4 and 7 deep, and with a 90
+        // degree field of view the corners are as far to the side as they are deep
+        DebugFrustum slice = frustum.slice(1.0 / 3, 2.0 / 3, COLOR, false);
+        assertEquals(-4, slice.corners()[0].z(), 1e-9);
+        assertEquals(-4, slice.corners()[0].x(), 1e-9);
+        assertEquals(-4, slice.corners()[0].y(), 1e-9);
+        assertEquals(-7, slice.corners()[6].z(), 1e-9);
+        assertEquals(7, slice.corners()[6].x(), 1e-9);
+        assertEquals(7, slice.corners()[6].y(), 1e-9);
+
+        // The whole range is the frustum itself
+        DebugFrustum whole = frustum.slice(0, 1, COLOR, false);
+        for (int i = 0; i < DebugFrustum.CORNER_COUNT; ++i) {
+            assertTrue(whole.corners()[i].equals(frustum.corners()[i], 1e-9));
+        }
+    }
+
+    @Test
     void renderSpaceIsExactFarFromTheOrigin() {
         DebugLine line =
                 new DebugLine(
