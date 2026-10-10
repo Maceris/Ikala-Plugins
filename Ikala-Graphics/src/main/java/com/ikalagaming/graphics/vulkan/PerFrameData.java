@@ -78,6 +78,12 @@ public class PerFrameData {
     public int meshSlotCount;
 
     /**
+     * How many slots the baked mesh table has this frame, which is how many draw commands each
+     * visible list of each baked kind has. See {@code InstanceDrawUpdate.commandIndex}.
+     */
+    public int bakedSlotCount;
+
+    /**
      * Indirect draw commands this frame: one per mesh slot per visible list, which the culling pass
      * fills in, then the CPU-written commands of {@link #modelDrawInfo}.
      */

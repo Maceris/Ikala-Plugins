@@ -23,12 +23,13 @@ struct Instance {
     uvec4 info;
 };
 
-// One mesh of a model: its mesh table slot and generation, and the mesh's own material
+// One mesh of a model: its mesh table slot and generation, the mesh's own material, and its kind,
+// which picks the mesh table it is in and the draw commands it goes in (see MeshKind)
 struct ModelMesh {
     uint slot;
     uint generation;
     uint material;
-    uint unused;
+    uint kind;
 };
 
 // See GeometryArena for the layout
@@ -124,6 +125,11 @@ layout(push_constant) uniform Constants {
     View view;
     // PHASE_EARLY or PHASE_LATE
     uint phase;
+    // How many slots the baked mesh table has, which is how many commands each list of each baked
+    // kind has
+    uint bakedSlotCount;
+    // The mesh table of baked sections
+    Meshes bakedMeshes;
 };
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
@@ -146,6 +152,9 @@ const uint LIST_COUNT = 5;
 
 // The counter of meshes the occlusion test hid, after one counter per list
 const uint COUNTER_OCCLUDED = LIST_COUNT;
+
+// The standard kind, in the main mesh table; every other kind is baked
+const uint KIND_STANDARD = 0;
 
 // Set in the view flags when the scene is culled by occlusion
 const uint FLAG_OCCLUSION = 1;
@@ -225,10 +234,20 @@ bool occluded(vec3 center, vec3 extents)
     return nearest > farthest;
 }
 
-// Add an instance's mesh to the draw command for that mesh in a list
-void draw(uint list, uint meshSlot, uint slot, uint material)
+// How many commands each list of a kind has
+uint slotsOf(uint kind)
 {
-    uint command = list * meshSlotCount + meshSlot;
+    return kind == KIND_STANDARD ? meshSlotCount : bakedSlotCount;
+}
+
+// Add an instance's mesh to the draw command for that mesh in a list. The commands are laid out by
+// kind, then list, then mesh slot, see InstanceDrawUpdate.commandIndex.
+void draw(uint list, uint kind, uint meshSlot, uint slot, uint material)
+{
+    uint kindStart = kind == KIND_STANDARD
+        ? 0
+        : LIST_COUNT * meshSlotCount + (kind - 1) * LIST_COUNT * bakedSlotCount;
+    uint command = kindStart + list * slotsOf(kind) + meshSlot;
     uint index = atomicAdd(commands.commands[command].instanceCount, 1u);
     visible.visible[commands.commands[command].firstInstance + index] = uvec2(slot, material);
     atomicAdd(counters.counters[list], 1u);
@@ -254,10 +273,12 @@ void main()
     uint count = instance.info.z;
     for (uint i = 0; i < count; ++i) {
         ModelMesh modelMesh = modelMeshes.modelMeshes[first + i];
-        if (modelMesh.slot == NO_MESH) {
+        if (modelMesh.slot == NO_MESH || modelMesh.slot >= slotsOf(modelMesh.kind)) {
             continue;
         }
-        Mesh mesh = meshes.meshes[modelMesh.slot];
+        Mesh mesh = modelMesh.kind == KIND_STANDARD
+            ? meshes.meshes[modelMesh.slot]
+            : bakedMeshes.meshes[modelMesh.slot];
         // A different mesh in the slot, or one that can't be drawn yet
         if (mesh.info.w != modelMesh.generation || mesh.info.z == 0) {
             continue;
@@ -280,10 +301,10 @@ void main()
             if (pass == 0) {
                 // With occlusion on, what wasn't visible last frame waits for the late test
                 if ((view.flags & FLAG_OCCLUSION) == 0 || history.history[entry] != 0) {
-                    draw(LIST_SCENE_EARLY, modelMesh.slot, slot, material);
+                    draw(LIST_SCENE_EARLY, modelMesh.kind, modelMesh.slot, slot, material);
                 }
             } else {
-                draw(LIST_FIRST_CASCADE + pass - 1, modelMesh.slot, slot, material);
+                draw(LIST_FIRST_CASCADE + pass - 1, modelMesh.kind, modelMesh.slot, slot, material);
             }
             continue;
         }
@@ -296,7 +317,7 @@ void main()
         bool drawnEarly = history.history[entry] != 0;
         history.history[entry] = seen ? 1u : 0u;
         if (seen && !drawnEarly) {
-            draw(LIST_SCENE_LATE, modelMesh.slot, slot, material);
+            draw(LIST_SCENE_LATE, modelMesh.kind, modelMesh.slot, slot, material);
         }
     }
 }

@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.vulkan;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.MeshHandle;
+import com.ikalagaming.graphics.MeshKind;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -170,6 +171,32 @@ public class GeometryArena {
             @NonNull ByteBuffer indexData,
             @NonNull Vector3fc aabbMin,
             @NonNull Vector3fc aabbMax) {
+        return register(state, owner, MeshKind.STANDARD, vertexData, indexData, aabbMin, aabbMax);
+    }
+
+    /**
+     * Add a mesh of a given kind, which must be in this arena's vertex format. See {@link
+     * #register(VulkanState, String, ByteBuffer, ByteBuffer, Vector3fc, Vector3fc)}.
+     *
+     * @param state The Vulkan state.
+     * @param owner The key of the plugin that owns the mesh.
+     * @param kind The kind of mesh, which its handle carries.
+     * @param vertexData The vertices, tightly packed, from position to limit.
+     * @param indexData The 32-bit indices, from position to limit.
+     * @param aabbMin The minimum corner of the mesh's bounding box.
+     * @param aabbMax The maximum corner of the mesh's bounding box.
+     * @return The handle, pending until uploaded.
+     * @throws IllegalArgumentException If the data isn't whole vertices and triangles, or an index
+     *     points past the last vertex.
+     */
+    public MeshHandle register(
+            @NonNull VulkanState state,
+            @NonNull String owner,
+            @NonNull MeshKind kind,
+            @NonNull ByteBuffer vertexData,
+            @NonNull ByteBuffer indexData,
+            @NonNull Vector3fc aabbMin,
+            @NonNull Vector3fc aabbMax) {
         if (vertexData.remaining() % vertexStride != 0) {
             throw new IllegalArgumentException(
                     vertexData.remaining() + " bytes isn't a whole number of vertices");
@@ -183,7 +210,7 @@ public class GeometryArena {
         checkIndices(indexData, vertexCount);
 
         final MeshRegistry.Reservation reservation =
-                registry.add(owner, vertexCount, indexCount, aabbMin, aabbMax);
+                registry.add(owner, kind, vertexCount, indexCount, aabbMin, aabbMax);
         uploads.add(
                 new Upload(
                         reservation.handle(),

@@ -193,6 +193,16 @@ public class GraphicsDebug extends GuiWindow {
                     IkGui.text("Meshes in shadow cascades: " + shadows);
                 }
                 IkGui.text(String.format("Triangles: %,d", triangles));
+                if (renderer != null && renderer.getState().sections != null) {
+                    final var sections = renderer.getState().sections.getStats();
+                    IkGui.text(
+                            String.format(
+                                    "Sections: %,d (%,d drawn, %,d baking), %,d triangles",
+                                    sections.sections(),
+                                    sections.resident(),
+                                    sections.baking(),
+                                    sections.triangles()));
+                }
             }
 
             if (IkGui.collapsingHeader("Render Config Info")) {

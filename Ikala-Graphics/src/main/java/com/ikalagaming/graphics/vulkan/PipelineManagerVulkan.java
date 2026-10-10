@@ -114,13 +114,19 @@ public class PipelineManagerVulkan {
         stageDepthPyramidBuild =
                 new DepthPyramidBuild(shaders.getShader(RenderStage.Type.DEPTH_PYRAMID));
         stageDepthPyramidBuild.initialize(state);
-        stageSceneRender = new SceneRender(shaders.getShader(RenderStage.Type.SCENE));
+        stageSceneRender =
+                new SceneRender(
+                        shaders.getShader(RenderStage.Type.SCENE),
+                        shaders.getShader(RenderStage.Type.SCENE_BAKED));
         stageSceneRender.initialize(state);
         stageGuiRender = new GuiRender(shaders.getShader(RenderStage.Type.GUI), fontAtlas);
         stageGuiRender.initialize(state);
         stageSkyboxRender = new SkyboxRender(shaders.getShader(RenderStage.Type.SKYBOX), skybox);
         stageSkyboxRender.initialize(state);
-        stageShadowRender = new ShadowRender(shaders.getShader(RenderStage.Type.SHADOW));
+        stageShadowRender =
+                new ShadowRender(
+                        shaders.getShader(RenderStage.Type.SHADOW),
+                        shaders.getShader(RenderStage.Type.SHADOW_BAKED));
         stageShadowRender.initialize(state);
         stageLightRender = new LightRender(shaders.getShader(RenderStage.Type.LIGHT), quadMesh);
         stageLightRender.initialize(state);

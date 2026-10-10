@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.vulkan;
 
 import com.ikalagaming.graphics.MeshHandle;
+import com.ikalagaming.graphics.MeshKind;
 
 import lombok.NonNull;
 import org.joml.Vector3f;
@@ -161,6 +162,28 @@ public class MeshRegistry {
             int indexCount,
             @NonNull Vector3fc aabbMin,
             @NonNull Vector3fc aabbMax) {
+        return add(owner, MeshKind.STANDARD, vertexCount, indexCount, aabbMin, aabbMax);
+    }
+
+    /**
+     * Reserve room for a mesh of a given kind, which its handle carries.
+     *
+     * @param owner The key of the plugin that owns it.
+     * @param kind The kind of mesh.
+     * @param vertexCount How many vertices it has.
+     * @param indexCount How many indices it has.
+     * @param aabbMin The minimum corner of its bounding box.
+     * @param aabbMax The maximum corner of its bounding box.
+     * @return The new handle, pending, and where the data goes.
+     * @throws IllegalStateException If there is no room left at all.
+     */
+    public Reservation add(
+            @NonNull String owner,
+            @NonNull MeshKind kind,
+            int vertexCount,
+            int indexCount,
+            @NonNull Vector3fc aabbMin,
+            @NonNull Vector3fc aabbMax) {
         lock.lock();
         try {
             final int vertexOffset = vertices.allocate(vertexCount);
@@ -180,7 +203,8 @@ public class MeshRegistry {
                             vertexCount,
                             indexCount,
                             new Vector3f(aabbMin),
-                            new Vector3f(aabbMax));
+                            new Vector3f(aabbMax),
+                            kind);
             owners[slot] = owner;
             handles[slot] = handle;
             states[slot] = State.PENDING;

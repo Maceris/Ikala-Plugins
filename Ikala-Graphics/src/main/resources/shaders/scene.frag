@@ -29,6 +29,10 @@ layout(location = 4) in vec4 outViewPosition;
 layout(location = 5) in vec4 outWorldPosition;
 layout(location = 6) flat in uint outMaterialIdx;
 
+// Whether to drop pixels the texture's alpha cuts out. Off for baked opaque geometry, so the
+// depth test can run before the shader.
+layout(constant_id = 0) const bool ALPHA_TEST = true;
+
 layout(location = 0) out vec4 buffBaseColor;
 layout(location = 1) out vec4 buffNormal;
 layout(location = 2) out vec4 buffTangent;
@@ -47,7 +51,7 @@ void main() {
     if (material.textureIndex > 0) {
         baseColor = texture(bindlessTextures[nonuniformEXT(material.textureIndex)], outTextCoord);
     }
-    if (baseColor.a < 0.5) {
+    if (ALPHA_TEST && baseColor.a < 0.5) {
         discard;
     }
 

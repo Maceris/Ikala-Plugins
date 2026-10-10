@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.vulkan.stages;
 
 import com.ikalagaming.graphics.MeshHandle;
+import com.ikalagaming.graphics.MeshKind;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.Material;
@@ -51,6 +52,11 @@ import java.util.Map;
  * <p>There are more visible lists than passes, since the scene is culled in two phases, see {@code
  * cull.comp}: the early scene list, the late scene list, then a list for each cascade.
  *
+ * <p>Each {@link MeshKind} has its own block of commands, since each is drawn with its own pipeline
+ * from its own buffers: by kind, then list, then mesh slot, see {@link #commandIndex}. Standard
+ * meshes have a command per slot of the main mesh table, and each baked kind one per slot of the
+ * baked mesh table; culling only fills in a baked slot's command in the block of its mesh's kind.
+ *
  * <p>Models culling can't draw, animated ones, get CPU-written commands and visible entries after
  * the culled ones, as do all models while the normal or tangent lines are shown.
  */
@@ -84,6 +90,54 @@ public class InstanceDrawUpdate implements RenderStage {
 
     /** How many counters the culling pass keeps. */
     public static final int COUNTER_COUNT = COUNTER_OCCLUDED + 1;
+
+    /**
+     * Where a mesh slot's draw command for one list is, with the commands laid out by kind, then
+     * list, then mesh slot. {@code cull.comp} works this out the same way.
+     *
+     * @param kind The kind of mesh.
+     * @param list The visible list.
+     * @param slot The mesh's slot in its kind's mesh table.
+     * @param standardSlots How many slots the main mesh table has.
+     * @param bakedSlots How many slots the baked mesh table has.
+     * @return The command's index in the draw command buffer.
+     */
+    public static int commandIndex(
+            @NonNull MeshKind kind, int list, int slot, int standardSlots, int bakedSlots) {
+        final int kindStart =
+                kind == MeshKind.STANDARD
+                        ? 0
+                        : LIST_COUNT * standardSlots
+                                + (kind.ordinal() - 1) * LIST_COUNT * bakedSlots;
+        return kindStart + list * slotsOf(kind, standardSlots, bakedSlots) + slot;
+    }
+
+    /**
+     * How many commands each list has for a kind of mesh.
+     *
+     * @param kind The kind.
+     * @param standardSlots How many slots the main mesh table has.
+     * @param bakedSlots How many slots the baked mesh table has.
+     * @return The command count.
+     */
+    public static int slotsOf(@NonNull MeshKind kind, int standardSlots, int bakedSlots) {
+        return kind == MeshKind.STANDARD ? standardSlots : bakedSlots;
+    }
+
+    /**
+     * How many culled draw commands there are in all, every list of every kind.
+     *
+     * @param standardSlots How many slots the main mesh table has.
+     * @param bakedSlots How many slots the baked mesh table has.
+     * @return The command count.
+     */
+    public static int culledCommandCount(int standardSlots, int bakedSlots) {
+        int count = 0;
+        for (MeshKind kind : MeshKind.ALL) {
+            count += LIST_COUNT * slotsOf(kind, standardSlots, bakedSlots);
+        }
+        return count;
+    }
 
     /** One model's instances, collected while the instance registry is locked. */
     private static final class ModelInstances {
@@ -168,14 +222,20 @@ public class InstanceDrawUpdate implements RenderStage {
 
         final InstanceTable.Snapshot snapshot = instances.getSnapshot();
         final MeshRegistry meshes = vulkanState.geometry.getRegistry();
+        final MeshRegistry bakedMeshes = vulkanState.bakedGeometry.getRegistry();
         final int meshSlots = meshes.getSlotCapacity();
+        final int bakedSlots = bakedMeshes.getSlotCapacity();
         frameData.instanceCount = snapshot.slotCapacity();
         frameData.meshSlotCount = meshSlots;
+        frameData.bakedSlotCount = bakedSlots;
 
-        // Room in each pass's visible list for every instance of every mesh, mesh slot by slot,
-        // counted from the same snapshot the culling pass sees, so it can't overflow
-        final int[] firstVisible = new int[meshSlots];
-        final int culledEntries = layoutVisible(snapshot.models(), meshSlots, firstVisible);
+        // Room in each list for every instance of every mesh, kind by kind and mesh slot by mesh
+        // slot, counted from the same snapshot the culling pass sees, so it can't overflow
+        final int[][] firstVisible = new int[MeshKind.ALL.length][];
+        for (MeshKind kind : MeshKind.ALL) {
+            firstVisible[kind.ordinal()] = new int[slotsOf(kind, meshSlots, bakedSlots)];
+        }
+        final int culledEntries = layoutVisible(snapshot.models(), firstVisible);
 
         // Models culling doesn't draw, with their instances
         final DebugVisualizers visualizers = scene.getDebugVisualizers();
@@ -184,7 +244,7 @@ public class InstanceDrawUpdate implements RenderStage {
         final Map<Model, ModelInstances> listed = new LinkedHashMap<>();
         for (InstanceTable.ModelCount modelCount : snapshot.models()) {
             final Model model = modelCount.model();
-            if (!model.isAnimated() && !debugLines) {
+            if ((!model.isAnimated() && !debugLines) || isBaked(model)) {
                 continue;
             }
             final ModelInstances modelInstances = new ModelInstances(model, materialCache);
@@ -206,7 +266,7 @@ public class InstanceDrawUpdate implements RenderStage {
         }
 
         // Lay out the listed models after the culled lists
-        final int culledCommands = LIST_COUNT * meshSlots;
+        final int culledCommands = culledCommandCount(meshSlots, bakedSlots);
         int visibleCount = LIST_COUNT * culledEntries;
         int commandCount = culledCommands;
         int poseCount = 0;
@@ -254,7 +314,26 @@ public class InstanceDrawUpdate implements RenderStage {
                 MemoryUtil.memByteBuffer(
                         frameData.sceneDrawCommands.allocationInfo.pMappedData(),
                         Math.max(1, commandCount) * DRAW_COMMAND_SIZE);
-        writeCulledCommands(commands, meshes, meshSlots, firstVisible, culledEntries);
+        writeCulledCommands(
+                commands,
+                meshes,
+                MeshKind.STANDARD,
+                meshSlots,
+                bakedSlots,
+                firstVisible,
+                culledEntries);
+        for (MeshKind kind : MeshKind.ALL) {
+            if (kind.isBaked()) {
+                writeCulledCommands(
+                        commands,
+                        bakedMeshes,
+                        kind,
+                        meshSlots,
+                        bakedSlots,
+                        firstVisible,
+                        culledEntries);
+            }
+        }
         writeFrusta(scene, frameData, visualizers.isCullingDisabled());
         writeOcclusionView(scene, window, vulkanState, frameData, visualizers);
 
@@ -280,20 +359,37 @@ public class InstanceDrawUpdate implements RenderStage {
     }
 
     /**
-     * Set aside room in a culled pass's visible list for every instance of every mesh, mesh slot by
-     * mesh slot. A mesh slot used by more than one model, as when a released mesh's slot was
+     * Whether a model is a baked section, which only culling draws.
+     *
+     * @param model The model.
+     * @return True if its meshes are baked.
+     */
+    private static boolean isBaked(@NonNull Model model) {
+        for (MeshData mesh : model.getMeshDataList()) {
+            if (mesh.getMesh() != null && mesh.getMesh().kind().isBaked()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Set aside room in a culled list for every instance of every mesh, kind by kind and mesh slot
+     * by mesh slot. A mesh slot used by more than one model, as when a released mesh's slot was
      * reused, gets room for all of them; culling only fills it for the live mesh.
      *
      * @param models Every model with instances, and how many each has.
-     * @param meshSlots How many mesh slots there are.
-     * @param firstVisible Receives where each mesh slot's room starts, {@code meshSlots} long.
-     * @return How many entries a pass's visible list needs in all.
+     * @param firstVisible Receives where each mesh slot's room starts, one array per {@link
+     *     MeshKind} ordinal, as long as that kind has slots.
+     * @return How many entries a list needs in all.
      */
     static int layoutVisible(
             @NonNull List<InstanceTable.ModelCount> models,
-            int meshSlots,
-            int @NonNull [] firstVisible) {
-        final int[] perSlot = new int[meshSlots];
+            int @NonNull [] @NonNull [] firstVisible) {
+        final int[][] perSlot = new int[firstVisible.length][];
+        for (int kind = 0; kind < firstVisible.length; ++kind) {
+            perSlot[kind] = new int[firstVisible[kind].length];
+        }
         for (InstanceTable.ModelCount modelCount : models) {
             // Animated models are drawn from CPU-written commands instead
             if (modelCount.model().isAnimated()) {
@@ -301,15 +397,21 @@ public class InstanceDrawUpdate implements RenderStage {
             }
             for (MeshData mesh : modelCount.model().getMeshDataList()) {
                 MeshHandle handle = mesh.getMesh();
-                if (handle != null && handle.slot() < meshSlots) {
-                    perSlot[handle.slot()] += modelCount.instanceCount();
+                if (handle == null) {
+                    continue;
+                }
+                final int[] slots = perSlot[handle.kind().ordinal()];
+                if (handle.slot() < slots.length) {
+                    slots[handle.slot()] += modelCount.instanceCount();
                 }
             }
         }
         int total = 0;
-        for (int slot = 0; slot < meshSlots; ++slot) {
-            firstVisible[slot] = total;
-            total += perSlot[slot];
+        for (int kind = 0; kind < firstVisible.length; ++kind) {
+            for (int slot = 0; slot < firstVisible[kind].length; ++slot) {
+                firstVisible[kind][slot] = total;
+                total += perSlot[kind][slot];
+            }
         }
         return total;
     }
@@ -338,34 +440,43 @@ public class InstanceDrawUpdate implements RenderStage {
     }
 
     /**
-     * Write the draw command of every mesh slot for every culled list, with no instances yet.
+     * Write the draw command of every mesh slot of one kind for every culled list, with no
+     * instances yet. The baked kinds share a mesh table, so each baked slot gets a command in every
+     * baked kind's block; culling only adds instances in the block of the mesh's own kind.
      *
      * @param commands The mapped draw command buffer.
-     * @param meshes Where each mesh is.
-     * @param meshSlots How many mesh slots there are.
-     * @param firstVisible Where each mesh slot's room starts in a visible list.
+     * @param meshes The mesh table the kind lives in.
+     * @param kind The kind of mesh.
+     * @param standardSlots How many slots the main mesh table has.
+     * @param bakedSlots How many slots the baked mesh table has.
+     * @param firstVisible Where each mesh slot's room starts in a visible list, by kind.
      * @param listEntries How many visible entries each list has room for.
      */
     private static void writeCulledCommands(
             @NonNull ByteBuffer commands,
             @NonNull MeshRegistry meshes,
-            int meshSlots,
-            int @NonNull [] firstVisible,
+            @NonNull MeshKind kind,
+            int standardSlots,
+            int bakedSlots,
+            int @NonNull [] @NonNull [] firstVisible,
             int listEntries) {
+        final int slots = slotsOf(kind, standardSlots, bakedSlots);
+        final int[] kindFirst = firstVisible[kind.ordinal()];
         meshes.visitAll(
                 (slot, resident, generation, vertexOffset, firstIndex, indexCount, min, max) -> {
-                    if (slot >= meshSlots) {
+                    if (slot >= slots) {
                         return;
                     }
                     for (int list = 0; list < LIST_COUNT; ++list) {
                         writeCommand(
                                 commands,
-                                (list * meshSlots + slot) * DRAW_COMMAND_SIZE,
+                                commandIndex(kind, list, slot, standardSlots, bakedSlots)
+                                        * DRAW_COMMAND_SIZE,
                                 resident ? indexCount : 0,
                                 0,
                                 firstIndex,
                                 vertexOffset,
-                                list * listEntries + firstVisible[slot]);
+                                list * listEntries + kindFirst[slot]);
                     }
                 });
     }

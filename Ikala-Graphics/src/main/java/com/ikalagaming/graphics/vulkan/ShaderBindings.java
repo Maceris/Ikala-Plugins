@@ -89,8 +89,17 @@ public class ShaderBindings {
         /** Which phase this is, {@link #PHASE_EARLY} or {@link #PHASE_LATE}. */
         public static final int PUSH_CONSTANT_PHASE_OFFSET = PUSH_CONSTANT_VIEW_OFFSET + Long.BYTES;
 
+        /** How many slots the baked mesh table has. */
+        public static final int PUSH_CONSTANT_BAKED_SLOT_COUNT_OFFSET =
+                PUSH_CONSTANT_PHASE_OFFSET + Integer.BYTES;
+
+        /** Device address of the baked mesh table, aligned to 8 after the phase and count. */
+        public static final int PUSH_CONSTANT_BAKED_MESHES_OFFSET =
+                PUSH_CONSTANT_BAKED_SLOT_COUNT_OFFSET + Integer.BYTES;
+
         /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_PHASE_OFFSET + Integer.BYTES;
+        public static final int PUSH_CONSTANTS_SIZE =
+                PUSH_CONSTANT_BAKED_MESHES_OFFSET + Long.BYTES;
 
         /** The phase that culls the shadow cascades, and the scene by last frame's history. */
         public static final int PHASE_EARLY = 0;

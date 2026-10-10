@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics;
 
+import com.ikalagaming.graphics.bake.BakeSource;
+import com.ikalagaming.graphics.bake.Faces;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.vulkan.GeometryArena;
@@ -100,6 +102,44 @@ public final class Meshes {
     }
 
     /**
+     * Register one of a model's meshes so that sections can be baked from it, as well as placed
+     * like any other mesh. A CPU copy is kept, with its face groups worked out against a box: each
+     * triangle lying flat on a face of the box, facing out, can be left out of a baked section when
+     * a neighbor hides that face. See {@link Sections}.
+     *
+     * @param mesh The mesh, which mustn't be animated.
+     * @param boxMin The minimum corner of the box one placement fills, like {@code (0, 0, 0)}.
+     * @param boxMax The maximum corner of the box, like {@code (1, 1, 1)}. It must be a cube.
+     * @return The handle, which becomes resident once uploaded.
+     * @throws IllegalArgumentException If the mesh data is broken or animated, or the box isn't a
+     *     cube.
+     * @throws IllegalStateException If the plugin was unloaded, or the renderer isn't running.
+     */
+    public MeshHandle registerBakeable(
+            @NonNull MeshData mesh, @NonNull Vector3fc boxMin, @NonNull Vector3fc boxMax) {
+        context.checkOpen();
+        final BakeSource source = BakeSource.derive(mesh, boxMin, boxMax);
+        final MeshHandle handle = register(mesh);
+        renderer().getState().bakeSources.put(context.getOwnerKey(), handle, source);
+        return handle;
+    }
+
+    /**
+     * What a mesh registered for baking looks like from each side, for working out which faces its
+     * neighbors hide with {@link Faces}.
+     *
+     * @param mesh The mesh.
+     * @return Its face groups and coverage, or null if it wasn't registered for baking or was
+     *     released.
+     */
+    @Nullable public BakeSource faceInfo(@Nullable MeshHandle mesh) {
+        VulkanInstance renderer = GraphicsManager.getRenderInstance();
+        return renderer == null || renderer.getState().bakeSources == null
+                ? null
+                : renderer.getState().bakeSources.get(mesh);
+    }
+
+    /**
      * Register every mesh of a model, and set up its animation data if it is animated, so it can be
      * added to the scene. Call this once per model, after it is fully loaded.
      *
@@ -126,7 +166,7 @@ public final class Meshes {
         if (mesh == null) {
             return;
         }
-        GeometryArena geometry = geometry();
+        GeometryArena geometry = geometry(mesh);
         if (geometry == null) {
             return;
         }
@@ -142,6 +182,7 @@ public final class Meshes {
             return;
         }
         geometry.release(mesh);
+        GraphicsManager.getRenderInstance().getState().bakeSources.remove(mesh);
     }
 
     /**
@@ -162,7 +203,7 @@ public final class Meshes {
      * @return False if the handle is null, stale, or still uploading.
      */
     public boolean isResident(@Nullable MeshHandle mesh) {
-        GeometryArena geometry = geometry();
+        GeometryArena geometry = geometry(mesh);
         return geometry != null && geometry.getRegistry().isResident(mesh);
     }
 
@@ -173,18 +214,19 @@ public final class Meshes {
      * @return False if the handle is null or stale.
      */
     public boolean isValid(@Nullable MeshHandle mesh) {
-        GeometryArena geometry = geometry();
+        GeometryArena geometry = geometry(mesh);
         return geometry != null && geometry.getRegistry().isValid(mesh);
     }
 
     /**
-     * The shared geometry buffers, if the renderer is running.
+     * The shared geometry buffers a mesh lives in, if the renderer is running.
      *
-     * @return The geometry arena, or null.
+     * @param mesh The mesh, whose kind picks the buffers.
+     * @return The geometry arena, or null if the mesh is null or there is no renderer.
      */
-    private static GeometryArena geometry() {
+    private static GeometryArena geometry(@Nullable MeshHandle mesh) {
         VulkanInstance renderer = GraphicsManager.getRenderInstance();
-        return renderer == null ? null : renderer.getState().geometry;
+        return renderer == null || mesh == null ? null : renderer.getState().arenaFor(mesh.kind());
     }
 
     /**

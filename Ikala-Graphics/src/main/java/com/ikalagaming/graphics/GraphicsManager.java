@@ -268,6 +268,14 @@ public class GraphicsManager {
         if (renderInstance == null) {
             return;
         }
+        // Sections first, so none is placed again after its instances are removed below
+        if (renderInstance.getState().sections != null) {
+            int sections =
+                    renderInstance.getState().sections.removeAllOwnedBy(context.getOwnerKey());
+            if (sections > 0) {
+                log.debug("Removed {} sections owned by {}", sections, context.getOwnerKey());
+            }
+        }
         InstanceTable instances = renderInstance.getState().instances;
         if (instances != null) {
             var removed = instances.getRegistry().removeAllOwnedBy(context.getOwnerKey());
@@ -282,6 +290,16 @@ public class GraphicsManager {
             int meshes = geometry.releaseAllOwnedBy(context.getOwnerKey());
             if (meshes > 0) {
                 log.debug("Released {} meshes owned by {}", meshes, context.getOwnerKey());
+            }
+        }
+        if (renderInstance.getState().bakeSources != null) {
+            renderInstance.getState().bakeSources.removeAllOwnedBy(context.getOwnerKey());
+        }
+        GeometryArena bakedGeometry = renderInstance.getState().bakedGeometry;
+        if (bakedGeometry != null) {
+            int meshes = bakedGeometry.releaseAllOwnedBy(context.getOwnerKey());
+            if (meshes > 0) {
+                log.debug("Released {} baked meshes owned by {}", meshes, context.getOwnerKey());
             }
         }
         TextureRegistry registry = renderInstance.getState().textureRegistry;

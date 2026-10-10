@@ -4,7 +4,9 @@ import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.MeshKind;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.bake.BakedVertex;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.scene.Scene;
@@ -31,6 +33,12 @@ public class ShadowRender implements RenderStage {
     /** The shader to use for rendering. */
     @NonNull @Setter private ShaderVulkan shader;
 
+    /** The shader for baked sections, in the baked vertex format. */
+    @NonNull private final ShaderVulkan bakedShader;
+
+    /** VkPipeline for baked sections, will be VK_NULL_HANDLE if not set up. */
+    private long bakedPipeline;
+
     /** VkDescriptorSetLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorSetLayout;
 
@@ -56,9 +64,13 @@ public class ShadowRender implements RenderStage {
      * Set up the shadow render stage.
      *
      * @param shader The shader to use for rendering.
+     * @param bakedShader The shader for baked sections.
      */
-    public ShadowRender(final @NonNull ShaderVulkan shader) {
+    public ShadowRender(
+            final @NonNull ShaderVulkan shader, final @NonNull ShaderVulkan bakedShader) {
         this.shader = shader;
+        this.bakedShader = bakedShader;
+        this.bakedPipeline = VK_NULL_HANDLE;
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
         this.pipeline = VK_NULL_HANDLE;
@@ -71,7 +83,8 @@ public class ShadowRender implements RenderStage {
     public void initialize(@NonNull VulkanState vulkanState) {
         log.debug("Initializing shadow render");
         createPipelineLayout(vulkanState);
-        createPipeline(vulkanState);
+        pipeline = createPipeline(vulkanState, shader, false);
+        bakedPipeline = createPipeline(vulkanState, bakedShader, true);
     }
 
     @Override
@@ -82,6 +95,8 @@ public class ShadowRender implements RenderStage {
         descriptorPool = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
         pipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, bakedPipeline, null);
+        bakedPipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
         pipelineLayout = VK_NULL_HANDLE;
         vkDestroyDescriptorSetLayout(vulkanState.device.logical, descriptorSetLayout, null);
@@ -192,9 +207,8 @@ public class ShadowRender implements RenderStage {
                             .pDepthAttachment(depthAttachment);
             vkCmdBeginRendering(commandBuffer, renderingInfo);
 
-            if (frameData.meshSlotCount > 0 || !frameData.modelDrawInfo.isEmpty()) {
-                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-
+            if (frameData.meshSlotCount + frameData.bakedSlotCount > 0
+                    || !frameData.modelDrawInfo.isEmpty()) {
                 // Not flipped, so the light stage can use the shadow map coordinates as is
                 VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
                 viewports.get(0).width(width).height(height).minDepth(0).maxDepth(1);
@@ -219,20 +233,41 @@ public class ShadowRender implements RenderStage {
                         pushConstants);
                 LongBuffer vertexBuffers = stack.callocLong(1);
                 LongBuffer vertexOffsets = stack.callocLong(1);
-                vkCmdBindIndexBuffer(
-                        commandBuffer, state.geometry.getIndices().buffer, 0, VK_INDEX_TYPE_UINT32);
-                vertexBuffers.put(0, state.geometry.getVertices().buffer);
-                vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffers, vertexOffsets);
 
-                // Everything culling handled for this cascade, one command per mesh slot
-                if (frameData.meshSlotCount > 0) {
+                // Everything culling handled for this cascade, each kind from its own buffers,
+                // one command per mesh slot. Standard last, which the listed models need.
+                for (int k = MeshKind.ALL.length - 1; k >= 0; --k) {
+                    final MeshKind kind = MeshKind.ALL[k];
+                    final int slots =
+                            InstanceDrawUpdate.slotsOf(
+                                    kind, frameData.meshSlotCount, frameData.bakedSlotCount);
+                    if (slots == 0 && kind != MeshKind.STANDARD) {
+                        continue;
+                    }
+                    vkCmdBindPipeline(
+                            commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            kind.isBaked() ? bakedPipeline : pipeline);
+                    final GeometryArena arena = state.arenaFor(kind);
+                    vkCmdBindIndexBuffer(
+                            commandBuffer, arena.getIndices().buffer, 0, VK_INDEX_TYPE_UINT32);
+                    vertexBuffers.put(0, arena.getVertices().buffer);
+                    vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffers, vertexOffsets);
+                    if (slots == 0) {
+                        continue;
+                    }
                     vkCmdDrawIndexedIndirect(
                             commandBuffer,
                             frameData.sceneDrawCommands.buffer,
-                            (long) list
-                                    * frameData.meshSlotCount
+                            (long)
+                                            InstanceDrawUpdate.commandIndex(
+                                                    kind,
+                                                    list,
+                                                    0,
+                                                    frameData.meshSlotCount,
+                                                    frameData.bakedSlotCount)
                                     * InstanceDrawUpdate.DRAW_COMMAND_SIZE,
-                            frameData.meshSlotCount,
+                            slots,
                             InstanceDrawUpdate.DRAW_COMMAND_SIZE);
                 }
                 SceneRender.drawListedModels(
@@ -354,7 +389,16 @@ public class ShadowRender implements RenderStage {
         }
     }
 
-    private void createPipeline(@NonNull VulkanState state) {
+    /**
+     * Create a shadow pipeline.
+     *
+     * @param state The Vulkan state.
+     * @param shader The shader.
+     * @param baked Whether it reads the baked vertex format.
+     * @return The VkPipeline.
+     */
+    private long createPipeline(
+            @NonNull VulkanState state, @NonNull ShaderVulkan shader, boolean baked) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
@@ -365,15 +409,15 @@ public class ShadowRender implements RenderStage {
                     .get(0)
                     .binding(0)
                     .location(0)
-                    .format(VK_FORMAT_R32G32B32_SFLOAT)
-                    .offset(0);
+                    .format(baked ? VK_FORMAT_R16G16B16A16_SINT : VK_FORMAT_R32G32B32_SFLOAT)
+                    .offset(baked ? BakedVertex.POSITION_OFFSET : 0);
 
             VkVertexInputBindingDescription.Buffer vertexBindings =
                     VkVertexInputBindingDescription.calloc(1, stack);
             vertexBindings
                     .get(0)
                     .binding(0)
-                    .stride(MeshData.VERTEX_SIZE_IN_BYTES)
+                    .stride(baked ? BakedVertex.SIZE : MeshData.VERTEX_SIZE_IN_BYTES)
                     .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
 
             VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo =
@@ -457,7 +501,7 @@ public class ShadowRender implements RenderStage {
                             null,
                             longOutput));
 
-            pipeline = longOutput.get(0);
+            return longOutput.get(0);
         }
     }
 }

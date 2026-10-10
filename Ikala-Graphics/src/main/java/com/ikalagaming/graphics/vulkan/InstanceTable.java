@@ -53,7 +53,8 @@ import javax.annotation.Nullable;
  * </pre>
  *
  * <p>Model mesh entry, {@link #MODEL_MESH_SIZE} bytes: {@code uvec4(meshSlot, meshGeneration,
- * material, 0)}, with {@link #NO_MESH} as the slot when the mesh isn't registered.
+ * material, kind)}, with {@link #NO_MESH} as the slot when the mesh isn't registered, and the
+ * {@link com.ikalagaming.graphics.MeshKind} ordinal, which picks the mesh table the slot is in.
  */
 public class InstanceTable {
 
@@ -253,7 +254,7 @@ public class InstanceTable {
         out.putInt(base, mesh == null ? NO_MESH : mesh.slot());
         out.putInt(base + Integer.BYTES, mesh == null ? 0 : mesh.generation());
         out.putInt(base + 2 * Integer.BYTES, materialIndex);
-        out.putInt(base + 3 * Integer.BYTES, 0);
+        out.putInt(base + 3 * Integer.BYTES, mesh == null ? 0 : mesh.kind().ordinal());
     }
 
     /**

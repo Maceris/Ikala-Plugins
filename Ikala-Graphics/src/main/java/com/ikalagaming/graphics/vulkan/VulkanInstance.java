@@ -16,6 +16,8 @@ import com.ikalagaming.graphics.*;
 import com.ikalagaming.graphics.BufferHolder;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.bake.BakeSources;
+import com.ikalagaming.graphics.bake.BakedVertex;
 import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -381,6 +383,9 @@ public class VulkanInstance {
         state.textureUploads.clear(state);
         state.textureRegistry.removeAll().forEach(textureLoader::delete);
         state.geometry.cleanup(state);
+        state.bakedGeometry.cleanup(state);
+        state.bakeSources.clear();
+        state.sections.cleanup();
         state.instances.cleanup(state);
 
         DeletionQueue.Entry nextEntry = GraphicsManager.getDeletionQueue().pop();
@@ -398,6 +403,9 @@ public class VulkanInstance {
         state.textureRegistry = null;
         state.textureUploads = null;
         state.geometry = null;
+        state.bakedGeometry = null;
+        state.bakeSources = null;
+        state.sections = null;
         state.instances = null;
         state.stagingRing.cleanup(state);
         state.stagingRing = null;
@@ -1154,6 +1162,9 @@ public class VulkanInstance {
         state.stagingRing = new StagingRing(state);
         state.textureUploads = new TextureUploads();
         state.geometry = new GeometryArena(state, MeshData.VERTEX_SIZE_IN_BYTES);
+        state.bakedGeometry = new GeometryArena(state, BakedVertex.SIZE);
+        state.bakeSources = new BakeSources();
+        state.sections = new SectionManager();
         state.instances = new InstanceTable(state);
         textureLoader = new TextureLoaderVulkan(state);
         shaderMap = new ShaderMap();
@@ -1356,6 +1367,20 @@ public class VulkanInstance {
         var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
 
         shaderMap.addShader(RenderStage.Type.SCENE, shaderProgram);
+
+        // Baked sections share the fragment shader, with their own vertex format
+        List<ShaderVulkan.ShaderModuleData> bakedModules = new ArrayList<>();
+        bakedModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/scene_baked.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        bakedModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/scene.frag",
+                        ShaderVulkan.Type.FRAGMENT,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(RenderStage.Type.SCENE_BAKED, new ShaderVulkan(bakedModules, state));
     }
 
     /**
@@ -1386,6 +1411,14 @@ public class VulkanInstance {
         var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
 
         shaderMap.addShader(RenderStage.Type.SHADOW, shaderProgram);
+
+        List<ShaderVulkan.ShaderModuleData> bakedModules = new ArrayList<>();
+        bakedModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/shadow_baked.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(RenderStage.Type.SHADOW_BAKED, new ShaderVulkan(bakedModules, state));
     }
 
     /** Set up the skybox shader and uniforms. */
@@ -1540,9 +1573,12 @@ public class VulkanInstance {
 
         // Before anything that could sample the textures or draw the meshes
         state.textureUploads.record(state, commandBuffer, textureLoader);
+        // Sections whose bakes are resident are placed before the instance table is recorded
+        state.sections.update(state);
         // Instances first, so the mesh table recorded after covers every mesh they point at
         state.instances.record(state, commandBuffer, scene.getMaterialCache());
         state.geometry.record(state, commandBuffer);
+        state.bakedGeometry.record(state, commandBuffer);
 
         // This will record the command buffer
         pipeline.render(scene, windowInfo.window, state);

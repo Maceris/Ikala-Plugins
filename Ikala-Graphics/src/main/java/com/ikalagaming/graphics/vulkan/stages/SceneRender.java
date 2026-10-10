@@ -4,8 +4,10 @@ import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.MeshKind;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.bake.BakedVertex;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -36,6 +38,9 @@ import java.util.Arrays;
  */
 @Slf4j
 public class SceneRender implements RenderStage {
+
+    /** The constant_id of {@code ALPHA_TEST} in {@code scene.frag}. */
+    private static final int ALPHA_TEST_CONSTANT_ID = 0;
 
     /** The size of a material in the materials buffer, in bytes. */
     public static final int MATERIAL_SIZE = ShaderBindings.Scene.Material.SIZEOF;
@@ -99,6 +104,18 @@ public class SceneRender implements RenderStage {
     /** The shader to use for rendering. */
     @NonNull @Setter private ShaderVulkan shader;
 
+    /** The shader for baked sections, in the baked vertex format. */
+    @NonNull private final ShaderVulkan bakedShader;
+
+    /** VkPipeline for baked opaque sections, with no alpha test so depth is tested early. */
+    private long bakedPipeline;
+
+    /** VkPipeline for baked sections with cut out or see-through textures. */
+    private long bakedAlphaPipeline;
+
+    /** VkPipeline for drawing baked sections as wireframes. */
+    private long bakedWireframe;
+
     /**
      * The late half of the scene pass, which shares this stage's pipelines and descriptor sets, so
      * it is only initialized and cleaned up through this stage. -- GETTER -- The late half.
@@ -135,9 +152,15 @@ public class SceneRender implements RenderStage {
      * Set up the scene render stage.
      *
      * @param shader The shader to use for rendering.
+     * @param bakedShader The shader for baked sections.
      */
-    public SceneRender(final @NonNull ShaderVulkan shader) {
+    public SceneRender(
+            final @NonNull ShaderVulkan shader, final @NonNull ShaderVulkan bakedShader) {
         this.shader = shader;
+        this.bakedShader = bakedShader;
+        this.bakedPipeline = VK_NULL_HANDLE;
+        this.bakedAlphaPipeline = VK_NULL_HANDLE;
+        this.bakedWireframe = VK_NULL_HANDLE;
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
         this.pipeline = VK_NULL_HANDLE;
@@ -152,8 +175,11 @@ public class SceneRender implements RenderStage {
     public void initialize(@NonNull VulkanState vulkanState) {
         log.debug("Initializing scene render");
         createPipelineLayout(vulkanState);
-        this.pipeline = createPipeline(vulkanState, false);
-        this.pipelineWireframe = createPipeline(vulkanState, true);
+        this.pipeline = createPipeline(vulkanState, shader, false, false, true);
+        this.pipelineWireframe = createPipeline(vulkanState, shader, false, true, true);
+        this.bakedPipeline = createPipeline(vulkanState, bakedShader, true, false, false);
+        this.bakedAlphaPipeline = createPipeline(vulkanState, bakedShader, true, false, true);
+        this.bakedWireframe = createPipeline(vulkanState, bakedShader, true, true, true);
     }
 
     @Override
@@ -164,6 +190,12 @@ public class SceneRender implements RenderStage {
         descriptorPool = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, pipelineWireframe, null);
         pipelineWireframe = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, bakedPipeline, null);
+        bakedPipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, bakedAlphaPipeline, null);
+        bakedAlphaPipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, bakedWireframe, null);
+        bakedWireframe = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
@@ -292,7 +324,8 @@ public class SceneRender implements RenderStage {
         vkCmdBeginRendering(commandBuffer, renderingInfo);
 
         final boolean anyListed = listedModels && !frameData.modelDrawInfo.isEmpty();
-        if ((frameData.meshSlotCount > 0 || anyListed) && width > 0 && height > 0) {
+        final boolean anyCulled = frameData.meshSlotCount + frameData.bakedSlotCount > 0;
+        if ((anyCulled || anyListed) && width > 0 && height > 0) {
             drawModels(commandBuffer, state, renderConfig, width, height, list, anyListed, stack);
         }
 
@@ -322,11 +355,7 @@ public class SceneRender implements RenderStage {
             boolean listedModels,
             @NonNull MemoryStack stack) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
-
-        vkCmdBindPipeline(
-                commandBuffer,
-                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                RenderConfig.sceneIsWireframe(renderConfig) ? pipelineWireframe : pipeline);
+        final boolean wireframe = RenderConfig.sceneIsWireframe(renderConfig);
 
         // A negative height flips y so the projection matrices work the same as in OpenGL
         VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
@@ -348,24 +377,63 @@ public class SceneRender implements RenderStage {
 
         LongBuffer vertexBuffers = stack.callocLong(1);
         LongBuffer vertexOffsets = stack.callocLong(1);
-        // Every mesh's indices are in the shared index buffer, found by each command's first index
-        vkCmdBindIndexBuffer(
-                commandBuffer, state.geometry.getIndices().buffer, 0, VK_INDEX_TYPE_UINT32);
-        vertexBuffers.put(0, state.geometry.getVertices().buffer);
-        vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffers, vertexOffsets);
 
-        // Everything culling handled: the list's commands, one per mesh slot
-        if (frameData.meshSlotCount > 0) {
+        // Everything culling handled: the list's commands for each kind, one per mesh slot, from
+        // that kind's buffers with its pipeline. Standard last, which the listed models need.
+        for (int k = MeshKind.ALL.length - 1; k >= 0; --k) {
+            final MeshKind kind = MeshKind.ALL[k];
+            final int slots =
+                    InstanceDrawUpdate.slotsOf(
+                            kind, frameData.meshSlotCount, frameData.bakedSlotCount);
+            if (slots == 0 && kind != MeshKind.STANDARD) {
+                continue;
+            }
+            vkCmdBindPipeline(
+                    commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineFor(kind, wireframe));
+            // Every mesh's indices are in the shared index buffer, found by each command's first
+            // index
+            final GeometryArena arena = state.arenaFor(kind);
+            vkCmdBindIndexBuffer(commandBuffer, arena.getIndices().buffer, 0, VK_INDEX_TYPE_UINT32);
+            vertexBuffers.put(0, arena.getVertices().buffer);
+            vkCmdBindVertexBuffers(commandBuffer, 0, vertexBuffers, vertexOffsets);
+            if (slots == 0) {
+                continue;
+            }
             vkCmdDrawIndexedIndirect(
                     commandBuffer,
                     frameData.sceneDrawCommands.buffer,
-                    (long) list * frameData.meshSlotCount * InstanceDrawUpdate.DRAW_COMMAND_SIZE,
-                    frameData.meshSlotCount,
+                    (long)
+                                    InstanceDrawUpdate.commandIndex(
+                                            kind,
+                                            list,
+                                            0,
+                                            frameData.meshSlotCount,
+                                            frameData.bakedSlotCount)
+                            * InstanceDrawUpdate.DRAW_COMMAND_SIZE,
+                    slots,
                     InstanceDrawUpdate.DRAW_COMMAND_SIZE);
         }
         if (listedModels) {
             drawListedModels(commandBuffer, state, frameData, vertexBuffers, vertexOffsets);
         }
+    }
+
+    /**
+     * The pipeline a kind of mesh is drawn with.
+     *
+     * @param kind The kind.
+     * @param wireframe Whether to draw wireframes.
+     * @return The VkPipeline.
+     */
+    private long pipelineFor(@NonNull MeshKind kind, boolean wireframe) {
+        if (!kind.isBaked()) {
+            return wireframe ? pipelineWireframe : pipeline;
+        }
+        if (wireframe) {
+            return bakedWireframe;
+        }
+        // See-through sections are drawn cut out until there is a blended pass
+        return kind == MeshKind.BAKED_OPAQUE ? bakedPipeline : bakedAlphaPipeline;
     }
 
     /**
@@ -833,34 +901,120 @@ public class SceneRender implements RenderStage {
         vkUpdateDescriptorSets(state.device.logical, writes, null);
     }
 
-    private long createPipeline(@NonNull VulkanState state, boolean wireframe) {
+    /**
+     * Describe the vertex format a pipeline reads.
+     *
+     * @param baked Whether it is the baked format rather than the full one.
+     * @param stack The stack to allocate on.
+     * @return The attributes, read from binding 0.
+     */
+    private static VkVertexInputAttributeDescription.Buffer vertexAttributes(
+            boolean baked, @NonNull MemoryStack stack) {
+        if (baked) {
+            // See BakedVertex: steps and user data, octahedral normal and tangent, half UV,
+            // material and flags
+            final int[] formats = {
+                VK_FORMAT_R16G16B16A16_SINT,
+                VK_FORMAT_R16G16_SNORM,
+                VK_FORMAT_R16G16_SNORM,
+                VK_FORMAT_R16G16_SFLOAT,
+                VK_FORMAT_R16G16_UINT
+            };
+            final int[] offsets = {
+                BakedVertex.POSITION_OFFSET,
+                BakedVertex.NORMAL_OFFSET,
+                BakedVertex.TANGENT_OFFSET,
+                BakedVertex.UV_OFFSET,
+                BakedVertex.MATERIAL_OFFSET
+            };
+            VkVertexInputAttributeDescription.Buffer attributes =
+                    VkVertexInputAttributeDescription.calloc(formats.length, stack);
+            for (int i = 0; i < formats.length; i++) {
+                attributes.get(i).binding(0).location(i).format(formats[i]).offset(offsets[i]);
+            }
+            return attributes;
+        }
+        // Position, normal, tangent, bitangent, texture coordinates
+        final int[] componentCounts = {3, 3, 3, 3, 2};
+        VkVertexInputAttributeDescription.Buffer attributes =
+                VkVertexInputAttributeDescription.calloc(componentCounts.length, stack);
+        int offset = 0;
+        for (int i = 0; i < componentCounts.length; i++) {
+            attributes
+                    .get(i)
+                    .binding(0)
+                    .location(i)
+                    .format(
+                            componentCounts[i] == 3
+                                    ? VK_FORMAT_R32G32B32_SFLOAT
+                                    : VK_FORMAT_R32G32_SFLOAT)
+                    .offset(offset);
+            offset += componentCounts[i] * Float.BYTES;
+        }
+        return attributes;
+    }
+
+    /**
+     * Copy a shader's stages, turning the fragment shader's alpha test off if asked, through its
+     * {@code ALPHA_TEST} specialization constant.
+     *
+     * @param shader The shader.
+     * @param alphaTest Whether to drop pixels the texture's alpha cuts out.
+     * @param stack The stack to allocate on.
+     * @return The stages for the pipeline.
+     */
+    private static VkPipelineShaderStageCreateInfo.Buffer stages(
+            @NonNull ShaderVulkan shader, boolean alphaTest, @NonNull MemoryStack stack) {
+        final int count = shader.shaderModules.length;
+        VkPipelineShaderStageCreateInfo.Buffer stages =
+                VkPipelineShaderStageCreateInfo.calloc(count, stack);
+        for (int i = 0; i < count; ++i) {
+            stages.get(i).set(shader.shaderStages.get(i));
+        }
+        if (alphaTest) {
+            return stages;
+        }
+        VkSpecializationMapEntry.Buffer entries = VkSpecializationMapEntry.calloc(1, stack);
+        entries.get(0).constantID(ALPHA_TEST_CONSTANT_ID).offset(0).size(Integer.BYTES);
+        VkSpecializationInfo specialization =
+                VkSpecializationInfo.calloc(stack)
+                        .pMapEntries(entries)
+                        .pData(stack.bytes(new byte[Integer.BYTES]));
+        for (int i = 0; i < count; ++i) {
+            if (stages.get(i).stage() == VK_SHADER_STAGE_FRAGMENT_BIT) {
+                stages.get(i).pSpecializationInfo(specialization);
+            }
+        }
+        return stages;
+    }
+
+    /**
+     * Create one of the scene pipelines.
+     *
+     * @param state The Vulkan state.
+     * @param shader The shader.
+     * @param baked Whether it reads the baked vertex format.
+     * @param wireframe Whether to draw wireframes.
+     * @param alphaTest Whether to drop pixels the texture's alpha cuts out.
+     * @return The VkPipeline.
+     */
+    private long createPipeline(
+            @NonNull VulkanState state,
+            @NonNull ShaderVulkan shader,
+            boolean baked,
+            boolean wireframe,
+            boolean alphaTest) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
-            // Position, normal, tangent, bitangent, texture coordinates
-            final int[] componentCounts = {3, 3, 3, 3, 2};
             VkVertexInputAttributeDescription.Buffer vertexAttributes =
-                    VkVertexInputAttributeDescription.calloc(componentCounts.length, stack);
-            int offset = 0;
-            for (int i = 0; i < componentCounts.length; i++) {
-                vertexAttributes
-                        .get(i)
-                        .binding(0)
-                        .location(i)
-                        .format(
-                                componentCounts[i] == 3
-                                        ? VK_FORMAT_R32G32B32_SFLOAT
-                                        : VK_FORMAT_R32G32_SFLOAT)
-                        .offset(offset);
-                offset += componentCounts[i] * Float.BYTES;
-            }
-
+                    vertexAttributes(baked, stack);
             VkVertexInputBindingDescription.Buffer vertexBindings =
                     VkVertexInputBindingDescription.calloc(1, stack);
             vertexBindings
                     .get(0)
                     .binding(0)
-                    .stride(MeshData.VERTEX_SIZE_IN_BYTES)
+                    .stride(baked ? BakedVertex.SIZE : MeshData.VERTEX_SIZE_IN_BYTES)
                     .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
 
             VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo =
@@ -944,7 +1098,7 @@ public class SceneRender implements RenderStage {
                     .sType$Default()
                     .pNext(renderingCreateInfo)
                     .stageCount(shader.shaderModules.length)
-                    .pStages(shader.shaderStages)
+                    .pStages(stages(shader, alphaTest, stack))
                     .pVertexInputState(vertexInputStateCreateInfo)
                     .pInputAssemblyState(inputAssemblyState)
                     .pViewportState(viewportState)

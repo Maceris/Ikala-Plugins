@@ -38,12 +38,15 @@ class ShaderBindingsTest {
 
     @Test
     void testCullOffsets() {
-        // 9 buffer addresses, 2 counts, 2 more addresses, the phase
+        // 9 buffer addresses, 2 counts, 2 more addresses, the phase, then the baked mesh table
         assertEquals(72, ShaderBindings.Cull.PUSH_CONSTANT_SLOT_COUNT_OFFSET);
         assertEquals(80, ShaderBindings.Cull.PUSH_CONSTANT_HISTORY_OFFSET);
         assertEquals(88, ShaderBindings.Cull.PUSH_CONSTANT_VIEW_OFFSET);
         assertEquals(96, ShaderBindings.Cull.PUSH_CONSTANT_PHASE_OFFSET);
-        assertEquals(100, ShaderBindings.Cull.PUSH_CONSTANTS_SIZE);
+        // The baked slot count, then the baked mesh table's address on an 8 byte boundary
+        assertEquals(100, ShaderBindings.Cull.PUSH_CONSTANT_BAKED_SLOT_COUNT_OFFSET);
+        assertEquals(104, ShaderBindings.Cull.PUSH_CONSTANT_BAKED_MESHES_OFFSET);
+        assertEquals(112, ShaderBindings.Cull.PUSH_CONSTANTS_SIZE);
         // The guaranteed minimum push constant space
         assertTrue(ShaderBindings.Cull.PUSH_CONSTANTS_SIZE <= 128);
         // View {mat4 projectionView; ivec2 size; int levels; uint flags;}

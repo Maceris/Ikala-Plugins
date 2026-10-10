@@ -112,7 +112,7 @@ public class InstanceCull implements RenderStage {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
         final int slots = frameData.instanceCount;
         if (slots == 0
-                || frameData.meshSlotCount == 0
+                || frameData.meshSlotCount + frameData.bakedSlotCount == 0
                 || (phase == ShaderBindings.Cull.PHASE_LATE && !frameData.occlusion)) {
             return;
         }
@@ -165,6 +165,12 @@ public class InstanceCull implements RenderStage {
                     ShaderBindings.Cull.PUSH_CONSTANT_VIEW_OFFSET,
                     frameData.cullView.deviceAddress);
             constants.putInt(ShaderBindings.Cull.PUSH_CONSTANT_PHASE_OFFSET, phase);
+            constants.putInt(
+                    ShaderBindings.Cull.PUSH_CONSTANT_BAKED_SLOT_COUNT_OFFSET,
+                    frameData.bakedSlotCount);
+            constants.putLong(
+                    ShaderBindings.Cull.PUSH_CONSTANT_BAKED_MESHES_OFFSET,
+                    state.bakedGeometry.getMeshTable().getBuffer().deviceAddress);
             vkCmdPushConstants(
                     commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
             final int groups =

@@ -4,7 +4,9 @@ import static org.lwjgl.vulkan.VK10.VK_FORMAT_UNDEFINED;
 import static org.lwjgl.vulkan.VK13.VK_NULL_HANDLE;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.MeshKind;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.bake.BakeSources;
 
 import lombok.NonNull;
 import org.lwjgl.vulkan.*;
@@ -35,8 +37,27 @@ public class VulkanState {
     /** Texture uploads waiting for the render thread. */
     public TextureUploads textureUploads = null;
 
-    /** The shared vertex and index buffers every scene mesh lives in. */
+    /** The shared vertex and index buffers every standard scene mesh lives in. */
     public GeometryArena geometry = null;
+
+    /** The shared vertex and index buffers baked sections live in, in the baked vertex format. */
+    public GeometryArena bakedGeometry = null;
+
+    /** The CPU copies of meshes that sections can be baked from. */
+    public BakeSources bakeSources = null;
+
+    /** Bakes sections and keeps them in the scene. */
+    public SectionManager sections = null;
+
+    /**
+     * The geometry buffers a kind of mesh lives in.
+     *
+     * @param kind The kind.
+     * @return The arena, or null if the renderer isn't set up.
+     */
+    public GeometryArena arenaFor(@NonNull MeshKind kind) {
+        return kind.isBaked() ? bakedGeometry : geometry;
+    }
 
     /** Everything placed in the scene, kept on the GPU across frames. */
     public InstanceTable instances = null;

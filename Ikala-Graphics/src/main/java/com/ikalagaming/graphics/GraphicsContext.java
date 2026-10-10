@@ -56,6 +56,9 @@ public final class GraphicsContext {
     /** Placing models in the scene for this context. */
     private final Instances instances;
 
+    /** The sections API for this plugin. */
+    private final Sections sections;
+
     /** Debug shape drawing for this context. */
     private final DebugDraw debug;
 
@@ -78,6 +81,7 @@ public final class GraphicsContext {
         textures = new Textures(this);
         meshes = new Meshes(this);
         instances = new Instances(this);
+        sections = new Sections(this);
         debug = new DebugDraw(this);
         ui = new UI(this, GraphicsManager::getUiManager);
         closed = false;
@@ -114,6 +118,17 @@ public final class GraphicsContext {
     public Instances instances() {
         checkOpen();
         return instances;
+    }
+
+    /**
+     * Bake sections of terrain from many placements, owned by this plugin.
+     *
+     * @return The sections API for this plugin.
+     * @throws IllegalStateException If the plugin was unloaded.
+     */
+    public Sections sections() {
+        checkOpen();
+        return sections;
     }
 
     /**

@@ -70,6 +70,22 @@ public class Material {
     /** The handle for the texture, which might be null. */
     private TextureHandle texture;
 
+    /**
+     * How the material lets light through, which decides which faces it hides when baked and how it
+     * is drawn.
+     */
+    public enum Transparency {
+        /** Solid: hides whatever is behind it. */
+        OPAQUE,
+        /** Holes cut out by the texture's alpha, like leaves: hides nothing. */
+        CUTOUT,
+        /** See-through, like glass: hides nothing except the same material behind it. */
+        TRANSLUCENT
+    }
+
+    /** How the material lets light through, opaque unless set. */
+    private Transparency transparency;
+
     /** Create a default material with no texture. */
     public Material() {
         baseColor = new Vector4f(Material.DEFAULT_COLOR);
@@ -85,5 +101,6 @@ public class Material {
         subsurface = 0;
         normalMap = null;
         texture = null;
+        transparency = Transparency.OPAQUE;
     }
 }
