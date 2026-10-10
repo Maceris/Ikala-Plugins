@@ -4,9 +4,10 @@ package com.ikalagaming.graphics.gui.data;
  * The vertical metrics of a font at a specific size, in pixels. These come from the font face, so
  * they are the same for every glyph and string.
  *
- * <p>The font's ascent and descent are often larger than the line height, as fonts leave room for
- * accents and tall scripts. So text is laid out with the baseline at {@link
- * #baselineOffset(float)}, which keeps descenders inside the line.
+ * <p>Fonts are sized so the ascent plus the descent is the line height, like in Dear ImGui.
+ * FreeType rounds them to whole pixels, so together they can be a pixel more than the line. Text is
+ * laid out with the baseline at {@link #baselineOffset(float)}, which keeps descenders inside the
+ * line.
  *
  * @param ascent The distance from the baseline to the top of the tallest glyphs, positive.
  * @param descent The distance from the baseline to the bottom of the lowest glyphs, which is

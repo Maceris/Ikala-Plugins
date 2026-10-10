@@ -483,6 +483,9 @@ public class PipelineManagerVulkan {
         if (fontAtlasInfo != null) {
             GraphicsManager.getDeletionQueue().add(fontAtlasInfo);
         }
+        if (IkGui.getIO().fonts.texture == fontAtlas) {
+            IkGui.getIO().fonts.texture = null;
+        }
         fontAtlas = null;
         skybox.cleanup(state);
         skybox = null;
@@ -586,6 +589,8 @@ public class PipelineManagerVulkan {
                                 Format.R8G8B8A8_UNORM,
                                 FontAtlas.FONT_ATLAS_IMAGE_WIDTH,
                                 FontAtlas.FONT_ATLAS_IMAGE_HEIGHT);
+        // So debug tools like the demo and metrics windows can show the atlas
+        fontAtlas1.texture = this.fontAtlas;
     }
 
     private GBuffer generateGBuffer(@NonNull VulkanState state, @NonNull VkExtent3D imageExtent) {

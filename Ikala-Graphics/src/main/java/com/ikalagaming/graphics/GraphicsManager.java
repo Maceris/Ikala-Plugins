@@ -294,7 +294,11 @@ public class GraphicsManager {
      * @return The plugin, or null if it isn't loaded.
      */
     private static Plugin loadedInstance(@NonNull String pluginName) {
-        return PluginManager.getInstance().getPlugin(pluginName).orElse(null);
+        // Never create a plugin manager here: this runs in unload events, which can arrive while
+        // the program shuts down and the plugin manager is already gone
+        return PluginManager.getExistingInstance()
+                .flatMap(manager -> manager.getPlugin(pluginName))
+                .orElse(null);
     }
 
     /**

@@ -7,6 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import static org.lwjgl.util.freetype.FreeType.FT_PIXEL_MODE_GRAY;
+import static org.lwjgl.util.freetype.FreeType.FT_PIXEL_MODE_GRAY2;
+import static org.lwjgl.util.freetype.FreeType.FT_PIXEL_MODE_GRAY4;
+import static org.lwjgl.util.freetype.FreeType.FT_PIXEL_MODE_MONO;
 
 import com.ikalagaming.graphics.gui.IkGui;
 
@@ -16,6 +20,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -122,6 +127,55 @@ class FontAtlasTest {
     }
 
     @Test
+    void testGlyphPixelsAreWhiteWithCoverageAlpha() {
+        useAtlas(1, "Noto");
+        atlas.stagedBitmaps.clear();
+        atlas.registerCharacter('e', 18);
+        FontAtlas.StagedBitmap glyph = atlas.stagedBitmaps.getLast();
+        ByteBuffer data = glyph.data();
+
+        int covered = 0;
+        int faint = 0;
+        for (int i = 0; i < glyph.width() * glyph.height(); ++i) {
+            int pixel = data.getInt(i * Integer.BYTES);
+            int alpha = pixel & 0xFF;
+            if (alpha == 0) {
+                continue;
+            }
+            ++covered;
+            if (alpha < 128) {
+                ++faint;
+            }
+            // Dark color on the edges would draw a dark fringe around text on light backgrounds
+            assertEquals(0xFFFFFF, pixel >>> 8, "Glyph pixels must be white, alpha " + alpha);
+        }
+        assertTrue(covered > 0, "The glyph has pixels");
+        assertTrue(faint > 0, "The edges are anti-aliased");
+    }
+
+    @Test
+    void testLowBitDepthPixelModes() {
+        // Most significant bit first, so the first pixel is the top bit
+        ByteBuffer mono = ByteBuffer.wrap(new byte[] {(byte) 0b1000_0001});
+        assertEquals(0xFFFFFFFF, FontAtlas.atlasPixel(FT_PIXEL_MODE_MONO, mono, 0, 0));
+        assertEquals(0xFFFFFF00, FontAtlas.atlasPixel(FT_PIXEL_MODE_MONO, mono, 0, 1));
+        assertEquals(0xFFFFFFFF, FontAtlas.atlasPixel(FT_PIXEL_MODE_MONO, mono, 0, 7));
+
+        ByteBuffer gray2 = ByteBuffer.wrap(new byte[] {(byte) 0b11_10_01_00});
+        assertEquals(0xFFFFFFFF, FontAtlas.atlasPixel(FT_PIXEL_MODE_GRAY2, gray2, 0, 0));
+        assertEquals(0xFFFFFF00, FontAtlas.atlasPixel(FT_PIXEL_MODE_GRAY2, gray2, 0, 3));
+
+        ByteBuffer gray4 = ByteBuffer.wrap(new byte[] {(byte) 0xF0});
+        assertEquals(0xFFFFFFFF, FontAtlas.atlasPixel(FT_PIXEL_MODE_GRAY4, gray4, 0, 0));
+        assertEquals(0xFFFFFF00, FontAtlas.atlasPixel(FT_PIXEL_MODE_GRAY4, gray4, 0, 1));
+
+        // Coverage above 127 is a negative byte, which must not sign extend
+        ByteBuffer gray = ByteBuffer.wrap(new byte[] {0x40, (byte) 0xC0});
+        assertEquals(0xFFFFFF40, FontAtlas.atlasPixel(FT_PIXEL_MODE_GRAY, gray, 0, 0));
+        assertEquals(0xFFFFFFC0, FontAtlas.atlasPixel(FT_PIXEL_MODE_GRAY, gray, 0, 1));
+    }
+
+    @Test
     void testRegisteringTwiceKeepsOneGlyph() {
         useAtlas(1, "Noto");
         atlas.registerCharacter('a', 16);
@@ -135,8 +189,9 @@ class FontAtlasTest {
     @Test
     void testEvictionKeepsGlyphsSeparate() {
         useAtlas(1 << 14, "Noto");
-        // Huge glyphs, so the texture fills up after a few dozen and older ones get evicted
-        final int fontSize = 300;
+        // Huge glyphs, so the texture fills up after a few dozen and older ones get evicted. The
+        // size is the line height, so the glyphs themselves are about three quarters of it.
+        final int fontSize = 420;
         for (char c = '!'; c <= '~'; ++c) {
             atlas.registerCharacter(c, fontSize);
             // The newest glyph is always available

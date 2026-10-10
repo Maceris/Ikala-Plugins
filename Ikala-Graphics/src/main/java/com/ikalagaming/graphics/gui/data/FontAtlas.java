@@ -844,7 +844,6 @@ public class FontAtlas {
 
             final int width = bitmap.width();
             final int height = bitmap.rows();
-            final int totalPixels = width * height;
             int originalBufferSize = Math.abs(bitmap.pitch()) * height;
 
             ByteBuffer oldContents = bitmap.buffer(originalBufferSize);
@@ -855,85 +854,20 @@ public class FontAtlas {
             }
             ByteBuffer newContents = ByteBuffer.allocateDirect(width * height * Integer.BYTES);
 
-            int pixelsProcessed = 0;
-            switch (bitmap.pixel_mode()) {
-                case FT_PIXEL_MODE_MONO:
-                    for (int i = 0; i < originalBufferSize; ++i) {
-                        byte currentByte = oldContents.get(i);
-
-                        int bitsToProcess = Math.min(8, totalPixels - pixelsProcessed);
-                        for (int j = 0; j < bitsToProcess; ++j) {
-                            int value = (currentByte >> j) & 0b1;
-                            int newPixel = value == 1 ? 0xFFFFFFFF : 0x00000000;
-                            newContents.putInt(newPixel);
-                        }
-                        pixelsProcessed += 8;
-                    }
-                    break;
-                case FT_PIXEL_MODE_GRAY2:
-                    for (int i = 0; i < originalBufferSize; ++i) {
-                        byte currentByte = oldContents.get(i);
-
-                        int bitsToProcess = Math.min(8, (totalPixels - pixelsProcessed) * 2);
-                        for (int j = 0; j < bitsToProcess; j += 2) {
-                            int value = (currentByte >> j) & 0b11;
-                            value = (255 * value) / 4;
-                            int newPixel = (value << 24) | (value << 16) | (value << 8) | value;
-                            newContents.putInt(newPixel);
-                        }
-                        pixelsProcessed += 4;
-                    }
-                    break;
-                case FT_PIXEL_MODE_GRAY4:
-                    for (int i = 0; i < originalBufferSize; ++i) {
-                        byte currentByte = oldContents.get(i);
-
-                        int bitsToProcess = Math.min(8, (totalPixels - pixelsProcessed) * 4);
-                        for (int j = 0; j < bitsToProcess; j += 4) {
-                            int value = (currentByte >> j) & 0b1111;
-                            value = (255 * value) / 16;
-                            int newPixel = (value << 24) | (value << 16) | (value << 8) | value;
-                            newContents.putInt(newPixel);
-                        }
-                        pixelsProcessed += 2;
-                    }
-                    break;
-                case FT_PIXEL_MODE_GRAY:
-                    for (int i = 0; i < originalBufferSize; ++i) {
-                        byte currentByte = oldContents.get(i);
-                        newContents.putInt(currentByte);
-                    }
-                    break;
-                case FT_PIXEL_MODE_LCD, FT_PIXEL_MODE_LCD_V:
-                    for (int i = 0; i + 2 < originalBufferSize; i += 3) {
-                        byte rAlpha = oldContents.get(i);
-                        byte gAlpha = oldContents.get(i + 1);
-                        byte bAlpha = oldContents.get(i + 2);
-                        int averageAlpha = (rAlpha + gAlpha + bAlpha) / 3;
-
-                        int newPixel =
-                                (rAlpha << 24) | (gAlpha << 16) | (bAlpha << 8) | averageAlpha;
-                        newContents.putInt(newPixel);
-                    }
-                    break;
-                case FT_PIXEL_MODE_BGRA:
-                    for (int i = 0; i + 3 < originalBufferSize; i += 4) {
-                        byte b = oldContents.get(i);
-                        byte g = oldContents.get(i + 1);
-                        byte r = oldContents.get(i + 2);
-                        byte a = oldContents.get(i + 3);
-
-                        int newPixel = (r << 24) | (g << 16) | (b << 8) | a;
-                        newContents.putInt(newPixel);
-                    }
-                    break;
-                default:
-                    IkGuiInternal.reportError(
-                            log,
-                            "Unexpected pixel mode {} for font {}",
-                            bitmap.pixel_mode(),
-                            font.name);
-                    return null;
+            final int pixelMode = bitmap.pixel_mode();
+            if (!FontAtlas.isSupportedPixelMode(pixelMode)) {
+                IkGuiInternal.reportError(
+                        log, "Unexpected pixel mode {} for font {}", pixelMode, font.name);
+                return null;
+            }
+            // Rows can be padded, and are stored bottom up when the pitch is negative
+            final int pitch = bitmap.pitch();
+            final int rowBytes = Math.abs(pitch);
+            for (int row = 0; row < height; ++row) {
+                final int rowStart = pitch >= 0 ? row * rowBytes : (height - 1 - row) * rowBytes;
+                for (int x = 0; x < width; ++x) {
+                    newContents.putInt(FontAtlas.atlasPixel(pixelMode, oldContents, rowStart, x));
+                }
             }
             newContents.flip();
 
@@ -957,6 +891,88 @@ public class FontAtlas {
 
         } finally {
             font.lock.unlock();
+        }
+    }
+
+    /**
+     * Whether we can convert FreeType bitmaps in a pixel mode.
+     *
+     * @param pixelMode The FreeType pixel mode.
+     * @return True if {@link #atlasPixel(int, ByteBuffer, int, int)} handles it.
+     */
+    private static boolean isSupportedPixelMode(int pixelMode) {
+        return switch (pixelMode) {
+            case FT_PIXEL_MODE_MONO,
+                            FT_PIXEL_MODE_GRAY2,
+                            FT_PIXEL_MODE_GRAY4,
+                            FT_PIXEL_MODE_GRAY,
+                            FT_PIXEL_MODE_LCD,
+                            FT_PIXEL_MODE_LCD_V,
+                            FT_PIXEL_MODE_BGRA ->
+                    true;
+            default -> false;
+        };
+    }
+
+    /**
+     * White with the given coverage as alpha, as an RGBA32 pixel. Text is tinted by multiplying, so
+     * glyph pixels are white and only their alpha says how much of the pixel the glyph covers.
+     * Anything else would darken the anti-aliased edges against the background.
+     *
+     * @param coverage How much of the pixel is covered, from 0 to 255.
+     * @return The pixel.
+     */
+    static int coveragePixel(int coverage) {
+        return 0xFFFFFF00 | (coverage & 0xFF);
+    }
+
+    /**
+     * Convert one pixel of a FreeType bitmap to an RGBA32 atlas pixel.
+     *
+     * @param pixelMode The FreeType pixel mode, which must be supported.
+     * @param bitmap The bitmap bytes.
+     * @param rowStart Where the pixel's row starts in the bitmap.
+     * @param x The pixel's column.
+     * @return The pixel.
+     */
+    static int atlasPixel(int pixelMode, @NonNull ByteBuffer bitmap, int rowStart, int x) {
+        switch (pixelMode) {
+            case FT_PIXEL_MODE_MONO:
+                {
+                    // Most significant bit first
+                    final int bits = bitmap.get(rowStart + x / 8) & 0xFF;
+                    return FontAtlas.coveragePixel(((bits >> (7 - x % 8)) & 0b1) == 1 ? 255 : 0);
+                }
+            case FT_PIXEL_MODE_GRAY2:
+                {
+                    final int bits = bitmap.get(rowStart + x / 4) & 0xFF;
+                    return FontAtlas.coveragePixel(((bits >> (6 - 2 * (x % 4))) & 0b11) * 255 / 3);
+                }
+            case FT_PIXEL_MODE_GRAY4:
+                {
+                    final int bits = bitmap.get(rowStart + x / 2) & 0xFF;
+                    return FontAtlas.coveragePixel(
+                            ((bits >> (4 - 4 * (x % 2))) & 0b1111) * 255 / 15);
+                }
+            case FT_PIXEL_MODE_GRAY:
+                // Bytes are signed in Java, so mask to get the coverage from 0 to 255
+                return FontAtlas.coveragePixel(bitmap.get(rowStart + x) & 0xFF);
+            case FT_PIXEL_MODE_LCD, FT_PIXEL_MODE_LCD_V:
+                // We never render subpixel glyphs, whose width counts each subpixel, so each
+                // subpixel's coverage is used as a pixel's
+                return FontAtlas.coveragePixel(bitmap.get(rowStart + x) & 0xFF);
+            case FT_PIXEL_MODE_BGRA:
+                {
+                    // Color glyphs, like emoji, keep their colors
+                    final int index = rowStart + x * 4;
+                    final int b = bitmap.get(index) & 0xFF;
+                    final int g = bitmap.get(index + 1) & 0xFF;
+                    final int r = bitmap.get(index + 2) & 0xFF;
+                    final int a = bitmap.get(index + 3) & 0xFF;
+                    return (r << 24) | (g << 16) | (b << 8) | a;
+                }
+            default:
+                return 0;
         }
     }
 

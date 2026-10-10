@@ -79,8 +79,11 @@ public class Font {
             int dpiFont = IkGui.getContext().dpiScaleFont;
             int dpiScreen = IkGui.getContext().dpiScaleScreen;
 
+            // Like Dear ImGui, the font size is the height of a line: the font's ascent plus its
+            // descent. A nominal (em) size would make the glyphs taller than the line, which
+            // pushes text up in its line and clips the bottoms of letters.
             sizeRequest.set(
-                    FT_SIZE_REQUEST_TYPE_NOMINAL,
+                    FT_SIZE_REQUEST_TYPE_REAL_DIM,
                     0,
                     (long) (fontSize * (dpiFont / 72f) * 64),
                     dpiScreen,

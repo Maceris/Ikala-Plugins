@@ -61,9 +61,17 @@ class IkGuiFontMetricsTest {
         IkGui.setFont("NotoSans", FONT_SIZE);
     }
 
-    /** The size of an em in pixels, for a font size. */
-    private float emPixels(int fontSize) {
+    /** The height of a line in pixels, for a font size. */
+    private float linePixels(int fontSize) {
         return fontSize * (float) context.dpiScaleScreen / context.dpiScaleFont;
+    }
+
+    /**
+     * The size of an em in pixels, for a font size. The font size is the line height, which is the
+     * font's ascent plus its descent, so the em is smaller.
+     */
+    private float emPixels(int fontSize) {
+        return linePixels(fontSize) * UNITS_PER_EM / (ASCENDER - DESCENDER);
     }
 
     @Test
@@ -158,6 +166,61 @@ class IkGuiFontMetricsTest {
         }
         // Descenders stay inside the line
         assertTrue(expected - metrics.descent() <= 100 + lineHeight + 1.0f);
+    }
+
+    /**
+     * The top and bottom of every glyph's quad.
+     *
+     * @param text The text, without spaces so that every character has a quad.
+     * @param posY The top of the text.
+     * @return The smallest top and the largest bottom.
+     */
+    private float[] glyphExtent(String text, float posY) {
+        final DrawList drawList = new DrawList("Test");
+        drawList.addText(FONT_SIZE, 10, posY, Color.WHITE, text);
+        drawList.prepareForRender();
+
+        float top = Float.MAX_VALUE;
+        float bottom = -Float.MAX_VALUE;
+        final int count = drawList.commandBuffer.limit() / DrawData.SIZE_OF_DRAW_COMMAND;
+        int glyph = 0;
+        for (int i = 0; i < count; ++i) {
+            final int offset = i * DrawData.SIZE_OF_DRAW_COMMAND;
+            if (drawList.commandBuffer.getInt(offset + 16)
+                    != DrawList.ElementType.TEXT.getTypeID()) {
+                continue;
+            }
+            final int point = drawList.commandBuffer.getInt(offset) * DrawData.SIZE_OF_POINT;
+            final float quadMinY = drawList.pointBuffer.getFloat(point + 4);
+            final FontAtlas.CharInfo info =
+                    context.io.fonts.getFontMapInfo(text.charAt(glyph++), FONT_SIZE).orElseThrow();
+            top = Math.min(top, quadMinY);
+            bottom = Math.max(bottom, quadMinY + info.height);
+        }
+        return new float[] {top, bottom};
+    }
+
+    @Test
+    void testGlyphsFitInTheLine() throws IOException {
+        loadTestFont();
+        final float lineHeight = IkGuiInternal.getFontSize();
+        // Capitals with accents reach the highest, and descenders the lowest
+        final float[] extent = glyphExtent("ÁÉÍgjpqy", 100);
+        assertTrue(extent[0] >= 100, "Glyph tops are inside the line, was " + extent[0]);
+        assertTrue(
+                extent[1] <= 100 + lineHeight,
+                "Glyph bottoms are inside the line, was " + extent[1]);
+    }
+
+    @Test
+    void testCapitalsAreNearTheMiddleOfTheLine() throws IOException {
+        loadTestFont();
+        final float lineHeight = IkGuiInternal.getFontSize();
+        // A capital without descenders or accents, whose middle should be close to the line's
+        final float[] extent = glyphExtent("H", 100);
+        final float middle = (extent[0] + extent[1]) / 2;
+        // The descent sits below, so capitals are a little above the middle, but not by much
+        assertEquals(100 + lineHeight / 2, middle, lineHeight * 0.2f);
     }
 
     @Test
