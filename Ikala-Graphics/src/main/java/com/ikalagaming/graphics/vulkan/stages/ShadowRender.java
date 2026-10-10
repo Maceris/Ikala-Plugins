@@ -30,6 +30,19 @@ import java.util.Arrays;
 @Slf4j
 public class ShadowRender implements RenderStage {
 
+    /**
+     * How far every surface is pushed from the light in the shadow maps, in units of the smallest
+     * depth step at its depth. Tiny with a 32-bit float depth buffer; the slope term does the work.
+     */
+    private static final float DEPTH_BIAS_CONSTANT = 1;
+
+    /**
+     * How far surfaces are pushed from the light per unit of their depth slope across a texel, so a
+     * surface nearly edge-on to the sun, which spans a wide depth range within one texel, doesn't
+     * shadow itself. The light stage also offsets along the normal, see lights.frag.
+     */
+    private static final float DEPTH_BIAS_SLOPE = 1.5f;
+
     /** The shader to use for rendering. */
     @NonNull @Setter private ShaderVulkan shader;
 
@@ -461,13 +474,17 @@ public class ShadowRender implements RenderStage {
                     VkPipelineColorBlendStateCreateInfo.calloc(stack).sType$Default();
 
             // Back face culling like OpenGL. The viewport isn't flipped here, which flips the
-            // winding, so counter-clockwise faces in OpenGL are clockwise here.
+            // winding, so counter-clockwise faces in OpenGL are clockwise here. Depth is pushed
+            // away from the light, more on slopes, so lit surfaces don't shadow themselves.
             VkPipelineRasterizationStateCreateInfo rasterizationState =
                     VkPipelineRasterizationStateCreateInfo.calloc(stack)
                             .sType$Default()
                             .polygonMode(VK_POLYGON_MODE_FILL)
                             .cullMode(VK_CULL_MODE_BACK_BIT)
                             .frontFace(VK_FRONT_FACE_CLOCKWISE)
+                            .depthBiasEnable(true)
+                            .depthBiasConstantFactor(DEPTH_BIAS_CONSTANT)
+                            .depthBiasSlopeFactor(DEPTH_BIAS_SLOPE)
                             .lineWidth(1.0f);
             VkPipelineMultisampleStateCreateInfo multisampleState =
                     VkPipelineMultisampleStateCreateInfo.calloc(stack)

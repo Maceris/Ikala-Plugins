@@ -464,12 +464,15 @@ public class ShaderBindings {
             /** The distance to the split. */
             public static final int SPLIT_DISTANCE = 4 * 4 * Float.BYTES;
 
+            /** How wide one texel of the cascade's shadow map is, in meters. */
+            public static final int TEXEL_SIZE = SPLIT_DISTANCE + Float.BYTES;
+
             /**
              * The distance between elements of an array of these structs. Array elements are padded
              * out to 16 bytes under std140 rules.
              */
             public static final int ARRAY_STRIDE =
-                    (int) SharedBuffer.align(SPLIT_DISTANCE + Float.BYTES);
+                    (int) SharedBuffer.align(TEXEL_SIZE + Float.BYTES);
 
             /** Private constructor so this class is not instantiated. */
             private CascadeShadow() {

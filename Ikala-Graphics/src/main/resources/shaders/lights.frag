@@ -20,8 +20,14 @@ const float FIRST_SLICE_DEPTH = 1.0;
 const float HEAT_MAP_FULL = 32.0;
 // How much of the heat map color covers the lit color
 const float HEAT_MAP_OPACITY = 0.6;
-const float BIAS = 0.0005;
+// How much of the sun is left in full shadow, standing in for light bounced off the surroundings
 const float SHADOW_FACTOR = 0.35;
+// How far to move a point out along its normal before looking it up in a shadow map, in texels of
+// that map, so a lit surface doesn't shadow itself
+const float NORMAL_OFFSET_TEXELS = 1.5;
+// How much of each cascade's slice, at its far end, blends into the next cascade, or for the last
+// one into no shadow, so the change in detail doesn't show as a line
+const float CASCADE_BLEND = 0.1;
 const float PI = 3.1415926535897932384626433832795;
 
 layout(location = 0) in vec2 outTextCoord;
@@ -64,7 +70,10 @@ struct Fog
 
 struct CascadeShadow {
     mat4 projViewMatrix;
+    // The view space z of the far end of the cascade's slice, so negative
     float splitDistance;
+    // How wide one texel of the cascade's shadow map is, in meters
+    float texelSize;
 };
 
 struct Material
@@ -304,33 +313,87 @@ vec3 heatColor(uint count) {
         : mix(vec3(0, 1, 0), vec3(1, 0, 0), heat * 2.0 - 1.0);
 }
 
-float textureProj(vec4 shadowCoord, vec2 offset, int idx) {
-    float shadow = 1.0;
+// How much of the sun reaches a point through one cascade, from 0 in full shadow to 1, filtered over
+// a 3 by 3 grid of bilinear taps, which read a 4 by 4 block of texels with four gathers. Below 0 if
+// the point is outside the cascade's shadow map.
+float cascadeVisibility(vec3 renderPosition, vec3 renderNormal, int idx) {
+    CascadeShadow cascade = cascadeShadowSplits[idx];
+    vec3 offset = renderNormal * (cascade.texelSize * NORMAL_OFFSET_TEXELS);
+    vec4 shadowMapPosition = cascade.projViewMatrix * vec4(renderPosition + offset, 1);
+    // The shadow maps aren't drawn with a flipped viewport, and Vulkan depth is already [0, 1]
+    vec3 ndc = shadowMapPosition.xyz / shadowMapPosition.w;
+    vec2 uv = ndc.xy * 0.5 + 0.5;
+    if (any(lessThan(uv, vec2(0))) || any(greaterThan(uv, vec2(1)))) {
+        return -1.0;
+    }
+    // Further toward the sun than the map reaches, nothing can shadow it; past its far end,
+    // nothing was drawn
+    if (ndc.z <= 0.0 || ndc.z >= 1.0) {
+        return 1.0;
+    }
+    int map = idx == 0 ? shadowMap0Index : (idx == 1 ? shadowMap1Index : shadowMap2Index);
+    vec2 size = vec2(textureSize(bindlessTextures[nonuniformEXT(map)], 0));
+    vec2 texel = uv * size - 0.5;
+    vec2 base = floor(texel);
+    vec2 fraction = texel - base;
 
-    if (shadowCoord.z > -1.0 && shadowCoord.z < 1.0) {
-        float dist = 0.0;
-        if (idx == 0) {
-            dist = texture(bindlessTextures[nonuniformEXT(shadowMap0Index)], vec2(shadowCoord.xy + offset)).r;
-        } else if (idx == 1) {
-            dist = texture(bindlessTextures[nonuniformEXT(shadowMap1Index)], vec2(shadowCoord.xy + offset)).r;
-        } else {
-            dist = texture(bindlessTextures[nonuniformEXT(shadowMap2Index)], vec2(shadowCoord.xy + offset)).r;
-        }
-        if (shadowCoord.w > 0 && dist < shadowCoord.z - BIAS) {
-            shadow = SHADOW_FACTOR;
+    // Whether each texel of the 4 by 4 block from base - 1 lets the sun through
+    float lit[4][4];
+    for (int gy = 0; gy < 2; ++gy) {
+        for (int gx = 0; gx < 2; ++gx) {
+            // Between texels base - 1 + 2g and base + 2g, so the gather reads those four
+            vec2 at = (base + vec2(2 * gx, 2 * gy)) / size;
+            vec4 stored = textureGather(bindlessTextures[nonuniformEXT(map)], at, 0);
+            vec4 through = step(vec4(ndc.z), stored);
+            // Gathers come back as (left, bottom), (right, bottom), (right, top), (left, top),
+            // counting rows up from the lower one
+            lit[2 * gx][2 * gy + 1] = through.x;
+            lit[2 * gx + 1][2 * gy + 1] = through.y;
+            lit[2 * gx + 1][2 * gy] = through.z;
+            lit[2 * gx][2 * gy] = through.w;
         }
     }
-    return shadow;
+    float sum = 0.0;
+    for (int y = 0; y < 3; ++y) {
+        for (int x = 0; x < 3; ++x) {
+            sum += mix(
+                mix(lit[x][y], lit[x + 1][y], fraction.x),
+                mix(lit[x][y + 1], lit[x + 1][y + 1], fraction.x),
+                fraction.y);
+        }
+    }
+    return sum / 9.0;
 }
 
-float calcShadow(vec4 renderPosition, int idx) {
-    vec4 shadowMapPosition = cascadeShadowSplits[idx].projViewMatrix * renderPosition;
-    float shadow = 1.0;
-    vec4 ndc = shadowMapPosition / shadowMapPosition.w;
-    // The shadow maps aren't drawn with a flipped viewport, and Vulkan depth is already [0, 1]
-    vec4 shadowCoord = vec4(ndc.xy * 0.5 + 0.5, ndc.z, 1.0);
-    shadow = textureProj(shadowCoord, vec2(0, 0), idx);
-    return shadow;
+// How much of the sun reaches a point, from 0 in full shadow to 1. Past the shadow distance,
+// nothing is shadowed.
+float sunVisibility(vec3 viewPosition, vec3 renderPosition, vec3 renderNormal) {
+    float depth = -viewPosition.z;
+    float shadowDistance = -cascadeShadowSplits[NUM_CASCADES - 1].splitDistance;
+    if (depth >= shadowDistance) {
+        return 1.0;
+    }
+    // The splits get further away (more negative in view space), so use the last one we're past
+    int idx = 0;
+    for (int i = 0; i < NUM_CASCADES - 1; i++) {
+        if (viewPosition.z < cascadeShadowSplits[i].splitDistance) {
+            idx = i + 1;
+        }
+    }
+    float visibility = cascadeVisibility(renderPosition, renderNormal, idx);
+    if (visibility < 0) {
+        return 1.0;
+    }
+    float sliceStart = idx == 0 ? 0.0 : -cascadeShadowSplits[idx - 1].splitDistance;
+    float sliceEnd = -cascadeShadowSplits[idx].splitDistance;
+    float blendStart = sliceEnd - CASCADE_BLEND * (sliceEnd - sliceStart);
+    if (depth > blendStart) {
+        float next = idx + 1 < NUM_CASCADES ? cascadeVisibility(renderPosition, renderNormal, idx + 1) : 1.0;
+        if (next >= 0) {
+            visibility = mix(visibility, next, (depth - blendStart) / (sliceEnd - blendStart));
+        }
+    }
+    return visibility;
 }
 
 void main()
@@ -357,15 +420,9 @@ void main()
     // Render space is world space moved so the camera is at the origin
     vec4 renderPosition = invViewMatrix * vec4(viewPosition, 1);
 
-    // The splits get further away (more negative in view space), so use the last one we're past
-    int cascadeIndex = 0;
-    for (int i = 0; i < NUM_CASCADES - 1; i++) {
-        if (viewPosition.z < cascadeShadowSplits[i].splitDistance) {
-            cascadeIndex = i + 1;
-        }
-    }
     // Only the directional light casts shadows
-    float shadowFactor = calcShadow(renderPosition, cascadeIndex);
+    vec3 renderNormal = normalize((invViewMatrix * vec4(normal, 0)).xyz);
+    float shadowFactor = mix(SHADOW_FACTOR, 1.0, sunVisibility(viewPosition, renderPosition.xyz, renderNormal));
     vec3 color = calcDirLight(baseColor.xyz, material, directionalLight, viewPosition, normal, tangent, bitangent)
         * shadowFactor;
 

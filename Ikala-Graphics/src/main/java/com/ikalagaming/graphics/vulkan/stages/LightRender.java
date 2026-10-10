@@ -284,6 +284,9 @@ public class LightRender implements RenderStage {
             uniformData.putFloat(
                     offset + ShaderBindings.Light.CascadeShadow.SPLIT_DISTANCE,
                     cascadeShadowSplits[i].getSplitDistance());
+            uniformData.putFloat(
+                    offset + ShaderBindings.Light.CascadeShadow.TEXEL_SIZE,
+                    cascadeShadowSplits[i].getTexelSize());
         }
 
         TextureInfoVulkan[] gBuffer = frameData.gBuffer.textures();
