@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.gui.windows;
 
 import com.ikalagaming.graphics.UI;
+import com.ikalagaming.graphics.gui.util.Color;
 import com.ikalagaming.graphics.ui.Align;
 import com.ikalagaming.graphics.ui.Anchors;
 import com.ikalagaming.graphics.ui.Canvas;
@@ -37,6 +38,24 @@ public final class ContainerShowcase {
     /** Cells in the virtual grid. */
     private static final int VIRTUAL_CELLS = 100_000;
 
+    /** Links to locked nodes: the default theme's border grey, without its transparency. */
+    private static final int LOCKED_LINE = Color.rgb(110, 110, 128);
+
+    /** The border of a locked node: darker than its links, so the node reads as out of reach. */
+    private static final int LOCKED_BORDER = Color.rgb(85, 85, 95);
+
+    /** The inside of a locked node: close to the window background. */
+    private static final int LOCKED_BACKGROUND = Color.rgb(26, 26, 32);
+
+    /** Done links and nodes: the default theme's ok green. */
+    private static final int DONE = Color.rgb(115, 230, 115);
+
+    /** How opaque the glow around a done node is. */
+    private static final float DONE_GLOW_OPACITY = 0.375f;
+
+    /** Done links while lit up: the default theme's warning yellow. */
+    private static final int DONE_RELATED = Color.rgb(255, 217, 77);
+
     /**
      * Styles for the showcase's graphs: locked and done links and nodes. The names are prefixed so
      * they don't clash with a game's own classes.
@@ -48,24 +67,24 @@ public final class ContainerShowcase {
                 .styleClass(
                         "showcase-locked",
                         Style.builder()
-                                .set(StyleKey.LINE, 0x6E6E80FF)
+                                .set(StyleKey.LINE, LOCKED_LINE)
                                 .set(StyleKey.DASH, List.of(6f, 4f))
-                                .set(StyleKey.BORDER, 0x55555FFF)
-                                .set(StyleKey.BACKGROUND, 0x1A1A20FF)
+                                .set(StyleKey.BORDER, LOCKED_BORDER)
+                                .set(StyleKey.BACKGROUND, LOCKED_BACKGROUND)
                                 .build())
                 .styleClass(
                         "showcase-done",
                         Style.builder()
-                                .set(StyleKey.LINE, 0x73E673FF)
+                                .set(StyleKey.LINE, DONE)
                                 .set(StyleKey.STROKES, 3f)
                                 .set(StyleKey.LINE_SIZE, Length.u(1))
                                 .set(StyleKey.STROKE_GAP, Length.u(1.5f))
                                 .set(StyleKey.CORNER, "chamfer 6")
-                                .set(StyleKey.BORDER, 0x73E673FF)
-                                .set(StyleKey.GLOW, 0x73E67360)
+                                .set(StyleKey.BORDER, DONE)
+                                .set(StyleKey.GLOW, Color.multiplyAlpha(DONE, DONE_GLOW_OPACITY))
                                 .state(
                                         StyleState.RELATED,
-                                        Style.builder().set(StyleKey.LINE, 0xFFD94DFF).build())
+                                        Style.builder().set(StyleKey.LINE, DONE_RELATED).build())
                                 .build())
                 .styleClass(
                         "showcase-arrow",

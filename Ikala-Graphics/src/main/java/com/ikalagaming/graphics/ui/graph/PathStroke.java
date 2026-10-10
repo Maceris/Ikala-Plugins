@@ -122,6 +122,46 @@ public record PathStroke(
     /** How many line pieces a rounded corner or a curve is flattened into. */
     private static final int CURVE_STEPS = 8;
 
+    /** The shortest an arrowhead gets, in pixels, so thin lines still get a visible one. */
+    private static final float MIN_ARROW_LENGTH = 6;
+
+    /** How long an arrowhead is for each pixel of line width. */
+    private static final float ARROW_LENGTH_PER_WIDTH = 4;
+
+    /** How wide an arrowhead's base is for each pixel of its length. */
+    private static final float ARROW_WIDTH_PER_LENGTH = 1;
+
+    /**
+     * How far apart the middles of the outermost parallel strokes are.
+     *
+     * @return The distance in pixels, 0 for a single stroke.
+     */
+    private float strokeSpread() {
+        return (Math.max(1, strokes) - 1) * (width + strokeGap);
+    }
+
+    /**
+     * How long the arrowheads are: in proportion to the line width, and wider by the spread of
+     * parallel strokes, so the base covers all of them.
+     *
+     * @return The length from base to tip, in pixels.
+     */
+    public float arrowLength() {
+        float single = Math.max(MIN_ARROW_LENGTH, width * ARROW_LENGTH_PER_WIDTH);
+        return single + strokeSpread() / ARROW_WIDTH_PER_LENGTH;
+    }
+
+    /**
+     * How far the strokes stop short of an end with an arrowhead, so they end under the arrowhead
+     * instead of poking out past its narrow tip. They stop half a line width past the base, so
+     * there is no gap between line and arrowhead.
+     *
+     * @return The distance from the tip, in pixels.
+     */
+    public float arrowTrim() {
+        return arrowLength() - width / 2;
+    }
+
     /**
      * Draw a path.
      *
@@ -133,22 +173,67 @@ public record PathStroke(
             return;
         }
         List<Vector2f> path = cornered(points, corner);
+        boolean startArrow = arrow == Arrow.START || arrow == Arrow.BOTH;
+        boolean endArrow = arrow == Arrow.END || arrow == Arrow.BOTH;
+        float trim = arrowTrim();
+        List<Vector2f> lines = trimmed(path, startArrow ? trim : 0, endArrow ? trim : 0);
         int count = Math.max(1, strokes);
-        for (int k = 0; k < count; ++k) {
+        for (int k = 0; k < count && lines.size() >= 2; ++k) {
             float distance = (k - (count - 1) / 2.0f) * (width + strokeGap);
-            List<Vector2f> line = distance == 0 ? path : offset(path, distance);
+            List<Vector2f> line = distance == 0 ? lines : offset(lines, distance);
             for (Segment segment : segments(line, dash)) {
                 drawList.addLine(
                         segment.x1(), segment.y1(), segment.x2(), segment.y2(), color, width);
             }
         }
-        float arrowSize = Math.max(6, width * 4) + (count - 1) * (width + strokeGap);
-        if (arrow == Arrow.END || arrow == Arrow.BOTH) {
-            drawArrow(drawList, path.get(path.size() - 2), path.getLast(), arrowSize);
+        // The arrowheads point along the untrimmed ends, with their tips on the path's ends
+        float length = arrowLength();
+        if (endArrow) {
+            drawArrow(drawList, path.get(path.size() - 2), path.getLast(), length);
         }
-        if (arrow == Arrow.START || arrow == Arrow.BOTH) {
-            drawArrow(drawList, path.get(1), path.getFirst(), arrowSize);
+        if (startArrow) {
+            drawArrow(drawList, path.get(1), path.getFirst(), length);
         }
+    }
+
+    /**
+     * Cut lengths off the ends of a polyline, measured along it.
+     *
+     * @param points The polyline.
+     * @param fromStart How much to cut off the start.
+     * @param fromEnd How much to cut off the end.
+     * @return The shorter polyline, or an empty list if nothing is left.
+     */
+    public static List<Vector2f> trimmed(
+            @NonNull List<Vector2f> points, float fromStart, float fromEnd) {
+        if (fromStart <= 0 && fromEnd <= 0) {
+            return points;
+        }
+        float total = 0;
+        for (int i = 0; i + 1 < points.size(); ++i) {
+            total += points.get(i).distance(points.get(i + 1));
+        }
+        float start = Math.max(0, fromStart);
+        float end = total - Math.max(0, fromEnd);
+        if (end - start <= 1e-4f) {
+            return List.of();
+        }
+        List<Vector2f> result = new ArrayList<>();
+        float walked = 0;
+        for (int i = 0; i + 1 < points.size(); ++i) {
+            Vector2f from = points.get(i);
+            Vector2f to = points.get(i + 1);
+            float length = from.distance(to);
+            float next = walked + length;
+            if (next > start && walked < end && length > 0) {
+                if (result.isEmpty()) {
+                    result.add(new Vector2f(from).lerp(to, Math.max(0, start - walked) / length));
+                }
+                result.add(new Vector2f(from).lerp(to, (Math.min(end, next) - walked) / length));
+            }
+            walked = next;
+        }
+        return result;
     }
 
     /**
@@ -188,7 +273,7 @@ public record PathStroke(
         dy /= length;
         float baseX = tip.x - dx * size;
         float baseY = tip.y - dy * size;
-        float half = size * 0.5f;
+        float half = size * ARROW_WIDTH_PER_LENGTH / 2;
         drawList.addTriangleFilled(
                 tip.x,
                 tip.y,

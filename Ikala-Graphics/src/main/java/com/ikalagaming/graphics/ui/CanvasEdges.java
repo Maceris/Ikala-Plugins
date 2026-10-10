@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.ui;
 
 import com.ikalagaming.graphics.gui.data.DrawList;
 import com.ikalagaming.graphics.ui.graph.Edge;
+import com.ikalagaming.graphics.ui.graph.GraphColors;
 import com.ikalagaming.graphics.ui.graph.Highlight;
 import com.ikalagaming.graphics.ui.graph.PathStroke;
 import com.ikalagaming.graphics.ui.graph.Port;
@@ -23,10 +24,10 @@ import java.util.Set;
 /** Routes, styles and draws the links between a canvas's children. */
 final class CanvasEdges {
     /** The line color when the theme doesn't set one. */
-    static final int DEFAULT_LINE = 0x8C8C8CFF;
+    static final int DEFAULT_LINE = GraphColors.LINE;
 
     /** The line color of related links when the theme doesn't set one. */
-    static final int DEFAULT_RELATED_LINE = 0xFFC83CFF;
+    static final int DEFAULT_RELATED_LINE = GraphColors.HIGHLIGHT;
 
     /** The line width when the theme doesn't set one, in UI units. */
     static final float DEFAULT_SIZE = 2;

@@ -219,6 +219,58 @@ class GraphGeometryTest {
     }
 
     @Test
+    void pathsAreTrimmedAlongTheirLength() {
+        List<Vector2f> line = List.of(new Vector2f(0, 0), new Vector2f(100, 0));
+        List<Vector2f> trimmed = PathStroke.trimmed(line, 10, 20);
+        assertEquals(2, trimmed.size());
+        assertPoint(10, 0, trimmed.get(0));
+        assertPoint(80, 0, trimmed.get(1));
+        assertEquals(line, PathStroke.trimmed(line, 0, 0));
+
+        // Trimming walks around corners, dropping the pieces it passes
+        List<Vector2f> corner =
+                List.of(new Vector2f(0, 0), new Vector2f(10, 0), new Vector2f(10, 10));
+        List<Vector2f> shortEnd = PathStroke.trimmed(corner, 0, 15);
+        assertEquals(2, shortEnd.size());
+        assertPoint(0, 0, shortEnd.get(0));
+        assertPoint(5, 0, shortEnd.get(1));
+        List<Vector2f> shortStart = PathStroke.trimmed(corner, 12, 0);
+        assertEquals(2, shortStart.size());
+        assertPoint(10, 2, shortStart.get(0));
+        assertPoint(10, 10, shortStart.get(1));
+
+        assertTrue(PathStroke.trimmed(line, 60, 60).isEmpty());
+    }
+
+    @Test
+    void arrowheadsCoverTheStrokesTheyEnd() {
+        float width = 3;
+        float gap = 1.5f;
+        int strokes = 3;
+        PathStroke stroke =
+                new PathStroke(
+                        width,
+                        0,
+                        null,
+                        strokes,
+                        gap,
+                        PathStroke.Corner.SHARP,
+                        PathStroke.Arrow.END);
+        float spread = (strokes - 1) * (width + gap);
+        // Four line widths long, plus the spread of the parallel strokes
+        assertEquals(4 * width + spread, stroke.arrowLength(), 1e-4);
+        // The strokes stop half a line width behind the base
+        assertEquals(stroke.arrowLength() - width / 2, stroke.arrowTrim(), 1e-4);
+        // Where they stop, the arrowhead (as wide as it is long from the tip) covers all of them
+        assertTrue(stroke.arrowTrim() >= spread + width);
+
+        // Thin lines still get an arrowhead big enough to see
+        PathStroke thin =
+                new PathStroke(1, 0, null, 1, 0, PathStroke.Corner.SHARP, PathStroke.Arrow.END);
+        assertEquals(6, thin.arrowLength(), 1e-4);
+    }
+
+    @Test
     void stylesParseCornersAndArrows() {
         assertEquals(
                 new PathStroke.Corner(PathStroke.CornerKind.ROUND, 12),

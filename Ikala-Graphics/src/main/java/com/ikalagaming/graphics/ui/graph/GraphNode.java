@@ -56,19 +56,19 @@ public class GraphNode extends CustomItem<GraphNode> {
     }
 
     /** The frame color when the theme doesn't set one. */
-    private static final int DEFAULT_BACKGROUND = 0x2B2B30FF;
+    private static final int DEFAULT_BACKGROUND = GraphColors.NODE_BACKGROUND;
 
     /** The border color when the theme doesn't set one. */
-    private static final int DEFAULT_BORDER = 0x8C8C8CFF;
+    private static final int DEFAULT_BORDER = GraphColors.LINE;
 
     /** The badge color when the theme doesn't set one. */
-    private static final int DEFAULT_ACCENT = 0xFFC83CFF;
+    private static final int DEFAULT_ACCENT = GraphColors.HIGHLIGHT;
 
     /** The badge text color. */
-    private static final int BADGE_TEXT = 0x141414FF;
+    private static final int BADGE_TEXT = GraphColors.BADGE_TEXT;
 
     /** The label color when the theme doesn't set one. */
-    private static final int DEFAULT_TEXT = 0xFFFFFFFF;
+    private static final int DEFAULT_TEXT = GraphColors.TEXT;
 
     /** The border width when the theme doesn't set one, in UI units. */
     private static final float DEFAULT_BORDER_SIZE = 2;
