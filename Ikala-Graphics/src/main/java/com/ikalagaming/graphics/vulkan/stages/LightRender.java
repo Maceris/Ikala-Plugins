@@ -268,7 +268,8 @@ public class LightRender implements RenderStage {
         Fog fog = scene.getFog();
         offset = ShaderBindings.Light.FOG_OFFSET;
         fog.getColor().get(offset + ShaderBindings.Light.Fog.COLOR, uniformData);
-        uniformData.putFloat(offset + ShaderBindings.Light.Fog.DENSITY, fog.getDensity());
+        uniformData.putFloat(
+                offset + ShaderBindings.Light.Fog.DENSITY, fog.getDensity() * Fog.DENSITY_SCALE);
         uniformData.putInt(offset + ShaderBindings.Light.Fog.ENABLED, fog.isActive() ? 1 : 0);
 
         CascadeShadowSplit[] cascadeShadowSplits = frameData.cascadeShadowSplits;
