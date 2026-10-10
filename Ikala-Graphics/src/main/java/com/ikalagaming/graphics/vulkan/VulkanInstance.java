@@ -1201,25 +1201,27 @@ public class VulkanInstance {
     }
 
     /**
-     * Set up the default filter shader.
+     * Set up the default filter shader, and the debug views that show the g-buffer instead.
      *
-     * @throws ShaderException If the default filter could not be found or loaded properly.
+     * @throws ShaderException If a filter could not be found or loaded properly.
      */
     private void initializeFilterShader() {
-        List<ShaderVulkan.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
-        shaderModuleDataList.add(
-                new ShaderVulkan.ShaderModuleData(
-                        "shaders/filters/default.vert",
-                        ShaderVulkan.Type.VERTEX,
-                        ShaderVulkan.Location.BUNDLED));
-        shaderModuleDataList.add(
-                new ShaderVulkan.ShaderModuleData(
-                        "shaders/filters/default.frag",
-                        ShaderVulkan.Type.FRAGMENT,
-                        ShaderVulkan.Location.BUNDLED));
-        var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
+        for (FilterView view : FilterView.values()) {
+            List<ShaderVulkan.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
+            shaderModuleDataList.add(
+                    new ShaderVulkan.ShaderModuleData(
+                            "shaders/filters/default.vert",
+                            ShaderVulkan.Type.VERTEX,
+                            ShaderVulkan.Location.BUNDLED));
+            shaderModuleDataList.add(
+                    new ShaderVulkan.ShaderModuleData(
+                            view.getFragmentShader(),
+                            ShaderVulkan.Type.FRAGMENT,
+                            ShaderVulkan.Location.BUNDLED));
+            var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
 
-        shaderMap.addShader(RenderStage.Type.FILTER, shaderProgram);
+            shaderMap.addShader(view.getShaderType(), shaderProgram);
+        }
     }
 
     /**
@@ -1878,6 +1880,25 @@ public class VulkanInstance {
         checkError(vkDeviceWaitIdle(state.device.logical));
         renderConfig = config;
         pipeline = pipelineManager.getPipeline(config);
+    }
+
+    /**
+     * Fetch what the filter stage currently shows.
+     *
+     * @return The current filter view.
+     */
+    public FilterView getFilterView() {
+        return pipelineManager.getFilterView();
+    }
+
+    /**
+     * Change what the filter stage shows, starting next frame. Only has an effect while the
+     * pipeline has a filter stage.
+     *
+     * @param view The view to show.
+     */
+    public void setFilterView(@NonNull FilterView view) {
+        pipelineManager.setFilterView(view);
     }
 
     /**

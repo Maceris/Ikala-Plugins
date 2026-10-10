@@ -9,12 +9,14 @@ import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.component.Checkbox;
 import com.ikalagaming.graphics.gui.component.GuiWindow;
 import com.ikalagaming.graphics.gui.component.Slider;
+import com.ikalagaming.graphics.gui.data.IkInt;
 import com.ikalagaming.graphics.gui.enums.Condition;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.gui.util.Alignment;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
+import com.ikalagaming.graphics.vulkan.FilterView;
 import com.ikalagaming.graphics.vulkan.InstanceRegistry;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
 
@@ -45,6 +47,21 @@ public class GraphicsDebug extends GuiWindow {
     private final Slider directionalLightZ;
     private final Slider directionalLightIntensity;
 
+    /** The display names of the filter views, in ordinal order. */
+    private final String[] filterViewNames;
+
+    /** The selected filter view's ordinal. */
+    private final IkInt filterView;
+
+    /** Whether the filter view selection changed this frame. */
+    private boolean filterViewChanged;
+
+    /**
+     * Whether we added the filter stage to show a g-buffer view, so we can take it back out when
+     * going back to the default.
+     */
+    private boolean addedFilterStage;
+
     public GraphicsDebug() {
         super(WINDOW_NAME, WindowFlags.NONE);
         setScale(0.34f, 0.45f);
@@ -69,6 +86,12 @@ public class GraphicsDebug extends GuiWindow {
         directionalLightY = new Slider("Directional Light Y", 0, -1, 1);
         directionalLightZ = new Slider("Directional Light Z", 0, -1, 1);
         directionalLightIntensity = new Slider("Directional Light Intensity", 0, 0, 4f);
+        FilterView[] views = FilterView.values();
+        filterViewNames = new String[views.length];
+        for (int i = 0; i < views.length; ++i) {
+            filterViewNames[i] = views[i].getDisplayName();
+        }
+        filterView = new IkInt(FilterView.DEFAULT.ordinal());
 
         addChild(fogEnabled);
         addChild(fogDensity);
@@ -231,6 +254,12 @@ public class GraphicsDebug extends GuiWindow {
                 IkGui.textWrapped(
                         "Culling, level of detail and streaming use the observer, so freeze it to"
                                 + " inspect them from outside.");
+                if (IkGui.combo("Filter", filterView, filterViewNames)) {
+                    filterViewChanged = true;
+                }
+                IkGui.textWrapped(
+                        "The filter can show a g-buffer texture instead of the lit scene. The"
+                                + " g-buffer is only drawn while rendering the scene.");
             }
 
             if (IkGui.collapsingHeader("Retained UI")) {
@@ -301,6 +330,39 @@ public class GraphicsDebug extends GuiWindow {
         }
     }
 
+    /**
+     * Apply a change to the filter view selection. G-buffer views add the filter stage to the
+     * pipeline if it's missing, and going back to the default removes it again if we added it.
+     */
+    private void handleFilterInput() {
+        if (!filterViewChanged) {
+            return;
+        }
+        filterViewChanged = false;
+        final VulkanInstance renderer = GraphicsManager.getRenderInstance();
+        if (renderer == null) {
+            return;
+        }
+        final FilterView view = FilterView.values()[filterView.get()];
+        renderer.setFilterView(view);
+
+        final int config = GraphicsManager.getPipelineConfig();
+        if (view != FilterView.DEFAULT) {
+            // The filter needs something to run over, or the config is an error
+            if (!RenderConfig.hasFilterStage(config)
+                    && (RenderConfig.hasSceneStage(config)
+                            || RenderConfig.hasSkyboxStage(config))) {
+                GraphicsManager.swapPipeline(RenderConfig.builder(config).withFilter().build());
+                addedFilterStage = true;
+            }
+        } else if (addedFilterStage) {
+            if (RenderConfig.hasFilterStage(config)) {
+                GraphicsManager.swapPipeline(RenderConfig.builder(config).withoutFilter().build());
+            }
+            addedFilterStage = false;
+        }
+    }
+
     @Override
     public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
         super.handleGuiInput(scene, window);
@@ -320,6 +382,7 @@ public class GraphicsDebug extends GuiWindow {
             GraphicsManager.swapPipeline(builder.build());
         }
         handleDebugInput(scene);
+        handleFilterInput();
         if (showUiShowcase.checkResult()) {
             UiShowcase.setShown(showUiShowcase.getState());
         }
@@ -351,6 +414,10 @@ public class GraphicsDebug extends GuiWindow {
         fogEnabled.setState(scene.getFog().isActive());
         int config = GraphicsManager.getPipelineConfig();
         wireframeEnabled.setState(RenderConfig.sceneIsWireframe(config));
+        final VulkanInstance renderer = GraphicsManager.getRenderInstance();
+        if (renderer != null) {
+            filterView.set(renderer.getFilterView().ordinal());
+        }
 
         DirectionalLight directionalLight = scene.getSceneLights().getDirLight();
         Vector3f directionalLightDir = directionalLight.getDirection();

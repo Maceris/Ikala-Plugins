@@ -10,6 +10,7 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.*;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -20,18 +21,24 @@ import org.lwjgl.vulkan.*;
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
 import java.util.Arrays;
+import java.util.EnumMap;
+import java.util.Map;
 
 /**
  * Runs a post-processing filter over the lit scene, from the pre-filter image to the final image.
  * Unlike OpenGL, filters can also read the g-buffer through the bindless texture array, along with
  * the camera matrices, which helps with screen space effects. See the default filter shader for the
- * inputs.
+ * inputs. There is a pipeline for each {@link FilterView}, so the debug views can be swapped in
+ * without rebuilding anything.
  */
 @Slf4j
 public class FilterRender implements RenderStage {
 
-    /** The shader to use for rendering. */
-    @NonNull @Setter private ShaderVulkan shader;
+    /** The shader for each view. */
+    @NonNull private final Map<FilterView, ShaderVulkan> shaders;
+
+    /** What to show, picks the pipeline we render with. */
+    @NonNull @Getter @Setter private FilterView view;
 
     /** A mesh for rendering onto. */
     @NonNull private final QuadMesh quadMesh;
@@ -42,8 +49,8 @@ public class FilterRender implements RenderStage {
     /** VkPipelineLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long pipelineLayout;
 
-    /** VkPipeline pointer, will be VK_NULL_HANDLE if not set up. */
-    private long pipeline;
+    /** VkPipeline pointer for each view, by ordinal. VK_NULL_HANDLE if not set up. */
+    private final long[] pipelines;
 
     /** VkDescriptorPool pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorPool;
@@ -60,15 +67,24 @@ public class FilterRender implements RenderStage {
     /**
      * Set up the filter render stage.
      *
-     * @param shader The shader to use for rendering.
+     * @param shaders The shader for each view, which must include every view.
      * @param quadMesh The mesh to render onto.
      */
-    public FilterRender(final @NonNull ShaderVulkan shader, final @NonNull QuadMesh quadMesh) {
-        this.shader = shader;
+    public FilterRender(
+            final @NonNull Map<FilterView, ShaderVulkan> shaders,
+            final @NonNull QuadMesh quadMesh) {
+        for (FilterView filterView : FilterView.values()) {
+            if (!shaders.containsKey(filterView)) {
+                throw new IllegalArgumentException("Missing filter shader for " + filterView);
+            }
+        }
+        this.shaders = new EnumMap<>(shaders);
+        this.view = FilterView.DEFAULT;
         this.quadMesh = quadMesh;
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
-        this.pipeline = VK_NULL_HANDLE;
+        this.pipelines = new long[FilterView.values().length];
+        Arrays.fill(pipelines, VK_NULL_HANDLE);
         this.descriptorPool = VK_NULL_HANDLE;
         this.descriptorSets = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
         this.writtenViews = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
@@ -78,7 +94,9 @@ public class FilterRender implements RenderStage {
     public void initialize(@NonNull VulkanState vulkanState) {
         log.debug("Initializing filter render");
         createPipelineLayout(vulkanState);
-        createPipeline(vulkanState);
+        for (FilterView filterView : FilterView.values()) {
+            pipelines[filterView.ordinal()] = createPipeline(vulkanState, shaders.get(filterView));
+        }
     }
 
     @Override
@@ -88,8 +106,10 @@ public class FilterRender implements RenderStage {
         Arrays.fill(writtenViews, VK_NULL_HANDLE);
         vkDestroyDescriptorPool(vulkanState.device.logical, descriptorPool, null);
         descriptorPool = VK_NULL_HANDLE;
-        vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
-        pipeline = VK_NULL_HANDLE;
+        for (int i = 0; i < pipelines.length; i++) {
+            vkDestroyPipeline(vulkanState.device.logical, pipelines[i], null);
+            pipelines[i] = VK_NULL_HANDLE;
+        }
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
         pipelineLayout = VK_NULL_HANDLE;
         vkDestroyDescriptorSetLayout(vulkanState.device.logical, descriptorSetLayout, null);
@@ -170,7 +190,8 @@ public class FilterRender implements RenderStage {
             vkCmdBeginRendering(commandBuffer, renderingInfo);
 
             if (width > 0 && height > 0) {
-                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+                vkCmdBindPipeline(
+                        commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[view.ordinal()]);
 
                 VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
                 viewports.get(0).width(width).height(height).minDepth(0).maxDepth(1);
@@ -429,7 +450,14 @@ public class FilterRender implements RenderStage {
         }
     }
 
-    private void createPipeline(@NonNull VulkanState state) {
+    /**
+     * Create a pipeline that runs the given filter shader.
+     *
+     * @param state The Vulkan state.
+     * @param shader The filter shader.
+     * @return The VkPipeline.
+     */
+    private long createPipeline(@NonNull VulkanState state, @NonNull ShaderVulkan shader) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
@@ -547,7 +575,7 @@ public class FilterRender implements RenderStage {
                             null,
                             longOutput));
 
-            pipeline = longOutput.get(0);
+            return longOutput.get(0);
         }
     }
 }

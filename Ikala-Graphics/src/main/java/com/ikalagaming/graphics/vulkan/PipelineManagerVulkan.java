@@ -115,7 +115,11 @@ public class PipelineManagerVulkan {
         stageLightRender.initialize(state);
         stageAnimationRender = new AnimationRender(shaders.getShader(RenderStage.Type.ANIMATION));
         stageAnimationRender.initialize(state);
-        stageFilterRender = new FilterRender(shaders.getShader(RenderStage.Type.FILTER), quadMesh);
+        Map<FilterView, ShaderVulkan> filterShaders = new EnumMap<>(FilterView.class);
+        for (FilterView view : FilterView.values()) {
+            filterShaders.put(view, shaders.getShader(view.getShaderType()));
+        }
+        stageFilterRender = new FilterRender(filterShaders, quadMesh);
         stageFilterRender.initialize(state);
         stageDebugRender =
                 new DebugRender(
@@ -660,6 +664,24 @@ public class PipelineManagerVulkan {
 
     public PipelineVulkan getPipeline(final int configuration) {
         return renderers.computeIfAbsent(configuration, this::buildPipeline);
+    }
+
+    /**
+     * Fetch what the filter stage currently shows.
+     *
+     * @return The current filter view.
+     */
+    public FilterView getFilterView() {
+        return stageFilterRender.getView();
+    }
+
+    /**
+     * Change what the filter stage shows, starting next frame.
+     *
+     * @param view The view to show.
+     */
+    public void setFilterView(@NonNull FilterView view) {
+        stageFilterRender.setView(view);
     }
 
     /**
