@@ -54,7 +54,6 @@ dependencies {
 	compileOnly project(':RPG-Item')
 	compileOnly project(':Ikala-Attributes')
 	compileOnly project(':Random')
-	compileOnly project(':Ikala-Database')
 	compileOnly project(':RPG-Inventory')
 	compileOnly project(':EntityComponentSystem')
 	compileOnly project(':RPG-World')

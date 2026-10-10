@@ -9,7 +9,6 @@ import com.ikalagaming.rpg.item.Affix;
 import com.ikalagaming.rpg.item.Equipment;
 import com.ikalagaming.rpg.item.Item;
 import com.ikalagaming.rpg.item.ItemCatalog;
-import com.ikalagaming.rpg.item.ItemPersistence;
 import com.ikalagaming.rpg.item.ItemRoller;
 import com.ikalagaming.rpg.item.template.AccessoryTemplate;
 import com.ikalagaming.rpg.item.template.ArmorTemplate;
@@ -241,11 +240,6 @@ public class ItemCatalogWindow implements GUIWindow {
     @Override
     public void setup(@NonNull Scene scene) {
         catalog = ItemCatalog.getInstance();
-
-        ItemPersistence persist = new ItemPersistence();
-
-        persist.loadContext();
-        persist.fetchAffix();
 
         catalog.getAccessoryTemplates().add(ItemGenerator.getAccessoryTemplate());
         catalog.getAccessoryTemplates().add(ItemGenerator.getAccessoryTemplate());

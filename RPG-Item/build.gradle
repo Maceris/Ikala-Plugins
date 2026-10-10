@@ -52,7 +52,6 @@ dependencies {
 	compileOnly project(':Ikala-Core')
 	compileOnly project(':Ikala-Attributes')
 	compileOnly project(':Random')
-	compileOnly project(':Ikala-Database')
 
 	// Testing
 	testImplementation project(':Ikala-Core')
@@ -60,8 +59,7 @@ dependencies {
 	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 	testImplementation project(':Ikala-Attributes')
 	testImplementation project(':Random')
-	testImplementation project(':Ikala-Database')
-	
+
 	// lombok
 	compileOnly "org.projectlombok:lombok:${lombokVersion}"
 	annotationProcessor "org.projectlombok:lombok:${lombokVersion}"

@@ -7,7 +7,6 @@ main-class: com.ikalagaming.rpg.GUIPlugin
 dependencies:
   - EntityComponentSystem
   - Ikala-Attributes
-  - Ikala-Database
   - Ikala-Graphics
   - RPG-Inventory
   - RPG-Item
