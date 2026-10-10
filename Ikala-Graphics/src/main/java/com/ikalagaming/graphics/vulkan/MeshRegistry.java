@@ -58,7 +58,10 @@ public class MeshRegistry {
     public record Retired(
             int slot, int vertexOffset, int vertexCount, int firstIndex, int indexCount) {}
 
-    /** The most vertices or indices the shared buffers can hold. */
+    /**
+     * The most vertices or indices the shared buffers can hold when no limit is given, leaving room
+     * for the allocator to double without overflowing an int.
+     */
     public static final int MAX_ELEMENTS = Integer.MAX_VALUE / 64;
 
     /** How many slots to add when the table runs out. */
@@ -140,8 +143,20 @@ public class MeshRegistry {
      * @param indexCapacity How many indices the shared buffers start out holding.
      */
     public MeshRegistry(int vertexCapacity, int indexCapacity) {
-        vertices = new RangeAllocator(vertexCapacity, MAX_ELEMENTS);
-        indices = new RangeAllocator(indexCapacity, MAX_ELEMENTS);
+        this(vertexCapacity, indexCapacity, MAX_ELEMENTS, MAX_ELEMENTS);
+    }
+
+    /**
+     * Create an empty registry with limits on how far the buffers can grow.
+     *
+     * @param vertexCapacity How many vertices the shared buffers start out holding.
+     * @param indexCapacity How many indices the shared buffers start out holding.
+     * @param maxVertices The most vertices the buffers can ever hold.
+     * @param maxIndices The most indices the buffers can ever hold.
+     */
+    public MeshRegistry(int vertexCapacity, int indexCapacity, int maxVertices, int maxIndices) {
+        vertices = new RangeAllocator(vertexCapacity, maxVertices);
+        indices = new RangeAllocator(indexCapacity, maxIndices);
     }
 
     /**

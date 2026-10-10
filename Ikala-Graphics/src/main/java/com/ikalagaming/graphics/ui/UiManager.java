@@ -517,6 +517,31 @@ public class UiManager {
         automation.afterDraw(getShownSurfaces());
     }
 
+    /**
+     * Whether every surface is hidden, so the scene can be seen, as a debugging aid. Their own
+     * visibility is kept, and comes back when this is turned off.
+     */
+    private volatile boolean surfacesHidden;
+
+    /**
+     * Hide or show every surface at once, for looking at the scene behind them. Safe from any
+     * thread.
+     *
+     * @param hidden Whether to hide them all.
+     */
+    public void setSurfacesHidden(boolean hidden) {
+        surfacesHidden = hidden;
+    }
+
+    /**
+     * Whether every surface is hidden.
+     *
+     * @return True if hidden by {@link #setSurfacesHidden(boolean)}.
+     */
+    public boolean isSurfacesHidden() {
+        return surfacesHidden;
+    }
+
     /** Lay out and submit every visible surface. */
     private void drawSurfaces() {
         if (hotReload) {
@@ -527,7 +552,7 @@ public class UiManager {
         // Kept current even with nothing shown, so a theme change is visible to readers at once
         final ActiveTheme theme =
                 activeTheme(variantsFor(viewport.workSize.x, viewport.workSize.y, scale));
-        if (surfaces.isEmpty()) {
+        if (surfaces.isEmpty() || surfacesHidden) {
             return;
         }
         final Style style = IkGui.getStyle();

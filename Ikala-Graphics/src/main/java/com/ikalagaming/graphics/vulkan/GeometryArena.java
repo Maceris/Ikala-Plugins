@@ -48,6 +48,22 @@ public class GeometryArena {
     /** How many indices the buffer starts out holding. */
     public static final int INITIAL_INDICES = 3 * INITIAL_VERTICES;
 
+    /**
+     * The largest a vertex or index buffer can grow, in bytes: 2 GiB, which desktop GPUs take as
+     * one buffer, and which keeps every byte offset within an int.
+     */
+    public static final long MAX_BUFFER_BYTES = Integer.MAX_VALUE;
+
+    /**
+     * The most elements of a size a buffer can hold.
+     *
+     * @param elementSize The size of one vertex or index, in bytes.
+     * @return The element limit.
+     */
+    static int maxElements(int elementSize) {
+        return (int) (MAX_BUFFER_BYTES / elementSize);
+    }
+
     /** Usage of the vertex buffer: drawn from, read by compute, and copied when it grows. */
     private static final int VERTEX_USAGE =
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
@@ -139,7 +155,12 @@ public class GeometryArena {
      */
     public GeometryArena(@NonNull VulkanState state, int vertexStride) {
         this.vertexStride = vertexStride;
-        registry = new MeshRegistry(INITIAL_VERTICES, INITIAL_INDICES);
+        registry =
+                new MeshRegistry(
+                        INITIAL_VERTICES,
+                        INITIAL_INDICES,
+                        maxElements(vertexStride),
+                        maxElements(Integer.BYTES));
         meshTable = new DeviceTable(state, "mesh", MESH_ENTRY_SIZE, 256);
         vertices =
                 SharedBuffer.allocateDeviceLocal(

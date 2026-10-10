@@ -171,14 +171,20 @@ public final class DeviceTable {
         entries.data.position(0).limit(count * entrySize);
         final StagingRing.Staging staging = state.stagingRing.stage(state, entries.data);
         state.deferFree(() -> state.stagingRing.free(state, staging));
-        VkBufferCopy.Buffer regions = VkBufferCopy.calloc(count, stack);
-        for (int i = 0; i < count; ++i) {
-            regions.get(i)
-                    .srcOffset(staging.offset() + (long) i * entrySize)
-                    .dstOffset((long) entries.indices[i] * entrySize)
-                    .size(entrySize);
+        // One region per entry can be far more than the stack holds, as when a whole world is
+        // placed
+        VkBufferCopy.Buffer regions = VkBufferCopy.calloc(count);
+        try {
+            for (int i = 0; i < count; ++i) {
+                regions.get(i)
+                        .srcOffset(staging.offset() + (long) i * entrySize)
+                        .dstOffset((long) entries.indices[i] * entrySize)
+                        .size(entrySize);
+            }
+            vkCmdCopyBuffer(commandBuffer, staging.buffer(), buffer.buffer, regions);
+        } finally {
+            regions.free();
         }
-        vkCmdCopyBuffer(commandBuffer, staging.buffer(), buffer.buffer, regions);
     }
 
     /**

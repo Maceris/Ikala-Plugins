@@ -36,4 +36,13 @@ public interface RenderStage {
     default void cleanup(@NonNull VulkanState state) {}
 
     void render(Scene scene, @NonNull Window window, @NonNull VulkanState state, int renderConfig);
+
+    /**
+     * What the stage is called in frame timings.
+     *
+     * @return The name, the class's simple name unless a stage says otherwise.
+     */
+    default String name() {
+        return getClass().getSimpleName();
+    }
 }

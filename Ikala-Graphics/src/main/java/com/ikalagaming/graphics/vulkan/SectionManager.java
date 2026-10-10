@@ -114,6 +114,9 @@ public class SectionManager {
         /** The instance placing the current bake, or null. */
         InstanceHandle instance;
 
+        /** Whether the last bake couldn't be uploaded, as when the buffers are full. */
+        boolean failed;
+
         Section(String owner) {
             this.owner = owner;
         }
@@ -404,7 +407,19 @@ public class SectionManager {
             if (bucket == null) {
                 continue;
             }
-            final MeshHandle handle = register(state, owner, MeshKind.baked(transparency), bucket);
+            final MeshHandle handle;
+            try {
+                handle = register(state, owner, MeshKind.baked(transparency), bucket);
+            } catch (IllegalStateException e) {
+                // Out of room in the buffers: this bake is dropped, the section keeps what it has
+                log.error(
+                        "Section {} doesn't fit in the baked geometry buffers: {}",
+                        done.id(),
+                        e.getMessage());
+                releasing.addAll(meshes);
+                markFailed(done.id());
+                return;
+            }
             final MeshData meshData =
                     new MeshData(
                             new Vector3f(bucket.min()),
@@ -436,6 +451,24 @@ public class SectionManager {
                 releasing.addAll(section.pending.meshes());
             }
             section.pending = version;
+            section.failed = false;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Note that a section's bake couldn't be uploaded.
+     *
+     * @param id The section.
+     */
+    private void markFailed(long id) {
+        lock.lock();
+        try {
+            Section section = sections.get(id);
+            if (section != null) {
+                section.failed = true;
+            }
         } finally {
             lock.unlock();
         }
@@ -531,8 +564,9 @@ public class SectionManager {
      * @param resident How many have a bake drawn.
      * @param triangles How many triangles the drawn bakes have.
      * @param baking How many bakes are on the workers.
+     * @param failed How many sections' last bake couldn't be uploaded.
      */
-    public record Stats(int sections, int resident, long triangles, int baking) {}
+    public record Stats(int sections, int resident, long triangles, int baking, int failed) {}
 
     /**
      * Totals for the debug window.
@@ -544,13 +578,17 @@ public class SectionManager {
         try {
             int resident = 0;
             long triangles = 0;
+            int failed = 0;
             for (Section section : sections.values()) {
+                if (section.failed) {
+                    failed += 1;
+                }
                 if (section.current != null) {
                     resident += 1;
                     triangles += section.current.triangles();
                 }
             }
-            return new Stats(sections.size(), resident, triangles, inFlight.get());
+            return new Stats(sections.size(), resident, triangles, inFlight.get(), failed);
         } finally {
             lock.unlock();
         }

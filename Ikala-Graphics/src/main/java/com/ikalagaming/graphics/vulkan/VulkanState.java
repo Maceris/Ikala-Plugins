@@ -49,6 +49,9 @@ public class VulkanState {
     /** Bakes sections and keeps them in the scene. */
     public SectionManager sections = null;
 
+    /** How long each part of a frame takes on the GPU and CPU. */
+    public FrameTimings frameTimings = null;
+
     /**
      * The geometry buffers a kind of mesh lives in.
      *
@@ -250,6 +253,12 @@ public class VulkanState {
          * we care about.
          */
         public VkQueueFamilyProperties.Buffer queueFamilyProperties = null;
+
+        /**
+         * How many bits of a timestamp the graphics queue family writes, 0 if it can't, kept after
+         * the queue family properties are dropped.
+         */
+        public int graphicsTimestampValidBits = 0;
     }
 
     /** Info specific to a window. */

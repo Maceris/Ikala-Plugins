@@ -386,6 +386,7 @@ public class VulkanInstance {
         state.bakedGeometry.cleanup(state);
         state.bakeSources.clear();
         state.sections.cleanup();
+        state.frameTimings.cleanup(state);
         state.instances.cleanup(state);
 
         DeletionQueue.Entry nextEntry = GraphicsManager.getDeletionQueue().pop();
@@ -406,6 +407,7 @@ public class VulkanInstance {
         state.bakedGeometry = null;
         state.bakeSources = null;
         state.sections = null;
+        state.frameTimings = null;
         state.instances = null;
         state.stagingRing.cleanup(state);
         state.stagingRing = null;
@@ -1166,6 +1168,7 @@ public class VulkanInstance {
         state.bakeSources = new BakeSources();
         state.sections = new SectionManager();
         state.instances = new InstanceTable(state);
+        state.frameTimings = new FrameTimings(state);
         textureLoader = new TextureLoaderVulkan(state);
         shaderMap = new ShaderMap();
         initializeShaders();
@@ -1570,6 +1573,7 @@ public class VulkanInstance {
         }
         // Resources freed from here until the next frame starts may be used by this frame
         state.recordingFrame = true;
+        state.frameTimings.begin(commandBuffer, state.frameIndex, state);
 
         // Before anything that could sample the textures or draw the meshes
         state.textureUploads.record(state, commandBuffer, textureLoader);
@@ -1579,6 +1583,7 @@ public class VulkanInstance {
         state.instances.record(state, commandBuffer, scene.getMaterialCache());
         state.geometry.record(state, commandBuffer);
         state.bakedGeometry.record(state, commandBuffer);
+        state.frameTimings.mark(commandBuffer, state.frameIndex, "Uploads");
 
         // This will record the command buffer
         pipeline.render(scene, windowInfo.window, state);
@@ -1618,6 +1623,7 @@ public class VulkanInstance {
                             state.device.graphicsQueue,
                             submitInfos,
                             state.fences[state.frameIndex]));
+            state.frameTimings.end(state.frameIndex);
 
             LongBuffer waitSemaphores =
                     stack.longs(
@@ -2028,6 +2034,13 @@ public class VulkanInstance {
                             presentFamily,
                             transferFamily,
                             roomForSeparateTransferQueue);
+            deviceInfo.graphicsTimestampValidBits =
+                    graphicsFamily == QueueFamilyIndices.MISSING
+                            ? 0
+                            : deviceInfo
+                                    .queueFamilyProperties
+                                    .get(graphicsFamily)
+                                    .timestampValidBits();
             // NOTE(ches) it's important that we use a buffer that doesn't need manual freeing
             deviceInfo.queueFamilyProperties = null;
         }

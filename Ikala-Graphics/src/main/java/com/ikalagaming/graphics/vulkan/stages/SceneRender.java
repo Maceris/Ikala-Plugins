@@ -122,7 +122,21 @@ public class SceneRender implements RenderStage {
      *
      * @return The stage that draws the late half.
      */
-    @Getter private final RenderStage late = this::renderLate;
+    @Getter private final RenderStage late = new LateHalf();
+
+    /** The late half of the scene pass, see {@link #getLate()}. */
+    private final class LateHalf implements RenderStage {
+        @Override
+        public void render(
+                Scene scene, @NonNull Window window, @NonNull VulkanState state, int renderConfig) {
+            renderLate(scene, window, state, renderConfig);
+        }
+
+        @Override
+        public String name() {
+            return "SceneRender (late)";
+        }
+    }
 
     /** VkDescriptorSetLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorSetLayout;

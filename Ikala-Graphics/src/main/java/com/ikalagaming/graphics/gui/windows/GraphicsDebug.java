@@ -3,12 +3,16 @@ package com.ikalagaming.graphics.gui.windows;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.benchmark.GateBenchmark;
+import com.ikalagaming.graphics.benchmark.GateScene;
+import com.ikalagaming.graphics.benchmark.SyntheticTerrain;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.component.Checkbox;
 import com.ikalagaming.graphics.gui.component.GuiWindow;
 import com.ikalagaming.graphics.gui.component.Slider;
+import com.ikalagaming.graphics.gui.data.IkBoolean;
 import com.ikalagaming.graphics.gui.data.IkInt;
 import com.ikalagaming.graphics.gui.enums.Condition;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
@@ -17,12 +21,16 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.vulkan.FilterView;
+import com.ikalagaming.graphics.vulkan.FrameTimings;
 import com.ikalagaming.graphics.vulkan.InstanceRegistry;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
 import com.ikalagaming.graphics.vulkan.stages.InstanceDrawUpdate;
 
 import lombok.NonNull;
 import org.joml.Vector3f;
+
+import java.util.Arrays;
+import java.util.List;
 
 public class GraphicsDebug extends GuiWindow {
 
@@ -54,6 +62,19 @@ public class GraphicsDebug extends GuiWindow {
 
     /** The selected filter view's ordinal. */
     private final IkInt filterView;
+
+    /** The benchmark recipe picked, by ordinal. */
+    private final IkInt benchmarkRecipe = new IkInt(SyntheticTerrain.Recipe.TERRAIN.ordinal());
+
+    /** The benchmark view distance picked, in sections. */
+    private final int[] benchmarkRadius = {12};
+
+    /** Whether the benchmark leaves its world in place when it finishes. */
+    private final IkBoolean benchmarkKeepWorld = new IkBoolean(false);
+
+    /** The benchmark recipes' names, in ordinal order. */
+    private static final String[] RECIPE_NAMES =
+            Arrays.stream(SyntheticTerrain.Recipe.values()).map(Enum::name).toArray(String[]::new);
 
     /** Whether the filter view selection changed this frame. */
     private boolean filterViewChanged;
@@ -203,6 +224,14 @@ public class GraphicsDebug extends GuiWindow {
                                     sections.baking(),
                                     sections.triangles()));
                 }
+            }
+
+            if (IkGui.collapsingHeader("Frame timing")) {
+                drawTimings();
+            }
+
+            if (IkGui.collapsingHeader("Benchmark")) {
+                drawBenchmark();
             }
 
             if (IkGui.collapsingHeader("Render Config Info")) {
@@ -456,5 +485,114 @@ public class GraphicsDebug extends GuiWindow {
         directionalLightY.setValue(directionalLightDir.y());
         directionalLightZ.setValue(directionalLightDir.z());
         directionalLightIntensity.setValue(directionalLight.getIntensity());
+    }
+
+    /** Show how long each part of a frame takes, over the last couple of seconds. */
+    private static void drawTimings() {
+        final VulkanInstance renderer = GraphicsManager.getRenderInstance();
+        if (renderer == null || renderer.getState().frameTimings == null) {
+            return;
+        }
+        final FrameTimings timings = renderer.getState().frameTimings;
+        if (!timings.isSupported()) {
+            IkGui.textWrapped("The GPU can't write timestamps, so only CPU time is shown.");
+        }
+        IkGui.textWrapped(
+                "Milliseconds over the last "
+                        + FrameTimings.WINDOW
+                        + " frames. The CPU time is recording and submitting a frame; the frame"
+                        + " rate itself is held to the display's refresh rate.");
+        drawTimingTable("timings", timings.snapshot());
+    }
+
+    /**
+     * Show timings as a table of average, 95th percentile and worst.
+     *
+     * @param id The table's id.
+     * @param rows The timings.
+     */
+    static void drawTimingTable(String id, List<FrameTimings.Timing> rows) {
+        if (!IkGui.beginTable(id, 4)) {
+            return;
+        }
+        IkGui.tableSetupColumn("Part");
+        IkGui.tableSetupColumn("Average");
+        IkGui.tableSetupColumn("95%");
+        IkGui.tableSetupColumn("Worst");
+        IkGui.tableHeadersRow();
+        for (FrameTimings.Timing row : rows) {
+            IkGui.tableNextRow();
+            IkGui.tableNextColumn();
+            IkGui.text(row.name());
+            IkGui.tableNextColumn();
+            IkGui.text(String.format("%.3f", row.average()));
+            IkGui.tableNextColumn();
+            IkGui.text(String.format("%.3f", row.p95()));
+            IkGui.tableNextColumn();
+            IkGui.text(String.format("%.3f", row.max()));
+        }
+        IkGui.endTable();
+    }
+
+    /** Run the gate benchmark and show what it found. */
+    private void drawBenchmark() {
+        IkGui.textWrapped(
+                "Builds a made-up world out to a view distance, bakes it, then turns the camera once"
+                        + " around measuring each frame. The gate passes if the GPU's 95th percentile"
+                        + " frame is within "
+                        + GateBenchmark.GPU_BUDGET_MS
+                        + " ms.");
+        IkGui.combo("Recipe", benchmarkRecipe, RECIPE_NAMES);
+        IkGui.sliderInt("Radius (sections)", benchmarkRadius, 6, 24);
+        IkGui.checkbox("Keep world", benchmarkKeepWorld);
+        IkGui.sameLine();
+        final boolean uiHidden = GraphicsManager.getUiManager().isSurfacesHidden();
+        if (IkGui.checkbox("Hide plugin UI", uiHidden)) {
+            GraphicsManager.getUiManager().setSurfacesHidden(!uiHidden);
+        }
+        IkGui.setItemTooltip(
+                "Leave the world in place when the run finishes, to fly around it with the debug"
+                        + " views and a frozen observer.");
+        if (IkGui.button("Run")) {
+            GateBenchmark.start(
+                    SyntheticTerrain.Recipe.values()[benchmarkRecipe.get()],
+                    benchmarkRadius[0],
+                    benchmarkKeepWorld.get());
+        }
+        IkGui.sameLine();
+        if (IkGui.button("Stop")) {
+            GateBenchmark.stop();
+        }
+        final GateBenchmark run = GateBenchmark.getCurrent();
+        if (run == null) {
+            return;
+        }
+        if (run.isWorldKept()) {
+            IkGui.sameLine();
+            if (IkGui.button("Remove world")) {
+                GateBenchmark.removeWorld();
+            }
+        }
+        IkGui.text(run.status());
+        final GateBenchmark.Results results = run.getResults();
+        if (results == null) {
+            return;
+        }
+        final GateScene.LoadStats load = results.load();
+        IkGui.text(
+                String.format(
+                        "%s at radius %d: %s",
+                        results.recipe(),
+                        results.radius(),
+                        results.passed() ? "passed" : "failed"));
+        IkGui.text(
+                String.format(
+                        "%,d of %,d sections with content, %.2f per column",
+                        load.contentSections(), load.sectionsInSphere(), load.sectionsPerColumn()));
+        IkGui.text(
+                String.format(
+                        "%,d triangles, %,.0f per section; %,d frames measured",
+                        load.triangles(), load.trianglesPerSection(), results.frames()));
+        drawTimingTable("benchmark", results.timings());
     }
 }

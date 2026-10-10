@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.lwjgl.vulkan.VkCommandBuffer;
 
 @RequiredArgsConstructor
 public class PipelineVulkan {
@@ -26,8 +27,10 @@ public class PipelineVulkan {
      * @param state The Vulkan state.
      */
     public void render(Scene scene, @NonNull Window window, @NonNull VulkanState state) {
+        final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
         for (RenderStage stage : renderStages) {
             stage.render(scene, window, state, renderConfig);
+            state.frameTimings.mark(commandBuffer, state.frameIndex, stage.name());
         }
     }
 }

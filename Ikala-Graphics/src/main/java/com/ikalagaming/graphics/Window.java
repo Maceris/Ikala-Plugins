@@ -610,9 +610,17 @@ public class Window {
     }
 
     /**
-     * Checks if the window should close.
+     * Ask the window to close, as if the user closed it, which shuts graphics down on the next
+     * tick.
+     */
+    public void requestClose() {
+        glfwSetWindowShouldClose(windowHandle, true);
+    }
+
+    /**
+     * Whether the window has been asked to close.
      *
-     * @return True if the window should close, false if not.
+     * @return True once it should close.
      */
     public boolean windowShouldClose() {
         return glfwWindowShouldClose(windowHandle);

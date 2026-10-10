@@ -4,6 +4,7 @@ import static org.lwjgl.glfw.GLFW.glfwGetTime;
 import static org.lwjgl.glfw.GLFW.glfwSetErrorCallback;
 import static org.lwjgl.glfw.GLFW.glfwTerminate;
 
+import com.ikalagaming.graphics.benchmark.GateBenchmark;
 import com.ikalagaming.graphics.events.WindowCreated;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.WindowManager;
@@ -517,6 +518,8 @@ public class GraphicsManager {
         }
 
         if (currentTime >= nextRenderTime) {
+            // Drives the gate benchmark's camera and timings, if one is running
+            GateBenchmark.update(scene);
             render();
             // Update the next time we should render a frame
             lastRenderTime = currentTime;
