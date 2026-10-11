@@ -2,6 +2,7 @@ package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.lod.ClusterMeshes;
 import com.ikalagaming.graphics.lod.LodDag;
+import com.ikalagaming.graphics.vulkan.LodRenderer;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
 
 import lombok.NonNull;
@@ -11,9 +12,9 @@ import java.util.List;
 
 /**
  * Draws level of detail worlds, owned by one plugin. A world is a cluster DAG ({@link LodDag}) put
- * on the GPU whole; its owner chooses which clusters are drawn, such as a cut from {@link
- * com.ikalagaming.graphics.lod.LodCut}, and they are drawn opaque with the scene and its shadows,
- * textured by projecting each material's texture along the triangle's main axis.
+ * on the GPU whole. Each frame the GPU picks its cut from the observer, as {@link
+ * com.ikalagaming.graphics.lod.LodCut} does, culls it, and draws it opaque with the scene and its
+ * shadows, textured by projecting each material's texture along the triangle's main axis.
  *
  * <p>Safe from any thread.
  */
@@ -32,8 +33,9 @@ public final class Lods {
     }
 
     /**
-     * Put a world on the GPU, with nothing drawn yet. Its clusters are turned into meshes on the
-     * calling thread and uploaded over the next frames.
+     * Put a world on the GPU. Its clusters are turned into meshes on the calling thread and
+     * uploaded over the next frames, and it is drawn once they all are, with the error threshold in
+     * {@link GraphicsSettings#lodThresholdPixels}.
      *
      * @param dag The world.
      * @return Its handle.
@@ -49,20 +51,60 @@ public final class Lods {
         return new LodHandle(
                 renderer.getState()
                         .lods
-                        .add(renderer.getState(), context.getOwnerKey(), dag.getOrigin(), meshes));
+                        .add(
+                                renderer.getState(),
+                                context.getOwnerKey(),
+                                dag,
+                                meshes,
+                                GraphicsManager.getSettings().lodThresholdPixels));
     }
 
     /**
-     * Choose which of a world's clusters are drawn, from the next frame on.
+     * Set the most error, in pixels, a world's drawn clusters may have, from the next frame on.
+     * Nothing happens if the handle is stale.
      *
      * @param world The world.
-     * @param drawn Whether each cluster is drawn, by id.
+     * @param pixels The error threshold.
      */
-    public void setDrawn(@NonNull LodHandle world, boolean @NonNull [] drawn) {
-        final VulkanInstance renderer = GraphicsManager.getRenderInstance();
-        if (renderer != null && renderer.getState().lods != null) {
-            renderer.getState().lods.setDrawn(world.id(), drawn);
+    public void setThreshold(@NonNull LodHandle world, double pixels) {
+        final LodRenderer lods = lods();
+        if (lods != null) {
+            lods.setThreshold(world.id(), pixels);
         }
+    }
+
+    /**
+     * Show or hide a world, from the next frame on. Worlds start out shown. Nothing happens if the
+     * handle is stale.
+     *
+     * @param world The world.
+     * @param visible Whether it is drawn.
+     */
+    public void setVisible(@NonNull LodHandle world, boolean visible) {
+        final LodRenderer lods = lods();
+        if (lods != null) {
+            lods.setVisible(world.id(), visible);
+        }
+    }
+
+    /**
+     * What the GPU drew of every world, over all plugins, a few frames ago.
+     *
+     * @return The counts, all zero if the renderer isn't running.
+     */
+    public LodRenderer.Stats stats() {
+        final LodRenderer lods = lods();
+        return lods == null ? new LodRenderer.Stats(0, 0, 0, 0, 0, 0) : lods.getStats();
+    }
+
+    /**
+     * The running renderer's worlds.
+     *
+     * @return The worlds, or null if it isn't running.
+     */
+    private static LodRenderer lods() {
+        final VulkanInstance renderer = GraphicsManager.getRenderInstance();
+        return renderer == null ? null : renderer.getState().lods;
     }
 
     /**

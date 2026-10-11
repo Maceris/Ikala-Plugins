@@ -538,6 +538,8 @@ public class VulkanInstance {
                     .descriptorBindingUpdateUnusedWhilePending(true)
                     .descriptorBindingVariableDescriptorCount(true)
                     .descriptorIndexing(true)
+                    // Level of detail draws take their count from the culling pass
+                    .drawIndirectCount(true)
                     .runtimeDescriptorArray(true)
                     .shaderSampledImageArrayNonUniformIndexing(true)
                     .pNext(enabledVk11Features.address());
@@ -1205,6 +1207,14 @@ public class VulkanInstance {
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(RenderStage.Type.CULL, new ShaderVulkan(cullModules, state));
 
+        List<ShaderVulkan.ShaderModuleData> lodCullModules = new ArrayList<>();
+        lodCullModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/lod_cull.comp",
+                        ShaderVulkan.Type.COMPUTE,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(RenderStage.Type.LOD_CULL, new ShaderVulkan(lodCullModules, state));
+
         List<ShaderVulkan.ShaderModuleData> pyramidModules = new ArrayList<>();
         pyramidModules.add(
                 new ShaderVulkan.ShaderModuleData(
@@ -1710,7 +1720,11 @@ public class VulkanInstance {
         state.lods.record(state, commandBuffer);
         // Before the shadows, the first to draw them
         state.lods.prepare(
-                state, state.perFrameData[state.frameIndex], scene.getCamera().getPosition());
+                state,
+                state.perFrameData[state.frameIndex],
+                scene.getCamera().getPosition(),
+                scene.getObserver(),
+                windowInfo.window.getHeight());
         state.frameTimings.mark(commandBuffer, state.frameIndex, "Uploads");
 
         // This will record the command buffer
@@ -1996,6 +2010,7 @@ public class VulkanInstance {
             required.put("fragmentStoresAndAtomics", vk10.fragmentStoresAndAtomics());
             required.put("shaderDrawParameters", vk11.shaderDrawParameters());
             required.put("bufferDeviceAddress", vk12.bufferDeviceAddress());
+            required.put("drawIndirectCount", vk12.drawIndirectCount());
             required.put("descriptorBindingPartiallyBound", vk12.descriptorBindingPartiallyBound());
             required.put(
                     "descriptorBindingSampledImageUpdateAfterBind",

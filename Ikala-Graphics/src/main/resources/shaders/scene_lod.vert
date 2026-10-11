@@ -1,4 +1,5 @@
 #version 460
+#extension GL_EXT_buffer_reference : require
 
 // The scene vertex shader for level of detail clusters, in the vertex format of LodVertex. Every
 // position is on one grid of 1 / STEPS_PER_UNIT unit from the LOD world's origin, so clusters meet
@@ -24,12 +25,23 @@ layout(set = 0, binding = 0) uniform Uniforms {
     mat4 viewMatrix;
 };
 
-// Where the camera is, for each LOD world drawn
-layout(push_constant) uniform LodConstants {
+// Where the camera is for each LOD world, see LodCullMath; each draw's instance is its world
+struct World {
+    vec4 renderOffset;
+    vec4 eye;
     // xyz: the camera's grid step from the world's origin, rounded down
     ivec4 cameraGrid;
     // xyz: the rest of the camera's position past that step, in units
     vec4 cameraFraction;
+    uvec4 info;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Worlds {
+    World worlds[];
+};
+
+layout(push_constant) uniform LodConstants {
+    Worlds worldTable;
 };
 
 // Grid steps per unit, and its power of two, see LodVertex
@@ -48,6 +60,9 @@ vec3 fromOctahedral(vec2 e)
 
 void main()
 {
+    World world = worldTable.worlds[gl_InstanceIndex];
+    ivec4 cameraGrid = world.cameraGrid;
+    vec4 cameraFraction = world.cameraFraction;
     vec3 normal = fromOctahedral(normalOct);
     outMaterialIdx = materialFlags.x;
 

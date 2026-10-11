@@ -9,6 +9,7 @@ public interface RenderStage {
     enum Type {
         ANIMATION,
         CULL,
+        LOD_CULL,
         DEBUG,
         DEBUG_NORMALS,
         DEPTH_PYRAMID,

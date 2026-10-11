@@ -378,8 +378,7 @@ public class SceneRender implements RenderStage {
 
         final boolean anyListed = listedModels && !frameData.modelDrawInfo.isEmpty();
         final boolean anyCulled = frameData.meshSlotCount + frameData.bakedSlotCount > 0;
-        final boolean anyLod =
-                list == InstanceDrawUpdate.LIST_SCENE_EARLY && LodRenderer.hasDraws(frameData);
+        final boolean anyLod = LodRenderer.hasDraws(frameData);
         if ((anyCulled || anyListed || anyLod) && width > 0 && height > 0) {
             drawModels(commandBuffer, state, renderConfig, width, height, list, anyListed, stack);
         }
@@ -433,8 +432,8 @@ public class SceneRender implements RenderStage {
         LongBuffer vertexBuffers = stack.callocLong(1);
         LongBuffer vertexOffsets = stack.callocLong(1);
 
-        // Level of detail clusters, all drawn early until they are culled by occlusion too
-        if (list == InstanceDrawUpdate.LIST_SCENE_EARLY && LodRenderer.hasDraws(frameData)) {
+        // Level of detail clusters, the list's share of the cut, as many as culling counted
+        if (LodRenderer.hasDraws(frameData)) {
             vkCmdBindPipeline(
                     commandBuffer,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -443,7 +442,8 @@ public class SceneRender implements RenderStage {
                     commandBuffer,
                     frameData,
                     pipelineLayout,
-                    ShaderBindings.Scene.PUSH_CONSTANT_LOD_CAMERA_OFFSET);
+                    ShaderBindings.Scene.PUSH_CONSTANT_LOD_WORLDS_OFFSET,
+                    list);
         }
 
         // Everything culling handled: the list's commands for each kind, one per mesh slot, from

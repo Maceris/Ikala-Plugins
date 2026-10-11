@@ -113,6 +113,13 @@ public class PipelineManagerVulkan {
     private final InstanceTransform stageInstanceTransform;
     private final InstanceCull stageInstanceCull;
     private final InstanceCull stageInstanceCullLate;
+
+    /** Picks and culls the level of detail cut before anything draws. */
+    private final LodCull stageLodCull;
+
+    /** Culls the level of detail cut against the depth pyramid. */
+    private final LodCull stageLodCullLate;
+
     private final DepthPyramidBuild stageDepthPyramidBuild;
     private final SceneRender stageSceneRender;
     private final ShadowRender stageShadowRender;
@@ -145,6 +152,16 @@ public class PipelineManagerVulkan {
                 new InstanceCull(
                         shaders.getShader(RenderStage.Type.CULL), ShaderBindings.Cull.PHASE_LATE);
         stageInstanceCullLate.initialize(state);
+        stageLodCull =
+                new LodCull(
+                        shaders.getShader(RenderStage.Type.LOD_CULL),
+                        ShaderBindings.Cull.PHASE_EARLY);
+        stageLodCull.initialize(state);
+        stageLodCullLate =
+                new LodCull(
+                        shaders.getShader(RenderStage.Type.LOD_CULL),
+                        ShaderBindings.Cull.PHASE_LATE);
+        stageLodCullLate.initialize(state);
         stageDepthPyramidBuild =
                 new DepthPyramidBuild(shaders.getShader(RenderStage.Type.DEPTH_PYRAMID));
         stageDepthPyramidBuild.initialize(state);
@@ -216,6 +233,7 @@ public class PipelineManagerVulkan {
             stages.add(stageInstanceDrawUpdate);
             stages.add(stageInstanceTransform);
             stages.add(stageInstanceCull);
+            stages.add(stageLodCull);
         }
         if (RenderConfig.hasAnimationStage(configuration)) {
             stages.add(stageAnimationRender);
@@ -228,6 +246,7 @@ public class PipelineManagerVulkan {
             stages.add(stageSceneRender);
             stages.add(stageDepthPyramidBuild);
             stages.add(stageInstanceCullLate);
+            stages.add(stageLodCullLate);
             stages.add(stageSceneRender.getLate());
             stages.add(stageLightCull);
             stages.add(stageLightRender);
@@ -532,6 +551,13 @@ public class PipelineManagerVulkan {
                                 DEFERRED_UNTIL_LATER,
                                 state,
                                 VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | STORAGE);
+                state.perFrameData[i].lodCounts =
+                        SharedBuffer.allocate(
+                                DEFERRED_UNTIL_LATER,
+                                state,
+                                VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | STORAGE);
+                state.perFrameData[i].lodWorlds =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].modelDrawInfo = new LinkedHashMap<>();
                 state.perFrameData[i].debugVertices =
                         SharedBuffer.allocate(
@@ -651,6 +677,8 @@ public class PipelineManagerVulkan {
         stageInstanceTransform.cleanup(state);
         stageInstanceCull.cleanup(state);
         stageInstanceCullLate.cleanup(state);
+        stageLodCull.cleanup(state);
+        stageLodCullLate.cleanup(state);
         stageDepthPyramidBuild.cleanup(state);
         stageSceneRender.cleanup(state);
         stageShadowRender.cleanup(state);
@@ -764,7 +792,11 @@ public class PipelineManagerVulkan {
         data.sceneDrawCommands = null;
         SharedBuffer.free(data.lodDrawCommands, state);
         data.lodDrawCommands = null;
-        data.lodBatches = null;
+        SharedBuffer.free(data.lodCounts, state);
+        data.lodCounts = null;
+        SharedBuffer.free(data.lodWorlds, state);
+        data.lodWorlds = null;
+        data.lodWorldCount = 0;
         data.modelDrawInfo = null;
         SharedBuffer.free(data.skyboxUniforms, state);
         data.skyboxUniforms = null;

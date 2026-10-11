@@ -263,14 +263,15 @@ public class ShadowRender implements RenderStage {
                 LongBuffer vertexBuffers = stack.callocLong(1);
                 LongBuffer vertexOffsets = stack.callocLong(1);
 
-                // Level of detail clusters, the same cut the scene draws
+                // Level of detail clusters, the cut the scene sees, in this cascade's frustum
                 if (LodRenderer.hasDraws(frameData)) {
                     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lodPipeline);
                     state.lods.draw(
                             commandBuffer,
                             frameData,
                             pipelineLayout,
-                            ShaderBindings.Shadow.PUSH_CONSTANT_LOD_CAMERA_OFFSET);
+                            ShaderBindings.Shadow.PUSH_CONSTANT_LOD_WORLDS_OFFSET,
+                            list);
                 }
 
                 // Everything culling handled for this cascade, each kind from its own buffers,

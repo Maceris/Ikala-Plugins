@@ -38,4 +38,11 @@ public class GraphicsSettings {
      * VSync and thus will be effectively whatever the monitor's refresh rate is.
      */
     public int targetFPS = 0;
+
+    /**
+     * The most error, in pixels, a level of detail cluster may have and be drawn, for worlds added
+     * after it is set; see {@link Lods#setThreshold}. At 1, Nanite's choice, the switch between
+     * levels can't be seen.
+     */
+    public double lodThresholdPixels = 1;
 }

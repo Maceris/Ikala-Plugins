@@ -3,7 +3,6 @@ package com.ikalagaming.graphics.vulkan;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.Model;
 
-import java.util.List;
 import java.util.Map;
 
 /** Data buffers for a frame, only the data that the CPU cares about. */
@@ -113,11 +112,32 @@ public class PerFrameData {
      */
     public SharedBuffer sceneDrawCommands;
 
-    /** Indirect draw commands for level of detail clusters this frame, see {@link LodRenderer}. */
+    /**
+     * Indirect draw commands for level of detail clusters this frame, written by the culling pass:
+     * {@link LodRenderer#LIST_COUNT} lists of {@link #lodCapacity} commands each.
+     */
     public SharedBuffer lodDrawCommands;
 
-    /** Each level of detail world's draws in {@link #lodDrawCommands} this frame. */
-    public List<LodRenderer.Batch> lodBatches;
+    /**
+     * How many commands each level of detail list has, then the culling pass's counters, see {@link
+     * LodRenderer#COUNTER_COUNT}.
+     */
+    public SharedBuffer lodCounts;
+
+    /** The level of detail worlds culled this frame, see {@link LodCullMath}. */
+    public SharedBuffer lodWorlds;
+
+    /** How many level of detail worlds are culled this frame. */
+    public int lodWorldCount;
+
+    /** Where each culled world's clusters start in the cluster table. */
+    public int[] lodFirstClusters = new int[0];
+
+    /** How many clusters each culled world has. */
+    public int[] lodClusterCounts = new int[0];
+
+    /** How many commands each level of detail list has room for. */
+    public int lodCapacity;
 
     /**
      * Models drawn from CPU-written commands this frame, which culling doesn't handle: animated

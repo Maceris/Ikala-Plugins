@@ -267,8 +267,13 @@ public final class LodView implements AutoCloseable {
      */
     private volatile LodHandle world;
 
-    /** Whether the last build drew through {@link #world}. */
-    private boolean texturedShown;
+    /**
+     * Whether the last build drew through {@link #world}, so the GPU picks the cut. -- GETTER --
+     * Whether the renderer draws the cut the GPU picks, rather than meshes of this view's cut.
+     *
+     * @return True if the GPU picks the cut.
+     */
+    @Getter private boolean texturedShown;
 
     /** A count for model IDs, so the old and new models never share one. */
     private int builds;
@@ -322,6 +327,8 @@ public final class LodView implements AutoCloseable {
                         return;
                     }
                     final LodHandle added = graphics.lods().add(dag);
+                    // Hidden until a build in the materials coloring shows it
+                    graphics.lods().setVisible(added, false);
                     post(
                             () -> {
                                 if (closed) {
@@ -376,10 +383,7 @@ public final class LodView implements AutoCloseable {
             return;
         }
         // Redo the materials coloring textured once the DAG has finished uploading
-        if (settings.mode() == Mode.MATERIALS
-                && !texturedShown
-                && world != null
-                && graphics.lods().isResident(world)) {
+        if (drawsTextured(settings) && !texturedShown) {
             builtSettings = null;
         }
         final Scene scene = GraphicsManager.getScene();
@@ -393,10 +397,10 @@ public final class LodView implements AutoCloseable {
         building = true;
         final long mine = generation.incrementAndGet();
         final LodCut.View view = new LodCut.View(at.x, at.y, at.z, pixelsPerUnit(observer));
-        final boolean textured =
-                settings.mode() == Mode.MATERIALS
-                        && world != null
-                        && graphics.lods().isResident(world);
+        final boolean textured = drawsTextured(settings);
+        if (world != null) {
+            graphics.lods().setThreshold(world, settings.thresholdPixels());
+        }
         worker.execute(
                 () -> {
                     final Built built;
@@ -409,6 +413,20 @@ public final class LodView implements AutoCloseable {
                     }
                     post(() -> show(built));
                 });
+    }
+
+    /**
+     * Whether the renderer draws the world, textured, with the cut the GPU picks: in the materials
+     * coloring, with no fixed level, once the DAG is uploaded.
+     *
+     * @param settings What to show.
+     * @return True if the renderer draws it.
+     */
+    private boolean drawsTextured(@NonNull Settings settings) {
+        return settings.mode() == Mode.MATERIALS
+                && settings.fixedLevel() < 0
+                && world != null
+                && graphics.lods().isResident(world);
     }
 
     /**
@@ -695,10 +713,10 @@ public final class LodView implements AutoCloseable {
         final Scene scene = GraphicsManager.getScene();
         texturedShown = built.textured();
         if (world != null) {
-            graphics.lods().setDrawn(world, built.textured() ? built.drawn() : new boolean[0]);
+            graphics.lods().setVisible(world, built.textured());
         }
         if (built.textured()) {
-            // The renderer draws the cut; no model is needed
+            // The renderer picks and draws the cut; no model is needed
             if (previous != null) {
                 scene.removeModel(previous.modelId());
             }

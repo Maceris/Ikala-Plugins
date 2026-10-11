@@ -151,6 +151,58 @@ public class ShaderBindings {
         }
     }
 
+    /**
+     * Level of detail culling shader variables, see {@code lod_cull.comp}. Every buffer is passed
+     * by address.
+     */
+    public static class LodCull {
+        /** Device address of the cluster table, see {@link LodCullMath}. */
+        public static final int PUSH_CONSTANT_CLUSTERS_OFFSET = 0;
+
+        /** Device address of whether each cluster was visible last frame. */
+        public static final int PUSH_CONSTANT_HISTORY_OFFSET = Long.BYTES;
+
+        /** Device address of the clusters' mesh table. */
+        public static final int PUSH_CONSTANT_MESHES_OFFSET = 2 * Long.BYTES;
+
+        /** Device address of this frame's world table, see {@link LodCullMath}. */
+        public static final int PUSH_CONSTANT_WORLDS_OFFSET = 3 * Long.BYTES;
+
+        /** Device address of this frame's draw commands. */
+        public static final int PUSH_CONSTANT_COMMANDS_OFFSET = 4 * Long.BYTES;
+
+        /** Device address of this frame's draw counts and statistics. */
+        public static final int PUSH_CONSTANT_COUNTS_OFFSET = 5 * Long.BYTES;
+
+        /** Device address of this frame's frustum planes, the same as {@link Cull}'s. */
+        public static final int PUSH_CONSTANT_FRUSTA_OFFSET = 6 * Long.BYTES;
+
+        /** Device address of this frame's occlusion view, the same as {@link Cull}'s. */
+        public static final int PUSH_CONSTANT_VIEW_OFFSET = 7 * Long.BYTES;
+
+        /** Which world is culled, its index in the world table. */
+        public static final int PUSH_CONSTANT_WORLD_OFFSET = 8 * Long.BYTES;
+
+        /** Which phase this is, {@link Cull#PHASE_EARLY} or {@link Cull#PHASE_LATE}. */
+        public static final int PUSH_CONSTANT_PHASE_OFFSET =
+                PUSH_CONSTANT_WORLD_OFFSET + Integer.BYTES;
+
+        /** How many commands each list has room for. */
+        public static final int PUSH_CONSTANT_CAPACITY_OFFSET =
+                PUSH_CONSTANT_PHASE_OFFSET + Integer.BYTES;
+
+        /** The size of the push constants in bytes. */
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_CAPACITY_OFFSET + Integer.BYTES;
+
+        /** The number of clusters each compute workgroup handles. */
+        public static final int WORKGROUP_SIZE = 64;
+
+        /** Private constructor so this class is not instantiated. */
+        private LodCull() {
+            cutItOut();
+        }
+    }
+
     /** Depth pyramid shader variables, see {@code depth_pyramid.comp}. */
     public static class DepthPyramid {
         /** The size of what is read, two ints. */
@@ -792,14 +844,13 @@ public class ShaderBindings {
     public static class Scene {
 
         /**
-         * Push constant offset for where the camera is relative to a level of detail world, which
-         * only {@code scene_lod.vert} reads.
+         * Push constant offset for the device address of this frame's level of detail world table,
+         * where each world's camera is, which only {@code scene_lod.vert} reads.
          */
-        public static final int PUSH_CONSTANT_LOD_CAMERA_OFFSET = 0;
+        public static final int PUSH_CONSTANT_LOD_WORLDS_OFFSET = 0;
 
         /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE =
-                PUSH_CONSTANT_LOD_CAMERA_OFFSET + LodRenderer.CAMERA_CONSTANTS_SIZE;
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_LOD_WORLDS_OFFSET + Long.BYTES;
 
         /** Offsets into the material struct. */
         public static class Material {
@@ -894,15 +945,15 @@ public class ShaderBindings {
         public static final int PUSH_CONSTANT_VISIBLE_OFFSET = 4 * 4 * Float.BYTES;
 
         /**
-         * Push constant offset for where the camera is relative to a level of detail world, which
-         * only {@code shadow_lod.vert} reads, after the visible list address and aligned for its
-         * ivec4.
+         * Push constant offset for the device address of this frame's level of detail world table,
+         * where each world's camera is, which only {@code shadow_lod.vert} reads, after the visible
+         * list address.
          */
-        public static final int PUSH_CONSTANT_LOD_CAMERA_OFFSET = 5 * 4 * Float.BYTES;
+        public static final int PUSH_CONSTANT_LOD_WORLDS_OFFSET =
+                PUSH_CONSTANT_VISIBLE_OFFSET + Long.BYTES;
 
         /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE =
-                PUSH_CONSTANT_LOD_CAMERA_OFFSET + LodRenderer.CAMERA_CONSTANTS_SIZE;
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_LOD_WORLDS_OFFSET + Long.BYTES;
 
         /** The binding point for the model matrices buffer. */
         public static final int MODEL_MATRICES_BINDING = 0;

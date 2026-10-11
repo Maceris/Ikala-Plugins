@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.gui.data.IkBoolean;
 import com.ikalagaming.graphics.gui.data.IkInt;
 import com.ikalagaming.graphics.gui.flags.TreeNodeFlags;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.LodRenderer;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -303,6 +304,19 @@ public final class LodPanel implements AutoCloseable {
                         view.getDrawnClusters(),
                         view.getBuildMillis(),
                         buildMillis));
+        if (view.isTexturedShown()) {
+            final LodRenderer.Stats gpu = graphics.lods().stats();
+            IkGui.text(
+                    String.format(
+                            "GPU cut: %,d triangles in %,d clusters; %,d outside the view, %,d"
+                                    + " hidden, %,d drawn early, %,d late.",
+                            gpu.selectedTriangles(),
+                            gpu.selectedClusters(),
+                            gpu.outside(),
+                            gpu.occluded(),
+                            gpu.early(),
+                            gpu.late()));
+        }
         if (IkGui.collapsingHeader("Levels##lod", TreeNodeFlags.DEFAULT_OPEN)) {
             LodTables.draw(levels);
         }

@@ -1,0 +1,305 @@
+#version 460
+#extension GL_EXT_buffer_reference : require
+
+// Picks each level of detail world's cut and culls it. Each thread takes one cluster of one world
+// and one pass. A cluster is in the cut by Nanite's rule: its own error, projected to the screen
+// from the nearest point of its saturated sphere, is at or under the threshold, and its parent
+// group's is over it (LodCullMath has it in Java, with tests). What is in the cut is then tested
+// against the pass's frustum, and the scene's against the depth pyramid in two phases, the same
+// way cull.comp culls instances:
+// - Early, with the shadow cascades: the scene draws what was visible last frame, by the history
+//   kept for each cluster. The cascades draw everything in the cut in their frusta, so shadows
+//   come from the cut the scene sees.
+// - Late, after the pyramid is built: everything in the cut and the frustum is tested against the
+//   pyramid, what is visible and wasn't drawn early is drawn now, and the history is updated.
+// Each draw is appended to its list's commands with an atomic count, which the draws read as
+// their count.
+
+// See LodCullMath for the layout
+struct Cluster {
+    vec4 tight;
+    vec4 bound;
+    vec4 parentBound;
+    // x: error bits, y: parent error bits, z: mesh slot, w: the slot's generation
+    uvec4 info;
+};
+
+// See LodCullMath for the layout
+struct World {
+    vec4 renderOffset;
+    vec4 eye;
+    ivec4 cameraGrid;
+    vec4 cameraFraction;
+    // x: first cluster, y: cluster count, z: threshold bits, w: pixels per unit bits
+    uvec4 info;
+};
+
+// See GeometryArena for the layout
+struct Mesh {
+    // x: vertex offset, y: first index, z: index count (0 if it can't be drawn), w: generation
+    uvec4 info;
+    vec4 aabbMin;
+    vec4 aabbMax;
+};
+
+// VkDrawIndexedIndirectCommand
+struct Command {
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    int vertexOffset;
+    uint firstInstance;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Clusters {
+    Cluster clusters[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer History {
+    uint history[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Meshes {
+    Mesh meshes[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Worlds {
+    World worlds[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 4) writeonly buffer Commands {
+    Command commands[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer Counts {
+    uint counts[];
+};
+
+// The frustum planes of each pass, six per pass, in render space. A point p is inside a plane
+// when dot(plane.xyz, p) + plane.w >= 0.
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Frusta {
+    vec4 planes[];
+};
+
+// What the occlusion test needs, see cull.comp
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer View {
+    mat4 projectionView;
+    ivec2 size;
+    int levels;
+    uint flags;
+};
+
+// Every level of the depth pyramid, the farthest depth under each texel
+layout(set = 0, binding = 0) uniform sampler2D pyramid;
+
+layout(push_constant) uniform Constants {
+    Clusters clusterTable;
+    History historyTable;
+    Meshes meshTable;
+    Worlds worldTable;
+    Commands commandList;
+    Counts countList;
+    Frusta frusta;
+    View view;
+    // Which world this dispatch culls
+    uint world;
+    // PHASE_EARLY or PHASE_LATE
+    uint phase;
+    // How many commands each list has room for
+    uint capacity;
+};
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// A cluster without triangles
+const uint NO_MESH = 0xFFFFFFFFu;
+
+// The phases, see the top
+const uint PHASE_EARLY = 0;
+const uint PHASE_LATE = 1;
+
+// The lists, the same as cull.comp's up to the translucent one, see LodRenderer
+const uint LIST_SCENE_EARLY = 0;
+const uint LIST_SCENE_LATE = 1;
+const uint LIST_FIRST_CASCADE = 2;
+const uint LIST_COUNT = 5;
+
+// The counters after the lists' counts, see LodRenderer
+const uint COUNTER_SELECTED = LIST_COUNT;
+const uint COUNTER_TRIANGLES = LIST_COUNT + 1;
+const uint COUNTER_OUTSIDE = LIST_COUNT + 2;
+const uint COUNTER_OCCLUDED = LIST_COUNT + 3;
+
+// Set in the view flags when the scene is culled by occlusion
+const uint FLAG_OCCLUSION = 1;
+// Set in the view flags when the pyramid holds a depth buffer
+const uint FLAG_PYRAMID_VALID = 2;
+
+// How far in front of the eye in clip space w a box's corners must be for it to be projected
+const float MIN_CLIP_W = 1e-5;
+
+// The nearest a sphere is treated as being, so errors stay finite, see LodCullMath
+const float MIN_DISTANCE = 1e-6;
+
+// An error projected to the screen from the nearest point of a sphere, see LodCullMath.projected
+float projected(float error, vec4 sphere, vec3 eye, float pixelsPerUnit)
+{
+    if (isinf(error)) {
+        return error;
+    }
+    if (error == 0.0) {
+        return 0.0;
+    }
+    float distance = max(MIN_DISTANCE, length(sphere.xyz - eye) - sphere.w);
+    return error * pixelsPerUnit / distance;
+}
+
+// Whether a sphere is at least partly inside all six planes of a pass
+bool inFrustum(uint pass, vec3 center, float radius)
+{
+    for (uint i = 0; i < 6; ++i) {
+        vec4 plane = frusta.planes[pass * 6 + i];
+        if (dot(plane.xyz, center) + plane.w < -radius) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// The pixel a screen coordinate falls in, kept on screen
+int toPixel(float coordinate, int size)
+{
+    return int(clamp(floor(coordinate), 0.0, float(size - 1)));
+}
+
+// The pyramid texel a depth pixel is under at a level, along one axis
+int texelAt(int pixel, int size, int level)
+{
+    return min(pixel >> (level + 1), max(1, size >> (level + 1)) - 1);
+}
+
+// Whether a render space box is hidden behind what the pyramid saw, as in cull.comp and
+// DepthPyramidMath.occluded
+bool occluded(vec3 center, vec3 extents)
+{
+    vec2 low = vec2(1e30);
+    vec2 high = vec2(-1e30);
+    float nearest = 1e30;
+    for (int i = 0; i < 8; ++i) {
+        vec3 sides = vec3(
+            (i & 1) == 0 ? -1.0 : 1.0, (i & 2) == 0 ? -1.0 : 1.0, (i & 4) == 0 ? -1.0 : 1.0);
+        vec4 clip = view.projectionView * vec4(center + extents * sides, 1.0);
+        // Reaching behind the eye, it may be all around it
+        if (clip.w <= MIN_CLIP_W) {
+            return false;
+        }
+        vec3 ndc = clip.xyz / clip.w;
+        low = min(low, ndc.xy);
+        high = max(high, ndc.xy);
+        nearest = min(nearest, ndc.z);
+    }
+
+    // Device y points up and pixel rows go down
+    ivec2 size = view.size;
+    int x0 = toPixel((low.x * 0.5 + 0.5) * float(size.x), size.x);
+    int x1 = toPixel((high.x * 0.5 + 0.5) * float(size.x), size.x);
+    int y0 = toPixel((0.5 - high.y * 0.5) * float(size.y), size.y);
+    int y1 = toPixel((0.5 - low.y * 0.5) * float(size.y), size.y);
+
+    // The finest level where the rectangle is under at most 2 x 2 texels
+    int level = 0;
+    while (level < view.levels - 1
+            && (texelAt(x1, size.x, level) - texelAt(x0, size.x, level) > 1
+                || texelAt(y1, size.y, level) - texelAt(y0, size.y, level) > 1)) {
+        level += 1;
+    }
+    float farthest = 0.0;
+    for (int y = texelAt(y0, size.y, level); y <= texelAt(y1, size.y, level); ++y) {
+        for (int x = texelAt(x0, size.x, level); x <= texelAt(x1, size.x, level); ++x) {
+            farthest = max(farthest, texelFetch(pyramid, ivec2(x, y), level).r);
+        }
+    }
+    return nearest > farthest;
+}
+
+// Append a cluster's mesh to a list's draw commands. The world's index goes in as the instance,
+// which the vertex shaders read their camera with.
+void draw(uint list, Mesh mesh)
+{
+    uint index = atomicAdd(countList.counts[list], 1u);
+    Command command;
+    command.indexCount = mesh.info.z;
+    command.instanceCount = 1;
+    command.firstIndex = mesh.info.y;
+    command.vertexOffset = int(mesh.info.x);
+    command.firstInstance = world;
+    commandList.commands[list * capacity + index] = command;
+}
+
+void main()
+{
+    World w = worldTable.worlds[world];
+    uint clusterIndex = gl_GlobalInvocationID.x;
+    // Early, the scene then each cascade; late, only the scene
+    uint pass = gl_GlobalInvocationID.y;
+    if (clusterIndex >= w.info.y) {
+        return;
+    }
+    uint entry = w.info.x + clusterIndex;
+    Cluster cluster = clusterTable.clusters[entry];
+
+    // In the cut, from the observer
+    float threshold = uintBitsToFloat(w.info.z);
+    float pixelsPerUnit = uintBitsToFloat(w.info.w);
+    float own = projected(uintBitsToFloat(cluster.info.x), cluster.bound, w.eye.xyz, pixelsPerUnit);
+    float parent =
+        projected(uintBitsToFloat(cluster.info.y), cluster.parentBound, w.eye.xyz, pixelsPerUnit);
+    bool selected = own <= threshold && parent > threshold;
+
+    // A cluster with no triangles, or one whose mesh isn't there, draws nothing
+    bool drawable = cluster.info.z != NO_MESH;
+    Mesh mesh;
+    if (drawable) {
+        mesh = meshTable.meshes[cluster.info.z];
+        drawable = mesh.info.w == cluster.info.w && mesh.info.z != 0;
+    }
+    if (!selected || !drawable) {
+        if (phase == PHASE_LATE) {
+            historyTable.history[entry] = 0u;
+        }
+        return;
+    }
+
+    vec3 center = cluster.tight.xyz + w.renderOffset.xyz;
+    float radius = cluster.tight.w;
+    bool inView = inFrustum(pass, center, radius);
+
+    if (phase == PHASE_EARLY) {
+        if (pass == 0) {
+            atomicAdd(countList.counts[COUNTER_SELECTED], 1u);
+            atomicAdd(countList.counts[COUNTER_TRIANGLES], mesh.info.z / 3u);
+            if (!inView) {
+                atomicAdd(countList.counts[COUNTER_OUTSIDE], 1u);
+                return;
+            }
+            // With occlusion on, what wasn't visible last frame waits for the late test
+            if ((view.flags & FLAG_OCCLUSION) == 0 || historyTable.history[entry] != 0) {
+                draw(LIST_SCENE_EARLY, mesh);
+            }
+        } else if (inView) {
+            draw(LIST_FIRST_CASCADE + pass - 1, mesh);
+        }
+        return;
+    }
+
+    bool seen = inView;
+    if (seen && (view.flags & FLAG_PYRAMID_VALID) != 0 && occluded(center, vec3(radius))) {
+        seen = false;
+        atomicAdd(countList.counts[COUNTER_OCCLUDED], 1u);
+    }
+    bool drawnEarly = historyTable.history[entry] != 0;
+    historyTable.history[entry] = seen ? 1u : 0u;
+    if (seen && !drawnEarly) {
+        draw(LIST_SCENE_LATE, mesh);
+    }
+}
