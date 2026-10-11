@@ -367,7 +367,7 @@ public final class BlockMeshes {
      * @param point The point, in its cell.
      * @return The texture coordinates.
      */
-    static float[] uv(int axis, int sign, float[] point) {
+    public static float[] uv(int axis, int sign, float[] point) {
         final float x = point[0];
         final float y = point[1];
         final float z = point[2];

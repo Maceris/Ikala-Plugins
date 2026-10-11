@@ -9,6 +9,7 @@ import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakedVertex;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.MeshData;
+import com.ikalagaming.graphics.lod.LodVertex;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.*;
 import com.ikalagaming.graphics.vulkan.RenderStage;
@@ -52,6 +53,12 @@ public class ShadowRender implements RenderStage {
     /** VkPipeline for baked sections, will be VK_NULL_HANDLE if not set up. */
     private long bakedPipeline;
 
+    /** The shader for level of detail clusters, in their vertex format. */
+    @NonNull private final ShaderVulkan lodShader;
+
+    /** VkPipeline for level of detail clusters, will be VK_NULL_HANDLE if not set up. */
+    private long lodPipeline;
+
     /** VkDescriptorSetLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorSetLayout;
 
@@ -78,12 +85,17 @@ public class ShadowRender implements RenderStage {
      *
      * @param shader The shader to use for rendering.
      * @param bakedShader The shader for baked sections.
+     * @param lodShader The shader for level of detail clusters.
      */
     public ShadowRender(
-            final @NonNull ShaderVulkan shader, final @NonNull ShaderVulkan bakedShader) {
+            final @NonNull ShaderVulkan shader,
+            final @NonNull ShaderVulkan bakedShader,
+            final @NonNull ShaderVulkan lodShader) {
         this.shader = shader;
         this.bakedShader = bakedShader;
+        this.lodShader = lodShader;
         this.bakedPipeline = VK_NULL_HANDLE;
+        this.lodPipeline = VK_NULL_HANDLE;
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
         this.pipeline = VK_NULL_HANDLE;
@@ -96,8 +108,9 @@ public class ShadowRender implements RenderStage {
     public void initialize(@NonNull VulkanState vulkanState) {
         log.debug("Initializing shadow render");
         createPipelineLayout(vulkanState);
-        pipeline = createPipeline(vulkanState, shader, false);
-        bakedPipeline = createPipeline(vulkanState, bakedShader, true);
+        pipeline = createPipeline(vulkanState, shader, false, false);
+        bakedPipeline = createPipeline(vulkanState, bakedShader, true, false);
+        lodPipeline = createPipeline(vulkanState, lodShader, false, true);
     }
 
     @Override
@@ -110,6 +123,8 @@ public class ShadowRender implements RenderStage {
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, bakedPipeline, null);
         bakedPipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, lodPipeline, null);
+        lodPipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
         pipelineLayout = VK_NULL_HANDLE;
         vkDestroyDescriptorSetLayout(vulkanState.device.logical, descriptorSetLayout, null);
@@ -221,7 +236,8 @@ public class ShadowRender implements RenderStage {
             vkCmdBeginRendering(commandBuffer, renderingInfo);
 
             if (frameData.meshSlotCount + frameData.bakedSlotCount > 0
-                    || !frameData.modelDrawInfo.isEmpty()) {
+                    || !frameData.modelDrawInfo.isEmpty()
+                    || LodRenderer.hasDraws(frameData)) {
                 // Not flipped, so the light stage can use the shadow map coordinates as is
                 VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
                 viewports.get(0).width(width).height(height).minDepth(0).maxDepth(1);
@@ -246,6 +262,16 @@ public class ShadowRender implements RenderStage {
                         pushConstants);
                 LongBuffer vertexBuffers = stack.callocLong(1);
                 LongBuffer vertexOffsets = stack.callocLong(1);
+
+                // Level of detail clusters, the same cut the scene draws
+                if (LodRenderer.hasDraws(frameData)) {
+                    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lodPipeline);
+                    state.lods.draw(
+                            commandBuffer,
+                            frameData,
+                            pipelineLayout,
+                            ShaderBindings.Shadow.PUSH_CONSTANT_LOD_CAMERA_OFFSET);
+                }
 
                 // Everything culling handled for this cascade, each kind from its own buffers,
                 // one command per mesh slot. Standard last, which the listed models need.
@@ -408,10 +434,11 @@ public class ShadowRender implements RenderStage {
      * @param state The Vulkan state.
      * @param shader The shader.
      * @param baked Whether it reads the baked vertex format.
+     * @param lod Whether it reads the level of detail vertex format.
      * @return The VkPipeline.
      */
     private long createPipeline(
-            @NonNull VulkanState state, @NonNull ShaderVulkan shader, boolean baked) {
+            @NonNull VulkanState state, @NonNull ShaderVulkan shader, boolean baked, boolean lod) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
@@ -422,15 +449,26 @@ public class ShadowRender implements RenderStage {
                     .get(0)
                     .binding(0)
                     .location(0)
-                    .format(baked ? VK_FORMAT_R16G16B16A16_SINT : VK_FORMAT_R32G32B32_SFLOAT)
-                    .offset(baked ? BakedVertex.POSITION_OFFSET : 0);
+                    .format(
+                            lod
+                                    ? VK_FORMAT_R32G32B32_SINT
+                                    : (baked
+                                            ? VK_FORMAT_R16G16B16A16_SINT
+                                            : VK_FORMAT_R32G32B32_SFLOAT))
+                    .offset(
+                            lod
+                                    ? LodVertex.POSITION_OFFSET
+                                    : (baked ? BakedVertex.POSITION_OFFSET : 0));
 
             VkVertexInputBindingDescription.Buffer vertexBindings =
                     VkVertexInputBindingDescription.calloc(1, stack);
             vertexBindings
                     .get(0)
                     .binding(0)
-                    .stride(baked ? BakedVertex.SIZE : MeshData.VERTEX_SIZE_IN_BYTES)
+                    .stride(
+                            lod
+                                    ? LodVertex.SIZE
+                                    : (baked ? BakedVertex.SIZE : MeshData.VERTEX_SIZE_IN_BYTES))
                     .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
 
             VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo =

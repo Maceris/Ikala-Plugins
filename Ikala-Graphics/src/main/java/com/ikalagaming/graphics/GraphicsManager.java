@@ -17,6 +17,7 @@ import com.ikalagaming.graphics.ui.UiManager;
 import com.ikalagaming.graphics.vulkan.DeletionQueue;
 import com.ikalagaming.graphics.vulkan.GeometryArena;
 import com.ikalagaming.graphics.vulkan.InstanceTable;
+import com.ikalagaming.graphics.vulkan.LodRenderer;
 import com.ikalagaming.graphics.vulkan.TextureRegistry;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
 import com.ikalagaming.launcher.Launcher;
@@ -301,6 +302,10 @@ public class GraphicsManager {
         }
         if (renderInstance.getState().bakeSources != null) {
             renderInstance.getState().bakeSources.removeAllOwnedBy(context.getOwnerKey());
+        }
+        LodRenderer lods = renderInstance.getState().lods;
+        if (lods != null) {
+            lods.removeAllOwnedBy(context.getOwnerKey());
         }
         GeometryArena bakedGeometry = renderInstance.getState().bakedGeometry;
         if (bakedGeometry != null) {

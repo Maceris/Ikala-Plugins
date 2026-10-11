@@ -12,6 +12,7 @@ import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
+import com.ikalagaming.graphics.lod.LodVertex;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.*;
 import com.ikalagaming.graphics.vulkan.RenderStage;
@@ -41,6 +42,19 @@ public class SceneRender implements RenderStage {
 
     /** The constant_id of {@code ALPHA_TEST} in {@code scene.frag}. */
     private static final int ALPHA_TEST_CONSTANT_ID = 0;
+
+    /** The constant_id of {@code TRIPLANAR} in {@code scene.frag}. */
+    private static final int TRIPLANAR_CONSTANT_ID = 1;
+
+    /** The vertex formats the scene pipelines read. */
+    private enum VertexFormat {
+        /** The full format of models, MeshData. */
+        STANDARD,
+        /** Baked sections, BakedVertex. */
+        BAKED,
+        /** Level of detail clusters, LodVertex. */
+        LOD
+    }
 
     /** The size of a material in the materials buffer, in bytes. */
     public static final int MATERIAL_SIZE = ShaderBindings.Scene.Material.SIZEOF;
@@ -107,6 +121,15 @@ public class SceneRender implements RenderStage {
     /** The shader for baked sections, in the baked vertex format. */
     @NonNull private final ShaderVulkan bakedShader;
 
+    /** The shader for level of detail clusters, in their vertex format. */
+    @NonNull private final ShaderVulkan lodShader;
+
+    /** VkPipeline for level of detail clusters, opaque and textured by projection. */
+    private long lodPipeline;
+
+    /** VkPipeline for level of detail clusters as wireframes. */
+    private long lodWireframe;
+
     /** VkPipeline for baked opaque sections, with no alpha test so depth is tested early. */
     private long bakedPipeline;
 
@@ -167,11 +190,17 @@ public class SceneRender implements RenderStage {
      *
      * @param shader The shader to use for rendering.
      * @param bakedShader The shader for baked sections.
+     * @param lodShader The shader for level of detail clusters.
      */
     public SceneRender(
-            final @NonNull ShaderVulkan shader, final @NonNull ShaderVulkan bakedShader) {
+            final @NonNull ShaderVulkan shader,
+            final @NonNull ShaderVulkan bakedShader,
+            final @NonNull ShaderVulkan lodShader) {
         this.shader = shader;
         this.bakedShader = bakedShader;
+        this.lodShader = lodShader;
+        this.lodPipeline = VK_NULL_HANDLE;
+        this.lodWireframe = VK_NULL_HANDLE;
         this.bakedPipeline = VK_NULL_HANDLE;
         this.bakedAlphaPipeline = VK_NULL_HANDLE;
         this.bakedWireframe = VK_NULL_HANDLE;
@@ -189,11 +218,17 @@ public class SceneRender implements RenderStage {
     public void initialize(@NonNull VulkanState vulkanState) {
         log.debug("Initializing scene render");
         createPipelineLayout(vulkanState);
-        this.pipeline = createPipeline(vulkanState, shader, false, false, true);
-        this.pipelineWireframe = createPipeline(vulkanState, shader, false, true, true);
-        this.bakedPipeline = createPipeline(vulkanState, bakedShader, true, false, false);
-        this.bakedAlphaPipeline = createPipeline(vulkanState, bakedShader, true, false, true);
-        this.bakedWireframe = createPipeline(vulkanState, bakedShader, true, true, true);
+        this.pipeline = createPipeline(vulkanState, shader, VertexFormat.STANDARD, false, true);
+        this.pipelineWireframe =
+                createPipeline(vulkanState, shader, VertexFormat.STANDARD, true, true);
+        this.bakedPipeline =
+                createPipeline(vulkanState, bakedShader, VertexFormat.BAKED, false, false);
+        this.bakedAlphaPipeline =
+                createPipeline(vulkanState, bakedShader, VertexFormat.BAKED, false, true);
+        this.bakedWireframe =
+                createPipeline(vulkanState, bakedShader, VertexFormat.BAKED, true, true);
+        this.lodPipeline = createPipeline(vulkanState, lodShader, VertexFormat.LOD, false, false);
+        this.lodWireframe = createPipeline(vulkanState, lodShader, VertexFormat.LOD, true, false);
     }
 
     @Override
@@ -210,6 +245,10 @@ public class SceneRender implements RenderStage {
         bakedAlphaPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, bakedWireframe, null);
         bakedWireframe = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, lodPipeline, null);
+        lodPipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, lodWireframe, null);
+        lodWireframe = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
         pipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
@@ -339,7 +378,9 @@ public class SceneRender implements RenderStage {
 
         final boolean anyListed = listedModels && !frameData.modelDrawInfo.isEmpty();
         final boolean anyCulled = frameData.meshSlotCount + frameData.bakedSlotCount > 0;
-        if ((anyCulled || anyListed) && width > 0 && height > 0) {
+        final boolean anyLod =
+                list == InstanceDrawUpdate.LIST_SCENE_EARLY && LodRenderer.hasDraws(frameData);
+        if ((anyCulled || anyListed || anyLod) && width > 0 && height > 0) {
             drawModels(commandBuffer, state, renderConfig, width, height, list, anyListed, stack);
         }
 
@@ -391,6 +432,19 @@ public class SceneRender implements RenderStage {
 
         LongBuffer vertexBuffers = stack.callocLong(1);
         LongBuffer vertexOffsets = stack.callocLong(1);
+
+        // Level of detail clusters, all drawn early until they are culled by occlusion too
+        if (list == InstanceDrawUpdate.LIST_SCENE_EARLY && LodRenderer.hasDraws(frameData)) {
+            vkCmdBindPipeline(
+                    commandBuffer,
+                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    wireframe ? lodWireframe : lodPipeline);
+            state.lods.draw(
+                    commandBuffer,
+                    frameData,
+                    pipelineLayout,
+                    ShaderBindings.Scene.PUSH_CONSTANT_LOD_CAMERA_OFFSET);
+        }
 
         // Everything culling handled: the list's commands for each kind, one per mesh slot, from
         // that kind's buffers with its pipeline. Standard last, which the listed models need.
@@ -839,13 +893,21 @@ public class SceneRender implements RenderStage {
                             state.device.logical, descriptorSetLayoutCreateInfo, null, longOutput));
             descriptorSetLayout = longOutput.get(0);
 
+            // Only level of detail clusters use these: where the camera is for each world
+            VkPushConstantRange.Buffer pushConstantRanges = VkPushConstantRange.calloc(1, stack);
+            pushConstantRanges
+                    .get(0)
+                    .stageFlags(VK_SHADER_STAGE_VERTEX_BIT)
+                    .offset(0)
+                    .size(ShaderBindings.Scene.PUSH_CONSTANTS_SIZE);
             VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo =
                     VkPipelineLayoutCreateInfo.calloc(stack)
                             .sType$Default()
                             .pSetLayouts(
                                     stack.longs(
                                             descriptorSetLayout,
-                                            state.bindlessTextures.getDescriptorSetLayout()));
+                                            state.bindlessTextures.getDescriptorSetLayout()))
+                            .pPushConstantRanges(pushConstantRanges);
             checkError(
                     vkCreatePipelineLayout(
                             state.device.logical, pipelineLayoutCreateInfo, null, longOutput));
@@ -970,31 +1032,57 @@ public class SceneRender implements RenderStage {
     }
 
     /**
-     * Copy a shader's stages, turning the fragment shader's alpha test off if asked, through its
-     * {@code ALPHA_TEST} specialization constant.
+     * Describe the level of detail vertex format, see LodVertex: grid position, octahedral normal,
+     * material and flags.
+     *
+     * @param stack The stack to allocate on.
+     * @return The attributes, read from binding 0.
+     */
+    static VkVertexInputAttributeDescription.Buffer lodVertexAttributes(
+            @NonNull MemoryStack stack) {
+        final int[] formats = {
+            VK_FORMAT_R32G32B32_SINT, VK_FORMAT_R16G16_SNORM, VK_FORMAT_R16G16_UINT
+        };
+        final int[] offsets = {
+            LodVertex.POSITION_OFFSET, LodVertex.NORMAL_OFFSET, LodVertex.MATERIAL_OFFSET
+        };
+        VkVertexInputAttributeDescription.Buffer attributes =
+                VkVertexInputAttributeDescription.calloc(formats.length, stack);
+        for (int i = 0; i < formats.length; i++) {
+            attributes.get(i).binding(0).location(i).format(formats[i]).offset(offsets[i]);
+        }
+        return attributes;
+    }
+
+    /**
+     * Copy a shader's stages, setting the fragment shader's {@code ALPHA_TEST} and {@code
+     * TRIPLANAR} specialization constants.
      *
      * @param shader The shader.
      * @param alphaTest Whether to drop pixels the texture's alpha cuts out.
+     * @param triplanar Whether its texture coordinates are unwrapped projections.
      * @param stack The stack to allocate on.
      * @return The stages for the pipeline.
      */
     private static VkPipelineShaderStageCreateInfo.Buffer stages(
-            @NonNull ShaderVulkan shader, boolean alphaTest, @NonNull MemoryStack stack) {
+            @NonNull ShaderVulkan shader,
+            boolean alphaTest,
+            boolean triplanar,
+            @NonNull MemoryStack stack) {
         final int count = shader.shaderModules.length;
         VkPipelineShaderStageCreateInfo.Buffer stages =
                 VkPipelineShaderStageCreateInfo.calloc(count, stack);
         for (int i = 0; i < count; ++i) {
             stages.get(i).set(shader.shaderStages.get(i));
         }
-        if (alphaTest) {
-            return stages;
-        }
-        VkSpecializationMapEntry.Buffer entries = VkSpecializationMapEntry.calloc(1, stack);
+        VkSpecializationMapEntry.Buffer entries = VkSpecializationMapEntry.calloc(2, stack);
         entries.get(0).constantID(ALPHA_TEST_CONSTANT_ID).offset(0).size(Integer.BYTES);
+        entries.get(1).constantID(TRIPLANAR_CONSTANT_ID).offset(Integer.BYTES).size(Integer.BYTES);
+        final ByteBuffer data = stack.malloc(2 * Integer.BYTES);
+        data.putInt(0, alphaTest ? 1 : 0);
+        data.putInt(Integer.BYTES, triplanar ? 1 : 0);
         VkSpecializationInfo specialization =
-                VkSpecializationInfo.calloc(stack)
-                        .pMapEntries(entries)
-                        .pData(stack.bytes(new byte[Integer.BYTES]));
+                VkSpecializationInfo.calloc(stack).pMapEntries(entries).pData(data);
         for (int i = 0; i < count; ++i) {
             if (stages.get(i).stage() == VK_SHADER_STAGE_FRAGMENT_BIT) {
                 stages.get(i).pSpecializationInfo(specialization);
@@ -1008,7 +1096,7 @@ public class SceneRender implements RenderStage {
      *
      * @param state The Vulkan state.
      * @param shader The shader.
-     * @param baked Whether it reads the baked vertex format.
+     * @param format The vertex format it reads.
      * @param wireframe Whether to draw wireframes.
      * @param alphaTest Whether to drop pixels the texture's alpha cuts out.
      * @return The VkPipeline.
@@ -1016,20 +1104,27 @@ public class SceneRender implements RenderStage {
     private long createPipeline(
             @NonNull VulkanState state,
             @NonNull ShaderVulkan shader,
-            boolean baked,
+            @NonNull VertexFormat format,
             boolean wireframe,
             boolean alphaTest) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
             VkVertexInputAttributeDescription.Buffer vertexAttributes =
-                    vertexAttributes(baked, stack);
+                    format == VertexFormat.LOD
+                            ? lodVertexAttributes(stack)
+                            : vertexAttributes(format == VertexFormat.BAKED, stack);
             VkVertexInputBindingDescription.Buffer vertexBindings =
                     VkVertexInputBindingDescription.calloc(1, stack);
             vertexBindings
                     .get(0)
                     .binding(0)
-                    .stride(baked ? BakedVertex.SIZE : MeshData.VERTEX_SIZE_IN_BYTES)
+                    .stride(
+                            switch (format) {
+                                case STANDARD -> MeshData.VERTEX_SIZE_IN_BYTES;
+                                case BAKED -> BakedVertex.SIZE;
+                                case LOD -> LodVertex.SIZE;
+                            })
                     .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
 
             VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo =
@@ -1113,7 +1208,7 @@ public class SceneRender implements RenderStage {
                     .sType$Default()
                     .pNext(renderingCreateInfo)
                     .stageCount(shader.shaderModules.length)
-                    .pStages(stages(shader, alphaTest, stack))
+                    .pStages(stages(shader, alphaTest, format == VertexFormat.LOD, stack))
                     .pVertexInputState(vertexInputStateCreateInfo)
                     .pInputAssemblyState(inputAssemblyState)
                     .pViewportState(viewportState)

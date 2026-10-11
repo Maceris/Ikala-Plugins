@@ -384,6 +384,7 @@ public class VulkanInstance {
         state.textureRegistry.removeAll().forEach(textureLoader::delete);
         state.geometry.cleanup(state);
         state.bakedGeometry.cleanup(state);
+        state.lods.cleanup(state);
         state.bakeSources.clear();
         state.sections.cleanup();
         state.frameTimings.cleanup(state);
@@ -405,6 +406,7 @@ public class VulkanInstance {
         state.textureUploads = null;
         state.geometry = null;
         state.bakedGeometry = null;
+        state.lods = null;
         state.bakeSources = null;
         state.sections = null;
         state.frameTimings = null;
@@ -1167,6 +1169,7 @@ public class VulkanInstance {
         state.textureUploads = new TextureUploads();
         state.geometry = new GeometryArena(state, MeshData.VERTEX_SIZE_IN_BYTES);
         state.bakedGeometry = new GeometryArena(state, BakedVertex.SIZE);
+        state.lods = new LodRenderer(state);
         state.bakeSources = new BakeSources();
         state.sections = new SectionManager();
         state.instances = new InstanceTable(state);
@@ -1483,6 +1486,20 @@ public class VulkanInstance {
                         ShaderVulkan.Type.FRAGMENT,
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(RenderStage.Type.SCENE_BAKED, new ShaderVulkan(bakedModules, state));
+
+        // Level of detail clusters too, textured by projection through TRIPLANAR
+        List<ShaderVulkan.ShaderModuleData> lodModules = new ArrayList<>();
+        lodModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/scene_lod.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        lodModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/scene.frag",
+                        ShaderVulkan.Type.FRAGMENT,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(RenderStage.Type.SCENE_LOD, new ShaderVulkan(lodModules, state));
     }
 
     /**
@@ -1521,6 +1538,14 @@ public class VulkanInstance {
                         ShaderVulkan.Type.VERTEX,
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(RenderStage.Type.SHADOW_BAKED, new ShaderVulkan(bakedModules, state));
+
+        List<ShaderVulkan.ShaderModuleData> lodModules = new ArrayList<>();
+        lodModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/shadow_lod.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(RenderStage.Type.SHADOW_LOD, new ShaderVulkan(lodModules, state));
     }
 
     /** Set up the skybox shader and uniforms. */
@@ -1682,6 +1707,10 @@ public class VulkanInstance {
         state.instances.record(state, commandBuffer, scene.getMaterialCache());
         state.geometry.record(state, commandBuffer);
         state.bakedGeometry.record(state, commandBuffer);
+        state.lods.record(state, commandBuffer);
+        // Before the shadows, the first to draw them
+        state.lods.prepare(
+                state, state.perFrameData[state.frameIndex], scene.getCamera().getPosition());
         state.frameTimings.mark(commandBuffer, state.frameIndex, "Uploads");
 
         // This will record the command buffer

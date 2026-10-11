@@ -44,6 +44,9 @@ public class VulkanState {
     /** The shared vertex and index buffers baked sections live in, in the baked vertex format. */
     public GeometryArena bakedGeometry = null;
 
+    /** Level of detail worlds, their clusters and their draws. */
+    public LodRenderer lods = null;
+
     /** The CPU copies of meshes that sections can be baked from. */
     public BakeSources bakeSources = null;
 

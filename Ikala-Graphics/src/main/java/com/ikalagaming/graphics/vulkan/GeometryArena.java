@@ -17,6 +17,8 @@ import org.lwjgl.vulkan.VkDependencyInfo;
 import org.lwjgl.vulkan.VkMemoryBarrier2;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -420,14 +422,26 @@ public class GeometryArena {
             long bytes = 0;
             Upload upload;
             VkBufferCopy.Buffer region = VkBufferCopy.calloc(1, stack);
+            // Meshes registered on another thread since the buffers grew above may lie past their
+            // ends; those wait for the next frame, which grows the buffers first
+            final List<Upload> later = new ArrayList<>();
             while (bytes < BYTES_PER_FRAME && (upload = uploads.poll()) != null) {
                 final StagingRing.Staging vertexStaging = upload.vertices();
                 final StagingRing.Staging indexStaging = upload.indices();
+                final MeshRegistry.Location location = registry.locatePending(upload.handle());
+                if (location != null
+                        && ((long) location.vertexOffset() * vertexStride + vertexStaging.size()
+                                        > vertices.allocationInfo.size()
+                                || (long) location.firstIndex() * Integer.BYTES
+                                                + indexStaging.size()
+                                        > indices.allocationInfo.size())) {
+                    later.add(upload);
+                    continue;
+                }
                 bytes += vertexStaging.size() + indexStaging.size();
                 // Read by this frame, so they can go once it finishes
                 state.deferFree(() -> state.stagingRing.free(state, vertexStaging));
                 state.deferFree(() -> state.stagingRing.free(state, indexStaging));
-                final MeshRegistry.Location location = registry.locatePending(upload.handle());
                 if (location == null) {
                     // Released while waiting
                     continue;
@@ -446,6 +460,7 @@ public class GeometryArena {
                         region);
                 registry.markResident(upload.handle());
             }
+            uploads.addAll(later);
 
             // Drawn, and read as storage by compute and debug passes
             memoryBarrier(

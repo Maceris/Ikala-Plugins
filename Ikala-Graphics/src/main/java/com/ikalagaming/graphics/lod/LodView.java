@@ -4,6 +4,7 @@ import com.ikalagaming.graphics.DebugShapeHandle;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.InstanceHandle;
+import com.ikalagaming.graphics.LodHandle;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -160,6 +161,8 @@ public final class LodView implements AutoCloseable {
      * @param drawn Whether each cluster was drawn.
      * @param millis How long it took.
      * @param mode How the triangles were colored.
+     * @param textured Whether the clusters are drawn textured through the renderer's level of
+     *     detail path, so there are no meshes.
      */
     private record Built(
             long generation,
@@ -170,7 +173,8 @@ public final class LodView implements AutoCloseable {
             int triangles,
             boolean[] drawn,
             double millis,
-            Mode mode) {}
+            Mode mode,
+            boolean textured) {}
 
     /**
      * What is in the scene for one build.
@@ -255,7 +259,16 @@ public final class LodView implements AutoCloseable {
     @Getter private double buildMillis;
 
     /** Whether it was closed. */
-    private boolean closed;
+    private volatile boolean closed;
+
+    /**
+     * The DAG on the GPU, drawn textured in the materials coloring once uploaded, or null until the
+     * worker has put it there.
+     */
+    private volatile LodHandle world;
+
+    /** Whether the last build drew through {@link #world}. */
+    private boolean texturedShown;
 
     /** A count for model IDs, so the old and new models never share one. */
     private int builds;
@@ -303,6 +316,21 @@ public final class LodView implements AutoCloseable {
         mismatchPalette[NOT_MAJORITY_KEY] =
                 debugMaterial(cache, NOT_MAJORITY_RGB[0], NOT_MAJORITY_RGB[1], NOT_MAJORITY_RGB[2]);
         cache.setDirty(true);
+        worker.execute(
+                () -> {
+                    if (closed || graphics.isClosed()) {
+                        return;
+                    }
+                    final LodHandle added = graphics.lods().add(dag);
+                    post(
+                            () -> {
+                                if (closed) {
+                                    graphics.lods().remove(added);
+                                } else {
+                                    world = added;
+                                }
+                            });
+                });
     }
 
     /**
@@ -347,6 +375,13 @@ public final class LodView implements AutoCloseable {
         if (building) {
             return;
         }
+        // Redo the materials coloring textured once the DAG has finished uploading
+        if (settings.mode() == Mode.MATERIALS
+                && !texturedShown
+                && world != null
+                && graphics.lods().isResident(world)) {
+            builtSettings = null;
+        }
         final Scene scene = GraphicsManager.getScene();
         final Observer observer = scene.getObserver();
         final Vector3d at = new Vector3d(observer.getPosition());
@@ -358,11 +393,15 @@ public final class LodView implements AutoCloseable {
         building = true;
         final long mine = generation.incrementAndGet();
         final LodCut.View view = new LodCut.View(at.x, at.y, at.z, pixelsPerUnit(observer));
+        final boolean textured =
+                settings.mode() == Mode.MATERIALS
+                        && world != null
+                        && graphics.lods().isResident(world);
         worker.execute(
                 () -> {
                     final Built built;
                     try {
-                        built = build(mine, view, settings);
+                        built = build(mine, view, settings, textured);
                     } catch (RuntimeException e) {
                         log.warn("The LOD view {} could not build", name, e);
                         post(() -> building = false);
@@ -390,9 +429,11 @@ public final class LodView implements AutoCloseable {
      * @param mine This build's generation.
      * @param view Where the cut is seen from.
      * @param settings What to show.
+     * @param textured Whether the renderer draws the clusters, so no meshes are needed.
      * @return The meshes.
      */
-    private Built build(long mine, LodCut.@NonNull View view, @NonNull Settings settings) {
+    private Built build(
+            long mine, LodCut.@NonNull View view, @NonNull Settings settings, boolean textured) {
         final long start = System.nanoTime();
         final boolean[] chosen;
         if (settings.fixedLevel() >= 0) {
@@ -415,6 +456,9 @@ public final class LodView implements AutoCloseable {
             final LodDag.Cluster cluster = dag.clusters().get(i);
             ++clusters;
             triangles += cluster.triangleCount();
+            if (textured) {
+                continue;
+            }
             for (int t = 0; t < cluster.triangleCount(); ++t) {
                 final int key = keyOf(cluster, t, settings.mode(), fidelity);
                 float[] corners = new float[TRIANGLE_VALUES];
@@ -440,7 +484,8 @@ public final class LodView implements AutoCloseable {
                 triangles,
                 chosen,
                 (System.nanoTime() - start) / NANOS_PER_MILLI,
-                settings.mode());
+                settings.mode(),
+                textured);
     }
 
     /**
@@ -648,6 +693,23 @@ public final class LodView implements AutoCloseable {
             return;
         }
         final Scene scene = GraphicsManager.getScene();
+        texturedShown = built.textured();
+        if (world != null) {
+            graphics.lods().setDrawn(world, built.textured() ? built.drawn() : new boolean[0]);
+        }
+        if (built.textured()) {
+            // The renderer draws the cut; no model is needed
+            if (previous != null) {
+                scene.removeModel(previous.modelId());
+            }
+            if (current != null) {
+                scene.removeModel(current.modelId());
+            }
+            previous = null;
+            current = null;
+            showOverlay(built);
+            return;
+        }
         final MaterialCache cache = scene.getMaterialCache();
         final Model model = new Model(name + "#lod" + builds++);
         for (int i = 0; i < built.meshes().size(); ++i) {
@@ -677,6 +739,15 @@ public final class LodView implements AutoCloseable {
         }
         previous = current;
         current = new Shown(model.getId(), model, instance);
+        showOverlay(built);
+    }
+
+    /**
+     * Swap in a build's debug shapes, and note what it drew. Render thread.
+     *
+     * @param built The build.
+     */
+    private void showOverlay(@NonNull Built built) {
         for (DebugShapeHandle handle : shapes) {
             graphics.debug().remove(handle);
         }
@@ -766,7 +837,11 @@ public final class LodView implements AutoCloseable {
         current = null;
         if (!graphics.isClosed()) {
             shapes.forEach(graphics.debug()::remove);
+            if (world != null) {
+                graphics.lods().remove(world);
+            }
         }
+        world = null;
         shapes.clear();
         for (Material material : palette) {
             scene.getMaterialCache().removeMaterial(material);

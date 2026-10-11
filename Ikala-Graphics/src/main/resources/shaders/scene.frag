@@ -16,6 +16,11 @@ layout(location = 6) flat in uint outMaterialIdx;
 // depth test can run before the shader.
 layout(constant_id = 0) const bool ALPHA_TEST = true;
 
+// Whether the texture coordinates are unwrapped projections, as scene_lod.vert gives level of
+// detail clusters: then the fraction is sampled, one repeat per block, with the unwrapped
+// coordinates' gradients so the mip level doesn't jump where the fraction wraps.
+layout(constant_id = 1) const bool TRIPLANAR = false;
+
 layout(location = 0) out vec4 buffBaseColor;
 layout(location = 1) out vec4 buffNormal;
 layout(location = 2) out vec4 buffTangent;
@@ -27,12 +32,25 @@ layout(std430, set = 0, binding = 2) readonly buffer Materials {
     Material materials[];
 };
 
+// Sample one of the bindless textures at this pixel's texture coordinates
+vec4 sampleTexture(int index)
+{
+    if (TRIPLANAR) {
+        return textureGrad(
+            bindlessTextures[nonuniformEXT(index)],
+            fract(outTextCoord),
+            dFdx(outTextCoord),
+            dFdy(outTextCoord));
+    }
+    return texture(bindlessTextures[nonuniformEXT(index)], outTextCoord);
+}
+
 void main() {
     Material material = materials[outMaterialIdx];
 
     vec4 baseColor = material.baseColor;
     if (material.textureIndex > 0) {
-        baseColor = texture(bindlessTextures[nonuniformEXT(material.textureIndex)], outTextCoord);
+        baseColor = sampleTexture(material.textureIndex);
     }
     if (ALPHA_TEST && baseColor.a < 0.5) {
         discard;
@@ -41,7 +59,7 @@ void main() {
     vec3 normal = outNormal;
     if (material.normalMapIndex > 0) {
         mat3 TBN = mat3(outTangent, outBitangent, outNormal);
-        vec3 newNormal = texture(bindlessTextures[nonuniformEXT(material.normalMapIndex)], outTextCoord).rgb;
+        vec3 newNormal = sampleTexture(material.normalMapIndex).rgb;
         newNormal = newNormal * 2.0 - 1.0;
         normal = normalize(TBN * newNormal);
     }

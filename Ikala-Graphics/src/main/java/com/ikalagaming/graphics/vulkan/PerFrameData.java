@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.vulkan;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.Model;
 
+import java.util.List;
 import java.util.Map;
 
 /** Data buffers for a frame, only the data that the CPU cares about. */
@@ -111,6 +112,12 @@ public class PerFrameData {
      * fills in, then the CPU-written commands of {@link #modelDrawInfo}.
      */
     public SharedBuffer sceneDrawCommands;
+
+    /** Indirect draw commands for level of detail clusters this frame, see {@link LodRenderer}. */
+    public SharedBuffer lodDrawCommands;
+
+    /** Each level of detail world's draws in {@link #lodDrawCommands} this frame. */
+    public List<LodRenderer.Batch> lodBatches;
 
     /**
      * Models drawn from CPU-written commands this frame, which culling doesn't handle: animated

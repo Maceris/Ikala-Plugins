@@ -62,6 +62,9 @@ public final class GraphicsContext {
     /** The sections API for this plugin. */
     private final Sections sections;
 
+    /** The level of detail API. */
+    private final Lods lods;
+
     /** Debug shape drawing for this context. */
     private final DebugDraw debug;
 
@@ -86,6 +89,7 @@ public final class GraphicsContext {
         instances = new Instances(this);
         lights = new Lights(this);
         sections = new Sections(this);
+        lods = new Lods(this);
         debug = new DebugDraw(this);
         ui = new UI(this, GraphicsManager::getUiManager);
         closed = false;
@@ -144,6 +148,17 @@ public final class GraphicsContext {
     public Sections sections() {
         checkOpen();
         return sections;
+    }
+
+    /**
+     * Draw level of detail worlds, owned by this plugin.
+     *
+     * @return The level of detail API for this plugin.
+     * @throws IllegalStateException If the plugin was unloaded.
+     */
+    public Lods lods() {
+        checkOpen();
+        return lods;
     }
 
     /**

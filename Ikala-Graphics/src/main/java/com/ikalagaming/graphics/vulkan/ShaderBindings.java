@@ -791,6 +791,16 @@ public class ShaderBindings {
      */
     public static class Scene {
 
+        /**
+         * Push constant offset for where the camera is relative to a level of detail world, which
+         * only {@code scene_lod.vert} reads.
+         */
+        public static final int PUSH_CONSTANT_LOD_CAMERA_OFFSET = 0;
+
+        /** The size of the push constants in bytes. */
+        public static final int PUSH_CONSTANTS_SIZE =
+                PUSH_CONSTANT_LOD_CAMERA_OFFSET + LodRenderer.CAMERA_CONSTANTS_SIZE;
+
         /** Offsets into the material struct. */
         public static class Material {
             /** Offset in bytes to the base color. */
@@ -883,8 +893,16 @@ public class ShaderBindings {
         /** Push constant offset for the device address of this frame's visible instance list. */
         public static final int PUSH_CONSTANT_VISIBLE_OFFSET = 4 * 4 * Float.BYTES;
 
+        /**
+         * Push constant offset for where the camera is relative to a level of detail world, which
+         * only {@code shadow_lod.vert} reads, after the visible list address and aligned for its
+         * ivec4.
+         */
+        public static final int PUSH_CONSTANT_LOD_CAMERA_OFFSET = 5 * 4 * Float.BYTES;
+
         /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_VISIBLE_OFFSET + Long.BYTES;
+        public static final int PUSH_CONSTANTS_SIZE =
+                PUSH_CONSTANT_LOD_CAMERA_OFFSET + LodRenderer.CAMERA_CONSTANTS_SIZE;
 
         /** The binding point for the model matrices buffer. */
         public static final int MODEL_MATRICES_BINDING = 0;

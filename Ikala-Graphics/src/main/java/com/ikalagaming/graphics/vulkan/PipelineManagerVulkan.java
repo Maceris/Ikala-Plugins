@@ -151,7 +151,8 @@ public class PipelineManagerVulkan {
         stageSceneRender =
                 new SceneRender(
                         shaders.getShader(RenderStage.Type.SCENE),
-                        shaders.getShader(RenderStage.Type.SCENE_BAKED));
+                        shaders.getShader(RenderStage.Type.SCENE_BAKED),
+                        shaders.getShader(RenderStage.Type.SCENE_LOD));
         stageSceneRender.initialize(state);
         stageGuiRender = new GuiRender(shaders.getShader(RenderStage.Type.GUI), fontAtlas);
         stageGuiRender.initialize(state);
@@ -160,7 +161,8 @@ public class PipelineManagerVulkan {
         stageShadowRender =
                 new ShadowRender(
                         shaders.getShader(RenderStage.Type.SHADOW),
-                        shaders.getShader(RenderStage.Type.SHADOW_BAKED));
+                        shaders.getShader(RenderStage.Type.SHADOW_BAKED),
+                        shaders.getShader(RenderStage.Type.SHADOW_LOD));
         stageShadowRender.initialize(state);
         stageLightCull = new LightCull(shaders.getShader(RenderStage.Type.LIGHT_CULL));
         stageLightCull.initialize(state);
@@ -525,6 +527,11 @@ public class PipelineManagerVulkan {
                                 DEFERRED_UNTIL_LATER,
                                 state,
                                 VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | STORAGE);
+                state.perFrameData[i].lodDrawCommands =
+                        SharedBuffer.allocate(
+                                DEFERRED_UNTIL_LATER,
+                                state,
+                                VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | STORAGE);
                 state.perFrameData[i].modelDrawInfo = new LinkedHashMap<>();
                 state.perFrameData[i].debugVertices =
                         SharedBuffer.allocate(
@@ -755,6 +762,9 @@ public class PipelineManagerVulkan {
         data.visibleInstances = null;
         SharedBuffer.free(data.sceneDrawCommands, state);
         data.sceneDrawCommands = null;
+        SharedBuffer.free(data.lodDrawCommands, state);
+        data.lodDrawCommands = null;
+        data.lodBatches = null;
         data.modelDrawInfo = null;
         SharedBuffer.free(data.skyboxUniforms, state);
         data.skyboxUniforms = null;
