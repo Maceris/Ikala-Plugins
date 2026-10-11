@@ -2,9 +2,7 @@ package com.ikalagaming.graphics.lod;
 
 import lombok.NonNull;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Splits a mesh into clusters of at most a set number of triangles, by partitioning its dual graph:
@@ -27,12 +25,6 @@ public final class Clusters {
     /** Values in a triangle's corners. */
     static final int TRIANGLE_VALUES = 9;
 
-    /** Bits in an int, for packing an edge into a long. */
-    private static final int INT_BITS = 32;
-
-    /** The mask of the low int in a long. */
-    private static final long LOW_INT = 0xFFFFFFFFL;
-
     /**
      * Split a mesh's triangles into clusters.
      *
@@ -50,7 +42,7 @@ public final class Clusters {
             return new int[][] {all};
         }
         Graph.Builder builder = new Graph.Builder(n);
-        Map<Long, Integer> firstUse = new HashMap<>();
+        final LongIntMap firstUse = new LongIntMap(n * CORNERS);
         for (int t = 0; t < n; ++t) {
             double x = 0;
             double y = 0;
@@ -61,9 +53,9 @@ public final class Clusters {
                 y += mesh.position(v, 1);
                 z += mesh.position(v, 2);
                 final int w = mesh.corner(t, (corner + 1) % CORNERS);
-                final long edge = ((long) Math.min(v, w) << INT_BITS) | (Math.max(v, w) & LOW_INT);
-                final Integer other = firstUse.putIfAbsent(edge, t);
-                if (other != null) {
+                final int other =
+                        firstUse.putIfAbsent(LongIntMap.pair(Math.min(v, w), Math.max(v, w)), t);
+                if (other != LongIntMap.MISSING) {
                     builder.edge(t, other, 1);
                 }
             }

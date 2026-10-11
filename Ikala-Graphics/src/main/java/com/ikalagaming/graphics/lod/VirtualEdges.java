@@ -4,10 +4,9 @@ import com.ikalagaming.util.IntArrayList;
 
 import lombok.NonNull;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Virtual edges join parts of a mesh that are close but share no face, so simplification can merge
@@ -33,11 +32,8 @@ final class VirtualEdges {
     /** The mask of one packed grid coordinate. */
     private static final long CELL_MASK = (1L << CELL_BITS) - 1;
 
-    /** Bits in an int, for packing a pair of indices into a long. */
-    private static final int INT_BITS = 32;
-
-    /** The mask of the low int in a long. */
-    private static final long LOW_INT = 0xFFFFFFFFL;
+    /** Room for this many close pairs at first. */
+    private static final int INITIAL_PAIRS = 64;
 
     /**
      * Find the virtual edges of a mesh.
@@ -51,46 +47,107 @@ final class VirtualEdges {
             return new int[0];
         }
         final int[] component = components(mesh);
+        if (oneComponent(component)) {
+            // Nothing to join
+            return new int[0];
+        }
+        final int[] triangleComponent = new int[mesh.getTriangleCount()];
+        for (int t = 0; t < triangleComponent.length; ++t) {
+            triangleComponent[t] = component[mesh.corner(t, 0)];
+        }
         final double reach = 2 * radius;
         final double cell = cellSize(mesh, reach);
-        // Each triangle goes in every cell its bounds, grown by 2r, touch
-        Map<Long, IntArrayList> grid = new HashMap<>();
+        // Each triangle goes in the cells its own bounds touch
+        final LongIntMap cellIndex = new LongIntMap(mesh.getTriangleCount());
+        final List<IntArrayList> cells = new ArrayList<>();
         final double[] min = new double[AXES];
         final double[] max = new double[AXES];
         for (int t = 0; t < mesh.getTriangleCount(); ++t) {
-            bounds(mesh, t, reach, min, max);
+            bounds(mesh, t, 0, min, max);
             for (long x = cellOf(min[0], cell); x <= cellOf(max[0], cell); ++x) {
                 for (long y = cellOf(min[1], cell); y <= cellOf(max[1], cell); ++y) {
                     for (long z = cellOf(min[2], cell); z <= cellOf(max[2], cell); ++z) {
-                        grid.computeIfAbsent(pack(x, y, z), k -> new IntArrayList()).addInt(t);
+                        int index = cellIndex.putIfAbsent(pack(x, y, z), cells.size());
+                        if (index == LongIntMap.MISSING) {
+                            index = cells.size();
+                            cells.add(new IntArrayList());
+                        }
+                        cells.get(index).addInt(t);
                     }
                 }
             }
         }
-        Set<Long> checked = new HashSet<>();
-        Set<Long> edges = new HashSet<>();
-        IntArrayList found = new IntArrayList();
+        // Each triangle looks through the cells its bounds grown by 2r touch, for later triangles
+        // of
+        // other components; a triangle closer than 2r is in one of them. The stamp skips a
+        // triangle met in several cells.
+        final int[] seenBy = new int[mesh.getTriangleCount()];
+        Arrays.fill(seenBy, -1);
+        long[] pairs = new long[INITIAL_PAIRS];
+        int pairCount = 0;
         final double[] a = new double[TRIANGLE_VALUES];
         final double[] b = new double[TRIANGLE_VALUES];
         final double limit = reach * reach;
-        for (IntArrayList triangles : grid.values()) {
-            for (int i = 0; i < triangles.size(); ++i) {
-                final int ta = triangles.getInt(i);
-                for (int j = i + 1; j < triangles.size(); ++j) {
-                    final int tb = triangles.getInt(j);
-                    if (component[mesh.corner(ta, 0)] == component[mesh.corner(tb, 0)]
-                            || !checked.add(pair(Math.min(ta, tb), Math.max(ta, tb)))) {
-                        continue;
-                    }
-                    load(mesh, ta, a);
-                    load(mesh, tb, b);
-                    if (Geometry.triangleDistanceSquared(a, b) < limit) {
-                        closestPair(mesh, ta, tb, edges, found);
+        for (int ta = 0; ta < mesh.getTriangleCount(); ++ta) {
+            bounds(mesh, ta, reach, min, max);
+            boolean loaded = false;
+            for (long x = cellOf(min[0], cell); x <= cellOf(max[0], cell); ++x) {
+                for (long y = cellOf(min[1], cell); y <= cellOf(max[1], cell); ++y) {
+                    for (long z = cellOf(min[2], cell); z <= cellOf(max[2], cell); ++z) {
+                        final int index = cellIndex.get(pack(x, y, z));
+                        if (index == LongIntMap.MISSING) {
+                            continue;
+                        }
+                        final IntArrayList triangles = cells.get(index);
+                        for (int i = 0; i < triangles.size(); ++i) {
+                            final int tb = triangles.getInt(i);
+                            if (tb <= ta
+                                    || seenBy[tb] == ta
+                                    || triangleComponent[ta] == triangleComponent[tb]) {
+                                continue;
+                            }
+                            seenBy[tb] = ta;
+                            if (!loaded) {
+                                load(mesh, ta, a);
+                                loaded = true;
+                            }
+                            load(mesh, tb, b);
+                            if (Geometry.triangleDistanceSquared(a, b) < limit) {
+                                if (pairCount == pairs.length) {
+                                    pairs = Arrays.copyOf(pairs, pairs.length * 2);
+                                }
+                                pairs[pairCount++] = closestPair(mesh, ta, tb);
+                            }
+                        }
                     }
                 }
             }
         }
+        // Many triangle pairs share their closest vertices: keep each edge once
+        Arrays.sort(pairs, 0, pairCount);
+        final IntArrayList found = new IntArrayList();
+        for (int i = 0; i < pairCount; ++i) {
+            if (i == 0 || pairs[i] != pairs[i - 1]) {
+                found.addInt((int) (pairs[i] >>> Integer.SIZE));
+                found.addInt((int) pairs[i]);
+            }
+        }
         return found.toIntArray();
+    }
+
+    /**
+     * Whether every vertex is in the same component.
+     *
+     * @param component Each vertex's component.
+     * @return True if there is only one.
+     */
+    private static boolean oneComponent(int @NonNull [] component) {
+        for (int c : component) {
+            if (c != component[0]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -217,17 +274,6 @@ final class VirtualEdges {
     }
 
     /**
-     * Pack two ints into a long.
-     *
-     * @param a The high int.
-     * @param b The low int.
-     * @return The key.
-     */
-    private static long pair(int a, int b) {
-        return ((long) a << INT_BITS) | (b & LOW_INT);
-    }
-
-    /**
      * Read a triangle's corners.
      *
      * @param mesh The mesh.
@@ -243,20 +289,14 @@ final class VirtualEdges {
     }
 
     /**
-     * Join the closest pair of vertices of two triangles, unless they are already joined.
+     * The closest pair of vertices of two triangles.
      *
      * @param mesh The mesh.
      * @param ta The first triangle.
      * @param tb The second triangle.
-     * @param edges The edges so far, packed, to skip repeats.
-     * @param found The edges so far, as pairs.
+     * @return The pair, packed with the lower vertex first.
      */
-    private static void closestPair(
-            @NonNull LodMesh mesh,
-            int ta,
-            int tb,
-            @NonNull Set<Long> edges,
-            @NonNull IntArrayList found) {
+    private static long closestPair(@NonNull LodMesh mesh, int ta, int tb) {
         double best = Double.MAX_VALUE;
         int bestA = -1;
         int bestB = -1;
@@ -276,10 +316,7 @@ final class VirtualEdges {
                 }
             }
         }
-        if (edges.add(pair(Math.min(bestA, bestB), Math.max(bestA, bestB)))) {
-            found.addInt(bestA);
-            found.addInt(bestB);
-        }
+        return LongIntMap.pair(Math.min(bestA, bestB), Math.max(bestA, bestB));
     }
 
     /** Static helpers only. */

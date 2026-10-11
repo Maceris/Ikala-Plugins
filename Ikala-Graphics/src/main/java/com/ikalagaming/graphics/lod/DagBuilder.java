@@ -427,13 +427,14 @@ public final class DagBuilder {
      * @return The locked edges, then all edges.
      */
     private static int[] countEdges(@NonNull LodMesh mesh) {
-        Set<Long> edges = new HashSet<>();
+        final LongIntMap edges = new LongIntMap(mesh.getTriangleCount() * AXES);
         int locked = 0;
         for (int t = 0; t < mesh.getTriangleCount(); ++t) {
             for (int corner = 0; corner < AXES; ++corner) {
                 final int v = mesh.corner(t, corner);
                 final int w = mesh.corner(t, (corner + 1) % AXES);
-                if (edges.add(((long) Math.min(v, w) << Integer.SIZE) | Math.max(v, w))
+                if (edges.putIfAbsent(LongIntMap.pair(Math.min(v, w), Math.max(v, w)), 0)
+                                == LongIntMap.MISSING
                         && mesh.isLocked(v)
                         && mesh.isLocked(w)) {
                     ++locked;

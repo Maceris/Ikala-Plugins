@@ -205,6 +205,31 @@ public final class Simplifier {
     private final double[] chosen = new double[AXES];
 
     /**
+     * Each vertex's boundary area quadric, the sum over its boundary edges, kept until the vertex's
+     * version changes. A collapse changes the boundary edges and positions only around the kept
+     * vertex, whose neighbors' versions it bumps, so a matching version means the sum is current.
+     */
+    private final double[] boundary;
+
+    /** The version each vertex's boundary quadric was summed at, or -1. */
+    private final int[] boundaryVersion;
+
+    /** Scratch corner for the flip check. */
+    private final double[] cornerA = new double[AXES];
+
+    /** Scratch corner for the flip check. */
+    private final double[] cornerB = new double[AXES];
+
+    /** Scratch corner for the flip check. */
+    private final double[] cornerC = new double[AXES];
+
+    /** Scratch normal for the flip check. */
+    private final double[] normalBefore = new double[AXES];
+
+    /** Scratch normal for the flip check. */
+    private final double[] normalAfter = new double[AXES];
+
+    /**
      * Set up a simplification.
      *
      * @param input The mesh.
@@ -225,6 +250,9 @@ public final class Simplifier {
         vertexAlive = new boolean[n];
         Arrays.fill(vertexAlive, true);
         versions = new int[n];
+        boundary = new double[n * Quadric.STRIDE];
+        boundaryVersion = new int[n];
+        Arrays.fill(boundaryVersion, -1);
         faces = input.triangles.clone();
         faceAlive = new boolean[m];
         Arrays.fill(faceAlive, true);
@@ -360,8 +388,8 @@ public final class Simplifier {
         Quadric.add(scratch, 0, quadrics, a * Quadric.STRIDE);
         Quadric.add(scratch, 0, quadrics, b * Quadric.STRIDE);
         // The memoryless boundary area term, from the boundary edges at either end
-        addBoundary(a);
-        addBoundary(b);
+        Quadric.add(scratch, 0, boundaryOf(a), a * Quadric.STRIDE);
+        Quadric.add(scratch, 0, boundaryOf(b), b * Quadric.STRIDE);
         if (locked[a] || locked[b]) {
             load(locked[a] ? a : b, chosen);
             return Quadric.error(scratch, 0, chosen);
@@ -391,20 +419,29 @@ public final class Simplifier {
     }
 
     /**
-     * Add the boundary area quadric of every boundary edge at a vertex to the scratch quadric.
+     * Make sure a vertex's boundary area quadric, the sum over every boundary edge at it, is
+     * current.
      *
      * @param v The vertex.
+     * @return The array holding it, at {@code v * Quadric.STRIDE}.
      */
-    private void addBoundary(int v) {
+    private double[] boundaryOf(int v) {
+        if (boundaryVersion[v] == versions[v]) {
+            return boundary;
+        }
+        final int at = v * Quadric.STRIDE;
+        Arrays.fill(boundary, at, at + Quadric.STRIDE, 0);
         final IntArrayList around = neighbors[v];
         for (int k = 0; k < around.size(); ++k) {
             final int u = around.getInt(k);
             if (sharedFaces(v, u) == 1) {
                 load(v, point);
                 load(u, other);
-                Quadric.addBoundaryEdge(scratch, 0, point, other);
+                Quadric.addBoundaryEdge(boundary, at, point, other);
             }
         }
+        boundaryVersion[v] = versions[v];
+        return boundary;
     }
 
     /**
@@ -525,11 +562,11 @@ public final class Simplifier {
      * @return True if a face flips.
      */
     private boolean flipsAround(int v, int otherEnd, double @NonNull [] to) {
-        final double[] a = new double[AXES];
-        final double[] b = new double[AXES];
-        final double[] c = new double[AXES];
-        final double[] before = new double[AXES];
-        final double[] after = new double[AXES];
+        final double[] a = cornerA;
+        final double[] b = cornerB;
+        final double[] c = cornerC;
+        final double[] before = normalBefore;
+        final double[] after = normalAfter;
         final IntArrayList around = vertexFaces[v];
         for (int k = 0; k < around.size(); ++k) {
             final int f = around.getInt(k);
