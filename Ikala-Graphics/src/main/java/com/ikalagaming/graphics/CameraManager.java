@@ -2,7 +2,9 @@ package com.ikalagaming.graphics;
 
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_A;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_D;
+import static org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_CONTROL;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_SHIFT;
+import static org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT_CONTROL;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_S;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_SPACE;
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_W;
@@ -40,6 +42,14 @@ public class CameraManager {
     /** The speed in world units that the camera moves per second. */
     private static final float MOVE_SPEED_PER_SECOND = 5f;
 
+    /** How much faster the camera moves in fast mode. */
+    private static final float FAST_MULTIPLIER = 10f;
+
+    /** How to move the camera, for tools to show. */
+    public static final String CONTROLS =
+            "Hold the right mouse button to turn; W, A, S, D, Space and Shift to move; Ctrl"
+                    + " switches to 10x speed and back.";
+
     /**
      * The camera for the window.
      *
@@ -55,6 +65,16 @@ public class CameraManager {
 
     /** Whether the right mouse button was turning the camera the last time it updated. */
     private boolean wasTurning;
+
+    /**
+     * Whether the camera moves at fast speed. Pressing either Ctrl key toggles it.
+     *
+     * @return True if moving fast.
+     */
+    @Getter private boolean fast;
+
+    /** Whether a Ctrl key was down the last time the camera updated. */
+    private boolean wasControl;
 
     /**
      * Create a new camera manager for the given window.
@@ -97,23 +117,33 @@ public class CameraManager {
         }
         wasTurning = turning;
 
+        // Toggle on the press, not while held; not while typing, where Ctrl makes shortcuts
+        final boolean control =
+                window.isKeyPressed(GLFW_KEY_LEFT_CONTROL)
+                        || window.isKeyPressed(GLFW_KEY_RIGHT_CONTROL);
+        if (control && !wasControl && !ikIO.wantCaptureKeyboard) {
+            fast = !fast;
+        }
+        wasControl = control;
+
+        final float step = MOVE_SPEED_PER_SECOND * (fast ? FAST_MULTIPLIER : 1) * deltaTime;
         if (window.isKeyPressed(GLFW_KEY_W)) {
-            camera.moveForward(CameraManager.MOVE_SPEED_PER_SECOND * deltaTime);
+            camera.moveForward(step);
         }
         if (window.isKeyPressed(GLFW_KEY_S)) {
-            camera.moveBackwards(CameraManager.MOVE_SPEED_PER_SECOND * deltaTime);
+            camera.moveBackwards(step);
         }
         if (window.isKeyPressed(GLFW_KEY_A)) {
-            camera.moveLeft(CameraManager.MOVE_SPEED_PER_SECOND * deltaTime);
+            camera.moveLeft(step);
         }
         if (window.isKeyPressed(GLFW_KEY_D)) {
-            camera.moveRight(CameraManager.MOVE_SPEED_PER_SECOND * deltaTime);
+            camera.moveRight(step);
         }
         if (window.isKeyPressed(GLFW_KEY_LEFT_SHIFT)) {
-            camera.moveDown(CameraManager.MOVE_SPEED_PER_SECOND * deltaTime);
+            camera.moveDown(step);
         }
         if (window.isKeyPressed(GLFW_KEY_SPACE)) {
-            camera.moveUp(CameraManager.MOVE_SPEED_PER_SECOND * deltaTime);
+            camera.moveUp(step);
         }
 
         // Update camera based on mouse

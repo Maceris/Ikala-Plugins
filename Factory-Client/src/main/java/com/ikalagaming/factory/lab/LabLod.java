@@ -3,6 +3,7 @@ package com.ikalagaming.factory.lab;
 import com.ikalagaming.factory.world.Chunk;
 import com.ikalagaming.factory.world.ChunkPos;
 import com.ikalagaming.factory.world.World;
+import com.ikalagaming.graphics.CameraManager;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
@@ -260,7 +261,7 @@ final class LabLod implements AutoCloseable {
             IkGui.setNextWindowPos(MARGIN, TOP, Condition.ONCE);
             IkGui.begin(title, windowOpen, windowFlags);
             final boolean back = IkGui.button("Back to the Lab") || !windowOpen.get();
-            IkGui.text("Hold the right mouse button to turn; W, A, S, D, Space and Shift to move.");
+            IkGui.text(CameraManager.CONTROLS);
             if (panel != null) {
                 panel.draw();
             }

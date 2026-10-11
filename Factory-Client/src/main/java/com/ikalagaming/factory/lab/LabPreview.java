@@ -6,6 +6,7 @@ import com.ikalagaming.factory.world.World;
 import com.ikalagaming.factory.world.gen.Fluids;
 import com.ikalagaming.factory.world.gen.Stage;
 import com.ikalagaming.factory.world.gen.debug.WorldgenDebug;
+import com.ikalagaming.graphics.CameraManager;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshHandle;
@@ -607,7 +608,7 @@ final class LabPreview implements AutoCloseable {
             IkGui.setNextWindowPos(LOOK_MARGIN, LOOK_TOP, Condition.ONCE);
             IkGui.begin(title, windowOpen, windowFlags);
             IkGui.text(status);
-            IkGui.text("Hold the right mouse button to turn; W, A, S, D, Space and Shift to move.");
+            IkGui.text(CameraManager.CONTROLS);
             final boolean back = IkGui.button("Back to the Lab") || !windowOpen.get();
             IkGui.end();
             if (back) {

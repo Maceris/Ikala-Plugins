@@ -2,6 +2,7 @@ package com.ikalagaming.converter.gui.window;
 
 import com.ikalagaming.converter.ConverterPlugin;
 import com.ikalagaming.converter.ModelConverter;
+import com.ikalagaming.graphics.CameraManager;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
@@ -308,7 +309,7 @@ public final class LodPrototype {
             IkGui.setNextWindowPos(MARGIN, TOP, Condition.ONCE);
             IkGui.begin(title, windowOpen, windowFlags);
             final boolean back = IkGui.button("Back to the menu") || !windowOpen.get();
-            IkGui.text("Hold the right mouse button to turn; W, A, S, D, Space and Shift to move.");
+            IkGui.text(CameraManager.CONTROLS);
             if (panel != null) {
                 panel.draw();
             }
