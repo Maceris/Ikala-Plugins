@@ -43,7 +43,9 @@ public final class LodPanel implements AutoCloseable {
     private static final double NANOS_PER_SECOND = 1e9;
 
     /** The coloring choices, in combo order. */
-    private static final String[] MODES = {"Materials", "Clusters", "Groups", "Levels", "Mismatch"};
+    private static final String[] MODES = {
+        "Materials", "Clusters", "Groups", "Levels", "Mismatch", "Visibility"
+    };
 
     /** The plugin's graphics context. */
     private final GraphicsContext graphics;

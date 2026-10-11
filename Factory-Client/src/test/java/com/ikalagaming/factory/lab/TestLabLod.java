@@ -146,7 +146,7 @@ class TestLabLod {
         }
         assertTrue(grassSeen);
 
-        final LodDag dag = DagBuilder.build(baked, new DagBuilder.Options(0.5, true, 2, false));
+        final LodDag dag = DagBuilder.build(baked, new DagBuilder.Options(0.5, true, 2, false, 0));
         assertTrue(dag.getLevels() >= 3, dag.getLevels() + " levels");
         final CrackCheck check = new CrackCheck(dag);
         Random random = new Random(7);

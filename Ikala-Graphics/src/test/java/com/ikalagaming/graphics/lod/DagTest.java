@@ -79,11 +79,12 @@ class DagTest {
     }
 
     /** Options for a test build, on two threads. */
-    private static final DagBuilder.Options OPTIONS = new DagBuilder.Options(0.5, false, 2, false);
+    private static final DagBuilder.Options OPTIONS =
+            new DagBuilder.Options(0.5, false, 2, false, 0);
 
     /** The same, with the input's open border locked at every level. */
     private static final DagBuilder.Options LOCKED_RIM =
-            new DagBuilder.Options(0.5, true, 2, false);
+            new DagBuilder.Options(0.5, true, 2, false, 0);
 
     /** A height field builds up to a root, roughly halving each level. */
     @Test
@@ -117,13 +118,24 @@ class DagTest {
     /** No cut of baked block terrain has a crack, with the rim simplified. */
     @Test
     void testRandomCutsHaveNoCracks() {
-        assertCrackFree(DagBuilder.build(terrain(2), OPTIONS));
+        assertCrackFree(DagBuilder.build(terrain(2), OPTIONS), 2);
+    }
+
+    /**
+     * No cut of a larger terrain has a crack, with visibility weights. Slits in the input whose
+     * sides fall in two groups only show up here: a group closing its side, or collapsing the tip
+     * of an ear against a shared border, leaves a crack next to the other group's coarser level.
+     */
+    @Test
+    void testLargerTerrainHasNoCracks() {
+        assertCrackFree(
+                DagBuilder.build(terrain(4), new DagBuilder.Options(0.5, false, 2, false, 12)), 4);
     }
 
     /** The check accepts cuts of a DAG with its rim locked too. */
     @Test
     void testLockedRimCutsHaveNoCracks() {
-        assertCrackFree(DagBuilder.build(terrain(2), LOCKED_RIM));
+        assertCrackFree(DagBuilder.build(terrain(2), LOCKED_RIM), 2);
     }
 
     /**
@@ -144,19 +156,21 @@ class DagTest {
     }
 
     /**
-     * Check 200 random cuts of a DAG for cracks.
+     * Check 200 random cuts of a DAG for cracks, from views around and above it.
      *
      * @param dag The DAG.
+     * @param columns Columns of sections it covers along x and z.
      */
-    private static void assertCrackFree(LodDag dag) {
+    private static void assertCrackFree(LodDag dag, int columns) {
+        final double size = columns * SECTION;
         final CrackCheck check = new CrackCheck(dag);
         Random random = new Random(99);
         for (int cut = 0; cut < 200; ++cut) {
             final LodCut.View view =
                     new LodCut.View(
-                            random.nextDouble() * 96 - 32,
-                            random.nextDouble() * 96 - 16,
-                            random.nextDouble() * 96 - 32,
+                            random.nextDouble() * 3 * size - size,
+                            random.nextDouble() * 3 * size - size / 2,
+                            random.nextDouble() * 3 * size - size,
                             PIXELS);
             final double threshold = 0.25 + random.nextDouble() * 16;
             final boolean[] drawn = LodCut.select(dag, view, threshold);

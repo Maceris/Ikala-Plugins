@@ -69,12 +69,12 @@ public final class Correspondence {
     }
 
     /**
-     * Give every triangle of a simplified mesh the material of the input triangle its center maps
-     * to.
+     * Give every triangle of a simplified mesh the material and visibility of the input triangle
+     * its center maps to.
      *
      * @param input The mesh that was simplified.
-     * @param result The simplification, with its history recorded. Its mesh's materials are
-     *     replaced.
+     * @param result The simplification, with its history recorded. Its mesh's materials and
+     *     visibility are replaced.
      * @throws IllegalArgumentException If the history wasn't recorded.
      */
     public static void assignMaterials(@NonNull LodMesh input, Simplifier.@NonNull Result result) {
@@ -92,7 +92,9 @@ public final class Correspondence {
                                         + mesh.position(mesh.corner(t, 2), axis))
                                 / AXES;
             }
-            mesh.materials[t] = input.material(map.inputFace(center, result.faceIds()[t]));
+            final int face = map.inputFace(center, result.faceIds()[t]);
+            mesh.materials[t] = input.material(face);
+            mesh.visibility[t] = input.visibility(face);
         }
     }
 

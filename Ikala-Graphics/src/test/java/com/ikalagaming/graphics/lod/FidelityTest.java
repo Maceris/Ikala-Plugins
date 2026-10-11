@@ -12,7 +12,7 @@ import java.util.List;
 class FidelityTest {
 
     /** Options for a test build, on two threads, keeping the lineage. */
-    private static final DagBuilder.Options OPTIONS = new DagBuilder.Options(0.5, true, 2, true);
+    private static final DagBuilder.Options OPTIONS = new DagBuilder.Options(0.5, true, 2, true, 0);
 
     /**
      * A flat square grid on the xz plane, material 0 on the low x half and 1 on the high.
@@ -89,7 +89,8 @@ class FidelityTest {
     @Test
     void testNeedsTheLineage() {
         final LodDag dag =
-                DagBuilder.build(List.of(halves(8)), new DagBuilder.Options(0.5, true, 2, false));
+                DagBuilder.build(
+                        List.of(halves(8)), new DagBuilder.Options(0.5, true, 2, false, 0));
         assertThrows(IllegalArgumentException.class, () -> Fidelity.measure(dag));
     }
 

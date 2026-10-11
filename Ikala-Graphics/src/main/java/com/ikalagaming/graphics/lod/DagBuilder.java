@@ -39,6 +39,12 @@ public final class DagBuilder {
      */
     private static final double VIRTUAL_EDGE_GROWTH = Math.sqrt(2);
 
+    /** The default visibility reach, in leaf edges. */
+    private static final double DEFAULT_VISIBILITY_REACH = 12;
+
+    /** Nanoseconds in a millisecond. */
+    private static final double NANOS_PER_MILLI = 1e6;
+
     /** Coordinates in a position. */
     private static final int AXES = 3;
 
@@ -55,19 +61,31 @@ public final class DagBuilder {
      * @param threads Worker threads for building groups.
      * @param keepLineage Whether to keep where every triangle came from, for {@link Fidelity}. It
      *     holds every group's collapse history.
+     * @param visibilityReach How far a leaf triangle's rays must get to count as seen from outside,
+     *     as a multiple of the leaves' average edge length; 0 to treat every triangle as open (see
+     *     {@link Visibility}).
      */
     public record Options(
-            double virtualEdgeFactor, boolean lockOpenBorder, int threads, boolean keepLineage) {
+            double virtualEdgeFactor,
+            boolean lockOpenBorder,
+            int threads,
+            boolean keepLineage,
+            double visibilityReach) {
 
         /**
          * The defaults: r half the leaves' edge length, the open border simplified, every core but
-         * one, and the lineage kept.
+         * one, the lineage kept, and visibility out to 12 leaf edges, about 13 blocks on block
+         * terrain.
          *
          * @return The options.
          */
         public static Options defaults() {
             return new Options(
-                    0.5, false, Math.max(1, Runtime.getRuntime().availableProcessors() - 1), true);
+                    0.5,
+                    false,
+                    Math.max(1, Runtime.getRuntime().availableProcessors() - 1),
+                    true,
+                    DEFAULT_VISIBILITY_REACH);
         }
     }
 
@@ -77,6 +95,7 @@ public final class DagBuilder {
      * @param children The clusters it was made from.
      * @param corners Each output cluster's corners.
      * @param materials Each output cluster's materials.
+     * @param visibility Each output cluster's visibility.
      * @param tight Each output cluster's tight sphere.
      * @param error The group's saturated error.
      * @param bound The group's saturated sphere.
@@ -97,6 +116,7 @@ public final class DagBuilder {
             int[] children,
             List<float[]> corners,
             List<int[]> materials,
+            List<float[]> visibility,
             List<double[]> tight,
             double error,
             double[] bound,
@@ -151,10 +171,10 @@ public final class DagBuilder {
             throw new IllegalArgumentException("A DAG needs at least one mesh");
         }
         DagBuilder builder = new DagBuilder(inputs.get(0).getOrigin().clone(), options);
-        builder.leaves(inputs);
         ExecutorService pool =
                 Executors.newFixedThreadPool(options.threads(), daemonThreads("LOD build"));
         try {
+            builder.leaves(inputs, pool);
             builder.levels(pool);
         } finally {
             pool.shutdownNow();
@@ -178,11 +198,13 @@ public final class DagBuilder {
     }
 
     /**
-     * Split each input into leaf clusters, and find the open border.
+     * Split each input into leaf clusters, work out how visible their triangles are, and find the
+     * open border.
      *
      * @param inputs The meshes.
+     * @param pool The workers.
      */
-    private void leaves(@NonNull List<LodMesh> inputs) {
+    private void leaves(@NonNull List<LodMesh> inputs, @NonNull ExecutorService pool) {
         double edgeLength = 0;
         long edgeCount = 0;
         for (int section = 0; section < inputs.size(); ++section) {
@@ -194,8 +216,10 @@ public final class DagBuilder {
             for (int[] triangles : Clusters.split(mesh, Clusters.MAX_TRIANGLES)) {
                 final float[] corners = Clusters.corners(mesh, triangles, offset);
                 final int[] materials = new int[triangles.length];
+                final float[] visibility = new float[triangles.length];
                 for (int i = 0; i < triangles.length; ++i) {
                     materials[i] = mesh.material(triangles[i]);
+                    visibility[i] = mesh.visibility(triangles[i]);
                 }
                 final double[] tight = Clusters.tightSphere(corners);
                 dag.add(
@@ -204,6 +228,7 @@ public final class DagBuilder {
                                 0,
                                 corners,
                                 materials,
+                                visibility,
                                 0,
                                 tight,
                                 tight,
@@ -228,6 +253,9 @@ public final class DagBuilder {
             }
         }
         leafEdge = edgeCount == 0 ? 1 : edgeLength / edgeCount;
+        if (options.visibilityReach() > 0) {
+            leafVisibility(options.visibilityReach() * leafEdge, pool);
+        }
         if (options.lockOpenBorder()) {
             List<Integer> all = new ArrayList<>();
             for (int i = 0; i < dag.clusters().size(); ++i) {
@@ -240,6 +268,34 @@ public final class DagBuilder {
                 }
             }
         }
+    }
+
+    /**
+     * Work out how visible every leaf triangle is from outside, against all the leaves, and store
+     * it in the leaves.
+     *
+     * @param reach How far a ray must get to escape, in world units.
+     * @param pool The workers.
+     */
+    private void leafVisibility(double reach, @NonNull ExecutorService pool) {
+        final long start = System.nanoTime();
+        int total = 0;
+        for (LodDag.Cluster cluster : dag.clusters()) {
+            total += cluster.corners().length;
+        }
+        final float[] all = new float[total];
+        int at = 0;
+        for (LodDag.Cluster cluster : dag.clusters()) {
+            System.arraycopy(cluster.corners(), 0, all, at, cluster.corners().length);
+            at += cluster.corners().length;
+        }
+        final float[] seen = Visibility.compute(all, reach, pool);
+        int t = 0;
+        for (LodDag.Cluster cluster : dag.clusters()) {
+            System.arraycopy(seen, t, cluster.visibility(), 0, cluster.triangleCount());
+            t += cluster.triangleCount();
+        }
+        dag.setVisibilityMillis((System.nanoTime() - start) / NANOS_PER_MILLI);
     }
 
     /**
@@ -264,10 +320,12 @@ public final class DagBuilder {
             }
             final int[][] groups = Grouping.group(dag, active);
             final Map<Grouping.Corner, Integer> owners = owners(groups);
+            final List<Grouping.Edge> rim = rim(active);
+            lockRimNearBorders(owners, rim);
             List<Future<Built>> futures = new ArrayList<>();
             for (int[] group : groups) {
                 final int currentLevel = level;
-                futures.add(pool.submit(() -> buildGroup(group, owners, currentLevel)));
+                futures.add(pool.submit(() -> buildGroup(group, owners, rim, currentLevel)));
             }
             int trianglesIn = 0;
             int trianglesOut = 0;
@@ -322,15 +380,120 @@ public final class DagBuilder {
     }
 
     /**
+     * A level's open edges: those only one of its triangles uses.
+     *
+     * @param active The level's clusters.
+     * @return The edges.
+     */
+    private List<Grouping.Edge> rim(int @NonNull [] active) {
+        List<Integer> clusters = new ArrayList<>();
+        for (int id : active) {
+            clusters.add(id);
+        }
+        List<Grouping.Edge> out = new ArrayList<>();
+        for (Map.Entry<Grouping.Edge, Integer> edge : Grouping.edgeUses(dag, clusters).entrySet()) {
+            if (edge.getValue() == 1) {
+                out.add(edge.getKey());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Lock the rim vertices next to corners that groups share. A rim vertex beside a shared corner
+     * can be the tip of an ear, the only triangle on its group's side of a border edge the groups
+     * share; collapsing the tip would take that triangle and leave the other group's edge facing
+     * nothing. Keeping these vertices also stops a rim from collapsing onto the shared corners,
+     * while the rest of it still simplifies.
+     *
+     * @param owners Which group uses each corner, -1 for shared; rim corners to lock become -1.
+     * @param rim This level's open edges.
+     */
+    private static void lockRimNearBorders(
+            @NonNull Map<Grouping.Corner, Integer> owners, @NonNull List<Grouping.Edge> rim) {
+        List<Grouping.Corner> lock = new ArrayList<>();
+        for (Grouping.Edge edge : rim) {
+            final boolean aShared = owners.getOrDefault(edge.a(), -1) < 0;
+            final boolean bShared = owners.getOrDefault(edge.b(), -1) < 0;
+            if (aShared && !bShared) {
+                lock.add(edge.b());
+            } else if (bShared && !aShared) {
+                lock.add(edge.a());
+            }
+        }
+        lock.forEach(corner -> owners.put(corner, -1));
+    }
+
+    /**
+     * The edges a group must not create: open edges of other groups between two corners it shares
+     * with them. A hole or slit in the input can have its sides in two groups, one with the edge
+     * a–b and the other with the path a–w–b. If the second closed it with its own a–b, a cut
+     * drawing its coarser level next to the first group would leave a–w–b uncovered.
+     *
+     * @param builder The builder of the group's merged mesh, to find corners by position.
+     * @param merged The merged mesh.
+     * @param rim The level's open edges.
+     * @return The edges, as packed vertex pairs of the merged mesh.
+     */
+    private static long[] keepOpen(
+            LodMesh.@NonNull Builder builder,
+            @NonNull LodMesh merged,
+            @NonNull List<Grouping.Edge> rim) {
+        final LongIntMap own = new LongIntMap(merged.getTriangleCount() * AXES);
+        for (int t = 0; t < merged.getTriangleCount(); ++t) {
+            for (int corner = 0; corner < AXES; ++corner) {
+                final int v = merged.corner(t, corner);
+                final int w = merged.corner(t, (corner + 1) % AXES);
+                own.putIfAbsent(LongIntMap.pair(Math.min(v, w), Math.max(v, w)), 0);
+            }
+        }
+        final IntArrayList out = new IntArrayList();
+        for (Grouping.Edge edge : rim) {
+            final int a = find(builder, edge.a());
+            final int b = find(builder, edge.b());
+            if (a >= 0 && b >= 0) {
+                final long key = LongIntMap.pair(Math.min(a, b), Math.max(a, b));
+                if (own.get(key) == LongIntMap.MISSING) {
+                    out.addInt(Math.min(a, b));
+                    out.addInt(Math.max(a, b));
+                }
+            }
+        }
+        final long[] keys = new long[out.size() / 2];
+        for (int i = 0; i < keys.length; ++i) {
+            keys[i] = LongIntMap.pair(out.getInt(2 * i), out.getInt(2 * i + 1));
+        }
+        return keys;
+    }
+
+    /**
+     * The merged mesh's vertex at a corner.
+     *
+     * @param builder The builder.
+     * @param corner The corner.
+     * @return The vertex, or -1 if the group has none there.
+     */
+    private static int find(LodMesh.@NonNull Builder builder, Grouping.@NonNull Corner corner) {
+        return builder.find(
+                Float.intBitsToFloat(corner.x()),
+                Float.intBitsToFloat(corner.y()),
+                Float.intBitsToFloat(corner.z()));
+    }
+
+    /**
      * Merge, simplify and split one group. On a worker.
      *
      * @param children The group's clusters.
      * @param owners Which group uses each corner.
+     * @param rim This level's open edges.
      * @param level The children's level.
      * @return What it made.
      */
     private Built buildGroup(
-            int @NonNull [] children, @NonNull Map<Grouping.Corner, Integer> owners, int level) {
+            int @NonNull [] children,
+            @NonNull Map<Grouping.Corner, Integer> owners,
+            @NonNull List<Grouping.Edge> rim,
+            int level) {
         final long start = System.nanoTime();
         // Merge
         LodMesh.Builder builder = LodMesh.builder(dag.getOrigin());
@@ -352,7 +515,8 @@ public final class DagBuilder {
                         builder.lock(v[corner]);
                     }
                 }
-                if (builder.triangle(v[0], v[1], v[2], cluster.materials()[t])) {
+                if (builder.triangle(
+                        v[0], v[1], v[2], cluster.materials()[t], cluster.visibility()[t])) {
                     sourceCluster.addInt(id);
                     sourceTriangle.addInt(t);
                 }
@@ -367,23 +531,29 @@ public final class DagBuilder {
                 options.virtualEdgeFactor() * leafEdge * Math.pow(VIRTUAL_EDGE_GROWTH, level);
         final Simplifier.Result result =
                 Simplifier.simplify(
-                        merged, Simplifier.Options.toCount(merged.getTriangleCount() / 2, radius));
+                        merged,
+                        Simplifier.Options.toCount(merged.getTriangleCount() / 2, radius)
+                                .keepingOpen(keepOpen(builder, merged, rim)));
         Correspondence.assignMaterials(merged, result);
         // Split
         List<float[]> outCorners = new ArrayList<>();
         List<int[]> outMaterials = new ArrayList<>();
+        List<float[]> outVisibility = new ArrayList<>();
         List<double[]> outTight = new ArrayList<>();
         List<int[]> outFaces = options.keepLineage() ? new ArrayList<>() : null;
         final float[] noOffset = new float[AXES];
         for (int[] triangles : Clusters.split(result.mesh(), Clusters.MAX_TRIANGLES)) {
             final float[] corners = Clusters.corners(result.mesh(), triangles, noOffset);
             final int[] materials = new int[triangles.length];
+            final float[] visibility = new float[triangles.length];
             for (int i = 0; i < triangles.length; ++i) {
                 materials[i] = result.mesh().material(triangles[i]);
+                visibility[i] = result.mesh().visibility(triangles[i]);
             }
             final double[] tight = Clusters.tightSphere(corners);
             outCorners.add(corners);
             outMaterials.add(materials);
+            outVisibility.add(visibility);
             outTight.add(tight);
             spheres.add(tight);
             if (outFaces != null) {
@@ -401,6 +571,7 @@ public final class DagBuilder {
                 children,
                 outCorners,
                 outMaterials,
+                outVisibility,
                 outTight,
                 error,
                 bound,
@@ -464,6 +635,7 @@ public final class DagBuilder {
                             level + 1,
                             built.corners().get(i),
                             built.materials().get(i),
+                            built.visibility().get(i),
                             built.error(),
                             built.bound(),
                             built.tight().get(i),

@@ -251,7 +251,12 @@ public final class LodStats {
     public static String report(
             @NonNull String name, @NonNull LodDag dag, @NonNull List<Footprint> footprints) {
         StringBuilder out = new StringBuilder();
-        out.append(name).append(": ").append(dag.getStopReason()).append('\n');
+        out.append(name).append(": ").append(dag.getStopReason());
+        if (dag.getVisibilityMillis() > 0) {
+            out.append(
+                    String.format("; visibility worked out in %.0f ms", dag.getVisibilityMillis()));
+        }
+        out.append('\n');
         out.append(
                 String.format(
                         "%5s %9s %8s %6s %7s %9s %14s %16s %7s %26s %8s %6s %6s%n",

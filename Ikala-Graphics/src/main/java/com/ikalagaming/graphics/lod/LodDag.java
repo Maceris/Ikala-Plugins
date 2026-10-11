@@ -30,6 +30,7 @@ public final class LodDag {
      * @param level 0 for leaves, one more for each simplification above them.
      * @param corners Its triangles' corners, 9 floats per triangle, relative to the DAG's origin.
      * @param materials Each triangle's material.
+     * @param visibility How visible each triangle is from outside, 0 to 1.
      * @param error The saturated error of the group that made it, 0 for leaves, in world units.
      * @param bound The saturated sphere the error is projected from: x, y, z, radius.
      * @param tight A sphere around its own triangles, for culling.
@@ -41,6 +42,7 @@ public final class LodDag {
             int level,
             float @NonNull [] corners,
             int @NonNull [] materials,
+            float @NonNull [] visibility,
             double error,
             double @NonNull [] bound,
             double @NonNull [] tight,
@@ -124,6 +126,13 @@ public final class LodDag {
     @Getter private String stopReason = "";
 
     /**
+     * How long working out the leaves' visibility took, or 0 if it wasn't.
+     *
+     * @return The time, in milliseconds.
+     */
+    @Getter private double visibilityMillis;
+
+    /**
      * Where every triangle came from, if the build kept it.
      *
      * @return The lineage, or null.
@@ -180,6 +189,15 @@ public final class LodDag {
      */
     void setLineage(@NonNull Lineage lineage) {
         this.lineage = lineage;
+    }
+
+    /**
+     * Note how long working out visibility took.
+     *
+     * @param millis The time, in milliseconds.
+     */
+    void setVisibilityMillis(double millis) {
+        visibilityMillis = millis;
     }
 
     /**

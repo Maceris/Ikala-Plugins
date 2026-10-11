@@ -55,7 +55,12 @@ public final class LodView implements AutoCloseable {
          * it doesn't, and magenta where its material isn't even the most common one under it. Needs
          * {@link #setFidelity}.
          */
-        MISMATCH
+        MISMATCH,
+        /**
+         * Gray where a triangle is open to the outside, shading to red the more of it is hidden, as
+         * the simplifier weighted it.
+         */
+        VISIBILITY
     }
 
     /**
@@ -458,6 +463,8 @@ public final class LodView implements AutoCloseable {
             case LEVELS -> Math.floorMod(cluster.level(), PALETTE);
             case MISMATCH ->
                     mismatchKey(fidelity == null ? 0 : fidelity.mark(cluster.id(), triangle));
+            case VISIBILITY ->
+                    Math.round((1 - cluster.visibility()[triangle]) * (MISMATCH_STEPS - 1));
         };
     }
 
@@ -649,7 +656,7 @@ public final class LodView implements AutoCloseable {
             mesh.setMaterial(
                     switch (built.mode()) {
                         case MATERIALS -> material(cache, key);
-                        case MISMATCH -> mismatchPalette[key];
+                        case MISMATCH, VISIBILITY -> mismatchPalette[key];
                         default -> palette[key];
                     });
             graphics.meshes().register(mesh);

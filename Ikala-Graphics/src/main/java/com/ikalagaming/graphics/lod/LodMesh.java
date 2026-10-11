@@ -61,6 +61,9 @@ public final class LodMesh {
     /** The material of each triangle. */
     final int[] materials;
 
+    /** How visible each triangle is from outside, 0 to 1 (see {@link Visibility}). */
+    final float[] visibility;
+
     /** Whether each vertex must not move or be removed. */
     final boolean[] locked;
 
@@ -73,6 +76,7 @@ public final class LodMesh {
      * @param triangles The triangles, three indices each.
      * @param triangleCount How many triangles there are.
      * @param materials The material of each triangle.
+     * @param visibility How visible each triangle is, 0 to 1.
      * @param locked Whether each vertex is locked.
      */
     LodMesh(
@@ -82,6 +86,7 @@ public final class LodMesh {
             int @NonNull [] triangles,
             int triangleCount,
             int @NonNull [] materials,
+            float @NonNull [] visibility,
             boolean @NonNull [] locked) {
         this.origin = origin;
         this.positions = positions;
@@ -89,6 +94,7 @@ public final class LodMesh {
         this.triangles = triangles;
         this.triangleCount = triangleCount;
         this.materials = materials;
+        this.visibility = visibility;
         this.locked = locked;
     }
 
@@ -122,6 +128,16 @@ public final class LodMesh {
      */
     public int material(int triangle) {
         return materials[triangle];
+    }
+
+    /**
+     * How visible a triangle is from outside.
+     *
+     * @param triangle The triangle.
+     * @return From 0, hidden, to 1, open.
+     */
+    public float visibility(int triangle) {
+        return visibility[triangle];
     }
 
     /**
@@ -247,6 +263,9 @@ public final class LodMesh {
         /** Materials so far. */
         private int[] materials = new int[INITIAL_CAPACITY];
 
+        /** Visibility so far. */
+        private float[] visibility = new float[INITIAL_CAPACITY];
+
         /** Triangles so far. */
         private int triangleCount;
 
@@ -305,6 +324,24 @@ public final class LodMesh {
         }
 
         /**
+         * Find a vertex without adding one.
+         *
+         * @param x The x, relative to the origin.
+         * @param y The y.
+         * @param z The z.
+         * @return Its index, or -1 if there is none there.
+         */
+        public int find(float x, float y, float z) {
+            final Integer existing =
+                    welding.get(
+                            new Position(
+                                    Float.floatToIntBits(x + 0f),
+                                    Float.floatToIntBits(y + 0f),
+                                    Float.floatToIntBits(z + 0f)));
+            return existing == null ? -1 : existing;
+        }
+
+        /**
          * Lock a vertex.
          *
          * @param vertex The vertex.
@@ -323,17 +360,33 @@ public final class LodMesh {
          * @return Whether it was added.
          */
         public boolean triangle(int a, int b, int c, int material) {
+            return triangle(a, b, c, material, 1);
+        }
+
+        /**
+         * Add a triangle, unless it uses a vertex twice.
+         *
+         * @param a The first corner.
+         * @param b The second corner.
+         * @param c The third corner.
+         * @param material Its material.
+         * @param seen How visible it is from outside, 0 to 1.
+         * @return Whether it was added.
+         */
+        public boolean triangle(int a, int b, int c, int material, float seen) {
             if (a == b || b == c || a == c) {
                 return false;
             }
             if ((triangleCount + 1) * CORNERS > triangles.length) {
                 triangles = Arrays.copyOf(triangles, triangles.length * 2);
                 materials = Arrays.copyOf(materials, materials.length * 2);
+                visibility = Arrays.copyOf(visibility, visibility.length * 2);
             }
             triangles[triangleCount * CORNERS] = a;
             triangles[triangleCount * CORNERS + 1] = b;
             triangles[triangleCount * CORNERS + 2] = c;
             materials[triangleCount] = material;
+            visibility[triangleCount] = seen;
             ++triangleCount;
             return true;
         }
@@ -351,6 +404,7 @@ public final class LodMesh {
                     Arrays.copyOf(triangles, triangleCount * CORNERS),
                     triangleCount,
                     Arrays.copyOf(materials, triangleCount),
+                    Arrays.copyOf(visibility, triangleCount),
                     Arrays.copyOf(locked, vertexCount));
         }
     }

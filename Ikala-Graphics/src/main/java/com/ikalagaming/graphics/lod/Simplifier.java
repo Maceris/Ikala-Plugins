@@ -39,6 +39,12 @@ public final class Simplifier {
     /** How many faces' corners a history has room for at first. */
     private static final int INITIAL_HISTORY = 64;
 
+    /**
+     * The weight a completely hidden face's plane keeps, against 1 for an open one, so hidden faces
+     * still hold some shape.
+     */
+    private static final double MIN_VISIBILITY_WEIGHT = 0.05;
+
     /** The smallest weight an error is divided by, so a weightless quadric doesn't divide by 0. */
     private static final double MIN_WEIGHT = 1e-12;
 
@@ -51,9 +57,15 @@ public final class Simplifier {
      *     for no limit.
      * @param recordHistory Whether to record what each collapse changed, for {@link
      *     Correspondence}.
+     * @param keepOpen Edges no collapse may create, as vertex pairs packed by {@link
+     *     LongIntMap#pair} with the lower vertex first, sorted.
      */
     public record Options(
-            int targetTriangles, double virtualEdgeRadius, double maxError, boolean recordHistory) {
+            int targetTriangles,
+            double virtualEdgeRadius,
+            double maxError,
+            boolean recordHistory,
+            long @NonNull [] keepOpen) {
 
         /**
          * Simplify to a triangle count with no error limit, recording history.
@@ -63,7 +75,24 @@ public final class Simplifier {
          * @return The options.
          */
         public static Options toCount(int targetTriangles, double virtualEdgeRadius) {
-            return new Options(targetTriangles, virtualEdgeRadius, Double.POSITIVE_INFINITY, true);
+            return new Options(
+                    targetTriangles,
+                    virtualEdgeRadius,
+                    Double.POSITIVE_INFINITY,
+                    true,
+                    new long[0]);
+        }
+
+        /**
+         * The same options, with edges no collapse may create.
+         *
+         * @param edges The edges, packed vertex pairs, lower vertex first; sorted here.
+         * @return The options.
+         */
+        public Options keepingOpen(long @NonNull [] edges) {
+            final long[] sorted = edges.clone();
+            Arrays.sort(sorted);
+            return new Options(targetTriangles, virtualEdgeRadius, maxError, recordHistory, sorted);
         }
     }
 
@@ -302,9 +331,12 @@ public final class Simplifier {
             load(va, a);
             load(vb, b);
             load(vc, c);
-            Quadric.addFace(quadrics, va * Quadric.STRIDE, a, b, c);
-            Quadric.addFace(quadrics, vb * Quadric.STRIDE, a, b, c);
-            Quadric.addFace(quadrics, vc * Quadric.STRIDE, a, b, c);
+            // Hidden faces pull less on where vertices go, so they give way to visible ones
+            final double weight =
+                    MIN_VISIBILITY_WEIGHT + (1 - MIN_VISIBILITY_WEIGHT) * input.visibility[f];
+            Quadric.addFace(quadrics, va * Quadric.STRIDE, a, b, c, weight);
+            Quadric.addFace(quadrics, vb * Quadric.STRIDE, a, b, c, weight);
+            Quadric.addFace(quadrics, vc * Quadric.STRIDE, a, b, c, weight);
         }
         final int[] virtual = VirtualEdges.find(input, options.virtualEdgeRadius());
         for (int i = 0; i + 1 < virtual.length; i += 2) {
@@ -346,7 +378,7 @@ public final class Simplifier {
             // Keep the locked end, if there is one
             final int keep = locked[b] ? b : a;
             final int remove = keep == a ? b : a;
-            if (!linkCondition(keep, remove)) {
+            if (!linkCondition(keep, remove) || createsKeptOpen(keep, remove)) {
                 ++rejectedLinks;
                 continue;
             }
@@ -503,6 +535,34 @@ public final class Simplifier {
             }
         }
         return true;
+    }
+
+    /**
+     * Whether a collapse would join the kept vertex to one of the removed vertex's neighbors by an
+     * edge that must stay out of the mesh, such as an edge another group already has on the rim of
+     * a hole the two share: closing it here would leave a crack where the other group's coarser
+     * level meets this one.
+     *
+     * @param keep The vertex that stays.
+     * @param remove The vertex that goes.
+     * @return True if it would.
+     */
+    private boolean createsKeptOpen(int keep, int remove) {
+        final long[] keepOpen = options.keepOpen();
+        if (keepOpen.length == 0) {
+            return false;
+        }
+        final IntArrayList around = neighbors[remove];
+        for (int k = 0; k < around.size(); ++k) {
+            final int u = around.getInt(k);
+            if (u != keep
+                    && Arrays.binarySearch(
+                                    keepOpen, LongIntMap.pair(Math.min(keep, u), Math.max(keep, u)))
+                            >= 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -877,6 +937,7 @@ public final class Simplifier {
         }
         int[] outTriangles = new int[faceCount * CORNERS];
         int[] outMaterials = new int[faceCount];
+        float[] outVisibility = new float[faceCount];
         int[] faceIds = new int[faceCount];
         int t = 0;
         for (int f = 0; f < faceAlive.length; ++f) {
@@ -887,6 +948,7 @@ public final class Simplifier {
                 outTriangles[t * CORNERS + corner] = remap[faces[f * CORNERS + corner]];
             }
             outMaterials[t] = input.materials[f];
+            outVisibility[t] = input.visibility[f];
             faceIds[t] = f;
             ++t;
         }
@@ -898,6 +960,7 @@ public final class Simplifier {
                         outTriangles,
                         t,
                         outMaterials,
+                        outVisibility,
                         outLocked);
         return new Result(
                 mesh,

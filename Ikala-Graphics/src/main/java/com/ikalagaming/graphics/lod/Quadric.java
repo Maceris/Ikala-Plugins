@@ -81,13 +81,33 @@ final class Quadric {
             double @NonNull [] a,
             double @NonNull [] b,
             double @NonNull [] c) {
+        addFace(q, at, a, b, c, 1);
+    }
+
+    /**
+     * Add a face's plane, weighted by a third of its area times a factor, to a quadric.
+     *
+     * @param q The quadrics.
+     * @param at Where the quadric starts.
+     * @param a The face's first corner.
+     * @param b The second corner.
+     * @param c The third corner.
+     * @param factor What else the weight is scaled by, such as the face's visibility.
+     */
+    static void addFace(
+            double @NonNull [] q,
+            int at,
+            double @NonNull [] a,
+            double @NonNull [] b,
+            double @NonNull [] c,
+            double factor) {
         final double[] n = new double[3];
         Geometry.normal(a, b, c, n);
         final double length = Math.sqrt(Geometry.dot(n, n));
         if (length == 0) {
             return;
         }
-        final double weight = 0.5 * length * THIRD;
+        final double weight = 0.5 * length * THIRD * factor;
         n[0] /= length;
         n[1] /= length;
         n[2] /= length;
