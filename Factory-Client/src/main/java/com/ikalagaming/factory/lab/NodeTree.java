@@ -18,8 +18,9 @@ import java.util.function.Consumer;
 /**
  * The Lab's node tree: the target's density tree, each node with its range over the current view,
  * the axes it depends on, and a small live image of its own output over the slice, so you can see
- * where a composition goes wrong. Clicking a node makes it the main view's target. Render thread
- * only, except where noted.
+ * where a composition goes wrong. Clicking a row opens or closes it; its View button makes it the
+ * main view's target, and the tree stays rooted where it was. Render thread only, except where
+ * noted.
  */
 final class NodeTree {
 
@@ -32,7 +33,7 @@ final class NodeTree {
     /** Draws thumbnails. */
     private final LabRenderer renderer;
 
-    /** Told when a node is picked, with its target. */
+    /** Told when a node's View button is pressed, with its target. */
     private final Consumer<String> onPick;
 
     /** The tree being shown, or null. */
@@ -94,15 +95,19 @@ final class NodeTree {
         root = null;
     }
 
-    /** Draw the tree with IkGui, inside the side panel. */
-    void draw() {
+    /**
+     * Draw the tree with IkGui, inside the side panel.
+     *
+     * @param viewing The main view's target, to mark the node it shows.
+     */
+    void draw(@NonNull String viewing) {
         if (root == null) {
             IkGui.textWrapped("Pick a density, parameter or noise target to see its tree.");
             return;
         }
         rows = 0;
         IkGui.setNextItemOpen(true, Condition.ONCE);
-        drawNode(root, 0);
+        drawNode(root, 0, viewing);
         if (rows >= MAX_ROWS) {
             IkGui.text("(Only the first " + MAX_ROWS + " nodes are shown)");
         }
@@ -113,8 +118,9 @@ final class NodeTree {
      *
      * @param node The node's bounds.
      * @param index Its index among its siblings, for a unique ID.
+     * @param viewing The main view's target.
      */
-    private void drawNode(WorldgenDebug.@NonNull Bounds node, int index) {
+    private void drawNode(WorldgenDebug.@NonNull Bounds node, int index, @NonNull String viewing) {
         if (++rows > MAX_ROWS) {
             return;
         }
@@ -128,17 +134,29 @@ final class NodeTree {
                         verdict(node),
                         index,
                         origin);
+        // Clicking the row only opens and closes it; viewing is its own button
         final boolean open = IkGui.treeNode(label);
-        if (!origin.isEmpty() && IkGui.isItemClicked()) {
-            onPick.accept(WorldgenDebug.targetOf(origin));
+        IkGui.setItemTooltip(origin.isEmpty() ? node.type() : origin);
+        if (!origin.isEmpty()) {
+            final String target = WorldgenDebug.targetOf(origin);
+            IkGui.sameLine();
+            if (target.equals(viewing)) {
+                IkGui.textDisabled("(viewing)");
+            } else {
+                IkGui.pushID(label);
+                if (IkGui.smallButton("View")) {
+                    onPick.accept(target);
+                }
+                IkGui.setItemTooltip("Show this node in the main view; the tree stays as it is.");
+                IkGui.popID();
+            }
         }
-        IkGui.setItemTooltip(origin.isEmpty() ? node.type() : origin + "\nClick to view this node");
         if (!open) {
             return;
         }
         drawThumbnail(origin);
         for (int i = 0; i < node.children().size(); ++i) {
-            drawNode(node.children().get(i), i);
+            drawNode(node.children().get(i), i, viewing);
         }
         IkGui.treePop();
     }

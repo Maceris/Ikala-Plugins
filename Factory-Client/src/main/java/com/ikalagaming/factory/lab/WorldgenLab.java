@@ -93,6 +93,9 @@ public final class WorldgenLab implements AutoCloseable {
     /** The mask of one color channel. */
     private static final int CHANNEL_MASK = 0xff;
 
+    /** How many earlier targets Back remembers. */
+    private static final int MAX_HISTORY = 50;
+
     /** The number of axes in a position. */
     private static final int AXES = 3;
 
@@ -210,8 +213,17 @@ public final class WorldgenLab implements AutoCloseable {
     /** The trace at the pinned point. Render thread. */
     private WorldgenDebug.Trace trace;
 
-    /** The target the node tree shows, to rebuild it when it changes. Render thread. */
+    /** The tree root and view the node tree was built for, to rebuild it when they change. */
     private String treeKey = "";
+
+    /**
+     * The target the node tree is rooted at. Choosing a target sets it; viewing a node from the
+     * tree doesn't, so the tree stays put. Render thread.
+     */
+    private String treeRoot = "";
+
+    /** Earlier targets with their tree roots, newest first, for Back. Render thread. */
+    private final Deque<Visit> history = new ArrayDeque<>();
 
     /** A message about the last export. Render thread. */
     private String exportMessage = "";
@@ -242,7 +254,7 @@ public final class WorldgenLab implements AutoCloseable {
         seedText = new IkString(Long.toString(settings.seed()), 32);
         session = new LabSession(loaded -> post(() -> onLoaded(loaded)));
         renderer = new LabRenderer(graphics, drawn -> post(() -> onFrame(drawn)));
-        nodeTree = new NodeTree(renderer, this::post, this::setTarget);
+        nodeTree = new NodeTree(renderer, this::post, this::viewNode);
         preview = new LabPreview(graphics);
         bookmarks = new Bookmarks(dataFolder.resolve("lab").resolve("bookmarks.kvt"));
         loader = Executors.newSingleThreadExecutor(daemon("Worldgen Lab load"));
@@ -331,6 +343,7 @@ public final class WorldgenLab implements AutoCloseable {
         state = loaded;
         if (loaded.debug() != null && (first || targetText.get().isEmpty())) {
             targetText.set(loaded.debug().terrainTarget());
+            treeRoot = targetText.get();
         }
         if (first) {
             view.setScale(1);
@@ -357,12 +370,53 @@ public final class WorldgenLab implements AutoCloseable {
     }
 
     /**
-     * Show a target.
+     * A place to go back to.
+     *
+     * @param target The main view's target.
+     * @param root The node tree's root.
+     */
+    private record Visit(@NonNull String target, @NonNull String root) {}
+
+    /**
+     * Show a node from the tree in the main view, keeping the tree as it is.
+     *
+     * @param target The node's target.
+     */
+    private void viewNode(@NonNull String target) {
+        remember();
+        targetText.set(target);
+    }
+
+    /**
+     * Show a target and root the node tree at it.
      *
      * @param target The target.
      */
-    private void setTarget(@NonNull String target) {
+    private void chooseTarget(@NonNull String target) {
+        remember();
         targetText.set(target);
+        treeRoot = target;
+    }
+
+    /** Remember the current target and tree root, for Back. */
+    private void remember() {
+        final Visit now = new Visit(targetText.get().trim(), treeRoot);
+        if (now.target().isEmpty() || now.equals(history.peekFirst())) {
+            return;
+        }
+        history.addFirst(now);
+        while (history.size() > MAX_HISTORY) {
+            history.removeLast();
+        }
+    }
+
+    /** Go back to the last target and tree root. */
+    private void back() {
+        final Visit last = history.pollFirst();
+        if (last != null) {
+            targetText.set(last.target());
+            treeRoot = last.root();
+        }
     }
 
     /**
@@ -446,20 +500,30 @@ public final class WorldgenLab implements AutoCloseable {
 
         label("Target");
         IkGui.setNextItemWidth(WIDE_FIELD);
-        IkGui.inputText("##target", targetText);
+        if (IkGui.inputText("##target", targetText)) {
+            // A typed target is a choice of its own, so the tree follows it
+            treeRoot = targetText.get().trim();
+        }
         IkGui.setItemTooltip(
                 "A noise, density or parameter ID, id#path for a node in a file, biome or blocks.");
         IkGui.sameLine();
+        IkGui.beginDisabled(history.isEmpty());
+        if (IkGui.button("Back")) {
+            back();
+        }
+        IkGui.setItemTooltip("Go back to the previous target and node tree.");
+        IkGui.endDisabled();
+        IkGui.sameLine();
         if (IkGui.button("Terrain") && state != null && state.debug() != null) {
-            targetText.set(state.debug().terrainTarget());
+            chooseTarget(state.debug().terrainTarget());
         }
         IkGui.sameLine();
         if (IkGui.button("Biome")) {
-            targetText.set(SliceImages.BIOME_TARGET);
+            chooseTarget(SliceImages.BIOME_TARGET);
         }
         IkGui.sameLine();
         if (IkGui.button("Blocks")) {
-            targetText.set(SliceImages.BLOCKS_TARGET);
+            chooseTarget(SliceImages.BLOCKS_TARGET);
         }
         IkGui.sameLine();
         for (WorldgenDebug.Plane plane : WorldgenDebug.Plane.values()) {
@@ -913,12 +977,22 @@ public final class WorldgenLab implements AutoCloseable {
      * @param request The view being drawn.
      */
     private void rebuildTreeIfChanged(SliceImages.@NonNull Request request) {
-        final String key = request.target() + "|" + drawnKey;
+        final String root = treeRoot.isBlank() ? request.target() : treeRoot.trim();
+        // The root and the view, not the viewed target, so viewing a node keeps the tree
+        final String key =
+                String.join(
+                        "|",
+                        root,
+                        request.plane().name(),
+                        Arrays.toString(request.origin()),
+                        request.width() + "x" + request.height(),
+                        Double.toString(request.scale()),
+                        Long.toString(state.version()));
         if (key.equals(treeKey)) {
             return;
         }
         treeKey = key;
-        if (request.isCategorical()) {
+        if (SliceImages.BIOME_TARGET.equals(root) || SliceImages.BLOCKS_TARGET.equals(root)) {
             nodeTree.show(null, null, request);
             return;
         }
@@ -945,11 +1019,10 @@ public final class WorldgenLab implements AutoCloseable {
                         thumbHeight,
                         request.scale() * request.width() / NodeTree.THUMBNAIL_SIZE,
                         request.stage());
-        final String target = request.target();
         inspector.execute(
                 () -> {
                     try {
-                        final WorldgenDebug.Bounds tree = debug.bounds(target, box);
+                        final WorldgenDebug.Bounds tree = debug.bounds(root, box);
                         post(
                                 () -> {
                                     if (treeKey.equals(key)) {
@@ -979,7 +1052,7 @@ public final class WorldgenLab implements AutoCloseable {
             }
         }
         if (IkGui.collapsingHeader("Node tree", TreeNodeFlags.DEFAULT_OPEN)) {
-            nodeTree.draw();
+            nodeTree.draw(targetText.get().trim());
         }
         if (IkGui.collapsingHeader("Problems")) {
             drawProblems();
@@ -1090,7 +1163,7 @@ public final class WorldgenLab implements AutoCloseable {
             final Bookmarks.Bookmark bookmark = list.get(i);
             IkGui.pushID(i);
             if (IkGui.button("Go")) {
-                targetText.set(bookmark.target());
+                chooseTarget(bookmark.target());
                 view.setPlane(bookmark.plane());
                 view.setCenter(bookmark.center()[0], bookmark.center()[1], bookmark.center()[2]);
                 view.setScale(bookmark.scale());
