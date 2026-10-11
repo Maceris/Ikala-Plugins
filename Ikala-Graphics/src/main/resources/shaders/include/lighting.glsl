@@ -23,6 +23,8 @@ const float PI = 3.1415926535897932384626433832795;
 // How strong a fully specular dielectric's reflection is head on, per unit of the material's
 // specular value: 0.5 gives 4%. Matches AmbientMath.DIELECTRIC_SPECULAR_SCALE.
 const float DIELECTRIC_SPECULAR_SCALE = 0.08;
+// How much a clearcoat reflects head on, as a dielectric with an index of refraction of 1.5
+const float CLEARCOAT_SPECULAR = 0.04;
 // The smallest N.V used for ambient light, so surfaces seen edge on don't divide by nothing
 const float MIN_N_DOT_V = 1e-4;
 // The average of Schlick's Fresnel over the hemisphere is F0 + (1 - F0) / 21
@@ -75,11 +77,14 @@ vec3 disneyBRDF(vec3 baseColor, Material material, vec3 toViewDirection, vec3 to
     // This expects the toViewDirection, toLightDirection, and normal to be normalized
     float angleLight = dot(normal, toLightDirection);
     float angleView = dot(normal, toViewDirection);
-    if (angleLight < 0 || angleView < 0) {
+    // Grazing light adds nothing, and leaving it out keeps L + V from being zero below
+    if (angleLight <= 0 || angleView < 0) {
         return vec3(0);
     }
 
-    vec3 halfVector = (toLightDirection + toViewDirection) / 2;
+    // Normalized, or the distribution below is divided by |L + V|^4 / 16, which goes toward zero for
+    // a light behind a surface seen nearly edge on
+    vec3 halfVector = normalize(toLightDirection + toViewDirection);
     float angleHalf = dot(normal, halfVector);
     float angleDifference = dot(toLightDirection, halfVector);
 
@@ -106,9 +111,10 @@ vec3 disneyBRDF(vec3 baseColor, Material material, vec3 toViewDirection, vec3 to
     float specularDistribution = generalizedTrowbridgeReitzAnisotropic(
         angleHalf, dot(halfVector, x), dot(halfVector, y), aspectX, aspectY
     );
-    float fresnelHalf = schlickFresnel(angleHalf);
+    // Fresnel goes by the angle between the light and the microfacet normal, L.H, not N.H
+    float fresnelHalf = schlickFresnel(angleDifference);
     vec3 specularFresnel = mix(colorSpecular0, vec3(1), fresnelHalf);
-    float specularShadowing = smithGGXAnisotropic(angleView, dot(toLightDirection, x), dot(toLightDirection, y), aspectX, aspectY);
+    float specularShadowing = smithGGXAnisotropic(angleLight, dot(toLightDirection, x), dot(toLightDirection, y), aspectX, aspectY);
     specularShadowing *= smithGGXAnisotropic(angleView, dot(toViewDirection, x), dot(toViewDirection, y), aspectX, aspectY);
 
     vec3 sheen = fresnelHalf * material.sheen * colorSheen;
@@ -116,7 +122,7 @@ vec3 disneyBRDF(vec3 baseColor, Material material, vec3 toViewDirection, vec3 to
     float clearcoat = 0.0f;
     if (material.clearcoat > 0) {
         float clearcoatDistribution = generalizedTrowbridgeReitz1(angleHalf, mix(0.1, 0.001, material.clearcoatGloss));
-        float clearcoatFresnel = schlickFresnel(mix(0.04, 1.0, fresnelHalf));
+        float clearcoatFresnel = mix(CLEARCOAT_SPECULAR, 1.0, fresnelHalf);
         float clearcoatShadowing = smithGGX(angleLight, 0.25) * smithGGX(angleView, 0.25);
         clearcoat = 0.25 * material.clearcoat * clearcoatDistribution * clearcoatFresnel * clearcoatShadowing;
     }
