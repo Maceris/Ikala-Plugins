@@ -115,6 +115,29 @@ class DagTest {
         }
     }
 
+    /**
+     * Each group's stored error covers how far it really is from the input. Distances are sampled,
+     * and missing input is charged to the group nearest it, so a few groups may come out slightly
+     * over; none may be far over.
+     */
+    @Test
+    void testErrorsBoundTheDistance() {
+        final LodDag dag =
+                DagBuilder.build(terrain(2), new DagBuilder.Options(0.5, false, 2, true, 12));
+        final Fidelity fidelity = Fidelity.measure(dag);
+        int under = 0;
+        for (LodDag.Group group : dag.groups()) {
+            final double distance = fidelity.groupDistance(group.id());
+            assertTrue(
+                    distance <= 1.5 * group.error() + 1e-4,
+                    "Group " + group.id() + ": " + distance + " against " + group.error());
+            if (distance > group.error() + 1e-4) {
+                ++under;
+            }
+        }
+        assertTrue(under * 10 <= dag.groups().size(), under + " groups under-bounded");
+    }
+
     /** No cut of baked block terrain has a crack, with the rim simplified. */
     @Test
     void testRandomCutsHaveNoCracks() {

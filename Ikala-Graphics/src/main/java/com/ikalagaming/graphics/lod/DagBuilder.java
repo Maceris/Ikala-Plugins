@@ -39,6 +39,12 @@ public final class DagBuilder {
      */
     private static final double VIRTUAL_EDGE_GROWTH = Math.sqrt(2);
 
+    /**
+     * How far apart samples are when measuring a group's error, in leaf edges. It grows each level
+     * like the virtual edge radius, so each group takes about as many samples.
+     */
+    private static final double MEASURE_SPACING = 0.5;
+
     /** The default visibility reach, in leaf edges. */
     private static final double DEFAULT_VISIBILITY_REACH = 12;
 
@@ -99,7 +105,8 @@ public final class DagBuilder {
      * @param tight Each output cluster's tight sphere.
      * @param error The group's saturated error.
      * @param bound The group's saturated sphere.
-     * @param simplifyError The simplification's own error.
+     * @param simplifyError The simplification's own error, measured.
+     * @param quadricError The simplifier's estimate of it.
      * @param trianglesIn Triangles in.
      * @param trianglesOut Triangles out.
      * @param borderEdges Edges between two locked vertices.
@@ -121,6 +128,7 @@ public final class DagBuilder {
             double error,
             double[] bound,
             double simplifyError,
+            double quadricError,
             int trianglesIn,
             int trianglesOut,
             int borderEdges,
@@ -253,6 +261,7 @@ public final class DagBuilder {
             }
         }
         leafEdge = edgeCount == 0 ? 1 : edgeLength / edgeCount;
+        dag.setLeafEdge(leafEdge);
         if (options.visibilityReach() > 0) {
             leafVisibility(options.visibilityReach() * leafEdge, pool);
         }
@@ -564,7 +573,14 @@ public final class DagBuilder {
                 outFaces.add(faces);
             }
         }
-        final double error = Math.max(childError, result.error());
+        // Measure how far the output is from the children, and add the children's own error: by the
+        // triangle inequality that bounds how far the output is from the input
+        final double simplifyError =
+                Hausdorff.between(
+                        result.mesh(),
+                        merged,
+                        MEASURE_SPACING * leafEdge * Math.pow(VIRTUAL_EDGE_GROWTH, level + 1));
+        final double error = childError + simplifyError;
         final double[] bound = Clusters.enclose(spheres);
         final int[] edgeCounts = countEdges(merged);
         return new Built(
@@ -575,6 +591,7 @@ public final class DagBuilder {
                 outTight,
                 error,
                 bound,
+                simplifyError,
                 result.error(),
                 trianglesIn,
                 result.mesh().getTriangleCount(),
@@ -658,6 +675,7 @@ public final class DagBuilder {
                         built.error(),
                         built.bound(),
                         built.simplifyError(),
+                        built.quadricError(),
                         built.trianglesIn(),
                         built.trianglesOut(),
                         built.borderEdges(),

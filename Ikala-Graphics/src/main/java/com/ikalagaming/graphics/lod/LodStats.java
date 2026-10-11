@@ -29,6 +29,7 @@ public final class LodStats {
      * @param groups Groups made from this level's clusters.
      * @param halving The next level's triangles over this level's, ideally 0.5.
      * @param maxError The largest saturated error of this level's clusters.
+     * @param maxQuadricError The largest quadric estimate of the groups that made this level.
      * @param groupClusters Clusters per group: min, median, max.
      * @param groupTriangles Triangles per group: min, median, max.
      * @param lockedShare Edges between two locked vertices, over all edges, in this level's groups.
@@ -44,6 +45,7 @@ public final class LodStats {
             int groups,
             double halving,
             double maxError,
+            double maxQuadricError,
             int @NonNull [] groupClusters,
             int @NonNull [] groupTriangles,
             double lockedShare,
@@ -95,11 +97,18 @@ public final class LodStats {
             int triangles = 0;
             int clusters = 0;
             double maxError = 0;
+            double maxQuadricError = 0;
             for (LodDag.Cluster cluster : dag.clusters()) {
                 if (cluster.level() == level) {
                     triangles += cluster.triangleCount();
                     ++clusters;
                     maxError = Math.max(maxError, cluster.error());
+                    if (cluster.producer() >= 0) {
+                        maxQuadricError =
+                                Math.max(
+                                        maxQuadricError,
+                                        dag.groups().get(cluster.producer()).quadricError());
+                    }
                 }
             }
             final int next = dag.trianglesAt(level + 1);
@@ -134,6 +143,7 @@ public final class LodStats {
                                     ? Double.NaN
                                     : (double) next / triangles,
                             maxError,
+                            maxQuadricError,
                             spread(sizes),
                             spread(groupTriangles),
                             edges == 0 ? 0 : (double) locked / edges,
@@ -259,13 +269,14 @@ public final class LodStats {
         out.append('\n');
         out.append(
                 String.format(
-                        "%5s %9s %8s %6s %7s %9s %14s %16s %7s %26s %8s %6s %6s%n",
+                        "%5s %9s %8s %6s %7s %9s %9s %14s %16s %7s %26s %8s %6s %6s%n",
                         "level",
                         "tris",
                         "clusters",
                         "groups",
                         "halving",
                         "error",
+                        "quadric",
                         "group clusters",
                         "group tris",
                         "locked",
@@ -276,13 +287,14 @@ public final class LodStats {
         for (Level l : levels(dag)) {
             out.append(
                     String.format(
-                            "%5d %9d %8d %6d %7.3f %9.4f %14s %16s %6.1f%% %26s %8d %6d %6d%n",
+                            "%5d %9d %8d %6d %7.3f %9.4f %9.4f %14s %16s %6.1f%% %26s %8d %6d %6d%n",
                             l.level(),
                             l.triangles(),
                             l.clusters(),
                             l.groups(),
                             l.halving(),
                             l.maxError(),
+                            l.maxQuadricError(),
                             l.groupClusters()[0]
                                     + "/"
                                     + l.groupClusters()[1]

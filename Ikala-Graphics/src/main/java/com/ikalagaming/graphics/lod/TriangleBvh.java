@@ -8,9 +8,9 @@ import java.util.Arrays;
 
 /**
  * A bounding volume hierarchy over triangles, for asking whether a ray hits anything within a
- * distance. Nodes split at the middle of their triangles' centers along the longest axis, down to a
- * few triangles each. Everything is in flat arrays, and queries allocate nothing, so many threads
- * can query one tree at once.
+ * distance, and how far a point is from the nearest triangle. Nodes split at the middle of their
+ * triangles' centers along the longest axis, down to a few triangles each. Everything is in flat
+ * arrays, and queries allocate nothing, so many threads can query one tree at once.
  */
 final class TriangleBvh {
 
@@ -37,6 +37,12 @@ final class TriangleBvh {
 
     /** The triangles' corners, reordered so each leaf's triangles are together. */
     private final float[] corners;
+
+    /** Each reordered triangle's index in the input. */
+    private final int[] original;
+
+    /** Where each input triangle went in the reordered corners. */
+    private final int[] placed;
 
     /** Each node's bounds: min x, y, z, then max x, y, z. */
     private float[] bounds = new float[2 * AXES * LEAF_SIZE];
@@ -98,6 +104,11 @@ final class TriangleBvh {
             work.addInt(end);
         }
         corners = new float[n * TRIANGLE_VALUES];
+        original = order;
+        placed = new int[n];
+        for (int i = 0; i < n; ++i) {
+            placed[order[i]] = i;
+        }
         for (int i = 0; i < n; ++i) {
             System.arraycopy(
                     triangles,
@@ -227,6 +238,145 @@ final class TriangleBvh {
             }
         }
         return false;
+    }
+
+    /** What a nearest-triangle query works in, so it allocates nothing. One per thread. */
+    static final class Scratch {
+        /** Nodes still to visit. */
+        final int[] stack = new int[STACK_SIZE];
+
+        /** A triangle's first corner. */
+        final double[] a = new double[AXES];
+
+        /** Its second corner. */
+        final double[] b = new double[AXES];
+
+        /** Its third corner. */
+        final double[] c = new double[AXES];
+
+        /** The closest point on it. */
+        final double[] closest = new double[AXES];
+
+        /** The nearest triangle the last query found, as its index in the input, or -1. */
+        int triangle = -1;
+    }
+
+    /**
+     * The squared distance from a point to the nearest triangle, if it is under a limit.
+     *
+     * @param point The point.
+     * @param limitSquared Don't look farther than the square root of this.
+     * @param scratch Room for the query, which also holds the nearest triangle found.
+     * @return The squared distance, or the limit if no triangle is closer.
+     */
+    double nearest(double @NonNull [] point, double limitSquared, @NonNull Scratch scratch) {
+        return nearest(point, limitSquared, 0, scratch);
+    }
+
+    /**
+     * The squared distance from a point to the nearest triangle, stopping early once any triangle
+     * is within a distance that is close enough, as when only distances over a running maximum
+     * matter.
+     *
+     * @param point The point.
+     * @param limitSquared Don't look farther than the square root of this.
+     * @param enoughSquared Stop once a triangle is within the square root of this.
+     * @param scratch Room for the query, which also holds the nearest triangle found.
+     * @return The squared distance, or the limit if no triangle is closer; once a triangle is close
+     *     enough, its distance, which may not be the nearest.
+     */
+    double nearest(
+            double @NonNull [] point,
+            double limitSquared,
+            double enoughSquared,
+            @NonNull Scratch scratch) {
+        scratch.triangle = -1;
+        if (corners.length == 0) {
+            return limitSquared;
+        }
+        final int[] stack = scratch.stack;
+        double best = limitSquared;
+        int top = 0;
+        stack[top++] = 0;
+        while (top > 0) {
+            final int node = stack[--top];
+            if (boxDistanceSquared(node, point) >= best) {
+                continue;
+            }
+            if (count[node] == 0) {
+                if (top + 2 > stack.length) {
+                    throw new IllegalStateException("The tree is too deep to search");
+                }
+                final int left = first[node];
+                final double toLeft = boxDistanceSquared(left, point);
+                final double toRight = boxDistanceSquared(left + 1, point);
+                // The nearer child goes on top, so it is searched first and prunes the other
+                if (toLeft < toRight) {
+                    stack[top++] = left + 1;
+                    stack[top++] = left;
+                } else {
+                    stack[top++] = left;
+                    stack[top++] = left + 1;
+                }
+                continue;
+            }
+            for (int t = first[node]; t < first[node] + count[node]; ++t) {
+                final int base = t * TRIANGLE_VALUES;
+                for (int axis = 0; axis < AXES; ++axis) {
+                    scratch.a[axis] = corners[base + axis];
+                    scratch.b[axis] = corners[base + AXES + axis];
+                    scratch.c[axis] = corners[base + 2 * AXES + axis];
+                }
+                Geometry.closestOnTriangle(point, scratch.a, scratch.b, scratch.c, scratch.closest);
+                final double distance = Geometry.distanceSquared(point, scratch.closest);
+                if (distance < best) {
+                    best = distance;
+                    scratch.triangle = original[t];
+                    if (best <= enoughSquared) {
+                        return best;
+                    }
+                }
+            }
+        }
+        return best;
+    }
+
+    /**
+     * The squared distance from a point to one triangle.
+     *
+     * @param point The point.
+     * @param triangle The triangle, as its index in the input.
+     * @param scratch Room for the query.
+     * @return The squared distance.
+     */
+    double distanceSquared(double @NonNull [] point, int triangle, @NonNull Scratch scratch) {
+        final int base = placed[triangle] * TRIANGLE_VALUES;
+        for (int axis = 0; axis < AXES; ++axis) {
+            scratch.a[axis] = corners[base + axis];
+            scratch.b[axis] = corners[base + AXES + axis];
+            scratch.c[axis] = corners[base + 2 * AXES + axis];
+        }
+        Geometry.closestOnTriangle(point, scratch.a, scratch.b, scratch.c, scratch.closest);
+        return Geometry.distanceSquared(point, scratch.closest);
+    }
+
+    /**
+     * The squared distance from a point to a node's box, 0 inside it.
+     *
+     * @param node The node.
+     * @param point The point.
+     * @return The squared distance.
+     */
+    private double boxDistanceSquared(int node, double @NonNull [] point) {
+        final int at = node * 2 * AXES;
+        double sum = 0;
+        for (int axis = 0; axis < AXES; ++axis) {
+            final double below = bounds[at + axis] - point[axis];
+            final double above = point[axis] - bounds[at + AXES + axis];
+            final double outside = Math.max(0, Math.max(below, above));
+            sum += outside * outside;
+        }
+        return sum;
     }
 
     /**

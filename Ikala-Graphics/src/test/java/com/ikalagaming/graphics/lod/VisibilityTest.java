@@ -165,4 +165,50 @@ class VisibilityTest {
         // A degenerate triangle is never hit
         assertEquals(false, single.anyHit(new double[] {0, 1, 0}, new double[] {0, -2, 0}, stack));
     }
+
+    /** The tree finds the nearest triangle's distance, as a brute-force search does. */
+    @Test
+    void testNearestMatchesBruteForce() {
+        final Random random = new Random(9);
+        final int count = 300;
+        final float[] triangles = new float[count * 9];
+        for (int t = 0; t < count; ++t) {
+            for (int axis = 0; axis < 3; ++axis) {
+                triangles[t * 9 + axis] = (float) (random.nextDouble() * 20);
+            }
+            for (int c = 1; c < 3; ++c) {
+                for (int axis = 0; axis < 3; ++axis) {
+                    triangles[t * 9 + c * 3 + axis] =
+                            triangles[t * 9 + axis] + (float) (random.nextDouble() * 2 - 1);
+                }
+            }
+        }
+        final TriangleBvh bvh = new TriangleBvh(triangles);
+        final TriangleBvh.Scratch scratch = new TriangleBvh.Scratch();
+        for (int r = 0; r < 500; ++r) {
+            final double[] point = {
+                random.nextDouble() * 30 - 5,
+                random.nextDouble() * 30 - 5,
+                random.nextDouble() * 30 - 5
+            };
+            double expected = Double.POSITIVE_INFINITY;
+            for (int t = 0; t < count; ++t) {
+                final float[] one = new float[9];
+                System.arraycopy(triangles, t * 9, one, 0, 9);
+                expected =
+                        Math.min(
+                                expected,
+                                new TriangleBvh(one)
+                                        .nearest(point, Double.POSITIVE_INFINITY, scratch));
+            }
+            assertEquals(
+                    expected,
+                    bvh.nearest(point, Double.POSITIVE_INFINITY, scratch),
+                    1e-9,
+                    "Point " + r);
+        }
+        // Nothing nearer than the limit gives the limit
+        assertEquals(1, bvh.nearest(new double[] {1000, 0, 0}, 1, scratch));
+        assertEquals(5, new TriangleBvh(new float[0]).nearest(new double[3], 5, scratch));
+    }
 }

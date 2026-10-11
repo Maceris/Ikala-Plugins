@@ -50,6 +50,7 @@ final class LodTables {
                         Integer.toString(l.groups()),
                         Double.isNaN(l.halving()) ? "" : String.format("%.3f", l.halving()),
                         String.format("%.4f", l.maxError()),
+                        String.format("%.4f", l.maxQuadricError()),
                         spread(l.groupClusters()),
                         spread(l.groupTriangles()),
                         String.format("%.1f%%", PERCENT * l.lockedShare()),
@@ -73,6 +74,7 @@ final class LodTables {
                     "groups",
                     "halving",
                     "error",
+                    "quadric estimate",
                     "group clusters",
                     "group triangles",
                     "locked",
@@ -104,10 +106,7 @@ final class LodTables {
                         percent(l.assignment()),
                         percent(l.mismatchUp()),
                         percent(l.unavoidableUp()),
-                        percent(l.assignmentUp()),
-                        String.format("%.3f", l.meanDistance()),
-                        String.format("%.3f", l.maxDistance()),
-                        String.format("%.3f", l.maxError())
+                        percent(l.assignmentUp())
                     });
         }
         List<Table> out = new ArrayList<>();
@@ -126,12 +125,10 @@ final class LodTables {
                             "assignment",
                             "mismatch, above",
                             "unavoidable, above",
-                            "assignment, above",
-                            "mean distance",
-                            "max distance",
-                            "error"
+                            "assignment, above"
                         },
                         rows));
+        out.add(distances(fidelity));
         final SortedSet<Integer> materials = new TreeSet<>();
         for (Fidelity.Level l : fidelity.levels()) {
             materials.addAll(l.shares().keySet());
@@ -197,6 +194,41 @@ final class LodTables {
             rows.add(row);
         }
         return new Table(title, headers, rows);
+    }
+
+    /**
+     * The distance table: how far each level is from the input, both ways, against its error.
+     *
+     * @param fidelity The measurements.
+     * @return The table.
+     */
+    private static Table distances(@NonNull Fidelity fidelity) {
+        List<String[]> rows = new ArrayList<>();
+        for (Fidelity.Level l : fidelity.levels()) {
+            final Fidelity.Distance d = l.distance();
+            rows.add(
+                    new String[] {
+                        Integer.toString(l.level()),
+                        String.format("%.3f / %.3f / %.3f", d.outMean(), d.outP95(), d.outMax()),
+                        String.format("%.3f / %.3f / %.3f", d.inMean(), d.inP95(), d.inMax()),
+                        String.format("%.3f", d.maxError()),
+                        d.underBounded() + " of " + d.groups(),
+                        String.format("%.2f", d.worstRatio())
+                    });
+        }
+        return new Table(
+                "Distance to the input. Out: from points on the level to the nearest input;"
+                        + " in: from visible input to the nearest triangle its group made."
+                        + " Under-bounded: groups farther than their stored error.",
+                new String[] {
+                    "level",
+                    "out (mean / p95 / max)",
+                    "in (mean / p95 / max)",
+                    "max error",
+                    "under-bounded",
+                    "worst ratio"
+                },
+                rows);
     }
 
     /**

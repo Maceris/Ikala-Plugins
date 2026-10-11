@@ -42,7 +42,35 @@ class FidelityTest {
         final Fidelity fidelity = Fidelity.measure(DagBuilder.build(DagTest.terrain(2), OPTIONS));
         final Fidelity.Level leaves = fidelity.levels().get(0);
         assertEquals(0, leaves.mismatch());
-        assertEquals(0, leaves.maxDistance(), 1e-5);
+        assertEquals(0, leaves.distance().outMax(), 1e-5);
+    }
+
+    /** Every level above the leaves is measured, and its groups are all counted. */
+    @Test
+    void testDistancesMeasured() {
+        final LodDag dag = DagBuilder.build(DagTest.terrain(2), OPTIONS);
+        final Fidelity fidelity = Fidelity.measure(dag);
+        int groups = 0;
+        for (Fidelity.Level level : fidelity.levels()) {
+            final Fidelity.Distance d = level.distance();
+            assertTrue(Double.isFinite(d.outMax()) && Double.isFinite(d.inMax()));
+            assertTrue(d.outMean() <= d.outP95() && d.outP95() <= d.outMax());
+            assertTrue(d.inMean() <= d.inP95() && d.inP95() <= d.inMax());
+            groups += d.groups();
+        }
+        assertEquals(dag.groups().size(), groups);
+    }
+
+    /** The distance stats weigh each sample by its area. */
+    @Test
+    void testStatsWeighByArea() {
+        final double[] stats =
+                Fidelity.stats(
+                        List.of(new float[] {1, 2}, new float[] {10}),
+                        List.of(new float[] {1, 1}, new float[] {0.05f}));
+        assertEquals((1 + 2 + 0.5) / 2.05, stats[0], 1e-6);
+        assertEquals(2, stats[1], 1e-6, "Under 5% of the area is at 10");
+        assertEquals(10, stats[2], 1e-6);
     }
 
     /** Every point on any level lands on a leaf, near where it started on a flat input. */
@@ -72,7 +100,8 @@ class FidelityTest {
     void testHalvesKeepTheirShares() {
         final Fidelity fidelity = Fidelity.measure(DagBuilder.build(List.of(halves(48)), OPTIONS));
         for (Fidelity.Level level : fidelity.levels()) {
-            assertTrue(level.meanDistance() < 1e-4, "Level " + level.level() + " moved");
+            assertTrue(level.distance().outMax() < 1e-4, "Level " + level.level() + " moved");
+            assertTrue(level.distance().inMax() < 1e-4, "Level " + level.level() + " lost input");
             for (int material = 0; material < 2; ++material) {
                 final double[] share = level.shares().get(material);
                 assertEquals(0.5, share[2], 0.02, "Level " + level.level() + " found shares");

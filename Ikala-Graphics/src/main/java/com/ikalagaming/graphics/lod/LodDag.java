@@ -31,7 +31,8 @@ public final class LodDag {
      * @param corners Its triangles' corners, 9 floats per triangle, relative to the DAG's origin.
      * @param materials Each triangle's material.
      * @param visibility How visible each triangle is from outside, 0 to 1.
-     * @param error The saturated error of the group that made it, 0 for leaves, in world units.
+     * @param error The saturated error of the group that made it, 0 for leaves, in world units: a
+     *     bound on how far it is from the input.
      * @param bound The saturated sphere the error is projected from: x, y, z, radius.
      * @param tight A sphere around its own triangles, for culling.
      * @param producer The group that made it, or -1 for leaves.
@@ -68,7 +69,10 @@ public final class LodDag {
      * @param outputs The clusters it made.
      * @param error Its saturated error.
      * @param bound Its saturated sphere.
-     * @param simplifyError The error simplifying it added, before saturation.
+     * @param simplifyError The error simplifying it added, before saturation: how far its output is
+     *     from its children, measured both ways.
+     * @param quadricError The simplifier's own estimate of that, a weighted mean distance, for
+     *     comparison.
      * @param trianglesIn Triangles going in.
      * @param trianglesOut Triangles coming out.
      * @param borderEdges Edges on its locked outer border.
@@ -86,6 +90,7 @@ public final class LodDag {
             double error,
             double @NonNull [] bound,
             double simplifyError,
+            double quadricError,
             int trianglesIn,
             int trianglesOut,
             int borderEdges,
@@ -101,6 +106,14 @@ public final class LodDag {
      * @return The origin, x, y, z. Don't modify it.
      */
     @Getter private final double[] origin;
+
+    /**
+     * The leaves' average edge length, which sets the scale of virtual edges, visibility and
+     * distance sampling.
+     *
+     * @return The length, in world units.
+     */
+    @Getter private double leafEdge = 1;
 
     /** The clusters, by id. */
     private final List<Cluster> clusters = new ArrayList<>();
@@ -198,6 +211,15 @@ public final class LodDag {
      */
     void setVisibilityMillis(double millis) {
         visibilityMillis = millis;
+    }
+
+    /**
+     * Note the leaves' average edge length.
+     *
+     * @param length The length, in world units.
+     */
+    void setLeafEdge(double length) {
+        leafEdge = length;
     }
 
     /**
