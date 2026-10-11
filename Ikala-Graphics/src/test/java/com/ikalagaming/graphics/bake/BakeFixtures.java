@@ -9,7 +9,7 @@ import java.util.Arrays;
 
 /**
  * Small meshes built in code for the baking tests: boxes, slabs, plants and decals, in {@link
- * MeshData}'s vertex layout, against the unit box {@code [0, 1]³}.
+ * MeshData}'s vertex layout, against the unit box {@code [0, 1]^3}.
  */
 final class BakeFixtures {
 

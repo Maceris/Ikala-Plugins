@@ -13,7 +13,7 @@ import javax.annotation.Nullable;
 /**
  * The CPU copy of a mesh that sections can be baked from, with its face groups worked out against a
  * box. Graphics knows nothing about blocks: the box is whatever the plugin registering the mesh
- * says one placement fills, like {@code [0, 1]³}.
+ * says one placement fills, like {@code [0, 1]^3}.
  *
  * <p>Each triangle that lies flat on one of the box's faces, inside its rectangle and facing out,
  * belongs to that face's group, and can be dropped when a neighbor hides that face. Every other

@@ -10,8 +10,8 @@ import org.joml.Vector3f;
 import java.util.Arrays;
 
 /**
- * The benchmark's blocks, built in code against the unit box {@code [0, 1]³}, one mesh and material
- * per {@link SyntheticTerrain} block type.
+ * The benchmark's blocks, built in code against the unit box {@code [0, 1]^3}, one mesh and
+ * material per {@link SyntheticTerrain} block type.
  */
 public final class BlockMeshes {
 
