@@ -3,6 +3,7 @@ package com.ikalagaming.factory.gui;
 import static com.ikalagaming.factory.gui.DefaultWindows.*;
 
 import com.ikalagaming.factory.FactoryClientPlugin;
+import com.ikalagaming.factory.lab.LabTool;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.WindowManager;
@@ -28,6 +29,7 @@ public class DebugToolbar extends MainToolbar {
     private final Checkbox graphicsWindow;
     private final Checkbox scriptDebugger;
     private final Checkbox scriptMonitor;
+    private final Checkbox worldgenLab;
 
     public DebugToolbar(@NonNull WindowManager windowManager) {
         this.windowManager = windowManager;
@@ -60,6 +62,11 @@ public class DebugToolbar extends MainToolbar {
                         "TOOLBAR_DEBUG_SCRIPT_MONITOR", FactoryClientPlugin.getResourceBundle());
         scriptMonitor =
                 new Checkbox(textScriptMonitor, windowManager.isVisible(ScriptMonitor.WINDOW_NAME));
+
+        var textWorldgenLab =
+                SafeResourceLoader.getString(
+                        "TOOLBAR_DEBUG_WORLDGEN_LAB", FactoryClientPlugin.getResourceBundle());
+        worldgenLab = new Checkbox(textWorldgenLab, false);
     }
 
     @Override
@@ -71,6 +78,7 @@ public class DebugToolbar extends MainToolbar {
                 graphicsWindow.draw(width, height);
                 scriptDebugger.draw(width, height);
                 scriptMonitor.draw(width, height);
+                worldgenLab.draw(width, height);
                 IkGui.endMenu();
             }
             IkGui.pushStyleColor(ColorType.TEXT, Color.rgba(1f, 0.1f, 0.1f, 1.0f));
@@ -105,11 +113,24 @@ public class DebugToolbar extends MainToolbar {
             windowManager.setVisible(ScriptMonitor.WINDOW_NAME, scriptMonitor.getState());
             return true;
         }
+        if (worldgenLab.checkResult()) {
+            LabTool lab = FactoryClientPlugin.getLabTool();
+            if (lab != null) {
+                if (worldgenLab.getState()) {
+                    lab.open();
+                } else {
+                    lab.hide();
+                }
+            }
+            return true;
+        }
         return false;
     }
 
     @Override
     public void updateValues(@NonNull Scene scene, @NonNull Window window) {
-        // Not required
+        // The Lab can close itself
+        LabTool lab = FactoryClientPlugin.getLabTool();
+        worldgenLab.setState(lab != null && lab.isOpen());
     }
 }

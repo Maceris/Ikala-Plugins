@@ -1,6 +1,6 @@
 package com.ikalagaming.factory.kvt;
 
-import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.EqualsAndHashCode;
@@ -77,7 +77,7 @@ class ArrayNode<T> implements KVT {
                 log.warn(
                         SafeResourceLoader.getStringFormatted(
                                 "NODE_UNEXPECTED_TYPE",
-                                FactoryPlugin.getResourceBundle(),
+                                FactoryStrings.bundle(),
                                 this.getClass().getSimpleName(),
                                 type.name()));
                 throw new UnsupportedOperationException();

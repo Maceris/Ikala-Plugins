@@ -1,6 +1,6 @@
 package com.ikalagaming.factory.crafting;
 
-import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.AllArgsConstructor;
@@ -43,7 +43,7 @@ public record Recipe(
 
             @Override
             public String toString() {
-                return SafeResourceLoader.getString(i18nKey, FactoryPlugin.getResourceBundle());
+                return SafeResourceLoader.getString(i18nKey, FactoryStrings.bundle());
             }
         }
 
@@ -71,8 +71,7 @@ public record Recipe(
         public RecipeBuilder and(@NonNull Ingredient ingredient) {
             if (lastList == null) {
                 var message =
-                        SafeResourceLoader.getString(
-                                "NOT_STARTED_LIST", FactoryPlugin.getResourceBundle());
+                        SafeResourceLoader.getString("NOT_STARTED_LIST", FactoryStrings.bundle());
                 log.warn(message);
                 throw new UnsupportedOperationException(message);
             }
@@ -118,7 +117,7 @@ public record Recipe(
                 var message =
                         SafeResourceLoader.getStringFormatted(
                                 "INVALID_INPUT_TYPE",
-                                FactoryPlugin.getResourceBundle(),
+                                FactoryStrings.bundle(),
                                 ingredient.type.toString());
                 log.warn(message);
                 throw new IllegalArgumentException(message);
@@ -136,7 +135,7 @@ public record Recipe(
                 var message =
                         SafeResourceLoader.getStringFormatted(
                                 "INVALID_OUTPUT_TYPE",
-                                FactoryPlugin.getResourceBundle(),
+                                FactoryStrings.bundle(),
                                 ingredient.type.toString());
                 log.warn(message);
                 throw new IllegalArgumentException(message);
@@ -222,7 +221,7 @@ public record Recipe(
             if (time < 0) {
                 var message =
                         SafeResourceLoader.getString(
-                                "RECIPE_NEGATIVE_TIME", FactoryPlugin.getResourceBundle());
+                                "RECIPE_NEGATIVE_TIME", FactoryStrings.bundle());
                 log.warn(message);
                 throw new IllegalArgumentException(message);
             }

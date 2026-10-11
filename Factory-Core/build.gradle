@@ -50,6 +50,8 @@ idea {
 
 configurations {
 	mockitoAgent { transitive = false }
+	// Shared libraries this plugin needs, see collectLibraries
+	library
 	provided
 	// Make compile extend from our provided configuration so that things added to bundled end up on the compile classpath
 	implementation.extendsFrom(provided)
@@ -59,6 +61,8 @@ dependencies {
 	compileOnly project(':Ikala-Core')
 	compileOnly project(':Random')
 	implementation "com.opencsv:opencsv:${openCSVVersion}"
+	// The definition loader reads CSV at runtime, from the shared libraries, see collectLibraries
+	library "com.opencsv:opencsv:${openCSVVersion}"
 	provided "io.netty:netty-all:${nettyVersion}"
 	provided "com.google.guava:guava:${guavaVersion}"
 
@@ -126,6 +130,11 @@ tasks.named('jar') {
         configurations.provided.collect { it.isDirectory() ? it : zipTree(it) }
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.register('collectLibraries', Copy) {
+	from configurations.library
+	into layout.buildDirectory.dir('libraries')
 }
 
 tasks.named('check') {

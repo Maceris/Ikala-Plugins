@@ -66,22 +66,50 @@ public record BlockRules(@NonNull String id, @NonNull List<Rule> rules) {
     public record Rule(Condition condition, Block block, BlockRules nested) {}
 
     /**
+     * Which rule chose a block, for debug views.
+     *
+     * @param block The block.
+     * @param rule Where the rule is, like {@code lotomation:grassy rules[2]}, with the lists it was
+     *     reached through before it.
+     * @param condition The rule's condition, or null for a rule that always matches.
+     */
+    public record Match(@NonNull Block block, @NonNull String rule, Condition condition) {
+        @Override
+        public String toString() {
+            return rule + (condition == null ? "" : " if " + condition) + " -> " + block.getName();
+        }
+    }
+
+    /**
      * The first matching rule's block.
      *
      * @param context What is known about the position.
      * @return The block, or null if nothing matched.
      */
     public Block choose(@NonNull Context context) {
-        for (Rule rule : rules) {
+        final Match match = explain(context);
+        return match == null ? null : match.block();
+    }
+
+    /**
+     * The first matching rule, and the block it chose.
+     *
+     * @param context What is known about the position.
+     * @return The match, or null if nothing matched.
+     */
+    public Match explain(@NonNull Context context) {
+        for (int i = 0; i < rules.size(); ++i) {
+            final Rule rule = rules.get(i);
             if (rule.condition() != null && !rule.condition().test(context)) {
                 continue;
             }
+            final String here = id + " rules[" + i + "]";
             if (rule.block() != null) {
-                return rule.block();
+                return new Match(rule.block(), here, rule.condition());
             }
-            final Block nested = rule.nested().choose(context);
+            final Match nested = rule.nested().explain(context);
             if (nested != null) {
-                return nested;
+                return new Match(nested.block(), here + " > " + nested.rule(), nested.condition());
             }
         }
         return null;

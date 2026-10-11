@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.gui.data.Viewport;
 import com.ikalagaming.graphics.gui.util.RectFloat;
 import com.ikalagaming.graphics.ui.automation.UiAutomation;
 import com.ikalagaming.graphics.ui.spec.NodeTypes;
+import com.ikalagaming.graphics.ui.spec.ObservableList;
 import com.ikalagaming.graphics.ui.spec.SpecInstance;
 import com.ikalagaming.graphics.ui.spec.SpecLoader;
 import com.ikalagaming.graphics.ui.spec.UiSpec;
@@ -91,6 +92,20 @@ public class UiManager {
 
     /** The theme in use, with its variants. Render thread only. */
     private ActiveTheme activeTheme = ActiveTheme.EMPTY;
+
+    /**
+     * A tool and the context that registered it.
+     *
+     * @param owner The registering context.
+     * @param tool The tool.
+     */
+    private record OwnedTool(@NonNull GraphicsContext owner, @NonNull Tool tool) {}
+
+    /** The tools plugins offer, in registration order. Render thread only. */
+    private final List<OwnedTool> tools = new ArrayList<>();
+
+    /** The tools, for menus to bind to. */
+    private final ObservableList<Tool> toolList = new ObservableList<>();
 
     /** Node types UI specs can use. Safe from any thread. */
     private final NodeTypes nodeTypes = new NodeTypes();
@@ -446,6 +461,9 @@ public class UiManager {
                         }
                     }
                     automation.cancelAllOwnedBy(owner);
+                    if (tools.removeIf(owned -> owned.owner() == owner)) {
+                        publishTools();
+                    }
                     if (themeOverride != null && themeOverride.owner() == owner) {
                         themeOverride = null;
                         themeChanged = true;
@@ -468,6 +486,44 @@ public class UiManager {
                         log.debug("Removed {} surfaces owned by {}", removed, owner.getOwnerKey());
                     }
                 });
+    }
+
+    /**
+     * Offer a tool, replacing any tool with the same ID. Render thread only; {@code UI} posts it.
+     *
+     * @param owner The registering context, which the tool goes away with.
+     * @param tool The tool.
+     */
+    public void addTool(@NonNull GraphicsContext owner, @NonNull Tool tool) {
+        tools.removeIf(owned -> owned.tool().id().equals(tool.id()));
+        tools.add(new OwnedTool(owner, tool));
+        publishTools();
+    }
+
+    /**
+     * Withdraw a tool a context registered. Render thread only; {@code UI} posts it.
+     *
+     * @param owner The registering context.
+     * @param id The tool's ID.
+     */
+    public void removeTool(@NonNull GraphicsContext owner, @NonNull String id) {
+        if (tools.removeIf(owned -> owned.owner() == owner && owned.tool().id().equals(id))) {
+            publishTools();
+        }
+    }
+
+    /**
+     * The tools plugins offer, for menus to bind to, like an editor's list of tools.
+     *
+     * @return The tools, updated as plugins register and unload them.
+     */
+    public ObservableList<Tool> getTools() {
+        return toolList;
+    }
+
+    /** Tell menus the tools changed. */
+    private void publishTools() {
+        toolList.set(tools.stream().map(OwnedTool::tool).toList());
     }
 
     /**

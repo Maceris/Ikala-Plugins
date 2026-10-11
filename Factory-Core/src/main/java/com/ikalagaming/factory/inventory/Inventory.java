@@ -1,6 +1,6 @@
 package com.ikalagaming.factory.inventory;
 
-import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.factory.item.Item;
 import com.ikalagaming.factory.item.ItemStack;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -58,8 +58,7 @@ public class Inventory {
     public Inventory(final int size) {
         if (size <= 0) {
             String error =
-                    SafeResourceLoader.getString(
-                            "INVALID_INVENTORY_SIZE", FactoryPlugin.getResourceBundle());
+                    SafeResourceLoader.getString("INVALID_INVENTORY_SIZE", FactoryStrings.bundle());
             log.warn(error);
             throw new IllegalArgumentException(error);
         }

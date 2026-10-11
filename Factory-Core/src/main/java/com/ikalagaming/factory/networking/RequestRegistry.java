@@ -1,6 +1,6 @@
 package com.ikalagaming.factory.networking;
 
-import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.factory.networking.base.Request;
 import com.ikalagaming.factory.networking.base.RequestDirection;
 import com.ikalagaming.factory.networking.request.clientbound.UpdateTagRegistry;
@@ -71,7 +71,7 @@ public class RequestRegistry {
         log.warn(
                 SafeResourceLoader.getStringFormatted(
                         "REQUEST_ALREADY_REGISTERED",
-                        FactoryPlugin.getResourceBundle(),
+                        FactoryStrings.bundle(),
                         type.getSimpleName()));
     }
 

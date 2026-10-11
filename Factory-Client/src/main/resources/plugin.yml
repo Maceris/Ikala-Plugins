@@ -6,7 +6,9 @@ authors: [maceris]
 main-class: com.ikalagaming.factory.FactoryClientPlugin
 dependencies:
   - Factory-Core
-  - Factory-Server
   - Ikala-Graphics
   - Random
+# Only single player needs the server, so the client also runs without it, as in the asset editor
+soft-dependencies:
+  - Factory-Server
 libraries: [joml]

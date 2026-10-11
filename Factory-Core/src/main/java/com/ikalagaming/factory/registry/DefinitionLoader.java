@@ -1,11 +1,10 @@
-package com.ikalagaming.factory.server;
+package com.ikalagaming.factory.registry;
 
-import com.ikalagaming.factory.FactoryServerPlugin;
+import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.factory.item.ItemDefinition;
-import com.ikalagaming.factory.registry.*;
 import com.ikalagaming.factory.world.BlockDefinition;
 import com.ikalagaming.launcher.PluginFolder;
-import com.ikalagaming.util.SafeResourceLoader;
 
 import com.opencsv.CSVReaderHeaderAware;
 import com.opencsv.exceptions.CsvValidationException;
@@ -15,11 +14,34 @@ import org.yaml.snakeyaml.Yaml;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Stream;
 
+/**
+ * Loads the game's definitions from a data folder into registries: {@value #TAGS_FILE}, {@value
+ * #MATERIALS_FILE}, {@value #BLOCKS_FILE} and {@value #ITEMS_FILE}. They are shared content that
+ * the server, the client and the tools all read, so they live in Factory-Core's data folder,
+ * alongside the world generation data that names the blocks.
+ *
+ * <p>Load order matters, since each kind refers to the ones before it: tags, then materials, then
+ * blocks (which register their items), then items. {@link #loadAll} does that.
+ */
 @Slf4j
 public class DefinitionLoader {
+
+    /** The tag definitions. */
+    public static final String TAGS_FILE = "tags.yml";
+
+    /** The material definitions. */
+    public static final String MATERIALS_FILE = "materials.yml";
+
+    /** The block definitions. */
+    public static final String BLOCKS_FILE = "blocks.csv";
+
+    /** The item definitions. */
+    public static final String ITEMS_FILE = "items.csv";
 
     /** The headers that we expect in the blocks csv file. */
     private static final String[] BLOCK_HEADERS = {
@@ -29,24 +51,85 @@ public class DefinitionLoader {
     /** The headers that we expect in the items csv file. */
     private static final String[] ITEM_HEADERS = {"mod_name", "identifier", "material", "tags"};
 
+    /** Where several tags in one cell are split. */
+    private static final String TAG_SEPARATOR = ",";
+
+    /**
+     * Factory-Core's data folder, where the game's definitions live.
+     *
+     * @return The folder.
+     */
+    public static Path dataFolder() {
+        return PluginFolder.getResource(
+                        FactoryPlugin.PLUGIN_NAME, PluginFolder.ResourceType.DATA, "")
+                .toPath();
+    }
+
+    /**
+     * Load every definition from a data folder, in order.
+     *
+     * @param dataFolder The folder holding the definition files.
+     * @param registries Where to register them.
+     */
+    public static void loadAll(@NonNull Path dataFolder, @NonNull Registries registries) {
+        loadTags(dataFolder, registries.getTagRegistry());
+        loadMaterials(dataFolder, registries.getMaterialRegistry());
+        loadBlocks(dataFolder, registries.getBlockRegistry(), registries.getItemRegistry());
+        loadItems(dataFolder, registries.getItemRegistry());
+    }
+
+    /**
+     * The block IDs a data folder defines, for checking world generation data against.
+     *
+     * @param dataFolder The folder holding the definition files.
+     * @return The block IDs, or empty if the folder defines none.
+     */
+    public static Set<String> blockIds(@NonNull Path dataFolder) {
+        if (!Files.isRegularFile(dataFolder.resolve(BLOCKS_FILE))) {
+            return Set.of();
+        }
+        Registries registries = new Registries();
+        loadAll(dataFolder, registries);
+        return new TreeSet<>(registries.getBlockRegistry().getNames());
+    }
+
+    /**
+     * An optional cell: empty means not given.
+     *
+     * @param cell The cell's text.
+     * @return The text, or null if the cell is empty.
+     */
+    private static String optional(String cell) {
+        return cell == null || cell.isBlank() ? null : cell.trim();
+    }
+
+    /**
+     * Split a cell of tags.
+     *
+     * @param tagsRaw The cell, possibly empty.
+     * @return The tags.
+     */
+    private static List<String> parseTags(String tagsRaw) {
+        if (tagsRaw == null || tagsRaw.isBlank()) {
+            return new ArrayList<>();
+        }
+        return new ArrayList<>(Stream.of(tagsRaw.split(TAG_SEPARATOR)).map(String::trim).toList());
+    }
+
     /**
      * Load and process blocks from disk.
      *
+     * @param dataFolder The folder holding the definition files.
      * @param blockRegistry Where we are registering the blocks.
      * @param itemRegistry Where we are registering the corresponding block items.
      */
     public static void loadBlocks(
-            @NonNull BlockRegistry blockRegistry, @NonNull ItemRegistry itemRegistry) {
-        File blocks =
-                PluginFolder.getResource(
-                        FactoryServerPlugin.PLUGIN_NAME,
-                        PluginFolder.ResourceType.DATA,
-                        "blocks.csv");
-
+            @NonNull Path dataFolder,
+            @NonNull BlockRegistry blockRegistry,
+            @NonNull ItemRegistry itemRegistry) {
+        final File blocks = dataFolder.resolve(BLOCKS_FILE).toFile();
         try (var stream = new FileInputStream(blocks);
-                var streamReader =
-                        new InputStreamReader(
-                                Objects.requireNonNull(stream), StandardCharsets.UTF_8);
+                var streamReader = new InputStreamReader(stream, StandardCharsets.UTF_8);
                 var fileReader = new BufferedReader(streamReader);
                 var csvReader = new CSVReaderHeaderAware(fileReader)) {
 
@@ -54,15 +137,9 @@ public class DefinitionLoader {
             while (results != null) {
                 var modName = results[0];
                 var identifier = results[1];
-                var material = results[2];
-                var tagsRaw = results[3];
+                var material = optional(results[2]);
+                var tags = parseTags(results[3]);
                 boolean registerItem = Boolean.parseBoolean(results[4]);
-                List<String> tags = new ArrayList<>();
-
-                if (tagsRaw != null && tagsRaw.isEmpty()) {
-                    var tagsParsed = Stream.of(tagsRaw.split(",")).map(String::trim).toList();
-                    tags.addAll(tagsParsed);
-                }
 
                 var combinedName = RegistryConstants.combineName(modName, identifier);
                 var definition = new BlockDefinition(modName, identifier, material, tags);
@@ -75,32 +152,22 @@ public class DefinitionLoader {
 
                 results = csvReader.readNext(BLOCK_HEADERS);
             }
-            log.debug(
-                    SafeResourceLoader.getString(
-                            "LOADED_BLOCKS", FactoryServerPlugin.getResourceBundle()));
+            log.debug(FactoryStrings.format("LOADED_BLOCKS"));
         } catch (IOException | CsvValidationException | NullPointerException e) {
-            log.warn(
-                    SafeResourceLoader.getString(
-                            "BLOCK_INVALID_STRUCTURE", FactoryServerPlugin.getResourceBundle()),
-                    e);
+            log.warn(FactoryStrings.format("BLOCK_INVALID_STRUCTURE"), e);
         }
     }
 
     /**
      * Load and process items from disk.
      *
+     * @param dataFolder The folder holding the definition files.
      * @param itemRegistry Where we are registering items.
      */
-    public static void loadItems(@NonNull ItemRegistry itemRegistry) {
-        File items =
-                PluginFolder.getResource(
-                        FactoryServerPlugin.PLUGIN_NAME,
-                        PluginFolder.ResourceType.DATA,
-                        "items.csv");
+    public static void loadItems(@NonNull Path dataFolder, @NonNull ItemRegistry itemRegistry) {
+        final File items = dataFolder.resolve(ITEMS_FILE).toFile();
         try (var stream = new FileInputStream(items);
-                var streamReader =
-                        new InputStreamReader(
-                                Objects.requireNonNull(stream), StandardCharsets.UTF_8);
+                var streamReader = new InputStreamReader(stream, StandardCharsets.UTF_8);
                 var fileReader = new BufferedReader(streamReader);
                 var csvReader = new CSVReaderHeaderAware(fileReader)) {
 
@@ -108,75 +175,50 @@ public class DefinitionLoader {
             while (results != null) {
                 var modName = results[0];
                 var identifier = results[1];
-                var material = results[2];
-                var tagsRaw = results[3];
-                List<String> tags = new ArrayList<>();
-
-                if (tagsRaw != null && tagsRaw.isEmpty()) {
-                    var tagsParsed = Stream.of(tagsRaw.split(",")).map(String::trim).toList();
-                    tags.addAll(tagsParsed);
-                }
+                var material = optional(results[2]);
+                var tags = parseTags(results[3]);
 
                 var combinedName = RegistryConstants.combineName(modName, identifier);
-
                 var itemDefinition = new ItemDefinition(modName, identifier, material, tags);
                 itemRegistry.register(combinedName, itemDefinition);
 
                 results = csvReader.readNext(ITEM_HEADERS);
             }
-            log.debug(
-                    SafeResourceLoader.getString(
-                            "LOADED_ITEMS", FactoryServerPlugin.getResourceBundle()));
+            log.debug(FactoryStrings.format("LOADED_ITEMS"));
         } catch (IOException | CsvValidationException | NullPointerException e) {
-            log.warn(
-                    SafeResourceLoader.getString(
-                            "ITEM_INVALID_STRUCTURE", FactoryServerPlugin.getResourceBundle()),
-                    e);
+            log.warn(FactoryStrings.format("ITEM_INVALID_STRUCTURE"), e);
         }
     }
 
     /**
      * Load and process materials from disk.
      *
+     * @param dataFolder The folder holding the definition files.
      * @param materialRegistry Where we are registering materials.
      */
-    public static void loadMaterials(@NonNull MaterialRegistry materialRegistry) {
-        File materials =
-                PluginFolder.getResource(
-                        FactoryServerPlugin.PLUGIN_NAME,
-                        PluginFolder.ResourceType.DATA,
-                        "materials.yml");
-        Map<String, Object> materialMap = loadYaml(materials);
+    public static void loadMaterials(
+            @NonNull Path dataFolder, @NonNull MaterialRegistry materialRegistry) {
+        Map<String, Object> materialMap = loadYaml(dataFolder.resolve(MATERIALS_FILE).toFile());
         if (materialMap.isEmpty()) {
             return;
         }
         processMaterials(materialMap, materialRegistry);
-
-        log.debug(
-                SafeResourceLoader.getString(
-                        "LOADED_MATERIALS", FactoryServerPlugin.getResourceBundle()));
+        log.debug(FactoryStrings.format("LOADED_MATERIALS"));
     }
 
     /**
      * Load the tags from files.
      *
+     * @param dataFolder The folder holding the definition files.
      * @param tagRegistry Where we are registering tags.
      */
-    public static void loadTags(@NonNull TagRegistry tagRegistry) {
-        File tags =
-                PluginFolder.getResource(
-                        FactoryServerPlugin.PLUGIN_NAME,
-                        PluginFolder.ResourceType.DATA,
-                        "tags.yml");
-
-        Map<String, Object> tagMap = loadYaml(tags);
+    public static void loadTags(@NonNull Path dataFolder, @NonNull TagRegistry tagRegistry) {
+        Map<String, Object> tagMap = loadYaml(dataFolder.resolve(TAGS_FILE).toFile());
         if (tagMap.isEmpty()) {
             return;
         }
         processTags(tagMap, null, tagRegistry);
-        log.debug(
-                SafeResourceLoader.getString(
-                        "LOADED_TAGS", FactoryServerPlugin.getResourceBundle()));
+        log.debug(FactoryStrings.format("LOADED_TAGS"));
     }
 
     /**
@@ -192,17 +234,11 @@ public class DefinitionLoader {
         try (InputStream stream = new FileInputStream(file)) {
             results = yaml.load(stream);
             if (results == null) {
-                log.warn(
-                        SafeResourceLoader.getString(
-                                "FILE_EMPTY", FactoryServerPlugin.getResourceBundle()),
-                        file.getAbsolutePath());
+                log.warn(FactoryStrings.format("FILE_EMPTY", file.getAbsolutePath()));
                 return new HashMap<>();
             }
         } catch (IOException e) {
-            log.warn(
-                    SafeResourceLoader.getString(
-                            "FILE_NOT_FOUND", FactoryServerPlugin.getResourceBundle()),
-                    file.getAbsolutePath());
+            log.warn(FactoryStrings.format("FILE_NOT_FOUND", file.getAbsolutePath()));
             return new HashMap<>();
         }
 
@@ -221,10 +257,7 @@ public class DefinitionLoader {
             for (Map.Entry<String, Object> entry : map.entrySet()) {
                 Object value = entry.getValue();
                 if (!(value instanceof Map<?, ?>)) {
-                    log.warn(
-                            SafeResourceLoader.getString(
-                                    "MAT_INVALID_STRUCTURE",
-                                    FactoryServerPlugin.getResourceBundle()));
+                    log.warn(FactoryStrings.format("MAT_INVALID_STRUCTURE"));
                     return;
                 }
 
@@ -238,9 +271,7 @@ public class DefinitionLoader {
                 materialRegistry.addMaterial(entry.getKey(), tagNames, parent);
             }
         } catch (Exception e) {
-            log.warn(
-                    SafeResourceLoader.getString(
-                            "MAT_INVALID_STRUCTURE", FactoryServerPlugin.getResourceBundle()));
+            log.warn(FactoryStrings.format("MAT_INVALID_STRUCTURE"));
         }
     }
 

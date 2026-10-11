@@ -1,0 +1,9 @@
+---
+# In editor mode the game's menus and toolbar stay closed, and the Worldgen Lab is offered as a
+# tool instead. The asset editor turns this on.
+editor-mode: false
+lab:
+  # Data folders in load order. Empty uses Factory-Core's data folder.
+  data-folders: []
+  world-type: 'lotomation:overworld'
+  seed: 0

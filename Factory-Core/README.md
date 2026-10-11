@@ -28,15 +28,22 @@ generation is a pure function of the seed, the chunk position and the data.
 The tools run the same code the game generates with. From this folder:
 
 ```bash
-./gradlew worldgen --args="check <dataFolder> --blocks <blocks.csv>"
+./gradlew worldgen --args="check <dataFolder>"
 ./gradlew worldgen --args="render --data <dataFolder> --world lotomation:overworld --target lotomation:overworld/terrain --plane xy --origin -256,64,0 --size 512,256 --out side.png"
 ```
 
 Commands: `check` (errors with file and field), `render` (a PNG slice of any noise, density,
 parameter, `id#path` node, `biome` or `blocks`), `hash` (chunk content hashes), `trace` (every
 node's value at a point), `biome` (why a point has its biome) and `bounds` (every node's range over
-a box). Relative paths are from this folder. The same commands work in the running game's console
-as `worldgen <command> ...`.
+a box). Relative paths are from this folder. Blocks are checked against the data folder's
+`blocks.csv`. The same commands work in the running game's console as `worldgen <command> ...`,
+where the data folder defaults to Factory-Core's.
+
+## Definitions
+
+The game's definitions live in Factory-Core's data folder, next to the world generation data that
+names them: `tags.yml`, `materials.yml`, `blocks.csv` and `items.csv`, loaded in that order by
+`DefinitionLoader`. The server, the client and the tools all read them from there.
 
 The determinism tests compare a fixed set of chunks against
 `src/test/resources/worldgen/golden-hashes.txt`. When generation changes on purpose, regenerate it

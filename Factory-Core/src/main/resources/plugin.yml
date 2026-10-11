@@ -6,3 +6,4 @@ authors: [maceris]
 main-class: com.ikalagaming.factory.FactoryPlugin
 dependencies:
   - Random
+libraries: [opencsv]

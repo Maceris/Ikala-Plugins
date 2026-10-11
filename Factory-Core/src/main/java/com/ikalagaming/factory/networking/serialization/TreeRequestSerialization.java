@@ -1,6 +1,6 @@
 package com.ikalagaming.factory.networking.serialization;
 
-import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.factory.kvt.KVT;
 import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -323,7 +323,7 @@ public class TreeRequestSerialization {
             log.error(
                     SafeResourceLoader.getStringFormatted(
                             "ERROR_ENCODING_KVT",
-                            FactoryPlugin.getResourceBundle(),
+                            FactoryStrings.bundle(),
                             input.getClass().getSimpleName()));
             return Optional.empty();
         }
@@ -353,9 +353,7 @@ public class TreeRequestSerialization {
                 | NoSuchMethodException e) {
             log.error(
                     SafeResourceLoader.getStringFormatted(
-                            "ERROR_DECODING_KVT",
-                            FactoryPlugin.getResourceBundle(),
-                            type.getSimpleName()),
+                            "ERROR_DECODING_KVT", FactoryStrings.bundle(), type.getSimpleName()),
                     e);
         }
         return Optional.empty();

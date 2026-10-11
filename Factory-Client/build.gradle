@@ -71,6 +71,9 @@ dependencies {
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
 	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 	testImplementation project(':Ikala-Graphics')
+	testImplementation project(':Ikala-Core')
+	testImplementation project(':Factory-Core')
+	testImplementation project(':Random')
 	
 	// lombok
 	compileOnly "org.projectlombok:lombok:${lombokVersion}"

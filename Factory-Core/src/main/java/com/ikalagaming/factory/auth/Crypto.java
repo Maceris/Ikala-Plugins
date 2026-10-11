@@ -1,6 +1,6 @@
 package com.ikalagaming.factory.auth;
 
-import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.random.RandomGen;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -87,7 +87,7 @@ public class Crypto {
         } catch (NoSuchAlgorithmException e) {
             log.warn(
                     SafeResourceLoader.getString(
-                            "KEY_PAIR_CREATION_FAILED", FactoryPlugin.getResourceBundle()),
+                            "KEY_PAIR_CREATION_FAILED", FactoryStrings.bundle()),
                     e);
             throw new RuntimeException(e);
         }
@@ -125,9 +125,7 @@ public class Crypto {
     public static Optional<KeyPair> readKeysFromFile(@NonNull File file) {
 
         if (!file.exists() || !file.canRead()) {
-            log.debug(
-                    SafeResourceLoader.getString(
-                            "KEY_FILE_MISSING", FactoryPlugin.getResourceBundle()));
+            log.debug(SafeResourceLoader.getString("KEY_FILE_MISSING", FactoryStrings.bundle()));
             return Optional.empty();
         }
 
@@ -138,7 +136,7 @@ public class Crypto {
             if (!RSA_PRIVATE_HEADER.equals(reader.readLine())) {
                 log.warn(
                         SafeResourceLoader.getString(
-                                "KEY_FILE_UNEXPECTED_FORMAT", FactoryPlugin.getResourceBundle()));
+                                "KEY_FILE_UNEXPECTED_FORMAT", FactoryStrings.bundle()));
                 return Optional.empty();
             }
             String line;
@@ -154,7 +152,7 @@ public class Crypto {
             if (!RSA_PUBLIC_HEADER.equals(reader.readLine())) {
                 log.warn(
                         SafeResourceLoader.getString(
-                                "KEY_FILE_UNEXPECTED_FORMAT", FactoryPlugin.getResourceBundle()));
+                                "KEY_FILE_UNEXPECTED_FORMAT", FactoryStrings.bundle()));
                 return Optional.empty();
             }
             keyParts.clear();
@@ -169,21 +167,16 @@ public class Crypto {
 
             return Optional.of(new KeyPair(pub, priv));
         } catch (FileNotFoundException e) {
-            log.warn(
-                    SafeResourceLoader.getString(
-                            "KEY_FILE_MISSING", FactoryPlugin.getResourceBundle()),
-                    e);
+            log.warn(SafeResourceLoader.getString("KEY_FILE_MISSING", FactoryStrings.bundle()), e);
             return Optional.empty();
         } catch (IOException e) {
             log.warn(
-                    SafeResourceLoader.getString(
-                            "KEY_FILE_IO_EXCEPTION", FactoryPlugin.getResourceBundle()),
+                    SafeResourceLoader.getString("KEY_FILE_IO_EXCEPTION", FactoryStrings.bundle()),
                     e);
             return Optional.empty();
         } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
             log.warn(
-                    SafeResourceLoader.getString(
-                            "KEY_FILE_CRYPTO_ERROR", FactoryPlugin.getResourceBundle()),
+                    SafeResourceLoader.getString("KEY_FILE_CRYPTO_ERROR", FactoryStrings.bundle()),
                     e);
             return Optional.empty();
         }
@@ -212,10 +205,7 @@ public class Crypto {
             chopUpKey(publicBase64).forEach(out::println);
             out.println(RSA_PUBLIC_FOOTER);
         } catch (FileNotFoundException e) {
-            log.warn(
-                    SafeResourceLoader.getString(
-                            "KEY_FILE_MISSING", FactoryPlugin.getResourceBundle()),
-                    e);
+            log.warn(SafeResourceLoader.getString("KEY_FILE_MISSING", FactoryStrings.bundle()), e);
             return false;
         }
         return true;

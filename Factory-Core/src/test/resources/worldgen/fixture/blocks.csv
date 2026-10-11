@@ -1,0 +1,9 @@
+mod_name,identifier,material,tags,register_item
+test,stone,,solid,FALSE
+test,grass,,solid,FALSE
+test,dirt,,solid,FALSE
+test,moss,,,FALSE
+test,sand,,solid,FALSE
+test,basalt,,solid,FALSE
+test,deepstone,,solid,FALSE
+test,water,,liquid,FALSE

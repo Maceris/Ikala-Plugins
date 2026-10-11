@@ -1,6 +1,6 @@
 package com.ikalagaming.factory.networking.serialization;
 
-import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.factory.kvt.KVT;
 import com.ikalagaming.factory.kvt.TreeBinarySerialization;
 import com.ikalagaming.factory.networking.RequestRegistry;
@@ -35,9 +35,7 @@ public class RequestDecoder extends ByteToMessageDecoder {
         if (type == null) {
             log.error(
                     SafeResourceLoader.getStringFormatted(
-                            "UNKNOWN_REQUEST_ID",
-                            FactoryPlugin.getResourceBundle(),
-                            Integer.toString(id)));
+                            "UNKNOWN_REQUEST_ID", FactoryStrings.bundle(), Integer.toString(id)));
             return;
         }
 
@@ -51,7 +49,7 @@ public class RequestDecoder extends ByteToMessageDecoder {
             log.error(
                     SafeResourceLoader.getStringFormatted(
                             "ERROR_DECODING_REQUEST",
-                            FactoryPlugin.getResourceBundle(),
+                            FactoryStrings.bundle(),
                             Integer.toString(id)));
         }
     }

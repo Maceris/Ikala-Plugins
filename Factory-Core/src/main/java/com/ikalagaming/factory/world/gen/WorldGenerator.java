@@ -452,29 +452,82 @@ public final class WorldGenerator {
                     }
                     Block block = worldType.defaultBlock();
                     if (rules) {
-                        final String biomeId = chunk.getBiome(x, y, z);
-                        final Biome biome = biomesById.get(biomeId);
-                        if (biome != null && biome.blockRules() != null) {
-                            final BlockRules.Context context =
-                                    new BlockRules.Context(
-                                            pos.blockX() + x,
-                                            pos.blockY() + y,
-                                            pos.blockZ() + z,
-                                            distanceToOpen(solid, rx, ry, rz, 1),
-                                            distanceToOpen(solid, rx, ry, rz, -1),
-                                            biomeId,
-                                            touchesFluid(fluid, rx, ry, rz),
-                                            cache);
-                            final Block chosen = biome.blockRules().choose(context);
-                            if (chosen != null) {
-                                block = chosen;
-                            }
+                        final BlockRules.Match match =
+                                match(chunk, pos, x, y, z, solid, fluid, cache);
+                        if (match != null) {
+                            block = match.block();
                         }
                     }
                     chunk.setBlock(x, y, z, block);
                 }
             }
         }
+    }
+
+    /**
+     * The block rule that chooses a solid block, if any.
+     *
+     * @param chunk The chunk, with its biomes chosen.
+     * @param pos Where it is.
+     * @param x The block's x within the chunk.
+     * @param y The block's y within the chunk.
+     * @param z The block's z within the chunk.
+     * @param solid The solid flags.
+     * @param fluid The fluid at each position, or empty.
+     * @param cache The chunk's cache.
+     * @return The match, or null if the biome has no rules or none match.
+     */
+    private BlockRules.Match match(
+            @NonNull Chunk chunk,
+            @NonNull ChunkPos pos,
+            int x,
+            int y,
+            int z,
+            boolean @NonNull [] solid,
+            Block @NonNull [] fluid,
+            EvalCache cache) {
+        final String biomeId = chunk.getBiome(x, y, z);
+        final Biome biome = biomesById.get(biomeId);
+        if (biome == null || biome.blockRules() == null) {
+            return null;
+        }
+        final int rx = x + MARGIN_XZ;
+        final int ry = y + MARGIN_Y;
+        final int rz = z + MARGIN_XZ;
+        final BlockRules.Context context =
+                new BlockRules.Context(
+                        pos.blockX() + x,
+                        pos.blockY() + y,
+                        pos.blockZ() + z,
+                        distanceToOpen(solid, rx, ry, rz, 1),
+                        distanceToOpen(solid, rx, ry, rz, -1),
+                        biomeId,
+                        touchesFluid(fluid, rx, ry, rz),
+                        cache);
+        return biome.blockRules().explain(context);
+    }
+
+    /**
+     * Why a block is what it is: the block rule that chose it, the same way generation does.
+     *
+     * @param x The block's x.
+     * @param y The block's y.
+     * @param z The block's z.
+     * @return The rule's match, or null if the position is open, or solid with the default block.
+     */
+    public BlockRules.Match explain(long x, long y, long z) {
+        final ChunkPos pos = ChunkPos.containing(x, y, z);
+        final EvalCache cache = new EvalCache();
+        Chunk chunk = new Chunk(World.AIR, worldType.fallbackBiome().id());
+        chooseBiomes(chunk, pos, cache);
+        final boolean[] solid = terrain(pos, cache);
+        final int lx = (int) (x - pos.blockX());
+        final int ly = (int) (y - pos.blockY());
+        final int lz = (int) (z - pos.blockZ());
+        if (!solid[regionIndex(lx + MARGIN_XZ, ly + MARGIN_Y, lz + MARGIN_XZ)]) {
+            return null;
+        }
+        return match(chunk, pos, lx, ly, lz, solid, fluids(pos, solid, cache), cache);
     }
 
     /**

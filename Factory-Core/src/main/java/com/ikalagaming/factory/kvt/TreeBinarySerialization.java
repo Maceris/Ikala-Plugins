@@ -1,6 +1,6 @@
 package com.ikalagaming.factory.kvt;
 
-import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.Getter;
@@ -214,7 +214,7 @@ public class TreeBinarySerialization {
         } catch (IOException e) {
             log.warn(
                     SafeResourceLoader.getString(
-                            "NODE_SERIALIZATION_FAILED", FactoryPlugin.getResourceBundle()),
+                            "NODE_SERIALIZATION_FAILED", FactoryStrings.bundle()),
                     e);
             return Optional.empty();
         }
@@ -314,7 +314,7 @@ public class TreeBinarySerialization {
             throw new IOException(
                     SafeResourceLoader.getStringFormatted(
                             "NODE_OUT_OF_DATA",
-                            FactoryPlugin.getResourceBundle(),
+                            FactoryStrings.bundle(),
                             "" + count,
                             "" + actuallyRead));
         }
@@ -714,7 +714,7 @@ public class TreeBinarySerialization {
         log.warn(
                 SafeResourceLoader.getStringFormatted(
                         "NODE_UNEXPECTED_TYPE",
-                        FactoryPlugin.getResourceBundle(),
+                        FactoryStrings.bundle(),
                         TreeBinarySerialization.class.getSimpleName(),
                         node.getType().name()));
         throw new UnsupportedOperationException();
@@ -737,7 +737,7 @@ public class TreeBinarySerialization {
         } catch (IOException e) {
             log.warn(
                     SafeResourceLoader.getString(
-                            "NODE_SERIALIZATION_FAILED", FactoryPlugin.getResourceBundle()));
+                            "NODE_SERIALIZATION_FAILED", FactoryStrings.bundle()));
             return false;
         }
     }

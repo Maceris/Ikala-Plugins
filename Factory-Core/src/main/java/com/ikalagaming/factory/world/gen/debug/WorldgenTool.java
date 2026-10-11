@@ -1,5 +1,6 @@
 package com.ikalagaming.factory.world.gen.debug;
 
+import com.ikalagaming.factory.registry.DefinitionLoader;
 import com.ikalagaming.factory.world.Chunk;
 import com.ikalagaming.factory.world.ChunkPos;
 import com.ikalagaming.factory.world.gen.BiomeSelector;
@@ -9,14 +10,12 @@ import com.ikalagaming.factory.world.gen.data.WorldgenCompiler;
 import com.ikalagaming.factory.world.gen.data.WorldgenData;
 import com.ikalagaming.factory.world.gen.density.Box;
 import com.ikalagaming.factory.world.gen.density.DensityNode;
-import com.ikalagaming.factory.world.gen.density.Interval;
 
 import lombok.NonNull;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -34,12 +33,13 @@ public final class WorldgenTool {
     private static final String USAGE =
             """
             Usage: worldgen <command> [options]
-              check <dataFolder>... [--blocks blocks.csv]
-                  Check data for errors. Exits non-zero if there are any.
+              check <dataFolder>...
+                  Check data for errors. Exits non-zero if there are any. Blocks are checked
+                  against the blocks.csv in the data folders, when there is one.
               render --data <folder> [--data ...] --world <id> --target <target> --out <file.png>
                   [--seed N] [--plane xz|xy|zy] [--origin x,y,z] [--size w,h] [--scale blocks]
                   [--colormap diverging|sequential|categorical] [--channel name] [--range r]
-                  [--stage stage] [--blocks blocks.csv]
+                  [--stage stage]
                   Write an image of a slice. The target is a noise, density or parameter ID,
                   id#path for a node in a file, "biome" for the biome map or "blocks" for blocks.
               hash --data <folder> --world <id> --chunks x,y,z;x,y,z [--seed N] [--stage stage]
@@ -77,13 +77,26 @@ public final class WorldgenTool {
      * @return The exit code: 0 for success.
      */
     public static int run(@NonNull List<String> args, @NonNull PrintStream out) {
+        return run(args, out, null);
+    }
+
+    /**
+     * Run a command, with a data folder to use when none is given, like the plugin's own.
+     *
+     * @param args The command and its options.
+     * @param out Where to print.
+     * @param defaultFolder The data folder used when the command names none, or null for none.
+     * @return The exit code: 0 for success.
+     */
+    public static int run(
+            @NonNull List<String> args, @NonNull PrintStream out, Path defaultFolder) {
         if (args.isEmpty()) {
             out.println(USAGE);
             return 1;
         }
         final Options options;
         try {
-            options = new Options(args.subList(1, args.size()));
+            options = new Options(args.subList(1, args.size()), defaultFolder);
         } catch (IllegalArgumentException e) {
             out.println(e.getMessage());
             out.println(USAGE);
@@ -116,12 +129,17 @@ public final class WorldgenTool {
         /** Each option's values. */
         private final Map<String, List<String>> named = new HashMap<>();
 
+        /** The data folder used when none is given, or null. */
+        private final Path defaultFolder;
+
         /**
          * Parse options.
          *
          * @param args The arguments after the command.
+         * @param defaultFolder The data folder used when none is given, or null.
          */
-        Options(@NonNull List<String> args) {
+        Options(@NonNull List<String> args, Path defaultFolder) {
+            this.defaultFolder = defaultFolder;
             for (int i = 0; i < args.size(); ++i) {
                 final String arg = args.get(i);
                 if (arg.startsWith("--")) {
@@ -192,6 +210,9 @@ public final class WorldgenTool {
          */
         List<Path> dataFolders() {
             final List<String> folders = all("data").isEmpty() ? positional : all("data");
+            if (folders.isEmpty() && defaultFolder != null) {
+                return List.of(defaultFolder);
+            }
             if (folders.isEmpty()) {
                 throw new IllegalArgumentException("Give at least one data folder");
             }
@@ -208,14 +229,20 @@ public final class WorldgenTool {
         }
 
         /**
-         * The known blocks, if a block list is given.
+         * The blocks the data folders define, in their {@code blocks.csv} files.
          *
-         * @return The block IDs, or null.
-         * @throws IOException If the list can't be read.
+         * @return The block IDs, or null if no folder defines blocks, to only check their format.
          */
-        Set<String> blocks() throws IOException {
-            final String file = get("blocks", "");
-            return file.isEmpty() ? null : readBlocks(Path.of(file));
+        Set<String> blocks() {
+            Set<String> ids = new TreeSet<>();
+            boolean any = false;
+            for (Path folder : dataFolders()) {
+                if (Files.isRegularFile(folder.resolve(DefinitionLoader.BLOCKS_FILE))) {
+                    any = true;
+                    ids.addAll(DefinitionLoader.blockIds(folder));
+                }
+            }
+            return any ? ids : null;
         }
 
         /**
@@ -229,42 +256,12 @@ public final class WorldgenTool {
     }
 
     /**
-     * Read the block IDs from a block list, in the format the server's definition loader reads: CSV
-     * with {@code mod_name} and {@code identifier} columns.
-     *
-     * @param file The CSV file.
-     * @return The block IDs.
-     * @throws IOException If it can't be read.
-     */
-    public static Set<String> readBlocks(@NonNull Path file) throws IOException {
-        final List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
-        if (lines.isEmpty()) {
-            return Set.of();
-        }
-        final List<String> header = Arrays.asList(lines.get(0).trim().split(","));
-        final int mod = header.indexOf("mod_name");
-        final int name = header.indexOf("identifier");
-        if (mod < 0 || name < 0) {
-            throw new IllegalArgumentException(file + " needs mod_name and identifier columns");
-        }
-        Set<String> ids = new TreeSet<>();
-        for (String line : lines.subList(1, lines.size())) {
-            if (line.isBlank()) {
-                continue;
-            }
-            final String[] cells = line.split(",", -1);
-            ids.add(cells[mod].trim() + ":" + cells[name].trim());
-        }
-        return ids;
-    }
-
-    /**
      * Check data for errors.
      *
      * @param options The options.
      * @param out Where to print.
      * @return 0 if there are no errors.
-     * @throws IOException If the block list can't be read.
+     * @throws IOException If a file can't be read.
      */
     private static int check(@NonNull Options options, @NonNull PrintStream out)
             throws IOException {
@@ -290,7 +287,7 @@ public final class WorldgenTool {
      * @param options The options.
      * @param out Where to print.
      * @return The debug context.
-     * @throws IOException If the block list can't be read.
+     * @throws IOException If a file can't be read.
      */
     private static WorldgenDebug load(@NonNull Options options, @NonNull PrintStream out)
             throws IOException {
@@ -325,79 +322,28 @@ public final class WorldgenTool {
         final int width = (int) size[0];
         final int height = (int) size[1];
         final double scale = Double.parseDouble(options.get("scale", "1"));
-        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        Map<String, Integer> legend = new TreeMap<>();
-        if ("biome".equals(target) || "blocks".equals(target)) {
-            final String[] ids =
-                    "biome".equals(target)
-                            ? debug.biomeSlice(plane, origin, width, height, scale)
-                            : debug.blockSlice(
-                                    plane, origin, width, height, scale, options.stage());
-            for (int i = 0; i < ids.length; ++i) {
-                final int color =
-                        WorldgenDebug.airName().equals(ids[i])
-                                ? Colormaps.AIR
-                                : Colormaps.categorical(ids[i]);
-                legend.put(ids[i], color);
-                image.setRGB(i % width, i / width, color);
-            }
-        } else {
-            final double[] values =
-                    debug.slice(
-                            target,
-                            options.get("channel", "").isEmpty()
-                                    ? null
-                                    : options.get("channel", ""),
-                            plane,
-                            origin,
-                            width,
-                            height,
-                            scale);
-            final String colormap = options.get("colormap", "diverging");
-            double range = Double.parseDouble(options.get("range", "0"));
-            if (range <= 0) {
-                for (double v : values) {
-                    range = Math.max(range, Math.abs(v));
-                }
-                range = range == 0 ? 1 : range;
-            }
-            Interval stats = Interval.of(values[0]);
-            for (double v : values) {
-                stats = stats.union(Interval.of(v));
-            }
-            out.println("Values from " + stats.min() + " to " + stats.max());
-            for (int row = 0; row < height; ++row) {
-                for (int column = 0; column < width; ++column) {
-                    final double v = values[row * width + column];
-                    int color =
-                            switch (colormap) {
-                                case "diverging" -> Colormaps.diverging(v / range);
-                                case "sequential" ->
-                                        Colormaps.sequential(
-                                                (v - stats.min())
-                                                        / Math.max(
-                                                                stats.max() - stats.min(),
-                                                                Double.MIN_VALUE));
-                                default ->
-                                        throw new IllegalArgumentException(
-                                                "Unknown colormap " + colormap);
-                            };
-                    // Where the sign changes to the next pixel, draw the solid boundary
-                    if ("diverging".equals(colormap)) {
-                        final boolean right =
-                                column + 1 < width
-                                        && (v > 0) != (values[row * width + column + 1] > 0);
-                        final boolean below =
-                                row + 1 < height
-                                        && (v > 0) != (values[(row + 1) * width + column] > 0);
-                        if (right || below) {
-                            color = Colormaps.CONTOUR;
-                        }
-                    }
-                    image.setRGB(column, row, color);
-                }
-            }
+        final SliceImages.Request request =
+                new SliceImages.Request(
+                        target,
+                        options.get("channel", "").isEmpty() ? null : options.get("channel", ""),
+                        plane,
+                        origin,
+                        width,
+                        height,
+                        scale,
+                        options.stage());
+        final SliceImages.Image drawn =
+                SliceImages.render(
+                        debug,
+                        request,
+                        SliceImages.Colormap.of(options.get("colormap", "diverging")),
+                        Double.parseDouble(options.get("range", "0")));
+        if (drawn.range() != null) {
+            out.println("Values from " + drawn.range().min() + " to " + drawn.range().max());
         }
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        image.setRGB(0, 0, width, height, drawn.rgb(), 0, width);
+        final Map<String, Integer> legend = drawn.legend();
         final Path file = Path.of(options.get("out", null));
         ImageIO.write(image, "png", file.toFile());
         legend.forEach((id, color) -> out.printf("%06x %s%n", color, id));
@@ -411,7 +357,7 @@ public final class WorldgenTool {
      * @param options The options.
      * @param out Where to print.
      * @return 0 on success.
-     * @throws IOException If the block list can't be read.
+     * @throws IOException If a file can't be read.
      */
     private static int hash(@NonNull Options options, @NonNull PrintStream out) throws IOException {
         final WorldgenDebug debug = load(options, out);
@@ -438,7 +384,7 @@ public final class WorldgenTool {
      * @param options The options.
      * @param out Where to print.
      * @return 0 on success.
-     * @throws IOException If the block list can't be read.
+     * @throws IOException If a file can't be read.
      */
     private static int trace(@NonNull Options options, @NonNull PrintStream out)
             throws IOException {
@@ -476,7 +422,7 @@ public final class WorldgenTool {
      * @param options The options.
      * @param out Where to print.
      * @return 0 on success.
-     * @throws IOException If the block list can't be read.
+     * @throws IOException If a file can't be read.
      */
     private static int biome(@NonNull Options options, @NonNull PrintStream out)
             throws IOException {
@@ -503,7 +449,7 @@ public final class WorldgenTool {
      * @param options The options.
      * @param out Where to print.
      * @return 0 on success.
-     * @throws IOException If the block list can't be read.
+     * @throws IOException If a file can't be read.
      */
     private static int bounds(@NonNull Options options, @NonNull PrintStream out)
             throws IOException {

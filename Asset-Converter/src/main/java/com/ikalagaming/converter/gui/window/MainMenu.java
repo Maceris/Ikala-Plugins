@@ -12,6 +12,7 @@ import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
+import com.ikalagaming.graphics.ui.Tool;
 import com.ikalagaming.graphics.ui.spec.Observable;
 import com.ikalagaming.graphics.ui.spec.SpecBindings;
 import com.ikalagaming.graphics.ui.spec.SpecInstance;
@@ -83,7 +84,19 @@ public class MainMenu {
                                     // TODO(ches) model loading UI
                                 })
                         .handler("open-inspector", this::startInspector)
+                        .handler("open-tool", event -> openTool((Tool) event.item()))
+                        .list("tools", ui.tools())
                         .value("samples.count", sampleCount));
+    }
+
+    /**
+     * Open a tool another plugin offers, like the Worldgen Lab. The menu stays up behind it, so
+     * closing the tool comes back here.
+     *
+     * @param tool The tool.
+     */
+    private void openTool(Tool tool) {
+        tool.open().run();
     }
 
     /** Hide the menu and show the asset inspector. */

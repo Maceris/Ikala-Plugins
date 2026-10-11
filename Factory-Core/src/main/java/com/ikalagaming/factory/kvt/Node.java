@@ -1,6 +1,6 @@
 package com.ikalagaming.factory.kvt;
 
-import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.EqualsAndHashCode;
@@ -51,7 +51,7 @@ public class Node implements KVT {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
                             "NODE_INVALID_INDEX",
-                            FactoryPlugin.getResourceBundle(),
+                            FactoryStrings.bundle(),
                             "" + index,
                             String.join(".", names)));
             return;
@@ -70,7 +70,7 @@ public class Node implements KVT {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
                             "NODE_INVALID_TYPE",
-                            FactoryPlugin.getResourceBundle(),
+                            FactoryStrings.bundle(),
                             next,
                             String.join(".", names)));
         }
@@ -173,9 +173,7 @@ public class Node implements KVT {
         if (index < 0 || index >= names.size()) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
-                            "MISSING_NODE",
-                            FactoryPlugin.getResourceBundle(),
-                            String.join(".", names)));
+                            "MISSING_NODE", FactoryStrings.bundle(), String.join(".", names)));
             return null;
         }
 
@@ -198,9 +196,7 @@ public class Node implements KVT {
 
         log.warn(
                 SafeResourceLoader.getStringFormatted(
-                        "MISSING_NODE",
-                        FactoryPlugin.getResourceBundle(),
-                        String.join(".", names)));
+                        "MISSING_NODE", FactoryStrings.bundle(), String.join(".", names)));
 
         return null;
     }

@@ -1,6 +1,6 @@
 package com.ikalagaming.factory.registry;
 
-import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.factory.world.BlockDefinition;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -29,13 +29,13 @@ public class BlockRegistry extends Registry<BlockDefinition> {
         if (!name.matches(RegistryConstants.FULLY_QUALIFIED_NAME_FORMAT)) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
-                            "FULL_BLOCK_NAME_INVALID", FactoryPlugin.getResourceBundle(), name));
+                            "FULL_BLOCK_NAME_INVALID", FactoryStrings.bundle(), name));
             return false;
         }
         if (definitions.containsKey(name)) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
-                            "BLOCK_ALREADY_DEFINED", FactoryPlugin.getResourceBundle(), name));
+                            "BLOCK_ALREADY_DEFINED", FactoryStrings.bundle(), name));
             return false;
         }
 
@@ -47,14 +47,14 @@ public class BlockRegistry extends Registry<BlockDefinition> {
                 RegistryConstants.combineName(definition.modName(), definition.blockName()))) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
-                            "DEFINITION_MISMATCHED_NAME", FactoryPlugin.getResourceBundle(), name));
+                            "DEFINITION_MISMATCHED_NAME", FactoryStrings.bundle(), name));
             return false;
         }
 
         definitions.put(name, definition);
         log.debug(
                 SafeResourceLoader.getStringFormatted(
-                        "BLOCK_REGISTERED", FactoryPlugin.getResourceBundle(), name));
+                        "BLOCK_REGISTERED", FactoryStrings.bundle(), name));
         return true;
     }
 
@@ -68,32 +68,26 @@ public class BlockRegistry extends Registry<BlockDefinition> {
         if (!value.modName().matches(RegistryConstants.MOD_NAME_FORMAT)) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
-                            "MOD_NAME_INVALID",
-                            FactoryPlugin.getResourceBundle(),
-                            value.modName()));
+                            "MOD_NAME_INVALID", FactoryStrings.bundle(), value.modName()));
             return false;
         }
         if (!value.blockName().matches(RegistryConstants.RESOURCE_NAME_FORMAT)) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
-                            "RESOURCE_NAME_INVALID",
-                            FactoryPlugin.getResourceBundle(),
-                            value.blockName()));
+                            "RESOURCE_NAME_INVALID", FactoryStrings.bundle(), value.blockName()));
             return false;
         }
         if (value.material() != null && !materialRegistry.containsKey(value.material())) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
-                            "MAT_MISSING", FactoryPlugin.getResourceBundle(), value.material()));
+                            "MAT_MISSING", FactoryStrings.bundle(), value.material()));
             return false;
         }
         for (String tag : value.tags()) {
             if (!tagRegistry.containsKey(tag)) {
                 log.warn(
                         SafeResourceLoader.getStringFormatted(
-                                "TAG_MISSING",
-                                FactoryPlugin.getResourceBundle(),
-                                value.material()));
+                                "TAG_MISSING", FactoryStrings.bundle(), value.material()));
                 return false;
             }
         }

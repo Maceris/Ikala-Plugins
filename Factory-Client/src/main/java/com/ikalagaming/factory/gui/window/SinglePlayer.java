@@ -4,7 +4,7 @@ import static com.ikalagaming.factory.gui.DefaultWindows.MAIN_MENU;
 import static com.ikalagaming.factory.gui.DefaultWindows.SINGLE_PLAYER;
 
 import com.ikalagaming.factory.FactoryClientPlugin;
-import com.ikalagaming.factory.FactoryServerPlugin;
+import com.ikalagaming.factory.LocalServer;
 import com.ikalagaming.factory.gui.component.menu.SaveEntry;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
@@ -23,10 +23,12 @@ import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
 
 /** The screen for selecting a single player game to play. */
+@Slf4j
 public class SinglePlayer extends GuiWindow {
     private final WindowManager windowManager;
     private final Button back;
@@ -116,7 +118,11 @@ public class SinglePlayer extends GuiWindow {
 
     void startGame() {
         // TODO(ches) actually start the server properly, and connect to it
-        FactoryServerPlugin.getServer().start();
+        if (!LocalServer.start()) {
+            log.warn(
+                    SafeResourceLoader.getString(
+                            "NO_LOCAL_SERVER", FactoryClientPlugin.getResourceBundle()));
+        }
 
         Model cubeModel =
                 ModelLoader.loadModel(

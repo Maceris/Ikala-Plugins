@@ -1,6 +1,5 @@
-package com.ikalagaming.factory.world.gen.data;
+package com.ikalagaming.factory;
 
-import com.ikalagaming.factory.FactoryPlugin;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -10,10 +9,11 @@ import java.util.ResourceBundle;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Localized messages for world generation. The headless tools and tests run without the plugin
- * loaded, so when the plugin's bundle isn't set this loads the same bundle itself.
+ * Localized messages for Factory-Core code that also runs headless, like the definition loader and
+ * world generation. The tools and tests run without the plugin loaded, so when the plugin's bundle
+ * isn't set this loads the same bundle itself.
  */
-public final class WorldgenStrings {
+public final class FactoryStrings {
 
     /** The bundle the plugin loads its strings from. */
     private static final String BUNDLE_NAME = "com.ikalagaming.factory.strings";
@@ -36,11 +36,12 @@ public final class WorldgenStrings {
     }
 
     /**
-     * The bundle to read messages from.
+     * The bundle to read messages from, for code that passes a bundle to {@link SafeResourceLoader}
+     * itself.
      *
      * @return The plugin's bundle if it is loaded, otherwise the same bundle loaded directly.
      */
-    private static ResourceBundle bundle() {
+    public static ResourceBundle bundle() {
         final ResourceBundle plugin = FactoryPlugin.getResourceBundle();
         if (plugin != null) {
             return plugin;
@@ -56,7 +57,7 @@ public final class WorldgenStrings {
         }
     }
 
-    private WorldgenStrings() {
+    private FactoryStrings() {
         throw new UnsupportedOperationException("This utility class should not be instantiated");
     }
 }

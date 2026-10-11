@@ -1,6 +1,6 @@
 package com.ikalagaming.factory.registry;
 
-import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.factory.world.Tag;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -34,16 +34,13 @@ public class TagRegistry extends Registry<Tag> {
         if (containsKey(tag)) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
-                            "TAG_DUPLICATE", FactoryPlugin.getResourceBundle(), tag));
+                            "TAG_DUPLICATE", FactoryStrings.bundle(), tag));
             return false;
         }
         if (parentName != null && !containsKey(parentName)) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
-                            "TAG_MISSING_PARENT",
-                            FactoryPlugin.getResourceBundle(),
-                            tag,
-                            parentName));
+                            "TAG_MISSING_PARENT", FactoryStrings.bundle(), tag, parentName));
             return false;
         }
 
@@ -69,9 +66,7 @@ public class TagRegistry extends Registry<Tag> {
         if (containsKey(tagName)) {
             return Optional.of(definitions.get(tagName));
         }
-        log.error(
-                SafeResourceLoader.getString("TAG_MISSING", FactoryPlugin.getResourceBundle()),
-                tagName);
+        log.error(SafeResourceLoader.getString("TAG_MISSING", FactoryStrings.bundle()), tagName);
         return Optional.empty();
     }
 }

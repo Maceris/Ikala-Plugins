@@ -392,6 +392,35 @@ class UISubmissionTest {
     }
 
     @Test
+    void toolsAreListedUntilTheirPluginUnloads() {
+        GraphicsContext other = new GraphicsContext("Other-Plugin", null);
+        int[] opened = {0};
+        manager.addTool(owner, new com.ikalagaming.graphics.ui.Tool("a", "A", () -> opened[0]++));
+        manager.addTool(other, new com.ikalagaming.graphics.ui.Tool("b", "B", () -> {}));
+        assertEquals(
+                List.of("a", "b"),
+                manager.getTools().get().stream()
+                        .map(com.ikalagaming.graphics.ui.Tool::id)
+                        .toList());
+
+        // The same ID replaces, and opening runs the tool's callback
+        manager.addTool(owner, new com.ikalagaming.graphics.ui.Tool("a", "A2", () -> opened[0]++));
+        assertEquals(2, manager.getTools().get().size());
+        manager.getTools().get().get(1).open().run();
+        assertEquals(1, opened[0]);
+
+        manager.removeAllOwnedBy(owner);
+        frame();
+        assertEquals(
+                List.of("b"),
+                manager.getTools().get().stream()
+                        .map(com.ikalagaming.graphics.ui.Tool::id)
+                        .toList());
+        manager.removeTool(other, "b");
+        assertEquals(List.of(), manager.getTools().get());
+    }
+
+    @Test
     void postedChangesRunInOrderOnTheNextFrame() {
         List<Integer> order = new ArrayList<>();
         manager.post(() -> order.add(1));

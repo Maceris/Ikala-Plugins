@@ -1,6 +1,6 @@
 package com.ikalagaming.factory.kvt;
 
-import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.factory.kvt.KVTParser.ArrayContext;
 import com.ikalagaming.factory.kvt.KVTParser.CompilationUnitContext;
 import com.ikalagaming.factory.kvt.KVTParser.EntryContext;
@@ -250,9 +250,7 @@ public class TreeStringSerialization {
         } catch (IllegalArgumentException ignored) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
-                            "NODE_INVALID_FORMAT",
-                            FactoryPlugin.getResourceBundle(),
-                            context.getText()));
+                            "NODE_INVALID_FORMAT", FactoryStrings.bundle(), context.getText()));
         }
     }
 

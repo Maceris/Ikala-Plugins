@@ -1,10 +1,12 @@
 package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.ui.Surface;
+import com.ikalagaming.graphics.ui.Tool;
 import com.ikalagaming.graphics.ui.UiManager;
 import com.ikalagaming.graphics.ui.automation.Steps;
 import com.ikalagaming.graphics.ui.script.ScriptUi;
 import com.ikalagaming.graphics.ui.spec.NodeFactory;
+import com.ikalagaming.graphics.ui.spec.ObservableList;
 import com.ikalagaming.graphics.ui.spec.SpecBindings;
 import com.ikalagaming.graphics.ui.spec.SpecException;
 import com.ikalagaming.graphics.ui.spec.SpecInstance;
@@ -88,6 +90,39 @@ public final class UI {
     public void setVisible(@NonNull String id, boolean visible) {
         context.checkOpen();
         manager.get().post(() -> manager.get().setVisible(context, id, visible));
+    }
+
+    /**
+     * Offer a tool for an editor's menus to list, like the asset editor's main menu. It goes away
+     * when this plugin unloads, or when it is removed.
+     *
+     * @param id The tool's ID, unique among all tools.
+     * @param label What menus show for it.
+     * @param open Opens the tool, on the render thread.
+     */
+    public void registerTool(@NonNull String id, @NonNull String label, @NonNull Runnable open) {
+        context.checkOpen();
+        final Tool tool = new Tool(id, label, open);
+        manager.get().post(() -> manager.get().addTool(context, tool));
+    }
+
+    /**
+     * Withdraw a tool this plugin offered.
+     *
+     * @param id The tool's ID.
+     */
+    public void removeTool(@NonNull String id) {
+        context.checkOpen();
+        manager.get().post(() -> manager.get().removeTool(context, id));
+    }
+
+    /**
+     * Every tool plugins offer, for a menu to list with a spec repeat.
+     *
+     * @return The tools, updated as plugins register and unload them.
+     */
+    public ObservableList<Tool> tools() {
+        return manager.get().getTools();
     }
 
     /**

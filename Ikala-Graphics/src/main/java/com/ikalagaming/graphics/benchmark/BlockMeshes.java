@@ -172,14 +172,14 @@ public final class BlockMeshes {
     }
 
     /**
-     * A box's six faces, facing out.
+     * A box's six faces, facing out. Also used by plugins that need a placeholder block.
      *
      * @param min The minimum corner.
      * @param max The maximum corner.
      * @param material The material.
      * @return The mesh.
      */
-    static MeshData box(float[] min, float[] max, Material material) {
+    public static MeshData box(float[] min, float[] max, Material material) {
         final Builder builder = new Builder();
         for (int axis = 0; axis < 3; ++axis) {
             for (int sign = -1; sign <= 1; sign += 2) {

@@ -1,6 +1,6 @@
 package com.ikalagaming.factory.quest;
 
-import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
@@ -31,7 +31,6 @@ public enum RewardType {
 
     @Override
     public String toString() {
-        return SafeResourceLoader.getString(
-                getLocalizationKey(this), FactoryPlugin.getResourceBundle());
+        return SafeResourceLoader.getString(getLocalizationKey(this), FactoryStrings.bundle());
     }
 }

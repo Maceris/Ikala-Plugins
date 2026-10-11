@@ -5,6 +5,8 @@ import static com.ikalagaming.factory.gui.DefaultWindows.*;
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.factory.gui.*;
 import com.ikalagaming.factory.gui.window.*;
+import com.ikalagaming.factory.lab.LabTool;
+import com.ikalagaming.factory.lab.WorldgenLab;
 import com.ikalagaming.factory.saves.UserDataUtil;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.gui.WindowManager;
@@ -14,6 +16,7 @@ import com.ikalagaming.graphics.gui.windows.IkScriptDebugger;
 import com.ikalagaming.graphics.gui.windows.ScriptMonitor;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
+import com.ikalagaming.plugins.config.ConfigManager;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -44,6 +47,16 @@ public class FactoryClientPlugin extends Plugin {
 
     @Getter private WindowManager guiManager;
 
+    /**
+     * Opens the Worldgen Lab.
+     *
+     * @return The Lab's opener, while the plugin is enabled.
+     */
+    @Getter private static LabTool labTool;
+
+    /** The config key that turns on editor mode. */
+    private static final String EDITOR_MODE_KEY = "editor-mode";
+
     @Override
     public Set<Listener> getListeners() {
         if (null == listeners) {
@@ -59,9 +72,15 @@ public class FactoryClientPlugin extends Plugin {
 
     @Override
     public boolean onEnable() {
+        var graphics = GraphicsManager.forPlugin(getName());
+        labTool = new LabTool(graphics);
+        if (ConfigManager.loadConfig(PLUGIN_NAME).getOrDefault(EDITOR_MODE_KEY, false)) {
+            // In the editor, the Lab is a tool, and the game's menus stay closed
+            graphics.ui().registerTool(WorldgenLab.SURFACE_ID, LabTool.LABEL, labTool::open);
+            return true;
+        }
         UserDataUtil.createUserDataFolder();
         guiManager = GraphicsManager.getWindowManager();
-        var graphics = GraphicsManager.forPlugin(getName());
         guiManager.addWindow(graphics, MAIN_MENU.getName(), new MainMenu(guiManager));
         guiManager.addWindow(graphics, SINGLE_PLAYER.getName(), new SinglePlayer(guiManager));
         guiManager.addWindow(graphics, DEBUG.getName(), new Debug());
@@ -72,6 +91,15 @@ public class FactoryClientPlugin extends Plugin {
         Stream.of(MAIN_MENU).map(DefaultWindows::getName).forEach(guiManager::show);
 
         guiManager.setToolbar(graphics, new DebugToolbar(guiManager));
+        return true;
+    }
+
+    @Override
+    public boolean onDisable() {
+        if (labTool != null) {
+            labTool.close();
+            labTool = null;
+        }
         return true;
     }
 

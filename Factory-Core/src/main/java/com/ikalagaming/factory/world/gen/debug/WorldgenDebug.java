@@ -1,6 +1,5 @@
 package com.ikalagaming.factory.world.gen.debug;
 
-import com.ikalagaming.factory.world.Block;
 import com.ikalagaming.factory.world.Chunk;
 import com.ikalagaming.factory.world.ChunkPos;
 import com.ikalagaming.factory.world.World;
@@ -196,7 +195,10 @@ public final class WorldgenDebug {
         // Compile whichever file it is, then find the node by where it was defined
         compiler.density(id, null);
         compiler.parameter(id, null);
-        for (Kind kind : new Kind[] {Kind.DENSITY, Kind.PARAMETER, Kind.BIOME, Kind.BLOCK_RULES}) {
+        for (Kind kind :
+                new Kind[] {
+                    Kind.DENSITY, Kind.PARAMETER, Kind.BIOME, Kind.BLOCK_RULES, Kind.WORLD_TYPE
+                }) {
             final Optional<DensityNode> node =
                     compiler.nodeAt(WorldgenCompiler.label(kind, id) + "#" + path);
             if (node.isPresent()) {
@@ -204,6 +206,56 @@ public final class WorldgenDebug {
             }
         }
         throw new IllegalArgumentException("No density node at " + target);
+    }
+
+    /**
+     * The target for the world type's terrain, its {@code density} field.
+     *
+     * @return The target, like {@code lotomation:overworld#density}.
+     */
+    public String terrainTarget() {
+        return generator.getWorldType().id() + "#density";
+    }
+
+    /**
+     * A density node by where it was defined.
+     *
+     * @param origin Its origin, as {@link Trace#origin()} and {@link Bounds#origin()} give it.
+     * @return The node.
+     */
+    public Optional<DensityNode> nodeAt(@NonNull String origin) {
+        return compiler.nodeAt(origin);
+    }
+
+    /**
+     * The target that names a node, from its origin: the origin without its kind.
+     *
+     * @param origin The origin, like {@code density/lotomation:x#args[1]}.
+     * @return The target, like {@code lotomation:x#args[1]}.
+     */
+    public static String targetOf(@NonNull String origin) {
+        final int slash = origin.indexOf('/');
+        final int colon = origin.indexOf(':');
+        // The kind is a folder name before the ID, which has no slash before its colon
+        return slash >= 0 && slash < colon ? origin.substring(slash + 1) : origin;
+    }
+
+    /**
+     * The data's content hash, for exports to record what made them.
+     *
+     * @return The hash.
+     */
+    public long dataHash() {
+        return compiler.getData().contentHash();
+    }
+
+    /**
+     * The world seed.
+     *
+     * @return The seed.
+     */
+    public long seed() {
+        return compiler.getSeed();
     }
 
     /**
@@ -292,14 +344,8 @@ public final class WorldgenDebug {
      */
     public String[] biomeSlice(
             @NonNull Plane plane, double @NonNull [] origin, int width, int height, double scale) {
-        String[] ids = new String[width * height];
-        for (int row = 0; row < height; ++row) {
-            for (int column = 0; column < width; ++column) {
-                final double[] p = pixelPosition(plane, origin, scale, column, row);
-                ids[row * width + column] = biomeAt(p[0], p[1], p[2]).chosen();
-            }
-        }
-        return ids;
+        return categorical(
+                SliceImages.BIOME_TARGET, plane, origin, width, height, scale, Stage.BIOMES);
     }
 
     /**
@@ -320,26 +366,34 @@ public final class WorldgenDebug {
             int height,
             double scale,
             @NonNull Stage until) {
-        Map<ChunkPos, Chunk> chunks = new HashMap<>();
-        String[] names = new String[width * height];
-        for (int row = 0; row < height; ++row) {
-            for (int column = 0; column < width; ++column) {
-                final double[] p = pixelPosition(plane, origin, scale, column, row);
-                final long x = (long) StrictMath.floor(p[0]);
-                final long y = (long) StrictMath.floor(p[1]);
-                final long z = (long) StrictMath.floor(p[2]);
-                final ChunkPos pos = ChunkPos.containing(x, y, z);
-                final Chunk chunk =
-                        chunks.computeIfAbsent(pos, at -> generator.generate(at, until));
-                final Block block =
-                        chunk.getBlock(
-                                (int) (x - pos.blockX()),
-                                (int) (y - pos.blockY()),
-                                (int) (z - pos.blockZ()));
-                names[row * width + column] = block.getName();
-            }
-        }
-        return names;
+        return categorical(SliceImages.BLOCKS_TARGET, plane, origin, width, height, scale, until);
+    }
+
+    /**
+     * Sample a categorical target over a slice.
+     *
+     * @param target The target.
+     * @param plane The plane.
+     * @param origin The world position of the top-left pixel.
+     * @param width The width in pixels.
+     * @param height The height in pixels.
+     * @param scale Blocks per pixel.
+     * @param until The last stage to generate, for blocks.
+     * @return The IDs, row by row from the top.
+     */
+    private String[] categorical(
+            @NonNull String target,
+            @NonNull Plane plane,
+            double @NonNull [] origin,
+            int width,
+            int height,
+            double scale,
+            @NonNull Stage until) {
+        final SliceImages.Request request =
+                new SliceImages.Request(target, null, plane, origin, width, height, scale, until);
+        final SliceImages.Samples samples = SliceImages.Samples.allocate(request);
+        SliceImages.sampleRows(this, request, null, 0, height, new HashMap<>(), samples);
+        return samples.ids();
     }
 
     /**

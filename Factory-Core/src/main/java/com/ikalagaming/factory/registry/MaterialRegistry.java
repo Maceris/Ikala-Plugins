@@ -1,6 +1,6 @@
 package com.ikalagaming.factory.registry;
 
-import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.factory.world.Material;
 import com.ikalagaming.factory.world.Tag;
 import com.ikalagaming.util.SafeResourceLoader;
@@ -65,16 +65,13 @@ public class MaterialRegistry extends Registry<Material> {
         if (containsKey(name)) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
-                            "MAT_DUPLICATE", FactoryPlugin.getResourceBundle(), name));
+                            "MAT_DUPLICATE", FactoryStrings.bundle(), name));
             return false;
         }
         if (parentName != null && !containsKey(parentName)) {
             log.warn(
                     SafeResourceLoader.getStringFormatted(
-                            "MAT_MISSING_PARENT",
-                            FactoryPlugin.getResourceBundle(),
-                            name,
-                            parentName));
+                            "MAT_MISSING_PARENT", FactoryStrings.bundle(), name, parentName));
             return false;
         }
 
@@ -94,7 +91,7 @@ public class MaterialRegistry extends Registry<Material> {
                 if (maybeTag.isEmpty()) {
                     log.warn(
                             SafeResourceLoader.getStringFormatted(
-                                    "TAG_MISSING", FactoryPlugin.getResourceBundle(), tagName));
+                                    "TAG_MISSING", FactoryStrings.bundle(), tagName));
                     return false;
                 }
 
@@ -131,7 +128,7 @@ public class MaterialRegistry extends Registry<Material> {
             return Optional.of(definitions.get(materialName));
         }
         log.error(
-                SafeResourceLoader.getString("MATERIAL_MISSING", FactoryPlugin.getResourceBundle()),
+                SafeResourceLoader.getString("MATERIAL_MISSING", FactoryStrings.bundle()),
                 materialName);
         return Optional.empty();
     }

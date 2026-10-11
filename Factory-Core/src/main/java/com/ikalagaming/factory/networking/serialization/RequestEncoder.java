@@ -1,6 +1,6 @@
 package com.ikalagaming.factory.networking.serialization;
 
-import com.ikalagaming.factory.FactoryPlugin;
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.factory.kvt.TreeBinarySerialization;
 import com.ikalagaming.factory.networking.RequestRegistry;
@@ -34,7 +34,7 @@ public class RequestEncoder extends MessageToByteEncoder<Request> {
             log.error(
                     SafeResourceLoader.getStringFormatted(
                             "UNSUPPORTED_REQUEST_TYPE",
-                            FactoryPlugin.getResourceBundle(),
+                            FactoryStrings.bundle(),
                             msg.getClass().getSimpleName()));
             return;
         }
@@ -50,7 +50,7 @@ public class RequestEncoder extends MessageToByteEncoder<Request> {
             log.error(
                     SafeResourceLoader.getStringFormatted(
                             "ERROR_ENCODING_REQUEST",
-                            FactoryPlugin.getResourceBundle(),
+                            FactoryStrings.bundle(),
                             Integer.toString(id)));
         }
     }

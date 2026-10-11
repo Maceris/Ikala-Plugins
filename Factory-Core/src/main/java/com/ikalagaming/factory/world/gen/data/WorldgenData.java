@@ -1,8 +1,10 @@
 package com.ikalagaming.factory.world.gen.data;
 
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.factory.kvt.Node;
 import com.ikalagaming.factory.kvt.TreeStringSerialization;
 import com.ikalagaming.factory.registry.RegistryConstants;
+import com.ikalagaming.factory.world.gen.WorldgenHash;
 
 import lombok.NonNull;
 
@@ -48,9 +50,14 @@ public final class WorldgenData {
      * @param kind What kind of file it is.
      * @param path Where it was read from.
      * @param root Its contents.
+     * @param textHash A hash of the file's text, for {@link #contentHash()}.
      */
     public record DataFile(
-            @NonNull String id, @NonNull Kind kind, @NonNull Path path, @NonNull Node root) {}
+            @NonNull String id,
+            @NonNull Kind kind,
+            @NonNull Path path,
+            @NonNull Node root,
+            long textHash) {}
 
     /** Every file, by kind then ID. */
     private final Map<Kind, SortedMap<String, DataFile>> files = new EnumMap<>(Kind.class);
@@ -132,6 +139,25 @@ public final class WorldgenData {
      */
     public Collection<DataFile> all(@NonNull Kind kind) {
         return Collections.unmodifiableCollection(files.get(kind).values());
+    }
+
+    /**
+     * A hash of every file's kind, ID and text, in sorted order, so it changes with any edit and
+     * doesn't depend on the order folders were read in. Saves and exported corpora record it, to
+     * tell when the data they were made with has changed.
+     *
+     * @return The hash.
+     */
+    public long contentHash() {
+        long hash = WorldgenHash.FNV_OFFSET;
+        for (Kind kind : Kind.values()) {
+            for (DataFile file : files.get(kind).values()) {
+                hash = WorldgenHash.fnvAdd(hash, WorldgenHash.fnv1a64(kind.getFolder()));
+                hash = WorldgenHash.fnvAdd(hash, WorldgenHash.fnv1a64(file.id()));
+                hash = WorldgenHash.fnvAdd(hash, file.textHash());
+            }
+        }
+        return hash;
     }
 
     /**
@@ -236,7 +262,8 @@ public final class WorldgenData {
             report(id, "WORLDGEN_PARSE_FAILED", path);
             return;
         }
-        files.get(kind).put(id, new DataFile(id, kind, path, root.get()));
+        files.get(kind)
+                .put(id, new DataFile(id, kind, path, root.get(), WorldgenHash.fnv1a64(text)));
     }
 
     /**
@@ -296,6 +323,6 @@ public final class WorldgenData {
                         "",
                         Diagnostic.Severity.ERROR,
                         code,
-                        WorldgenStrings.format(code, args)));
+                        FactoryStrings.format(code, args)));
     }
 }

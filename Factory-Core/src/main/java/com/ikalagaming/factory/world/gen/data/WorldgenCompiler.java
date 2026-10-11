@@ -1,5 +1,6 @@
 package com.ikalagaming.factory.world.gen.data;
 
+import com.ikalagaming.factory.FactoryStrings;
 import com.ikalagaming.factory.registry.RegistryConstants;
 import com.ikalagaming.factory.world.Block;
 import com.ikalagaming.factory.world.World;
@@ -108,7 +109,7 @@ public final class WorldgenCompiler implements FieldReader.Problems {
             @NonNull String code,
             Object... args) {
         diagnostics.add(
-                new Diagnostic(file, field, severity, code, WorldgenStrings.format(code, args)));
+                new Diagnostic(file, field, severity, code, FactoryStrings.format(code, args)));
         if (severity == Diagnostic.Severity.ERROR) {
             failed.add(file);
         }
