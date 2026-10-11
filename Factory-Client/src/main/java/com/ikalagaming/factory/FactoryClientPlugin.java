@@ -62,7 +62,6 @@ public class FactoryClientPlugin extends Plugin {
         UserDataUtil.createUserDataFolder();
         guiManager = GraphicsManager.getWindowManager();
         var graphics = GraphicsManager.forPlugin(getName());
-        guiManager.addWindow(graphics, BIOME_DEBUG.getName(), new BiomeDebug());
         guiManager.addWindow(graphics, MAIN_MENU.getName(), new MainMenu(guiManager));
         guiManager.addWindow(graphics, SINGLE_PLAYER.getName(), new SinglePlayer(guiManager));
         guiManager.addWindow(graphics, DEBUG.getName(), new Debug());

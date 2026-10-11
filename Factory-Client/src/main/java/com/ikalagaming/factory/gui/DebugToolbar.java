@@ -23,7 +23,6 @@ import lombok.NonNull;
 /** A menu bar at the top of the screen for debugging. */
 public class DebugToolbar extends MainToolbar {
     private final WindowManager windowManager;
-    private final Checkbox biomeDebug;
     private final Checkbox debug;
     private final Checkbox demoIkGuiWindow;
     private final Checkbox graphicsWindow;
@@ -32,11 +31,6 @@ public class DebugToolbar extends MainToolbar {
 
     public DebugToolbar(@NonNull WindowManager windowManager) {
         this.windowManager = windowManager;
-        var textBiomeDebug =
-                SafeResourceLoader.getString(
-                        "TOOLBAR_DEBUG_BIOME_DEBUG", FactoryClientPlugin.getResourceBundle());
-        biomeDebug = new Checkbox(textBiomeDebug, windowManager.isVisible(BIOME_DEBUG.getName()));
-
         var textDebug =
                 SafeResourceLoader.getString(
                         "TOOLBAR_DEBUG_DEBUG", FactoryClientPlugin.getResourceBundle());
@@ -72,7 +66,6 @@ public class DebugToolbar extends MainToolbar {
     public void draw(final int width, final int height) {
         if (IkGui.beginMainMenuBar()) {
             if (IkGui.beginMenu("Windows")) {
-                biomeDebug.draw(width, height);
                 debug.draw(width, height);
                 demoIkGuiWindow.draw(width, height);
                 graphicsWindow.draw(width, height);
@@ -92,10 +85,6 @@ public class DebugToolbar extends MainToolbar {
 
     @Override
     public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
-        if (biomeDebug.checkResult()) {
-            windowManager.setVisible(BIOME_DEBUG.getName(), biomeDebug.getState());
-            return true;
-        }
         if (debug.checkResult()) {
             windowManager.setVisible(DEBUG.getName(), debug.getState());
             return true;
