@@ -255,7 +255,7 @@ public final class WorldgenLab implements AutoCloseable {
         session = new LabSession(loaded -> post(() -> onLoaded(loaded)));
         renderer = new LabRenderer(graphics, drawn -> post(() -> onFrame(drawn)));
         nodeTree = new NodeTree(renderer, this::post, this::viewNode);
-        preview = new LabPreview(graphics);
+        preview = new LabPreview(graphics, dataFolder);
         bookmarks = new Bookmarks(dataFolder.resolve("lab").resolve("bookmarks.kvt"));
         loader = Executors.newSingleThreadExecutor(daemon("Worldgen Lab load"));
         inspector = Executors.newSingleThreadExecutor(daemon("Worldgen Lab inspect"));

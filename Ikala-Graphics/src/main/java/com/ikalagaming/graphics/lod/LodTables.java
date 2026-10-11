@@ -1,0 +1,248 @@
+package com.ikalagaming.graphics.lod;
+
+import com.ikalagaming.graphics.gui.IkGui;
+import com.ikalagaming.graphics.gui.flags.TableFlags;
+
+import lombok.NonNull;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.function.IntFunction;
+
+/**
+ * The LOD panel's measurements as IkGui tables: a DAG's levels from {@link LodStats}, and its
+ * {@link Fidelity}. Rows are formatted once, when the numbers arrive, and drawn each frame.
+ */
+final class LodTables {
+
+    /** How every table is drawn: bordered, striped, and as wide as its contents. */
+    private static final int FLAGS =
+            TableFlags.BORDERS | TableFlags.ROW_BACKGROUND | TableFlags.SIZING_FIXED_FIT;
+
+    /** Percent in a whole. */
+    private static final double PERCENT = 100;
+
+    /**
+     * One table.
+     *
+     * @param title A line above it saying what it shows.
+     * @param headers The column headers.
+     * @param rows Each row's cells.
+     */
+    record Table(@NonNull String title, @NonNull String[] headers, @NonNull List<String[]> rows) {}
+
+    /**
+     * The levels table.
+     *
+     * @param dag The DAG.
+     * @return The table.
+     */
+    static Table levels(@NonNull LodDag dag) {
+        List<String[]> rows = new ArrayList<>();
+        for (LodStats.Level l : LodStats.levels(dag)) {
+            rows.add(
+                    new String[] {
+                        Integer.toString(l.level()),
+                        String.format("%,d", l.triangles()),
+                        String.format("%,d", l.clusters()),
+                        Integer.toString(l.groups()),
+                        Double.isNaN(l.halving()) ? "" : String.format("%.3f", l.halving()),
+                        String.format("%.4f", l.maxError()),
+                        spread(l.groupClusters()),
+                        spread(l.groupTriangles()),
+                        String.format("%.1f%%", PERCENT * l.lockedShare()),
+                        String.format(
+                                "%.0f / %.1f / %.1f / %.1f",
+                                l.buildMillis()[0],
+                                l.buildMillis()[1],
+                                l.buildMillis()[2],
+                                l.buildMillis()[3]),
+                        Integer.toString(l.virtualEdges()),
+                        Integer.toString(l.rejectedFlips()),
+                        Integer.toString(l.rejectedLinks())
+                    });
+        }
+        return new Table(
+                "Building stopped: " + dag.getStopReason(),
+                new String[] {
+                    "level",
+                    "triangles",
+                    "clusters",
+                    "groups",
+                    "halving",
+                    "error",
+                    "group clusters",
+                    "group triangles",
+                    "locked",
+                    "build ms (sum / p50 / p95 / max)",
+                    "virtual",
+                    "flips",
+                    "links"
+                },
+                rows);
+    }
+
+    /**
+     * The fidelity tables: the errors, then material shares over all area and from above.
+     *
+     * @param fidelity The measurements.
+     * @param materialName A name for each material index.
+     * @return The tables.
+     */
+    static List<Table> fidelity(
+            @NonNull Fidelity fidelity, @NonNull IntFunction<String> materialName) {
+        List<String[]> rows = new ArrayList<>();
+        for (Fidelity.Level l : fidelity.levels()) {
+            rows.add(
+                    new String[] {
+                        Integer.toString(l.level()),
+                        String.format("%,d", l.triangles()),
+                        percent(l.mismatch()),
+                        percent(l.unavoidable()),
+                        percent(l.assignment()),
+                        percent(l.mismatchUp()),
+                        percent(l.unavoidableUp()),
+                        percent(l.assignmentUp()),
+                        String.format("%.3f", l.meanDistance()),
+                        String.format("%.3f", l.maxDistance()),
+                        String.format("%.3f", l.maxError())
+                    });
+        }
+        List<Table> out = new ArrayList<>();
+        out.add(
+                new Table(
+                        "Fidelity to the input, "
+                                + Fidelity.SAMPLES
+                                + " samples per triangle. Mismatch: area whose input material"
+                                + " differs; unavoidable: the part one material per triangle"
+                                + " can't fix; assignment: the rest.",
+                        new String[] {
+                            "level",
+                            "triangles",
+                            "mismatch",
+                            "unavoidable",
+                            "assignment",
+                            "mismatch, above",
+                            "unavoidable, above",
+                            "assignment, above",
+                            "mean distance",
+                            "max distance",
+                            "error"
+                        },
+                        rows));
+        final SortedSet<Integer> materials = new TreeSet<>();
+        for (Fidelity.Level l : fidelity.levels()) {
+            materials.addAll(l.shares().keySet());
+        }
+        out.add(
+                shares(
+                        fidelity,
+                        materials,
+                        materialName,
+                        Fidelity.ASSIGNED,
+                        Fidelity.MAPPED,
+                        "Material share of area, assigned (found under the samples):"));
+        out.add(
+                shares(
+                        fidelity,
+                        materials,
+                        materialName,
+                        Fidelity.ASSIGNED_UP,
+                        Fidelity.MAPPED_UP,
+                        "Material share of area seen from above, assigned (found under the"
+                                + " samples):"));
+        return out;
+    }
+
+    /**
+     * A table of material shares, a column per material.
+     *
+     * @param fidelity The measurements.
+     * @param materials The materials, as columns.
+     * @param materialName A name for each material index.
+     * @param assigned Which share is the assigned one.
+     * @param mapped Which share is the one found under the samples.
+     * @param title The table's title.
+     * @return The table.
+     */
+    private static Table shares(
+            @NonNull Fidelity fidelity,
+            @NonNull SortedSet<Integer> materials,
+            @NonNull IntFunction<String> materialName,
+            int assigned,
+            int mapped,
+            @NonNull String title) {
+        final String[] headers = new String[materials.size() + 1];
+        headers[0] = "level";
+        int column = 1;
+        for (int material : materials) {
+            headers[column++] = materialName.apply(material);
+        }
+        List<String[]> rows = new ArrayList<>();
+        for (Fidelity.Level l : fidelity.levels()) {
+            final String[] row = new String[headers.length];
+            row[0] = Integer.toString(l.level());
+            column = 1;
+            for (int material : materials) {
+                final double[] share = l.shares().get(material);
+                row[column++] =
+                        share == null
+                                ? ""
+                                : String.format(
+                                        "%.1f%% (%.1f%%)",
+                                        PERCENT * share[assigned], PERCENT * share[mapped]);
+            }
+            rows.add(row);
+        }
+        return new Table(title, headers, rows);
+    }
+
+    /**
+     * Draw a table with its title. Render thread, inside an IkGui window.
+     *
+     * @param table The table.
+     */
+    static void draw(@NonNull Table table) {
+        IkGui.textWrapped(table.title());
+        if (!IkGui.beginTable(table.title(), table.headers().length, FLAGS)) {
+            return;
+        }
+        for (String header : table.headers()) {
+            IkGui.tableSetupColumn(header);
+        }
+        IkGui.tableHeadersRow();
+        for (String[] row : table.rows()) {
+            IkGui.tableNextRow();
+            for (String cell : row) {
+                IkGui.tableNextColumn();
+                IkGui.textUnformatted(cell);
+            }
+        }
+        IkGui.endTable();
+    }
+
+    /**
+     * Min, median and max, as text.
+     *
+     * @param values The three.
+     * @return They, slash separated.
+     */
+    private static String spread(int @NonNull [] values) {
+        return values[0] + " / " + values[1] + " / " + values[2];
+    }
+
+    /**
+     * A share as a percentage.
+     *
+     * @param share The share.
+     * @return The text.
+     */
+    private static String percent(double share) {
+        return String.format("%.1f%%", PERCENT * share);
+    }
+
+    /** Static helpers only. */
+    private LodTables() {}
+}

@@ -4,6 +4,7 @@ import static com.ikalagaming.converter.gui.DefaultWindows.*;
 
 import com.ikalagaming.converter.gui.DebugToolbar;
 import com.ikalagaming.converter.gui.window.Debug;
+import com.ikalagaming.converter.gui.window.LodPrototype;
 import com.ikalagaming.converter.gui.window.MainMenu;
 import com.ikalagaming.converter.inspector.AssetInspectorWindow;
 import com.ikalagaming.converter.inspector.AssetSamples;
@@ -44,6 +45,9 @@ public class ConverterPlugin extends Plugin {
 
     private Set<Listener> listeners;
 
+    /** The level of detail prototype tool, while enabled. */
+    private LodPrototype lodPrototype;
+
     @Override
     public Set<Listener> getListeners() {
         if (null == this.listeners) {
@@ -66,6 +70,15 @@ public class ConverterPlugin extends Plugin {
         } catch (MissingResourceException missingResource) {
             // don't localize this since it would fail anyway
             log.warn("Locale not found for Asset-Converter in onLoad()");
+        }
+        return true;
+    }
+
+    @Override
+    public boolean onDisable() {
+        if (lodPrototype != null) {
+            lodPrototype.stop();
+            lodPrototype = null;
         }
         return true;
     }
@@ -105,6 +118,8 @@ public class ConverterPlugin extends Plugin {
         Observable<Integer> sampleCount =
                 Observable.of(AssetSamples.count(Path.of(AssetSamples.FOLDER)));
         ui.addStyles(AssetInspectorWindow.styles());
+        lodPrototype = new LodPrototype(graphics);
+        ui.registerTool(LodPrototype.TOOL_ID, LodPrototype.LABEL, lodPrototype::open);
         new MainMenu(ui, () -> setInspectorVisible(true), sampleCount).open();
         // Shown once so later toggles only change its visibility, and keep its state
         ui.show(new AssetInspectorWindow(ui, sampleCount).build());

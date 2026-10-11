@@ -45,14 +45,17 @@ public final class Fidelity {
     /** Values kept per material: assigned area, assigned area from above, then the same mapped. */
     private static final int SHARE_VALUES = 4;
 
-    /** Where the assigned area from above is. */
-    private static final int ASSIGNED_UP = 1;
+    /** Where a material's share of area, as assigned, is in {@link Level#shares}. */
+    public static final int ASSIGNED = 0;
 
-    /** Where the mapped area is. */
-    private static final int MAPPED = 2;
+    /** Where its share of area seen from above, as assigned, is. */
+    public static final int ASSIGNED_UP = 1;
 
-    /** Where the mapped area from above is. */
-    private static final int MAPPED_UP = 3;
+    /** Where its share of area, as found under the samples, is. */
+    public static final int MAPPED = 2;
+
+    /** Where its share of area seen from above, as found under the samples, is. */
+    public static final int MAPPED_UP = 3;
 
     /** A third. */
     private static final double THIRD = 1.0 / 3;
@@ -247,7 +250,7 @@ public final class Fidelity {
             final double sampleUp = upArea / SAMPLES;
             final int assigned = cluster.materials()[t];
             final double[] own = materials.computeIfAbsent(assigned, k -> new double[SHARE_VALUES]);
-            own[0] += triangleArea;
+            own[ASSIGNED] += triangleArea;
             own[ASSIGNED_UP] += upArea;
             counts.clear();
             int mismatched = 0;
@@ -434,7 +437,7 @@ public final class Fidelity {
                 "Material share of area, assigned (found under samples):",
                 materials,
                 materialName,
-                0);
+                ASSIGNED);
         shareTable(
                 out,
                 "Material share of area seen from above, assigned (found under samples):",

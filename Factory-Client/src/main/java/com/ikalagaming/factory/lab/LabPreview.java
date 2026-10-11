@@ -48,6 +48,10 @@ import java.util.concurrent.atomic.AtomicLong;
  * the box; the editor's camera controls take over from there. A small window leads back, which
  * restores everything.
  *
+ * <p>The box's chunks, or a section corpus's, can also be built into a level of detail DAG and
+ * shown through {@link LabLod}; the box's sections are taken out meanwhile and composed again
+ * after.
+ *
  * <p>Render thread only; generation and composing run on a worker pool.
  */
 @Slf4j
@@ -94,14 +98,32 @@ final class LabPreview implements AutoCloseable {
     /** The width of the box size field, in UI units. */
     private static final float SIZE_FIELD = 160;
 
+    /** Where section corpora are, in the data folder. */
+    private static final String CORPUS_FOLDER = "corpus";
+
+    /** The width of the corpus field, in UI units. */
+    private static final float CORPUS_FIELD = 320;
+
     /** Nanoseconds in a millisecond. */
     private static final long NANOS_PER_MILLI = 1_000_000;
 
     /** The plugin's graphics context. */
     private final GraphicsContext graphics;
 
+    /** Where corpora are written and read. */
+    private final Path dataFolder;
+
     /** Block meshes. */
     private final BlockMeshes blockMeshes;
+
+    /** Builds and shows level of detail DAGs. */
+    private final LabLod lod;
+
+    /** The corpus files found, by name. Render thread. */
+    private List<Path> corpora;
+
+    /** The corpus picked, an index into {@link #corpora}. */
+    private final IkInt corpus = new IkInt(0);
 
     /** Generates and composes. */
     private final ExecutorService workers;
@@ -117,6 +139,12 @@ final class LabPreview implements AutoCloseable {
 
     /** The chunks of the last finished build, for the corpus. Render thread. */
     private Map<ChunkPos, Chunk> chunks = Map.of();
+
+    /** The block meshes of the last finished build, for composing again. Render thread. */
+    private Map<String, BlockMeshes.Entry> builtMeshes = Map.of();
+
+    /** How long the last build took to generate. Render thread. */
+    private long builtMillis;
 
     /** The stage the last build generated to. Render thread. */
     private Stage builtStage;
@@ -151,10 +179,13 @@ final class LabPreview implements AutoCloseable {
      * Set up the preview; nothing is built until asked.
      *
      * @param graphics The plugin's graphics context.
+     * @param dataFolder The plugin's data folder; corpora are in {@code corpus/} there.
      */
-    LabPreview(@NonNull GraphicsContext graphics) {
+    LabPreview(@NonNull GraphicsContext graphics, @NonNull Path dataFolder) {
         this.graphics = graphics;
+        this.dataFolder = dataFolder;
         blockMeshes = new BlockMeshes(graphics);
+        lod = new LabLod(graphics, this::composeAgain);
         // At least two: one build waits on the chunks the others generate
         final int count = Math.max(2, Runtime.getRuntime().availableProcessors() - 1);
         final AtomicInteger threads = new AtomicInteger();
@@ -206,7 +237,14 @@ final class LabPreview implements AutoCloseable {
             if (IkGui.button("Look")) {
                 look();
             }
+            IkGui.sameLine();
+            if (IkGui.button("Build LOD")) {
+                buildLod();
+            }
+            IkGui.setItemTooltip(
+                    "Build a level of detail DAG from the box's chunks, and look at its cut.");
         }
+        drawCorpora(debug);
         IkGui.textWrapped(status);
         IkGui.textWrapped(
                 "Blocks are placeholder cubes in their slice colors until block definitions name"
@@ -319,6 +357,8 @@ final class LabPreview implements AutoCloseable {
                     final Map<String, BlockMeshes.Entry> meshes =
                             blockMeshes.meshesFor(blocks, fluids);
                     chunks = generated;
+                    builtMeshes = meshes;
+                    builtMillis = generateMillis;
                     builtStage = stage;
                     builtFrom = debug;
                     status =
@@ -377,55 +417,24 @@ final class LabPreview implements AutoCloseable {
                 break;
             }
             final ChunkPos pos = entry.getKey();
-            final Chunk chunk = entry.getValue();
-            List<MeshHandle> handles = new ArrayList<>();
-            List<Integer> positions = new ArrayList<>();
-            List<Byte> masks = new ArrayList<>();
-            BakeSource[] neighbors = new BakeSource[Face.ALL.length];
-            final int[] noRotations = new int[Face.ALL.length];
-            for (int y = 0; y < World.CHUNK_SIZE; ++y) {
-                for (int z = 0; z < World.CHUNK_SIZE; ++z) {
-                    for (int x = 0; x < World.CHUNK_SIZE; ++x) {
-                        final BlockMeshes.Entry block =
-                                meshes.get(chunk.getBlock(x, y, z).getName());
-                        if (block == null) {
-                            continue;
-                        }
-                        for (Face face : Face.ALL) {
-                            final int[] at = {x, y, z};
-                            at[face.getAxis()] += face.getSign();
-                            final BlockMeshes.Entry neighbor =
-                                    neighbor(generated, meshes, pos, chunk, at);
-                            neighbors[face.ordinal()] = neighbor == null ? null : neighbor.source();
-                        }
-                        handles.add(block.mesh());
-                        positions.add(SectionBaker.pack(x, y, z));
-                        masks.add(
-                                (byte)
-                                        Faces.hiddenFaces(
-                                                block.source(), 0, neighbors, noRotations));
-                    }
-                }
-            }
-            if (handles.isEmpty()) {
+            final Placed blocks = place(generated, meshes, pos, entry.getValue());
+            if (blocks == null) {
                 continue;
             }
-            final int count = handles.size();
-            int[] packed = new int[count];
-            byte[] faceMasks = new byte[count];
+            final int count = blocks.blocks().length;
+            final MeshHandle[] handles = new MeshHandle[count];
             for (int i = 0; i < count; ++i) {
-                packed[i] = positions.get(i);
-                faceMasks[i] = masks.get(i);
+                handles[i] = blocks.blocks()[i].mesh();
             }
             placed += count;
             made.add(
                     graphics.sections()
                             .compose(new Vector3d(pos.blockX(), pos.blockY(), pos.blockZ()))
                             .placements(
-                                    handles.toArray(MeshHandle[]::new),
-                                    packed,
+                                    handles,
+                                    blocks.packed(),
                                     new byte[count],
-                                    faceMasks,
+                                    blocks.faceMasks(),
                                     new short[count])
                             .submit());
         }
@@ -448,6 +457,70 @@ final class LabPreview implements AutoCloseable {
                                     made.size(),
                                     composeMillis);
                 });
+    }
+
+    /**
+     * One chunk's blocks, as the baker takes them.
+     *
+     * @param blocks Each block's mesh entry.
+     * @param packed Each block's packed cell position in the chunk.
+     * @param faceMasks Each block's faces hidden by its neighbors.
+     */
+    record Placed(
+            BlockMeshes.Entry @NonNull [] blocks,
+            int @NonNull [] packed,
+            byte @NonNull [] faceMasks) {}
+
+    /**
+     * Work out a chunk's blocks and which of their faces neighbors hide, looking into neighboring
+     * chunks of the box; faces on the box's outer edge show.
+     *
+     * @param chunks The box's chunks.
+     * @param meshes The block meshes, by name.
+     * @param pos The chunk's position.
+     * @param chunk The chunk.
+     * @return Its blocks, or null if it has none with a mesh.
+     */
+    static Placed place(
+            @NonNull Map<ChunkPos, Chunk> chunks,
+            @NonNull Map<String, BlockMeshes.Entry> meshes,
+            @NonNull ChunkPos pos,
+            @NonNull Chunk chunk) {
+        List<BlockMeshes.Entry> blocks = new ArrayList<>();
+        List<Integer> positions = new ArrayList<>();
+        List<Byte> masks = new ArrayList<>();
+        BakeSource[] neighbors = new BakeSource[Face.ALL.length];
+        final int[] noRotations = new int[Face.ALL.length];
+        for (int y = 0; y < World.CHUNK_SIZE; ++y) {
+            for (int z = 0; z < World.CHUNK_SIZE; ++z) {
+                for (int x = 0; x < World.CHUNK_SIZE; ++x) {
+                    final BlockMeshes.Entry block = meshes.get(chunk.getBlock(x, y, z).getName());
+                    if (block == null) {
+                        continue;
+                    }
+                    for (Face face : Face.ALL) {
+                        final int[] at = {x, y, z};
+                        at[face.getAxis()] += face.getSign();
+                        final BlockMeshes.Entry neighbor = neighbor(chunks, meshes, pos, chunk, at);
+                        neighbors[face.ordinal()] = neighbor == null ? null : neighbor.source();
+                    }
+                    blocks.add(block);
+                    positions.add(SectionBaker.pack(x, y, z));
+                    masks.add((byte) Faces.hiddenFaces(block.source(), 0, neighbors, noRotations));
+                }
+            }
+        }
+        if (blocks.isEmpty()) {
+            return null;
+        }
+        final int count = blocks.size();
+        int[] packed = new int[count];
+        byte[] faceMasks = new byte[count];
+        for (int i = 0; i < count; ++i) {
+            packed[i] = positions.get(i);
+            faceMasks[i] = masks.get(i);
+        }
+        return new Placed(blocks.toArray(BlockMeshes.Entry[]::new), packed, faceMasks);
     }
 
     /**
@@ -579,10 +652,127 @@ final class LabPreview implements AutoCloseable {
 
     /** Remove the sections and stop any build. */
     private void clear() {
+        removeSections();
+        chunks = Map.of();
+        builtMeshes = Map.of();
+    }
+
+    /** Remove the sections and stop any build, keeping the chunks to compose again. */
+    private void removeSections() {
         generation.incrementAndGet();
         sections.forEach(graphics.sections()::remove);
         sections.clear();
-        chunks = Map.of();
+    }
+
+    /** Compose the kept chunks again, after a level of detail view had them out. Render thread. */
+    private void composeAgain() {
+        if (chunks.isEmpty() || !sections.isEmpty()) {
+            return;
+        }
+        final long mine = generation.get();
+        final Map<ChunkPos, Chunk> generated = chunks;
+        final Map<String, BlockMeshes.Entry> meshes = builtMeshes;
+        final long millis = builtMillis;
+        status = "Composing the box again...";
+        CompletableFuture.runAsync(() -> compose(generated, meshes, mine, millis), workers)
+                .exceptionally(
+                        e -> {
+                            log.warn("The Worldgen Lab preview could not compose", e);
+                            post(() -> status = "Could not compose: " + e.getMessage());
+                            return null;
+                        });
+    }
+
+    /** Build a level of detail DAG from the box's chunks and show it. Render thread. */
+    private void buildLod() {
+        if (chunks.isEmpty() || builtFrom == null) {
+            return;
+        }
+        final String name =
+                builtFrom.getGenerator().getWorldType().id()
+                        + " "
+                        + builtFrom.seed()
+                        + ", "
+                        + chunks.size()
+                        + " chunks";
+        final Map<ChunkPos, Chunk> box = chunks;
+        final Map<String, BlockMeshes.Entry> meshes = builtMeshes;
+        removeSections();
+        lod.show(name, box, meshes);
+    }
+
+    /**
+     * Draw the corpus picker, and build a level of detail DAG from the one picked.
+     *
+     * @param debug The data, for which blocks are fluids, or null.
+     */
+    private void drawCorpora(WorldgenDebug debug) {
+        if (corpora == null) {
+            corpora = findCorpora();
+        }
+        if (corpora.isEmpty()) {
+            IkGui.textWrapped("Export a corpus to build level of detail from it here.");
+        } else {
+            corpus.set(Math.clamp(corpus.get(), 0, corpora.size() - 1));
+            IkGui.setNextItemWidth(CORPUS_FIELD);
+            IkGui.combo(
+                    "Corpus",
+                    corpus,
+                    corpora.stream()
+                            .map(file -> file.getFileName().toString())
+                            .toArray(String[]::new));
+            IkGui.sameLine();
+            if (IkGui.button("Build LOD##corpus")) {
+                buildLod(corpora.get(corpus.get()), debug);
+            }
+            IkGui.setItemTooltip("Build a level of detail DAG from the corpus's chunks.");
+            IkGui.sameLine();
+        }
+        if (IkGui.button("Refresh##corpora")) {
+            corpora = findCorpora();
+        }
+    }
+
+    /**
+     * The corpus files in the data folder, oldest first.
+     *
+     * @return Their paths.
+     */
+    private List<Path> findCorpora() {
+        final Path folder = dataFolder.resolve(CORPUS_FOLDER);
+        if (!Files.isDirectory(folder)) {
+            return List.of();
+        }
+        try (var files = Files.list(folder)) {
+            return files.filter(file -> file.toString().endsWith(".ika")).sorted().toList();
+        } catch (java.io.IOException e) {
+            log.warn("Could not list the corpora in {}", folder, e);
+            return List.of();
+        }
+    }
+
+    /**
+     * Read a corpus and build a level of detail DAG from its chunks. Render thread.
+     *
+     * @param file The corpus.
+     * @param debug The data, for which blocks are fluids, or null.
+     */
+    private void buildLod(@NonNull Path file, WorldgenDebug debug) {
+        final SectionCorpus.Corpus read;
+        try {
+            read = SectionCorpus.read(file);
+        } catch (RuntimeException e) {
+            log.warn("Could not read the corpus {}", file, e);
+            status = "Could not read " + file.getFileName() + ": " + e.getMessage();
+            return;
+        }
+        Set<String> blocks = new TreeSet<>();
+        read.chunks().values().forEach(chunk -> collectBlocks(chunk, blocks));
+        blocks.remove(World.AIR_NAME);
+        final Map<String, BlockMeshes.Entry> meshes =
+                blockMeshes.meshesFor(blocks, debug == null ? Set.of() : fluidNames(debug));
+        removeSections();
+        lod.show(file.getFileName().toString(), read.chunks(), meshes);
     }
 
     /**
@@ -612,6 +802,7 @@ final class LabPreview implements AutoCloseable {
                     new SectionCorpus.Source(
                             worldType, builtFrom.seed(), builtStage.name(), builtFrom.dataHash()),
                     chunks);
+            corpora = null;
             return "Wrote " + chunks.size() + " chunks to " + file.toAbsolutePath();
         } catch (Exception e) {
             return "Could not write the corpus: " + e.getMessage();
@@ -645,6 +836,7 @@ final class LabPreview implements AutoCloseable {
      */
     void stop() {
         workers.shutdownNow();
+        lod.stop();
         if (looking) {
             looking = false;
             GraphicsManager.getUiManager().setSurfacesHidden(false);
@@ -660,6 +852,7 @@ final class LabPreview implements AutoCloseable {
     @Override
     public void close() {
         stop();
+        lod.close();
         if (!graphics.isClosed()) {
             clear();
             GraphicsManager.getWindowManager().removeWindow(LOOK_WINDOW);

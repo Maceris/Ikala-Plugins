@@ -59,8 +59,10 @@ final class BlockMeshes implements AutoCloseable {
      *
      * @param mesh The registered mesh.
      * @param source Its faces, for working out which neighbors hide them.
+     * @param material Its material, which is in the scene's material cache.
      */
-    record Entry(@NonNull MeshHandle mesh, @NonNull BakeSource source) {}
+    record Entry(
+            @NonNull MeshHandle mesh, @NonNull BakeSource source, @NonNull Material material) {}
 
     /** The plugin's graphics context. */
     private final GraphicsContext graphics;
@@ -122,7 +124,7 @@ final class BlockMeshes implements AutoCloseable {
         scene.getMaterialCache().addMaterial(mesh.getMaterial());
         materials.add(mesh.getMaterial());
         final MeshHandle handle = graphics.meshes().registerBakeable(mesh, BOX_MIN, BOX_MAX);
-        return new Entry(handle, graphics.meshes().faceInfo(handle));
+        return new Entry(handle, graphics.meshes().faceInfo(handle), mesh.getMaterial());
     }
 
     /**

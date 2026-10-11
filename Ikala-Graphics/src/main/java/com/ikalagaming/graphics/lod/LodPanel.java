@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.IkBoolean;
 import com.ikalagaming.graphics.gui.data.IkInt;
+import com.ikalagaming.graphics.gui.flags.TreeNodeFlags;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
@@ -71,11 +72,11 @@ public final class LodPanel implements AutoCloseable {
     /** The view, once built. Render thread. */
     private LodView view;
 
-    /** The build's report, once built. */
-    private volatile String report;
+    /** The levels table, once built. */
+    private volatile LodTables.Table levels;
 
-    /** The fidelity report, once measured. */
-    private volatile String fidelityReport;
+    /** The fidelity tables, once measured. */
+    private volatile List<LodTables.Table> fidelityTables;
 
     /** Why the build failed, or null. */
     private volatile String failure;
@@ -129,12 +130,12 @@ public final class LodPanel implements AutoCloseable {
                                 final LodDag dag =
                                         DagBuilder.build(meshes, DagBuilder.Options.defaults());
                                 buildMillis = (System.nanoTime() - started) / NANOS_PER_MILLI;
-                                report = LodStats.report(name, dag, List.of());
+                                levels = LodTables.levels(dag);
                                 log.info(
                                         "Built LOD for {} in {} ms\n{}",
                                         name,
                                         Math.round(buildMillis),
-                                        report);
+                                        LodStats.report(name, dag, List.of()));
                                 post(
                                         () -> {
                                             if (!closed) {
@@ -143,13 +144,13 @@ public final class LodPanel implements AutoCloseable {
                                         });
                                 final long measuring = System.nanoTime();
                                 final Fidelity fidelity = Fidelity.measure(dag);
-                                fidelityReport = fidelity.report(materialName);
+                                fidelityTables = LodTables.fidelity(fidelity, materialName);
                                 log.info(
                                         "Measured LOD fidelity for {} in {} ms\n{}",
                                         name,
                                         Math.round(
                                                 (System.nanoTime() - measuring) / NANOS_PER_MILLI),
-                                        fidelityReport);
+                                        fidelity.report(materialName));
                                 post(
                                         () -> {
                                             if (view != null) {
@@ -191,7 +192,7 @@ public final class LodPanel implements AutoCloseable {
         IkGui.combo("Colors", mode, MODES);
         if (LodView.Mode.values()[mode.get()] == LodView.Mode.MISMATCH) {
             IkGui.textWrapped(
-                    fidelityReport == null
+                    fidelityTables == null
                             ? "Measuring fidelity..."
                             : "Gray: the input under the triangle has its material. Redder: more"
                                     + " of it doesn't. Magenta: its material isn't even the most"
@@ -236,13 +237,19 @@ public final class LodPanel implements AutoCloseable {
                         view.getDrawnClusters(),
                         view.getBuildMillis(),
                         buildMillis));
-        for (String line : report.split("\n")) {
-            IkGui.textUnformatted(line);
+        if (IkGui.collapsingHeader("Levels##lod", TreeNodeFlags.DEFAULT_OPEN)) {
+            LodTables.draw(levels);
         }
-        if (fidelityReport != null) {
-            for (String line : fidelityReport.split("\n")) {
-                IkGui.textUnformatted(line);
-            }
+        final List<LodTables.Table> fidelity = fidelityTables;
+        if (fidelity == null) {
+            IkGui.text("Measuring fidelity...");
+            return;
+        }
+        if (IkGui.collapsingHeader("Fidelity##lod", TreeNodeFlags.DEFAULT_OPEN)) {
+            LodTables.draw(fidelity.get(0));
+        }
+        if (IkGui.collapsingHeader("Material shares##lod")) {
+            fidelity.subList(1, fidelity.size()).forEach(LodTables::draw);
         }
     }
 
