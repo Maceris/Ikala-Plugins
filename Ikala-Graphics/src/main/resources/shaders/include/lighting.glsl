@@ -3,7 +3,7 @@
 
 // Lighting a surface: the Disney BRDF, the sun with its filtered shadow cascades, the point lights
 // and spotlights light_cull.comp sorted into the surface's cluster, ambient light and fog. All in
-// view space, in linear light.
+// view space, in linear light. AmbientMath has the ambient reflection in Java, with tests.
 
 #include "color.glsl"
 #include "light_inputs.glsl"
@@ -20,6 +20,13 @@ const float NORMAL_OFFSET_TEXELS = 1.5;
 // one into no shadow, so the change in detail doesn't show as a line
 const float CASCADE_BLEND = 0.1;
 const float PI = 3.1415926535897932384626433832795;
+// How strong a fully specular dielectric's reflection is head on, per unit of the material's
+// specular value: 0.5 gives 4%. Matches AmbientMath.DIELECTRIC_SPECULAR_SCALE.
+const float DIELECTRIC_SPECULAR_SCALE = 0.08;
+// The smallest N.V used for ambient light, so surfaces seen edge on don't divide by nothing
+const float MIN_N_DOT_V = 1e-4;
+// The average of Schlick's Fresnel over the hemisphere is F0 + (1 - F0) / 21
+const float FRESNEL_AVERAGE_DIVISOR = 21.0;
 
 float sqr(float x) {
     return x * x;
@@ -51,6 +58,17 @@ float schlickFresnel(float angle) {
     return m2 * m2 * m;// pow(m, 5)
 }
 
+// The color a surface reflects specularly head on: a dielectric reflects a little, tinted toward its
+// base color by its specular tint, and a metal reflects its base color
+vec3 specularColor(vec3 baseLinear, Material material) {
+    float baseLuminance = 0.3 * baseLinear.x + 0.6 * baseLinear.y + 0.1 * baseLinear.z;
+    vec3 baseTint = baseLuminance > 0 ? baseLinear / baseLuminance : vec3(1);
+    return mix(
+        material.specular * DIELECTRIC_SPECULAR_SCALE * mix(vec3(1), baseTint, material.specularTint),
+        baseLinear, material.metallic
+    );
+}
+
 vec3 disneyBRDF(vec3 baseColor, Material material, vec3 toViewDirection, vec3 toLightDirection, vec3 normal,
     vec3 x, vec3 y)
 {
@@ -68,10 +86,7 @@ vec3 disneyBRDF(vec3 baseColor, Material material, vec3 toViewDirection, vec3 to
     vec3 baseLinear = sRGBToLinear(baseColor);
     float baseLuminance = 0.3 * baseLinear.x + 0.6 * baseLinear.y + 0.1 * baseLinear.z;
     vec3 baseTint = baseLuminance > 0 ? baseLinear / baseLuminance : vec3(1);
-    vec3 colorSpecular0 = mix(
-        material.specular * 0.08 * mix(vec3(1), baseTint, material.specularTint),
-        baseLinear, material.metallic
-    );
+    vec3 colorSpecular0 = specularColor(baseLinear, material);
     vec3 colorSheen = mix(vec3(1), baseTint, material.sheenTint);
 
     float fresnelLight = schlickFresnel(angleLight);
@@ -163,6 +178,39 @@ vec3 calcDirLight(vec3 baseColor, Material material, DirectionalLight light, vec
 {
     return calcLightColor(baseColor, material, light.color, light.intensity, viewPosition, normalize(-light.direction),
         normal, tangent, bitangent);
+}
+
+// Karis's fit to the split-sum environment BRDF ("Physically Based Shading on Mobile", 2014): the
+// scale (x) and bias (y) that turn the color at normal incidence into how much light the surface
+// reflects specularly. The bias is kept at or above zero; the fit dips a fraction of a percent
+// below it on rough surfaces seen head on.
+vec2 environmentBRDF(float roughness, float nDotV) {
+    const vec4 c0 = vec4(-1, -0.0275, -0.572, 0.022);
+    const vec4 c1 = vec4(1, 0.0425, 1.04, -0.04);
+    vec4 r = roughness * c0 + c1;
+    float a004 = min(r.x * r.x, exp2(-9.28 * max(nDotV, MIN_N_DOT_V))) * r.x + r.y;
+    return vec2(-1.04 * a004 + r.z, max(1.04 * a004 + r.w, 0.0));
+}
+
+// How much of the ambient light, the same from every direction, a surface reflects toward the
+// viewer. Specular by the split sum with multiple scattering compensated after Fdez-Aguera ("A
+// Multiple-Scattering Microfacet Model for Real-Time Image-based Lighting", 2019), so rough
+// surfaces don't lose the light that bounces more than once; the diffuse gets what the specular
+// doesn't reflect, and metals have none.
+vec3 ambientReflectance(vec3 baseLinear, Material material, float nDotV) {
+    vec3 f0 = specularColor(baseLinear, material);
+    vec2 scaleBias = environmentBRDF(material.roughness, nDotV);
+    // Single scattering, for white and for this color. The fit can give a color more than white at
+    // grazing angles on smooth surfaces, where its scale goes negative, so it is kept to white's.
+    float singleWhite = scaleBias.x + scaleBias.y;
+    vec3 singleScatter = min(f0 * scaleBias.x + scaleBias.y, vec3(singleWhite));
+    float missed = 1.0 - singleWhite;
+    // What the missed light does over more bounces, by the average Fresnel
+    vec3 average = f0 + (1.0 - f0) / FRESNEL_AVERAGE_DIVISOR;
+    vec3 multiScatter = singleScatter * average / (1.0 - missed * average) * missed;
+    vec3 specular = singleScatter + multiScatter;
+    vec3 diffuse = (1.0 - specular) * baseLinear * (1.0 - material.metallic);
+    return diffuse + specular;
 }
 
 vec3 calcFog(vec3 pos, vec3 color, Fog fog, vec3 ambientLight, DirectionalLight directionalLight) {
@@ -298,8 +346,10 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
         Light light = lights[clusterData[firstIndex + i]];
         color += calcLight(baseColor.xyz, material, light, viewPosition, normal, tangent, bitangent);
     }
-    // Ambient light is light arriving from everywhere, so the surface reflects it by its own color
-    vec3 ambient = ambientLight.intensity * ambientLight.color * sRGBToLinear(baseColor.rgb);
+    // Ambient light arrives equally from everywhere
+    float nDotV = max(dot(normal, normalize(-viewPosition)), MIN_N_DOT_V);
+    vec3 ambient = ambientLight.intensity * ambientLight.color
+        * ambientReflectance(sRGBToLinear(baseColor.rgb), material, nDotV);
     vec3 finalColor = ambient + color;
 
     if (fog.enabled == 1 && fog.density > 0) {
