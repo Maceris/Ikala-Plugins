@@ -1,0 +1,4 @@
+{rules:[N;
+  {if:{type:"all", of:[N;{type:"density", id:"test:strata", min:0.0}, {type:"not", of:[N;{type:"biome", ids:[T;"test:desert"]}]}]},
+   then:{rules:[N;{if:{type:"air_below", min:2}, then:{block:"test:basalt"}}]}},
+  {if:{type:"density", density:{type:"axis", axis:"y"}, max:-30.0}, then:{block:"test:deepstone"}}]}

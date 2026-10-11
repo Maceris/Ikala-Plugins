@@ -81,3 +81,7 @@ COMMA :	',';
 COLON :	':';
 
 WS : [ \t\r\n\u000C]+ -> skip;
+
+// Block comments, so data files can explain themselves. Block rather than line comments, so the
+// text can be reformatted freely, even onto one line.
+BLOCK_COMMENT : '/*' .*? '*/' -> skip;

@@ -1,0 +1,3 @@
+{rules:[N;
+  {if:{type:"any", of:[N;{type:"air_above", max:4}, {type:"fluid"}]}, then:{block:"test:sand"}},
+  {then:{rules:"test:rocky"}}]}

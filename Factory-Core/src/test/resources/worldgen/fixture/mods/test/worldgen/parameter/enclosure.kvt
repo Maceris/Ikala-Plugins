@@ -1,0 +1,2 @@
+/* How deep in rock a place is: a coarse average of the terrain */
+{density:{type:"blur", radius:16.0, arg:"test:terrain"}, display_range:[D;-40.0,40.0]}

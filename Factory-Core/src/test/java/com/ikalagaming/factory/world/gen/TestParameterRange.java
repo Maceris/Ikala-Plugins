@@ -17,16 +17,21 @@ class TestParameterRange {
 
     private static Stream<Arguments> constructorArgumentProvider() {
         return Stream.of(
-                Arguments.of(0.0f, 1.0f), Arguments.of(0.10f, 0.101f), Arguments.of(0.1f, 0.112f));
+                Arguments.of(0.0f, 1.0f),
+                Arguments.of(0.10f, 0.101f),
+                Arguments.of(0.1f, 0.112f),
+                Arguments.of(-1.0f, 1.0f),
+                Arguments.of(-0.5f, -0.5f),
+                Arguments.of(0.0f, 1.1f));
     }
 
     private static Stream<Arguments> constructorIllegalArgumentProvider() {
         return Stream.of(
-                Arguments.of(-1.0f, 1.0f),
-                Arguments.of(0.0f, 1.1f),
                 Arguments.of(0.5f, 0.4f),
                 Arguments.of(Float.NaN, 1.0f),
-                Arguments.of(0.0f, Float.NaN));
+                Arguments.of(0.0f, Float.NaN),
+                Arguments.of(Float.NEGATIVE_INFINITY, 1.0f),
+                Arguments.of(0.0f, Float.POSITIVE_INFINITY));
     }
 
     private static Stream<Arguments> containsProvider() {

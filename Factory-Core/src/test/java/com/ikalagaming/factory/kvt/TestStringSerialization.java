@@ -74,4 +74,23 @@ class TestStringSerialization {
 
         Assertions.assertEquals(tree, maybeNode.get());
     }
+
+    /** Block comments are skipped anywhere between tokens, but not inside strings. */
+    @Test
+    void testComments() {
+        Optional<Node> maybeNode =
+                TreeStringSerialization.fromString(
+                        """
+                        /* Before */
+                        {name:"a /* b */ c", /* after a value,
+                           over several lines */ count:/* inline */2}
+                        /* At the end */""");
+        Assertions.assertTrue(maybeNode.isPresent());
+        Assertions.assertEquals("a /* b */ c", maybeNode.get().getString("name"));
+        Assertions.assertEquals(2, (int) maybeNode.get().getInteger("count"));
+        // Everything on one line still parses, which line comments wouldn't allow
+        Assertions.assertTrue(
+                TreeStringSerialization.fromString("{/* note */a:1,/* note */b:[I;1,/* x */2]}")
+                        .isPresent());
+    }
 }

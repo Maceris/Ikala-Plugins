@@ -1714,6 +1714,16 @@ public class OpenSimplex2S {
         return x < xi ? xi - 1 : xi;
     }
 
+    /**
+     * Floor to a long, for the lattice coordinates of the 2D and 3D noise, which pass the int range
+     * once a scaled coordinate goes beyond about 2.1 billion. The same as {@link #fastFloor} inside
+     * the int range, so values there don't change.
+     */
+    private static long fastFloorLong(double x) {
+        long xi = (long) x;
+        return x < xi ? xi - 1 : xi;
+    }
+
     private static float grad(long seed, long xsvp, long ysvp, float dx, float dy) {
         long hash = seed ^ xsvp ^ ysvp;
         hash *= OpenSimplex2S.HASH_MULTIPLIER;
@@ -1785,7 +1795,7 @@ public class OpenSimplex2S {
     private static float noise2_UnskewedBase(long seed, double xs, double ys) {
 
         // Get base points and offsets.
-        int xsb = OpenSimplex2S.fastFloor(xs), ysb = OpenSimplex2S.fastFloor(ys);
+        long xsb = OpenSimplex2S.fastFloorLong(xs), ysb = OpenSimplex2S.fastFloorLong(ys);
         float xi = (float) (xs - xsb), yi = (float) (ys - ysb);
 
         // Prime pre-multiplication for hash.
@@ -2012,9 +2022,9 @@ public class OpenSimplex2S {
     private static float noise3_UnrotatedBase(long seed, double xr, double yr, double zr) {
 
         // Get base points and offsets.
-        int xrb = OpenSimplex2S.fastFloor(xr),
-                yrb = OpenSimplex2S.fastFloor(yr),
-                zrb = OpenSimplex2S.fastFloor(zr);
+        long xrb = OpenSimplex2S.fastFloorLong(xr),
+                yrb = OpenSimplex2S.fastFloorLong(yr),
+                zrb = OpenSimplex2S.fastFloorLong(zr);
         float xi = (float) (xr - xrb), yi = (float) (yr - yrb), zi = (float) (zr - zrb);
 
         // Prime pre-multiplication for hash. Also flip seed for second lattice

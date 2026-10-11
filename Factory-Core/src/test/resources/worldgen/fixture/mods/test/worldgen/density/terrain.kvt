@@ -1,0 +1,4 @@
+/* Hills with caves carved out, plus a floating island. Inside [N;...] a reference is written as a ref object. */
+{type:"max", args:[N;
+  {type:"min", args:[N;{type:"ref", id:"test:ground"}, {type:"ref", id:"test:caves"}]},
+  {type:"ref", id:"test:island"}]}

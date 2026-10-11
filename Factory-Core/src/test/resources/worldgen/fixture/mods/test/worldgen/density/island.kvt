@@ -1,0 +1,4 @@
+/* A floating island above the hills, flattened on top */
+{type:"min", args:[N;
+  {type:"sphere", center:[D;0.0,60.0,0.0], radius:14.0},
+  {type:"plane", normal:[D;0.0,1.0,0.0], offset:64.0}]}

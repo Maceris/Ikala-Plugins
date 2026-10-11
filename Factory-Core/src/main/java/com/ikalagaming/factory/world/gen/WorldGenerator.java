@@ -2,211 +2,518 @@ package com.ikalagaming.factory.world.gen;
 
 import com.ikalagaming.factory.world.Block;
 import com.ikalagaming.factory.world.Chunk;
+import com.ikalagaming.factory.world.ChunkPos;
 import com.ikalagaming.factory.world.World;
-import com.ikalagaming.random.RandomGen;
+import com.ikalagaming.factory.world.gen.density.Box;
+import com.ikalagaming.factory.world.gen.density.DensityNode;
+import com.ikalagaming.factory.world.gen.density.EvalCache;
+import com.ikalagaming.factory.world.gen.density.Interval;
 
 import lombok.NonNull;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Used to generate the world.
+ * Generates chunks for one world type and seed. A chunk is a pure function of the seed, its
+ * position and the data, with a bounded neighborhood worked out from the same functions, so the
+ * result never depends on which chunks were generated before or which thread runs it. Safe to call
+ * from several threads at once.
  *
- * @author Ches Burks
+ * <p>Terrain is sampled on the world type's coarse lattice and interpolated between samples. The
+ * lattice is aligned to world coordinates, so neighboring chunks agree. Before sampling, the
+ * terrain's bounds over the chunk say whether it is certainly solid or certainly air, which skips
+ * the sampling entirely for most of a world.
+ *
+ * <p>The block rules need to know how far each block is from open space above and below, up to
+ * {@value BlockRules#EXPOSURE_CAP} blocks, and whether it touches fluid, so the terrain is worked
+ * out that far past the chunk's edges rather than read from neighboring chunks.
  */
-public class WorldGenerator {
+public final class WorldGenerator {
+
+    /** How far past the chunk the terrain is worked out vertically, for air distances. */
+    private static final int MARGIN_Y = BlockRules.EXPOSURE_CAP;
+
+    /** How far past the chunk the terrain is worked out horizontally, for touching fluid. */
+    private static final int MARGIN_XZ = 1;
+
+    /** The size of the region worked out along x and z. */
+    private static final int REGION_XZ = World.CHUNK_SIZE + 2 * MARGIN_XZ;
+
+    /** The size of the region worked out along y. */
+    private static final int REGION_Y = World.CHUNK_SIZE + 2 * MARGIN_Y;
+
+    /** Where in a biome cell its parameters are sampled: the middle. */
+    private static final double CELL_CENTER = Chunk.BIOME_CELL_SIZE / 2.0;
+
+    /** Counters for instrumentation. */
+    public static final class Stats {
+        /** Chunks generated. */
+        public final AtomicLong chunks = new AtomicLong();
+
+        /** Chunks whose terrain was certainly air, so nothing was sampled. */
+        public final AtomicLong skippedAir = new AtomicLong();
+
+        /** Chunks whose terrain was certainly solid, so nothing was sampled. */
+        public final AtomicLong skippedSolid = new AtomicLong();
+
+        /** Chunks entirely outside the world border. */
+        public final AtomicLong outsideBorder = new AtomicLong();
+
+        /** Terrain lattice samples taken. */
+        public final AtomicLong latticeSamples = new AtomicLong();
+    }
+
+    /** The world type. */
+    private final WorldType worldType;
+
+    /** Chooses biomes. */
+    private final BiomeSelector biomes;
+
+    /** Counters for instrumentation. */
+    private final Stats stats = new Stats();
+
+    /** The world type's biomes by ID, including the fallback. */
+    private final java.util.Map<String, Biome> biomesById = new java.util.HashMap<>();
 
     /**
-     * A scale parameter used for calculating the block height that the world height noise parameter
-     * value corresponds to. This value is chosen so that the total range of height values generated
-     * spans half the possible depth values. This way there is always room to dig under and build on
-     * top of the surface.
+     * Set up generation.
+     *
+     * @param worldType The world type, compiled with the world seed.
+     * @param seed The world seed.
      */
-    private static final int WORLD_HEIGHT_SCALE = World.WORLD_HEIGHT_TOTAL / 4;
-
-    private static final Map<String, BiomeParameters> biomes = new HashMap<>();
-    private static final Map<String, Byte> biomeEncoding = new HashMap<>();
-    private static final Map<String, BiomeDefinition> biomeDefinitions = new HashMap<>();
-
-    /**
-     * Convert from the height parameter to the actual world height in blocks. This serves as the
-     * starting point for the world height, but may be modified by various other world generation.
-     *
-     * <p>The height values generated span half the possible world depth values so there is always
-     * room to dig under and build on top of the surface.
-     *
-     * <p>The function is cubic, so there is a relatively flat region in the middle of the range,
-     * but steep extremes.
-     *
-     * @param height The height parameter, a float in the range [0, 1] inclusive.
-     * @return The corresponding height value, in the range [-256, 256].
-     */
-    private static int calculateHeight(final float height) {
-        final float base = (height * 2 - 1);
-        final float result = WORLD_HEIGHT_SCALE * base * base * base;
-        return Math.round(result);
+    public WorldGenerator(@NonNull WorldType worldType, long seed) {
+        this.worldType = worldType;
+        this.biomes = new BiomeSelector(worldType, seed);
+        biomesById.put(worldType.fallbackBiome().id(), worldType.fallbackBiome());
+        for (Biome biome : worldType.biomes()) {
+            biomesById.put(biome.id(), biome);
+        }
     }
 
     /**
-     * Compare two biomes based on a set of parameters.
+     * The world type.
      *
-     * @param first A map from biome name to parameters, for the first biome.
-     * @param second A map from biome name to parameters, for the second biome.
-     * @param target The parameters used to pick the biome.
-     * @return The value 0 if the values are equivalent; the value less than 0 if first is a better
-     *     match than the second; and a value greater than 0 if the first is a worse match than the
-     *     second.
+     * @return The world type.
      */
-    private static int compareBiomes(
-            @NonNull Map.Entry<String, BiomeParameters> first,
-            @NonNull Map.Entry<String, BiomeParameters> second,
-            @NonNull ParameterPack target) {
-
-        BiomeParameters firstBiome = first.getValue();
-        BiomeParameters secondBiome = second.getValue();
-        float distanceDifference = secondBiome.getDistance(target) - firstBiome.getDistance(target);
-        final float epsilon = 0.001f;
-        if (distanceDifference < -epsilon) {
-            return -1;
-        }
-        if (distanceDifference > epsilon) {
-            return 1;
-        }
-        // NOTE(ches) They are the same distance away, and may share a center point.
-        float rangeDifference = secondBiome.getTotalWidth() - firstBiome.getTotalWidth();
-        if (rangeDifference < -epsilon) {
-            return -1;
-        }
-        if (rangeDifference > epsilon) {
-            return 1;
-        }
-        return 0;
+    public WorldType getWorldType() {
+        return worldType;
     }
 
-    public static Chunk generateChunk(
-            final long seed, final int chunkCoordinateX, final int chunkCoordinateZ) {
-        var chunk = new Chunk();
+    /**
+     * Chooses biomes, for debug views.
+     *
+     * @return The selector.
+     */
+    public BiomeSelector getBiomes() {
+        return biomes;
+    }
 
-        for (int x = 0; x < World.CHUNK_WIDTH; ++x) {
-            for (int z = 0; z < World.CHUNK_WIDTH; ++z) {
-                final int actualX = chunkCoordinateX + x;
-                final int actualZ = chunkCoordinateZ + z;
-                var params =
-                        ParameterPack.generateParameters(
-                                RandomGen::generateSimplexNoise, seed, actualX, actualZ);
-                var biomeName = pickBiome(biomes, params, actualX, actualZ);
-                chunk.setBiome(x, z, biomeEncoding.get(biomeName));
+    /**
+     * Counters for instrumentation.
+     *
+     * @return The counters.
+     */
+    public Stats getStats() {
+        return stats;
+    }
 
-                final int height = calculateHeight(params.height());
+    /**
+     * Generate a chunk completely.
+     *
+     * @param pos The chunk.
+     * @return The chunk.
+     */
+    public Chunk generate(@NonNull ChunkPos pos) {
+        return generate(pos, Stage.BLOCK_RULES);
+    }
 
-                BiomeDefinition definition = biomeDefinitions.get(biomeName);
-
-                // Bottom to top
-                int currentLayer = 0;
-                for (int i = definition.layers().size() - 1; i >= 0; --i) {
-                    var layer = definition.layers().get(i);
-                    int proportionalExtraHeight =
-                            Math.round(
-                                    layer.extraProportion()
-                                            * (height - definition.totalMinHeight()));
-                    int actualHeight = layer.min() + proportionalExtraHeight;
-                    for (int j = 0; j < actualHeight; ++j) {
-                        String blockName = layer.block();
-                        chunk.setBlock(x, currentLayer, z, new Block(blockName, null));
-                        ++currentLayer;
-                    }
-                }
-            }
+    /**
+     * Generate a chunk up to a stage.
+     *
+     * @param pos The chunk.
+     * @param until The last stage to run.
+     * @return The chunk.
+     * @throws IllegalArgumentException If the stage isn't built yet.
+     */
+    public Chunk generate(@NonNull ChunkPos pos, @NonNull Stage until) {
+        if (!until.isBuilt()) {
+            throw new IllegalArgumentException("Stage " + until + " is not built yet");
         }
+        stats.chunks.incrementAndGet();
+        final EvalCache cache = new EvalCache();
+        Chunk chunk = new Chunk(World.AIR, worldType.fallbackBiome().id());
+        if (until.includes(Stage.BIOMES)) {
+            chooseBiomes(chunk, pos, cache);
+        }
+        if (!until.includes(Stage.TERRAIN)) {
+            return chunk;
+        }
+        final boolean[] solid = terrain(pos, cache);
+        final Block[] fluid =
+                until.includes(Stage.FLUIDS) ? fluids(pos, solid, cache) : new Block[0];
+        fill(chunk, pos, solid, fluid, until.includes(Stage.BLOCK_RULES), cache);
         return chunk;
     }
 
     /**
-     * Select a biome from a list given a set of biome parameters and coordinates.
+     * Choose the biome of each cell.
      *
-     * @param biomes The list of biomes we are selecting from.
-     * @param parameters The biome parameters that have been generated to pick a biome with.
-     * @param x The x coordinate that we want a biome for.
-     * @param z The z coordinate that we want a biome for.
-     * @return The name of the biome we have selected.
+     * @param chunk The chunk.
+     * @param pos Where it is.
+     * @param cache The chunk's cache.
      */
-    public static String pickBiome(
-            @NonNull Map<String, BiomeParameters> biomes,
-            final @NonNull ParameterPack parameters,
-            int x,
-            int z) {
-
-        List<Map.Entry<String, BiomeParameters>> choices =
-                biomes.entrySet().stream()
-                        .filter(entry -> entry.getValue().contains(parameters))
-                        .sorted((e1, e2) -> compareBiomes(e1, e2, parameters))
-                        .collect(Collectors.toCollection(ArrayList::new));
-
-        if (choices.isEmpty()) {
-            var fallbacks =
-                    biomes.entrySet().stream()
-                            .sorted((e1, e2) -> compareBiomes(e1, e2, parameters))
-                            .collect(Collectors.toCollection(ArrayList::new));
-            pruneWorseChoices(fallbacks, parameters);
-            if (fallbacks.size() == 1) {
-                return fallbacks.get(0).getKey();
+    private void chooseBiomes(@NonNull Chunk chunk, @NonNull ChunkPos pos, EvalCache cache) {
+        for (int cy = 0; cy < Chunk.BIOME_CELLS; ++cy) {
+            for (int cz = 0; cz < Chunk.BIOME_CELLS; ++cz) {
+                for (int cx = 0; cx < Chunk.BIOME_CELLS; ++cx) {
+                    final long x = pos.blockX() + (long) cx * Chunk.BIOME_CELL_SIZE;
+                    final long y = pos.blockY() + (long) cy * Chunk.BIOME_CELL_SIZE;
+                    final long z = pos.blockZ() + (long) cz * Chunk.BIOME_CELL_SIZE;
+                    final double[] values =
+                            biomes.parameters(
+                                    x + CELL_CENTER, y + CELL_CENTER, z + CELL_CENTER, cache);
+                    final Biome biome =
+                            biomes.choose(
+                                    values,
+                                    Math.floorDiv(x, Chunk.BIOME_CELL_SIZE),
+                                    Math.floorDiv(y, Chunk.BIOME_CELL_SIZE),
+                                    Math.floorDiv(z, Chunk.BIOME_CELL_SIZE));
+                    chunk.setBiomeCell(cx, cy, cz, biome.id());
+                }
             }
-            var names = fallbacks.stream().map(Map.Entry::getKey).toList();
-            return pickBiomeBasedOnName(names, x, z);
         }
-        if (choices.size() == 1) {
-            return choices.get(0).getKey();
-        }
-
-        pruneWorseChoices(choices, parameters);
-
-        if (choices.size() == 1) {
-            return choices.get(0).getKey();
-        }
-
-        var names = choices.stream().map(Map.Entry::getKey).toList();
-        return pickBiomeBasedOnName(names, x, z);
     }
 
     /**
-     * Pick a biome from a list of valid choices based on the unique names and coordinates.
+     * The index of a position in the region worked out around a chunk.
      *
-     * @param choices The list of biome names that are all equivalently good choices.
-     * @param x The x coordinate that we want a biome for.
-     * @param z The z coordinate that we want a biome for.
-     * @return The name of the biome we have selected.
+     * @param rx The x offset from the region's start.
+     * @param ry The y offset from the region's start.
+     * @param rz The z offset from the region's start.
+     * @return The index.
      */
-    private static String pickBiomeBasedOnName(@NonNull final List<String> choices, int x, int z) {
-        var orderedChoices =
-                choices.stream().sorted(Comparator.comparingInt(String::hashCode)).toList();
-        var selection = Arrays.hashCode(new int[] {x, z}) % orderedChoices.size();
-        return orderedChoices.get(selection);
+    private static int regionIndex(int rx, int ry, int rz) {
+        return rx + REGION_XZ * (rz + REGION_XZ * ry);
     }
 
     /**
-     * Remove any entries from the list that are worse matches than the first, presumably best,
-     * choice.
+     * Which positions are solid, over the chunk and its margins.
      *
-     * @param choices The choices, sorted by how close their centers are to the parameters and their
-     *     width. The best matches should be first.
-     * @param parameters The parameters used to generate the biome.
+     * @param pos The chunk.
+     * @param cache The chunk's cache.
+     * @return Solid flags, indexed by {@link #regionIndex}.
      */
-    private static void pruneWorseChoices(
-            @NonNull List<Map.Entry<String, BiomeParameters>> choices,
-            final @NonNull ParameterPack parameters) {
-        var firstItem = choices.get(0).getValue();
-        var distance = firstItem.getDistance(parameters);
-        var width = firstItem.getTotalWidth();
+    private boolean[] terrain(@NonNull ChunkPos pos, EvalCache cache) {
+        final long startX = pos.blockX() - MARGIN_XZ;
+        final long startY = pos.blockY() - MARGIN_Y;
+        final long startZ = pos.blockZ() - MARGIN_XZ;
+        boolean[] solid = new boolean[REGION_XZ * REGION_Y * REGION_XZ];
+        final Box region =
+                new Box(
+                        startX,
+                        startY,
+                        startZ,
+                        startX + REGION_XZ - 1,
+                        startY + REGION_Y - 1,
+                        startZ + REGION_XZ - 1);
+        final Box border = worldType.border();
+        if (region.maxX() < border.minX()
+                || region.minX() > border.maxX()
+                || region.maxY() < border.minY()
+                || region.minY() > border.maxY()
+                || region.maxZ() < border.minZ()
+                || region.minZ() > border.maxZ()) {
+            stats.outsideBorder.incrementAndGet();
+            return solid;
+        }
 
-        choices.removeIf(
-                entry ->
-                        entry.getValue().getDistance(parameters) > distance
-                                || entry.getValue().getTotalWidth() > width);
+        final int[] cell = worldType.interpolation();
+        // Interpolated values blend lattice samples up to a cell outside the region
+        final Interval range = worldType.density().bounds(region.expand(cell[0], cell[1], cell[2]));
+        final boolean wholeInside =
+                worldType.inside((long) region.minX(), (long) region.minY(), (long) region.minZ())
+                        && worldType.inside(
+                                (long) region.maxX(), (long) region.maxY(), (long) region.maxZ());
+        if (range.max() <= 0) {
+            stats.skippedAir.incrementAndGet();
+            return solid;
+        }
+        if (range.min() > 0 && wholeInside) {
+            stats.skippedSolid.incrementAndGet();
+            java.util.Arrays.fill(solid, true);
+            return solid;
+        }
+
+        final Lattice lattice = new Lattice(region, cell);
+        final DensityNode density = worldType.density();
+        double[] samples = new double[lattice.count()];
+        for (int ly = 0; ly < lattice.sizes[1]; ++ly) {
+            for (int lz = 0; lz < lattice.sizes[2]; ++lz) {
+                for (int lx = 0; lx < lattice.sizes[0]; ++lx) {
+                    samples[lattice.index(lx, ly, lz)] =
+                            density.value(
+                                    lattice.coordinate(0, lx),
+                                    lattice.coordinate(1, ly),
+                                    lattice.coordinate(2, lz),
+                                    cache);
+                }
+            }
+        }
+        stats.latticeSamples.addAndGet(samples.length);
+
+        for (int ry = 0; ry < REGION_Y; ++ry) {
+            for (int rz = 0; rz < REGION_XZ; ++rz) {
+                for (int rx = 0; rx < REGION_XZ; ++rx) {
+                    final long x = startX + rx;
+                    final long y = startY + ry;
+                    final long z = startZ + rz;
+                    solid[regionIndex(rx, ry, rz)] =
+                            worldType.inside(x, y, z) && lattice.interpolate(samples, x, y, z) > 0;
+                }
+            }
+        }
+        return solid;
     }
 
-    /** Private constructor so that this class is not instantiated. */
-    private WorldGenerator() {
-        throw new UnsupportedOperationException("This utility class should not be instantiated");
+    /**
+     * The coarse lattice terrain is sampled on, covering a region, aligned to world coordinates.
+     */
+    private static final class Lattice {
+        /** The first lattice coordinate along each axis. */
+        private final long[] starts = new long[DensityNode.AXIS_COUNT];
+
+        /** The cell size along each axis. */
+        private final int[] cells;
+
+        /** How many lattice points along each axis. */
+        private final int[] sizes = new int[DensityNode.AXIS_COUNT];
+
+        /**
+         * Cover a region.
+         *
+         * @param region The region.
+         * @param cells The cell size along each axis.
+         */
+        Lattice(@NonNull Box region, int @NonNull [] cells) {
+            this.cells = cells;
+            final double[] mins = {region.minX(), region.minY(), region.minZ()};
+            final double[] maxes = {region.maxX(), region.maxY(), region.maxZ()};
+            for (int axis = 0; axis < DensityNode.AXIS_COUNT; ++axis) {
+                starts[axis] = Math.floorDiv((long) mins[axis], cells[axis]) * cells[axis];
+                final long end = -Math.floorDiv(-(long) maxes[axis], cells[axis]) * cells[axis];
+                sizes[axis] = (int) ((end - starts[axis]) / cells[axis]) + 1;
+            }
+        }
+
+        /**
+         * How many points there are.
+         *
+         * @return The count.
+         */
+        int count() {
+            return sizes[0] * sizes[1] * sizes[2];
+        }
+
+        /**
+         * A point's index in the sample array.
+         *
+         * @param lx The point along x.
+         * @param ly The point along y.
+         * @param lz The point along z.
+         * @return The index.
+         */
+        int index(int lx, int ly, int lz) {
+            return lx + sizes[0] * (lz + sizes[2] * ly);
+        }
+
+        /**
+         * A point's world coordinate.
+         *
+         * @param axis The axis index.
+         * @param point The point along it.
+         * @return The coordinate.
+         */
+        double coordinate(int axis, int point) {
+            return starts[axis] + (long) point * cells[axis];
+        }
+
+        /**
+         * The interpolated terrain at a block.
+         *
+         * @param samples The lattice samples.
+         * @param x The block's x.
+         * @param y The block's y.
+         * @param z The block's z.
+         * @return The density.
+         */
+        double interpolate(double @NonNull [] samples, long x, long y, long z) {
+            final long[] p = {x, y, z};
+            int[] base = new int[DensityNode.AXIS_COUNT];
+            double[] t = new double[DensityNode.AXIS_COUNT];
+            for (int axis = 0; axis < DensityNode.AXIS_COUNT; ++axis) {
+                final long offset = p[axis] - starts[axis];
+                base[axis] = (int) (offset / cells[axis]);
+                t[axis] = (double) (offset % cells[axis]) / cells[axis];
+                if (base[axis] >= sizes[axis] - 1) {
+                    base[axis] = sizes[axis] - 2;
+                    t[axis] = 1;
+                }
+            }
+            double result = 0;
+            for (int corner = 0; corner < 1 << DensityNode.AXIS_COUNT; ++corner) {
+                double weight = 1;
+                int[] at = new int[DensityNode.AXIS_COUNT];
+                for (int axis = 0; axis < DensityNode.AXIS_COUNT; ++axis) {
+                    final boolean far = (corner >> axis & 1) != 0;
+                    at[axis] = base[axis] + (far ? 1 : 0);
+                    weight *= far ? t[axis] : 1 - t[axis];
+                }
+                if (weight != 0) {
+                    result += weight * samples[index(at[0], at[1], at[2])];
+                }
+            }
+            return result;
+        }
+    }
+
+    /**
+     * Which open positions hold fluid: the chunk and one block around it.
+     *
+     * @param pos The chunk.
+     * @param solid The solid flags.
+     * @param cache The chunk's cache.
+     * @return The fluid at each region position, null for none, indexed by {@link #regionIndex};
+     *     only filled around the chunk.
+     */
+    private Block[] fluids(@NonNull ChunkPos pos, boolean @NonNull [] solid, EvalCache cache) {
+        Block[] fluid = new Block[solid.length];
+        final long startX = pos.blockX() - MARGIN_XZ;
+        final long startY = pos.blockY() - MARGIN_Y;
+        final long startZ = pos.blockZ() - MARGIN_XZ;
+        final Fluids fluids = worldType.fluids();
+        final Interval level =
+                fluids.levelBounds(
+                        new Box(
+                                startX,
+                                pos.blockY() - 1,
+                                startZ,
+                                startX + REGION_XZ - 1,
+                                pos.blockY() + World.CHUNK_SIZE,
+                                startZ + REGION_XZ - 1));
+        // Fluid fills below the level, so a chunk certainly above it has none
+        if (level == null || level.max() <= pos.blockY() - 1) {
+            return fluid;
+        }
+        for (int ry = MARGIN_Y - 1; ry <= MARGIN_Y + World.CHUNK_SIZE; ++ry) {
+            for (int rz = 0; rz < REGION_XZ; ++rz) {
+                for (int rx = 0; rx < REGION_XZ; ++rx) {
+                    final int index = regionIndex(rx, ry, rz);
+                    final long x = startX + rx;
+                    final long y = startY + ry;
+                    final long z = startZ + rz;
+                    if (!solid[index] && worldType.inside(x, y, z)) {
+                        fluid[index] = fluids.fluidAt(x, y, z, cache);
+                    }
+                }
+            }
+        }
+        return fluid;
+    }
+
+    /**
+     * Write the chunk's blocks.
+     *
+     * @param chunk The chunk.
+     * @param pos Where it is.
+     * @param solid The solid flags.
+     * @param fluid The fluid at each position, or empty if fluids aren't generated.
+     * @param rules Whether to choose solid blocks by block rules.
+     * @param cache The chunk's cache.
+     */
+    private void fill(
+            @NonNull Chunk chunk,
+            @NonNull ChunkPos pos,
+            boolean @NonNull [] solid,
+            Block @NonNull [] fluid,
+            boolean rules,
+            EvalCache cache) {
+        for (int y = 0; y < World.CHUNK_SIZE; ++y) {
+            for (int z = 0; z < World.CHUNK_SIZE; ++z) {
+                for (int x = 0; x < World.CHUNK_SIZE; ++x) {
+                    final int rx = x + MARGIN_XZ;
+                    final int ry = y + MARGIN_Y;
+                    final int rz = z + MARGIN_XZ;
+                    final int index = regionIndex(rx, ry, rz);
+                    if (!solid[index]) {
+                        if (fluid.length > 0 && fluid[index] != null) {
+                            chunk.setBlock(x, y, z, fluid[index]);
+                        }
+                        continue;
+                    }
+                    Block block = worldType.defaultBlock();
+                    if (rules) {
+                        final String biomeId = chunk.getBiome(x, y, z);
+                        final Biome biome = biomesById.get(biomeId);
+                        if (biome != null && biome.blockRules() != null) {
+                            final BlockRules.Context context =
+                                    new BlockRules.Context(
+                                            pos.blockX() + x,
+                                            pos.blockY() + y,
+                                            pos.blockZ() + z,
+                                            distanceToOpen(solid, rx, ry, rz, 1),
+                                            distanceToOpen(solid, rx, ry, rz, -1),
+                                            biomeId,
+                                            touchesFluid(fluid, rx, ry, rz),
+                                            cache);
+                            final Block chosen = biome.blockRules().choose(context);
+                            if (chosen != null) {
+                                block = chosen;
+                            }
+                        }
+                    }
+                    chunk.setBlock(x, y, z, block);
+                }
+            }
+        }
+    }
+
+    /**
+     * How many blocks up or down to the first open position, capped.
+     *
+     * @param solid The solid flags.
+     * @param rx The block's x in the region.
+     * @param ry The block's y in the region.
+     * @param rz The block's z in the region.
+     * @param step 1 to look up, -1 to look down.
+     * @return The distance, from 1 for open right next to it to {@value BlockRules#EXPOSURE_CAP}.
+     */
+    private static int distanceToOpen(boolean[] solid, int rx, int ry, int rz, int step) {
+        for (int distance = 1; distance < BlockRules.EXPOSURE_CAP; ++distance) {
+            if (!solid[regionIndex(rx, ry + step * distance, rz)]) {
+                return distance;
+            }
+        }
+        return BlockRules.EXPOSURE_CAP;
+    }
+
+    /**
+     * Whether any face of a block touches fluid.
+     *
+     * @param fluid The fluid at each position, or empty.
+     * @param rx The block's x in the region.
+     * @param ry The block's y in the region.
+     * @param rz The block's z in the region.
+     * @return True if a neighbor is fluid.
+     */
+    private static boolean touchesFluid(Block[] fluid, int rx, int ry, int rz) {
+        if (fluid.length == 0) {
+            return false;
+        }
+        return fluid[regionIndex(rx + 1, ry, rz)] != null
+                || fluid[regionIndex(rx - 1, ry, rz)] != null
+                || fluid[regionIndex(rx, ry + 1, rz)] != null
+                || fluid[regionIndex(rx, ry - 1, rz)] != null
+                || fluid[regionIndex(rx, ry, rz + 1)] != null
+                || fluid[regionIndex(rx, ry, rz - 1)] != null;
     }
 }

@@ -1,0 +1,2 @@
+/* Rolling hills: 2D, so it is cached per column */
+{type:"simplex", dimensions:2, wavelength:48.0, fractal:{mode:"fbm", octaves:3}}

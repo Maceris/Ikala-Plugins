@@ -2,8 +2,10 @@ package com.ikalagaming.factory;
 
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.factory.networking.RequestRegistry;
+import com.ikalagaming.factory.world.gen.debug.WorldgenTool;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
+import com.ikalagaming.plugins.PluginManager;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -20,6 +22,9 @@ import java.util.*;
 public class FactoryPlugin extends Plugin {
     /** The name of the plugin in Java for convenience, should match the name in plugin.yml. */
     public static final String PLUGIN_NAME = "Factory-Core";
+
+    /** The console command for the world generation tools. */
+    public static final String WORLDGEN_COMMAND = "worldgen";
 
     /**
      * The resource bundle for the plugin.
@@ -61,6 +66,21 @@ public class FactoryPlugin extends Plugin {
             return false;
         }
 
+        return true;
+    }
+
+    @Override
+    public boolean onEnable() {
+        // The world generation tools, for checking and looking at data while the game runs
+        PluginManager.getInstance()
+                .registerCommand(
+                        WORLDGEN_COMMAND, args -> WorldgenTool.run(args, System.out), PLUGIN_NAME);
+        return true;
+    }
+
+    @Override
+    public boolean onDisable() {
+        PluginManager.getInstance().unregisterCommand(WORLDGEN_COMMAND);
         return true;
     }
 

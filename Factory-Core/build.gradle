@@ -64,6 +64,7 @@ dependencies {
 
 	// Testing
 	testImplementation project(':Ikala-Core')
+	testImplementation project(':Random')
 	testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
 	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 	testImplementation "org.mockito:mockito-core:${mockitoVersion}"
@@ -93,6 +94,8 @@ tasks.register('delombok', DelombokTask) {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	// ./gradlew test -Dworldgen.updateGolden=true deliberately rewrites the world generation golden hashes
+	systemProperty 'worldgen.updateGolden', System.getProperty('worldgen.updateGolden', 'false')
 	jvmArgs += "-javaagent:${configurations.mockitoAgent.asPath}"
 	testLogging {
 		exceptionFormat = 'full'
@@ -150,4 +153,13 @@ spotless {
 		importOrder('\\#', 'com.ikalagaming', '', 'java|javax')
 		formatAnnotations()
 	}
+}
+
+// The headless world generation tools, the same code the game generates with:
+// ./gradlew worldgen --args="check <dataFolder>". Relative paths are from this project's folder.
+tasks.register('worldgen', JavaExec) {
+	description = 'Runs the world generation tools (check, render, hash, trace, biome, bounds)'
+	group = 'application'
+	classpath = sourceSets.main.runtimeClasspath + configurations.compileClasspath
+	mainClass = 'com.ikalagaming.factory.world.gen.debug.WorldgenTool'
 }

@@ -1,0 +1,21 @@
+/* Everything else in the catalogue, so the golden hashes cover every node type */
+{type:"smooth_max", k:2.0, args:[N;
+  {type:"box", center:[D;8.0,-20.0,8.0], half_size:[D;6.0,4.0,6.0], rounding:1.0},
+  {type:"cylinder", center:[D;-24.0,-10.0,0.0], axis:"z", radius:5.0, half_height:20.0},
+  {type:"translate", offset:[D;3.0,0.0,-2.0], arg:
+    {type:"rotate", axis:"y", degrees:30.0, arg:
+      {type:"repeat", period:[D;32.0,0.0,32.0], arg:
+        {type:"mirror", axes:[T;"x"], arg:
+          {type:"sphere", center:[D;8.0,-30.0,8.0], radius:5.0}}}}},
+  {type:"step", threshold:0.5, below:-1.0, above:1.0, arg:
+    {type:"scale", factor:[D;2.0,1.0,2.0], arg:{type:"noise", noise:"test:dunes"}}},
+  {type:"smooth_min", k:1.0, args:[N;
+    {type:"remap", from:[D;-1.0,1.0], to:[D;-3.0,1.0], arg:
+      {type:"warp", amplitude:4.0,
+       by:[N;{type:"noise", noise:"test:hills"}, {type:"constant", value:0.0}, {type:"noise", noise:"test:hills", salt:"test:warp_z"}],
+       arg:{type:"quantize", step:[D;1.0,4.0,1.0], arg:{type:"noise", noise:"test:caves"}}}},
+    {type:"lerp", t:{type:"range_mask", min:-40.0, max:-20.0, falloff:8.0, arg:{type:"axis", axis:"y"}},
+     a:{type:"constant", value:-1.0},
+     b:{type:"clamp", min:-1.0, max:1.0, arg:
+       {type:"interpolated", cell:[D;8.0,8.0,8.0], arg:
+         {type:"add", args:[N;{type:"square", arg:{type:"noise", noise:"test:caves"}}, {type:"cube", arg:{type:"noise", noise:"test:hills"}}, {type:"constant", value:-0.3}]}}}}]}]}

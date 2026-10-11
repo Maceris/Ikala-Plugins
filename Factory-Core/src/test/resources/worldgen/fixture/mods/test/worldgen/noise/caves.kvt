@@ -1,0 +1,2 @@
+/* Squashed 3D noise for spaghetti caves */
+{type:"simplex", dimensions:3, wavelength:[D;24.0,16.0,24.0], fractal:{mode:"fbm", octaves:2, lacunarity:2.0, gain:0.5}}

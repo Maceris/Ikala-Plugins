@@ -1,0 +1,6 @@
+{rules:[N;
+  {if:{type:"fluid", adjacent:true}, then:{block:"test:sand"}},
+  {if:{type:"air_above", max:1}, then:{block:"test:grass"}},
+  {if:{type:"air_above", max:4}, then:{block:"test:dirt"}},
+  {if:{type:"air_below", max:1}, then:{block:"test:moss"}},
+  {then:{rules:"test:rocky"}}]}

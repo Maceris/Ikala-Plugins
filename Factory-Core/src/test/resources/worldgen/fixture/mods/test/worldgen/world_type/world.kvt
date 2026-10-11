@@ -1,0 +1,8 @@
+{border:{min:[I;-2000000000,-4096,-2000000000], max:[I;2000000007,4096,2000000007], kill_distance:1024},
+ density:"test:terrain",
+ interpolation:[I;4,8,4],
+ default_block:"test:stone",
+ parameters:[T;"test:temperature","test:humidity","test:enclosure"],
+ biomes:[T;"test:plains","test:desert","test:cavern"],
+ fallback_biome:"test:plains",
+ fluids:"test:water"}

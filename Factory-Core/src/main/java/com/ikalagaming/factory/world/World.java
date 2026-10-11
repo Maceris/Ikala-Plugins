@@ -5,25 +5,26 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * Tracks the state of the world.
  *
+ * <p>The world is made of cubic chunks, {@value #CHUNK_SIZE} blocks on every side, and y is just
+ * another coordinate: there is no height limit, floor or surface in code. What exists at any height
+ * comes from the world type's generation data, inside its world border.
+ *
  * @author Ches Burks
  */
 @Slf4j
 public class World {
-    /** The number of blocks per side of a chunk. */
-    public static final int CHUNK_WIDTH = 16;
+    /** The number of blocks along each side of a chunk. */
+    public static final int CHUNK_SIZE = 16;
 
-    /**
-     * The minimum y level of the world. Blocks can exist on this level, but nothing can be below
-     * it.
-     */
-    public static final int WORLD_HEIGHT_MIN = -512;
+    /** How many bits a block coordinate shifts by to give its chunk coordinate. */
+    public static final int CHUNK_SHIFT = Integer.numberOfTrailingZeros(CHUNK_SIZE);
 
-    /**
-     * The maximum y level of the world. Blocks can exist on this level, but nothing can be above
-     * it.
-     */
-    public static final int WORLD_HEIGHT_MAX = 512;
+    /** The number of blocks in a chunk. */
+    public static final int CHUNK_VOLUME = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
 
-    /** The total height of the world in blocks. */
-    public static final int WORLD_HEIGHT_TOTAL = WORLD_HEIGHT_MAX - WORLD_HEIGHT_MIN;
+    /** The name of empty space, which the engine defines rather than any mod. */
+    public static final String AIR_NAME = "factory:air";
+
+    /** Empty space. */
+    public static final Block AIR = new Block(AIR_NAME, null);
 }

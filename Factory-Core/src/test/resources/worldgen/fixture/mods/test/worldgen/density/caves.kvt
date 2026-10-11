@@ -1,0 +1,8 @@
+/* Positive except inside thin tubes where two noise fields are both near zero */
+{type:"mul", args:[N;
+  {type:"add", args:[N;
+    {type:"max", args:[N;
+      {type:"abs", arg:{type:"noise", noise:"test:caves"}},
+      {type:"abs", arg:{type:"noise", noise:"test:caves", salt:"test:caves_b"}}]},
+    {type:"constant", value:-0.08}]},
+  {type:"constant", value:40.0}]}

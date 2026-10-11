@@ -1,0 +1,5 @@
+/* The surface: a height from the hills, minus y */
+{type:"add", args:[N;
+  {type:"spline", interp:"cubic", arg:{type:"noise", noise:"test:hills"},
+   points:[N;{x:-1.0, y:-8.0}, {x:0.0, y:4.0}, {x:1.0, y:24.0}]},
+  {type:"neg", arg:{type:"axis", axis:"y"}}]}
