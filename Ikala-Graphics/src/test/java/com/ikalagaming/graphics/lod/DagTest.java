@@ -184,7 +184,7 @@ class DagTest {
      * @param dag The DAG.
      * @param columns Columns of sections it covers along x and z.
      */
-    private static void assertCrackFree(LodDag dag, int columns) {
+    static void assertCrackFree(LodDag dag, int columns) {
         final double size = columns * SECTION;
         final CrackCheck check = new CrackCheck(dag);
         Random random = new Random(99);

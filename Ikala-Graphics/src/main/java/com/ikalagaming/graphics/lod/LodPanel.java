@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.lod;
 
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.Sections;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.IkBoolean;
 import com.ikalagaming.graphics.gui.data.IkInt;
@@ -46,6 +47,9 @@ public final class LodPanel implements AutoCloseable {
     private static final String[] MODES = {
         "Materials", "Clusters", "Groups", "Levels", "Mismatch", "Visibility"
     };
+
+    /** Coordinates in a position. */
+    private static final int AXES = 3;
 
     /** The plugin's graphics context. */
     private final GraphicsContext graphics;
@@ -122,6 +126,26 @@ public final class LodPanel implements AutoCloseable {
             @NonNull String name,
             @NonNull Supplier<List<LodMesh>> inputs,
             @NonNull IntFunction<String> materialName) {
+        this(graphics, name, inputs, materialName, false);
+    }
+
+    /**
+     * Start building a DAG in the background, as one DAG or in region cells.
+     *
+     * @param graphics The plugin's graphics context.
+     * @param name What is being built, for the panel and the view's models.
+     * @param inputs The meshes, fetched on the build thread. For cells, each must be one section,
+     *     with its section's corner as its origin.
+     * @param materialName A name for each material index, for the fidelity report.
+     * @param cells Whether to build in region cells (see {@link LodStore}), which keeps no lineage
+     *     to measure fidelity with.
+     */
+    public LodPanel(
+            @NonNull GraphicsContext graphics,
+            @NonNull String name,
+            @NonNull Supplier<List<LodMesh>> inputs,
+            @NonNull IntFunction<String> materialName,
+            boolean cells) {
         this.graphics = graphics;
         this.name = name;
         Thread builder =
@@ -130,7 +154,10 @@ public final class LodPanel implements AutoCloseable {
                             try {
                                 final List<LodMesh> meshes = inputs.get();
                                 final LodDag dag =
-                                        DagBuilder.build(meshes, DagBuilder.Options.defaults());
+                                        cells
+                                                ? inCells(meshes)
+                                                : DagBuilder.build(
+                                                        meshes, DagBuilder.Options.defaults());
                                 buildMillis = (System.nanoTime() - started) / NANOS_PER_MILLI;
                                 levels = LodTables.levels(dag);
                                 log.info(
@@ -144,6 +171,16 @@ public final class LodPanel implements AutoCloseable {
                                                 view = new LodView(graphics, name, dag);
                                             }
                                         });
+                                if (cells) {
+                                    fidelityTables =
+                                            List.of(
+                                                    new LodTables.Table(
+                                                            "Fidelity isn't measured in region"
+                                                                    + " cells: they keep no lineage.",
+                                                            new String[] {""},
+                                                            List.of()));
+                                    return;
+                                }
                                 final long measuring = System.nanoTime();
                                 final Fidelity fidelity = Fidelity.measure(dag);
                                 fidelityTables = LodTables.fidelity(fidelity, materialName);
@@ -167,6 +204,33 @@ public final class LodPanel implements AutoCloseable {
                         "LOD panel " + name);
         builder.setDaemon(true);
         builder.start();
+    }
+
+    /**
+     * Build sections in region cells, and flatten the cells into one DAG.
+     *
+     * @param sections The section meshes, each with its section's corner as its origin.
+     * @return The flattened DAG.
+     */
+    private static LodDag inCells(@NonNull List<LodMesh> sections) {
+        final LodStore store =
+                new LodStore(
+                        new double[AXES],
+                        Sections.SECTION_SIZE,
+                        LodStore.DEFAULT_CELL_SECTIONS,
+                        LodStore.DEFAULT_STOP_AT,
+                        DagBuilder.Options.defaults());
+        for (LodMesh mesh : sections) {
+            final double[] origin = mesh.getOrigin();
+            store.put(
+                    new LodStore.SectionPos(
+                            (int) Math.floor(origin[0] / Sections.SECTION_SIZE),
+                            (int) Math.floor(origin[1] / Sections.SECTION_SIZE),
+                            (int) Math.floor(origin[2] / Sections.SECTION_SIZE)),
+                    mesh);
+        }
+        store.rebuild();
+        return store.snapshot();
     }
 
     /** Draw the panel and keep the view up to date. Call once a frame, inside an IkGui window. */

@@ -64,7 +64,7 @@ public final class LodDag {
      * One group: clusters merged, simplified and split.
      *
      * @param id Its index.
-     * @param level The level of its children.
+     * @param level The highest level of its children; its clusters are one above it.
      * @param children The clusters it was made from.
      * @param outputs The clusters it made.
      * @param error Its saturated error.

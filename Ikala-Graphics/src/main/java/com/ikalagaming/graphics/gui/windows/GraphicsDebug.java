@@ -110,6 +110,9 @@ public class GraphicsDebug extends GuiWindow {
     /** How many columns of sections the level of detail world has along each side. */
     private final int[] lodColumns = {4};
 
+    /** Whether the level of detail world is built in region cells. */
+    private final IkBoolean lodCells = new IkBoolean(false);
+
     /** The most columns the level of detail slider offers. */
     private static final int MAX_LOD_COLUMNS = 12;
 
@@ -712,6 +715,7 @@ public class GraphicsDebug extends GuiWindow {
                         + " from the observer. Freeze the observer to fly out and look at the cut.");
         IkGui.combo("Recipe##lod", lodRecipe, RECIPE_NAMES);
         IkGui.sliderInt("Columns##lod", lodColumns, 1, MAX_LOD_COLUMNS);
+        IkGui.checkbox("Region cells##lod", lodCells);
         if (IkGui.button("Build LOD")) {
             startLod(scene);
         }
@@ -780,7 +784,8 @@ public class GraphicsDebug extends GuiWindow {
                         GraphicsManager.forPlugin(GraphicsPlugin.PLUGIN_NAME),
                         recipe.name().toLowerCase() + " " + columns + "x" + columns,
                         () -> SyntheticSections.bake(recipe, LOD_SEED, columns, sources, materials),
-                        material -> materialNames.getOrDefault(material, "material " + material));
+                        material -> materialNames.getOrDefault(material, "material " + material),
+                        lodCells.get());
     }
 
     /**

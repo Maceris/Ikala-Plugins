@@ -99,6 +99,7 @@ public final class DagBuilder {
      * What one group's build made, before ids are assigned.
      *
      * @param children The clusters it was made from.
+     * @param level The highest level of its children.
      * @param corners Each output cluster's corners.
      * @param materials Each output cluster's materials.
      * @param visibility Each output cluster's visibility.
@@ -121,6 +122,7 @@ public final class DagBuilder {
      */
     private record Built(
             int[] children,
+            int level,
             List<float[]> corners,
             List<int[]> materials,
             List<float[]> visibility,
@@ -151,6 +153,18 @@ public final class DagBuilder {
 
     /** The leaves' average edge length, which virtual edge radii scale from. */
     private double leafEdge;
+
+    /** Stop once this many clusters or fewer are left. */
+    private int stopAt = 1;
+
+    /**
+     * The minimum corner of the region cell being built, relative to the DAG's origin, or null when
+     * not building a cell.
+     */
+    private double[] cellMin;
+
+    /** The maximum corner of the region cell being built, or null. */
+    private double[] cellMax;
 
     /**
      * Set up a build.
@@ -183,6 +197,105 @@ public final class DagBuilder {
                 Executors.newFixedThreadPool(options.threads(), daemonThreads("LOD build"));
         try {
             builder.leaves(inputs, pool);
+            builder.levels(pool);
+        } finally {
+            pool.shutdownNow();
+        }
+        return builder.dag;
+    }
+
+    /**
+     * Build the DAG of one region cell from its sections. The cell's boundary planes are locked,
+     * with the ring of vertices beside them (see {@link #lockCellBoundary}), so that whatever is
+     * built on the other side of a plane meets this cell exactly at every level. Building stops
+     * once few clusters are left, for the parent cell to take further.
+     *
+     * @param sections The cell's section meshes, each with its own origin.
+     * @param origin Where the DAG's positions are measured from.
+     * @param cellMin The cell's minimum corner, relative to the origin.
+     * @param cellMax The cell's maximum corner, relative to the origin.
+     * @param stopAt Stop once this many clusters or fewer are left.
+     * @param options How to build.
+     * @return The DAG.
+     * @throws IllegalArgumentException If there is nothing to build from.
+     */
+    public static LodDag buildCell(
+            @NonNull List<LodMesh> sections,
+            double @NonNull [] origin,
+            double @NonNull [] cellMin,
+            double @NonNull [] cellMax,
+            int stopAt,
+            @NonNull Options options) {
+        if (sections.isEmpty()) {
+            throw new IllegalArgumentException("A cell needs at least one section");
+        }
+        DagBuilder builder = new DagBuilder(origin.clone(), options);
+        builder.cellMin = cellMin.clone();
+        builder.cellMax = cellMax.clone();
+        builder.stopAt = stopAt;
+        ExecutorService pool =
+                Executors.newFixedThreadPool(options.threads(), daemonThreads("LOD build"));
+        try {
+            builder.leaves(sections, pool);
+            builder.levels(pool);
+        } finally {
+            pool.shutdownNow();
+        }
+        return builder.dag;
+    }
+
+    /**
+     * Build the DAG of a parent region cell from its children's top clusters, which become its
+     * first clusters, keeping their levels, errors and spheres. Only the parent's own boundary is
+     * locked, so the planes between its children simplify from here on.
+     *
+     * @param tops The children's top clusters, relative to the origin; their ids are ignored.
+     * @param leafEdge The leaves' average edge length, which scales virtual edges and sampling.
+     * @param origin Where the DAG's positions are measured from.
+     * @param cellMin The cell's minimum corner, relative to the origin.
+     * @param cellMax The cell's maximum corner, relative to the origin.
+     * @param stopAt Stop once this many clusters or fewer are left.
+     * @param options How to build.
+     * @return The DAG, whose first clusters are the tops in order.
+     * @throws IllegalArgumentException If there is nothing to build from.
+     */
+    public static LodDag buildParent(
+            @NonNull List<LodDag.Cluster> tops,
+            double leafEdge,
+            double @NonNull [] origin,
+            double @NonNull [] cellMin,
+            double @NonNull [] cellMax,
+            int stopAt,
+            @NonNull Options options) {
+        if (tops.isEmpty()) {
+            throw new IllegalArgumentException("A parent cell needs at least one cluster");
+        }
+        DagBuilder builder = new DagBuilder(origin.clone(), options);
+        builder.cellMin = cellMin.clone();
+        builder.cellMax = cellMax.clone();
+        builder.stopAt = stopAt;
+        builder.leafEdge = leafEdge;
+        builder.dag.setLeafEdge(leafEdge);
+        for (LodDag.Cluster top : tops) {
+            builder.dag.add(
+                    new LodDag.Cluster(
+                            builder.dag.clusters().size(),
+                            top.level(),
+                            top.corners(),
+                            top.materials(),
+                            top.visibility(),
+                            top.error(),
+                            top.bound(),
+                            top.tight(),
+                            -1,
+                            -1));
+            if (builder.dag.getLineage() != null) {
+                builder.dag.getLineage().addCluster(null);
+            }
+        }
+        ExecutorService pool =
+                Executors.newFixedThreadPool(options.threads(), daemonThreads("LOD build"));
+        try {
             builder.levels(pool);
         } finally {
             pool.shutdownNow();
@@ -317,24 +430,30 @@ public final class DagBuilder {
         for (int i = 0; i < active.length; ++i) {
             active[i] = i;
         }
-        int level = 0;
+        int round = 0;
         while (true) {
-            if (active.length <= 1) {
-                dag.setStopReason("one cluster left at level " + level);
+            final int top = dag.getLevels() - 1;
+            if (active.length <= stopAt) {
+                dag.setStopReason(
+                        (active.length == 1 ? "one cluster" : active.length + " clusters")
+                                + " left at level "
+                                + top);
                 return;
             }
-            if (level >= MAX_LEVELS) {
+            if (round >= MAX_LEVELS) {
                 dag.setStopReason("reached " + MAX_LEVELS + " levels");
                 return;
             }
             final int[][] groups = Grouping.group(dag, active);
             final Map<Grouping.Corner, Integer> owners = owners(groups);
+            if (cellMin != null) {
+                lockCellBoundary(owners, active);
+            }
             final List<Grouping.Edge> rim = rim(active);
             lockRimNearBorders(owners, rim);
             List<Future<Built>> futures = new ArrayList<>();
             for (int[] group : groups) {
-                final int currentLevel = level;
-                futures.add(pool.submit(() -> buildGroup(group, owners, rim, currentLevel)));
+                futures.add(pool.submit(() -> buildGroup(group, owners, rim)));
             }
             int trianglesIn = 0;
             int trianglesOut = 0;
@@ -352,18 +471,65 @@ public final class DagBuilder {
                 }
                 trianglesIn += built.trianglesIn();
                 trianglesOut += built.trianglesOut();
-                add(built, level, next);
+                add(built, next);
             }
             active = next.toIntArray();
-            ++level;
+            ++round;
             if (trianglesOut >= STALLED * trianglesIn) {
                 dag.setStopReason(
                         String.format(
                                 "stopped halving at level %d (%d of %d triangles)",
-                                level, trianglesOut, trianglesIn));
+                                dag.getLevels() - 1, trianglesOut, trianglesIn));
                 return;
             }
         }
+    }
+
+    /**
+     * Lock a region cell's boundary: every corner on one of its six planes, and every corner that
+     * shares a triangle with one. What lies across a plane is built separately, so no group here
+     * knows its open edges; with the ring beside the plane locked too, no collapse can join two
+     * corners on the plane by a new edge, the way closing a slit or an ear would, so the plane's
+     * edges stay exactly as the input has them until the parent cell unlocks them.
+     *
+     * @param owners Which group uses each corner, -1 for locked; the boundary's corners become -1.
+     * @param active This level's clusters.
+     */
+    private void lockCellBoundary(
+            @NonNull Map<Grouping.Corner, Integer> owners, int @NonNull [] active) {
+        final Set<Grouping.Corner> lock = new HashSet<>();
+        for (int id : active) {
+            final float[] corners = dag.clusters().get(id).corners();
+            for (int t = 0; t < corners.length; t += TRIANGLE_VALUES) {
+                boolean touches = false;
+                for (int corner = 0; corner < AXES; ++corner) {
+                    touches |= onCellPlane(corners, t + corner * AXES);
+                }
+                if (touches) {
+                    for (int corner = 0; corner < AXES; ++corner) {
+                        lock.add(Grouping.Corner.of(corners, t + corner * AXES));
+                    }
+                }
+            }
+        }
+        lock.forEach(corner -> owners.put(corner, -1));
+    }
+
+    /**
+     * Whether a corner lies on one of the cell's planes.
+     *
+     * @param corners Corner positions.
+     * @param at Where the corner starts.
+     * @return True if it does.
+     */
+    private boolean onCellPlane(float @NonNull [] corners, int at) {
+        for (int axis = 0; axis < AXES; ++axis) {
+            final float value = corners[at + axis];
+            if (value == (float) cellMin[axis] || value == (float) cellMax[axis]) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -495,15 +661,18 @@ public final class DagBuilder {
      * @param children The group's clusters.
      * @param owners Which group uses each corner.
      * @param rim This level's open edges.
-     * @param level The children's level.
      * @return What it made.
      */
     private Built buildGroup(
             int @NonNull [] children,
             @NonNull Map<Grouping.Corner, Integer> owners,
-            @NonNull List<Grouping.Edge> rim,
-            int level) {
+            @NonNull List<Grouping.Edge> rim) {
         final long start = System.nanoTime();
+        // Children can be of different levels in a parent cell; the group is above the highest
+        int level = 0;
+        for (int id : children) {
+            level = Math.max(level, dag.clusters().get(id).level());
+        }
         // Merge
         LodMesh.Builder builder = LodMesh.builder(dag.getOrigin());
         int trianglesIn = 0;
@@ -585,6 +754,7 @@ public final class DagBuilder {
         final int[] edgeCounts = countEdges(merged);
         return new Built(
                 children,
+                level,
                 outCorners,
                 outMaterials,
                 outVisibility,
@@ -638,10 +808,10 @@ public final class DagBuilder {
      * Add a built group and its clusters to the DAG.
      *
      * @param built The group.
-     * @param level The children's level.
      * @param next Where the new clusters' ids go.
      */
-    private void add(@NonNull Built built, int level, @NonNull IntArrayList next) {
+    private void add(@NonNull Built built, @NonNull IntArrayList next) {
+        final int level = built.level();
         final int groupId = dag.groups().size();
         final int[] outputs = new int[built.corners().size()];
         for (int i = 0; i < outputs.length; ++i) {

@@ -17,7 +17,10 @@ import java.util.Map;
  * are drawn twice.
  *
  * <p>Each level's edges are recorded when the check is made, so it compares cuts against the DAG as
- * it was built.
+ * it was built. A level is every cluster that stands for its part of the input there: those on the
+ * level, and those below it whose consumer makes a higher level, as happens where region cells stop
+ * at different levels and their parent takes over. In a DAG built in one piece, that is just the
+ * level's own clusters.
  */
 public final class CrackCheck {
 
@@ -67,11 +70,28 @@ public final class CrackCheck {
             byLevel.add(new ArrayList<>());
         }
         for (LodDag.Cluster cluster : dag.clusters()) {
-            byLevel.get(cluster.level()).add(cluster.id());
+            for (int level = cluster.level(); level <= highestStanding(cluster); ++level) {
+                byLevel.get(level).add(cluster.id());
+            }
         }
         for (List<Integer> clusters : byLevel) {
             levelUses.add(Grouping.edgeUses(dag, clusters));
         }
+    }
+
+    /**
+     * The highest level a cluster stands for its part of the input at: below the level its consumer
+     * makes, or the top for a root.
+     *
+     * @param cluster The cluster.
+     * @return The level.
+     */
+    private int highestStanding(LodDag.@NonNull Cluster cluster) {
+        final int group = dag.consumer(cluster.id());
+        if (group < 0) {
+            return dag.getLevels() - 1;
+        }
+        return dag.groups().get(group).level();
     }
 
     /**
@@ -92,7 +112,6 @@ public final class CrackCheck {
         final Map<Grouping.Edge, Integer> allowed = new HashMap<>();
         for (int id : clusters) {
             final LodDag.Cluster cluster = dag.clusters().get(id);
-            final Map<Grouping.Edge, Integer> level = levelUses.get(cluster.level());
             final float[] corners = cluster.corners();
             for (int t = 0; t < cluster.triangleCount(); ++t) {
                 for (int corner = 0; corner < AXES; ++corner) {
@@ -103,7 +122,9 @@ public final class CrackCheck {
                                     Grouping.Corner.of(
                                             corners,
                                             t * TRIANGLE_VALUES + ((corner + 1) % AXES) * AXES));
-                    allowed.merge(edge, level.getOrDefault(edge, 0), Math::max);
+                    for (int level = cluster.level(); level <= highestStanding(cluster); ++level) {
+                        allowed.merge(edge, levelUses.get(level).getOrDefault(edge, 0), Math::max);
+                    }
                 }
             }
         }
