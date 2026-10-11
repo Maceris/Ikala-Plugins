@@ -97,9 +97,13 @@ public class ShaderBindings {
         public static final int PUSH_CONSTANT_BAKED_MESHES_OFFSET =
                 PUSH_CONSTANT_BAKED_SLOT_COUNT_OFFSET + Integer.BYTES;
 
+        /** The address of whether each material is translucent, by material index. */
+        public static final int PUSH_CONSTANT_MATERIAL_TRANSPARENCY_OFFSET =
+                PUSH_CONSTANT_BAKED_MESHES_OFFSET + Long.BYTES;
+
         /** The size of the push constants in bytes. */
         public static final int PUSH_CONSTANTS_SIZE =
-                PUSH_CONSTANT_BAKED_MESHES_OFFSET + Long.BYTES;
+                PUSH_CONSTANT_MATERIAL_TRANSPARENCY_OFFSET + Long.BYTES;
 
         /** The phase that culls the shadow cascades, and the scene by last frame's history. */
         public static final int PHASE_EARLY = 0;
@@ -239,6 +243,112 @@ public class ShaderBindings {
 
         /** Private constructor so this class is not instantiated. */
         private LightCull() {
+            cutItOut();
+        }
+    }
+
+    /** Transparent stage shader variables, see {@code translucent.frag}. */
+    public static class Translucent {
+        /** The size of the area drawn, in pixels, two floats. */
+        public static final int PUSH_CONSTANT_SCREEN_SIZE_OFFSET = 0;
+
+        /** The scale from the log of a depth to a volume slice, see {@link VoxelOitMath}. */
+        public static final int PUSH_CONSTANT_LOG_SCALE_OFFSET =
+                PUSH_CONSTANT_SCREEN_SIZE_OFFSET + 2 * Float.BYTES;
+
+        /** Nonzero to weight by the transparency volume, zero for the depth weights. */
+        public static final int PUSH_CONSTANT_VOXEL_WEIGHTS_OFFSET =
+                PUSH_CONSTANT_LOG_SCALE_OFFSET + Float.BYTES;
+
+        /** How many tiles across and down this frame's volume holds, two floats. */
+        public static final int PUSH_CONSTANT_TILES_OFFSET =
+                PUSH_CONSTANT_VOXEL_WEIGHTS_OFFSET + Integer.BYTES;
+
+        /** The size of the push constants in bytes. */
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_TILES_OFFSET + 2 * Float.BYTES;
+
+        /** The set the transparency volume is read through. */
+        public static final int VOLUME_SET = 3;
+
+        /** Private constructor so this class is not instantiated. */
+        private Translucent() {
+            cutItOut();
+        }
+    }
+
+    /**
+     * Voxel-based transparency shader variables, see {@code oit_splat.frag} and {@code
+     * oit_integrate.comp}, which share the first ones.
+     */
+    public static class OitVolume {
+        /** Device address of the extinction buffer. */
+        public static final int PUSH_CONSTANT_EXTINCTION_OFFSET = 0;
+
+        /** How many tiles across and down this frame's volume holds, two uints. */
+        public static final int PUSH_CONSTANT_TILES_OFFSET =
+                PUSH_CONSTANT_EXTINCTION_OFFSET + Long.BYTES;
+
+        /** The scale from the log of a depth to a slice, splatting only. */
+        public static final int PUSH_CONSTANT_LOG_SCALE_OFFSET =
+                PUSH_CONSTANT_TILES_OFFSET + 2 * Integer.BYTES;
+
+        /** The size of the splat's push constants in bytes. */
+        public static final int SPLAT_PUSH_CONSTANTS_SIZE =
+                PUSH_CONSTANT_LOG_SCALE_OFFSET + Float.BYTES;
+
+        /** The size of the integration's push constants in bytes. */
+        public static final int INTEGRATE_PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_LOG_SCALE_OFFSET;
+
+        /** The binding of the transmittance, as a storage image to integrate into or to read. */
+        public static final int TRANSMITTANCE_BINDING = 0;
+
+        /** The width and height of the integration's workgroups, in tiles. */
+        public static final int WORKGROUP_SIZE = 8;
+
+        /** Private constructor so this class is not instantiated. */
+        private OitVolume() {
+            cutItOut();
+        }
+    }
+
+    /** Transparency resolve shader variables, see {@code oit_resolve.frag}. */
+    public static class OitResolve {
+        /** The bindless slot of the accumulated color and weight. */
+        public static final int PUSH_CONSTANT_ACCUM_INDEX_OFFSET = 0;
+
+        /** The bindless slot of the summed extinction. */
+        public static final int PUSH_CONSTANT_EXTINCTION_INDEX_OFFSET = Integer.BYTES;
+
+        /** The slice of the transparency volume to show, or negative to composite as usual. */
+        public static final int PUSH_CONSTANT_DEBUG_SLICE_OFFSET =
+                PUSH_CONSTANT_EXTINCTION_INDEX_OFFSET + Integer.BYTES;
+
+        /** The size of the push constants in bytes. */
+        public static final int PUSH_CONSTANTS_SIZE =
+                PUSH_CONSTANT_DEBUG_SLICE_OFFSET + Integer.BYTES;
+
+        /** The set the transparency volume is read through. */
+        public static final int VOLUME_SET = 1;
+
+        /** Private constructor so this class is not instantiated. */
+        private OitResolve() {
+            cutItOut();
+        }
+    }
+
+    /** Tone mapping shader variables, see {@code tonemap.frag}. */
+    public static class ToneMap {
+        /** The bindless slot of the scene color. */
+        public static final int PUSH_CONSTANT_SCENE_COLOR_INDEX_OFFSET = 0;
+
+        /** What the scene color is multiplied by before tone mapping. */
+        public static final int PUSH_CONSTANT_EXPOSURE_OFFSET = Integer.BYTES;
+
+        /** The size of the push constants in bytes. */
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_EXPOSURE_OFFSET + Float.BYTES;
+
+        /** Private constructor so this class is not instantiated. */
+        private ToneMap() {
             cutItOut();
         }
     }

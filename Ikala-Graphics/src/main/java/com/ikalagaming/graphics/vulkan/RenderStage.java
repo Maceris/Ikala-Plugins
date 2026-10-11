@@ -27,7 +27,14 @@ public interface RenderStage {
         SCENE_BAKED,
         SHADOW,
         SHADOW_BAKED,
-        SKYBOX
+        SKYBOX,
+        TONEMAP,
+        TRANSLUCENT,
+        TRANSLUCENT_BAKED,
+        OIT_RESOLVE,
+        OIT_SPLAT,
+        OIT_SPLAT_BAKED,
+        OIT_INTEGRATE
     }
 
     /** Set up the render stage. Must be called before rendering, should not be called twice. */

@@ -117,6 +117,26 @@ public class DebugVisualizers {
     public static final int HEAT_MAP_FULL = 32;
 
     /**
+     * Whether translucent surfaces are weighted by the voxel-based transparency volume, which
+     * blends them as if sorted, or by weighted blended transparency's depth weights, to compare
+     * against. Not a visualizer, so {@link #anyEnabled()} ignores it.
+     *
+     * @param voxelTransparency Whether to weight by the volume.
+     * @return Whether translucent surfaces are weighted by the volume.
+     */
+    private volatile boolean voxelTransparency = true;
+
+    /**
+     * Which slice of the voxel-based transparency volume to show over the whole screen, from black
+     * where nothing gets through to white where everything does, or negative to show nothing. Drawn
+     * by the transparency resolve, so {@link #anyEnabled()} ignores it.
+     *
+     * @param transmittanceSlice The slice to show, or negative for none.
+     * @return The slice shown, or negative for none.
+     */
+    private volatile int transmittanceSlice = -1;
+
+    /**
      * Whether any visualizer is turned on.
      *
      * @return True if at least one visualizer is on.

@@ -1,25 +1,8 @@
 #version 460
 #extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_GOOGLE_include_directive : require
 
-struct Material
-{
-    vec4 baseColor;
-
-    float anisotropic;
-    float clearcoat;
-    float clearcoatGloss;
-    float metallic;
-
-    float roughness;
-    float sheen;
-    float sheenTint;
-    float specular;
-
-    float specularTint;
-    float subsurface;
-    int normalMapIndex;
-    int textureIndex;
-};
+#include "material.glsl"
 
 layout(location = 0) in vec3 outNormal;
 layout(location = 1) in vec3 outTangent;

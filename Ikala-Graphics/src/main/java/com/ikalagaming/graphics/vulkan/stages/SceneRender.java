@@ -446,7 +446,8 @@ public class SceneRender implements RenderStage {
         if (wireframe) {
             return bakedWireframe;
         }
-        // See-through sections are drawn cut out until there is a blended pass
+        // See-through sections are in the translucent list instead, which the transparent stage
+        // draws, so these commands draw nothing
         return kind == MeshKind.BAKED_OPAQUE ? bakedPipeline : bakedAlphaPipeline;
     }
 
@@ -922,7 +923,7 @@ public class SceneRender implements RenderStage {
      * @param stack The stack to allocate on.
      * @return The attributes, read from binding 0.
      */
-    private static VkVertexInputAttributeDescription.Buffer vertexAttributes(
+    static VkVertexInputAttributeDescription.Buffer vertexAttributes(
             boolean baked, @NonNull MemoryStack stack) {
         if (baked) {
             // See BakedVertex: steps and user data, octahedral normal and tangent, half UV,
@@ -1134,5 +1135,24 @@ public class SceneRender implements RenderStage {
 
             return longOutput.get(0);
         }
+    }
+
+    /**
+     * The layout of this stage's per-frame descriptor set, for stages that read the same inputs.
+     *
+     * @return The VkDescriptorSetLayout.
+     */
+    public long getDescriptorSetLayout() {
+        return descriptorSetLayout;
+    }
+
+    /**
+     * This stage's descriptor set for a frame, written when the stage renders that frame.
+     *
+     * @param frameIndex The frame in flight.
+     * @return The VkDescriptorSet.
+     */
+    public long getDescriptorSet(int frameIndex) {
+        return descriptorSets[frameIndex];
     }
 }

@@ -46,8 +46,23 @@ public final class SyntheticTerrain {
     /** A glass cube, see-through. */
     public static final byte GLASS = 6;
 
+    /** A red tinted glass cube, more opaque than clear glass. */
+    public static final byte TINTED_GLASS = 7;
+
     /** How many block types there are, air included. */
-    public static final int BLOCK_TYPES = 7;
+    public static final int BLOCK_TYPES = 8;
+
+    /** How far apart the GLASS recipe's walls are, in blocks. */
+    private static final int GLASS_WALL_SPACING = 6;
+
+    /** How tall the GLASS recipe's walls are, in blocks. */
+    private static final int GLASS_WALL_HEIGHT = 10;
+
+    /** How big the GLASS recipe's tinted panels are, in blocks along each side. */
+    private static final int GLASS_PANEL_SIZE = 3;
+
+    /** How much of the GLASS recipe's walls are tinted panels. */
+    private static final double GLASS_TINTED = 0.2;
 
     /**
      * How much of a tree's blob of leaves is left open, so it is ragged like a real canopy rather
@@ -68,7 +83,12 @@ public final class SyntheticTerrain {
         /** A layer with a block in every other cell, so no face hides another. */
         CHECKERBOARD,
         /** A thick slab of rock riddled with caves, under a solid roof. */
-        CAVES
+        CAVES,
+        /**
+         * Walls of glass every few blocks on flat ground, with tinted panels, so many see-through
+         * layers overlap at different depths.
+         */
+        GLASS
     }
 
     /**
@@ -140,6 +160,7 @@ public final class SyntheticTerrain {
             case TERRAIN -> 48;
             case CHECKERBOARD -> SECTION - 1;
             case CAVES -> 34;
+            case GLASS -> GLASS_WALL_HEIGHT;
         };
     }
 
@@ -154,6 +175,7 @@ public final class SyntheticTerrain {
             case TERRAIN -> -64;
             case CHECKERBOARD -> 0;
             case CAVES -> -96;
+            case GLASS -> 0;
         };
     }
 
@@ -176,6 +198,7 @@ public final class SyntheticTerrain {
             case TERRAIN -> height(0, 0) + 6;
             case CHECKERBOARD -> SECTION + 8;
             case CAVES -> 42;
+            case GLASS -> GLASS_WALL_HEIGHT / 2.0;
         };
     }
 
@@ -198,6 +221,7 @@ public final class SyntheticTerrain {
             case TERRAIN -> terrain(x, y, z);
             case CHECKERBOARD -> ((x + y + z) & 1) == 0 ? STONE : AIR;
             case CAVES -> caves(x, y, z);
+            case GLASS -> glass(x, y, z);
         };
     }
 
@@ -284,6 +308,29 @@ public final class SyntheticTerrain {
     private boolean solid(int x, int y, int z, double height) {
         final double overhang = 7 * (fbm3(x / 18.0, y / 12.0, z / 18.0, 2) - 0.5) * 2;
         return y < height + overhang * Math.max(0, 1 - Math.abs(y - height) / 10);
+    }
+
+    /**
+     * The glass recipe: grass on flat ground, and every few blocks a wall of glass across x with
+     * tinted panels in it.
+     *
+     * @param x The block's x.
+     * @param y The block's y.
+     * @param z The block's z.
+     * @return The block type.
+     */
+    private byte glass(int x, int y, int z) {
+        if (y <= 0) {
+            return y == 0 ? GRASS : STONE;
+        }
+        // Halfway between, so the camera at the origin is between walls
+        if (y > GLASS_WALL_HEIGHT
+                || Math.floorMod(x, GLASS_WALL_SPACING) != GLASS_WALL_SPACING / 2) {
+            return AIR;
+        }
+        final int panelY = Math.floorDiv(y - 1, GLASS_PANEL_SIZE);
+        final int panelZ = Math.floorDiv(z, GLASS_PANEL_SIZE);
+        return hash(x, panelY, panelZ, 4) < GLASS_TINTED ? TINTED_GLASS : GLASS;
     }
 
     /**

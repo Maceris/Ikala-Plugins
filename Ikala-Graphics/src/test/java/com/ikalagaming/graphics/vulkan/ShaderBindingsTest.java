@@ -81,7 +81,9 @@ class ShaderBindingsTest {
         // The baked slot count, then the baked mesh table's address on an 8 byte boundary
         assertEquals(100, ShaderBindings.Cull.PUSH_CONSTANT_BAKED_SLOT_COUNT_OFFSET);
         assertEquals(104, ShaderBindings.Cull.PUSH_CONSTANT_BAKED_MESHES_OFFSET);
-        assertEquals(112, ShaderBindings.Cull.PUSH_CONSTANTS_SIZE);
+        // The material transparency address, at the end
+        assertEquals(112, ShaderBindings.Cull.PUSH_CONSTANT_MATERIAL_TRANSPARENCY_OFFSET);
+        assertEquals(120, ShaderBindings.Cull.PUSH_CONSTANTS_SIZE);
         // The guaranteed minimum push constant space
         assertTrue(ShaderBindings.Cull.PUSH_CONSTANTS_SIZE <= 128);
         // View {mat4 projectionView; ivec2 size; int levels; uint flags;}
@@ -115,6 +117,23 @@ class ShaderBindingsTest {
         assertEquals(144, ShaderBindings.Skybox.HAS_TEXTURE_OFFSET);
         assertEquals(148, ShaderBindings.Skybox.TEXTURE_INDEX_OFFSET);
         assertEquals(152, ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE);
+    }
+
+    @Test
+    void testTransparencyPushConstants() {
+        // vec2 screenSize; float logScale; int voxelWeights; vec2 tiles;
+        assertEquals(8, ShaderBindings.Translucent.PUSH_CONSTANT_LOG_SCALE_OFFSET);
+        assertEquals(12, ShaderBindings.Translucent.PUSH_CONSTANT_VOXEL_WEIGHTS_OFFSET);
+        assertEquals(16, ShaderBindings.Translucent.PUSH_CONSTANT_TILES_OFFSET);
+        assertEquals(24, ShaderBindings.Translucent.PUSH_CONSTANTS_SIZE);
+        // Extinction extinction; uvec2 tiles; float logScale;
+        assertEquals(8, ShaderBindings.OitVolume.PUSH_CONSTANT_TILES_OFFSET);
+        assertEquals(16, ShaderBindings.OitVolume.PUSH_CONSTANT_LOG_SCALE_OFFSET);
+        assertEquals(20, ShaderBindings.OitVolume.SPLAT_PUSH_CONSTANTS_SIZE);
+        assertEquals(16, ShaderBindings.OitVolume.INTEGRATE_PUSH_CONSTANTS_SIZE);
+        // int accumIndex; int extinctionIndex; int debugSlice;
+        assertEquals(8, ShaderBindings.OitResolve.PUSH_CONSTANT_DEBUG_SLICE_OFFSET);
+        assertEquals(12, ShaderBindings.OitResolve.PUSH_CONSTANTS_SIZE);
     }
 
     @Test

@@ -30,6 +30,12 @@ public class PerFrameData {
 
     public SharedBuffer lightUniforms;
 
+    /**
+     * Whether each material is translucent, a uint by material index, read by culling. Host
+     * coherent, written by the instance draw update stage.
+     */
+    public SharedBuffer materialTransparency;
+
     /** The point lights and spotlights, in view space, read by the light stage. */
     public SharedBuffer lights;
 
@@ -150,6 +156,30 @@ public class PerFrameData {
      * there's no filter, as we can just bind the final texture directly.
      */
     public TextureInfoVulkan preFilterTexture;
+
+    /**
+     * The lit scene in linear light, before tone mapping, drawn by the light, skybox and
+     * transparency stages and read by the tone map stage. Registered in the bindless array.
+     */
+    public TextureInfoVulkan sceneColor;
+
+    /**
+     * The translucent layers' lit color times opacity times weight, and opacity times weight, added
+     * up by the transparent stage and read by the resolve. Registered in the bindless array.
+     */
+    public TextureInfoVulkan oitAccum;
+
+    /**
+     * The translucent layers' summed extinction, -log(1 - opacity), added up by the transparent
+     * stage and read by the resolve. Registered in the bindless array.
+     */
+    public TextureInfoVulkan oitExtinction;
+
+    /**
+     * Whether this frame's translucent surfaces are weighted by the voxel-based transparency
+     * volume, read once at the start of the transparency stages so they all agree.
+     */
+    public boolean voxelTransparency;
 
     /**
      * The texture we render to just before moving over to the swapchain. The filter stage renders

@@ -555,7 +555,9 @@ public class VulkanInstance {
                     .fillModeNonSolid(true)
                     // Scene draws use indirect commands with several draws and base instances
                     .multiDrawIndirect(true)
-                    .drawIndirectFirstInstance(true);
+                    .drawIndirectFirstInstance(true)
+                    // The transparency splat adds into a buffer from the fragment shader
+                    .fragmentStoresAndAtomics(true);
 
             VkDeviceQueueCreateInfo.Buffer deviceQueueCreateInfos;
 
@@ -1305,6 +1307,95 @@ public class VulkanInstance {
         var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
 
         shaderMap.addShader(RenderStage.Type.LIGHT, shaderProgram);
+
+        // The same full screen quad as the light stage
+        List<ShaderVulkan.ShaderModuleData> toneMapModules = new ArrayList<>();
+        toneMapModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/lights.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        toneMapModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/tonemap.frag",
+                        ShaderVulkan.Type.FRAGMENT,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(RenderStage.Type.TONEMAP, new ShaderVulkan(toneMapModules, state));
+
+        shaderMap.addShader(
+                RenderStage.Type.TRANSLUCENT,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/translucent.vert",
+                                        ShaderVulkan.Type.VERTEX,
+                                        ShaderVulkan.Location.BUNDLED),
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/translucent.frag",
+                                        ShaderVulkan.Type.FRAGMENT,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
+                RenderStage.Type.TRANSLUCENT_BAKED,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/translucent_baked.vert",
+                                        ShaderVulkan.Type.VERTEX,
+                                        ShaderVulkan.Location.BUNDLED),
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/translucent.frag",
+                                        ShaderVulkan.Type.FRAGMENT,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
+                RenderStage.Type.OIT_RESOLVE,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/lights.vert",
+                                        ShaderVulkan.Type.VERTEX,
+                                        ShaderVulkan.Location.BUNDLED),
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/oit_resolve.frag",
+                                        ShaderVulkan.Type.FRAGMENT,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
+                RenderStage.Type.OIT_SPLAT,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/translucent.vert",
+                                        ShaderVulkan.Type.VERTEX,
+                                        ShaderVulkan.Location.BUNDLED),
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/oit_splat.frag",
+                                        ShaderVulkan.Type.FRAGMENT,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
+                RenderStage.Type.OIT_SPLAT_BAKED,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/translucent_baked.vert",
+                                        ShaderVulkan.Type.VERTEX,
+                                        ShaderVulkan.Location.BUNDLED),
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/oit_splat.frag",
+                                        ShaderVulkan.Type.FRAGMENT,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
+                RenderStage.Type.OIT_INTEGRATE,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/oit_integrate.comp",
+                                        ShaderVulkan.Type.COMPUTE,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
     }
 
     /**
@@ -1873,6 +1964,7 @@ public class VulkanInstance {
             required.put("fillModeNonSolid", vk10.fillModeNonSolid());
             required.put("multiDrawIndirect", vk10.multiDrawIndirect());
             required.put("drawIndirectFirstInstance", vk10.drawIndirectFirstInstance());
+            required.put("fragmentStoresAndAtomics", vk10.fragmentStoresAndAtomics());
             required.put("shaderDrawParameters", vk11.shaderDrawParameters());
             required.put("bufferDeviceAddress", vk12.bufferDeviceAddress());
             required.put("descriptorBindingPartiallyBound", vk12.descriptorBindingPartiallyBound());

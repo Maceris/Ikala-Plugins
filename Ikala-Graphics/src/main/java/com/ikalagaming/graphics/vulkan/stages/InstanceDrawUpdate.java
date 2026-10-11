@@ -50,7 +50,9 @@ import java.util.Map;
  * </ul>
  *
  * <p>There are more visible lists than passes, since the scene is culled in two phases, see {@code
- * cull.comp}: the early scene list, the late scene list, then a list for each cascade.
+ * cull.comp}: the early scene list, the late scene list, a list for each cascade, then the
+ * translucent list the transparent stage draws. Whether a mesh is translucent comes from its
+ * material, so this stage also writes each material's transparency for culling to read.
  *
  * <p>Each {@link MeshKind} has its own block of commands, since each is drawn with its own pipeline
  * from its own buffers: by kind, then list, then mesh slot, see {@link #commandIndex}. Standard
@@ -81,15 +83,45 @@ public class InstanceDrawUpdate implements RenderStage {
     /** The visible list of the first shadow cascade, the others following it. */
     public static final int LIST_FIRST_CASCADE = 2;
 
-    /** How many visible lists there are, each with its own draw commands. */
-    public static final int LIST_COUNT =
+    /**
+     * The visible list of translucent meshes, culled in the late phase and drawn by the transparent
+     * stage. They are in no cascade's list, so they don't cast shadows.
+     */
+    public static final int LIST_TRANSLUCENT =
             LIST_FIRST_CASCADE + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT;
+
+    /** How many visible lists there are, each with its own draw commands. */
+    public static final int LIST_COUNT = LIST_TRANSLUCENT + 1;
 
     /** The counter of meshes the occlusion test hid, after one counter per list. */
     public static final int COUNTER_OCCLUDED = LIST_COUNT;
 
     /** How many counters the culling pass keeps. */
     public static final int COUNTER_COUNT = COUNTER_OCCLUDED + 1;
+
+    /**
+     * Write whether each material is translucent, by material index, for culling to route meshes
+     * into the translucent list. Written before culling records, so the buffer's address is final.
+     *
+     * @param scene The scene.
+     * @param state The Vulkan state.
+     * @param frameData This frame's data.
+     */
+    private static void writeMaterialTransparency(
+            @NonNull Scene scene, @NonNull VulkanState state, @NonNull PerFrameData frameData) {
+        final MaterialCache cache = scene.getMaterialCache();
+        final int count = cache.getMaterialCount();
+        frameData.materialTransparency.ensureCapacity(
+                (long) Math.max(count, 1) * Integer.BYTES, state);
+        final IntBuffer translucent =
+                MemoryUtil.memIntBuffer(
+                        frameData.materialTransparency.allocationInfo.pMappedData(), count);
+        for (int i = 0; i < count; ++i) {
+            final boolean isTranslucent =
+                    cache.getMaterial(i).getTransparency() == Material.Transparency.TRANSLUCENT;
+            translucent.put(i, isTranslucent ? 1 : 0);
+        }
+    }
 
     /**
      * Where a mesh slot's draw command for one list is, with the commands laid out by kind, then
@@ -308,6 +340,7 @@ public class InstanceDrawUpdate implements RenderStage {
                 (long) PASS_COUNT * ShaderBindings.Cull.PLANES_PER_PASS * 4 * Float.BYTES,
                 vulkanState);
         frameData.cullCounters.ensureCapacity((long) COUNTER_COUNT * Integer.BYTES, vulkanState);
+        writeMaterialTransparency(scene, vulkanState, frameData);
 
         // The buffers are host coherent and the GPU is done with this frame's copies
         final ByteBuffer commands =

@@ -136,7 +136,7 @@ class SectionBakerTest {
     }
 
     @Test
-    void transparencyPicksTheBucketAndTranslucentIsSorted() {
+    void transparencyPicksTheBucket() {
         Grid grid = new Grid(4);
         BakeSource stone = BakeFixtures.cube().source();
         BakeSource leaves =
@@ -155,20 +155,8 @@ class SectionBakerTest {
         assertEquals(12, result.get(Material.Transparency.CUTOUT).triangleCount());
         // Two rows of four panes of one glass: the faces between panes go
         SectionBaker.Bucket translucent = result.get(Material.Transparency.TRANSLUCENT);
+        // Drawn in any order by the transparent stage, so not sorted
         assertEquals(2 * (4 * 4 + 2) * 2, translucent.triangleCount());
-
-        float previous = Float.MAX_VALUE;
-        for (int triangle = 0; triangle < translucent.triangleCount(); ++triangle) {
-            float key = 0;
-            for (int corner = 0; corner < 3; ++corner) {
-                int at = translucent.indices()[triangle * 3 + corner] * BakedVertex.SIZE;
-                for (int axis = 0; axis < 3; ++axis) {
-                    key += translucent.vertices().getShort(at + axis * 2);
-                }
-            }
-            assertTrue(key <= previous, "Farthest first");
-            previous = key;
-        }
     }
 
     @Test

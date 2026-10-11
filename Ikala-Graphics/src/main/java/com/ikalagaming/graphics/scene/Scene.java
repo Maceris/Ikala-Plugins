@@ -18,6 +18,7 @@ import com.ikalagaming.graphics.vulkan.VulkanInstance;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector4f;
 
@@ -109,6 +110,15 @@ public class Scene {
      */
     private volatile double viewDistance;
 
+    /**
+     * What the lit scene is multiplied by before tone mapping, like a camera's exposure: above 1
+     * brightens, below 1 darkens.
+     *
+     * @param exposure The new exposure.
+     * @return The exposure.
+     */
+    @Setter private volatile float exposure;
+
     /** The observer while it is frozen, or null while it follows the camera. */
     @Getter(AccessLevel.NONE)
     private volatile Observer frozenObserver;
@@ -126,6 +136,7 @@ public class Scene {
         sceneLights = new SceneLights();
         lightRegistry = new LightRegistry();
         viewDistance = DEFAULT_VIEW_DISTANCE;
+        exposure = 1;
         camera = new Camera();
         fog = new Fog();
         skyboxDiffuse = new Vector4f(0.65f, 0.65f, 0.65f, 1f);

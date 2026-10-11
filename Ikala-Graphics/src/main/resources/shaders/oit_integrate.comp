@@ -1,0 +1,51 @@
+#version 460
+#extension GL_EXT_buffer_reference : require
+#extension GL_GOOGLE_include_directive : require
+
+// Sums each tile's slices of the voxel-based transparency volume front to back into how much light
+// gets through up to the far end of each slice, and clears them for the next frame's splats. One
+// thread per tile. VoxelOitMath.integrate has the same math in Java.
+
+#include "oit_volume.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+// Each tile's slices, x fastest, then y, then slice
+layout(buffer_reference, std430, buffer_reference_align = 4) restrict buffer Extinction {
+    uint values[];
+};
+
+layout(push_constant) uniform Constants {
+    Extinction extinction;
+    // How many tiles across and down this frame's volume holds
+    uvec2 tiles;
+};
+
+layout(set = 0, binding = 0, r32f) uniform restrict writeonly image3D transmittance;
+
+// How many slices are read at once, so the reads overlap instead of waiting on each other
+const uint CHUNK = 16;
+
+void main() {
+    uvec2 tile = gl_GlobalInvocationID.xy;
+    if (any(greaterThanEqual(tile, tiles))) {
+        return;
+    }
+    uint column = tile.x + tiles.x * tile.y;
+    uint sliceStride = tiles.x * tiles.y;
+    float sum = 0.0;
+    for (uint first = 0; first < SLICES; first += CHUNK) {
+        uint values[CHUNK];
+        for (uint i = 0; i < CHUNK; ++i) {
+            values[i] = extinction.values[column + sliceStride * (first + i)];
+        }
+        for (uint i = 0; i < CHUNK; ++i) {
+            // Most slices are empty, and already clear
+            if (values[i] != 0) {
+                extinction.values[column + sliceStride * (first + i)] = 0;
+            }
+            sum += float(values[i]) / FIXED_POINT_SCALE;
+            imageStore(transmittance, ivec3(tile, first + i), vec4(exp(-sum)));
+        }
+    }
+}

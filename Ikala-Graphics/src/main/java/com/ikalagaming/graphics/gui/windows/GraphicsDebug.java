@@ -24,6 +24,7 @@ import com.ikalagaming.graphics.vulkan.ClusterMath;
 import com.ikalagaming.graphics.vulkan.FilterView;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
 import com.ikalagaming.graphics.vulkan.InstanceRegistry;
+import com.ikalagaming.graphics.vulkan.VoxelOitMath;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
 import com.ikalagaming.graphics.vulkan.stages.InstanceDrawUpdate;
 import com.ikalagaming.graphics.vulkan.stages.LightCull;
@@ -54,6 +55,7 @@ public class GraphicsDebug extends GuiWindow {
     private final Checkbox disableOcclusion;
     private final Checkbox showUiShowcase;
     private final Slider fogDensity;
+    private final Slider exposure;
     private final Slider directionalLightX;
     private final Slider directionalLightY;
     private final Slider directionalLightZ;
@@ -73,6 +75,9 @@ public class GraphicsDebug extends GuiWindow {
 
     /** How many torches the benchmark scatters over its world. */
     private final int[] benchmarkLights = {0};
+
+    /** The highest exposure the slider offers, two stops brighter. */
+    private static final float MAX_EXPOSURE = 4;
 
     /** The most torches the benchmark slider offers. */
     private static final int MAX_BENCHMARK_LIGHTS = 8000;
@@ -114,6 +119,7 @@ public class GraphicsDebug extends GuiWindow {
         disableOcclusion = new Checkbox("Draw hidden things (no occlusion culling)", false);
         showUiShowcase = new Checkbox("UI showcase", false);
         fogDensity = new Slider("Fog Density", 0, 0, 1);
+        exposure = new Slider("Exposure", 1, 0, MAX_EXPOSURE);
         directionalLightX = new Slider("Directional Light X", 0, -1, 1);
         directionalLightY = new Slider("Directional Light Y", 0, -1, 1);
         directionalLightZ = new Slider("Directional Light Z", 0, -1, 1);
@@ -127,6 +133,7 @@ public class GraphicsDebug extends GuiWindow {
 
         addChild(fogEnabled);
         addChild(fogDensity);
+        addChild(exposure);
         addChild(wireframeEnabled);
         addChild(showPointLights);
         addChild(showSpotLights);
@@ -200,7 +207,7 @@ public class GraphicsDebug extends GuiWindow {
                 if (drawn.length == InstanceDrawUpdate.COUNTER_COUNT) {
                     StringBuilder shadows = new StringBuilder();
                     for (int i = InstanceDrawUpdate.LIST_FIRST_CASCADE;
-                            i < InstanceDrawUpdate.LIST_COUNT;
+                            i < InstanceDrawUpdate.LIST_TRANSLUCENT;
                             ++i) {
                         shadows.append(i == InstanceDrawUpdate.LIST_FIRST_CASCADE ? "" : " / ")
                                 .append(String.format("%,d", drawn[i]));
@@ -217,6 +224,10 @@ public class GraphicsDebug extends GuiWindow {
                                     "Meshes hidden by occlusion: %,d",
                                     drawn[InstanceDrawUpdate.COUNTER_OCCLUDED]));
                     IkGui.text("Meshes in shadow cascades: " + shadows);
+                    IkGui.text(
+                            String.format(
+                                    "Translucent meshes drawn: %,d",
+                                    drawn[InstanceDrawUpdate.LIST_TRANSLUCENT]));
                 }
                 IkGui.text(String.format("Triangles: %,d", triangles));
                 if (renderer != null && renderer.getState().sections != null) {
@@ -237,6 +248,10 @@ public class GraphicsDebug extends GuiWindow {
 
             if (IkGui.collapsingHeader("Lights")) {
                 drawLights(scene);
+            }
+
+            if (IkGui.collapsingHeader("Transparency")) {
+                drawTransparency(scene);
             }
 
             if (IkGui.collapsingHeader("Benchmark")) {
@@ -294,6 +309,7 @@ public class GraphicsDebug extends GuiWindow {
                 }
                 fogEnabled.draw(width, height);
                 fogDensity.draw(width, height);
+                exposure.draw(width, height);
                 wireframeEnabled.draw(width, height);
                 directionalLightX.draw(width, height);
                 directionalLightY.draw(width, height);
@@ -459,6 +475,9 @@ public class GraphicsDebug extends GuiWindow {
         if (fogDensity.checkResult()) {
             scene.getFog().setDensity(fogDensity.getValue());
         }
+        if (exposure.checkResult()) {
+            scene.setExposure(exposure.getValue());
+        }
         if (directionalLightX.checkResult()) {
             directionalLightDir.setComponent(0, directionalLightX.getValue());
         }
@@ -490,6 +509,7 @@ public class GraphicsDebug extends GuiWindow {
         DirectionalLight directionalLight = scene.getSceneLights().getDirLight();
         Vector3f directionalLightDir = directionalLight.getDirection();
         fogDensity.setValue(scene.getFog().getDensity());
+        exposure.setValue(scene.getExposure());
         directionalLightX.setValue(directionalLightDir.x());
         directionalLightY.setValue(directionalLightDir.y());
         directionalLightZ.setValue(directionalLightDir.z());
@@ -588,6 +608,38 @@ public class GraphicsDebug extends GuiWindow {
                         + " or more.");
     }
 
+    /**
+     * Pick how translucent surfaces are weighted, and look inside the transparency volume.
+     *
+     * @param scene The scene.
+     */
+    private static void drawTransparency(@NonNull Scene scene) {
+        final DebugVisualizers visualizers = scene.getDebugVisualizers();
+        if (IkGui.checkbox("Voxel-based weights", visualizers.isVoxelTransparency())) {
+            visualizers.setVoxelTransparency(!visualizers.isVoxelTransparency());
+        }
+        IkGui.setItemTooltip(
+                "Weight each translucent surface by how much light gets through to it, from a"
+                        + " low resolution volume of what is in front, which blends layers a few"
+                        + " slices apart as if sorted. Off, surfaces are weighted by depth alone"
+                        + " (weighted blended transparency).");
+        IkGui.text(
+                String.format(
+                        "Volume: %d px tiles, %d slices from %.1f m to %.0f m",
+                        VoxelOitMath.TILE_SIZE,
+                        VoxelOitMath.SLICES,
+                        VoxelOitMath.FIRST_DEPTH,
+                        scene.getViewDistance()));
+        final int[] slice = {visualizers.getTransmittanceSlice()};
+        if (IkGui.sliderInt("Show slice", slice, -1, VoxelOitMath.SLICES - 1)) {
+            visualizers.setTransmittanceSlice(slice[0]);
+        }
+        IkGui.setItemTooltip(
+                "Show how much light gets through to the far end of one slice of the volume, from"
+                        + " black for none to white for all of it, over the whole screen. -1 shows"
+                        + " the scene. Only with voxel-based weights.");
+    }
+
     /** Run the gate benchmark and show what it found. */
     private void drawBenchmark() {
         IkGui.textWrapped(
@@ -598,7 +650,8 @@ public class GraphicsDebug extends GuiWindow {
                         + " ms.");
         IkGui.combo("Recipe", benchmarkRecipe, RECIPE_NAMES);
         IkGui.sliderInt("Radius (sections)", benchmarkRadius, 6, 24);
-        IkGui.sliderInt("Lights", benchmarkLights, 0, MAX_BENCHMARK_LIGHTS);
+        // Its own ID, apart from the Lights header's
+        IkGui.sliderInt("Lights##benchmark", benchmarkLights, 0, MAX_BENCHMARK_LIGHTS);
         IkGui.setItemTooltip("Torches scattered over the ground, to measure many lights.");
         IkGui.checkbox("Keep world", benchmarkKeepWorld);
         IkGui.sameLine();

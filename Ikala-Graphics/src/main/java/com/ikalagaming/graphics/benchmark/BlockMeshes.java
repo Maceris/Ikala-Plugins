@@ -24,6 +24,18 @@ public final class BlockMeshes {
     /** How many floats a vertex takes. */
     private static final int STRIDE = MeshData.VERTEX_SIZE_IN_FLOATS;
 
+    /** How much clear glass hides of what is behind it. */
+    private static final float CLEAR_GLASS_OPACITY = 0.3f;
+
+    /** How much tinted glass hides of what is behind it. */
+    private static final float TINTED_GLASS_OPACITY = 0.55f;
+
+    /** How rough glass is: smooth, for a sharp highlight. */
+    private static final float GLASS_ROUGHNESS = 0.1f;
+
+    /** How strong glass's highlight is, about an index of refraction of 1.5. */
+    private static final float GLASS_SPECULAR = 0.5f;
+
     /**
      * Make each block type's mesh, with a new material each.
      *
@@ -47,7 +59,9 @@ public final class BlockMeshes {
         meshes[SyntheticTerrain.LEAVES] =
                 box(zero, one, material(0.15f, 0.4f, 0.12f, Material.Transparency.CUTOUT));
         meshes[SyntheticTerrain.GLASS] =
-                box(zero, one, material(0.7f, 0.85f, 0.95f, Material.Transparency.TRANSLUCENT));
+                box(zero, one, glass(0.7f, 0.85f, 0.95f, CLEAR_GLASS_OPACITY));
+        meshes[SyntheticTerrain.TINTED_GLASS] =
+                box(zero, one, glass(0.9f, 0.3f, 0.25f, TINTED_GLASS_OPACITY));
         return meshes;
     }
 
@@ -80,6 +94,23 @@ public final class BlockMeshes {
         material.getBaseColor().set(red, green, blue, 1);
         material.setRoughness(0.85f);
         material.setTransparency(transparency);
+        return material;
+    }
+
+    /**
+     * A see-through, smooth material.
+     *
+     * @param red The red.
+     * @param green The green.
+     * @param blue The blue.
+     * @param opacity How much of what is behind it it hides, from 0 to 1.
+     * @return The material.
+     */
+    private static Material glass(float red, float green, float blue, float opacity) {
+        Material material = material(red, green, blue, Material.Transparency.TRANSLUCENT);
+        material.getBaseColor().w = opacity;
+        material.setRoughness(GLASS_ROUGHNESS);
+        material.setSpecular(GLASS_SPECULAR);
         return material;
     }
 

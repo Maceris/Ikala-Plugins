@@ -15,6 +15,9 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
+import org.lwjgl.util.shaderc.ShadercIncludeResolve;
+import org.lwjgl.util.shaderc.ShadercIncludeResult;
+import org.lwjgl.util.shaderc.ShadercIncludeResultRelease;
 import org.lwjgl.vulkan.VkPipelineShaderStageCreateInfo;
 import org.lwjgl.vulkan.VkShaderModuleCreateInfo;
 
@@ -27,7 +30,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.List;
 
-/** A shader program, compiled from GLSL to SPIR-V modules. */
+/**
+ * A shader program, compiled from GLSL to SPIR-V modules. Shaders can share code with {@code
+ * #include "name.glsl"} (and {@code #extension GL_GOOGLE_include_directive : require}), which reads
+ * the bundled {@value #INCLUDE_FOLDER} folder.
+ */
 @Slf4j
 public class ShaderVulkan {
     /**
@@ -54,6 +61,9 @@ public class ShaderVulkan {
         /** In the plugin data folder. */
         DATA_FOLDER,
     }
+
+    /** Where {@code #include} finds files, in the bundled resources. */
+    public static final String INCLUDE_FOLDER = "shaders/include/";
 
     /** It's always just main. */
     private static final String ENTRY_POINT = "main";
@@ -194,6 +204,54 @@ public class ShaderVulkan {
     }
 
     /**
+     * Find an included file for shaderc. A missing file becomes an {@code #error}, so the compile
+     * fails naming it.
+     *
+     * @param userData Unused.
+     * @param requestedSource The name in the include directive, a C string.
+     * @param type Whether it was quoted or in angle brackets, which are treated the same.
+     * @param requestingSource The file doing the including, a C string.
+     * @param includeDepth How deeply nested the include is.
+     * @return The address of a shaderc_include_result, freed by {@link #releaseInclude(long,
+     *     long)}.
+     */
+    private static long resolveInclude(
+            long userData,
+            long requestedSource,
+            int type,
+            long requestingSource,
+            long includeDepth) {
+        final String name = MemoryUtil.memUTF8(requestedSource);
+        String content;
+        try (InputStream stream =
+                ShaderVulkan.class.getClassLoader().getResourceAsStream(INCLUDE_FOLDER + name)) {
+            content =
+                    stream == null
+                            ? "#error Missing include " + name + "\n"
+                            : new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            content = "#error Couldn't read include " + name + "\n";
+        }
+        ShadercIncludeResult result = ShadercIncludeResult.calloc();
+        result.source_name(MemoryUtil.memUTF8(name, false));
+        result.content(MemoryUtil.memUTF8(content, false));
+        return result.address();
+    }
+
+    /**
+     * Free what {@link #resolveInclude(long, long, int, long, long)} made.
+     *
+     * @param userData Unused.
+     * @param includeResult The address of the shaderc_include_result.
+     */
+    private static void releaseInclude(long userData, long includeResult) {
+        ShadercIncludeResult result = ShadercIncludeResult.create(includeResult);
+        MemoryUtil.memFree(result.source_name());
+        MemoryUtil.memFree(result.content());
+        result.free();
+    }
+
+    /**
      * Create a new shader program.
      *
      * @param shaderModuleDataList The list of shader modules for the program.
@@ -210,6 +268,10 @@ public class ShaderVulkan {
                 options, shaderc_optimization_level_performance);
         shaderc_compile_options_set_target_env(
                 options, shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
+        ShadercIncludeResolve resolver = ShadercIncludeResolve.create(ShaderVulkan::resolveInclude);
+        ShadercIncludeResultRelease releaser =
+                ShadercIncludeResultRelease.create(ShaderVulkan::releaseInclude);
+        shaderc_compile_options_set_include_callbacks(options, resolver, releaser, 0);
 
         shaderStages = VkPipelineShaderStageCreateInfo.calloc(shaderModuleDataList.size());
 
@@ -228,6 +290,8 @@ public class ShaderVulkan {
         } finally {
             shaderc_compile_options_release(options);
             shaderc_compiler_release(compiler);
+            resolver.free();
+            releaser.free();
         }
     }
 

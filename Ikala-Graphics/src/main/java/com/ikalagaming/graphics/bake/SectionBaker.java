@@ -309,41 +309,7 @@ public final class SectionBaker {
         for (int i = 0; i < builders.length; ++i) {
             buckets[i] = builders[i] == null ? null : builders[i].build();
         }
-        final int translucent = Material.Transparency.TRANSLUCENT.ordinal();
-        if (buckets[translucent] != null) {
-            sortBackToFront(buckets[translucent]);
-        }
         return new Result(buckets);
-    }
-
-    /**
-     * Order translucent triangles so the ones farther along the section's diagonal come first. A
-     * placeholder until the blended pass sorts them for the camera.
-     *
-     * @param bucket The translucent bucket, sorted in place.
-     */
-    static void sortBackToFront(@NonNull Bucket bucket) {
-        final int[] indices = bucket.indices();
-        final int triangles = indices.length / 3;
-        final Integer[] order = new Integer[triangles];
-        final float[] keys = new float[triangles];
-        for (int triangle = 0; triangle < triangles; ++triangle) {
-            order[triangle] = triangle;
-            float key = 0;
-            for (int corner = 0; corner < 3; ++corner) {
-                final int at = indices[triangle * 3 + corner] * BakedVertex.SIZE;
-                for (int axis = 0; axis < 3; ++axis) {
-                    key += bucket.vertices().getShort(at + BakedVertex.POSITION_OFFSET + axis * 2);
-                }
-            }
-            keys[triangle] = key;
-        }
-        Arrays.sort(order, (a, b) -> Float.compare(keys[b], keys[a]));
-        final int[] sorted = new int[indices.length];
-        for (int i = 0; i < triangles; ++i) {
-            System.arraycopy(indices, order[i] * 3, sorted, i * 3, 3);
-        }
-        System.arraycopy(sorted, 0, indices, 0, indices.length);
     }
 
     /** Static helpers only. */

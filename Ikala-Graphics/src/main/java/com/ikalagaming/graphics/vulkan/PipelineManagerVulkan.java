@@ -47,6 +47,21 @@ public class PipelineManagerVulkan {
      */
     public static final int SCREEN_FORMAT = VK_FORMAT_R8G8B8A8_UNORM;
 
+    /**
+     * The format of the scene color: linear light, which can go past 1 before tone mapping, at half
+     * float precision.
+     */
+    public static final int SCENE_COLOR_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
+
+    /**
+     * The format the transparent layers' weighted colors add up in. Full floats, since lit colors
+     * past 1 times weights up to a few thousand would overflow half floats in a few layers.
+     */
+    public static final int OIT_ACCUM_FORMAT = VK_FORMAT_R32G32B32A32_SFLOAT;
+
+    /** The format the transparent layers' extinction adds up in. */
+    public static final int OIT_EXTINCTION_FORMAT = VK_FORMAT_R16_SFLOAT;
+
     /** Fallback pipeline that does nothing. */
     public static final PipelineVulkan ERROR_PIPELINE =
             new PipelineVulkan(new RenderStage[0], RenderConfig.ERROR_MASK);
@@ -78,6 +93,21 @@ public class PipelineManagerVulkan {
 
     /** Sorts the lights into clusters for the light stage. */
     private final LightCull stageLightCull;
+
+    /** Turns the scene color into the image shown. */
+    private final ToneMap stageToneMap;
+
+    /** Draws translucent geometry into the transparency targets. */
+    private final TranslucentRender stageTranslucentRender;
+
+    /** Composites the transparency targets over the scene color. */
+    private final OitResolve stageOitResolve;
+
+    /** Adds translucent surfaces' extinction into the transparency volume. */
+    private final OitSplat stageOitSplat;
+
+    /** Integrates the transparency volume into the weights the transparent stage reads. */
+    private final OitIntegrate stageOitIntegrate;
 
     private final InstanceDrawUpdate stageInstanceDrawUpdate;
     private final InstanceTransform stageInstanceTransform;
@@ -136,6 +166,26 @@ public class PipelineManagerVulkan {
         stageLightCull.initialize(state);
         stageLightRender = new LightRender(shaders.getShader(RenderStage.Type.LIGHT), quadMesh);
         stageLightRender.initialize(state);
+        stageToneMap = new ToneMap(shaders.getShader(RenderStage.Type.TONEMAP), quadMesh);
+        stageToneMap.initialize(state);
+        stageTranslucentRender =
+                new TranslucentRender(
+                        shaders.getShader(RenderStage.Type.TRANSLUCENT),
+                        shaders.getShader(RenderStage.Type.TRANSLUCENT_BAKED),
+                        stageSceneRender,
+                        stageLightRender);
+        stageTranslucentRender.initialize(state);
+        stageOitSplat =
+                new OitSplat(
+                        shaders.getShader(RenderStage.Type.OIT_SPLAT),
+                        shaders.getShader(RenderStage.Type.OIT_SPLAT_BAKED),
+                        stageSceneRender,
+                        stageLightRender);
+        stageOitSplat.initialize(state);
+        stageOitIntegrate = new OitIntegrate(shaders.getShader(RenderStage.Type.OIT_INTEGRATE));
+        stageOitIntegrate.initialize(state);
+        stageOitResolve = new OitResolve(shaders.getShader(RenderStage.Type.OIT_RESOLVE), quadMesh);
+        stageOitResolve.initialize(state);
         stageAnimationRender = new AnimationRender(shaders.getShader(RenderStage.Type.ANIMATION));
         stageAnimationRender.initialize(state);
         Map<FilterView, ShaderVulkan> filterShaders = new EnumMap<>(FilterView.class);
@@ -182,6 +232,19 @@ public class PipelineManagerVulkan {
         }
         if (RenderConfig.hasSkyboxStage(configuration)) {
             stages.add(stageSkyboxRender);
+        }
+        if (RenderConfig.hasSceneStage(configuration)) {
+            // Translucent geometry, over the sky too, in any order: what is in front of each
+            // surface first, then the surfaces weighted by it
+            stages.add(stageOitSplat);
+            stages.add(stageOitIntegrate);
+            stages.add(stageTranslucentRender);
+            stages.add(stageOitResolve);
+        }
+        if (RenderConfig.hasSceneStage(configuration)
+                || RenderConfig.hasSkyboxStage(configuration)) {
+            // From linear light to the image shown, before filters, debug lines and the GUI
+            stages.add(stageToneMap);
         }
         if (RenderConfig.hasFilterStage(configuration)) {
             stages.add(stageFilterRender);
@@ -398,6 +461,8 @@ public class PipelineManagerVulkan {
             state.realSize.set(window.getWidth(), window.getHeight(), 1);
             state.depthPyramid = new DepthPyramid(state);
             state.depthPyramid.resize(state, window.getWidth(), window.getHeight());
+            state.oitVolume = new OitVolume(state);
+            state.oitVolume.resize(state, window.getWidth(), window.getHeight());
 
             // SharedBuffer adds device address and transfer destination usage to all of these
             final int STORAGE = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
@@ -430,6 +495,8 @@ public class PipelineManagerVulkan {
                         SharedBuffer.allocate(
                                 ShaderBindings.Light.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
                 state.perFrameData[i].lights =
+                        SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
+                state.perFrameData[i].materialTransparency =
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].lightClusters =
                         SharedBuffer.allocateDeviceLocal(
@@ -494,6 +561,42 @@ public class PipelineManagerVulkan {
         }
         state.bindlessTextures.register(state, data.gBuffer.depth());
 
+        data.sceneColor =
+                createRenderTarget(
+                        state,
+                        imageExtent.width(),
+                        imageExtent.height(),
+                        SCENE_COLOR_FORMAT,
+                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                        VK_IMAGE_ASPECT_COLOR_BIT,
+                        VK_FILTER_NEAREST,
+                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        // Read through the bindless array by the tone map stage
+        state.bindlessTextures.register(state, data.sceneColor);
+        data.oitAccum =
+                createRenderTarget(
+                        state,
+                        imageExtent.width(),
+                        imageExtent.height(),
+                        OIT_ACCUM_FORMAT,
+                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                        VK_IMAGE_ASPECT_COLOR_BIT,
+                        VK_FILTER_NEAREST,
+                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        data.oitExtinction =
+                createRenderTarget(
+                        state,
+                        imageExtent.width(),
+                        imageExtent.height(),
+                        OIT_EXTINCTION_FORMAT,
+                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                        VK_IMAGE_ASPECT_COLOR_BIT,
+                        VK_FILTER_NEAREST,
+                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        // Read through the bindless array by the transparency resolve
+        state.bindlessTextures.register(state, data.oitAccum);
+        state.bindlessTextures.register(state, data.oitExtinction);
+
         // Transfer destination so the filter can clear it if nothing rendered to it
         data.preFilterTexture =
                 createRenderTarget(
@@ -531,6 +634,11 @@ public class PipelineManagerVulkan {
         stageDebugRender.cleanup(state);
         stageGuiRender.cleanup(state);
         stageLightRender.cleanup(state);
+        stageToneMap.cleanup(state);
+        stageOitResolve.cleanup(state);
+        stageTranslucentRender.cleanup(state);
+        stageOitSplat.cleanup(state);
+        stageOitIntegrate.cleanup(state);
         stageLightCull.cleanup(state);
         stageInstanceDrawUpdate.cleanup(state);
         stageInstanceTransform.cleanup(state);
@@ -544,6 +652,8 @@ public class PipelineManagerVulkan {
         cleanupShadowMaps(state);
         state.depthPyramid.cleanup(state);
         state.depthPyramid = null;
+        state.oitVolume.cleanup(state);
+        state.oitVolume = null;
         TextureInfoVulkan fontAtlasInfo = state.textureRegistry.remove(fontAtlas);
         if (fontAtlasInfo != null) {
             GraphicsManager.getDeletionQueue().add(fontAtlasInfo);
@@ -579,6 +689,21 @@ public class PipelineManagerVulkan {
             data.gBuffer = null;
         }
 
+        if (data.oitAccum != null) {
+            state.bindlessTextures.release(state, data.oitAccum);
+            data.oitAccum.destroy(state);
+            data.oitAccum = null;
+        }
+        if (data.oitExtinction != null) {
+            state.bindlessTextures.release(state, data.oitExtinction);
+            data.oitExtinction.destroy(state);
+            data.oitExtinction = null;
+        }
+        if (data.sceneColor != null) {
+            state.bindlessTextures.release(state, data.sceneColor);
+            data.sceneColor.destroy(state);
+            data.sceneColor = null;
+        }
         if (data.preFilterTexture != null) {
             data.preFilterTexture.destroy(state);
             data.preFilterTexture = null;
@@ -610,6 +735,8 @@ public class PipelineManagerVulkan {
         data.lightUniforms = null;
         SharedBuffer.free(data.lights, state);
         data.lights = null;
+        SharedBuffer.free(data.materialTransparency, state);
+        data.materialTransparency = null;
         SharedBuffer.free(data.lightClusters, state);
         data.lightClusters = null;
         SharedBuffer.free(data.lightClusterStats, state);
@@ -771,6 +898,7 @@ public class PipelineManagerVulkan {
                 createIntermediaryTextures(state, state.perFrameData[i], imageExtent);
             }
             state.depthPyramid.resize(state, newWidth, newHeight);
+            state.oitVolume.resize(state, newWidth, newHeight);
         }
     }
 }

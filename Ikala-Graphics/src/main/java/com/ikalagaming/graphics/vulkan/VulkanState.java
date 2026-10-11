@@ -72,6 +72,9 @@ public class VulkanState {
     /** The depth pyramid the scene is culled against, sized with the g-buffer. */
     public DepthPyramid depthPyramid = null;
 
+    /** The voxel-based transparency volume, sized with the g-buffer. */
+    public OitVolume oitVolume = null;
+
     /** For submitting work outside the frame, like texture uploads. */
     public ImmediateCommands immediateCommands = null;
 

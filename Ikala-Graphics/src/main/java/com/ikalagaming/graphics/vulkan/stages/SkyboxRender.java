@@ -46,17 +46,8 @@ public class SkyboxRender implements RenderStage {
     /** VkPipelineLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long pipelineLayout;
 
-    /**
-     * VkPipeline that alpha blends onto the final image, like OpenGL does when rendering to the
-     * back buffer. VK_NULL_HANDLE if not set up.
-     */
-    private long pipelineAlphaBlend;
-
-    /**
-     * VkPipeline that adds onto the pre-filter image, like OpenGL does when rendering to the screen
-     * texture. VK_NULL_HANDLE if not set up.
-     */
-    private long pipelineAdditive;
+    /** VkPipeline pointer, will be VK_NULL_HANDLE if not set up. */
+    private long pipeline;
 
     /** VkDescriptorPool pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorPool;
@@ -76,8 +67,7 @@ public class SkyboxRender implements RenderStage {
         this.skybox = skybox;
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
-        this.pipelineAlphaBlend = VK_NULL_HANDLE;
-        this.pipelineAdditive = VK_NULL_HANDLE;
+        this.pipeline = VK_NULL_HANDLE;
         this.descriptorPool = VK_NULL_HANDLE;
         this.descriptorSets = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
     }
@@ -86,8 +76,7 @@ public class SkyboxRender implements RenderStage {
     public void initialize(@NonNull VulkanState vulkanState) {
         log.debug("Initializing skybox render");
         createPipelineLayout(vulkanState);
-        pipelineAlphaBlend = createPipeline(vulkanState, false);
-        pipelineAdditive = createPipeline(vulkanState, true);
+        pipeline = createPipeline(vulkanState);
     }
 
     @Override
@@ -96,10 +85,8 @@ public class SkyboxRender implements RenderStage {
         Arrays.fill(descriptorSets, VK_NULL_HANDLE);
         vkDestroyDescriptorPool(vulkanState.device.logical, descriptorPool, null);
         descriptorPool = VK_NULL_HANDLE;
-        vkDestroyPipeline(vulkanState.device.logical, pipelineAdditive, null);
-        pipelineAdditive = VK_NULL_HANDLE;
-        vkDestroyPipeline(vulkanState.device.logical, pipelineAlphaBlend, null);
-        pipelineAlphaBlend = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
+        pipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
         pipelineLayout = VK_NULL_HANDLE;
         vkDestroyDescriptorSetLayout(vulkanState.device.logical, descriptorSetLayout, null);
@@ -115,10 +102,9 @@ public class SkyboxRender implements RenderStage {
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
         final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
-        final boolean hasFilter = RenderConfig.hasFilterStage(renderConfig);
         final boolean hasScene = RenderConfig.hasSceneStage(renderConfig);
-        final TextureInfoVulkan target =
-                hasFilter ? frameData.preFilterTexture : frameData.finalTexture;
+        // Linear light, like the light stage, tone mapped after
+        final TextureInfoVulkan target = frameData.sceneColor;
         final TextureInfoVulkan depth = frameData.gBuffer.depth();
 
         updateUniforms(scene, vulkanState, frameData);
@@ -212,10 +198,7 @@ public class SkyboxRender implements RenderStage {
             vkCmdBeginRendering(commandBuffer, renderingInfo);
 
             if (width > 0 && height > 0) {
-                vkCmdBindPipeline(
-                        commandBuffer,
-                        VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        hasFilter ? pipelineAdditive : pipelineAlphaBlend);
+                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
                 // A negative height flips y so the projection matrices work the same as in OpenGL
                 VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
@@ -375,10 +358,9 @@ public class SkyboxRender implements RenderStage {
      * Create a pipeline for drawing the skybox.
      *
      * @param state The Vulkan state.
-     * @param additive True to add onto the target, false to alpha blend onto it.
      * @return The VkPipeline.
      */
-    private long createPipeline(@NonNull VulkanState state, boolean additive) {
+    private long createPipeline(@NonNull VulkanState state) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
@@ -443,24 +425,15 @@ public class SkyboxRender implements RenderStage {
                     VkPipelineRenderingCreateInfo.calloc(stack)
                             .sType$Default()
                             .pColorAttachmentFormats(
-                                    stack.ints(PipelineManagerVulkan.SCREEN_FORMAT))
+                                    stack.ints(PipelineManagerVulkan.SCENE_COLOR_FORMAT))
                             .depthAttachmentFormat(PipelineManagerVulkan.DEPTH_FORMAT);
 
-            // OpenGL applies the same factors to the alpha channel too
-            final int srcFactor = additive ? VK_BLEND_FACTOR_ONE : VK_BLEND_FACTOR_SRC_ALPHA;
-            final int dstFactor =
-                    additive ? VK_BLEND_FACTOR_ONE : VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            // The sky replaces the empty pixels the scene left
             VkPipelineColorBlendAttachmentState.Buffer blendAttachments =
                     VkPipelineColorBlendAttachmentState.calloc(1, stack);
             blendAttachments
                     .get(0)
-                    .blendEnable(true)
-                    .srcColorBlendFactor(srcFactor)
-                    .dstColorBlendFactor(dstFactor)
-                    .colorBlendOp(VK_BLEND_OP_ADD)
-                    .srcAlphaBlendFactor(srcFactor)
-                    .dstAlphaBlendFactor(dstFactor)
-                    .alphaBlendOp(VK_BLEND_OP_ADD)
+                    .blendEnable(false)
                     .colorWriteMask(
                             VK_COLOR_COMPONENT_R_BIT
                                     | VK_COLOR_COMPONENT_G_BIT

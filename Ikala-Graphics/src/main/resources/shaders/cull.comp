@@ -79,6 +79,11 @@ layout(buffer_reference, std430, buffer_reference_align = 8) writeonly buffer Vi
 
 // The frustum planes of each pass, six per pass, in render space. A point p is inside a plane
 // when dot(plane.xyz, p) + plane.w >= 0.
+// Whether each material is translucent, by material index
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer MaterialTransparency {
+    uint translucent[];
+};
+
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Frusta {
     vec4 planes[];
 };
@@ -130,6 +135,7 @@ layout(push_constant) uniform Constants {
     uint bakedSlotCount;
     // The mesh table of baked sections
     Meshes bakedMeshes;
+    MaterialTransparency materialTransparency;
 };
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
@@ -148,13 +154,15 @@ const uint PHASE_LATE = 1;
 const uint LIST_SCENE_EARLY = 0;
 const uint LIST_SCENE_LATE = 1;
 const uint LIST_FIRST_CASCADE = 2;
-const uint LIST_COUNT = 5;
+const uint LIST_TRANSLUCENT = 5;
+const uint LIST_COUNT = 6;
 
 // The counter of meshes the occlusion test hid, after one counter per list
 const uint COUNTER_OCCLUDED = LIST_COUNT;
 
-// The standard kind, in the main mesh table; every other kind is baked
+// The standard kind, in the main mesh table; every other kind is baked. Must match MeshKind.
 const uint KIND_STANDARD = 0;
+const uint KIND_BAKED_TRANSLUCENT = 3;
 
 // Set in the view flags when the scene is culled by occlusion
 const uint FLAG_OCCLUSION = 1;
@@ -292,6 +300,21 @@ void main()
         uint material = overrides.overrides[entry];
         if (material == 0) {
             material = modelMesh.material;
+        }
+
+        // See-through meshes are drawn by the transparent stage after everything opaque, culled
+        // only against the finished pyramid, and cast no shadows
+        bool translucent = modelMesh.kind == KIND_BAKED_TRANSLUCENT
+            || (modelMesh.kind == KIND_STANDARD && materialTransparency.translucent[material] != 0);
+        if (translucent) {
+            if (phase == PHASE_LATE && pass == 0 && inView) {
+                if ((view.flags & FLAG_PYRAMID_VALID) != 0 && occluded(center, extents)) {
+                    atomicAdd(counters.counters[COUNTER_OCCLUDED], 1u);
+                } else {
+                    draw(LIST_TRANSLUCENT, modelMesh.kind, modelMesh.slot, slot, material);
+                }
+            }
+            continue;
         }
 
         if (phase == PHASE_EARLY) {

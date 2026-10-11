@@ -171,6 +171,9 @@ public class InstanceCull implements RenderStage {
             constants.putLong(
                     ShaderBindings.Cull.PUSH_CONSTANT_BAKED_MESHES_OFFSET,
                     state.bakedGeometry.getMeshTable().getBuffer().deviceAddress);
+            constants.putLong(
+                    ShaderBindings.Cull.PUSH_CONSTANT_MATERIAL_TRANSPARENCY_OFFSET,
+                    frameData.materialTransparency.deviceAddress);
             vkCmdPushConstants(
                     commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
             final int groups =

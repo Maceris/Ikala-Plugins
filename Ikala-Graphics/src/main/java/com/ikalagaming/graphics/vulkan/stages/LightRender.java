@@ -4,7 +4,6 @@ import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.scene.Fog;
@@ -29,8 +28,9 @@ import java.util.Arrays;
 
 /**
  * Handles rendering the lighting for a scene, given the g-buffer, lighting, and shadow information.
- * Renders into the pre-filter image if there is a filter stage, otherwise the final image, and
- * leaves it as a color attachment for the stages after.
+ * Renders linear light into the HDR scene color, clearing the sky's pixels for the skybox, and
+ * leaves it as a color attachment for the stages after; {@link ToneMap} turns it into the image
+ * shown.
  */
 @Setter
 @Slf4j
@@ -55,17 +55,8 @@ public class LightRender implements RenderStage {
     /** VkPipelineLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long pipelineLayout;
 
-    /**
-     * VkPipeline that alpha blends onto the final image, like OpenGL does when rendering to the
-     * back buffer. VK_NULL_HANDLE if not set up.
-     */
-    private long pipelineAlphaBlend;
-
-    /**
-     * VkPipeline that adds onto the pre-filter image, like OpenGL does when rendering to the screen
-     * texture. VK_NULL_HANDLE if not set up.
-     */
-    private long pipelineAdditive;
+    /** VkPipeline pointer, will be VK_NULL_HANDLE if not set up. */
+    private long pipeline;
 
     /** VkDescriptorPool pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorPool;
@@ -91,8 +82,7 @@ public class LightRender implements RenderStage {
 
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
-        this.pipelineAlphaBlend = VK_NULL_HANDLE;
-        this.pipelineAdditive = VK_NULL_HANDLE;
+        this.pipeline = VK_NULL_HANDLE;
         this.descriptorPool = VK_NULL_HANDLE;
         this.descriptorSets = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
         this.writtenBuffers =
@@ -103,8 +93,13 @@ public class LightRender implements RenderStage {
     public void initialize(@NonNull VulkanState vulkanState) {
         log.debug("Initializing light render");
         createPipelineLayout(vulkanState);
-        pipelineAlphaBlend = createPipeline(vulkanState, false);
-        pipelineAdditive = createPipeline(vulkanState, true);
+        pipeline =
+                FullScreenPass.createPipeline(
+                        vulkanState,
+                        shader,
+                        pipelineLayout,
+                        PipelineManagerVulkan.SCENE_COLOR_FORMAT,
+                        null);
     }
 
     @Override
@@ -113,10 +108,8 @@ public class LightRender implements RenderStage {
         Arrays.fill(descriptorSets, VK_NULL_HANDLE);
         vkDestroyDescriptorPool(vulkanState.device.logical, descriptorPool, null);
         descriptorPool = VK_NULL_HANDLE;
-        vkDestroyPipeline(vulkanState.device.logical, pipelineAdditive, null);
-        pipelineAdditive = VK_NULL_HANDLE;
-        vkDestroyPipeline(vulkanState.device.logical, pipelineAlphaBlend, null);
-        pipelineAlphaBlend = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
+        pipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
         pipelineLayout = VK_NULL_HANDLE;
         vkDestroyDescriptorSetLayout(vulkanState.device.logical, descriptorSetLayout, null);
@@ -132,9 +125,7 @@ public class LightRender implements RenderStage {
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
         final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
-        final boolean hasFilter = RenderConfig.hasFilterStage(renderConfig);
-        final TextureInfoVulkan target =
-                hasFilter ? frameData.preFilterTexture : frameData.finalTexture;
+        final TextureInfoVulkan target = frameData.sceneColor;
 
         // The light cull stage wrote the lights and sorted them into clusters
         updateUniforms(scene, frameData, frameData.lightCount);
@@ -149,7 +140,7 @@ public class LightRender implements RenderStage {
         final int height = Math.min(window.getHeight(), vulkanState.realSize.height());
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            // Last used by the blit to the swapchain or by the filter, a frame or more ago
+            // Last read by the tone map stage, a frame or more ago
             VkImageMemoryBarrier2.Buffer barrier = VkImageMemoryBarrier2.calloc(1, stack);
             SceneRender.imageBarrier(
                     barrier.get(0),
@@ -165,7 +156,7 @@ public class LightRender implements RenderStage {
                     commandBuffer,
                     VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barrier));
 
-            // Cleared to transparent black, like OpenGL
+            // Cleared, so the sky's pixels are empty until the skybox draws them
             VkRenderingAttachmentInfo.Buffer colorAttachments =
                     VkRenderingAttachmentInfo.calloc(1, stack);
             colorAttachments
@@ -184,17 +175,7 @@ public class LightRender implements RenderStage {
             vkCmdBeginRendering(commandBuffer, renderingInfo);
 
             if (width > 0 && height > 0) {
-                vkCmdBindPipeline(
-                        commandBuffer,
-                        VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        hasFilter ? pipelineAdditive : pipelineAlphaBlend);
-
-                VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
-                viewports.get(0).width(width).height(height).minDepth(0).maxDepth(1);
-                vkCmdSetViewport(commandBuffer, 0, viewports);
-                VkRect2D.Buffer scissors = VkRect2D.calloc(1, stack);
-                scissors.get(0).extent().set(width, height);
-                vkCmdSetScissor(commandBuffer, 0, scissors);
+                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
                 vkCmdBindDescriptorSets(
                         commandBuffer,
@@ -205,14 +186,7 @@ public class LightRender implements RenderStage {
                                 descriptorSets[vulkanState.frameIndex],
                                 vulkanState.bindlessTextures.getDescriptorSet()),
                         null);
-                vkCmdBindVertexBuffers(
-                        commandBuffer,
-                        0,
-                        stack.longs(quadMesh.vertexBuffer().buffer),
-                        stack.longs(0));
-                vkCmdBindIndexBuffer(
-                        commandBuffer, quadMesh.indexBuffer().buffer, 0, VK_INDEX_TYPE_UINT32);
-                vkCmdDrawIndexed(commandBuffer, QuadMesh.INDEX_COUNT, 1, 0, 0, 0);
+                FullScreenPass.draw(commandBuffer, quadMesh, width, height, stack);
             }
 
             vkCmdEndRendering(commandBuffer);
@@ -410,134 +384,21 @@ public class LightRender implements RenderStage {
     }
 
     /**
-     * Create a pipeline for drawing the lit scene onto a full screen quad.
+     * The layout of this stage's per-frame descriptor set, for stages that read the same inputs.
      *
-     * @param state The Vulkan state.
-     * @param additive True to add onto the target, false to alpha blend onto it.
-     * @return The VkPipeline.
+     * @return The VkDescriptorSetLayout.
      */
-    private long createPipeline(@NonNull VulkanState state, boolean additive) {
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            LongBuffer longOutput = stack.callocLong(1);
+    public long getDescriptorSetLayout() {
+        return descriptorSetLayout;
+    }
 
-            // Matches the QuadMesh layout
-            VkVertexInputAttributeDescription.Buffer vertexAttributes =
-                    VkVertexInputAttributeDescription.calloc(2, stack);
-            // Positions
-            vertexAttributes
-                    .get(0)
-                    .binding(0)
-                    .location(0)
-                    .format(VK_FORMAT_R32G32B32_SFLOAT)
-                    .offset(0);
-            // Texture Coordinates
-            vertexAttributes
-                    .get(1)
-                    .binding(0)
-                    .location(1)
-                    .format(VK_FORMAT_R32G32_SFLOAT)
-                    .offset(3 * Float.BYTES);
-
-            VkVertexInputBindingDescription.Buffer vertexBindings =
-                    VkVertexInputBindingDescription.calloc(1, stack);
-            vertexBindings
-                    .get(0)
-                    .binding(0)
-                    .stride((3 + 2) * Float.BYTES)
-                    .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
-
-            VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo =
-                    VkPipelineVertexInputStateCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .pVertexBindingDescriptions(vertexBindings)
-                            .pVertexAttributeDescriptions(vertexAttributes);
-
-            VkPipelineInputAssemblyStateCreateInfo inputAssemblyState =
-                    VkPipelineInputAssemblyStateCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-
-            VkPipelineViewportStateCreateInfo viewportState =
-                    VkPipelineViewportStateCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .viewportCount(1)
-                            .scissorCount(1);
-
-            VkPipelineDynamicStateCreateInfo dynamicState =
-                    VkPipelineDynamicStateCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .pDynamicStates(
-                                    stack.ints(
-                                            VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR));
-
-            VkPipelineRenderingCreateInfo renderingCreateInfo =
-                    VkPipelineRenderingCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .pColorAttachmentFormats(
-                                    stack.ints(PipelineManagerVulkan.SCREEN_FORMAT));
-
-            // OpenGL applies the same factors to the alpha channel too
-            final int srcFactor = additive ? VK_BLEND_FACTOR_ONE : VK_BLEND_FACTOR_SRC_ALPHA;
-            final int dstFactor =
-                    additive ? VK_BLEND_FACTOR_ONE : VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            VkPipelineColorBlendAttachmentState.Buffer blendAttachments =
-                    VkPipelineColorBlendAttachmentState.calloc(1, stack);
-            blendAttachments
-                    .get(0)
-                    .blendEnable(true)
-                    .srcColorBlendFactor(srcFactor)
-                    .dstColorBlendFactor(dstFactor)
-                    .colorBlendOp(VK_BLEND_OP_ADD)
-                    .srcAlphaBlendFactor(srcFactor)
-                    .dstAlphaBlendFactor(dstFactor)
-                    .alphaBlendOp(VK_BLEND_OP_ADD)
-                    .colorWriteMask(
-                            VK_COLOR_COMPONENT_R_BIT
-                                    | VK_COLOR_COMPONENT_G_BIT
-                                    | VK_COLOR_COMPONENT_B_BIT
-                                    | VK_COLOR_COMPONENT_A_BIT);
-            VkPipelineColorBlendStateCreateInfo colorBlendState =
-                    VkPipelineColorBlendStateCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .pAttachments(blendAttachments);
-            VkPipelineRasterizationStateCreateInfo rasterizationState =
-                    VkPipelineRasterizationStateCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .polygonMode(VK_POLYGON_MODE_FILL)
-                            .cullMode(VK_CULL_MODE_NONE)
-                            .lineWidth(1.0f);
-            VkPipelineMultisampleStateCreateInfo multisampleState =
-                    VkPipelineMultisampleStateCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .rasterizationSamples(VK_SAMPLE_COUNT_1_BIT);
-
-            VkGraphicsPipelineCreateInfo.Buffer pipelineCreateInfos =
-                    VkGraphicsPipelineCreateInfo.calloc(1, stack);
-            pipelineCreateInfos
-                    .get(0)
-                    .sType$Default()
-                    .pNext(renderingCreateInfo)
-                    .stageCount(shader.shaderModules.length)
-                    .pStages(shader.shaderStages)
-                    .pVertexInputState(vertexInputStateCreateInfo)
-                    .pInputAssemblyState(inputAssemblyState)
-                    .pViewportState(viewportState)
-                    .pRasterizationState(rasterizationState)
-                    .pMultisampleState(multisampleState)
-                    .pColorBlendState(colorBlendState)
-                    .pDynamicState(dynamicState)
-                    .layout(pipelineLayout)
-                    .renderPass(VK_NULL_HANDLE);
-
-            checkError(
-                    vkCreateGraphicsPipelines(
-                            state.device.logical,
-                            VK_NULL_HANDLE,
-                            pipelineCreateInfos,
-                            null,
-                            longOutput));
-
-            return longOutput.get(0);
-        }
+    /**
+     * This stage's descriptor set for a frame, written when the stage renders that frame.
+     *
+     * @param frameIndex The frame in flight.
+     * @return The VkDescriptorSet.
+     */
+    public long getDescriptorSet(int frameIndex) {
+        return descriptorSets[frameIndex];
     }
 }

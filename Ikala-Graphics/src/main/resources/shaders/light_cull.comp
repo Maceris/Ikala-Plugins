@@ -1,5 +1,6 @@
 #version 460
 #extension GL_EXT_buffer_reference : require
+#extension GL_GOOGLE_include_directive : require
 
 // Sorts the point lights and spotlights into clusters of the view, so the light stage only looks at
 // the lights that can reach each pixel. Each thread takes one cluster, builds its view space box,
@@ -8,30 +9,10 @@
 // ClusterMath has the grid and the tests in Java, with tests; keep them in step. lights.frag finds
 // a pixel's cluster the same way.
 
-const uint CLUSTERS_X = 16;
-const uint CLUSTERS_Y = 9;
-const uint CLUSTERS_Z = 24;
-const uint CLUSTER_COUNT = CLUSTERS_X * CLUSTERS_Y * CLUSTERS_Z;
-const uint MAX_LIGHTS_PER_CLUSTER = 256;
-const float FIRST_SLICE_DEPTH = 1.0;
-
-// Must match LightType.getShaderValue()
-const uint LIGHT_TYPE_SPOT = 1;
+#include "clusters.glsl"
+#include "light_struct.glsl"
 
 const uint GROUP_SIZE = 64;
-
-// A point light or spotlight, with the position and direction in view space
-struct Light {
-    vec3 position;
-    float range;
-    vec3 color;
-    float intensity;
-    vec3 direction;
-    float cosOuter;
-    float cosInner;
-    uint type;
-    vec2 _padding;
-};
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Lights {
     Light lights[];
