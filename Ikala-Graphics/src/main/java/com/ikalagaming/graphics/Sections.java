@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.bake.CubeRotations;
 import com.ikalagaming.graphics.bake.Face;
 import com.ikalagaming.graphics.bake.Faces;
 import com.ikalagaming.graphics.bake.SectionBaker;
+import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.vulkan.SectionManager;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
@@ -109,7 +110,7 @@ public final class Sections {
             final VulkanInstance renderer = renderer();
             final MaterialCache materials = GraphicsManager.getScene().getMaterialCache();
             final BakeSource[] sources = new BakeSource[count];
-            final int[] materialIndices = new int[count];
+            final int[] materialIndices = new int[count * SectionBaker.FACE_KINDS];
             for (int i = 0; i < count; ++i) {
                 sources[i] = renderer.getState().bakeSources.get(meshes[i]);
                 if (sources[i] == null) {
@@ -118,7 +119,13 @@ public final class Sections {
                                     + i
                                     + "'s mesh wasn't registered for baking, or was released");
                 }
-                materialIndices[i] = materials.getMaterialIndex(sources[i].getMaterial());
+                final Material material = sources[i].getMaterial();
+                final int base = i * SectionBaker.FACE_KINDS;
+                materialIndices[base + SectionBaker.SIDE] = materials.getMaterialIndex(material);
+                materialIndices[base + SectionBaker.TOP] =
+                        materials.getMaterialIndex(material == null ? null : material.forTop());
+                materialIndices[base + SectionBaker.BOTTOM] =
+                        materials.getMaterialIndex(material == null ? null : material.forBottom());
             }
             request =
                     new SectionManager.Request(

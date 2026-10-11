@@ -6,7 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ikalagaming.graphics.benchmark.BlockMeshes;
 import com.ikalagaming.graphics.graph.Material;
+import com.ikalagaming.graphics.lod.LodMesh;
 
 import org.junit.jupiter.api.Test;
 
@@ -206,6 +208,67 @@ class SectionBakerTest {
                 allOnTop &= bucket.vertices().getShort(at + 2) == BakedVertex.STEPS_PER_UNIT;
             }
             assertTrue(!allOnTop, "The top face is gone");
+        }
+    }
+
+    /**
+     * Faces take the material for the way they point in the world, after the placement's rotation:
+     * a block turned so its top faces +x gets its side material there.
+     */
+    @Test
+    void testFacesTakeMaterialsByWorldDirection() {
+        final BakeSource box =
+                BakeSource.derive(
+                        BlockMeshes.box(new float[] {0, 0, 0}, new float[] {1, 1, 1}, null),
+                        BlockMeshes.BOX_MIN,
+                        BlockMeshes.BOX_MAX);
+        int turned = -1;
+        for (int rotation = 0; rotation < CubeRotations.COUNT && turned < 0; ++rotation) {
+            if (CubeRotations.turn(rotation, Face.POS_Y) == Face.POS_X) {
+                turned = rotation;
+            }
+        }
+        final int side = 1;
+        final int top = 2;
+        final int bottom = 3;
+        // A slab's top is on no face of its box, and goes by its normal
+        final BakeSource slab =
+                BakeSource.derive(
+                        BlockMeshes.box(new float[] {0, 0, 0}, new float[] {1, 0.5f, 1}, null),
+                        BlockMeshes.BOX_MIN,
+                        BlockMeshes.BOX_MAX);
+        final SectionBaker.Result result =
+                SectionBaker.bakeByFace(
+                        new BakeSource[] {box, box, slab},
+                        new int[] {side, top, bottom, side, top, bottom, side, top, bottom},
+                        new int[] {
+                            SectionBaker.pack(0, 0, 0),
+                            SectionBaker.pack(2, 0, 0),
+                            SectionBaker.pack(4, 0, 0)
+                        },
+                        new byte[] {0, (byte) turned, 0},
+                        new byte[3],
+                        new short[3]);
+        final LodMesh mesh =
+                LodMesh.fromBaked(result.get(Material.Transparency.OPAQUE), new double[3]);
+        assertEquals(36, mesh.getTriangleCount());
+        final double[] a = new double[3];
+        final double[] b = new double[3];
+        final double[] c = new double[3];
+        final double[] n = new double[3];
+        for (int t = 0; t < mesh.getTriangleCount(); ++t) {
+            for (int axis = 0; axis < 3; ++axis) {
+                a[axis] = mesh.position(mesh.corner(t, 0), axis);
+                b[axis] = mesh.position(mesh.corner(t, 1), axis);
+                c[axis] = mesh.position(mesh.corner(t, 2), axis);
+            }
+            for (int axis = 0; axis < 3; ++axis) {
+                final int p = (axis + 1) % 3;
+                final int q = (axis + 2) % 3;
+                n[axis] = (b[p] - a[p]) * (c[q] - a[q]) - (b[q] - a[q]) * (c[p] - a[p]);
+            }
+            final int expected = n[1] > 0.5 ? top : (n[1] < -0.5 ? bottom : side);
+            assertEquals(expected, mesh.material(t), "Triangle " + t);
         }
     }
 }

@@ -388,10 +388,9 @@ public final class GateBenchmark {
         log.info("Gate benchmark: {} at radius {} with {} lights", recipe, radius, lightCount);
         final Scene scene = GraphicsManager.getScene();
         if (blockMeshes == null) {
-            blockMeshes = BlockMeshes.create();
-            for (int block = 1; block < blockMeshes.length; ++block) {
-                scene.getMaterialCache().addMaterial(blockMeshes[block].getMaterial());
-            }
+            final BlockMeshes.Textured blocks = BlockMeshes.textured(graphics.textures());
+            blockMeshes = blocks.meshes();
+            blocks.materials().forEach(scene.getMaterialCache()::addMaterial);
         }
         final BakeSource[] sources = new BakeSource[blockMeshes.length];
         for (int block = 1; block < blockMeshes.length; ++block) {

@@ -49,8 +49,44 @@ public final class SyntheticTerrain {
     /** A red tinted glass cube, more opaque than clear glass. */
     public static final byte TINTED_GLASS = 7;
 
+    /** A dirt cube, under grass. */
+    public static final byte DIRT = 8;
+
+    /** A cube of wooden planks. */
+    public static final byte PLANKS = 9;
+
+    /** Wooden stairs, climbing toward +z. */
+    public static final byte STAIRS = 10;
+
+    /** A water cube, see-through. */
+    public static final byte WATER = 11;
+
     /** How many block types there are, air included. */
-    public static final int BLOCK_TYPES = 8;
+    public static final int BLOCK_TYPES = 12;
+
+    /** How many blocks of dirt lie under the grass. */
+    private static final int DIRT_DEPTH = 3;
+
+    /** The terrain recipe's water level: open cells at or below it hold water. */
+    private static final int WATER_LEVEL = -8;
+
+    /** How far a hut's walls reach from its middle, in blocks. */
+    private static final int HUT_RADIUS = 2;
+
+    /** How tall a hut's walls are, in blocks. */
+    private static final int HUT_HEIGHT = 3;
+
+    /** How tall a hut's door is, in blocks. */
+    private static final int DOOR_HEIGHT = 2;
+
+    /** Tree cells at or above this hash get a hut instead, below {@link #GLASS_CELLS}. */
+    private static final double HUT_CELLS = 0.9;
+
+    /** Tree cells above this hash get a pane of glass. */
+    private static final double GLASS_CELLS = 0.95;
+
+    /** Where a tree's middle is in its cell, along x and z. */
+    private static final int TREE_MIDDLE = 4;
 
     /** How far apart the GLASS recipe's walls are, in blocks. */
     private static final int GLASS_WALL_SPACING = 6;
@@ -78,7 +114,10 @@ public final class SyntheticTerrain {
 
     /** What the world is made of. */
     public enum Recipe {
-        /** Rolling hills with overhangs, caves near the surface, plants, trees and glass. */
+        /**
+         * Rolling hills of grass over dirt and stone, with overhangs, caves near the surface,
+         * lakes, plants, trees, plank huts and glass.
+         */
         TERRAIN,
         /** A layer with a block in every other cell, so no face hides another. */
         CHECKERBOARD,
@@ -255,9 +294,15 @@ public final class SyntheticTerrain {
                     && Math.abs(fbm3(x / 24.0, y / 16.0, z / 24.0, 2) - 0.5) < 0.07) {
                 return AIR;
             }
-            return solid(x, y + 1, z, height(x, z)) ? STONE : GRASS;
+            if (!solid(x, y + 1, z, height)) {
+                return y < WATER_LEVEL ? DIRT : GRASS;
+            }
+            return y >= height - DIRT_DEPTH ? DIRT : STONE;
         }
-        // On top of the ground: slabs, plants, then leaves and glass in the air
+        if (y <= WATER_LEVEL) {
+            return WATER;
+        }
+        // On top of the ground: slabs, plants, then leaves, huts and glass in the air
         if (solid(x, y - 1, z, height)) {
             final double fraction = height - Math.floor(height);
             if (y == (int) Math.floor(height) + 1 && fraction >= 0.5) {
@@ -271,9 +316,9 @@ public final class SyntheticTerrain {
         final int cellX = Math.floorDiv(x, TREE_SPACING);
         final int cellZ = Math.floorDiv(z, TREE_SPACING);
         final double tree = hash(cellX, 0, cellZ, 2);
-        if (tree < 0.9) {
-            final int treeX = cellX * TREE_SPACING + 4;
-            final int treeZ = cellZ * TREE_SPACING + 4;
+        if (tree < HUT_CELLS) {
+            final int treeX = cellX * TREE_SPACING + TREE_MIDDLE;
+            final int treeZ = cellZ * TREE_SPACING + TREE_MIDDLE;
             final int top = (int) Math.floor(height(treeX, treeZ)) + 4;
             if (Math.abs(x - treeX) <= 3
                     && Math.abs(z - treeZ) <= 3
@@ -282,9 +327,12 @@ public final class SyntheticTerrain {
                     && hash(x, y, z, 3) >= LEAF_GAPS) {
                 return LEAVES;
             }
-        } else if (tree > 0.95) {
-            final int wallZ = cellZ * TREE_SPACING + 4;
-            final int base = (int) Math.floor(height(cellX * TREE_SPACING + 4, wallZ)) + 1;
+        } else if (tree < GLASS_CELLS) {
+            return hut(x, y, z, cellX, cellZ);
+        } else {
+            final int wallZ = cellZ * TREE_SPACING + TREE_MIDDLE;
+            final int base =
+                    (int) Math.floor(height(cellX * TREE_SPACING + TREE_MIDDLE, wallZ)) + 1;
             if (z == wallZ
                     && x >= cellX * TREE_SPACING + 1
                     && x < cellX * TREE_SPACING + TREE_SPACING - 1
@@ -294,6 +342,37 @@ public final class SyntheticTerrain {
             }
         }
         return AIR;
+    }
+
+    /**
+     * A small plank hut in a tree cell: walls around a square, a door on its -z side, and stairs in
+     * front of the door, left out under water.
+     *
+     * @param x The block's x.
+     * @param y The block's y.
+     * @param z The block's z.
+     * @param cellX The tree cell's x.
+     * @param cellZ The tree cell's z.
+     * @return The block type, air outside the hut.
+     */
+    private byte hut(int x, int y, int z, int cellX, int cellZ) {
+        final int middleX = cellX * TREE_SPACING + TREE_MIDDLE;
+        final int middleZ = cellZ * TREE_SPACING + TREE_MIDDLE;
+        final int base = (int) Math.floor(height(middleX, middleZ)) + 1;
+        if (base <= WATER_LEVEL + 1 || y < base || y >= base + HUT_HEIGHT) {
+            return AIR;
+        }
+        final int dx = x - middleX;
+        final int dz = z - middleZ;
+        if (dx == 0 && dz == -HUT_RADIUS - 1 && y == base) {
+            return STAIRS;
+        }
+        if (Math.abs(dx) > HUT_RADIUS || Math.abs(dz) > HUT_RADIUS) {
+            return AIR;
+        }
+        final boolean wall = Math.abs(dx) == HUT_RADIUS || Math.abs(dz) == HUT_RADIUS;
+        final boolean door = dx == 0 && dz == -HUT_RADIUS && y < base + DOOR_HEIGHT;
+        return wall && !door ? PLANKS : AIR;
     }
 
     /**
@@ -321,7 +400,10 @@ public final class SyntheticTerrain {
      */
     private byte glass(int x, int y, int z) {
         if (y <= 0) {
-            return y == 0 ? GRASS : STONE;
+            if (y == 0) {
+                return GRASS;
+            }
+            return y >= -DIRT_DEPTH ? DIRT : STONE;
         }
         // Halfway between, so the camera at the origin is between walls
         if (y > GLASS_WALL_HEIGHT
@@ -344,6 +426,9 @@ public final class SyntheticTerrain {
     private byte caves(int x, int y, int z) {
         if (y >= 32) {
             return y == 32 ? GRASS : AIR;
+        }
+        if (y >= 32 - DIRT_DEPTH) {
+            return DIRT;
         }
         if (y < 28 && fbm3(x / 14.0, y / 10.0, z / 14.0, 3) > 0.53) {
             return AIR;

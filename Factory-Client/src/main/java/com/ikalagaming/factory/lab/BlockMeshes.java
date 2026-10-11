@@ -5,6 +5,7 @@ import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.bake.BakeSource;
+import com.ikalagaming.graphics.benchmark.SyntheticTerrain;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.scene.Scene;
@@ -20,8 +21,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * <p>Block definitions don't name a mesh yet. When they do, with a mesh exported from the asset
  * editor, {@link #meshFor} loads that mesh instead, and nothing else in the preview changes. Until
- * then, and for any block whose mesh is missing, a block is a unit cube in its slice view color, so
- * 2D and 3D agree. Fluids are translucent.
+ * then, a block whose name (after its namespace) matches one of the graphics test blocks, such as
+ * stone, dirt, grass or water, is drawn as that textured block, and any other is a unit cube in its
+ * slice view color, so 2D and 3D agree. Fluids are translucent.
  *
  * <p>Render thread only, except {@link #removeMaterials}.
  */
@@ -73,6 +75,20 @@ final class BlockMeshes implements AutoCloseable {
     /** Materials added to the scene, to remove again. */
     private final List<Material> materials = new CopyOnWriteArrayList<>();
 
+    /** The graphics test blocks a block name can match, by the name after its namespace. */
+    private static final Map<String, Byte> TEST_BLOCKS =
+            Map.of(
+                    "stone", SyntheticTerrain.STONE,
+                    "dirt", SyntheticTerrain.DIRT,
+                    "grass", SyntheticTerrain.GRASS,
+                    "water", SyntheticTerrain.WATER,
+                    "planks", SyntheticTerrain.PLANKS,
+                    "leaves", SyntheticTerrain.LEAVES,
+                    "glass", SyntheticTerrain.GLASS);
+
+    /** The textured test blocks, made the first time a name matches one. */
+    private com.ikalagaming.graphics.benchmark.BlockMeshes.Textured textured;
+
     /**
      * Set up the lookup.
      *
@@ -115,14 +131,27 @@ final class BlockMeshes implements AutoCloseable {
      * @return Its entry.
      */
     private Entry meshFor(@NonNull String block, boolean fluid) {
-        final MeshData mesh =
-                com.ikalagaming.graphics.benchmark.BlockMeshes.box(
-                        new float[] {BOX_MIN.x, BOX_MIN.y, BOX_MIN.z},
-                        new float[] {BOX_MAX.x, BOX_MAX.y, BOX_MAX.z},
-                        placeholderMaterial(block, fluid));
         final Scene scene = GraphicsManager.getScene();
-        scene.getMaterialCache().addMaterial(mesh.getMaterial());
-        materials.add(mesh.getMaterial());
+        final Byte test = TEST_BLOCKS.get(block.substring(block.indexOf(':') + 1));
+        final MeshData mesh;
+        if (test != null) {
+            if (textured == null) {
+                textured =
+                        com.ikalagaming.graphics.benchmark.BlockMeshes.textured(
+                                graphics.textures());
+                textured.materials().forEach(scene.getMaterialCache()::addMaterial);
+                materials.addAll(textured.materials());
+            }
+            mesh = textured.meshes()[test];
+        } else {
+            mesh =
+                    com.ikalagaming.graphics.benchmark.BlockMeshes.box(
+                            new float[] {BOX_MIN.x, BOX_MIN.y, BOX_MIN.z},
+                            new float[] {BOX_MAX.x, BOX_MAX.y, BOX_MAX.z},
+                            placeholderMaterial(block, fluid));
+            scene.getMaterialCache().addMaterial(mesh.getMaterial());
+            materials.add(mesh.getMaterial());
+        }
         final MeshHandle handle = graphics.meshes().registerBakeable(mesh, BOX_MIN, BOX_MAX);
         return new Entry(handle, graphics.meshes().faceInfo(handle), mesh.getMaterial());
     }
@@ -166,7 +195,11 @@ final class BlockMeshes implements AutoCloseable {
     public void close() {
         if (!graphics.isClosed()) {
             entries.values().forEach(entry -> graphics.meshes().release(entry.mesh()));
+            if (textured != null) {
+                textured.textures().forEach(graphics.textures()::release);
+            }
         }
+        textured = null;
         entries.clear();
         removeMaterials();
     }

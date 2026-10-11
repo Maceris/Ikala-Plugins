@@ -23,6 +23,24 @@ public final class SectionBaker {
     /** How many bits each axis of a packed position takes. */
     public static final int POSITION_BITS = 10;
 
+    /**
+     * Materials each placement gives, by the way a face points in the world: sideways, up, then
+     * down. See {@link #bakeByFace}.
+     */
+    public static final int FACE_KINDS = 3;
+
+    /** The material for faces pointing sideways. */
+    public static final int SIDE = 0;
+
+    /** The material for faces pointing up. */
+    public static final int TOP = 1;
+
+    /** The material for faces pointing down. */
+    public static final int BOTTOM = 2;
+
+    /** A normal's y over this points mostly up: more than at 45 degrees. */
+    private static final float MOSTLY = (float) Math.sqrt(0.5);
+
     /** The smallest cell offset along an axis. */
     public static final int MIN_CELL = -(1 << (POSITION_BITS - 1));
 
@@ -224,8 +242,44 @@ public final class SectionBaker {
             byte @NonNull [] rotations,
             byte @NonNull [] faceMasks,
             short @NonNull [] userData) {
+        if (materials.length != sources.length) {
+            throw new IllegalArgumentException("Every placement array must be the same length");
+        }
+        final int[] byFace = new int[materials.length * FACE_KINDS];
+        for (int i = 0; i < materials.length; ++i) {
+            Arrays.fill(byFace, i * FACE_KINDS, (i + 1) * FACE_KINDS, materials[i]);
+        }
+        return bakeByFace(sources, byFace, packedPositions, rotations, faceMasks, userData);
+    }
+
+    /**
+     * Bake a section, with a material for each way a face can point in the world, so a block can
+     * have a different top and bottom, like grass. Every array has one entry per placement, except
+     * the materials.
+     *
+     * @param sources The mesh each placement puts down.
+     * @param faceMaterials {@link #FACE_KINDS} material indices per placement: for faces pointing
+     *     sideways, up, then down, after the placement's rotation; a triangle on no face of its box
+     *     goes by its normal.
+     * @param packedPositions The cell each placement fills, from {@link #pack(int, int, int)}.
+     * @param rotations Each placement's rotation, one of {@link CubeRotations}.
+     * @param faceMasks The faces of each placement its neighbors hide, after rotation, one bit per
+     *     {@link Face#bit()}.
+     * @param userData What each placement writes into its vertices for shaders, not interpreted
+     *     here.
+     * @return The baked meshes.
+     * @throws IllegalArgumentException If the arrays differ in length, a rotation is out of range,
+     *     or a vertex lands too far from the origin.
+     */
+    public static Result bakeByFace(
+            @NonNull BakeSource @NonNull [] sources,
+            int @NonNull [] faceMaterials,
+            int @NonNull [] packedPositions,
+            byte @NonNull [] rotations,
+            byte @NonNull [] faceMasks,
+            short @NonNull [] userData) {
         final int count = sources.length;
-        if (materials.length != count
+        if (faceMaterials.length != count * FACE_KINDS
                 || packedPositions.length != count
                 || rotations.length != count
                 || faceMasks.length != count
@@ -251,10 +305,11 @@ public final class SectionBaker {
                 builders[bucket] = new Builder();
             }
             final Builder builder = builders[bucket];
-            if (remap.length < source.getVertexCount()) {
-                remap = new int[source.getVertexCount()];
+            // A vertex shared by faces pointing different ways gets one copy per material
+            if (remap.length < source.getVertexCount() * FACE_KINDS) {
+                remap = new int[source.getVertexCount() * FACE_KINDS];
             }
-            Arrays.fill(remap, 0, source.getVertexCount(), -1);
+            Arrays.fill(remap, 0, source.getVertexCount() * FACE_KINDS, -1);
 
             final float size = source.getBoxSize();
             final float[] boxMin = source.getBoxMin();
@@ -262,13 +317,25 @@ public final class SectionBaker {
             final byte[] triangleFaces = source.getTriangleFaces();
             for (int triangle = 0; triangle < triangleFaces.length; ++triangle) {
                 final byte face = triangleFaces[triangle];
-                if (face != Face.NONE
-                        && (hidden & CubeRotations.turn(rotation, Face.ALL[face]).bit()) != 0) {
+                final Face turned =
+                        face == Face.NONE ? null : CubeRotations.turn(rotation, Face.ALL[face]);
+                if (turned != null && (hidden & turned.bit()) != 0) {
                     continue;
                 }
+                final int kind;
+                if (turned != null) {
+                    kind = faceKind(turned);
+                } else {
+                    // On no face of the box, like a slab's top: by the way the triangle points
+                    CubeRotations.apply(
+                            rotation, source.getNormals(), indices[triangle * 3] * 3, normal, 0);
+                    kind = kindOf(normal[1]);
+                }
+                final int material = faceMaterials[placement * FACE_KINDS + kind];
                 for (int corner = 0; corner < 3; ++corner) {
                     final int vertex = indices[triangle * 3 + corner];
-                    if (remap[vertex] < 0) {
+                    final int slot = vertex * FACE_KINDS + kind;
+                    if (remap[slot] < 0) {
                         // Turn about the box's center, then move to the cell
                         for (int axis = 0; axis < 3; ++axis) {
                             centered[axis] =
@@ -296,11 +363,11 @@ public final class SectionBaker {
                                 source.getFlippedBitangents()[vertex],
                                 source.getUvs(),
                                 vertex * 2,
-                                materials[placement]);
+                                material);
                         builder.bound(at);
-                        remap[vertex] = builder.vertexCount - 1;
+                        remap[slot] = builder.vertexCount - 1;
                     }
-                    builder.index(remap[vertex]);
+                    builder.index(remap[slot]);
                 }
             }
         }
@@ -310,6 +377,39 @@ public final class SectionBaker {
             buckets[i] = builders[i] == null ? null : builders[i].build();
         }
         return new Result(buckets);
+    }
+
+    /**
+     * Which material a face takes, by the way it points in the world.
+     *
+     * @param face The face after rotation.
+     * @return {@link #TOP}, {@link #BOTTOM} or {@link #SIDE}.
+     */
+    static int faceKind(@NonNull Face face) {
+        if (face == Face.POS_Y) {
+            return TOP;
+        }
+        if (face == Face.NEG_Y) {
+            return BOTTOM;
+        }
+        return SIDE;
+    }
+
+    /**
+     * Which material a triangle on no face of its box takes, by the way its normal points: up or
+     * down if more than sideways.
+     *
+     * @param up The normal's y, after rotation, from a unit normal.
+     * @return {@link #TOP}, {@link #BOTTOM} or {@link #SIDE}.
+     */
+    static int kindOf(float up) {
+        if (up > MOSTLY) {
+            return TOP;
+        }
+        if (up < -MOSTLY) {
+            return BOTTOM;
+        }
+        return SIDE;
     }
 
     /** Static helpers only. */

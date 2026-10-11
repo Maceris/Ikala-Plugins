@@ -52,7 +52,8 @@ public class SectionManager {
      *
      * @param origin The section's world position.
      * @param sources The mesh each placement puts down.
-     * @param materials The material index of each placement.
+     * @param faceMaterials {@link SectionBaker#FACE_KINDS} material indices per placement, see
+     *     {@link SectionBaker#bakeByFace}.
      * @param packedPositions Each placement's cell.
      * @param rotations Each placement's rotation.
      * @param faceMasks The faces each placement's neighbors hide.
@@ -61,7 +62,7 @@ public class SectionManager {
     public record Request(
             @NonNull Vector3dc origin,
             @NonNull BakeSource @NonNull [] sources,
-            int @NonNull [] materials,
+            int @NonNull [] faceMaterials,
             int @NonNull [] packedPositions,
             byte @NonNull [] rotations,
             byte @NonNull [] faceMasks,
@@ -251,9 +252,9 @@ public class SectionManager {
     private void bake(long id, long generation, @NonNull Request request) {
         try {
             SectionBaker.Result result =
-                    SectionBaker.bake(
+                    SectionBaker.bakeByFace(
                             request.sources(),
-                            request.materials(),
+                            request.faceMaterials(),
                             request.packedPositions(),
                             request.rotations(),
                             request.faceMasks(),

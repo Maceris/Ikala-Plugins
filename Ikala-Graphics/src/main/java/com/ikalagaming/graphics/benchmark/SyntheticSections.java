@@ -35,6 +35,30 @@ public final class SyntheticSections {
             int columns,
             @NonNull BakeSource @NonNull [] sources,
             int @NonNull [] materials) {
+        return bake(recipe, seed, columns, sources, materials, materials, materials);
+    }
+
+    /**
+     * Bake columns of sections, from (0, 0) up, with different materials for faces pointing up and
+     * down, as {@link SectionBaker#bakeByFace} takes them.
+     *
+     * @param recipe What the world is made of.
+     * @param seed The seed.
+     * @param columns Columns of sections along x and z.
+     * @param sources The bake source of each block type, by block id, null for air.
+     * @param sides The material index of each block type's faces pointing sideways, by block id.
+     * @param tops The same for faces pointing up.
+     * @param bottoms The same for faces pointing down.
+     * @return One mesh per section with opaque blocks, each with its section's origin.
+     */
+    public static List<LodMesh> bake(
+            SyntheticTerrain.@NonNull Recipe recipe,
+            long seed,
+            int columns,
+            @NonNull BakeSource @NonNull [] sources,
+            int @NonNull [] sides,
+            int @NonNull [] tops,
+            int @NonNull [] bottoms) {
         final SyntheticTerrain terrain = new SyntheticTerrain(recipe, seed, sources);
         List<LodMesh> meshes = new ArrayList<>();
         for (int sx = 0; sx < columns; ++sx) {
@@ -47,13 +71,17 @@ public final class SyntheticSections {
                         continue;
                     }
                     final BakeSource[] placed = new BakeSource[p.count()];
-                    final int[] placedMaterials = new int[p.count()];
+                    final int[] placedMaterials = new int[p.count() * SectionBaker.FACE_KINDS];
                     for (int i = 0; i < p.count(); ++i) {
-                        placed[i] = sources[p.blocks()[i]];
-                        placedMaterials[i] = materials[p.blocks()[i]];
+                        final int block = p.blocks()[i];
+                        placed[i] = sources[block];
+                        final int at = i * SectionBaker.FACE_KINDS;
+                        placedMaterials[at + SectionBaker.SIDE] = sides[block];
+                        placedMaterials[at + SectionBaker.TOP] = tops[block];
+                        placedMaterials[at + SectionBaker.BOTTOM] = bottoms[block];
                     }
                     final SectionBaker.Bucket opaque =
-                            SectionBaker.bake(
+                            SectionBaker.bakeByFace(
                                             placed,
                                             placedMaterials,
                                             p.packedPositions(),

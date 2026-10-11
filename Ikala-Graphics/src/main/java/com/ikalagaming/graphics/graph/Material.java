@@ -86,6 +86,18 @@ public class Material {
     /** How the material lets light through, opaque unless set. */
     private Transparency transparency;
 
+    /**
+     * The material baked faces pointing up in the world are drawn with instead, such as a grass
+     * block's top, or null to use this one. It must be in the material cache too.
+     */
+    private Material top;
+
+    /**
+     * The material baked faces pointing down in the world are drawn with instead, such as a grass
+     * block's dirt bottom, or null to use this one. It must be in the material cache too.
+     */
+    private Material bottom;
+
     /** Create a default material with no texture. */
     public Material() {
         baseColor = new Vector4f(Material.DEFAULT_COLOR);
@@ -102,5 +114,25 @@ public class Material {
         normalMap = null;
         texture = null;
         transparency = Transparency.OPAQUE;
+        top = null;
+        bottom = null;
+    }
+
+    /**
+     * The material for faces pointing up, this one unless there is a top variant.
+     *
+     * @return The material.
+     */
+    public Material forTop() {
+        return top == null ? this : top;
+    }
+
+    /**
+     * The material for faces pointing down, this one unless there is a bottom variant.
+     *
+     * @return The material.
+     */
+    public Material forBottom() {
+        return bottom == null ? this : bottom;
     }
 }

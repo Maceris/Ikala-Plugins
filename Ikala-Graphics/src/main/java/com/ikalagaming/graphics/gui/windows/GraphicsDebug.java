@@ -1,8 +1,10 @@
 package com.ikalagaming.graphics.gui.windows;
 
+import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.RenderConfig;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.benchmark.BlockMeshes;
@@ -101,7 +103,18 @@ public class GraphicsDebug extends GuiWindow {
 
     /** The synthetic terrain's block names, by block id, for the level of detail reports. */
     private static final String[] LOD_BLOCK_NAMES = {
-        "air", "stone", "grass", "slab", "plant", "leaves", "glass", "tinted glass"
+        "air",
+        "stone",
+        "grass",
+        "slab",
+        "plant",
+        "leaves",
+        "glass",
+        "tinted glass",
+        "dirt",
+        "planks",
+        "stairs",
+        "water"
     };
 
     /** The level of detail recipe picked, by ordinal. */
@@ -139,6 +152,9 @@ public class GraphicsDebug extends GuiWindow {
 
     /** The block materials the level of detail world added to the scene. */
     private final List<Material> lodMaterials = new ArrayList<>();
+
+    /** The block textures the level of detail world loaded, to release. */
+    private final List<TextureHandle> lodTextures = new ArrayList<>();
 
     /** The pipeline before the level of detail world, to put back. */
     private int lodPreviousPipeline;
@@ -736,17 +752,27 @@ public class GraphicsDebug extends GuiWindow {
      */
     private void startLod(@NonNull Scene scene) {
         removeLod(scene);
-        final MeshData[] meshes = BlockMeshes.create();
-        final int[] materials = new int[meshes.length];
+        final BlockMeshes.Textured blocks =
+                BlockMeshes.textured(
+                        GraphicsManager.forPlugin(GraphicsPlugin.PLUGIN_NAME).textures());
+        final MeshData[] meshes = blocks.meshes();
+        blocks.materials().forEach(scene.getMaterialCache()::addMaterial);
+        lodMaterials.addAll(blocks.materials());
+        lodTextures.addAll(blocks.textures());
+        final int[] sides = new int[meshes.length];
+        final int[] tops = new int[meshes.length];
+        final int[] bottoms = new int[meshes.length];
         final Map<Integer, String> materialNames = new HashMap<>();
         for (int block = 1; block < meshes.length; ++block) {
             final Material material = meshes[block].getMaterial();
-            scene.getMaterialCache().addMaterial(material);
-            lodMaterials.add(material);
-            materials[block] = scene.getMaterialCache().getMaterialIndex(material);
-            materialNames.put(
-                    materials[block],
-                    block < LOD_BLOCK_NAMES.length ? LOD_BLOCK_NAMES[block] : "block " + block);
+            final String name =
+                    block < LOD_BLOCK_NAMES.length ? LOD_BLOCK_NAMES[block] : "block " + block;
+            sides[block] = scene.getMaterialCache().getMaterialIndex(material);
+            tops[block] = scene.getMaterialCache().getMaterialIndex(material.forTop());
+            bottoms[block] = scene.getMaterialCache().getMaterialIndex(material.forBottom());
+            materialNames.putIfAbsent(sides[block], name);
+            materialNames.putIfAbsent(tops[block], name + " top");
+            materialNames.putIfAbsent(bottoms[block], name + " bottom");
         }
         scene.getMaterialCache().setDirty(true);
         final BakeSource[] sources = BlockMeshes.sources(meshes);
@@ -783,7 +809,9 @@ public class GraphicsDebug extends GuiWindow {
                 new LodPanel(
                         GraphicsManager.forPlugin(GraphicsPlugin.PLUGIN_NAME),
                         recipe.name().toLowerCase() + " " + columns + "x" + columns,
-                        () -> SyntheticSections.bake(recipe, LOD_SEED, columns, sources, materials),
+                        () ->
+                                SyntheticSections.bake(
+                                        recipe, LOD_SEED, columns, sources, sides, tops, bottoms),
                         material -> materialNames.getOrDefault(material, "material " + material),
                         lodCells.get());
     }
@@ -803,6 +831,9 @@ public class GraphicsDebug extends GuiWindow {
             scene.getMaterialCache().removeMaterial(material);
         }
         lodMaterials.clear();
+        final GraphicsContext graphics = GraphicsManager.forPlugin(GraphicsPlugin.PLUGIN_NAME);
+        lodTextures.forEach(graphics.textures()::release);
+        lodTextures.clear();
         scene.getMaterialCache().setDirty(true);
         scene.getSceneLights().setDirLight(lodPreviousSun);
         scene.getSceneLights().setAmbientLight(lodPreviousAmbient);

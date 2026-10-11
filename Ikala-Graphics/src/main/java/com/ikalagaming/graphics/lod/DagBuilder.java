@@ -35,13 +35,14 @@ public final class DagBuilder {
     private static final double STALLED = 0.95;
 
     /**
-     * How much the virtual edge radius grows each level, as clusters spread over twice the area.
+     * How much longer a simplified group's edges are than its input's: half the triangles over the
+     * same area, so each twice the area.
      */
-    private static final double VIRTUAL_EDGE_GROWTH = Math.sqrt(2);
+    private static final double EDGE_GROWTH = Math.sqrt(2);
 
     /**
-     * How far apart samples are when measuring a group's error, in leaf edges. It grows each level
-     * like the virtual edge radius, so each group takes about as many samples.
+     * How far apart samples are when measuring a group's error, in edges of its simplified mesh, so
+     * each group takes about as many samples whatever its level.
      */
     private static final double MEASURE_SPACING = 0.5;
 
@@ -60,8 +61,8 @@ public final class DagBuilder {
     /**
      * How to build.
      *
-     * @param virtualEdgeFactor r for virtual edges as a multiple of the leaves' average edge
-     *     length, growing by √2 a level; 0 for none.
+     * @param virtualEdgeFactor r for virtual edges as a multiple of each group's average edge
+     *     length; 0 for none.
      * @param lockOpenBorder Whether the input's open border is locked at every level, keeping it at
      *     full resolution.
      * @param threads Worker threads for building groups.
@@ -705,8 +706,10 @@ public final class DagBuilder {
         }
         final LodMesh merged = builder.build();
         // Simplify to half, then map materials back
-        final double radius =
-                options.virtualEdgeFactor() * leafEdge * Math.pow(VIRTUAL_EDGE_GROWTH, level);
+        // Scaled by the group's own edges rather than its level: levels climb faster in region
+        // cells, whose parents count up from their highest child, but triangle sizes don't
+        final double edge = averageEdge(merged);
+        final double radius = options.virtualEdgeFactor() * edge;
         final Simplifier.Result result =
                 Simplifier.simplify(
                         merged,
@@ -745,10 +748,7 @@ public final class DagBuilder {
         // Measure how far the output is from the children, and add the children's own error: by the
         // triangle inequality that bounds how far the output is from the input
         final double simplifyError =
-                Hausdorff.between(
-                        result.mesh(),
-                        merged,
-                        MEASURE_SPACING * leafEdge * Math.pow(VIRTUAL_EDGE_GROWTH, level + 1));
+                Hausdorff.between(result.mesh(), merged, MEASURE_SPACING * edge * EDGE_GROWTH);
         final double error = childError + simplifyError;
         final double[] bound = Clusters.enclose(spheres);
         final int[] edgeCounts = countEdges(merged);
@@ -778,6 +778,33 @@ public final class DagBuilder {
                                 sourceTriangle.toIntArray())
                         : null,
                 outFaces);
+    }
+
+    /**
+     * A mesh's average edge length, each edge counted once.
+     *
+     * @param mesh The mesh.
+     * @return The length, or the leaves' if the mesh has no edges.
+     */
+    private double averageEdge(@NonNull LodMesh mesh) {
+        final LongIntMap seen = new LongIntMap(mesh.getTriangleCount() * AXES);
+        double total = 0;
+        for (int t = 0; t < mesh.getTriangleCount(); ++t) {
+            for (int corner = 0; corner < AXES; ++corner) {
+                final int v = mesh.corner(t, corner);
+                final int w = mesh.corner(t, (corner + 1) % AXES);
+                if (seen.putIfAbsent(LongIntMap.pair(Math.min(v, w), Math.max(v, w)), 0)
+                        == LongIntMap.MISSING) {
+                    double d = 0;
+                    for (int axis = 0; axis < AXES; ++axis) {
+                        final double delta = mesh.position(v, axis) - mesh.position(w, axis);
+                        d += delta * delta;
+                    }
+                    total += Math.sqrt(d);
+                }
+            }
+        }
+        return seen.size() == 0 ? leafEdge : total / seen.size();
     }
 
     /**

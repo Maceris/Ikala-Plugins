@@ -149,12 +149,18 @@ final class LabLod implements AutoCloseable {
         lookAt(scene, chunks.keySet());
         // Material indices are read here, on the render thread, for the build thread to use
         final MaterialCache cache = scene.getMaterialCache();
-        final Map<String, Integer> materials = new HashMap<>();
+        final Map<String, int[]> materials = new HashMap<>();
         final Map<Integer, String> names = new HashMap<>();
         for (Map.Entry<String, BlockMeshes.Entry> entry : meshes.entrySet()) {
-            final int index = cache.getMaterialIndex(entry.getValue().material());
-            materials.put(entry.getKey(), index);
-            names.put(index, entry.getKey());
+            final Material material = entry.getValue().material();
+            final int[] byFace = new int[SectionBaker.FACE_KINDS];
+            byFace[SectionBaker.SIDE] = cache.getMaterialIndex(material);
+            byFace[SectionBaker.TOP] = cache.getMaterialIndex(material.forTop());
+            byFace[SectionBaker.BOTTOM] = cache.getMaterialIndex(material.forBottom());
+            materials.put(entry.getKey(), byFace);
+            names.putIfAbsent(byFace[SectionBaker.SIDE], entry.getKey());
+            names.putIfAbsent(byFace[SectionBaker.TOP], entry.getKey() + " top");
+            names.putIfAbsent(byFace[SectionBaker.BOTTOM], entry.getKey() + " bottom");
         }
         // Copies in the same order, so the same chunks always build the same DAG
         final Map<ChunkPos, Chunk> box = new LinkedHashMap<>(chunks);
@@ -206,14 +212,15 @@ final class LabLod implements AutoCloseable {
      *
      * @param chunks The chunks.
      * @param meshes The block meshes, by block name.
-     * @param materials Each block's material index, by block name.
+     * @param materials Each block's material indices by face kind (see {@link
+     *     SectionBaker#bakeByFace}), by block name.
      * @return One mesh per chunk with opaque triangles, each with the chunk's origin.
      */
     static List<LodMesh> bake(
             @NonNull Map<ChunkPos, Chunk> chunks,
             @NonNull Map<String, BlockMeshes.Entry> meshes,
-            @NonNull Map<String, Integer> materials) {
-        final Map<BlockMeshes.Entry, Integer> materialOf = new HashMap<>();
+            @NonNull Map<String, int[]> materials) {
+        final Map<BlockMeshes.Entry, int[]> materialOf = new HashMap<>();
         meshes.forEach((block, entry) -> materialOf.put(entry, materials.get(block)));
         List<LodMesh> out = new ArrayList<>();
         for (Map.Entry<ChunkPos, Chunk> entry : chunks.entrySet()) {
@@ -225,13 +232,18 @@ final class LabLod implements AutoCloseable {
             }
             final int count = placed.blocks().length;
             final BakeSource[] sources = new BakeSource[count];
-            final int[] blockMaterials = new int[count];
+            final int[] blockMaterials = new int[count * SectionBaker.FACE_KINDS];
             for (int i = 0; i < count; ++i) {
                 sources[i] = placed.blocks()[i].source();
-                blockMaterials[i] = materialOf.get(placed.blocks()[i]);
+                System.arraycopy(
+                        materialOf.get(placed.blocks()[i]),
+                        0,
+                        blockMaterials,
+                        i * SectionBaker.FACE_KINDS,
+                        SectionBaker.FACE_KINDS);
             }
             final SectionBaker.Bucket opaque =
-                    SectionBaker.bake(
+                    SectionBaker.bakeByFace(
                                     sources,
                                     blockMaterials,
                                     placed.packed(),

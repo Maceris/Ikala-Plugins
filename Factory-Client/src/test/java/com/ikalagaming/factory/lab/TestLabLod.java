@@ -53,6 +53,9 @@ class TestLabLod {
     /** Water's material index. */
     private static final int WATER_MATERIAL = 3;
 
+    /** Grass's top material index in these tests. */
+    private static final int GRASS_TOP_MATERIAL = 4;
+
     /** The unit box's minimum corner. */
     private static final Vector3f BOX_MIN = new Vector3f(0, 0, 0);
 
@@ -133,18 +136,28 @@ class TestLabLod {
         meshes.put(STONE, entry(false));
         meshes.put(GRASS, entry(false));
         meshes.put(WATER, entry(true));
-        final Map<String, Integer> materials =
-                Map.of(STONE, STONE_MATERIAL, GRASS, GRASS_MATERIAL, WATER, WATER_MATERIAL);
+        // Grass has its own material on top, by the side, top, bottom order bakeByFace takes
+        final Map<String, int[]> materials =
+                Map.of(
+                        STONE,
+                        new int[] {STONE_MATERIAL, STONE_MATERIAL, STONE_MATERIAL},
+                        GRASS,
+                        new int[] {GRASS_MATERIAL, GRASS_TOP_MATERIAL, GRASS_MATERIAL},
+                        WATER,
+                        new int[] {WATER_MATERIAL, WATER_MATERIAL, WATER_MATERIAL});
         final List<LodMesh> baked = LabLod.bake(hills(), meshes, materials);
         assertFalse(baked.isEmpty());
         boolean grassSeen = false;
+        boolean grassTopSeen = false;
         for (LodMesh mesh : baked) {
             for (int t = 0; t < mesh.getTriangleCount(); ++t) {
                 assertTrue(mesh.material(t) != WATER_MATERIAL, "Water is left out");
                 grassSeen |= mesh.material(t) == GRASS_MATERIAL;
+                grassTopSeen |= mesh.material(t) == GRASS_TOP_MATERIAL;
             }
         }
-        assertTrue(grassSeen);
+        assertTrue(grassSeen, "Grass sides");
+        assertTrue(grassTopSeen, "Grass tops");
 
         final LodDag dag = DagBuilder.build(baked, new DagBuilder.Options(0.5, true, 2, false, 0));
         assertTrue(dag.getLevels() >= 3, dag.getLevels() + " levels");
