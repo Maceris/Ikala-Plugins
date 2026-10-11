@@ -10,8 +10,8 @@ import java.util.Map;
  * Splits a mesh into clusters of at most a set number of triangles, by partitioning its dual graph:
  * triangles are nodes, and triangles sharing an edge are joined, so clusters are compact and their
  * shared borders short, which leaves the simplifier the most to work with (Karis et al., <i>Nanite:
- * A Deep Dive</i>, 2021). The same split is used for the leaves and for each simplified group.
- * Also the sphere helpers clusters and groups use.
+ * A Deep Dive</i>, 2021). The same split is used for the leaves and for each simplified group. Also
+ * the sphere helpers clusters and groups use.
  */
 public final class Clusters {
 
@@ -61,8 +61,7 @@ public final class Clusters {
                 y += mesh.position(v, 1);
                 z += mesh.position(v, 2);
                 final int w = mesh.corner(t, (corner + 1) % CORNERS);
-                final long edge =
-                        ((long) Math.min(v, w) << INT_BITS) | (Math.max(v, w) & LOW_INT);
+                final long edge = ((long) Math.min(v, w) << INT_BITS) | (Math.max(v, w) & LOW_INT);
                 final Integer other = firstUse.putIfAbsent(edge, t);
                 if (other != null) {
                     builder.edge(t, other, 1);

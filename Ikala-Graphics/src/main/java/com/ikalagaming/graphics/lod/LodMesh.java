@@ -14,13 +14,13 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * A triangle mesh as level of detail building sees it: positions welded so that vertices in the same
- * place are one vertex, a material per triangle, and a lock flag per vertex. Normals and texture
- * coordinates are dropped; simplification works on geometry only, and appearance is found again
- * afterwards by mapping back to the input (see {@link Correspondence}).
+ * A triangle mesh as level of detail building sees it: positions welded so that vertices in the
+ * same place are one vertex, a material per triangle, and a lock flag per vertex. Normals and
+ * texture coordinates are dropped; simplification works on geometry only, and appearance is found
+ * again afterwards by mapping back to the input (see {@link Correspondence}).
  *
- * <p>Positions are floats relative to a {@code double} origin, so a mesh far from the world's origin
- * keeps its precision. Everything is in flat arrays.
+ * <p>Positions are floats relative to a {@code double} origin, so a mesh far from the world's
+ * origin keeps its precision. Everything is in flat arrays.
  */
 public final class LodMesh {
 
@@ -180,7 +180,8 @@ public final class LodMesh {
         final int stride = MeshData.VERTEX_SIZE_IN_FLOATS;
         int[] welded = new int[mesh.getVertexCount()];
         for (int v = 0; v < welded.length; ++v) {
-            welded[v] = builder.vertex(data[v * stride], data[v * stride + 1], data[v * stride + 2]);
+            welded[v] =
+                    builder.vertex(data[v * stride], data[v * stride + 1], data[v * stride + 2]);
         }
         final int[] indices = mesh.getIndices();
         for (int i = 0; i + 2 < indices.length; i += CORNERS) {

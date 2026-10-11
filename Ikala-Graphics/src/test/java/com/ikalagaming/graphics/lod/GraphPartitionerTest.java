@@ -126,6 +126,8 @@ class GraphPartitionerTest {
         final Graph graph = builder.build();
         final int[] part = GraphPartitioner.partition(graph, 10);
         assertTrue(heaviestPart(graph, part) <= 10);
-        assertTrue(GraphPartitioner.partCount(part) <= 14, "Parts " + GraphPartitioner.partCount(part));
+        assertTrue(
+                GraphPartitioner.partCount(part) <= 14,
+                "Parts " + GraphPartitioner.partCount(part));
     }
 }

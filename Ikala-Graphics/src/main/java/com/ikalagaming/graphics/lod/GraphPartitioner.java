@@ -12,8 +12,8 @@ import java.util.Arrays;
  * <i>Nanite: A Deep Dive</i>, 2021):
  *
  * <ol>
- *   <li>Recursive bisection: a graph over the cap is split in two, with weights in proportion to how
- *       many parts each side should end up with, and each side is split again until it fits.
+ *   <li>Recursive bisection: a graph over the cap is split in two, with weights in proportion to
+ *       how many parts each side should end up with, and each side is split again until it fits.
  *   <li>Each bisection is multilevel: the graph is coarsened by matching each node with the
  *       neighbor it shares the heaviest edge with, the small graph is split by growing a region
  *       from a seed, and the split is refined with Fiduccia–Mattheyses moves on the way back to the
@@ -86,7 +86,11 @@ final class GraphPartitioner {
      * @param next The next part number.
      */
     private static void split(
-            @NonNull Graph graph, int @NonNull [] nodes, int cap, int @NonNull [] part, int @NonNull [] next) {
+            @NonNull Graph graph,
+            int @NonNull [] nodes,
+            int cap,
+            int @NonNull [] part,
+            int @NonNull [] next) {
         int weight = 0;
         for (int v : nodes) {
             weight += graph.nodeWeights()[v];
@@ -264,7 +268,10 @@ final class GraphPartitioner {
             builder.nodeWeight(c, weights[c]);
             final double w = Math.max(1, weights[c]);
             builder.position(
-                    c, positions[c * AXES] / w, positions[c * AXES + 1] / w, positions[c * AXES + 2] / w);
+                    c,
+                    positions[c * AXES] / w,
+                    positions[c * AXES + 1] / w,
+                    positions[c * AXES + 2] / w);
         }
         return builder.build();
     }
@@ -288,7 +295,8 @@ final class GraphPartitioner {
             final long[] tie = new long[n];
             double weight = 0;
             int current = seed;
-            while (current >= 0 && weight + graph.nodeWeights()[current] <= leftTarget + tolerance) {
+            while (current >= 0
+                    && weight + graph.nodeWeights()[current] <= leftTarget + tolerance) {
                 left[current] = true;
                 weight += graph.nodeWeights()[current];
                 for (int e = graph.offsets()[current]; e < graph.offsets()[current + 1]; ++e) {
@@ -467,7 +475,10 @@ final class GraphPartitioner {
     private static long gainOf(@NonNull Graph graph, boolean @NonNull [] left, int v) {
         long gain = 0;
         for (int e = graph.offsets()[v]; e < graph.offsets()[v + 1]; ++e) {
-            gain += left[graph.targets()[e]] == left[v] ? -graph.edgeWeights()[e] : graph.edgeWeights()[e];
+            gain +=
+                    left[graph.targets()[e]] == left[v]
+                            ? -graph.edgeWeights()[e]
+                            : graph.edgeWeights()[e];
         }
         return gain;
     }
@@ -605,7 +616,8 @@ final class GraphPartitioner {
     private static double distanceSquared(@NonNull Graph graph, int a, int b) {
         double d = 0;
         for (int axis = 0; axis < AXES; ++axis) {
-            final double delta = graph.positions()[a * AXES + axis] - graph.positions()[b * AXES + axis];
+            final double delta =
+                    graph.positions()[a * AXES + axis] - graph.positions()[b * AXES + axis];
             d += delta * delta;
         }
         return d;

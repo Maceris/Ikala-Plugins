@@ -1,11 +1,16 @@
 package com.ikalagaming.graphics.gui.windows;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.bake.BakeSource;
+import com.ikalagaming.graphics.benchmark.BlockMeshes;
 import com.ikalagaming.graphics.benchmark.GateBenchmark;
 import com.ikalagaming.graphics.benchmark.GateScene;
+import com.ikalagaming.graphics.benchmark.SyntheticSections;
 import com.ikalagaming.graphics.benchmark.SyntheticTerrain;
+import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.gui.IkGui;
@@ -17,8 +22,10 @@ import com.ikalagaming.graphics.gui.data.IkInt;
 import com.ikalagaming.graphics.gui.enums.Condition;
 import com.ikalagaming.graphics.gui.flags.WindowFlags;
 import com.ikalagaming.graphics.gui.util.Alignment;
+import com.ikalagaming.graphics.lod.LodPanel;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
+import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.vulkan.ClusterMath;
 import com.ikalagaming.graphics.vulkan.FilterView;
@@ -32,6 +39,7 @@ import com.ikalagaming.graphics.vulkan.stages.LightCull;
 import lombok.NonNull;
 import org.joml.Vector3f;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -88,6 +96,48 @@ public class GraphicsDebug extends GuiWindow {
     /** The benchmark recipes' names, in ordinal order. */
     private static final String[] RECIPE_NAMES =
             Arrays.stream(SyntheticTerrain.Recipe.values()).map(Enum::name).toArray(String[]::new);
+
+    /** The level of detail recipe picked, by ordinal. */
+    private final IkInt lodRecipe = new IkInt(SyntheticTerrain.Recipe.TERRAIN.ordinal());
+
+    /** How many columns of sections the level of detail world has along each side. */
+    private final int[] lodColumns = {4};
+
+    /** The most columns the level of detail slider offers. */
+    private static final int MAX_LOD_COLUMNS = 12;
+
+    /** The seed of the level of detail world. */
+    private static final long LOD_SEED = 0x1CA1A;
+
+    /** How high above the level of detail world the camera starts, in blocks. */
+    private static final double LOD_CAMERA_HEIGHT = 60;
+
+    /** How far the camera starts back from the level of detail world, in blocks. */
+    private static final double LOD_CAMERA_BACK = 40;
+
+    /** How far down the camera looks at the level of detail world, in radians. */
+    private static final float LOD_CAMERA_PITCH = 0.5f;
+
+    /** The sun's intensity while the level of detail world is shown. */
+    private static final float LOD_SUN_INTENSITY = 3;
+
+    /** The ambient light's intensity while the level of detail world is shown. */
+    private static final float LOD_AMBIENT_INTENSITY = 0.25f;
+
+    /** The level of detail panel, while one is shown. */
+    private LodPanel lodPanel;
+
+    /** The block materials the level of detail world added to the scene. */
+    private final List<Material> lodMaterials = new ArrayList<>();
+
+    /** The pipeline before the level of detail world, to put back. */
+    private int lodPreviousPipeline;
+
+    /** The sun before the level of detail world, to put back. */
+    private DirectionalLight lodPreviousSun;
+
+    /** The ambient light before the level of detail world, to put back. */
+    private AmbientLight lodPreviousAmbient;
 
     /** Whether the filter view selection changed this frame. */
     private boolean filterViewChanged;
@@ -256,6 +306,10 @@ public class GraphicsDebug extends GuiWindow {
 
             if (IkGui.collapsingHeader("Benchmark")) {
                 drawBenchmark();
+            }
+
+            if (IkGui.collapsingHeader("Level of detail")) {
+                drawLod(scene);
             }
 
             if (IkGui.collapsingHeader("Render Config Info")) {
@@ -638,6 +692,106 @@ public class GraphicsDebug extends GuiWindow {
                 "Show how much light gets through to the far end of one slice of the volume, from"
                         + " black for none to white for all of it, over the whole screen. -1 shows"
                         + " the scene. Only with voxel-based weights.");
+    }
+
+    /**
+     * Build a level of detail DAG of a synthetic world and look at it.
+     *
+     * @param scene The scene.
+     */
+    private void drawLod(@NonNull Scene scene) {
+        IkGui.textWrapped(
+                "Bakes a made-up world on the CPU, builds its cluster DAG, and draws the cut seen"
+                        + " from the observer. Freeze the observer to fly out and look at the cut.");
+        IkGui.combo("Recipe##lod", lodRecipe, RECIPE_NAMES);
+        IkGui.sliderInt("Columns##lod", lodColumns, 1, MAX_LOD_COLUMNS);
+        if (IkGui.button("Build LOD")) {
+            startLod(scene);
+        }
+        if (lodPanel != null) {
+            IkGui.sameLine();
+            if (IkGui.button("Remove LOD")) {
+                removeLod(scene);
+                return;
+            }
+            lodPanel.draw();
+        }
+    }
+
+    /**
+     * Start building a level of detail world, and set the scene up to show it.
+     *
+     * @param scene The scene.
+     */
+    private void startLod(@NonNull Scene scene) {
+        removeLod(scene);
+        final MeshData[] meshes = BlockMeshes.create();
+        final int[] materials = new int[meshes.length];
+        for (int block = 1; block < meshes.length; ++block) {
+            final Material material = meshes[block].getMaterial();
+            scene.getMaterialCache().addMaterial(material);
+            lodMaterials.add(material);
+            materials[block] = scene.getMaterialCache().getMaterialIndex(material);
+        }
+        scene.getMaterialCache().setDirty(true);
+        final BakeSource[] sources = BlockMeshes.sources(meshes);
+        final SyntheticTerrain.Recipe recipe = SyntheticTerrain.Recipe.values()[lodRecipe.get()];
+        final int columns = lodColumns[0];
+        lodPreviousPipeline = GraphicsManager.getPipelineConfig();
+        // The debug stage draws the bounds and locked edge overlays
+        GraphicsManager.swapPipeline(
+                RenderConfig.builder()
+                        .withAnimation()
+                        .withScene()
+                        .withSkybox()
+                        .withGui()
+                        .withDebug()
+                        .build());
+        lodPreviousSun = scene.getSceneLights().getDirLight();
+        lodPreviousAmbient = scene.getSceneLights().getAmbientLight();
+        scene.getSceneLights()
+                .setDirLight(
+                        new DirectionalLight(
+                                new Vector3f(1, 0.95f, 0.85f),
+                                new Vector3f(0.4f, -0.8f, 0.45f),
+                                LOD_SUN_INTENSITY));
+        scene.getSceneLights()
+                .setAmbientLight(new AmbientLight(new Vector3f(1, 1, 1), LOD_AMBIENT_INTENSITY));
+        final double middle = columns * SyntheticTerrain.SECTION / 2.0;
+        scene.getCamera()
+                .setPosition(
+                        middle,
+                        LOD_CAMERA_HEIGHT,
+                        columns * SyntheticTerrain.SECTION + LOD_CAMERA_BACK);
+        scene.getCamera().setRotation(LOD_CAMERA_PITCH, 0);
+        lodPanel =
+                new LodPanel(
+                        GraphicsManager.forPlugin(GraphicsPlugin.PLUGIN_NAME),
+                        recipe.name().toLowerCase() + " " + columns + "x" + columns,
+                        () ->
+                                SyntheticSections.bake(
+                                        recipe, LOD_SEED, columns, sources, materials));
+    }
+
+    /**
+     * Remove the level of detail world and put the scene back as it was.
+     *
+     * @param scene The scene.
+     */
+    private void removeLod(@NonNull Scene scene) {
+        if (lodPanel == null) {
+            return;
+        }
+        lodPanel.close();
+        lodPanel = null;
+        for (Material material : lodMaterials) {
+            scene.getMaterialCache().removeMaterial(material);
+        }
+        lodMaterials.clear();
+        scene.getMaterialCache().setDirty(true);
+        scene.getSceneLights().setDirLight(lodPreviousSun);
+        scene.getSceneLights().setAmbientLight(lodPreviousAmbient);
+        GraphicsManager.swapPipeline(lodPreviousPipeline);
     }
 
     /** Run the gate benchmark and show what it found. */

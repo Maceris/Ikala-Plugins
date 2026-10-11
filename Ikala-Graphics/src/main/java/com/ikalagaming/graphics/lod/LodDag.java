@@ -13,8 +13,8 @@ import java.util.List;
  * Any cut through it, chosen per cluster by the parallel rule in {@link LodCut}, gives a mesh with
  * no cracks, because every group's outer border was locked while it was simplified.
  *
- * <p>Errors and bounding spheres are saturated: a group's error is at least its children's, and
- * its sphere holds theirs, and every cluster a group makes stores the group's error and sphere, so
+ * <p>Errors and bounding spheres are saturated: a group's error is at least its children's, and its
+ * sphere holds theirs, and every cluster a group makes stores the group's error and sphere, so
  * every cluster in a group makes the same choice and every path from a leaf to a root changes
  * choice only once.
  */

@@ -4,15 +4,16 @@ import lombok.NonNull;
 
 /**
  * Quadrics stored flat, {@value #STRIDE} doubles each, so many fit in one array: the symmetric
- * matrix A (6 values), the vector b, the constant c, and the area weight they were summed with.
- * The error at x is {@code x^T A x + 2 b^T x + c}.
+ * matrix A (6 values), the vector b, the constant c, and the area weight they were summed with. The
+ * error at x is {@code x^T A x + 2 b^T x + c}.
  *
  * <p>Two kinds are used, as in Liu, Zhang and Yuksel, <i>Simplifying Textured Triangle Meshes in
  * the Wild</i> (2025):
  *
  * <ul>
  *   <li>Garland–Heckbert plane quadrics, each face's plane weighted by a third of its area per
- *       corner (their Eqs. 9–13). These are summed as vertices collapse, so they remember the input.
+ *       corner (their Eqs. 9–13). These are summed as vertices collapse, so they remember the
+ *       input.
  *   <li>The Lindstrom–Turk boundary area quadric (their Eqs. 15–16): for a boundary edge ab, the
  *       squared area of the triangle the new vertex makes with it. This is recomputed for each
  *       collapse from the boundary edges around it, and never summed.

@@ -125,7 +125,9 @@ class SimplifierTest {
         }
     }
 
-    /** Two boxes a little apart get virtual edges at a big enough radius, and none at a small one. */
+    /**
+     * Two boxes a little apart get virtual edges at a big enough radius, and none at a small one.
+     */
     @Test
     void testVirtualEdgesJoinNearbyParts() {
         LodMesh.Builder builder = LodMesh.builder(new double[3]);
@@ -162,12 +164,16 @@ class SimplifierTest {
         }
     }
 
-    /** A plane quadric's error grows with the square of the distance; a boundary quadric's with area. */
+    /**
+     * A plane quadric's error grows with the square of the distance; a boundary quadric's with
+     * area.
+     */
     @Test
     void testQuadricErrors() {
         double[] q = new double[Quadric.STRIDE];
         // A right triangle of area 2 in the plane y = 0
-        Quadric.addFace(q, 0, new double[] {0, 0, 0}, new double[] {0, 0, 2}, new double[] {2, 0, 0});
+        Quadric.addFace(
+                q, 0, new double[] {0, 0, 0}, new double[] {0, 0, 2}, new double[] {2, 0, 0});
         final double weight = q[Quadric.WEIGHT];
         assertEquals(2.0 / 3, weight, TOLERANCE);
         assertEquals(weight * 9, Quadric.error(q, 0, new double[] {5, 3, 5}), TOLERANCE);
@@ -200,7 +206,8 @@ class SimplifierTest {
         }
         final LodMesh plane = builder.build();
         final Simplifier.Result result =
-                Simplifier.simplify(plane, Simplifier.Options.toCount(plane.getTriangleCount() / 4, 0));
+                Simplifier.simplify(
+                        plane, Simplifier.Options.toCount(plane.getTriangleCount() / 4, 0));
         Correspondence.assignMaterials(plane, result);
         final LodMesh mesh = result.mesh();
         for (int t = 0; t < mesh.getTriangleCount(); ++t) {
@@ -258,7 +265,8 @@ class SimplifierTest {
                 result.error());
         start = System.nanoTime();
         Correspondence.assignMaterials(scatter, result);
-        System.out.printf("Scatter materials mapped in %.1f ms%n", (System.nanoTime() - start) / 1e6);
+        System.out.printf(
+                "Scatter materials mapped in %.1f ms%n", (System.nanoTime() - start) / 1e6);
     }
 
     /**

@@ -49,8 +49,7 @@ public final class Correspondence {
      *     replaced.
      * @throws IllegalArgumentException If the history wasn't recorded.
      */
-    public static void assignMaterials(
-            @NonNull LodMesh input, Simplifier.@NonNull Result result) {
+    public static void assignMaterials(@NonNull LodMesh input, Simplifier.@NonNull Result result) {
         if (result.history() == null) {
             throw new IllegalArgumentException("Mapping back needs the collapse history");
         }

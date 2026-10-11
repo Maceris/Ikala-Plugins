@@ -4,10 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ikalagaming.graphics.bake.BakeSource;
-import com.ikalagaming.graphics.bake.SectionBaker;
 import com.ikalagaming.graphics.benchmark.BlockMeshes;
+import com.ikalagaming.graphics.benchmark.SyntheticSections;
 import com.ikalagaming.graphics.benchmark.SyntheticTerrain;
-import com.ikalagaming.graphics.graph.Material;
 
 import org.junit.jupiter.api.Test;
 
@@ -17,7 +16,7 @@ import java.util.*;
 class DagTest {
 
     /** The seed for the synthetic terrain. */
-    private static final long SEED = 12345;
+    private static final long SEED = 12_345;
 
     /** The block sources, built without a GPU. */
     private static final BakeSource[] SOURCES = BlockMeshes.sources(BlockMeshes.create());
@@ -35,43 +34,12 @@ class DagTest {
      * @return The meshes, each with its section's origin.
      */
     static List<LodMesh> terrain(int columns) {
-        final SyntheticTerrain terrain =
-                new SyntheticTerrain(SyntheticTerrain.Recipe.TERRAIN, SEED, SOURCES);
-        List<LodMesh> meshes = new ArrayList<>();
-        for (int sx = 0; sx < columns; ++sx) {
-            for (int sz = 0; sz < columns; ++sz) {
-                for (int sy = Math.floorDiv(terrain.minY(), SECTION);
-                        sy <= Math.floorDiv(terrain.maxY(), SECTION);
-                        ++sy) {
-                    final SyntheticTerrain.Placements p = terrain.placements(sx, sy, sz);
-                    if (p.count() == 0) {
-                        continue;
-                    }
-                    BakeSource[] placed = new BakeSource[p.count()];
-                    int[] materials = new int[p.count()];
-                    for (int i = 0; i < p.count(); ++i) {
-                        placed[i] = SOURCES[p.blocks()[i]];
-                        materials[i] = p.blocks()[i];
-                    }
-                    final SectionBaker.Result baked =
-                            SectionBaker.bake(
-                                    placed,
-                                    materials,
-                                    p.packedPositions(),
-                                    new byte[p.count()],
-                                    p.faceMasks(),
-                                    new short[p.count()]);
-                    final SectionBaker.Bucket opaque = baked.get(Material.Transparency.OPAQUE);
-                    if (opaque != null) {
-                        meshes.add(
-                                LodMesh.fromBaked(
-                                        opaque,
-                                        new double[] {sx * SECTION, sy * SECTION, sz * SECTION}));
-                    }
-                }
-            }
+        final int[] materials = new int[SyntheticTerrain.BLOCK_TYPES];
+        for (int block = 0; block < materials.length; ++block) {
+            materials[block] = block;
         }
-        return meshes;
+        return SyntheticSections.bake(
+                SyntheticTerrain.Recipe.TERRAIN, SEED, columns, SOURCES, materials);
     }
 
     /**
@@ -93,7 +61,9 @@ class DagTest {
                         final double wz = sz * SECTION + z;
                         index[x][z] =
                                 builder.vertex(
-                                        x, (float) (3 * Math.sin(wx * 0.31) * Math.cos(wz * 0.23)), z);
+                                        x,
+                                        (float) (3 * Math.sin(wx * 0.31) * Math.cos(wz * 0.23)),
+                                        z);
                     }
                 }
                 for (int x = 0; x < SECTION; ++x) {
@@ -117,9 +87,7 @@ class DagTest {
         final LodDag dag = DagBuilder.build(heightField(4), OPTIONS);
         assertTrue(dag.getLevels() >= 4, dag.getLevels() + " levels");
         final List<LodStats.Level> levels = LodStats.levels(dag);
-        assertTrue(
-                levels.get(0).halving() < 0.7,
-                "Level 0 kept " + levels.get(0).halving());
+        assertTrue(levels.get(0).halving() < 0.7, "Level 0 kept " + levels.get(0).halving());
     }
 
     /** A group's error is at least its children's, and its sphere holds theirs. */
@@ -174,8 +142,7 @@ class DagTest {
     @Test
     void testBrokenBorderIsCaught() {
         final LodDag dag = DagBuilder.build(heightField(2), OPTIONS);
-        final boolean[] drawn =
-                LodCut.select(dag, new LodCut.View(-200, 50, -200, PIXELS), 1);
+        final boolean[] drawn = LodCut.select(dag, new LodCut.View(-200, 50, -200, PIXELS), 1);
         assertTrue(new CrackCheck(dag).check(drawn).isClean());
         // Find a corner one drawn cluster shares with another, and nudge it in one of them
         Map<Grouping.Corner, Integer> owner = new HashMap<>();
@@ -262,8 +229,7 @@ class DagTest {
     void testComparisonLogged() {
         final List<LodMesh> sections = terrain(4);
         final long start = System.nanoTime();
-        final LodDag dag =
-                DagBuilder.build(sections, DagBuilder.Options.defaults());
+        final LodDag dag = DagBuilder.build(sections, DagBuilder.Options.defaults());
         final double millis = (System.nanoTime() - start) / 1e6;
         List<LodStats.Footprint> footprints = new ArrayList<>();
         footprints.add(
@@ -282,8 +248,11 @@ class DagTest {
         }
         System.out.print(
                 LodStats.report(
-                        "Terrain on " + sections.size() + " sections, built in "
-                                + Math.round(millis) + " ms",
+                        "Terrain on "
+                                + sections.size()
+                                + " sections, built in "
+                                + Math.round(millis)
+                                + " ms",
                         dag,
                         footprints));
     }

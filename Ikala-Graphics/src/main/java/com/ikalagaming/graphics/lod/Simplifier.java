@@ -47,8 +47,8 @@ public final class Simplifier {
      *
      * @param targetTriangles Stop once there are this many triangles or fewer.
      * @param virtualEdgeRadius r: parts closer than 2r are joined by virtual edges. 0 for none.
-     * @param maxError Don't collapse an edge whose error, in world units, is over this. Infinity for
-     *     no limit.
+     * @param maxError Don't collapse an edge whose error, in world units, is over this. Infinity
+     *     for no limit.
      * @param recordHistory Whether to record what each collapse changed, for {@link
      *     Correspondence}.
      */
@@ -721,7 +721,9 @@ public final class Simplifier {
      * @return True if one of its corners is v.
      */
     private boolean uses(int f, int v) {
-        return faces[f * CORNERS] == v || faces[f * CORNERS + 1] == v || faces[f * CORNERS + 2] == v;
+        return faces[f * CORNERS] == v
+                || faces[f * CORNERS + 1] == v
+                || faces[f * CORNERS + 2] == v;
     }
 
     /**

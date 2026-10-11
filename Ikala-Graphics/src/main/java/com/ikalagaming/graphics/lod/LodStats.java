@@ -130,7 +130,9 @@ public final class LodStats {
                             triangles,
                             clusters,
                             sizes.size(),
-                            sizes.isEmpty() || triangles == 0 ? Double.NaN : (double) next / triangles,
+                            sizes.isEmpty() || triangles == 0
+                                    ? Double.NaN
+                                    : (double) next / triangles,
                             maxError,
                             spread(sizes),
                             spread(groupTriangles),
@@ -144,8 +146,8 @@ public final class LodStats {
     }
 
     /**
-     * What rebuilding some dirty leaves would take: every group with a dirty child is dirty, and
-     * so are the clusters it made, up to the roots.
+     * What rebuilding some dirty leaves would take: every group with a dirty child is dirty, and so
+     * are the clusters it made, up to the roots.
      *
      * @param dag The DAG.
      * @param edit What the edit was, for the report.
@@ -185,8 +187,8 @@ public final class LodStats {
     }
 
     /**
-     * The dirty leaves of a one-block edit: every leaf of the block's section, since the section
-     * is rebaked.
+     * The dirty leaves of a one-block edit: every leaf of the block's section, since the section is
+     * rebaked.
      *
      * @param dag The DAG.
      * @param section The section.
@@ -201,8 +203,8 @@ public final class LodStats {
     }
 
     /**
-     * The dirty leaves of an edit inside a sphere, like an explosion: every leaf of each section the
-     * sphere touches. With a single input mesh, only the leaves the sphere touches.
+     * The dirty leaves of an edit inside a sphere, like an explosion: every leaf of each section
+     * the sphere touches. With a single input mesh, only the leaves the sphere touches.
      *
      * @param dag The DAG.
      * @param center The sphere's center, relative to the DAG's origin.
@@ -276,7 +278,11 @@ public final class LodStats {
                             l.groups(),
                             l.halving(),
                             l.maxError(),
-                            l.groupClusters()[0] + "/" + l.groupClusters()[1] + "/" + l.groupClusters()[2],
+                            l.groupClusters()[0]
+                                    + "/"
+                                    + l.groupClusters()[1]
+                                    + "/"
+                                    + l.groupClusters()[2],
                             l.groupTriangles()[0]
                                     + "/"
                                     + l.groupTriangles()[1]
@@ -320,7 +326,9 @@ public final class LodStats {
         }
         List<Integer> sorted = new ArrayList<>(values);
         Collections.sort(sorted);
-        return new int[] {sorted.get(0), sorted.get(sorted.size() / 2), sorted.get(sorted.size() - 1)};
+        return new int[] {
+            sorted.get(0), sorted.get(sorted.size() / 2), sorted.get(sorted.size() - 1)
+        };
     }
 
     /**

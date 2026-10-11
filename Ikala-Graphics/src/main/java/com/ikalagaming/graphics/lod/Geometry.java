@@ -288,12 +288,8 @@ final class Geometry {
      * @return The squared distance.
      */
     static double triangleDistanceSquared(double @NonNull [] a, double @NonNull [] b) {
-        final double[][] ta = {
-            {a[0], a[1], a[2]}, {a[3], a[4], a[5]}, {a[6], a[7], a[8]}
-        };
-        final double[][] tb = {
-            {b[0], b[1], b[2]}, {b[3], b[4], b[5]}, {b[6], b[7], b[8]}
-        };
+        final double[][] ta = {{a[0], a[1], a[2]}, {a[3], a[4], a[5]}, {a[6], a[7], a[8]}};
+        final double[][] tb = {{b[0], b[1], b[2]}, {b[3], b[4], b[5]}, {b[6], b[7], b[8]}};
         for (int i = 0; i < AXES; ++i) {
             final int j = (i + 1) % AXES;
             if (segmentCrossesTriangle(ta[i], ta[j], tb[0], tb[1], tb[2])

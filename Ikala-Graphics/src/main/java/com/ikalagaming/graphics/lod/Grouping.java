@@ -11,12 +11,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Decides which clusters of a level are merged and simplified together, the way Nanite does
- * (Karis et al., <i>Nanite: A Deep Dive</i>, 2021): clusters are nodes of a graph, joined by the
- * number of triangle edges they share, plus light edges to their nearest clusters so separate
- * pieces are grouped with what is near them rather than arbitrarily. Partitioning it with the least
- * edge weight cut gives groups with the shortest shared borders, so the fewest edges are locked.
- * Groups get up to {@value #MAX_CLUSTERS} clusters.
+ * Decides which clusters of a level are merged and simplified together, the way Nanite does (Karis
+ * et al., <i>Nanite: A Deep Dive</i>, 2021): clusters are nodes of a graph, joined by the number of
+ * triangle edges they share, plus light edges to their nearest clusters so separate pieces are
+ * grouped with what is near them rather than arbitrarily. Partitioning it with the least edge
+ * weight cut gives groups with the shortest shared borders, so the fewest edges are locked. Groups
+ * get up to {@value #MAX_CLUSTERS} clusters.
  *
  * <p>Also the corner and edge keys used to find where clusters meet.
  */
@@ -149,7 +149,8 @@ public final class Grouping {
      * @param candidate Another cluster.
      * @param d Its distance.
      */
-    private static void insert(int @NonNull [] best, double @NonNull [] distance, int candidate, double d) {
+    private static void insert(
+            int @NonNull [] best, double @NonNull [] distance, int candidate, double d) {
         for (int k = 0; k < best.length; ++k) {
             if (d < distance[k] || (d == distance[k] && candidate < best[k])) {
                 // Shift the farther ones down one; arraycopy handles the overlap
@@ -176,7 +177,9 @@ public final class Grouping {
         final long x = (long) Math.floor(p[0] / cell) + dx;
         final long y = (long) Math.floor(p[1] / cell) + dy;
         final long z = (long) Math.floor(p[2] / cell) + dz;
-        return (x & CELL_MASK) | ((y & CELL_MASK) << CELL_BITS) | ((z & CELL_MASK) << (2 * CELL_BITS));
+        return (x & CELL_MASK)
+                | ((y & CELL_MASK) << CELL_BITS)
+                | ((z & CELL_MASK) << (2 * CELL_BITS));
     }
 
     /**

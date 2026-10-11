@@ -15,9 +15,9 @@ import java.util.Set;
  * (2025), §4.1.1: two triangles from different connected components whose distance is under 2r get
  * an edge between their closest pair of vertices.
  *
- * <p>Every block in a section is its own little component where it touches others only along
- * edges that welding already joins, but floating blocks, leaves and the gaps between separate meshes
- * need these edges to simplify together.
+ * <p>Every block in a section is its own little component where it touches others only along edges
+ * that welding already joins, but floating blocks, leaves and the gaps between separate meshes need
+ * these edges to simplify together.
  */
 final class VirtualEdges {
 
@@ -145,8 +145,8 @@ final class VirtualEdges {
     }
 
     /**
-     * The grid cell size: at least the reach, and not so small that big triangles fill thousands
-     * of cells.
+     * The grid cell size: at least the reach, and not so small that big triangles fill thousands of
+     * cells.
      *
      * @param mesh The mesh.
      * @param reach 2r.
@@ -211,7 +211,9 @@ final class VirtualEdges {
      * @return The key.
      */
     private static long pack(long x, long y, long z) {
-        return (x & CELL_MASK) | ((y & CELL_MASK) << CELL_BITS) | ((z & CELL_MASK) << (2 * CELL_BITS));
+        return (x & CELL_MASK)
+                | ((y & CELL_MASK) << CELL_BITS)
+                | ((z & CELL_MASK) << (2 * CELL_BITS));
     }
 
     /**

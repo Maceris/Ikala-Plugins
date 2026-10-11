@@ -192,6 +192,19 @@ public class Scene {
     }
 
     /**
+     * Remove a model from the scene, releasing its GPU resources as replacing it would. Nothing
+     * happens if no model has the ID. Render thread only.
+     *
+     * @param id The model's ID.
+     */
+    public void removeModel(@NonNull String id) {
+        Model previous = modelMap.remove(id);
+        if (previous != null) {
+            releaseResources(previous);
+        }
+    }
+
+    /**
      * Queue up deletion of a model's GPU resources: its instances, its meshes in the shared
      * geometry buffers, and its own buffers.
      *

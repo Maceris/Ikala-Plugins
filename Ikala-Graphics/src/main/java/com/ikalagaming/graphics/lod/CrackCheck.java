@@ -7,10 +7,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Checks a cut for cracks. With the input's open border locked at every level, a cut without
- * cracks has exactly the input's open edges (edges with one triangle) and no others: a crack is an
- * edge where two clusters drawn at different levels don't meet, so it shows up as an open edge the
- * input doesn't have. An edge used by more triangles than in the input means parts drawn twice.
+ * Checks a cut for cracks. With the input's open border locked at every level, a cut without cracks
+ * has exactly the input's open edges (edges with one triangle) and no others: a crack is an edge
+ * where two clusters drawn at different levels don't meet, so it shows up as an open edge the input
+ * doesn't have. An edge used by more triangles than in the input means parts drawn twice.
  */
 public final class CrackCheck {
 

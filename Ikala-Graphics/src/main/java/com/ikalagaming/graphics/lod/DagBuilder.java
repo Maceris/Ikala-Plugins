@@ -15,14 +15,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  * simplify it to half with its outer border locked, and split it back into clusters, until one
  * cluster is left or a level stops halving.
  *
- * <p>Input is a list of meshes, each with its own origin: the sections of a world, or one mesh. Leaf
- * clusters never span two input meshes, so editing a section only dirties its own leaves. Groups in
- * a level are built in parallel.
+ * <p>Input is a list of meshes, each with its own origin: the sections of a world, or one mesh.
+ * Leaf clusters never span two input meshes, so editing a section only dirties its own leaves.
+ * Groups in a level are built in parallel.
  *
- * <p>Locked vertices: those a group shares with clusters in other groups of the same level, and,
- * if asked, those on the input's open border (edges with one triangle), which then never change at
- * any level. With the open border locked, every cut has exactly the input's open edges, which is
- * what {@link CrackCheck} tests.
+ * <p>Locked vertices: those a group shares with clusters in other groups of the same level, and, if
+ * asked, those on the input's open border (edges with one triangle), which then never change at any
+ * level. With the open border locked, every cut has exactly the input's open edges, which is what
+ * {@link CrackCheck} tests.
  */
 @Slf4j
 public final class DagBuilder {
@@ -33,7 +33,9 @@ public final class DagBuilder {
     /** A level whose triangles are at least this share of the last has stopped halving. */
     private static final double STALLED = 0.95;
 
-    /** How much the virtual edge radius grows each level, as clusters spread over twice the area. */
+    /**
+     * How much the virtual edge radius grows each level, as clusters spread over twice the area.
+     */
     private static final double VIRTUAL_EDGE_GROWTH = Math.sqrt(2);
 
     /** Coordinates in a position. */
@@ -50,10 +52,7 @@ public final class DagBuilder {
      * @param lockOpenBorder Whether the input's open border is locked at every level.
      * @param threads Worker threads for building groups.
      */
-    public record Options(
-            double virtualEdgeFactor,
-            boolean lockOpenBorder,
-            int threads) {
+    public record Options(double virtualEdgeFactor, boolean lockOpenBorder, int threads) {
 
         /**
          * The defaults: r half the leaves' edge length, the open border locked, and every core but

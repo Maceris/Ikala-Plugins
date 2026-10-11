@@ -54,15 +54,19 @@ public final class LodCut {
      * @param thresholdPixels The most error, in pixels, a drawn cluster may have.
      * @return Whether each cluster is drawn.
      */
-    public static boolean[] select(@NonNull LodDag dag, @NonNull View view, double thresholdPixels) {
+    public static boolean[] select(
+            @NonNull LodDag dag, @NonNull View view, double thresholdPixels) {
         final int n = dag.clusters().size();
         final boolean[] drawn = new boolean[n];
         final double[] eye = {
-            view.x() - dag.getOrigin()[0], view.y() - dag.getOrigin()[1], view.z() - dag.getOrigin()[2]
+            view.x() - dag.getOrigin()[0],
+            view.y() - dag.getOrigin()[1],
+            view.z() - dag.getOrigin()[2]
         };
         for (int i = 0; i < n; ++i) {
             final LodDag.Cluster cluster = dag.clusters().get(i);
-            final double own = projected(cluster.error(), cluster.bound(), eye, view.pixelsPerUnit());
+            final double own =
+                    projected(cluster.error(), cluster.bound(), eye, view.pixelsPerUnit());
             final double parent =
                     projected(dag.parentError(i), dag.parentBound(i), eye, view.pixelsPerUnit());
             drawn[i] = own <= thresholdPixels && parent > thresholdPixels;
