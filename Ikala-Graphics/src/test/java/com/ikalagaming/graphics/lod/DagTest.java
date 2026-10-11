@@ -79,7 +79,7 @@ class DagTest {
     }
 
     /** Options for a test build, on two threads. */
-    private static final DagBuilder.Options OPTIONS = new DagBuilder.Options(0.5, true, 2);
+    private static final DagBuilder.Options OPTIONS = new DagBuilder.Options(0.5, true, 2, false);
 
     /** A height field builds up to a root, roughly halving each level. */
     @Test

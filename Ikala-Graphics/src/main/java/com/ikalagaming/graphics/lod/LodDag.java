@@ -124,6 +124,13 @@ public final class LodDag {
     @Getter private String stopReason = "";
 
     /**
+     * Where every triangle came from, if the build kept it.
+     *
+     * @return The lineage, or null.
+     */
+    @Getter private Lineage lineage;
+
+    /**
      * Start an empty DAG.
      *
      * @param origin Where positions are measured from.
@@ -164,6 +171,15 @@ public final class LodDag {
         for (int child : group.children()) {
             consumer[child] = group.id();
         }
+    }
+
+    /**
+     * Keep where every triangle came from, filled in as clusters and groups are added.
+     *
+     * @param lineage The empty lineage.
+     */
+    void setLineage(@NonNull Lineage lineage) {
+        this.lineage = lineage;
     }
 
     /**

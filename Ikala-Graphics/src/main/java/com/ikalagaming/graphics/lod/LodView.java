@@ -49,7 +49,13 @@ public final class LodView implements AutoCloseable {
         /** A color per group that made the cluster, so siblings share it. */
         GROUPS,
         /** A color per level. */
-        LEVELS
+        LEVELS,
+        /**
+         * Gray where a triangle's material matches the input under it, shading to red the more of
+         * it doesn't, and magenta where its material isn't even the most common one under it. Needs
+         * {@link #setFidelity}.
+         */
+        MISMATCH
     }
 
     /**
@@ -70,6 +76,21 @@ public final class LodView implements AutoCloseable {
 
     /** How many debug colors there are. */
     private static final int PALETTE = 16;
+
+    /** Steps from no mismatch to all, in the mismatch colors. */
+    private static final int MISMATCH_STEPS = 8;
+
+    /** The mismatch color key for a material that isn't the most common one under it. */
+    private static final int NOT_MAJORITY_KEY = MISMATCH_STEPS;
+
+    /** The color of no mismatch. */
+    private static final float[] MATCH_RGB = {0.6f, 0.6f, 0.6f};
+
+    /** The color of complete mismatch. */
+    private static final float[] MISMATCH_RGB = {0.9f, 0.1f, 0.05f};
+
+    /** The color of a material that isn't the most common one under it. */
+    private static final float[] NOT_MAJORITY_RGB = {0.9f, 0.1f, 0.9f};
 
     /** The golden ratio's fractional part, for spreading hues apart. */
     private static final double GOLDEN = 0.618_033_988_749_895;
@@ -133,6 +154,7 @@ public final class LodView implements AutoCloseable {
      * @param triangles How many triangles were drawn.
      * @param drawn Whether each cluster was drawn.
      * @param millis How long it took.
+     * @param mode How the triangles were colored.
      */
     private record Built(
             long generation,
@@ -142,7 +164,8 @@ public final class LodView implements AutoCloseable {
             int clusters,
             int triangles,
             boolean[] drawn,
-            double millis) {}
+            double millis,
+            Mode mode) {}
 
     /**
      * What is in the scene for one build.
@@ -174,6 +197,12 @@ public final class LodView implements AutoCloseable {
 
     /** The debug color materials. */
     private final Material[] palette = new Material[PALETTE];
+
+    /** The mismatch color materials, by step, then the not most common color. */
+    private final Material[] mismatchPalette = new Material[MISMATCH_STEPS + 1];
+
+    /** The DAG's fidelity, for the mismatch colors, or null. */
+    private volatile Fidelity fidelity;
 
     /** How far the observer must move before the cut is redone. */
     private final double moveStep;
@@ -250,18 +279,53 @@ public final class LodView implements AutoCloseable {
             final java.awt.Color rgb =
                     java.awt.Color.getHSBColor(
                             (float) ((i * GOLDEN) % 1.0), DEBUG_SATURATION, DEBUG_BRIGHTNESS);
-            Material material = new Material();
-            material.getBaseColor()
-                    .set(
+            palette[i] =
+                    debugMaterial(
+                            cache,
                             rgb.getRed() / CHANNEL_MAX,
                             rgb.getGreen() / CHANNEL_MAX,
-                            rgb.getBlue() / CHANNEL_MAX,
-                            1);
-            material.setRoughness(DEBUG_ROUGHNESS);
-            cache.addMaterial(material);
-            palette[i] = material;
+                            rgb.getBlue() / CHANNEL_MAX);
         }
+        for (int i = 0; i < MISMATCH_STEPS; ++i) {
+            final float f = i / (MISMATCH_STEPS - 1f);
+            mismatchPalette[i] =
+                    debugMaterial(
+                            cache,
+                            MATCH_RGB[0] + f * (MISMATCH_RGB[0] - MATCH_RGB[0]),
+                            MATCH_RGB[1] + f * (MISMATCH_RGB[1] - MATCH_RGB[1]),
+                            MATCH_RGB[2] + f * (MISMATCH_RGB[2] - MATCH_RGB[2]));
+        }
+        mismatchPalette[NOT_MAJORITY_KEY] =
+                debugMaterial(cache, NOT_MAJORITY_RGB[0], NOT_MAJORITY_RGB[1], NOT_MAJORITY_RGB[2]);
         cache.setDirty(true);
+    }
+
+    /**
+     * Add a plain debug material to the cache.
+     *
+     * @param cache The material cache.
+     * @param red Its red.
+     * @param green Its green.
+     * @param blue Its blue.
+     * @return The material.
+     */
+    private static Material debugMaterial(
+            @NonNull MaterialCache cache, float red, float green, float blue) {
+        Material material = new Material();
+        material.getBaseColor().set(red, green, blue, 1);
+        material.setRoughness(DEBUG_ROUGHNESS);
+        cache.addMaterial(material);
+        return material;
+    }
+
+    /**
+     * Give the view the DAG's fidelity, for the mismatch colors, and redo the meshes.
+     *
+     * @param fidelity The DAG's fidelity.
+     */
+    public void setFidelity(@NonNull Fidelity fidelity) {
+        this.fidelity = fidelity;
+        builtSettings = null;
     }
 
     /**
@@ -347,7 +411,7 @@ public final class LodView implements AutoCloseable {
             ++clusters;
             triangles += cluster.triangleCount();
             for (int t = 0; t < cluster.triangleCount(); ++t) {
-                final int key = keyOf(cluster, t, settings.mode());
+                final int key = keyOf(cluster, t, settings.mode(), fidelity);
                 float[] corners = new float[TRIANGLE_VALUES];
                 System.arraycopy(
                         cluster.corners(), t * TRIANGLE_VALUES, corners, 0, TRIANGLE_VALUES);
@@ -370,7 +434,8 @@ public final class LodView implements AutoCloseable {
                 clusters,
                 triangles,
                 chosen,
-                (System.nanoTime() - start) / NANOS_PER_MILLI);
+                (System.nanoTime() - start) / NANOS_PER_MILLI,
+                settings.mode());
     }
 
     /**
@@ -379,9 +444,11 @@ public final class LodView implements AutoCloseable {
      * @param cluster Its cluster.
      * @param triangle The triangle.
      * @param mode How triangles are colored.
+     * @param fidelity The DAG's fidelity, or null.
      * @return Its material index, or its debug color.
      */
-    private static int keyOf(LodDag.@NonNull Cluster cluster, int triangle, @NonNull Mode mode) {
+    private static int keyOf(
+            LodDag.@NonNull Cluster cluster, int triangle, @NonNull Mode mode, Fidelity fidelity) {
         return switch (mode) {
             case MATERIALS -> cluster.materials()[triangle];
             case CLUSTERS -> Math.floorMod(cluster.id(), PALETTE);
@@ -389,7 +456,23 @@ public final class LodView implements AutoCloseable {
                     Math.floorMod(
                             cluster.producer() < 0 ? cluster.id() : cluster.producer(), PALETTE);
             case LEVELS -> Math.floorMod(cluster.level(), PALETTE);
+            case MISMATCH ->
+                    mismatchKey(fidelity == null ? 0 : fidelity.mark(cluster.id(), triangle));
         };
+    }
+
+    /**
+     * The mismatch color of a triangle.
+     *
+     * @param mark Its fidelity mark.
+     * @return Step 0 for no mismatch, rising with mismatching samples, or the not most common key.
+     */
+    private static int mismatchKey(int mark) {
+        if ((mark & Fidelity.NOT_MAJORITY) != 0) {
+            return NOT_MAJORITY_KEY;
+        }
+        final int mismatched = mark & Fidelity.MISMATCH_MASK;
+        return mismatched == 0 ? 0 : 1 + (mismatched - 1) * (MISMATCH_STEPS - 1) / Fidelity.SAMPLES;
     }
 
     /**
@@ -564,7 +647,11 @@ public final class LodView implements AutoCloseable {
             final MeshData mesh = built.meshes().get(i);
             final int key = built.keys()[i];
             mesh.setMaterial(
-                    builtSettings.mode() == Mode.MATERIALS ? material(cache, key) : palette[key]);
+                    switch (built.mode()) {
+                        case MATERIALS -> material(cache, key);
+                        case MISMATCH -> mismatchPalette[key];
+                        default -> palette[key];
+                    });
             graphics.meshes().register(mesh);
             model.getMeshDataList().add(mesh);
         }
@@ -675,6 +762,9 @@ public final class LodView implements AutoCloseable {
         }
         shapes.clear();
         for (Material material : palette) {
+            scene.getMaterialCache().removeMaterial(material);
+        }
+        for (Material material : mismatchPalette) {
             scene.getMaterialCache().removeMaterial(material);
         }
         scene.getMaterialCache().setDirty(true);

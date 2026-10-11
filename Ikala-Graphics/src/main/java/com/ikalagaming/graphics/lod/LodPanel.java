@@ -11,6 +11,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
+import java.util.function.IntFunction;
 import java.util.function.Supplier;
 
 /**
@@ -18,7 +19,7 @@ import java.util.function.Supplier;
  * retained UI {@code Immediate} area. It builds on a background thread, then shows the cut through
  * a {@link LodView}, with controls for the error threshold, coloring, a fixed level, bounds and
  * locked border overlays, freezing the observer to look at the cut from outside, and a crack check,
- * plus the build's stats.
+ * plus the build's stats and its {@link Fidelity} to the input.
  *
  * <p>Render thread only, except the build. Close it with the plugin.
  */
@@ -41,7 +42,7 @@ public final class LodPanel implements AutoCloseable {
     private static final double NANOS_PER_SECOND = 1e9;
 
     /** The coloring choices, in combo order. */
-    private static final String[] MODES = {"Materials", "Clusters", "Groups", "Levels"};
+    private static final String[] MODES = {"Materials", "Clusters", "Groups", "Levels", "Mismatch"};
 
     /** The plugin's graphics context. */
     private final GraphicsContext graphics;
@@ -73,6 +74,9 @@ public final class LodPanel implements AutoCloseable {
     /** The build's report, once built. */
     private volatile String report;
 
+    /** The fidelity report, once measured. */
+    private volatile String fidelityReport;
+
     /** Why the build failed, or null. */
     private volatile String failure;
 
@@ -89,7 +93,7 @@ public final class LodPanel implements AutoCloseable {
     private volatile boolean closed;
 
     /**
-     * Start building a DAG in the background.
+     * Start building a DAG in the background, naming materials by index.
      *
      * @param graphics The plugin's graphics context.
      * @param name What is being built, for the panel and the view's models.
@@ -99,6 +103,22 @@ public final class LodPanel implements AutoCloseable {
             @NonNull GraphicsContext graphics,
             @NonNull String name,
             @NonNull Supplier<List<LodMesh>> inputs) {
+        this(graphics, name, inputs, material -> "material " + material);
+    }
+
+    /**
+     * Start building a DAG in the background.
+     *
+     * @param graphics The plugin's graphics context.
+     * @param name What is being built, for the panel and the view's models.
+     * @param inputs The meshes, fetched on the build thread.
+     * @param materialName A name for each material index, for the fidelity report.
+     */
+    public LodPanel(
+            @NonNull GraphicsContext graphics,
+            @NonNull String name,
+            @NonNull Supplier<List<LodMesh>> inputs,
+            @NonNull IntFunction<String> materialName) {
         this.graphics = graphics;
         this.name = name;
         Thread builder =
@@ -119,6 +139,21 @@ public final class LodPanel implements AutoCloseable {
                                         () -> {
                                             if (!closed) {
                                                 view = new LodView(graphics, name, dag);
+                                            }
+                                        });
+                                final long measuring = System.nanoTime();
+                                final Fidelity fidelity = Fidelity.measure(dag);
+                                fidelityReport = fidelity.report(materialName);
+                                log.info(
+                                        "Measured LOD fidelity for {} in {} ms\n{}",
+                                        name,
+                                        Math.round(
+                                                (System.nanoTime() - measuring) / NANOS_PER_MILLI),
+                                        fidelityReport);
+                                post(
+                                        () -> {
+                                            if (view != null) {
+                                                view.setFidelity(fidelity);
                                             }
                                         });
                             } catch (RuntimeException e) {
@@ -154,6 +189,14 @@ public final class LodPanel implements AutoCloseable {
         final int topLevel = view.getDag().getLevels() - 1;
         IkGui.sliderFloat("Error (pixels)", threshold, MIN_THRESHOLD, MAX_THRESHOLD);
         IkGui.combo("Colors", mode, MODES);
+        if (LodView.Mode.values()[mode.get()] == LodView.Mode.MISMATCH) {
+            IkGui.textWrapped(
+                    fidelityReport == null
+                            ? "Measuring fidelity..."
+                            : "Gray: the input under the triangle has its material. Redder: more"
+                                    + " of it doesn't. Magenta: its material isn't even the most"
+                                    + " common under it.");
+        }
         IkGui.sliderInt("Draw level", fixedLevel, -1, topLevel, fixedLevel[0] < 0 ? "cut" : "%d");
         IkGui.sliderInt(
                 "Locked edges of",
@@ -195,6 +238,11 @@ public final class LodPanel implements AutoCloseable {
                         buildMillis));
         for (String line : report.split("\n")) {
             IkGui.textUnformatted(line);
+        }
+        if (fidelityReport != null) {
+            for (String line : fidelityReport.split("\n")) {
+                IkGui.textUnformatted(line);
+            }
         }
     }
 

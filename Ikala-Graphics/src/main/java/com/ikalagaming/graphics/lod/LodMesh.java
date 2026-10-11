@@ -320,10 +320,11 @@ public final class LodMesh {
          * @param b The second corner.
          * @param c The third corner.
          * @param material Its material.
+         * @return Whether it was added.
          */
-        public void triangle(int a, int b, int c, int material) {
+        public boolean triangle(int a, int b, int c, int material) {
             if (a == b || b == c || a == c) {
-                return;
+                return false;
             }
             if ((triangleCount + 1) * CORNERS > triangles.length) {
                 triangles = Arrays.copyOf(triangles, triangles.length * 2);
@@ -334,6 +335,7 @@ public final class LodMesh {
             triangles[triangleCount * CORNERS + 2] = c;
             materials[triangleCount] = material;
             ++triangleCount;
+            return true;
         }
 
         /**

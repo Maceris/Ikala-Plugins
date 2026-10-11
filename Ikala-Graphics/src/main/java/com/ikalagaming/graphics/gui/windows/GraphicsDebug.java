@@ -41,7 +41,9 @@ import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class GraphicsDebug extends GuiWindow {
 
@@ -96,6 +98,11 @@ public class GraphicsDebug extends GuiWindow {
     /** The benchmark recipes' names, in ordinal order. */
     private static final String[] RECIPE_NAMES =
             Arrays.stream(SyntheticTerrain.Recipe.values()).map(Enum::name).toArray(String[]::new);
+
+    /** The synthetic terrain's block names, by block id, for the level of detail reports. */
+    private static final String[] LOD_BLOCK_NAMES = {
+        "air", "stone", "grass", "slab", "plant", "leaves", "glass", "tinted glass"
+    };
 
     /** The level of detail recipe picked, by ordinal. */
     private final IkInt lodRecipe = new IkInt(SyntheticTerrain.Recipe.TERRAIN.ordinal());
@@ -727,11 +734,15 @@ public class GraphicsDebug extends GuiWindow {
         removeLod(scene);
         final MeshData[] meshes = BlockMeshes.create();
         final int[] materials = new int[meshes.length];
+        final Map<Integer, String> materialNames = new HashMap<>();
         for (int block = 1; block < meshes.length; ++block) {
             final Material material = meshes[block].getMaterial();
             scene.getMaterialCache().addMaterial(material);
             lodMaterials.add(material);
             materials[block] = scene.getMaterialCache().getMaterialIndex(material);
+            materialNames.put(
+                    materials[block],
+                    block < LOD_BLOCK_NAMES.length ? LOD_BLOCK_NAMES[block] : "block " + block);
         }
         scene.getMaterialCache().setDirty(true);
         final BakeSource[] sources = BlockMeshes.sources(meshes);
@@ -768,9 +779,8 @@ public class GraphicsDebug extends GuiWindow {
                 new LodPanel(
                         GraphicsManager.forPlugin(GraphicsPlugin.PLUGIN_NAME),
                         recipe.name().toLowerCase() + " " + columns + "x" + columns,
-                        () ->
-                                SyntheticSections.bake(
-                                        recipe, LOD_SEED, columns, sources, materials));
+                        () -> SyntheticSections.bake(recipe, LOD_SEED, columns, sources, materials),
+                        material -> materialNames.getOrDefault(material, "material " + material));
     }
 
     /**

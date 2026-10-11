@@ -2,6 +2,8 @@ package com.ikalagaming.graphics.lod;
 
 import lombok.NonNull;
 
+import java.util.Arrays;
+
 /**
  * Maps points on a simplified mesh back to the input it came from, by successive closest point
  * projection through the collapse history, as Liu, Zhang and Yuksel do in <i>Simplifying Textured
@@ -29,6 +31,15 @@ public final class Correspondence {
     /** The collapse history. */
     private final Simplifier.History history;
 
+    /** Where each face's collapses start in {@link #collapses}, plus an end. */
+    private final int[] collapseStart;
+
+    /**
+     * The collapses each face was around right after, in increasing order, so walking back finds
+     * the next one that matters without looking at the rest.
+     */
+    private final int[] collapses;
+
     /**
      * Set up a mapping.
      *
@@ -38,6 +49,23 @@ public final class Correspondence {
     public Correspondence(@NonNull LodMesh input, Simplifier.@NonNull History history) {
         this.input = input;
         this.history = history;
+        // Face ids are input triangle indices
+        collapseStart = new int[input.getTriangleCount() + 1];
+        final int entries = history.afterStart.getInt(history.count);
+        for (int k = 0; k < entries; ++k) {
+            ++collapseStart[history.afterFaces.getInt(k) + 1];
+        }
+        for (int f = 0; f < input.getTriangleCount(); ++f) {
+            collapseStart[f + 1] += collapseStart[f];
+        }
+        collapses = new int[entries];
+        final int[] fill = Arrays.copyOf(collapseStart, input.getTriangleCount());
+        for (int collapse = 0; collapse < history.count; ++collapse) {
+            final int end = history.afterStart.getInt(collapse + 1);
+            for (int k = history.afterStart.getInt(collapse); k < end; ++k) {
+                collapses[fill[history.afterFaces.getInt(k)]++] = collapse;
+            }
+        }
     }
 
     /**
@@ -81,10 +109,9 @@ public final class Correspondence {
         final double[] c = new double[AXES];
         final double[] closest = new double[AXES];
         int current = face;
-        for (int collapse = history.count - 1; collapse >= 0; --collapse) {
-            if (!aroundNewVertex(collapse, current)) {
-                continue;
-            }
+        for (int collapse = latestAround(current, history.count - 1);
+                collapse >= 0;
+                collapse = latestAround(current, collapse - 1)) {
             // Project onto the closest face around the edge before it collapsed
             double best = Double.MAX_VALUE;
             int bestFace = current;
@@ -112,27 +139,30 @@ public final class Correspondence {
     }
 
     /**
-     * Whether a face was around a collapse's new vertex, right after that collapse.
+     * The latest collapse, up to a limit, that a face was around the new vertex of right after.
      *
-     * @param collapse The collapse.
      * @param face The face.
-     * @return True if it was.
+     * @param limit The latest collapse to consider.
+     * @return The collapse, or -1 if there is none.
      */
-    private boolean aroundNewVertex(int collapse, int face) {
-        int low = history.afterStart.getInt(collapse);
-        int high = history.afterStart.getInt(collapse + 1) - 1;
+    private int latestAround(int face, int limit) {
+        if (limit < 0) {
+            return -1;
+        }
+        // The last of the face's collapses that is at most the limit
+        int low = collapseStart[face];
+        int high = collapseStart[face + 1] - 1;
+        int found = -1;
         while (low <= high) {
             final int middle = (low + high) >>> 1;
-            final int value = history.afterFaces.getInt(middle);
-            if (value < face) {
+            if (collapses[middle] <= limit) {
+                found = collapses[middle];
                 low = middle + 1;
-            } else if (value > face) {
-                high = middle - 1;
             } else {
-                return true;
+                high = middle - 1;
             }
         }
-        return false;
+        return found;
     }
 
     /**

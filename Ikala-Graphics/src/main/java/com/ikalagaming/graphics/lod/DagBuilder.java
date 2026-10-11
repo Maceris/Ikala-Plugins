@@ -51,18 +51,21 @@ public final class DagBuilder {
      *     length, growing by √2 a level; 0 for none.
      * @param lockOpenBorder Whether the input's open border is locked at every level.
      * @param threads Worker threads for building groups.
+     * @param keepLineage Whether to keep where every triangle came from, for {@link Fidelity}. It
+     *     holds every group's collapse history.
      */
-    public record Options(double virtualEdgeFactor, boolean lockOpenBorder, int threads) {
+    public record Options(
+            double virtualEdgeFactor, boolean lockOpenBorder, int threads, boolean keepLineage) {
 
         /**
-         * The defaults: r half the leaves' edge length, the open border locked, and every core but
-         * one.
+         * The defaults: r half the leaves' edge length, the open border locked, every core but one,
+         * and the lineage kept.
          *
          * @return The options.
          */
         public static Options defaults() {
             return new Options(
-                    0.5, true, Math.max(1, Runtime.getRuntime().availableProcessors() - 1));
+                    0.5, true, Math.max(1, Runtime.getRuntime().availableProcessors() - 1), true);
         }
     }
 
@@ -84,6 +87,9 @@ public final class DagBuilder {
      * @param rejectedFlips Collapses rejected for flipping.
      * @param rejectedLinks Collapses rejected by the link condition.
      * @param nanos How long it took.
+     * @param lineage Where its merged triangles came from, or null if not kept.
+     * @param faces Each output cluster's triangles as faces of the merged mesh, or null if not
+     *     kept.
      */
     private record Built(
             int[] children,
@@ -100,7 +106,9 @@ public final class DagBuilder {
             int virtualEdges,
             int rejectedFlips,
             int rejectedLinks,
-            long nanos) {}
+            long nanos,
+            Lineage.Group lineage,
+            List<int[]> faces) {}
 
     /** The options. */
     private final Options options;
@@ -123,6 +131,9 @@ public final class DagBuilder {
     private DagBuilder(double @NonNull [] origin, @NonNull Options options) {
         this.options = options;
         dag = new LodDag(origin);
+        if (options.keepLineage()) {
+            dag.setLineage(new Lineage(dag));
+        }
     }
 
     /**
@@ -196,6 +207,9 @@ public final class DagBuilder {
                                 tight,
                                 -1,
                                 section));
+                if (dag.getLineage() != null) {
+                    dag.getLineage().addCluster(null);
+                }
             }
             for (int t = 0; t < mesh.getTriangleCount(); ++t) {
                 for (int corner = 0; corner < AXES; ++corner) {
@@ -321,6 +335,8 @@ public final class DagBuilder {
         int trianglesIn = 0;
         double childError = 0;
         List<double[]> spheres = new ArrayList<>();
+        final IntArrayList sourceCluster = new IntArrayList();
+        final IntArrayList sourceTriangle = new IntArrayList();
         for (int id : children) {
             final LodDag.Cluster cluster = dag.clusters().get(id);
             final float[] corners = cluster.corners();
@@ -334,7 +350,10 @@ public final class DagBuilder {
                         builder.lock(v[corner]);
                     }
                 }
-                builder.triangle(v[0], v[1], v[2], cluster.materials()[t]);
+                if (builder.triangle(v[0], v[1], v[2], cluster.materials()[t])) {
+                    sourceCluster.addInt(id);
+                    sourceTriangle.addInt(t);
+                }
             }
             trianglesIn += cluster.triangleCount();
             childError = Math.max(childError, cluster.error());
@@ -352,6 +371,7 @@ public final class DagBuilder {
         List<float[]> outCorners = new ArrayList<>();
         List<int[]> outMaterials = new ArrayList<>();
         List<double[]> outTight = new ArrayList<>();
+        List<int[]> outFaces = options.keepLineage() ? new ArrayList<>() : null;
         final float[] noOffset = new float[AXES];
         for (int[] triangles : Clusters.split(result.mesh(), Clusters.MAX_TRIANGLES)) {
             final float[] corners = Clusters.corners(result.mesh(), triangles, noOffset);
@@ -364,6 +384,13 @@ public final class DagBuilder {
             outMaterials.add(materials);
             outTight.add(tight);
             spheres.add(tight);
+            if (outFaces != null) {
+                final int[] faces = new int[triangles.length];
+                for (int i = 0; i < triangles.length; ++i) {
+                    faces[i] = result.faceIds()[triangles[i]];
+                }
+                outFaces.add(faces);
+            }
         }
         final double error = Math.max(childError, result.error());
         final double[] bound = Clusters.enclose(spheres);
@@ -383,7 +410,14 @@ public final class DagBuilder {
                 result.virtualEdges(),
                 result.rejectedFlips(),
                 result.rejectedLinks(),
-                System.nanoTime() - start);
+                System.nanoTime() - start,
+                options.keepLineage()
+                        ? new Lineage.Group(
+                                new Correspondence(merged, result.history()),
+                                sourceCluster.toIntArray(),
+                                sourceTriangle.toIntArray())
+                        : null,
+                outFaces);
     }
 
     /**
@@ -433,6 +467,12 @@ public final class DagBuilder {
                             groupId,
                             -1));
             next.addInt(outputs[i]);
+            if (dag.getLineage() != null) {
+                dag.getLineage().addCluster(built.faces().get(i));
+            }
+        }
+        if (dag.getLineage() != null) {
+            dag.getLineage().addGroup(built.lineage());
         }
         dag.add(
                 new LodDag.Group(
