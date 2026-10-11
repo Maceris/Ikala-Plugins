@@ -3,27 +3,34 @@ package com.ikalagaming.graphics.lod;
 import lombok.NonNull;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Checks a cut for cracks. With the input's open border locked at every level, a cut without cracks
- * has exactly the input's open edges (edges with one triangle) and no others: a crack is an edge
- * where two clusters drawn at different levels don't meet, so it shows up as an open edge the input
- * doesn't have. An edge used by more triangles than in the input means parts drawn twice.
+ * Checks a cut for cracks. Clusters drawn at different levels meet along group borders, which were
+ * locked while each group was simplified, so there they share exactly the same edges. A crack is an
+ * edge where they don't meet: an edge the cut uses once although the level that drew it uses it
+ * twice. An edge the cut uses once that its own level also uses once is that level's rim, the open
+ * edge of the input as that level simplified it, which nothing is drawn beyond. This holds whether
+ * or not the rim was locked. An edge used more often in the cut than in its own level means parts
+ * are drawn twice.
+ *
+ * <p>Each level's edges are recorded when the check is made, so it compares cuts against the DAG as
+ * it was built.
  */
 public final class CrackCheck {
 
     /**
      * What a check found.
      *
-     * @param openEdges Open edges in the cut that the input doesn't have: cracks.
-     * @param closedBorderEdges Input open edges the cut covers twice or not at all.
+     * @param openEdges Edges the cut uses once that the level drawing them uses twice: cracks.
+     * @param overdrawnEdges Edges the cut uses more often than the level drawing them does.
      * @param drawnClusters How many clusters the cut draws.
      */
     public record Result(
             @NonNull List<Grouping.Edge> openEdges,
-            @NonNull List<Grouping.Edge> closedBorderEdges,
+            @NonNull List<Grouping.Edge> overdrawnEdges,
             int drawnClusters) {
 
         /**
@@ -32,12 +39,18 @@ public final class CrackCheck {
          * @return True if nothing was found.
          */
         public boolean isClean() {
-            return openEdges.isEmpty() && closedBorderEdges.isEmpty();
+            return openEdges.isEmpty() && overdrawnEdges.isEmpty();
         }
     }
 
-    /** The input's open edges. */
-    private final Map<Grouping.Edge, Integer> leafUses;
+    /** Coordinates in a position. */
+    private static final int AXES = 3;
+
+    /** Values in a triangle's corners. */
+    private static final int TRIANGLE_VALUES = Clusters.TRIANGLE_VALUES;
+
+    /** How many triangles use each edge in the whole of each level, by level. */
+    private final List<Map<Grouping.Edge, Integer>> levelUses = new ArrayList<>();
 
     /** The DAG. */
     private final LodDag dag;
@@ -49,13 +62,16 @@ public final class CrackCheck {
      */
     public CrackCheck(@NonNull LodDag dag) {
         this.dag = dag;
-        List<Integer> leaves = new ArrayList<>();
-        for (LodDag.Cluster cluster : dag.clusters()) {
-            if (cluster.level() == 0) {
-                leaves.add(cluster.id());
-            }
+        List<List<Integer>> byLevel = new ArrayList<>();
+        for (int level = 0; level < dag.getLevels(); ++level) {
+            byLevel.add(new ArrayList<>());
         }
-        leafUses = Grouping.edgeUses(dag, leaves);
+        for (LodDag.Cluster cluster : dag.clusters()) {
+            byLevel.get(cluster.level()).add(cluster.id());
+        }
+        for (List<Integer> clusters : byLevel) {
+            levelUses.add(Grouping.edgeUses(dag, clusters));
+        }
     }
 
     /**
@@ -72,18 +88,35 @@ public final class CrackCheck {
             }
         }
         final Map<Grouping.Edge, Integer> uses = Grouping.edgeUses(dag, clusters);
+        // The most any level drawing an edge uses it
+        final Map<Grouping.Edge, Integer> allowed = new HashMap<>();
+        for (int id : clusters) {
+            final LodDag.Cluster cluster = dag.clusters().get(id);
+            final Map<Grouping.Edge, Integer> level = levelUses.get(cluster.level());
+            final float[] corners = cluster.corners();
+            for (int t = 0; t < cluster.triangleCount(); ++t) {
+                for (int corner = 0; corner < AXES; ++corner) {
+                    final Grouping.Edge edge =
+                            Grouping.Edge.of(
+                                    Grouping.Corner.of(
+                                            corners, t * TRIANGLE_VALUES + corner * AXES),
+                                    Grouping.Corner.of(
+                                            corners,
+                                            t * TRIANGLE_VALUES + ((corner + 1) % AXES) * AXES));
+                    allowed.merge(edge, level.getOrDefault(edge, 0), Math::max);
+                }
+            }
+        }
         List<Grouping.Edge> open = new ArrayList<>();
-        for (Map.Entry<Grouping.Edge, Integer> edge : uses.entrySet()) {
-            if (edge.getValue() == 1 && leafUses.getOrDefault(edge.getKey(), 0) != 1) {
-                open.add(edge.getKey());
+        List<Grouping.Edge> overdrawn = new ArrayList<>();
+        for (Map.Entry<Grouping.Edge, Integer> entry : uses.entrySet()) {
+            final int most = allowed.getOrDefault(entry.getKey(), 0);
+            if (entry.getValue() == 1 && most != 1) {
+                open.add(entry.getKey());
+            } else if (entry.getValue() > Math.max(most, 1)) {
+                overdrawn.add(entry.getKey());
             }
         }
-        List<Grouping.Edge> border = new ArrayList<>();
-        for (Map.Entry<Grouping.Edge, Integer> edge : leafUses.entrySet()) {
-            if (edge.getValue() == 1 && uses.getOrDefault(edge.getKey(), 0) != 1) {
-                border.add(edge.getKey());
-            }
-        }
-        return new Result(open, border, clusters.size());
+        return new Result(open, overdrawn, clusters.size());
     }
 }

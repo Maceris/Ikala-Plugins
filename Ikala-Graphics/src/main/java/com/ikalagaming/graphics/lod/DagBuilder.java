@@ -19,10 +19,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Leaf clusters never span two input meshes, so editing a section only dirties its own leaves.
  * Groups in a level are built in parallel.
  *
- * <p>Locked vertices: those a group shares with clusters in other groups of the same level, and, if
- * asked, those on the input's open border (edges with one triangle), which then never change at any
- * level. With the open border locked, every cut has exactly the input's open edges, which is what
- * {@link CrackCheck} tests.
+ * <p>Locked vertices: those a group shares with clusters in other groups of the same level, so
+ * clusters of different levels meet exactly along group borders, which is what {@link CrackCheck}
+ * tests. The input's open border (edges with one triangle, such as the rim of the loaded area) is
+ * simplified like any other edge unless asked to lock it: nothing is drawn beyond it, and when what
+ * lies beyond loads, the sections along it are rebaked and their groups rebuilt anyway.
  */
 @Slf4j
 public final class DagBuilder {
@@ -49,7 +50,8 @@ public final class DagBuilder {
      *
      * @param virtualEdgeFactor r for virtual edges as a multiple of the leaves' average edge
      *     length, growing by √2 a level; 0 for none.
-     * @param lockOpenBorder Whether the input's open border is locked at every level.
+     * @param lockOpenBorder Whether the input's open border is locked at every level, keeping it at
+     *     full resolution.
      * @param threads Worker threads for building groups.
      * @param keepLineage Whether to keep where every triangle came from, for {@link Fidelity}. It
      *     holds every group's collapse history.
@@ -58,14 +60,14 @@ public final class DagBuilder {
             double virtualEdgeFactor, boolean lockOpenBorder, int threads, boolean keepLineage) {
 
         /**
-         * The defaults: r half the leaves' edge length, the open border locked, every core but one,
-         * and the lineage kept.
+         * The defaults: r half the leaves' edge length, the open border simplified, every core but
+         * one, and the lineage kept.
          *
          * @return The options.
          */
         public static Options defaults() {
             return new Options(
-                    0.5, true, Math.max(1, Runtime.getRuntime().availableProcessors() - 1), true);
+                    0.5, false, Math.max(1, Runtime.getRuntime().availableProcessors() - 1), true);
         }
     }
 

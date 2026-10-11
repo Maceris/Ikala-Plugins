@@ -79,7 +79,11 @@ class DagTest {
     }
 
     /** Options for a test build, on two threads. */
-    private static final DagBuilder.Options OPTIONS = new DagBuilder.Options(0.5, true, 2, false);
+    private static final DagBuilder.Options OPTIONS = new DagBuilder.Options(0.5, false, 2, false);
+
+    /** The same, with the input's open border locked at every level. */
+    private static final DagBuilder.Options LOCKED_RIM =
+            new DagBuilder.Options(0.5, true, 2, false);
 
     /** A height field builds up to a root, roughly halving each level. */
     @Test
@@ -110,10 +114,41 @@ class DagTest {
         }
     }
 
-    /** No cut of baked block terrain has a crack. */
+    /** No cut of baked block terrain has a crack, with the rim simplified. */
     @Test
     void testRandomCutsHaveNoCracks() {
-        final LodDag dag = DagBuilder.build(terrain(2), OPTIONS);
+        assertCrackFree(DagBuilder.build(terrain(2), OPTIONS));
+    }
+
+    /** The check accepts cuts of a DAG with its rim locked too. */
+    @Test
+    void testLockedRimCutsHaveNoCracks() {
+        assertCrackFree(DagBuilder.build(terrain(2), LOCKED_RIM));
+    }
+
+    /**
+     * With the rim unlocked, terrain simplifies past the floor a locked rim leaves at full
+     * resolution.
+     */
+    @Test
+    void testUnlockedRimSimplifiesFurther() {
+        final List<LodMesh> sections = terrain(2);
+        final LodDag locked = DagBuilder.build(sections, LOCKED_RIM);
+        final LodDag unlocked = DagBuilder.build(sections, OPTIONS);
+        final int lockedTop = locked.trianglesAt(locked.getLevels() - 1);
+        final int unlockedTop = unlocked.trianglesAt(unlocked.getLevels() - 1);
+        System.out.printf(
+                "Top level: %d triangles with the rim locked, %d unlocked (%s; %s)%n",
+                lockedTop, unlockedTop, locked.getStopReason(), unlocked.getStopReason());
+        assertTrue(unlockedTop * 2 < lockedTop, unlockedTop + " against " + lockedTop);
+    }
+
+    /**
+     * Check 200 random cuts of a DAG for cracks.
+     *
+     * @param dag The DAG.
+     */
+    private static void assertCrackFree(LodDag dag) {
         final CrackCheck check = new CrackCheck(dag);
         Random random = new Random(99);
         for (int cut = 0; cut < 200; ++cut) {
@@ -133,8 +168,8 @@ class DagTest {
                             + ": "
                             + result.openEdges().size()
                             + " cracks, "
-                            + result.closedBorderEdges().size()
-                            + " border edges wrong");
+                            + result.overdrawnEdges().size()
+                            + " edges drawn twice");
         }
     }
 
@@ -142,8 +177,14 @@ class DagTest {
     @Test
     void testBrokenBorderIsCaught() {
         final LodDag dag = DagBuilder.build(heightField(2), OPTIONS);
-        final boolean[] drawn = LodCut.select(dag, new LodCut.View(-200, 50, -200, PIXELS), 1);
-        assertTrue(new CrackCheck(dag).check(drawn).isClean());
+        // The leaves: a cut with many clusters sharing corners
+        final boolean[] drawn = new boolean[dag.clusters().size()];
+        for (LodDag.Cluster cluster : dag.clusters()) {
+            drawn[cluster.id()] = cluster.level() == 0;
+        }
+        // Made before the damage, so it knows the DAG as built
+        final CrackCheck check = new CrackCheck(dag);
+        assertTrue(check.check(drawn).isClean());
         // Find a corner one drawn cluster shares with another, and nudge it in one of them
         Map<Grouping.Corner, Integer> owner = new HashMap<>();
         for (int i = 0; i < drawn.length; ++i) {
@@ -160,7 +201,7 @@ class DagTest {
                             corners[k + 1] += 0.01f;
                         }
                     }
-                    assertFalse(new CrackCheck(dag).check(drawn).isClean());
+                    assertFalse(check.check(drawn).isClean());
                     return;
                 }
             }

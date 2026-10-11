@@ -221,8 +221,8 @@ public final class LodPanel implements AutoCloseable {
                             ? "No cracks in " + result.drawnClusters() + " clusters."
                             : result.openEdges().size()
                                     + " cracks and "
-                                    + result.closedBorderEdges().size()
-                                    + " border edges wrong in "
+                                    + result.overdrawnEdges().size()
+                                    + " edges drawn twice in "
                                     + result.drawnClusters()
                                     + " clusters.";
         }
