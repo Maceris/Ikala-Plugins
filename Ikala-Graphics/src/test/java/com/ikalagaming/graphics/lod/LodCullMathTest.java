@@ -219,4 +219,116 @@ class LodCullMathTest {
         return Math.abs(own - threshold) <= ROUNDING * threshold
                 || Math.abs(parent - threshold) <= ROUNDING * threshold;
     }
+
+    /**
+     * With a section hidden and its cell and those above it stale, cuts have no cracks or overlaps
+     * but the hole where the section was, which the section fills by drawing itself.
+     */
+    @Test
+    void testOverrideLeavesOnlyTheSectionsHole() {
+        final LodStore store = new LodStore(new double[3], SECTION, 1, 4, OPTIONS);
+        for (LodMesh mesh : DagTest.terrain(2)) {
+            final double[] origin = mesh.getOrigin();
+            store.put(
+                    new LodStore.SectionPos(
+                            Math.floorDiv((int) origin[0], SECTION),
+                            Math.floorDiv((int) origin[1], SECTION),
+                            Math.floorDiv((int) origin[2], SECTION)),
+                    mesh);
+        }
+        store.rebuild();
+        final LodDag dag = store.snapshot();
+        // Slots as the renderer hands them out, and every entry in snapshot order
+        final java.util.Map<LodStore.CellKey, Integer> cellSlots = new java.util.HashMap<>();
+        for (LodStore.CellKey key : store.cellKeys()) {
+            cellSlots.put(key, cellSlots.size());
+        }
+        final java.util.Map<LodStore.SectionPos, Integer> sectionSlots = new java.util.HashMap<>();
+        final ByteBuffer entries =
+                ByteBuffer.allocate(dag.clusters().size() * LodCullMath.CLUSTER_ENTRY_SIZE)
+                        .order(ByteOrder.nativeOrder());
+        LodStore.SectionPos hiddenSection = null;
+        int at = 0;
+        for (LodStore.CellKey key : store.cellKeys()) {
+            for (LodStore.PieceCluster piece : store.piece(key)) {
+                int section = LodCullMath.NONE;
+                if (piece.section() != null) {
+                    section =
+                            sectionSlots.computeIfAbsent(piece.section(), k -> sectionSlots.size());
+                    if (hiddenSection == null) {
+                        hiddenSection = piece.section();
+                    }
+                }
+                entries.position(at * LodCullMath.CLUSTER_ENTRY_SIZE);
+                LodCullMath.putCluster(
+                        entries,
+                        piece.cluster(),
+                        piece.parentError(),
+                        piece.parentBound(),
+                        0,
+                        0,
+                        new LodCullMath.Place(
+                                0,
+                                cellSlots.get(key),
+                                piece.parentCell() == null
+                                        ? LodCullMath.NONE
+                                        : cellSlots.get(piece.parentCell()),
+                                section));
+                ++at;
+            }
+        }
+        final int[] flags = new int[cellSlots.size()];
+        for (LodStore.CellKey key = store.cellOf(hiddenSection);
+                cellSlots.containsKey(key);
+                key = key.parent()) {
+            flags[cellSlots.get(key)] = LodCullMath.FLAG_STALE;
+        }
+        final int[] hidden = new int[sectionSlots.size() / LodCullMath.BITS_PER_WORD + 1];
+        final int slot = sectionSlots.get(hiddenSection);
+        hidden[slot / LodCullMath.BITS_PER_WORD] |= 1 << (slot % LodCullMath.BITS_PER_WORD);
+
+        final float[] min = {
+            hiddenSection.x() * SECTION, hiddenSection.y() * SECTION, hiddenSection.z() * SECTION
+        };
+        final CrackCheck check = new CrackCheck(dag);
+        final Random random = new Random(3);
+        int holeEdges = 0;
+        for (int v = 0; v < VIEWS; ++v) {
+            final LodCut.View view = randomView(random, 2 * SECTION);
+            final double threshold = 0.25 + random.nextDouble() * 16;
+            final boolean[] drawn =
+                    LodCullMath.select(
+                            entries, at, dag.getOrigin(), view, threshold, flags, hidden);
+            final CrackCheck.Result result = check.check(drawn);
+            assertTrue(result.overdrawnEdges().isEmpty(), "View " + v + " draws an edge twice");
+            for (Grouping.Edge edge : result.openEdges()) {
+                assertTrue(
+                        onBox(edge.a(), min) && onBox(edge.b(), min),
+                        "View " + v + " has a crack away from the hidden section: " + edge);
+                ++holeEdges;
+            }
+        }
+        assertTrue(holeEdges > 0, "The hidden section leaves a hole");
+    }
+
+    /**
+     * Whether a corner is in or on a section's box.
+     *
+     * @param corner The corner.
+     * @param min The box's minimum corner.
+     * @return True if it is.
+     */
+    private static boolean onBox(Grouping.Corner corner, float[] min) {
+        final float[] at = {
+            Float.intBitsToFloat(corner.x()),
+            Float.intBitsToFloat(corner.y()),
+            Float.intBitsToFloat(corner.z())
+        };
+        for (int axis = 0; axis < at.length; ++axis) {
+            if (at[axis] < min[axis] || at[axis] > min[axis] + SECTION) {
+                return false;
+            }
+        }
+        return true;
+    }
 }

@@ -1711,12 +1711,17 @@ public class VulkanInstance {
 
         // Before anything that could sample the textures or draw the meshes
         state.textureUploads.record(state, commandBuffer, textureLoader);
-        // Sections whose bakes are resident are placed before the instance table is recorded
-        state.sections.update(state);
+        // Level of detail batches first, so the sections see what it shows when deciding overrides
+        state.lods.applyReady(state);
+        // Finished bakes, and urgent ones baked now, have their uploads recorded in this frame,
+        // so the sections can swap them in and place them before the instance table is recorded.
+        // Only sections place baked meshes, so the baked mesh table already covers them all.
+        state.sections.registerFinished(state);
+        state.bakedGeometry.record(state, commandBuffer);
+        state.sections.update(state, scene.getObserver());
         // Instances first, so the mesh table recorded after covers every mesh they point at
         state.instances.record(state, commandBuffer, scene.getMaterialCache());
         state.geometry.record(state, commandBuffer);
-        state.bakedGeometry.record(state, commandBuffer);
         state.lods.record(state, commandBuffer);
         // Before the shadows, the first to draw them
         state.lods.prepare(

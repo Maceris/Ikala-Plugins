@@ -1,14 +1,21 @@
 package com.ikalagaming.graphics.vulkan;
 
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.InstanceHandle;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.MeshKind;
+import com.ikalagaming.graphics.Sections;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.bake.BakedVertex;
 import com.ikalagaming.graphics.bake.SectionBaker;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
+import com.ikalagaming.graphics.lod.DagBuilder;
+import com.ikalagaming.graphics.lod.LiveLod;
+import com.ikalagaming.graphics.lod.LodMesh;
+import com.ikalagaming.graphics.lod.LodStore;
+import com.ikalagaming.graphics.scene.Observer;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -21,9 +28,11 @@ import org.lwjgl.system.MemoryUtil;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -41,8 +50,20 @@ import java.util.concurrent.locks.ReentrantLock;
  * and once they are all resident, places the new instance and takes the old one out. So a rebaked
  * section never disappears for a frame: the old one is drawn until the new one can be.
  *
- * <p>Submitting, rebaking and removing are safe from any thread. {@link #update(VulkanState)} runs
- * on the render thread at the start of each frame.
+ * <p>A plugin can have its sections feed a live level of detail world ({@link #startLive}). Its
+ * sections' opaque blocks are then drawn by level of detail, each finished bake going to the
+ * world's {@link LiveLod}, and only their cutout and translucent blocks are placed here. While a
+ * section near the observer has a bake newer than the level of detail shows, as right after an
+ * edit, it is an override: it draws its own opaque blocks, and the level of detail hides its leaves
+ * and keeps coarser clusters off it, so the edit shows as soon as the bake is resident.
+ *
+ * <p>A bake of a section near the observer, as after an edit, is urgent: rather than wait for a
+ * worker, the render thread bakes it at the start of the next frame, within a time budget, and the
+ * frame records its upload before swapping it in, so the edit is drawn in that frame.
+ *
+ * <p>Submitting, rebaking and removing are safe from any thread. {@link #registerFinished} and then
+ * {@link #update} run on the render thread at the start of each frame, with the baked geometry's
+ * uploads recorded between them.
  */
 @Slf4j
 public class SectionManager {
@@ -87,7 +108,10 @@ public class SectionManager {
      *
      * @param generation Which of the section's bakes it is.
      * @param origin Where it goes.
-     * @param model The model holding its meshes, which the instance places.
+     * @param model The model holding its meshes, which the instance places: all of them, or for a
+     *     section feeding level of detail, all but the opaque one.
+     * @param opaqueModel For a section feeding level of detail, the model holding its opaque mesh,
+     *     placed only while it is an override; otherwise null.
      * @param meshes Its meshes, one per bucket that had anything.
      * @param triangles How many triangles it has.
      */
@@ -95,6 +119,7 @@ public class SectionManager {
             long generation,
             @NonNull Vector3dc origin,
             @NonNull Model model,
+            Model opaqueModel,
             @NonNull List<MeshHandle> meshes,
             int triangles) {}
 
@@ -115,6 +140,15 @@ public class SectionManager {
         /** The instance placing the current bake, or null. */
         InstanceHandle instance;
 
+        /** The instance placing the current bake's opaque blocks while it is an override. */
+        InstanceHandle opaqueInstance;
+
+        /** What it was last asked to bake, to bake again when it starts feeding level of detail. */
+        Request request;
+
+        /** Where it is, in sections, or null if it isn't on the section grid. */
+        LodStore.SectionPos position;
+
         /** Whether the last bake couldn't be uploaded, as when the buffers are full. */
         boolean failed;
 
@@ -125,6 +159,9 @@ public class SectionManager {
 
     /** How a worker thread is named. */
     private static final String WORKER_NAME = "Section baker ";
+
+    /** The size of a section, in blocks: the grid live level of detail cells are built on. */
+    private static final int SECTION_SIZE = Sections.SECTION_SIZE;
 
     /** Guards the sections. */
     private final ReentrantLock lock = new ReentrantLock();
@@ -151,6 +188,59 @@ public class SectionManager {
 
     /** The next section's id. */
     private final AtomicLong nextId = new AtomicLong(1);
+
+    /**
+     * A plugin's live level of detail world.
+     *
+     * @param world Its id in the {@link LodRenderer}.
+     * @param lod Its builder.
+     * @param removed Sections taken out and the generation that took them, until the level of
+     *     detail shows them gone. Guarded by {@link #lock}.
+     */
+    private record Live(
+            long world, @NonNull LiveLod lod, @NonNull Map<LodStore.SectionPos, Long> removed) {}
+
+    /** Each plugin's live world, by owner. Guarded by {@link #lock}. */
+    private final Map<String, Live> live = new HashMap<>();
+
+    /** Owners already warned about sections off the section grid. Guarded by {@link #lock}. */
+    private final Set<String> warnedOffGrid = new HashSet<>();
+
+    /** How many sections were overrides last frame. */
+    private volatile int overrideCount;
+
+    /**
+     * A bake for the render thread to do at the start of the next frame.
+     *
+     * @param id The section.
+     * @param generation Which bake it is.
+     * @param request What to bake.
+     * @param feeds The live level of detail world its opaque blocks go to, or null.
+     * @param position Where it is, in sections.
+     */
+    private record Urgent(
+            long id,
+            long generation,
+            @NonNull Request request,
+            LiveLod feeds,
+            LodStore.SectionPos position) {}
+
+    /** Urgent bakes waiting for the next frame. */
+    private final Queue<Urgent> urgent = new ConcurrentLinkedQueue<>();
+
+    /**
+     * How long the render thread may spend on urgent bakes in a frame; the rest go to the workers.
+     */
+    private static final long URGENT_NANOS_PER_FRAME = 4_000_000L;
+
+    /** Where the observer was last frame, for deciding which bakes are urgent. */
+    private volatile Vector3dc lastEye;
+
+    /** How long the last urgent bake took, in nanoseconds. */
+    private volatile long lastUrgentNanos;
+
+    /** How many sections feeding level of detail it didn't show at their newest bake last frame. */
+    private volatile int lodBehind;
 
     /** Bakes submitted and not yet back. */
     private final AtomicInteger inFlight = new AtomicInteger();
@@ -184,7 +274,9 @@ public class SectionManager {
         final long id = nextId.getAndIncrement();
         lock.lock();
         try {
-            sections.put(id, new Section(owner));
+            final Section section = new Section(owner);
+            section.position = sectionPos(owner, request.origin());
+            sections.put(id, section);
         } finally {
             lock.unlock();
         }
@@ -223,6 +315,8 @@ public class SectionManager {
      */
     private void schedule(long id, @NonNull String owner, @NonNull Request request) {
         final long generation;
+        final LiveLod feeds;
+        final LodStore.SectionPos position;
         lock.lock();
         try {
             Section section = sections.get(id);
@@ -230,12 +324,23 @@ public class SectionManager {
                 return;
             }
             generation = ++section.requested;
+            section.request = request;
+            position = section.position;
+            final Live world = live.get(owner);
+            feeds = world == null || position == null ? null : world.lod();
         } finally {
             lock.unlock();
         }
         inFlight.incrementAndGet();
+        final Vector3dc eye = lastEye;
+        if (eye != null
+                && distance(eye, request.origin())
+                        <= GraphicsManager.getSettings().lodOverrideDistance) {
+            urgent.add(new Urgent(id, generation, request, feeds, position));
+            return;
+        }
         try {
-            workers.execute(() -> bake(id, generation, request));
+            workers.execute(() -> bake(id, generation, request, feeds, position));
         } catch (RejectedExecutionException e) {
             inFlight.decrementAndGet();
             log.debug("Not baking section {} of {}, the renderer is shutting down", id, owner);
@@ -248,8 +353,15 @@ public class SectionManager {
      * @param id The section.
      * @param generation Which bake this is.
      * @param request What to bake.
+     * @param feeds The live level of detail world its opaque blocks go to, or null.
+     * @param position Where it is, in sections, when it feeds one.
      */
-    private void bake(long id, long generation, @NonNull Request request) {
+    private void bake(
+            long id,
+            long generation,
+            @NonNull Request request,
+            LiveLod feeds,
+            LodStore.SectionPos position) {
         try {
             SectionBaker.Result result =
                     SectionBaker.bakeByFace(
@@ -259,6 +371,17 @@ public class SectionManager {
                             request.rotations(),
                             request.faceMasks(),
                             request.userData());
+            if (feeds != null) {
+                final SectionBaker.Bucket opaque = result.get(Material.Transparency.OPAQUE);
+                final Vector3dc origin = request.origin();
+                feeds.put(
+                        position,
+                        opaque == null
+                                ? null
+                                : LodMesh.fromBaked(
+                                        opaque, new double[] {origin.x(), origin.y(), origin.z()}),
+                        generation);
+            }
             baked.add(new Baked(id, generation, new Vector3d(request.origin()), result));
         } catch (RuntimeException e) {
             log.error("Baking section {} failed", id, e);
@@ -283,6 +406,12 @@ public class SectionManager {
             }
             sections.remove(id);
             forget(section);
+            final Live world = live.get(owner);
+            if (world != null && section.position != null) {
+                final long generation = section.requested + 1;
+                world.lod().remove(section.position, generation);
+                world.removed().put(section.position, generation);
+            }
             return true;
         } finally {
             lock.unlock();
@@ -301,6 +430,11 @@ public class SectionManager {
         try {
             int before = sections.size();
             sections.values().removeIf(section -> section.owner.equals(owner));
+            final Live world = live.remove(owner);
+            if (world != null) {
+                world.lod().close();
+            }
+            warnedOffGrid.remove(owner);
             return before - sections.size();
         } finally {
             lock.unlock();
@@ -315,6 +449,9 @@ public class SectionManager {
     private void forget(@NonNull Section section) {
         if (section.instance != null) {
             removing.add(new Removal(section.owner, section.instance));
+        }
+        if (section.opaqueInstance != null) {
+            removing.add(new Removal(section.owner, section.opaqueInstance));
         }
         if (section.current != null) {
             releasing.addAll(section.current.meshes());
@@ -356,17 +493,62 @@ public class SectionManager {
     }
 
     /**
-     * Upload finished bakes and swap in the ones that are resident. Render thread only, at the
-     * start of a frame, before the instance table is recorded.
+     * Do this frame's urgent bakes, within a budget, and register every finished bake's meshes in
+     * the baked geometry, so the frame records their uploads. Render thread only, at the start of a
+     * frame, before the baked geometry is recorded.
      *
      * @param state The Vulkan state.
      */
-    public void update(@NonNull VulkanState state) {
+    public void registerFinished(@NonNull VulkanState state) {
+        final long start = System.nanoTime();
+        Urgent next;
+        while ((next = urgent.poll()) != null) {
+            if (System.nanoTime() - start > URGENT_NANOS_PER_FRAME) {
+                final Urgent later = next;
+                try {
+                    workers.execute(
+                            () ->
+                                    bake(
+                                            later.id(),
+                                            later.generation(),
+                                            later.request(),
+                                            later.feeds(),
+                                            later.position()));
+                } catch (RejectedExecutionException e) {
+                    inFlight.decrementAndGet();
+                }
+                continue;
+            }
+            final long bakeStart = System.nanoTime();
+            bake(next.id(), next.generation(), next.request(), next.feeds(), next.position());
+            lastUrgentNanos = System.nanoTime() - bakeStart;
+        }
         Baked done;
         while ((done = baked.poll()) != null) {
             upload(state, done);
         }
+    }
+
+    /**
+     * How long the last bake done on the render thread took.
+     *
+     * @return The time, in nanoseconds, or 0 if there hasn't been one.
+     */
+    public long getLastUrgentNanos() {
+        return lastUrgentNanos;
+    }
+
+    /**
+     * Swap in the bakes that are resident, including those whose uploads this frame recorded, and
+     * decide which sections feeding level of detail are overrides. Render thread only, at the start
+     * of a frame, after the baked geometry is recorded and before the instance table is.
+     *
+     * @param state The Vulkan state.
+     * @param observer Where the scene is seen from, for overrides.
+     */
+    public void update(@NonNull VulkanState state, @NonNull Observer observer) {
         swapResident(state);
+        updateOverrides(state, observer);
         // After swapping, so a replaced bake goes in the same frame its replacement comes in
         Removal removal;
         while ((removal = removing.poll()) != null) {
@@ -401,7 +583,19 @@ public class SectionManager {
         } finally {
             lock.unlock();
         }
+        final boolean feedsLod;
+        lock.lock();
+        try {
+            Section section = sections.get(done.id());
+            feedsLod = section != null && section.position != null && live.containsKey(owner);
+        } finally {
+            lock.unlock();
+        }
         final Model model = new Model("section-" + done.id() + "-" + done.generation());
+        final Model opaqueModel =
+                feedsLod
+                        ? new Model("section-" + done.id() + "-" + done.generation() + "-opaque")
+                        : null;
         final List<MeshHandle> meshes = new ArrayList<>();
         for (Material.Transparency transparency : Material.Transparency.values()) {
             final SectionBaker.Bucket bucket = done.result().get(transparency);
@@ -431,7 +625,11 @@ public class SectionManager {
                             0,
                             new byte[0]);
             meshData.setMesh(handle);
-            model.getMeshDataList().add(meshData);
+            if (opaqueModel != null && transparency == Material.Transparency.OPAQUE) {
+                opaqueModel.getMeshDataList().add(meshData);
+            } else {
+                model.getMeshDataList().add(meshData);
+            }
             meshes.add(handle);
         }
         final Version version =
@@ -439,6 +637,7 @@ public class SectionManager {
                         done.generation(),
                         done.origin(),
                         model,
+                        opaqueModel,
                         meshes,
                         done.result().triangleCount());
         lock.lock();
@@ -536,12 +735,17 @@ public class SectionManager {
                     removing.add(new Removal(section.owner, section.instance));
                     section.instance = null;
                 }
+                // The override, if it still is one, places the new bake's opaque blocks below
+                if (section.opaqueInstance != null) {
+                    removing.add(new Removal(section.owner, section.opaqueInstance));
+                    section.opaqueInstance = null;
+                }
                 if (section.current != null) {
                     releasing.addAll(section.current.meshes());
                 }
                 section.current = pending;
                 section.pending = null;
-                if (!pending.meshes().isEmpty()) {
+                if (!pending.model().getMeshDataList().isEmpty()) {
                     section.instance =
                             state.instances
                                     .getRegistry()
@@ -556,6 +760,313 @@ public class SectionManager {
         } finally {
             lock.unlock();
         }
+    }
+
+    /**
+     * Have a plugin's sections feed a live level of detail world from now on, its sections already
+     * there included, which are baked again. Their opaque blocks are then drawn by level of detail.
+     *
+     * @param state The Vulkan state.
+     * @param owner The plugin's key.
+     * @param thresholdPixels The world's error threshold.
+     * @return The world's id in the {@link LodRenderer}, the same one if it already has one.
+     */
+    public long startLive(
+            @NonNull VulkanState state, @NonNull String owner, double thresholdPixels) {
+        final List<long[]> rebake = new ArrayList<>();
+        final Live world;
+        lock.lock();
+        try {
+            final Live existing = live.get(owner);
+            if (existing != null) {
+                return existing.world();
+            }
+            final double[] origin = new double[3];
+            final long[] id = new long[1];
+            final LiveLod lod =
+                    new LiveLod(
+                            origin,
+                            SECTION_SIZE,
+                            DagBuilder.Options.defaults(),
+                            batch -> state.lods.publish(state, id[0], batch));
+            id[0] = state.lods.addLive(owner, origin, lod::cellOf, thresholdPixels);
+            world = new Live(id[0], lod, new HashMap<>());
+            live.put(owner, world);
+            for (Map.Entry<Long, Section> entry : sections.entrySet()) {
+                if (entry.getValue().owner.equals(owner) && entry.getValue().request != null) {
+                    rebake.add(new long[] {entry.getKey()});
+                }
+            }
+        } finally {
+            lock.unlock();
+        }
+        world.lod().start();
+        rebakeAll(owner, rebake);
+        return world.world();
+    }
+
+    /**
+     * Stop a plugin's sections feeding level of detail, if the world is its live one. Its sections
+     * are baked again to draw their opaque blocks themselves.
+     *
+     * @param owner The plugin's key.
+     * @param world The world's id in the {@link LodRenderer}.
+     * @return True if it was the plugin's live world.
+     */
+    public boolean stopLive(@NonNull String owner, long world) {
+        final List<long[]> rebake = new ArrayList<>();
+        final Live stopped;
+        lock.lock();
+        try {
+            final Live existing = live.get(owner);
+            if (existing == null || existing.world() != world) {
+                return false;
+            }
+            stopped = live.remove(owner);
+            for (Map.Entry<Long, Section> entry : sections.entrySet()) {
+                if (entry.getValue().owner.equals(owner) && entry.getValue().request != null) {
+                    rebake.add(new long[] {entry.getKey()});
+                }
+            }
+        } finally {
+            lock.unlock();
+        }
+        stopped.lod().close();
+        rebakeAll(owner, rebake);
+        return true;
+    }
+
+    /**
+     * Bake sections again from their last requests.
+     *
+     * @param owner Their owner.
+     * @param ids The sections.
+     */
+    private void rebakeAll(@NonNull String owner, @NonNull List<long[]> ids) {
+        for (long[] id : ids) {
+            final Request request;
+            lock.lock();
+            try {
+                final Section section = sections.get(id[0]);
+                request = section == null ? null : section.request;
+            } finally {
+                lock.unlock();
+            }
+            if (request != null) {
+                schedule(id[0], owner, request);
+            }
+        }
+    }
+
+    /**
+     * Where a section is on the section grid.
+     *
+     * @param owner Its owner, warned once if it is off the grid.
+     * @param origin Its origin.
+     * @return Its position, or null if its origin isn't a section corner.
+     */
+    private LodStore.SectionPos sectionPos(@NonNull String owner, @NonNull Vector3dc origin) {
+        final double[] at = {origin.x(), origin.y(), origin.z()};
+        final int[] out = new int[at.length];
+        for (int axis = 0; axis < at.length; ++axis) {
+            final double sections = at[axis] / SECTION_SIZE;
+            if (sections != Math.rint(sections)
+                    || Math.abs(sections) > Integer.MAX_VALUE / SECTION_SIZE) {
+                if (warnedOffGrid.add(owner)) {
+                    log.warn(
+                            "Sections of {} off the {}-block grid, as at {}, don't feed level of"
+                                    + " detail",
+                            owner,
+                            SECTION_SIZE,
+                            origin);
+                }
+                return null;
+            }
+            out[axis] = (int) sections;
+        }
+        return new LodStore.SectionPos(out[0], out[1], out[2]);
+    }
+
+    /**
+     * Decide which sections feeding level of detail are overrides this frame: those near the
+     * observer whose bake is newer than the level of detail shows. Place or take out their opaque
+     * blocks, and tell each world which sections to hide. Render thread.
+     *
+     * @param state The Vulkan state.
+     * @param observer Where the scene is seen from.
+     */
+    private void updateOverrides(@NonNull VulkanState state, @NonNull Observer observer) {
+        final Vector3dc eye = observer.getPosition();
+        lastEye = new Vector3d(eye);
+        final double reach = GraphicsManager.getSettings().lodOverrideDistance;
+        int count = 0;
+        int behind = 0;
+        lock.lock();
+        try {
+            if (live.isEmpty()) {
+                overrideCount = 0;
+                lodBehind = 0;
+                return;
+            }
+            final Map<String, Set<LodStore.SectionPos>> overrides = new HashMap<>();
+            for (Map.Entry<String, Live> entry : live.entrySet()) {
+                entry.getValue().lod().setNear(eye.x(), eye.y(), eye.z());
+                overrides.put(entry.getKey(), new HashSet<>());
+            }
+            for (Section section : sections.values()) {
+                final Live world = live.get(section.owner);
+                if (world == null || section.position == null) {
+                    continue;
+                }
+                final Version current = section.current;
+                final boolean newer =
+                        current == null
+                                || current.generation()
+                                        > state.lods.coveredGeneration(
+                                                world.world(), section.position);
+                if (newer) {
+                    ++behind;
+                }
+                final boolean override =
+                        newer
+                                && current != null
+                                && current.opaqueModel() != null
+                                && distance(eye, section.position) <= reach;
+                if (override) {
+                    overrides.get(section.owner).add(section.position);
+                    if (section.opaqueInstance == null
+                            && !current.opaqueModel().getMeshDataList().isEmpty()) {
+                        section.opaqueInstance =
+                                state.instances
+                                        .getRegistry()
+                                        .place(
+                                                section.owner,
+                                                current.opaqueModel(),
+                                                current.origin(),
+                                                new Quaternionf(),
+                                                1.0f / BakedVertex.STEPS_PER_UNIT);
+                    }
+                    ++count;
+                } else if (section.opaqueInstance != null) {
+                    removing.add(new Removal(section.owner, section.opaqueInstance));
+                    section.opaqueInstance = null;
+                }
+            }
+            // Sections taken out show as gaps near the observer until the level of detail drops
+            // them
+            for (Map.Entry<String, Live> entry : live.entrySet()) {
+                final Live world = entry.getValue();
+                final var it = world.removed().entrySet().iterator();
+                while (it.hasNext()) {
+                    final var removed = it.next();
+                    final long shown =
+                            state.lods.coveredGeneration(world.world(), removed.getKey());
+                    if (shown >= removed.getValue()) {
+                        state.lods.forgetCovered(world.world(), removed.getKey());
+                        it.remove();
+                    } else if (distance(eye, removed.getKey()) <= reach) {
+                        overrides.get(entry.getKey()).add(removed.getKey());
+                        ++count;
+                    }
+                }
+                state.lods.setOverrides(world.world(), overrides.get(entry.getKey()));
+            }
+        } finally {
+            lock.unlock();
+        }
+        overrideCount = count;
+        lodBehind = behind;
+    }
+
+    /**
+     * How many sections feeding level of detail it didn't show at their newest bake last frame,
+     * counting those not yet baked: 0 once it has caught up.
+     *
+     * @return The count.
+     */
+    public int getLodBehind() {
+        return lodBehind;
+    }
+
+    /**
+     * The newest bake asked for of a section.
+     *
+     * @param id The section.
+     * @return Its generation, or -1 if it is gone.
+     */
+    public long requestedGeneration(long id) {
+        lock.lock();
+        try {
+            final Section section = sections.get(id);
+            return section == null ? -1 : section.requested;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * The bake of a section that is drawn.
+     *
+     * @param id The section.
+     * @return Its generation, or -1 before the first is resident or once it is gone.
+     */
+    public long currentGeneration(long id) {
+        lock.lock();
+        try {
+            final Section section = sections.get(id);
+            return section == null || section.current == null ? -1 : section.current.generation();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * How far a point is from a section's box.
+     *
+     * @param point The point, in the world.
+     * @param section The section.
+     * @return The distance, 0 inside it.
+     */
+    private static double distance(@NonNull Vector3dc point, LodStore.@NonNull SectionPos section) {
+        final double[] at = {point.x(), point.y(), point.z()};
+        final int[] corner = {section.x(), section.y(), section.z()};
+        double sum = 0;
+        for (int axis = 0; axis < at.length; ++axis) {
+            final double min = (double) corner[axis] * SECTION_SIZE;
+            final double d = Math.max(0, Math.max(min - at[axis], at[axis] - (min + SECTION_SIZE)));
+            sum += d * d;
+        }
+        return Math.sqrt(sum);
+    }
+
+    /**
+     * How far a point is from the section whose cells start at an origin.
+     *
+     * @param point The point, in the world.
+     * @param origin The section's origin.
+     * @return The distance, 0 inside it.
+     */
+    private static double distance(@NonNull Vector3dc point, @NonNull Vector3dc origin) {
+        final double[] at = {point.x(), point.y(), point.z()};
+        final double[] min = {origin.x(), origin.y(), origin.z()};
+        double sum = 0;
+        for (int axis = 0; axis < at.length; ++axis) {
+            final double d =
+                    Math.max(
+                            0,
+                            Math.max(min[axis] - at[axis], at[axis] - (min[axis] + SECTION_SIZE)));
+            sum += d * d;
+        }
+        return Math.sqrt(sum);
+    }
+
+    /**
+     * How many sections drew themselves over level of detail last frame.
+     *
+     * @return The count.
+     */
+    public int getOverrideCount() {
+        return overrideCount;
     }
 
     /**
@@ -603,11 +1114,14 @@ public class SectionManager {
         workers.shutdownNow();
         lock.lock();
         try {
+            live.values().forEach(world -> world.lod().close());
+            live.clear();
             sections.clear();
         } finally {
             lock.unlock();
         }
         baked.clear();
+        urgent.clear();
         releasing.clear();
         removing.clear();
     }

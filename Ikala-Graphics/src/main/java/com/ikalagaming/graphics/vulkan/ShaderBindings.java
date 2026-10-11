@@ -180,14 +180,19 @@ public class ShaderBindings {
         /** Device address of this frame's occlusion view, the same as {@link Cull}'s. */
         public static final int PUSH_CONSTANT_VIEW_OFFSET = 7 * Long.BYTES;
 
-        /** Which world is culled, its index in the world table. */
-        public static final int PUSH_CONSTANT_WORLD_OFFSET = 8 * Long.BYTES;
+        /** Device address of each cell slot's flags. */
+        public static final int PUSH_CONSTANT_CELL_FLAGS_OFFSET = 8 * Long.BYTES;
+
+        /** Device address of the hidden section set, one bit per section slot. */
+        public static final int PUSH_CONSTANT_HIDDEN_OFFSET = 9 * Long.BYTES;
 
         /** Which phase this is, {@link Cull#PHASE_EARLY} or {@link Cull#PHASE_LATE}. */
-        public static final int PUSH_CONSTANT_PHASE_OFFSET =
-                PUSH_CONSTANT_WORLD_OFFSET + Integer.BYTES;
+        public static final int PUSH_CONSTANT_PHASE_OFFSET = 10 * Long.BYTES;
 
-        /** How many commands each list has room for. */
+        /**
+         * How many entries the cluster table has, which is how many commands each list has room
+         * for.
+         */
         public static final int PUSH_CONSTANT_CAPACITY_OFFSET =
                 PUSH_CONSTANT_PHASE_OFFSET + Integer.BYTES;
 

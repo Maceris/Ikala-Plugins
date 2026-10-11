@@ -4,11 +4,13 @@ import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
 import com.ikalagaming.graphics.LightHandle;
+import com.ikalagaming.graphics.LodHandle;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.SectionHandle;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.graph.MeshData;
+import com.ikalagaming.graphics.lod.LodStore;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
@@ -19,6 +21,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
+import org.joml.Vector3fc;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -27,9 +30,13 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.SplittableRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
@@ -180,6 +187,106 @@ public final class GateBenchmark {
     /** The sections composed. */
     private final List<SectionHandle> sections = new ArrayList<>();
 
+    /** Each composed section by position, to rebake after a dig. Guarded by sectionsLock. */
+    private final Map<LodStore.SectionPos, SectionHandle> sectionAt = new HashMap<>();
+
+    /** Whether the world's opaque blocks are drawn by live level of detail. */
+    private final boolean lod;
+
+    /** The live level of detail world, while there is one. */
+    @Nullable private LodHandle lodWorld;
+
+    /** The world being drawn, once laid out, for digging. */
+    @Nullable private volatile SyntheticTerrain terrain;
+
+    /** Digs waiting to be drawn and to reach level of detail. Render thread. */
+    private final List<Dig> digs = new ArrayList<>();
+
+    /** Digs left to make on their own, from the startup property. */
+    private int digsLeft;
+
+    /** Digs a second for the digs from the startup property. */
+    private double propertyDigRate = PROPERTY_DIG_RATE;
+
+    /** Digs a second to make on their own, 0 for none. */
+    private double digRate;
+
+    /** When the last dig was made, from {@link System#nanoTime()}. */
+    private long lastDig;
+
+    /** Every dig's latency so far: until drawn, then until level of detail, in milliseconds. */
+    private final List<double[]> digLatencies = new ArrayList<>();
+
+    /** How far in front of the camera a dig is, in blocks. */
+    private static final double DIG_REACH = 6;
+
+    /** How wide the pit digs from the startup property make, in blocks. */
+    private static final int PIT_WIDTH = 7;
+
+    /** How long the pit is, in blocks. */
+    private static final int PIT_LENGTH = 3;
+
+    /** How high above the pit the camera looks down from, for digs from the startup property. */
+    private static final double PIT_VIEW_HEIGHT = 10;
+
+    /** How far down the camera looks at the pit, in radians. */
+    private static final float PIT_VIEW_PITCH = 1.1f;
+
+    /** How many digs were made. */
+    private int digCount;
+
+    /** Whether the camera was placed over the pit for digs from the startup property. */
+    private boolean pitView;
+
+    /** Digs a second when they are made on their own from the startup property, by default. */
+    private static final double PROPERTY_DIG_RATE = 2;
+
+    /** Nanoseconds in a second. */
+    private static final double NANOS_PER_SECOND = 1e9;
+
+    /** Nanoseconds in a millisecond. */
+    private static final double NANOS_PER_MILLI = 1e6;
+
+    /** One dig, waiting to be drawn and to reach level of detail. */
+    private static final class Dig {
+        /** The section the dug block was in. */
+        final SectionHandle section;
+
+        /** Where that section is. */
+        final LodStore.SectionPos position;
+
+        /** The bake that has the block gone. */
+        final long generation;
+
+        /** When it was made, from {@link System#nanoTime()}. */
+        final long start;
+
+        /** The block dug. */
+        final int[] block;
+
+        /** When the bake was drawn, or 0. */
+        long drawn;
+
+        /** Frames until it was drawn. */
+        int frames;
+
+        /**
+         * Keep a dig.
+         *
+         * @param section The section.
+         * @param position Its position.
+         * @param generation The bake with the block gone.
+         * @param block The block dug.
+         */
+        Dig(SectionHandle section, LodStore.SectionPos position, long generation, int[] block) {
+            this.section = section;
+            this.position = position;
+            this.generation = generation;
+            this.block = block;
+            start = System.nanoTime();
+        }
+    }
+
     /** The load, once laid out. */
     private volatile GateScene.LoadStats load;
 
@@ -232,16 +339,19 @@ public final class GateBenchmark {
      * @param radius The view distance, in sections.
      * @param lightCount How many torches to scatter over the world.
      * @param keepWorld Whether to leave the world in place when the run finishes.
+     * @param lod Whether the world's opaque blocks are drawn by live level of detail.
      */
     private GateBenchmark(
             SyntheticTerrain.@NonNull Recipe recipe,
             int radius,
             int lightCount,
-            boolean keepWorld) {
+            boolean keepWorld,
+            boolean lod) {
         this.recipe = recipe;
         this.radius = radius;
         this.lightCount = lightCount;
         this.keepWorld = keepWorld;
+        this.lod = lod;
         this.graphics = GraphicsManager.forPlugin(GraphicsPlugin.PLUGIN_NAME);
     }
 
@@ -256,9 +366,29 @@ public final class GateBenchmark {
      */
     public static void start(
             SyntheticTerrain.@NonNull Recipe recipe, int radius, int lights, boolean keepWorld) {
+        start(recipe, radius, lights, keepWorld, false);
+    }
+
+    /**
+     * Start a run, stopping any in progress and removing a kept world. Render thread only.
+     *
+     * @param recipe The world.
+     * @param radius The view distance, in sections.
+     * @param lights How many torches to scatter over the world, to measure many lights.
+     * @param keepWorld Whether to leave the world in place when the run finishes, to look around in
+     *     with the camera, the debug views and a frozen observer.
+     * @param lod Whether the world's opaque blocks are drawn by live level of detail, built from
+     *     its sections, rather than by the sections.
+     */
+    public static void start(
+            SyntheticTerrain.@NonNull Recipe recipe,
+            int radius,
+            int lights,
+            boolean keepWorld,
+            boolean lod) {
         stop();
         removeWorld();
-        current = new GateBenchmark(recipe, radius, Math.max(0, lights), keepWorld);
+        current = new GateBenchmark(recipe, radius, Math.max(0, lights), keepWorld, lod);
         current.begin();
     }
 
@@ -369,7 +499,13 @@ public final class GateBenchmark {
                         SyntheticTerrain.Recipe.valueOf(recipe.trim().toUpperCase()),
                         Integer.getInteger(PROPERTY + ".radius", 12),
                         Integer.getInteger(PROPERTY + ".lights", 0),
-                        keep);
+                        keep,
+                        Boolean.getBoolean(PROPERTY + ".lod"));
+                current.digsLeft = Integer.getInteger(PROPERTY + ".digs", 0);
+                current.propertyDigRate =
+                        Double.parseDouble(
+                                System.getProperty(
+                                        PROPERTY + ".digRate", String.valueOf(PROPERTY_DIG_RATE)));
             }
         }
         if (current != null) {
@@ -401,6 +537,9 @@ public final class GateBenchmark {
             sources[block] = graphics.meshes().faceInfo(meshes[block]);
         }
         scene.getMaterialCache().setDirty(true);
+        if (lod) {
+            lodWorld = graphics.lods().fromSections();
+        }
 
         final Thread builder = new Thread(() -> build(sources), "Gate benchmark builder");
         builder.setDaemon(true);
@@ -416,6 +555,7 @@ public final class GateBenchmark {
         try {
             final long start = System.nanoTime();
             final SyntheticTerrain terrain = new SyntheticTerrain(recipe, SEED, sources);
+            this.terrain = terrain;
             final GateScene.Layout layout = GateScene.build(terrain, radius);
             final int size = SyntheticTerrain.SECTION;
             for (GateScene.Section section : layout.sections()) {
@@ -445,6 +585,8 @@ public final class GateBenchmark {
                 sectionsLock.lock();
                 try {
                     sections.add(handle);
+                    sectionAt.put(
+                            new LodStore.SectionPos(section.x(), section.y(), section.z()), handle);
                 } finally {
                     sectionsLock.unlock();
                 }
@@ -530,7 +672,10 @@ public final class GateBenchmark {
                 } finally {
                     sectionsLock.unlock();
                 }
-                if (allResident && stats.baking() == 0) {
+                // With level of detail, also until it shows every section's bake
+                final boolean lodCaughtUp =
+                        !lod || renderer().getState().sections.getLodBehind() == 0;
+                if (allResident && stats.baking() == 0 && lodCaughtUp) {
                     bakeMilliseconds = (System.nanoTime() - composedAt) / 1_000_000;
                     load = load.withTriangles(stats.triangles());
                     log.info(
@@ -556,8 +701,9 @@ public final class GateBenchmark {
                     finish();
                 }
             }
+            case DONE -> updateDigs();
             default -> {
-                // Nothing to do while building, or once finished
+                // Nothing to do while building, or once stopped
             }
         }
     }
@@ -707,6 +853,198 @@ public final class GateBenchmark {
         return out.toString();
     }
 
+    /**
+     * Dig out the top block a few blocks in front of the camera and rebake the sections around it,
+     * timing how long until the hole is drawn and until level of detail has it. Render thread only,
+     * once the world is laid out.
+     *
+     * @param scene The scene.
+     * @return False if there is no world to dig in.
+     */
+    public boolean dig(@NonNull Scene scene) {
+        final SyntheticTerrain world = terrain;
+        if (world == null || released) {
+            return false;
+        }
+        final Vector3d at = scene.getCamera().getPosition();
+        final Vector3fc forward =
+                scene.getCamera().getInvViewMatrix().transformDirection(new Vector3f(0, 0, -1));
+        final double length = Math.max(1e-6, Math.hypot(forward.x(), forward.z()));
+        // Digs side by side, then row by row, so they make a pit
+        final int across = digCount % PIT_WIDTH - PIT_WIDTH / 2;
+        final int along = digCount / PIT_WIDTH % PIT_LENGTH;
+        // Forward by the reach and the row, sideways by the place in the row
+        final double ahead = DIG_REACH + along;
+        final int x =
+                (int) Math.floor(at.x + (forward.x() * ahead - forward.z() * across) / length);
+        final int z =
+                (int) Math.floor(at.z + (forward.z() * ahead + forward.x() * across) / length);
+        final int y = world.top(x, z);
+        if (y < world.minY()) {
+            return false;
+        }
+        world.setBlock(x, y, z, SyntheticTerrain.AIR);
+        final int size = SyntheticTerrain.SECTION;
+        final LodStore.SectionPos home =
+                new LodStore.SectionPos(
+                        Math.floorDiv(x, size), Math.floorDiv(y, size), Math.floorDiv(z, size));
+        // Its section, and any neighbor whose face masks it changes
+        final Set<LodStore.SectionPos> touched = new LinkedHashSet<>();
+        for (int dx = -1; dx <= 1; ++dx) {
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dz = -1; dz <= 1; ++dz) {
+                    touched.add(
+                            new LodStore.SectionPos(
+                                    Math.floorDiv(x + dx, size),
+                                    Math.floorDiv(y + dy, size),
+                                    Math.floorDiv(z + dz, size)));
+                }
+            }
+        }
+        SectionHandle homeHandle = null;
+        for (LodStore.SectionPos position : touched) {
+            final SectionHandle handle = rebake(world, position);
+            if (position.equals(home)) {
+                homeHandle = handle;
+            }
+        }
+        if (homeHandle != null) {
+            digs.add(
+                    new Dig(
+                            homeHandle,
+                            home,
+                            renderer().getState().sections.requestedGeneration(homeHandle.id()),
+                            new int[] {x, y, z}));
+        }
+        lastDig = System.nanoTime();
+        digCount += 1;
+        return true;
+    }
+
+    /**
+     * Bake a section again from the edited world, or compose it if it had nothing before.
+     *
+     * @param world The world.
+     * @param position The section.
+     * @return Its handle, or null if it has nothing and never had.
+     */
+    @Nullable private SectionHandle rebake(
+            @NonNull SyntheticTerrain world, LodStore.@NonNull SectionPos position) {
+        final SyntheticTerrain.Placements placements =
+                world.placements(position.x(), position.y(), position.z());
+        final int count = placements.count();
+        final MeshHandle[] placed = new MeshHandle[count];
+        for (int i = 0; i < count; ++i) {
+            placed[i] = meshes[placements.blocks()[i]];
+        }
+        final int size = SyntheticTerrain.SECTION;
+        final var request =
+                graphics.sections()
+                        .compose(
+                                new Vector3d(
+                                        position.x() * size,
+                                        position.y() * size,
+                                        position.z() * size))
+                        .placements(
+                                placed,
+                                placements.packedPositions(),
+                                new byte[count],
+                                placements.faceMasks(),
+                                new short[count]);
+        sectionsLock.lock();
+        try {
+            final SectionHandle handle = sectionAt.get(position);
+            if (handle != null) {
+                graphics.sections().rebake(handle, request);
+                return handle;
+            }
+            if (count == 0) {
+                return null;
+            }
+            final SectionHandle added = request.submit();
+            sections.add(added);
+            sectionAt.put(position, added);
+            return added;
+        } finally {
+            sectionsLock.unlock();
+        }
+    }
+
+    /**
+     * Dig on a timer, as a quick player would. Render thread only.
+     *
+     * @param perSecond Digs a second, 0 to stop.
+     */
+    public void setDigRate(double perSecond) {
+        digRate = Math.max(0, perSecond);
+    }
+
+    /**
+     * Every dig's latency so far.
+     *
+     * @return For each dig, milliseconds until its hole was drawn and until level of detail had it.
+     */
+    public List<double[]> getDigLatencies() {
+        return List.copyOf(digLatencies);
+    }
+
+    /** Make digs that are due, and time the ones in flight. Render thread, once a frame. */
+    private void updateDigs() {
+        if (digsLeft > 0 && !pitView && terrain != null) {
+            // Look down at where the pit goes
+            pitView = true;
+            final Scene scene = GraphicsManager.getScene();
+            final Vector3d position = cameraPosition;
+            final int top = terrain.top(0, (int) -DIG_REACH);
+            scene.getCamera().setPosition(position.x, top + PIT_VIEW_HEIGHT, position.z);
+            scene.getCamera().setRotation(PIT_VIEW_PITCH, 0);
+        }
+        final double rate = digsLeft > 0 ? propertyDigRate : digRate;
+        if (rate > 0 && (System.nanoTime() - lastDig) / NANOS_PER_SECOND >= 1 / rate) {
+            final Scene scene = GraphicsManager.getScene();
+            if (scene != null && dig(scene) && digsLeft > 0) {
+                --digsLeft;
+            }
+        }
+        final var manager = renderer().getState().sections;
+        final Iterator<Dig> it = digs.iterator();
+        while (it.hasNext()) {
+            final Dig dig = it.next();
+            final long now = System.nanoTime();
+            if (dig.drawn == 0) {
+                dig.frames += 1;
+                if (manager.currentGeneration(dig.section.id()) >= dig.generation) {
+                    dig.drawn = now;
+                }
+            }
+            final boolean inLod =
+                    lodWorld == null
+                            || renderer()
+                                            .getState()
+                                            .lods
+                                            .coveredGeneration(lodWorld.id(), dig.position)
+                                    >= dig.generation;
+            if (dig.drawn != 0 && inLod) {
+                final double drawnMillis = (dig.drawn - dig.start) / NANOS_PER_MILLI;
+                final double lodMillis = (now - dig.start) / NANOS_PER_MILLI;
+                digLatencies.add(new double[] {drawnMillis, lodMillis});
+                log.info(
+                        "Dig at ({}, {}, {}): drawn after {} ms ({} frames), in level of detail"
+                                + " after {} ms; {} sections drawing themselves; last bake on the"
+                                + " render thread {} ms",
+                        dig.block[0],
+                        dig.block[1],
+                        dig.block[2],
+                        String.format("%.1f", drawnMillis),
+                        dig.frames,
+                        String.format("%.1f", lodMillis),
+                        manager.getOverrideCount(),
+                        String.format("%.2f", manager.getLastUrgentNanos() / NANOS_PER_MILLI));
+                it.remove();
+            }
+        }
+    }
+
     /** Release every section and mesh the run made, once, and put the scene's lights back. */
     private void release() {
         if (released) {
@@ -727,6 +1065,7 @@ public final class GateBenchmark {
                 graphics.sections().remove(section);
             }
             sections.clear();
+            sectionAt.clear();
             for (LightHandle light : lights) {
                 graphics.lights().remove(light);
             }
@@ -737,6 +1076,11 @@ public final class GateBenchmark {
         for (MeshHandle mesh : meshes) {
             graphics.meshes().release(mesh);
         }
+        if (lodWorld != null) {
+            graphics.lods().remove(lodWorld);
+            lodWorld = null;
+        }
+        digs.clear();
     }
 
     /**

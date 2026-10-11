@@ -124,19 +124,16 @@ public class PerFrameData {
      */
     public SharedBuffer lodCounts;
 
-    /** The level of detail worlds culled this frame, see {@link LodCullMath}. */
+    /** Every level of detail world slot this frame, see {@link LodCullMath}. */
     public SharedBuffer lodWorlds;
 
-    /** How many level of detail worlds are culled this frame. */
+    /** How many level of detail worlds are drawn this frame. */
     public int lodWorldCount;
 
-    /** Where each culled world's clusters start in the cluster table. */
-    public int[] lodFirstClusters = new int[0];
-
-    /** How many clusters each culled world has. */
-    public int[] lodClusterCounts = new int[0];
-
-    /** How many commands each level of detail list has room for. */
+    /**
+     * How many entries the cluster table has, which is how many commands each level of detail list
+     * has room for.
+     */
     public int lodCapacity;
 
     /**

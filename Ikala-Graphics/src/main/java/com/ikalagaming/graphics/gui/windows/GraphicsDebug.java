@@ -97,6 +97,15 @@ public class GraphicsDebug extends GuiWindow {
     /** Whether the benchmark leaves its world in place when it finishes. */
     private final IkBoolean benchmarkKeepWorld = new IkBoolean(false);
 
+    /** Whether the benchmark world's opaque blocks are drawn by live level of detail. */
+    private final IkBoolean benchmarkLod = new IkBoolean(false);
+
+    /** Whether the kept benchmark world is being dug on a timer. */
+    private final IkBoolean benchmarkRapidDig = new IkBoolean(false);
+
+    /** Digs a second when digging on a timer. */
+    private static final double RAPID_DIGS_PER_SECOND = 10;
+
     /** The benchmark recipes' names, in ordinal order. */
     private static final String[] RECIPE_NAMES =
             Arrays.stream(SyntheticTerrain.Recipe.values()).map(Enum::name).toArray(String[]::new);
@@ -862,12 +871,16 @@ public class GraphicsDebug extends GuiWindow {
         IkGui.setItemTooltip(
                 "Leave the world in place when the run finishes, to fly around it with the debug"
                         + " views and a frozen observer.");
+        IkGui.checkbox("Level of detail##benchmark", benchmarkLod);
+        IkGui.setItemTooltip(
+                "Draw the world's opaque blocks with live level of detail built from its sections.");
         if (IkGui.button("Run")) {
             GateBenchmark.start(
                     SyntheticTerrain.Recipe.values()[benchmarkRecipe.get()],
                     benchmarkRadius[0],
                     benchmarkLights[0],
-                    benchmarkKeepWorld.get());
+                    benchmarkKeepWorld.get(),
+                    benchmarkLod.get());
         }
         IkGui.sameLine();
         if (IkGui.button("Stop")) {
@@ -881,6 +894,28 @@ public class GraphicsDebug extends GuiWindow {
             IkGui.sameLine();
             if (IkGui.button("Remove world")) {
                 GateBenchmark.removeWorld();
+            }
+            if (IkGui.button("Dig near camera")) {
+                run.dig(GraphicsManager.getScene());
+            }
+            IkGui.sameLine();
+            if (IkGui.checkbox("Dig 10 a second", benchmarkRapidDig)) {
+                run.setDigRate(benchmarkRapidDig.get() ? RAPID_DIGS_PER_SECOND : 0);
+            }
+            final List<double[]> latencies = run.getDigLatencies();
+            if (!latencies.isEmpty()) {
+                final double[] last = latencies.get(latencies.size() - 1);
+                IkGui.text(
+                        String.format(
+                                "%d digs; last drawn after %.0f ms, in level of detail after %.0f"
+                                        + " ms; %d sections drawing themselves",
+                                latencies.size(),
+                                last[0],
+                                last[1],
+                                GraphicsManager.getRenderInstance()
+                                        .getState()
+                                        .sections
+                                        .getOverrideCount()));
             }
         }
         IkGui.text(run.status());

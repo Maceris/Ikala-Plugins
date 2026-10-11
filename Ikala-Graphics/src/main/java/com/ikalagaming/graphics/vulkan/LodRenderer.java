@@ -5,7 +5,9 @@ import static org.lwjgl.vulkan.VK12.vkCmdDrawIndexedIndirectCount;
 
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.lod.ClusterMeshes;
+import com.ikalagaming.graphics.lod.LiveLod;
 import com.ikalagaming.graphics.lod.LodDag;
+import com.ikalagaming.graphics.lod.LodStore;
 import com.ikalagaming.graphics.lod.LodVertex;
 import com.ikalagaming.graphics.scene.Observer;
 import com.ikalagaming.graphics.vulkan.stages.InstanceDrawUpdate;
@@ -19,25 +21,43 @@ import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.VkCommandBuffer;
 
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.IntBuffer;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.BitSet;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
 
 /**
- * Keeps level of detail worlds on the GPU and draws the cut the culling pass picks for them. A
- * world's clusters live in their own geometry arena in the {@link LodVertex} format, one mesh each,
- * with an entry each in the cluster table that {@code lod_cull.comp} reads (see {@link
- * LodCullMath}). Each frame the culling pass picks every world's cut, culls it against each view
- * and writes compacted draw commands and their counts, one list per view, which the scene and
- * shadow stages draw with one call each.
+ * Keeps level of detail worlds on the GPU and draws the cut the culling pass picks for them.
  *
- * <p>Adding, setting up and removing are safe from any thread. Uploads and the frame's tables
- * happen on the render thread.
+ * <p>A world is a set of pieces, one per region cell of a live world ({@link LiveLod}) or one for a
+ * whole DAG. Each piece's clusters live in their own geometry arena in the {@link LodVertex}
+ * format, one mesh each, with an entry each in the cluster table that {@code lod_cull.comp} reads
+ * (see {@link LodCullMath}). Changes come as batches, whose meshes are uploaded first; a batch is
+ * applied in one frame once all of them are resident, so cells that replace each other never show
+ * together or leave a gap.
+ *
+ * <p>Each frame the culling pass picks every world's cut, culls it against each view and writes
+ * compacted draw commands and their counts, one list per view, which the scene and shadow stages
+ * draw with one call each. Cells marked stale and sections marked hidden change the cut, see {@link
+ * LodCullMath}.
+ *
+ * <p>Adding worlds, publishing batches and setting a world up are safe from any thread. Applying
+ * batches, overrides, uploads and the frame's tables happen on the render thread.
  */
 public class LodRenderer {
 
@@ -71,8 +91,20 @@ public class LodRenderer {
     /** How many clusters the tables start with room for. */
     private static final int INITIAL_CLUSTERS = 1024;
 
-    /** Bytes in a history entry. */
-    private static final int HISTORY_ENTRY_SIZE = Integer.BYTES;
+    /** How many cells and words of sections the flag tables start with room for. */
+    private static final int INITIAL_SLOTS = 64;
+
+    /** Bytes in a history, cell flag or hidden word entry. */
+    private static final int WORD_SIZE = Integer.BYTES;
+
+    /** The most levels of cells an override marks stale above its section. */
+    private static final int MAX_CELL_LEVELS = 32;
+
+    /** The key of a lone DAG's one piece. */
+    private static final LodStore.CellKey WHOLE = new LodStore.CellKey(-1, 0, 0, 0);
+
+    /** Nanoseconds in a millisecond. */
+    private static final double NANOS_PER_MILLI = 1e6;
 
     /**
      * The clusters' geometry. -- GETTER -- The arena.
@@ -96,17 +128,63 @@ public class LodRenderer {
      */
     @Getter private final DeviceTable history;
 
-    /** Where each world's clusters are in the tables. Render thread. */
+    /**
+     * Each cell slot's flags, {@link LodCullMath#FLAG_STALE}. -- GETTER -- The cell flags.
+     *
+     * @return The cell flags.
+     */
+    @Getter private final DeviceTable cellFlags;
+
+    /**
+     * One bit per section slot, set while the section draws itself. -- GETTER -- The hidden
+     * sections.
+     *
+     * @return The hidden section set.
+     */
+    @Getter private final DeviceTable hiddenSections;
+
+    /** Where each piece's clusters are in the tables. Render thread. */
     private final RangeAllocator ranges = new RangeAllocator(INITIAL_CLUSTERS, Integer.MAX_VALUE);
 
-    /** Guards the worlds and the removed ones. */
+    /** Ranges of removed pieces, freed next frame so no frame writes an entry twice. */
+    private final List<int[]> freeNextFrame = new ArrayList<>();
+
+    /** Cell slots, shared by every world. Render thread. */
+    private final Slots cellSlots = new Slots();
+
+    /** Section slots, shared by every world. Render thread. */
+    private final Slots sectionSlots = new Slots();
+
+    /** World slots. Guarded by {@link #lock}. */
+    private final Slots worldSlots = new Slots();
+
+    /** The cell flags as uploaded. Render thread. */
+    private int[] flags = new int[INITIAL_SLOTS];
+
+    /** The hidden section words as uploaded. Render thread. */
+    private int[] hiddenWords = new int[INITIAL_SLOTS];
+
+    /** Cell slots whose flags changed since the last upload. Render thread. */
+    private final BitSet dirtyFlags = new BitSet();
+
+    /** Hidden words that changed since the last upload. Render thread. */
+    private final BitSet dirtyWords = new BitSet();
+
+    /** Cluster entries changed this frame, uploaded by {@link #record}. Render thread. */
+    private DeviceTable.Entries clusterEntries =
+            new DeviceTable.Entries(LodCullMath.CLUSTER_ENTRY_SIZE);
+
+    /** History entries cleared this frame. Render thread. */
+    private DeviceTable.Entries historyEntries = new DeviceTable.Entries(WORD_SIZE);
+
+    /** Guards the worlds. */
     private final ReentrantLock lock = new ReentrantLock();
 
     /** The worlds by id, in the order they were added. */
     private final Map<Long, World> worlds = new LinkedHashMap<>();
 
-    /** Removed worlds whose ranges are freed on the render thread. */
-    private final List<World> removedRanges = new ArrayList<>();
+    /** Removed worlds whose pieces are taken out on the render thread. */
+    private final Queue<World> removedWorlds = new ConcurrentLinkedQueue<>();
 
     /** The next world's id. */
     private long nextId = 1;
@@ -136,7 +214,137 @@ public class LodRenderer {
             int early,
             int late) {}
 
-    /** One world's clusters. */
+    /**
+     * How a live world is keeping up.
+     *
+     * @param pieces Cells on the GPU.
+     * @param pendingBatches Batches waiting for their meshes to upload.
+     * @param batches Batches applied so far.
+     * @param staleCells Cells marked stale by the last batch or by overrides.
+     * @param hiddenSections Sections drawing themselves instead of their leaves.
+     * @param lastBuildMillis How long the last applied batch took to build.
+     * @param lastLatencyMillis From the oldest change in the last applied batch to applying it.
+     */
+    public record LiveStats(
+            int pieces,
+            int pendingBatches,
+            long batches,
+            int staleCells,
+            int hiddenSections,
+            double lastBuildMillis,
+            double lastLatencyMillis) {}
+
+    /** Small integers handed out and taken back, lowest free first. */
+    private static final class Slots {
+        /** Slots given back. */
+        private final ArrayDeque<Integer> free = new ArrayDeque<>();
+
+        /** The next slot never handed out. */
+        private int next;
+
+        /**
+         * Hand out a slot.
+         *
+         * @return The slot.
+         */
+        int take() {
+            final Integer reused = free.poll();
+            return reused != null ? reused : next++;
+        }
+
+        /**
+         * Take a slot back.
+         *
+         * @param slot The slot.
+         */
+        void give(int slot) {
+            free.add(slot);
+        }
+
+        /**
+         * One past the highest slot ever handed out.
+         *
+         * @return The bound.
+         */
+        int bound() {
+            return next;
+        }
+    }
+
+    /** One cell of a world on the GPU. */
+    private static final class Piece {
+        /** How many of its cell's first clusters aren't its own. */
+        final int inputs;
+
+        /** Where its clusters start in the tables. */
+        final int first;
+
+        /** Each cluster's mesh, or null if it has no triangles. */
+        final MeshHandle[] meshes;
+
+        /** Each cluster's section, or null above the leaves. */
+        final LodStore.SectionPos[] sections;
+
+        /**
+         * Keep a piece.
+         *
+         * @param inputs Its cell's input count.
+         * @param first Its first entry.
+         * @param meshes Its meshes.
+         * @param sections Its clusters' sections.
+         */
+        Piece(int inputs, int first, MeshHandle[] meshes, LodStore.SectionPos[] sections) {
+            this.inputs = inputs;
+            this.first = first;
+            this.meshes = meshes;
+            this.sections = sections;
+        }
+    }
+
+    /** A batch whose meshes are being registered and uploaded. Render thread. */
+    private static final class Uploading {
+        /** The batch, merged from every batch waiting when it was taken. */
+        final LiveLod.Batch batch;
+
+        /** Each added piece's meshes, null where a cluster has no triangles or isn't yet in. */
+        final MeshHandle[][] meshes;
+
+        /** The piece whose meshes are registered next. */
+        int piece;
+
+        /** The cluster of that piece registered next. */
+        int cluster;
+
+        /**
+         * Start uploading a batch.
+         *
+         * @param batch The batch.
+         */
+        Uploading(LiveLod.@NonNull Batch batch) {
+            this.batch = batch;
+            meshes = new MeshHandle[batch.added().size()][];
+            for (int p = 0; p < meshes.length; ++p) {
+                meshes[p] = new MeshHandle[batch.added().get(p).meshes().size()];
+            }
+        }
+
+        /**
+         * Whether every mesh has been registered.
+         *
+         * @return True once they all have.
+         */
+        boolean registered() {
+            return piece >= meshes.length;
+        }
+    }
+
+    /**
+     * The most mesh bytes registered for level of detail in a frame, so a big batch is staged a
+     * part at a time instead of overflowing the staging ring.
+     */
+    private static final long REGISTER_BYTES_PER_FRAME = 8L * 1024 * 1024;
+
+    /** One world. */
     private static final class World {
         /** The plugin that owns it. */
         final String owner;
@@ -144,43 +352,88 @@ public class LodRenderer {
         /** Where its positions are measured from, in the world. */
         final double[] origin;
 
-        /** Each cluster's mesh, or null if it has no triangles. */
-        final MeshHandle[] meshes;
+        /** Its slot in the world table. */
+        final int slot;
 
-        /** Its cluster table entries until they are placed, then null. */
-        ByteBuffer entries;
+        /** The level 0 cell a section is in, or null for a lone DAG. */
+        final Function<LodStore.SectionPos, LodStore.CellKey> cellOf;
 
-        /** Where its clusters start in the tables, or -1 until they are placed. */
-        int first = -1;
+        /** Batches published and not yet taken, in order. */
+        final Queue<LiveLod.Batch> incoming = new ConcurrentLinkedQueue<>();
 
-        /** Whether every mesh has been uploaded, once it has. */
-        boolean resident;
+        /** The batch being uploaded, or null. Render thread. */
+        Uploading uploading;
+
+        /** Whether a batch is being uploaded, for other threads. */
+        volatile boolean busy;
+
+        /** Its pieces by cell. Render thread. */
+        final Map<LodStore.CellKey, Piece> pieces = new HashMap<>();
+
+        /** Each cell's slot, while it has a piece. Render thread. */
+        final Map<LodStore.CellKey, Integer> cells = new HashMap<>();
+
+        /** Each section's slot and how many clusters use it. Render thread. */
+        final Map<LodStore.SectionPos, int[]> sections = new HashMap<>();
+
+        /** Cells the last batch left stale. Render thread. */
+        Set<LodStore.CellKey> batchStale = Set.of();
+
+        /** Sections drawing themselves, from the overrides. Render thread. */
+        Set<LodStore.SectionPos> hidden = Set.of();
+
+        /** Cells stale because of the overrides. Render thread. */
+        Set<LodStore.CellKey> overrideStale = Set.of();
+
+        /** The newest generation of each section the pieces show. Render thread. */
+        final Map<LodStore.SectionPos, Long> covered = new HashMap<>();
 
         /** Whether it is drawn. */
-        boolean visible = true;
+        volatile boolean visible = true;
 
         /** The most error a drawn cluster may have, in pixels. */
-        double thresholdPixels;
+        volatile double thresholdPixels;
+
+        /** Whether it has any pieces, for other threads. */
+        volatile boolean shown;
+
+        /** How many pieces it has, for other threads. */
+        volatile int pieceCount;
+
+        /** Batches applied. */
+        volatile long batches;
+
+        /** How long the last applied batch took to build. */
+        volatile double lastBuildMillis;
+
+        /** From the oldest change in the last applied batch to applying it. */
+        volatile double lastLatencyMillis;
+
+        /** Stale cells, last counted. */
+        volatile int staleCount;
+
+        /** Hidden sections, last counted. */
+        volatile int hiddenCount;
 
         /**
          * Keep a world.
          *
          * @param owner The owner.
          * @param origin The origin.
-         * @param meshes The meshes.
-         * @param entries Its cluster table entries.
+         * @param slot Its slot.
+         * @param cellOf The level 0 cell a section is in, or null.
          * @param thresholdPixels Its error threshold.
          */
         World(
                 String owner,
                 double[] origin,
-                MeshHandle[] meshes,
-                ByteBuffer entries,
+                int slot,
+                Function<LodStore.SectionPos, LodStore.CellKey> cellOf,
                 double thresholdPixels) {
             this.owner = owner;
             this.origin = origin;
-            this.meshes = meshes;
-            this.entries = entries;
+            this.slot = slot;
+            this.cellOf = cellOf;
             this.thresholdPixels = thresholdPixels;
         }
     }
@@ -195,11 +448,13 @@ public class LodRenderer {
         clusters =
                 new DeviceTable(
                         state, "lod cluster", LodCullMath.CLUSTER_ENTRY_SIZE, INITIAL_CLUSTERS);
-        history = new DeviceTable(state, "lod history", HISTORY_ENTRY_SIZE, INITIAL_CLUSTERS);
+        history = new DeviceTable(state, "lod history", WORD_SIZE, INITIAL_CLUSTERS);
+        cellFlags = new DeviceTable(state, "lod cell flags", WORD_SIZE, INITIAL_SLOTS);
+        hiddenSections = new DeviceTable(state, "lod hidden sections", WORD_SIZE, INITIAL_SLOTS);
     }
 
     /**
-     * Add a world, uploading every cluster. Safe from any thread.
+     * Add a whole DAG as a world, uploading every cluster. Safe from any thread.
      *
      * @param state The Vulkan state.
      * @param owner The key of the plugin that owns it.
@@ -214,34 +469,196 @@ public class LodRenderer {
             @NonNull LodDag dag,
             @NonNull List<ClusterMeshes.Mesh> meshes,
             double thresholdPixels) {
-        final int count = meshes.size();
-        final MeshHandle[] handles = new MeshHandle[count];
-        final ByteBuffer entries =
-                ByteBuffer.allocate(count * LodCullMath.CLUSTER_ENTRY_SIZE)
-                        .order(ByteOrder.nativeOrder());
-        for (int i = 0; i < count; ++i) {
-            final ClusterMeshes.Mesh mesh = meshes.get(i);
-            if (mesh.triangleCount() > 0) {
-                handles[i] = register(state, owner, mesh);
-            }
-            entries.position(i * LodCullMath.CLUSTER_ENTRY_SIZE);
-            LodCullMath.putCluster(
-                    entries,
-                    dag,
-                    i,
-                    handles[i] == null ? LodCullMath.NO_MESH : handles[i].slot(),
-                    handles[i] == null ? 0 : handles[i].generation());
+        final long id = newWorld(owner, dag.getOrigin(), null, thresholdPixels);
+        final List<LodStore.PieceCluster> clusterList = new ArrayList<>(meshes.size());
+        for (int i = 0; i < meshes.size(); ++i) {
+            final boolean consumed = dag.consumer(i) >= 0;
+            clusterList.add(
+                    new LodStore.PieceCluster(
+                            i,
+                            dag.clusters().get(i),
+                            dag.parentError(i),
+                            dag.parentBound(i),
+                            consumed ? WHOLE : null,
+                            null));
         }
-        entries.position(0);
+        publish(
+                state,
+                id,
+                new LiveLod.Batch(
+                        List.of(new LiveLod.Piece(WHOLE, 0, clusterList, meshes)),
+                        List.of(),
+                        List.of(),
+                        Collections.emptySortedSet(),
+                        Map.of(),
+                        0,
+                        System.nanoTime()));
+        return id;
+    }
+
+    /**
+     * Add an empty world that a live world fills with its batches, through {@link #publish}. Safe
+     * from any thread.
+     *
+     * @param owner The key of the plugin that owns it.
+     * @param origin Where its positions are measured from, in the world.
+     * @param cellOf The level 0 cell a section is in.
+     * @param thresholdPixels The most error a drawn cluster may have, in pixels.
+     * @return The world's id.
+     */
+    public long addLive(
+            @NonNull String owner,
+            double @NonNull [] origin,
+            @NonNull Function<LodStore.SectionPos, LodStore.CellKey> cellOf,
+            double thresholdPixels) {
+        return newWorld(owner, origin, cellOf, thresholdPixels);
+    }
+
+    /**
+     * Make a world.
+     *
+     * @param owner The owner.
+     * @param origin Its origin.
+     * @param cellOf The level 0 cell a section is in, or null for a lone DAG.
+     * @param thresholdPixels Its error threshold.
+     * @return Its id.
+     */
+    private long newWorld(
+            @NonNull String owner,
+            double @NonNull [] origin,
+            Function<LodStore.SectionPos, LodStore.CellKey> cellOf,
+            double thresholdPixels) {
         lock.lock();
         try {
             final long id = nextId++;
             worlds.put(
                     id,
-                    new World(owner, dag.getOrigin().clone(), handles, entries, thresholdPixels));
+                    new World(owner, origin.clone(), worldSlots.take(), cellOf, thresholdPixels));
             return id;
         } finally {
             lock.unlock();
+        }
+    }
+
+    /**
+     * Take a batch for a world. Its meshes are uploaded over the next frames and it is applied once
+     * they all are; batches that pile up meanwhile are merged into one. Safe from any thread;
+     * batches of one world are applied in the order they come.
+     *
+     * @param state The Vulkan state.
+     * @param id The world.
+     * @param batch The batch.
+     */
+    public void publish(@NonNull VulkanState state, long id, LiveLod.@NonNull Batch batch) {
+        final World world = world(id);
+        if (world != null) {
+            world.incoming.add(batch);
+        }
+    }
+
+    /**
+     * Merge batches in the order they came, as if they were one: later pieces replace earlier ones
+     * of the same cell, and later parents update the clusters of pieces still in the merge.
+     *
+     * @param batches The batches, oldest first.
+     * @return The merged batch.
+     */
+    static LiveLod.Batch merge(@NonNull List<LiveLod.Batch> batches) {
+        if (batches.size() == 1) {
+            return batches.get(0);
+        }
+        final Map<LodStore.CellKey, LiveLod.Piece> added = new LinkedHashMap<>();
+        final Set<LodStore.CellKey> removed = new LinkedHashSet<>();
+        final Map<LodStore.CellKey, Map<Integer, LodStore.PieceCluster>> tops = new HashMap<>();
+        final Map<LodStore.CellKey, Integer> topInputs = new HashMap<>();
+        final Map<LodStore.SectionPos, Long> covered = new HashMap<>();
+        SortedSet<LodStore.CellKey> stale = Collections.emptySortedSet();
+        long buildNanos = 0;
+        long oldest = Long.MAX_VALUE;
+        for (LiveLod.Batch batch : batches) {
+            for (LodStore.CellKey key : batch.removed()) {
+                added.remove(key);
+                tops.remove(key);
+                removed.add(key);
+            }
+            for (LiveLod.Piece piece : batch.added()) {
+                added.put(piece.key(), piece);
+                tops.remove(piece.key());
+            }
+            for (LiveLod.Piece top : batch.tops()) {
+                final LiveLod.Piece piece = added.get(top.key());
+                if (piece != null) {
+                    // Still in the merge: update its clusters in place
+                    final List<LodStore.PieceCluster> clusters = new ArrayList<>(piece.clusters());
+                    for (LodStore.PieceCluster cluster : top.clusters()) {
+                        clusters.set(cluster.local() - piece.inputs(), cluster);
+                    }
+                    added.put(
+                            top.key(),
+                            new LiveLod.Piece(
+                                    piece.key(), piece.inputs(), clusters, piece.meshes()));
+                } else {
+                    topInputs.put(top.key(), top.inputs());
+                    final Map<Integer, LodStore.PieceCluster> byLocal =
+                            tops.computeIfAbsent(top.key(), key -> new HashMap<>());
+                    for (LodStore.PieceCluster cluster : top.clusters()) {
+                        byLocal.put(cluster.local(), cluster);
+                    }
+                }
+            }
+            for (Map.Entry<LodStore.SectionPos, Long> entry : batch.covered().entrySet()) {
+                covered.merge(entry.getKey(), entry.getValue(), Math::max);
+            }
+            stale = batch.stale();
+            buildNanos += batch.buildNanos();
+            oldest = Math.min(oldest, batch.oldestChangeNanos());
+        }
+        final List<LiveLod.Piece> topPieces = new ArrayList<>();
+        for (Map.Entry<LodStore.CellKey, Map<Integer, LodStore.PieceCluster>> entry :
+                tops.entrySet()) {
+            topPieces.add(
+                    new LiveLod.Piece(
+                            entry.getKey(),
+                            topInputs.get(entry.getKey()),
+                            new ArrayList<>(entry.getValue().values()),
+                            List.of()));
+        }
+        return new LiveLod.Batch(
+                new ArrayList<>(added.values()),
+                new ArrayList<>(removed),
+                topPieces,
+                stale,
+                covered,
+                buildNanos,
+                oldest);
+    }
+
+    /**
+     * Register the next meshes of a batch, up to the frame's budget. Render thread.
+     *
+     * @param state The Vulkan state.
+     * @param owner The owner.
+     * @param uploading The batch.
+     */
+    private void registerSome(
+            @NonNull VulkanState state, @NonNull String owner, @NonNull Uploading uploading) {
+        long bytes = 0;
+        while (!uploading.registered() && bytes < REGISTER_BYTES_PER_FRAME) {
+            final List<ClusterMeshes.Mesh> pieceMeshes =
+                    uploading.batch.added().get(uploading.piece).meshes();
+            if (uploading.cluster >= pieceMeshes.size()) {
+                uploading.piece += 1;
+                uploading.cluster = 0;
+                continue;
+            }
+            final ClusterMeshes.Mesh mesh = pieceMeshes.get(uploading.cluster);
+            if (mesh.triangleCount() > 0) {
+                uploading.meshes[uploading.piece][uploading.cluster] = register(state, owner, mesh);
+                bytes +=
+                        (long) mesh.vertexCount() * LodVertex.SIZE
+                                + (long) mesh.indices().length * Integer.BYTES;
+            }
+            uploading.cluster += 1;
         }
     }
 
@@ -275,20 +692,30 @@ public class LodRenderer {
     }
 
     /**
+     * A world by id.
+     *
+     * @param id The world.
+     * @return The world, or null.
+     */
+    private World world(long id) {
+        lock.lock();
+        try {
+            return worlds.get(id);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
      * Set the most error a world's drawn clusters may have.
      *
      * @param id The world.
      * @param thresholdPixels The error, in pixels.
      */
     public void setThreshold(long id, double thresholdPixels) {
-        lock.lock();
-        try {
-            final World world = worlds.get(id);
-            if (world != null) {
-                world.thresholdPixels = thresholdPixels;
-            }
-        } finally {
-            lock.unlock();
+        final World world = world(id);
+        if (world != null) {
+            world.thresholdPixels = thresholdPixels;
         }
     }
 
@@ -299,50 +726,42 @@ public class LodRenderer {
      * @param visible Whether it is drawn.
      */
     public void setVisible(long id, boolean visible) {
-        lock.lock();
-        try {
-            final World world = worlds.get(id);
-            if (world != null) {
-                world.visible = visible;
-            }
-        } finally {
-            lock.unlock();
+        final World world = world(id);
+        if (world != null) {
+            world.visible = visible;
         }
     }
 
     /**
-     * Whether every cluster of a world has been uploaded.
+     * Whether a world has every batch published so far on the GPU, and something to draw.
      *
      * @param id The world.
-     * @return False if any is still waiting, or there is no such world.
+     * @return False while a batch is uploading, or there is no such world.
      */
     public boolean isResident(long id) {
-        lock.lock();
-        try {
-            final World world = worlds.get(id);
-            return world != null && isResidentLocked(world);
-        } finally {
-            lock.unlock();
-        }
+        final World world = world(id);
+        return world != null && world.shown && !world.busy && world.incoming.isEmpty();
     }
 
     /**
-     * Whether every cluster of a world has been uploaded, noting it once it has. Hold the lock.
+     * How a world is keeping up.
      *
-     * @param world The world.
-     * @return True if all have.
+     * @param id The world.
+     * @return Its numbers, or null if there is no such world.
      */
-    private boolean isResidentLocked(@NonNull World world) {
-        if (world.resident) {
-            return true;
+    public LiveStats liveStats(long id) {
+        final World world = world(id);
+        if (world == null) {
+            return null;
         }
-        for (MeshHandle mesh : world.meshes) {
-            if (mesh != null && !arena.getRegistry().isResident(mesh)) {
-                return false;
-            }
-        }
-        world.resident = true;
-        return true;
+        return new LiveStats(
+                world.pieceCount,
+                world.incoming.size() + (world.busy ? 1 : 0),
+                world.batches,
+                world.staleCount,
+                world.hiddenCount,
+                world.lastBuildMillis,
+                world.lastLatencyMillis);
     }
 
     /**
@@ -353,20 +772,18 @@ public class LodRenderer {
      * @return True if it was removed.
      */
     public boolean remove(long id, @NonNull String owner) {
-        final World world;
         lock.lock();
         try {
-            world = worlds.get(id);
+            final World world = worlds.get(id);
             if (world == null || !world.owner.equals(owner)) {
                 return false;
             }
             worlds.remove(id);
-            removedRanges.add(world);
+            removedWorlds.add(world);
+            return true;
         } finally {
             lock.unlock();
         }
-        release(world);
-        return true;
     }
 
     /**
@@ -376,112 +793,500 @@ public class LodRenderer {
      * @return How many were removed.
      */
     public int removeAllOwnedBy(@NonNull String owner) {
-        final List<World> removed = new ArrayList<>();
+        int count = 0;
         lock.lock();
         try {
             final Iterator<World> it = worlds.values().iterator();
             while (it.hasNext()) {
                 final World world = it.next();
                 if (world.owner.equals(owner)) {
-                    removed.add(world);
+                    removedWorlds.add(world);
                     it.remove();
+                    ++count;
                 }
             }
-            removedRanges.addAll(removed);
         } finally {
             lock.unlock();
         }
-        removed.forEach(this::release);
-        return removed.size();
+        return count;
     }
 
     /**
-     * Release a world's meshes.
+     * Take out removed worlds, register the next meshes of each world's batch, and apply each batch
+     * whose meshes are all resident. Render thread, at the start of a frame, before the overrides
+     * are set.
      *
-     * @param world The world.
+     * @param state The Vulkan state.
      */
-    private void release(@NonNull World world) {
-        for (MeshHandle mesh : world.meshes) {
-            if (mesh != null) {
-                arena.release(mesh);
+    public void applyReady(@NonNull VulkanState state) {
+        for (int[] range : freeNextFrame) {
+            ranges.free(range[0], range[1]);
+        }
+        freeNextFrame.clear();
+        World removed;
+        while ((removed = removedWorlds.poll()) != null) {
+            for (Piece piece : removed.pieces.values()) {
+                retire(removed, piece);
+            }
+            removed.pieces.clear();
+            for (int slot : removed.cells.values()) {
+                setFlag(slot, 0);
+                cellSlots.give(slot);
+            }
+            removed.cells.clear();
+            removed.incoming.clear();
+            if (removed.uploading != null) {
+                releaseAll(removed.uploading.meshes);
+                removed.uploading = null;
+            }
+            lock.lock();
+            try {
+                worldSlots.give(removed.slot);
+            } finally {
+                lock.unlock();
+            }
+        }
+        for (World world : snapshotWorlds()) {
+            if (world.uploading == null && !world.incoming.isEmpty()) {
+                final List<LiveLod.Batch> waiting = new ArrayList<>();
+                LiveLod.Batch next;
+                while ((next = world.incoming.poll()) != null) {
+                    waiting.add(next);
+                }
+                world.uploading = new Uploading(merge(waiting));
+                world.busy = true;
+            }
+            final Uploading uploading = world.uploading;
+            if (uploading == null) {
+                continue;
+            }
+            if (!uploading.registered()) {
+                registerSome(state, world.owner, uploading);
+            } else if (isResident(uploading.meshes)) {
+                // One batch a frame, so no entry is written twice in a frame
+                world.uploading = null;
+                world.busy = false;
+                apply(world, uploading.batch, uploading.meshes);
             }
         }
     }
 
     /**
-     * Upload waiting clusters, free released ones, and place new worlds in the cluster table.
-     * Render thread, at the start of a frame.
+     * The worlds, copied.
+     *
+     * @return The worlds.
+     */
+    private List<World> snapshotWorlds() {
+        lock.lock();
+        try {
+            return new ArrayList<>(worlds.values());
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Whether every mesh is uploaded.
+     *
+     * @param meshes The meshes, null where there are none.
+     * @return True if all are.
+     */
+    private boolean isResident(@NonNull MeshHandle[][] meshes) {
+        for (MeshHandle[] piece : meshes) {
+            for (MeshHandle mesh : piece) {
+                if (mesh != null && !arena.getRegistry().isResident(mesh)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Release every mesh of a batch that won't be applied.
+     *
+     * @param meshes The meshes.
+     */
+    private void releaseAll(@NonNull MeshHandle[][] meshes) {
+        for (MeshHandle[] piece : meshes) {
+            for (MeshHandle mesh : piece) {
+                if (mesh != null) {
+                    arena.release(mesh);
+                }
+            }
+        }
+    }
+
+    /**
+     * Apply one batch. Render thread.
+     *
+     * @param world The world.
+     * @param batch The batch.
+     * @param meshes Its meshes, resident.
+     */
+    private void apply(
+            @NonNull World world, LiveLod.@NonNull Batch batch, @NonNull MeshHandle[][] meshes) {
+        // Out with what is replaced or removed
+        final Set<LodStore.CellKey> going = new HashSet<>(batch.removed());
+        for (LiveLod.Piece piece : batch.added()) {
+            going.add(piece.key());
+        }
+        for (LodStore.CellKey key : going) {
+            final Piece old = world.pieces.remove(key);
+            if (old != null) {
+                retire(world, old);
+            }
+        }
+        // Every new cell has its slot before any entry names it as a parent
+        for (LiveLod.Piece piece : batch.added()) {
+            world.cells.computeIfAbsent(piece.key(), key -> cellSlots.take());
+        }
+        for (LodStore.CellKey key : batch.removed()) {
+            final Integer slot = world.cells.get(key);
+            if (slot != null && !world.pieces.containsKey(key) && !isAdded(batch, key)) {
+                world.cells.remove(key);
+                setFlag(slot, 0);
+                cellSlots.give(slot);
+            }
+        }
+        for (int p = 0; p < batch.added().size(); ++p) {
+            place(world, batch.added().get(p), meshes[p]);
+        }
+        for (LiveLod.Piece tops : batch.tops()) {
+            final Piece piece = world.pieces.get(tops.key());
+            if (piece == null) {
+                continue;
+            }
+            for (LodStore.PieceCluster cluster : tops.clusters()) {
+                final int index = cluster.local() - piece.inputs;
+                writeEntry(world, tops.key(), piece, index, cluster);
+            }
+        }
+        world.batchStale = new HashSet<>(batch.stale());
+        for (Map.Entry<LodStore.SectionPos, Long> entry : batch.covered().entrySet()) {
+            world.covered.merge(entry.getKey(), entry.getValue(), Math::max);
+        }
+        world.shown = !world.pieces.isEmpty();
+        world.pieceCount = world.pieces.size();
+        world.batches += 1;
+        world.lastBuildMillis = batch.buildNanos() / NANOS_PER_MILLI;
+        world.lastLatencyMillis = (System.nanoTime() - batch.oldestChangeNanos()) / NANOS_PER_MILLI;
+    }
+
+    /**
+     * Whether a batch adds a cell.
+     *
+     * @param batch The batch.
+     * @param key The cell.
+     * @return True if it does.
+     */
+    private static boolean isAdded(LiveLod.@NonNull Batch batch, LodStore.@NonNull CellKey key) {
+        for (LiveLod.Piece piece : batch.added()) {
+            if (piece.key().equals(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Put a piece in the tables. Render thread.
+     *
+     * @param world The world.
+     * @param added The piece.
+     * @param meshes Its meshes, resident.
+     */
+    private void place(
+            @NonNull World world, LiveLod.@NonNull Piece added, @NonNull MeshHandle[] meshes) {
+        final int count = added.clusters().size();
+        final int first = ranges.allocate(count);
+        if (first < 0) {
+            throw new IllegalStateException("No room for " + count + " more LOD clusters");
+        }
+        final LodStore.SectionPos[] sections = new LodStore.SectionPos[count];
+        final Piece piece = new Piece(added.inputs(), first, meshes, sections);
+        for (int i = 0; i < count; ++i) {
+            final LodStore.SectionPos section = added.clusters().get(i).section();
+            sections[i] = section;
+            if (section != null) {
+                final int[] slot = world.sections.get(section);
+                if (slot == null) {
+                    world.sections.put(section, new int[] {sectionSlots.take(), 1});
+                } else {
+                    slot[1] += 1;
+                }
+            }
+            writeEntry(world, added.key(), piece, i, added.clusters().get(i));
+            historyEntries.next(first + i);
+        }
+        world.pieces.put(added.key(), piece);
+    }
+
+    /**
+     * Write one cluster's entry. Render thread.
+     *
+     * @param world The world.
+     * @param key The cluster's cell.
+     * @param piece The cell's piece.
+     * @param index The cluster's index in the piece.
+     * @param cluster The cluster, with its parent.
+     */
+    private void writeEntry(
+            @NonNull World world,
+            LodStore.@NonNull CellKey key,
+            @NonNull Piece piece,
+            int index,
+            LodStore.@NonNull PieceCluster cluster) {
+        final MeshHandle mesh = piece.meshes[index];
+        final Integer cell = world.cells.get(key);
+        final Integer parentCell =
+                cluster.parentCell() == null ? null : world.cells.get(cluster.parentCell());
+        final int[] section =
+                cluster.section() == null ? null : world.sections.get(cluster.section());
+        LodCullMath.putCluster(
+                clusterEntries.next(piece.first + index),
+                cluster.cluster(),
+                cluster.parentError(),
+                cluster.parentBound(),
+                mesh == null ? LodCullMath.NO_MESH : mesh.slot(),
+                mesh == null ? 0 : mesh.generation(),
+                new LodCullMath.Place(
+                        world.slot,
+                        cell == null ? LodCullMath.NONE : cell,
+                        parentCell == null ? LodCullMath.NONE : parentCell,
+                        section == null ? LodCullMath.NONE : section[0]));
+    }
+
+    /**
+     * Take a piece out of the tables and release its meshes. Render thread.
+     *
+     * @param world The world.
+     * @param piece The piece.
+     */
+    private void retire(@NonNull World world, @NonNull Piece piece) {
+        final int count = piece.meshes.length;
+        for (int i = 0; i < count; ++i) {
+            // An empty entry, which the culling pass skips
+            clusterEntries.next(piece.first + i);
+            if (piece.meshes[i] != null) {
+                arena.release(piece.meshes[i]);
+            }
+            final LodStore.SectionPos section = piece.sections[i];
+            if (section != null) {
+                final int[] slot = world.sections.get(section);
+                if (slot != null && --slot[1] == 0) {
+                    world.sections.remove(section);
+                    setHidden(slot[0], false);
+                    sectionSlots.give(slot[0]);
+                }
+            }
+        }
+        freeNextFrame.add(new int[] {piece.first, count});
+    }
+
+    /**
+     * The newest generation of a section a live world shows. Render thread.
+     *
+     * @param id The world.
+     * @param section The section.
+     * @return The generation, or -1 if it shows none.
+     */
+    public long coveredGeneration(long id, LodStore.@NonNull SectionPos section) {
+        final World world = world(id);
+        if (world == null) {
+            return -1;
+        }
+        final Long generation = world.covered.get(section);
+        return generation == null ? -1 : generation;
+    }
+
+    /**
+     * Forget the generations shown of sections no longer around. Render thread.
+     *
+     * @param id The world.
+     * @param section The section.
+     */
+    public void forgetCovered(long id, LodStore.@NonNull SectionPos section) {
+        final World world = world(id);
+        if (world != null) {
+            world.covered.remove(section);
+        }
+    }
+
+    /**
+     * Set which sections of a live world draw themselves this frame: their leaves are hidden, and
+     * their cells and every cell above them are stale, so nothing coarser covers them. Render
+     * thread, after {@link #applyReady()} and before {@link #record}.
+     *
+     * @param id The world.
+     * @param overrides The sections.
+     */
+    public void setOverrides(long id, @NonNull Set<LodStore.SectionPos> overrides) {
+        final World world = world(id);
+        if (world == null || world.cellOf == null) {
+            return;
+        }
+        final Set<LodStore.CellKey> stale = new HashSet<>();
+        for (LodStore.SectionPos section : overrides) {
+            LodStore.CellKey key = world.cellOf.apply(section);
+            for (int level = 0; level < MAX_CELL_LEVELS; ++level) {
+                if (!stale.add(key)) {
+                    break;
+                }
+                key = key.parent();
+            }
+        }
+        world.hidden = Set.copyOf(overrides);
+        world.overrideStale = stale;
+    }
+
+    /**
+     * Bring the cell flags and hidden sections up to date with every world's batches and overrides.
+     * Render thread.
+     */
+    private void updateFlags() {
+        final int[] wantFlags = new int[cellSlots.bound()];
+        final int[] wantWords =
+                new int
+                        [(sectionSlots.bound() + LodCullMath.BITS_PER_WORD - 1)
+                                / LodCullMath.BITS_PER_WORD];
+        for (World world : snapshotWorlds()) {
+            int stale = 0;
+            for (Map.Entry<LodStore.CellKey, Integer> entry : world.cells.entrySet()) {
+                if (world.batchStale.contains(entry.getKey())
+                        || world.overrideStale.contains(entry.getKey())) {
+                    wantFlags[entry.getValue()] |= LodCullMath.FLAG_STALE;
+                    ++stale;
+                }
+            }
+            int hidden = 0;
+            for (LodStore.SectionPos section : world.hidden) {
+                final int[] slot = world.sections.get(section);
+                if (slot != null) {
+                    wantWords[slot[0] / LodCullMath.BITS_PER_WORD] |=
+                            1 << (slot[0] % LodCullMath.BITS_PER_WORD);
+                    ++hidden;
+                }
+            }
+            world.staleCount = stale;
+            world.hiddenCount = hidden;
+        }
+        for (int slot = 0; slot < Math.max(wantFlags.length, flags.length); ++slot) {
+            setFlag(slot, slot < wantFlags.length ? wantFlags[slot] : 0);
+        }
+        for (int word = 0; word < Math.max(wantWords.length, hiddenWords.length); ++word) {
+            setWord(word, word < wantWords.length ? wantWords[word] : 0);
+        }
+    }
+
+    /**
+     * Set a cell slot's flags, noting the change.
+     *
+     * @param slot The slot.
+     * @param value The flags.
+     */
+    private void setFlag(int slot, int value) {
+        if (slot >= flags.length) {
+            if (value == 0) {
+                return;
+            }
+            flags = Arrays.copyOf(flags, Math.max(slot + 1, flags.length * 2));
+        }
+        if (flags[slot] != value) {
+            flags[slot] = value;
+            dirtyFlags.set(slot);
+        }
+    }
+
+    /**
+     * Set or clear a section slot's hidden bit, noting the change.
+     *
+     * @param slot The slot.
+     * @param hidden Whether it is hidden.
+     */
+    private void setHidden(int slot, boolean hidden) {
+        final int word = slot / LodCullMath.BITS_PER_WORD;
+        final int bit = 1 << (slot % LodCullMath.BITS_PER_WORD);
+        final int old = word < hiddenWords.length ? hiddenWords[word] : 0;
+        setWord(word, hidden ? old | bit : old & ~bit);
+    }
+
+    /**
+     * Set a hidden section word, noting the change.
+     *
+     * @param word The word.
+     * @param value Its bits.
+     */
+    private void setWord(int word, int value) {
+        if (word >= hiddenWords.length) {
+            if (value == 0) {
+                return;
+            }
+            hiddenWords = Arrays.copyOf(hiddenWords, Math.max(word + 1, hiddenWords.length * 2));
+        }
+        if (hiddenWords[word] != value) {
+            hiddenWords[word] = value;
+            dirtyWords.set(word);
+        }
+    }
+
+    /**
+     * Upload waiting clusters, free released ones, and copy this frame's changed entries and flags
+     * into the tables. Render thread, after the overrides are set.
      *
      * @param state The Vulkan state.
      * @param commandBuffer The frame's command buffer.
      */
     public void record(@NonNull VulkanState state, @NonNull VkCommandBuffer commandBuffer) {
         arena.record(state, commandBuffer);
-        final DeviceTable.Entries clusterEntries =
-                new DeviceTable.Entries(LodCullMath.CLUSTER_ENTRY_SIZE);
-        final DeviceTable.Entries historyEntries = new DeviceTable.Entries(HISTORY_ENTRY_SIZE);
+        updateFlags();
+        final DeviceTable.Entries flagEntries = new DeviceTable.Entries(WORD_SIZE);
+        final DeviceTable.Entries wordEntries = new DeviceTable.Entries(WORD_SIZE);
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            lock.lock();
-            try {
-                // A removed range may be reused at once: frames in flight that read it come
-                // before this frame's copies on the queue
-                for (World world : removedRanges) {
-                    if (world.first >= 0) {
-                        ranges.free(world.first, world.meshes.length);
-                    }
-                }
-                removedRanges.clear();
-                for (World world : worlds.values()) {
-                    if (world.entries != null) {
-                        place(world, clusterEntries, historyEntries);
-                    }
-                }
-            } finally {
-                lock.unlock();
+            for (int slot = dirtyFlags.nextSetBit(0);
+                    slot >= 0;
+                    slot = dirtyFlags.nextSetBit(slot + 1)) {
+                final ByteBuffer out = flagEntries.next(slot);
+                out.putInt(out.position(), flags[slot]);
             }
+            dirtyFlags.clear();
+            for (int word = dirtyWords.nextSetBit(0);
+                    word >= 0;
+                    word = dirtyWords.nextSetBit(word + 1)) {
+                final ByteBuffer out = wordEntries.next(word);
+                out.putInt(out.position(), hiddenWords[word]);
+            }
+            dirtyWords.clear();
             final int capacity = ranges.getCapacity();
+            // Every slot handed out is covered, so the culling pass never reads past the end
+            final int flagCapacity = Math.max(1, Math.max(flags.length, cellSlots.bound()));
+            final int wordCapacity =
+                    Math.max(
+                            1,
+                            Math.max(
+                                    hiddenWords.length,
+                                    (sectionSlots.bound() + LodCullMath.BITS_PER_WORD - 1)
+                                            / LodCullMath.BITS_PER_WORD));
             if (!clusters.hasWork(capacity, clusterEntries)
-                    && !history.hasWork(capacity, historyEntries)) {
+                    && !history.hasWork(capacity, historyEntries)
+                    && !cellFlags.hasWork(flagCapacity, flagEntries)
+                    && !hiddenSections.hasWork(wordCapacity, wordEntries)) {
                 return;
             }
             DeviceTable.barrierBefore(commandBuffer, stack);
             clusters.record(state, commandBuffer, capacity, clusterEntries, stack);
             history.record(state, commandBuffer, capacity, historyEntries, stack);
+            cellFlags.record(state, commandBuffer, flagCapacity, flagEntries, stack);
+            hiddenSections.record(state, commandBuffer, wordCapacity, wordEntries, stack);
             DeviceTable.barrierAfter(commandBuffer, stack);
         } finally {
-            historyEntries.free();
+            wordEntries.free();
+            flagEntries.free();
             clusterEntries.free();
+            historyEntries.free();
+            clusterEntries = new DeviceTable.Entries(LodCullMath.CLUSTER_ENTRY_SIZE);
+            historyEntries = new DeviceTable.Entries(WORD_SIZE);
         }
-    }
-
-    /**
-     * Give a new world its range of the tables and pack its entries, with no history. Hold the
-     * lock.
-     *
-     * @param world The world.
-     * @param clusterEntries The cluster table's changed entries.
-     * @param historyEntries The history's changed entries, which start out cleared.
-     */
-    private void place(
-            @NonNull World world,
-            DeviceTable.@NonNull Entries clusterEntries,
-            DeviceTable.@NonNull Entries historyEntries) {
-        final int count = world.meshes.length;
-        world.first = ranges.allocate(count);
-        if (world.first < 0) {
-            throw new IllegalStateException("No room for " + count + " more LOD clusters");
-        }
-        final ByteBuffer packed = world.entries;
-        for (int i = 0; i < count; ++i) {
-            final ByteBuffer out = clusterEntries.next(world.first + i);
-            out.put(
-                    out.position(),
-                    packed,
-                    i * LodCullMath.CLUSTER_ENTRY_SIZE,
-                    LodCullMath.CLUSTER_ENTRY_SIZE);
-            historyEntries.next(world.first + i);
-        }
-        world.entries = null;
     }
 
     /**
@@ -523,46 +1328,36 @@ public class LodRenderer {
         final float pixelsPerUnit =
                 Math.abs(observer.getProjectionMatrix().m11()) * heightPixels / 2;
         final Vector3dc eye = observer.getPosition();
-        final List<World> culled = new ArrayList<>();
-        final List<Float> thresholds = new ArrayList<>();
-        lock.lock();
-        try {
-            for (World world : worlds.values()) {
-                if (world.visible && world.first >= 0 && isResidentLocked(world)) {
-                    culled.add(world);
-                    thresholds.add((float) world.thresholdPixels);
-                }
+        final List<World> all = snapshotWorlds();
+        int slots = 0;
+        int drawn = 0;
+        for (World world : all) {
+            slots = Math.max(slots, world.slot + 1);
+            if (world.visible && world.shown) {
+                ++drawn;
             }
-        } finally {
-            lock.unlock();
         }
-        int capacity = 0;
-        for (World world : culled) {
-            capacity = Math.max(capacity, world.first + world.meshes.length);
-        }
-        frameData.lodWorldCount = culled.size();
-        frameData.lodFirstClusters = new int[culled.size()];
-        frameData.lodClusterCounts = new int[culled.size()];
+        final int capacity = ranges.getCapacity();
+        frameData.lodWorldCount = drawn;
         frameData.lodCapacity = capacity;
         frameData.lodWorlds.ensureCapacity(
-                (long) Math.max(1, culled.size()) * LodCullMath.WORLD_ENTRY_SIZE, state);
+                (long) Math.max(1, slots) * LodCullMath.WORLD_ENTRY_SIZE, state);
         frameData.lodDrawCommands.ensureCapacity(
                 (long) Math.max(1, capacity) * LIST_COUNT * COMMAND_SIZE, state);
         final ByteBuffer table =
                 MemoryUtil.memByteBuffer(
                         frameData.lodWorlds.allocationInfo.pMappedData(),
-                        Math.max(1, culled.size()) * LodCullMath.WORLD_ENTRY_SIZE);
-        for (int w = 0; w < culled.size(); ++w) {
-            final World world = culled.get(w);
-            frameData.lodFirstClusters[w] = world.first;
-            frameData.lodClusterCounts[w] = world.meshes.length;
+                        Math.max(1, slots) * LodCullMath.WORLD_ENTRY_SIZE);
+        MemoryUtil.memSet(MemoryUtil.memAddress(table), 0, table.capacity());
+        for (World world : all) {
             putWorld(
                     table,
-                    w * LodCullMath.WORLD_ENTRY_SIZE,
+                    world.slot * LodCullMath.WORLD_ENTRY_SIZE,
                     world,
                     camera,
                     eye,
-                    thresholds.get(w),
+                    world.visible && world.shown,
+                    (float) world.thresholdPixels,
                     pixelsPerUnit);
         }
     }
@@ -575,6 +1370,7 @@ public class LodRenderer {
      * @param world The world.
      * @param camera The camera's position, in the world.
      * @param eye The observer's position, in the world.
+     * @param drawn Whether it is drawn.
      * @param thresholdPixels The world's error threshold.
      * @param pixelsPerUnit Pixels per world unit at distance 1.
      */
@@ -584,6 +1380,7 @@ public class LodRenderer {
             @NonNull World world,
             @NonNull Vector3dc camera,
             @NonNull Vector3dc eye,
+            boolean drawn,
             float thresholdPixels,
             float pixelsPerUnit) {
         final double[] at = {camera.x(), camera.y(), camera.z()};
@@ -603,8 +1400,7 @@ public class LodRenderer {
                     base + LodCullMath.WORLD_CAMERA_FRACTION_OFFSET + axis * Float.BYTES,
                     (float) (relative - step / LodVertex.STEPS_PER_UNIT));
         }
-        out.putInt(base + LodCullMath.WORLD_INFO_OFFSET, world.first);
-        out.putInt(base + LodCullMath.WORLD_INFO_OFFSET + Integer.BYTES, world.meshes.length);
+        out.putInt(base + LodCullMath.WORLD_INFO_OFFSET + Integer.BYTES, drawn ? 1 : 0);
         out.putFloat(base + LodCullMath.WORLD_INFO_OFFSET + 2 * Integer.BYTES, thresholdPixels);
         out.putFloat(base + LodCullMath.WORLD_INFO_OFFSET + 3 * Integer.BYTES, pixelsPerUnit);
     }
@@ -670,10 +1466,16 @@ public class LodRenderer {
         lock.lock();
         try {
             worlds.clear();
-            removedRanges.clear();
         } finally {
             lock.unlock();
         }
+        removedWorlds.clear();
+        clusterEntries.free();
+        historyEntries.free();
+        clusterEntries = new DeviceTable.Entries(LodCullMath.CLUSTER_ENTRY_SIZE);
+        historyEntries = new DeviceTable.Entries(WORD_SIZE);
+        hiddenSections.cleanup(state);
+        cellFlags.cleanup(state);
         history.cleanup(state);
         clusters.cleanup(state);
         arena.cleanup(state);

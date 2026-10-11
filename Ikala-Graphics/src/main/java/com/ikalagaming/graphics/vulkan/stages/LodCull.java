@@ -150,23 +150,25 @@ public class LodCull implements RenderStage {
             constants.putLong(
                     ShaderBindings.LodCull.PUSH_CONSTANT_VIEW_OFFSET,
                     frameData.cullView.deviceAddress);
+            constants.putLong(
+                    ShaderBindings.LodCull.PUSH_CONSTANT_CELL_FLAGS_OFFSET,
+                    lods.getCellFlags().getBuffer().deviceAddress);
+            constants.putLong(
+                    ShaderBindings.LodCull.PUSH_CONSTANT_HIDDEN_OFFSET,
+                    lods.getHiddenSections().getBuffer().deviceAddress);
             constants.putInt(ShaderBindings.LodCull.PUSH_CONSTANT_PHASE_OFFSET, phase);
             constants.putInt(
                     ShaderBindings.LodCull.PUSH_CONSTANT_CAPACITY_OFFSET, frameData.lodCapacity);
             // Early, the scene and every cascade; late, only the scene
             final int passes =
                     phase == ShaderBindings.Cull.PHASE_EARLY ? InstanceDrawUpdate.PASS_COUNT : 1;
-            for (int world = 0; world < frameData.lodWorldCount; ++world) {
-                constants.putInt(ShaderBindings.LodCull.PUSH_CONSTANT_WORLD_OFFSET, world);
-                vkCmdPushConstants(
-                        commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
-                final int groups =
-                        (frameData.lodClusterCounts[world]
-                                        + ShaderBindings.LodCull.WORKGROUP_SIZE
-                                        - 1)
-                                / ShaderBindings.LodCull.WORKGROUP_SIZE;
-                vkCmdDispatch(commandBuffer, groups, passes, 1);
-            }
+            vkCmdPushConstants(
+                    commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
+            // One thread per entry of the cluster table, over every world at once
+            final int groups =
+                    (frameData.lodCapacity + ShaderBindings.LodCull.WORKGROUP_SIZE - 1)
+                            / ShaderBindings.LodCull.WORKGROUP_SIZE;
+            vkCmdDispatch(commandBuffer, groups, passes, 1);
 
             // Draws read the commands and counts, the CPU reads the counters later, and next
             // frame's culling reads the visibility history

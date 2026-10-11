@@ -14,6 +14,10 @@
 //   pyramid, what is visible and wasn't drawn early is drawn now, and the history is updated.
 // Each draw is appended to its list's commands with an atomic count, which the draws read as
 // their count.
+//
+// While a live world catches up with its sections, a cell marked stale can't have its clusters
+// above the leaves drawn, a cluster whose parent is in a stale cell treats its parent's error as
+// infinite, and a hidden section's leaves aren't drawn, since the section draws itself.
 
 // See LodCullMath for the layout
 struct Cluster {
@@ -22,6 +26,9 @@ struct Cluster {
     vec4 parentBound;
     // x: error bits, y: parent error bits, z: mesh slot, w: the slot's generation
     uvec4 info;
+    // x: world slot + 1 (0 for an empty entry), y: cell slot, z: parent's cell slot (NONE for a
+    // root), w: section slot for a leaf (NONE above the leaves)
+    uvec4 place;
 };
 
 // See LodCullMath for the layout
@@ -30,7 +37,7 @@ struct World {
     vec4 eye;
     ivec4 cameraGrid;
     vec4 cameraFraction;
-    // x: first cluster, y: cluster count, z: threshold bits, w: pixels per unit bits
+    // x: unused, y: 1 if it is drawn, z: threshold bits, w: pixels per unit bits
     uvec4 info;
 };
 
@@ -75,6 +82,16 @@ layout(buffer_reference, std430, buffer_reference_align = 4) buffer Counts {
     uint counts[];
 };
 
+// Each cell slot's flags
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer CellFlags {
+    uint cellFlags[];
+};
+
+// One bit per section slot, set while the section draws itself
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Hidden {
+    uint hidden[];
+};
+
 // The frustum planes of each pass, six per pass, in render space. A point p is inside a plane
 // when dot(plane.xyz, p) + plane.w >= 0.
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Frusta {
@@ -101,11 +118,11 @@ layout(push_constant) uniform Constants {
     Counts countList;
     Frusta frusta;
     View view;
-    // Which world this dispatch culls
-    uint world;
+    CellFlags cellFlagTable;
+    Hidden hiddenTable;
     // PHASE_EARLY or PHASE_LATE
     uint phase;
-    // How many commands each list has room for
+    // How many entries the cluster table has, which is how many commands each list has room for
     uint capacity;
 };
 
@@ -113,6 +130,12 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 // A cluster without triangles
 const uint NO_MESH = 0xFFFFFFFFu;
+
+// A cell or section slot that isn't there
+const uint NONE = 0xFFFFFFFFu;
+
+// Set in a cell's flags while it is stale
+const uint FLAG_STALE = 1;
 
 // The phases, see the top
 const uint PHASE_EARLY = 0;
@@ -222,9 +245,15 @@ bool occluded(vec3 center, vec3 extents)
     return nearest > farthest;
 }
 
-// Append a cluster's mesh to a list's draw commands. The world's index goes in as the instance,
+// Whether a cell slot is there and stale
+bool stale(uint cell)
+{
+    return cell != NONE && (cellFlagTable.cellFlags[cell] & FLAG_STALE) != 0;
+}
+
+// Append a cluster's mesh to a list's draw commands. The world's slot goes in as the instance,
 // which the vertex shaders read their camera with.
-void draw(uint list, Mesh mesh)
+void draw(uint list, Mesh mesh, uint world)
 {
     uint index = atomicAdd(countList.counts[list], 1u);
     Command command;
@@ -238,23 +267,34 @@ void draw(uint list, Mesh mesh)
 
 void main()
 {
-    World w = worldTable.worlds[world];
-    uint clusterIndex = gl_GlobalInvocationID.x;
+    uint entry = gl_GlobalInvocationID.x;
     // Early, the scene then each cascade; late, only the scene
     uint pass = gl_GlobalInvocationID.y;
-    if (clusterIndex >= w.info.y) {
+    if (entry >= capacity) {
         return;
     }
-    uint entry = w.info.x + clusterIndex;
     Cluster cluster = clusterTable.clusters[entry];
+    if (cluster.place.x == 0) {
+        return;
+    }
+    uint world = cluster.place.x - 1;
+    World w = worldTable.worlds[world];
+    if (w.info.y == 0) {
+        return;
+    }
 
     // In the cut, from the observer
     float threshold = uintBitsToFloat(w.info.z);
     float pixelsPerUnit = uintBitsToFloat(w.info.w);
+    bool leaf = cluster.place.w != NONE;
+    bool selectable = leaf
+        ? (hiddenTable.hidden[cluster.place.w >> 5] & (1u << (cluster.place.w & 31u))) == 0
+        : !stale(cluster.place.y);
     float own = projected(uintBitsToFloat(cluster.info.x), cluster.bound, w.eye.xyz, pixelsPerUnit);
-    float parent =
-        projected(uintBitsToFloat(cluster.info.y), cluster.parentBound, w.eye.xyz, pixelsPerUnit);
-    bool selected = own <= threshold && parent > threshold;
+    float parent = stale(cluster.place.z)
+        ? uintBitsToFloat(0x7F800000u)
+        : projected(uintBitsToFloat(cluster.info.y), cluster.parentBound, w.eye.xyz, pixelsPerUnit);
+    bool selected = selectable && own <= threshold && parent > threshold;
 
     // A cluster with no triangles, or one whose mesh isn't there, draws nothing
     bool drawable = cluster.info.z != NO_MESH;
@@ -284,10 +324,10 @@ void main()
             }
             // With occlusion on, what wasn't visible last frame waits for the late test
             if ((view.flags & FLAG_OCCLUSION) == 0 || historyTable.history[entry] != 0) {
-                draw(LIST_SCENE_EARLY, mesh);
+                draw(LIST_SCENE_EARLY, mesh, world);
             }
         } else if (inView) {
-            draw(LIST_FIRST_CASCADE + pass - 1, mesh);
+            draw(LIST_FIRST_CASCADE + pass - 1, mesh, world);
         }
         return;
     }
@@ -300,6 +340,6 @@ void main()
     bool drawnEarly = historyTable.history[entry] != 0;
     historyTable.history[entry] = seen ? 1u : 0u;
     if (seen && !drawnEarly) {
-        draw(LIST_SCENE_LATE, mesh);
+        draw(LIST_SCENE_LATE, mesh, world);
     }
 }

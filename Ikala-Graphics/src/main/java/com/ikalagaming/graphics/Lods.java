@@ -60,6 +60,42 @@ public final class Lods {
     }
 
     /**
+     * Have this plugin's sections feed a live level of detail world, from now on and including the
+     * sections it already has, which are baked again. Their opaque blocks are then drawn by level
+     * of detail: region cells are rebuilt in the background as sections are submitted, rebaked and
+     * removed. A section near the observer whose newest bake isn't in the level of detail yet, as
+     * right after an edit, draws its own opaque blocks meanwhile, within {@link
+     * GraphicsSettings#lodOverrideDistance}. Sections must sit on the {@value
+     * Sections#SECTION_SIZE}-block grid to feed it. A plugin has one live world; removing it with
+     * {@link #remove} has its sections draw their opaque blocks themselves again.
+     *
+     * @return The live world's handle, the same one on later calls.
+     * @throws IllegalStateException If the plugin was unloaded, or the renderer isn't running.
+     */
+    public LodHandle fromSections() {
+        context.checkOpen();
+        final VulkanInstance renderer = renderer();
+        return new LodHandle(
+                renderer.getState()
+                        .sections
+                        .startLive(
+                                renderer.getState(),
+                                context.getOwnerKey(),
+                                GraphicsManager.getSettings().lodThresholdPixels));
+    }
+
+    /**
+     * How a live world is keeping up with its sections.
+     *
+     * @param world The world.
+     * @return Its numbers, or null if the handle is stale or the renderer isn't running.
+     */
+    public LodRenderer.LiveStats liveStats(@NonNull LodHandle world) {
+        final LodRenderer lods = lods();
+        return lods == null ? null : lods.liveStats(world.id());
+    }
+
+    /**
      * Set the most error, in pixels, a world's drawn clusters may have, from the next frame on.
      * Nothing happens if the handle is stale.
      *
@@ -128,6 +164,7 @@ public final class Lods {
     public void remove(@NonNull LodHandle world) {
         final VulkanInstance renderer = GraphicsManager.getRenderInstance();
         if (renderer != null && renderer.getState().lods != null) {
+            renderer.getState().sections.stopLive(context.getOwnerKey(), world.id());
             renderer.getState().lods.remove(world.id(), context.getOwnerKey());
         }
     }

@@ -2,6 +2,8 @@ package com.ikalagaming.graphics.lod;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ikalagaming.graphics.benchmark.SyntheticTerrain;
@@ -135,5 +137,75 @@ class LodStoreTest {
         store.rebuild();
         assertEquals(0, store.cellCount());
         assertEquals(0, store.snapshot().clusters().size());
+    }
+
+    /** A limited rebuild takes the nearest cells first, and leaves parents until none is dirty. */
+    @Test
+    void testLimitedRebuildNearestFirst() {
+        final LodStore store = store(DagTest.terrain(4), 1);
+        final double[] near = {0, 0, 0};
+        LodStore.Rebuilt first = store.rebuild(2, near);
+        assertEquals(2, first.built().size());
+        for (LodStore.CellKey key : first.built()) {
+            assertEquals(0, key.level());
+            assertTrue(key.x() - LodStore.BIAS <= 1 && key.z() - LodStore.BIAS <= 1, "" + key);
+        }
+        assertTrue(store.isDirty());
+        LodStore.Rebuilt last = first;
+        while (store.isDirty()) {
+            last = store.rebuild(2, near);
+        }
+        assertTrue(last.built().stream().anyMatch(key -> key.level() > 0), "Parents come last");
+        assertTrue(last.stale().isEmpty());
+        final LodDag all = withAll(store(DagTest.terrain(4), 1));
+        assertEquals(all.clusters().size(), store.snapshot().clusters().size());
+    }
+
+    /** Ancestors of a rebuilt cell whose parents wait are stale until they are rebuilt. */
+    @Test
+    void testStaleAncestors() {
+        final List<LodMesh> sections = DagTest.terrain(4);
+        final LodStore store = store(sections, 1);
+        store.rebuild();
+        final LodMesh a = sections.get(0);
+        final LodMesh b = sections.get(sections.size() - 1);
+        store.put(position(a), a);
+        store.put(position(b), b);
+        final LodStore.Rebuilt one = store.rebuild(1, a.getOrigin());
+        assertEquals(1, one.built().size());
+        assertFalse(one.stale().isEmpty());
+        for (LodStore.CellKey key : one.stale()) {
+            assertTrue(key.level() > 0);
+            assertTrue(store.contains(key));
+        }
+        final LodStore.Rebuilt rest = store.rebuild(1, a.getOrigin());
+        assertTrue(rest.stale().isEmpty());
+        assertTrue(rest.built().containsAll(one.stale()), "Every stale cell is rebuilt");
+    }
+
+    /** Pieces, cell by cell, give every cluster the same parent as the flattened DAG. */
+    @Test
+    void testPiecesMatchSnapshot() {
+        final LodStore store = store(DagTest.terrain(4), 1);
+        store.rebuild();
+        final LodDag dag = store.snapshot();
+        int id = 0;
+        int leaves = 0;
+        for (LodStore.CellKey key : store.cellKeys()) {
+            for (LodStore.PieceCluster piece : store.piece(key)) {
+                final LodDag.Cluster cluster = dag.clusters().get(id);
+                assertArrayEquals(cluster.corners(), piece.cluster().corners(), "" + id);
+                assertEquals(dag.parentError(id), piece.parentError(), 0, "" + id);
+                assertArrayEquals(dag.parentBound(id), piece.parentBound(), 0, "" + id);
+                assertEquals(dag.consumer(id) < 0, piece.parentCell() == null, "" + id);
+                if (cluster.level() == 0) {
+                    assertNotNull(piece.section());
+                    ++leaves;
+                }
+                ++id;
+            }
+        }
+        assertEquals(dag.clusters().size(), id);
+        assertTrue(leaves > 0);
     }
 }

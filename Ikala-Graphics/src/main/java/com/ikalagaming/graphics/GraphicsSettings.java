@@ -45,4 +45,11 @@ public class GraphicsSettings {
      * levels can't be seen.
      */
     public double lodThresholdPixels = 1;
+
+    /**
+     * How near the observer, in world units, a section feeding level of detail draws its own opaque
+     * blocks while its newest bake isn't in the level of detail yet, as right after an edit.
+     * Further away, changes show once the level of detail is rebuilt.
+     */
+    public double lodOverrideDistance = 32;
 }

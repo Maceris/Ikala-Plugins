@@ -171,18 +171,27 @@ public final class DeviceTable {
         entries.data.position(0).limit(count * entrySize);
         final StagingRing.Staging staging = state.stagingRing.stage(state, entries.data);
         state.deferFree(() -> state.stagingRing.free(state, staging));
-        // One region per entry can be far more than the stack holds, as when a whole world is
-        // placed
+        // Entries packed for consecutive indices go in one region, since whole ranges are often
+        // written at once and drivers and validation slow down with many regions. Even so there
+        // can be far more than the stack holds, as when a whole world is placed.
         VkBufferCopy.Buffer regions = VkBufferCopy.calloc(count);
         try {
-            for (int i = 0; i < count; ++i) {
-                regions.get(i)
-                        .srcOffset(staging.offset() + (long) i * entrySize)
-                        .dstOffset((long) entries.indices[i] * entrySize)
-                        .size(entrySize);
+            int used = 0;
+            int runStart = 0;
+            for (int i = 1; i <= count; ++i) {
+                if (i < count && entries.indices[i] == entries.indices[i - 1] + 1) {
+                    continue;
+                }
+                regions.get(used++)
+                        .srcOffset(staging.offset() + (long) runStart * entrySize)
+                        .dstOffset((long) entries.indices[runStart] * entrySize)
+                        .size((long) (i - runStart) * entrySize);
+                runStart = i;
             }
+            regions.limit(used);
             vkCmdCopyBuffer(commandBuffer, staging.buffer(), buffer.buffer, regions);
         } finally {
+            regions.limit(regions.capacity());
             regions.free();
         }
     }

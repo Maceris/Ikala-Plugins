@@ -10,6 +10,8 @@ import lombok.Getter;
 import lombok.NonNull;
 
 import java.util.Arrays;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * A deterministic made-up world for measuring the renderer, standing in for the factory plugin's
@@ -163,6 +165,15 @@ public final class SyntheticTerrain {
     /** Whether every triangle of each block type is on a face, so hiding all six hides it all. */
     private final boolean[] boxShaped = new boolean[BLOCK_TYPES];
 
+    /** Blocks changed from what the recipe makes, by {@link #editKey}. */
+    private final Map<Long, Byte> edits = new ConcurrentHashMap<>();
+
+    /** Bits each coordinate gets in an edit's key. */
+    private static final int KEY_BITS = 21;
+
+    /** The mask of one coordinate in an edit's key. */
+    private static final long KEY_MASK = (1L << KEY_BITS) - 1;
+
     /**
      * Set up a world.
      *
@@ -250,6 +261,12 @@ public final class SyntheticTerrain {
      * @return The block type.
      */
     public byte block(int x, int y, int z) {
+        if (!edits.isEmpty()) {
+            final Byte edited = edits.get(editKey(x, y, z));
+            if (edited != null) {
+                return edited;
+            }
+        }
         if (y > maxY()) {
             return AIR;
         }
@@ -262,6 +279,47 @@ public final class SyntheticTerrain {
             case CAVES -> caves(x, y, z);
             case GLASS -> glass(x, y, z);
         };
+    }
+
+    /**
+     * Change a block, as an edit would. Placements worked out afterward include it. Safe from any
+     * thread. Edits only show between {@link #minY()} and {@link #maxY()}, where sections are
+     * looked at.
+     *
+     * @param x The block's x.
+     * @param y The block's y.
+     * @param z The block's z.
+     * @param block The block type, {@link #AIR} to dig it out.
+     */
+    public void setBlock(int x, int y, int z, byte block) {
+        edits.put(editKey(x, y, z), block);
+    }
+
+    /**
+     * The highest block of a column that isn't air.
+     *
+     * @param x The column's x.
+     * @param z The column's z.
+     * @return Its y, or {@link #minY()} - 1 if the column is empty that far down.
+     */
+    public int top(int x, int z) {
+        int y = maxY();
+        while (y >= minY() && block(x, y, z) == AIR) {
+            --y;
+        }
+        return y;
+    }
+
+    /**
+     * The key of an edited block.
+     *
+     * @param x The block's x.
+     * @param y The block's y.
+     * @param z The block's z.
+     * @return The key.
+     */
+    private static long editKey(int x, int y, int z) {
+        return ((x & KEY_MASK) << (2 * KEY_BITS)) | ((y & KEY_MASK) << KEY_BITS) | (z & KEY_MASK);
     }
 
     /**
