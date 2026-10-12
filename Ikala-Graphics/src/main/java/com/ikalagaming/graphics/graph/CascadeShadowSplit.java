@@ -26,13 +26,17 @@ import org.joml.Vector4f;
  * every texel stays put on the ground and the shadow edges don't shimmer. The shadow map reaches
  * {@link #CASTER_REACH} further toward the sun than the sphere, so what stands outside the slice
  * still casts into it.
+ *
+ * <p>The far cascades are kept in place in the world by {@link SunShadowCache} instead, so what
+ * doesn't move is drawn into them only when something changes; see there. Each frame's cascade says
+ * which way it was placed and what of its map is drawn again.
  */
 @Getter
 public class CascadeShadowSplit {
     /** The number of partitions that we split the camera frustum into. */
     public static final int SHADOW_MAP_CASCADE_COUNT = 3;
 
-    /** The width and height of each cascade's shadow map, in texels. */
+    /** The width and height of a cascade's shadow map fitted to its slice each frame, in texels. */
     public static final int SHADOW_MAP_SIZE = 2048;
 
     /** The width of the shadow map in pixels. */
@@ -58,13 +62,13 @@ public class CascadeShadowSplit {
      * What each cascade's radius is rounded up to, in meters, so rounding error in the slice's
      * corners never changes it from frame to frame.
      */
-    private static final float RADIUS_STEP = 1 / 16f;
+    static final float RADIUS_STEP = 1 / 16f;
 
     /**
      * Texels left around each cascade's sphere: one for the snapping, two for the light stage's
      * filter.
      */
-    private static final int MARGIN_TEXELS = 3;
+    static final int MARGIN_TEXELS = 3;
 
     /**
      * The light projection and view matrix, from render space to the shadow map.
@@ -78,18 +82,63 @@ public class CascadeShadowSplit {
      *
      * @return The split distance.
      */
-    private float splitDistance;
+    float splitDistance;
 
     /**
      * How wide one texel of the shadow map is, in meters.
      *
      * @return The texel size.
      */
-    private float texelSize;
+    float texelSize;
+
+    /**
+     * How wide and high its shadow map is, in texels.
+     *
+     * @return The size.
+     */
+    int mapSize = SHADOW_MAP_SIZE;
+
+    /**
+     * Whether it is kept in place in the world, with a separate map for what moves.
+     *
+     * @return True if it is cached.
+     */
+    boolean cached;
+
+    /**
+     * What of its map is drawn this frame. A cascade that isn't cached is drawn whole every frame.
+     *
+     * @return The redraw.
+     */
+    SunShadowCache.Redraw redraw = SunShadowCache.Redraw.ALL;
+
+    /**
+     * The texels drawn again for {@link SunShadowCache.Redraw#PART}: min x, min y, max x, max y,
+     * the max exclusive, with y counting up like the light stage's map coordinates.
+     *
+     * @return The rectangle. Don't modify it.
+     */
+    final int[] redrawRect = new int[4];
+
+    /**
+     * What things that don't move are culled with this frame, from render space: the whole cascade,
+     * the part drawn again, or nothing.
+     *
+     * @return The matrix.
+     */
+    final Matrix4f staticCullMatrix;
+
+    /**
+     * Whether nothing that doesn't move is drawn this frame, so culling it rejects everything.
+     *
+     * @return True if none is.
+     */
+    boolean staticCulledAway;
 
     /** Create a new cascade shadow. */
     public CascadeShadowSplit() {
         projViewMatrix = new Matrix4f();
+        staticCullMatrix = new Matrix4f();
     }
 
     /**
@@ -171,63 +220,106 @@ public class CascadeShadowSplit {
 
         for (int i = 0; i < SHADOW_MAP_CASCADE_COUNT; ++i) {
             final float near = i == 0 ? Projection.Z_NEAR : depths[i - 1];
-            final float far = depths[i];
-
-            // The sphere around the slice, worked out in view space so turning can't change it
-            final Vector3f center = new Vector3f();
-            for (Vector3f ray : rays) {
-                center.fma(near, ray).fma(far, ray);
-            }
-            center.div(2f * rays.length);
-            float radius = 0;
-            for (Vector3f ray : rays) {
-                radius = Math.max(radius, new Vector3f(ray).mul(near).distance(center));
-                radius = Math.max(radius, new Vector3f(ray).mul(far).distance(center));
-            }
-            radius = (float) Math.ceil(radius / RADIUS_STEP) * RADIUS_STEP;
-            // Texels to spare on each side, since snapping moves the center by up to a texel and
-            // the light stage's filter reads two texels around a point
-            final float texelSize = 2 * radius / (SHADOW_MAP_SIZE - 2 * MARGIN_TEXELS);
-            final float extent = radius + MARGIN_TEXELS * texelSize;
-
-            // Snap the center to the texel grid in world space, in double precision
-            inverseView.transformPosition(center);
-            final Vector3d world = new Vector3d(center).add(cameraPosition);
-            lightRotation.transformPosition(world);
-            world.x = Math.floor(world.x / texelSize) * texelSize;
-            world.y = Math.floor(world.y / texelSize) * texelSize;
-            inverseLightRotation.transformPosition(world);
-            final Vector3f snapped =
-                    new Vector3f(
-                            (float) (world.x - cameraPosition.x()),
-                            (float) (world.y - cameraPosition.y()),
-                            (float) (world.z - cameraPosition.z()));
-
-            final float back = extent + CASTER_REACH;
-            final Vector3f eye =
-                    new Vector3f(snapped)
-                            .sub(
-                                    (float) (direction.x * back),
-                                    (float) (direction.y * back),
-                                    (float) (direction.z * back));
-            /*
-             * NOTE(ches) This has to be right handed to match the orthographic projection. With a left handed view,
-             * surfaces closer to the light ended up with larger depth values, so the shadow map kept the surfaces
-             * furthest from the light and shadows were drawn on top of the geometry casting them.
-             */
-            final Matrix4f lightView =
-                    new Matrix4f()
-                            .lookAt(
-                                    eye,
-                                    snapped,
-                                    new Vector3f((float) up.x, (float) up.y, (float) up.z));
-            final CascadeShadowSplit cascade = cascades[i];
-            cascade.projViewMatrix
-                    .setOrtho(-extent, extent, -extent, extent, 0, back + extent, true)
-                    .mul(lightView);
-            cascade.splitDistance = -far;
-            cascade.texelSize = texelSize;
+            fitSlice(
+                    cascades[i],
+                    near,
+                    depths[i],
+                    rays,
+                    inverseView,
+                    cameraPosition,
+                    direction,
+                    up,
+                    lightRotation,
+                    inverseLightRotation,
+                    SHADOW_MAP_SIZE);
         }
+    }
+
+    /**
+     * Fit one cascade around its slice of the view, to be drawn whole this frame.
+     *
+     * @param cascade The cascade to fill out.
+     * @param near The depth of the slice's near end.
+     * @param far The depth of the slice's far end.
+     * @param rays The view space rays through the screen's corners, see {@link #cornerRays}.
+     * @param inverseView The inverse of the camera's view matrix.
+     * @param cameraPosition The camera's world position.
+     * @param direction The way the sun's light travels, normalized.
+     * @param up The up direction of the light's view.
+     * @param lightRotation The light's rotation, from world directions to its view.
+     * @param inverseLightRotation The inverse of the light's rotation.
+     * @param mapSize The size of the cascade's map, in texels.
+     */
+    static void fitSlice(
+            @NonNull CascadeShadowSplit cascade,
+            float near,
+            float far,
+            @NonNull Vector3f @NonNull [] rays,
+            @NonNull Matrix4fc inverseView,
+            @NonNull Vector3dc cameraPosition,
+            @NonNull Vector3d direction,
+            @NonNull Vector3d up,
+            @NonNull Matrix4d lightRotation,
+            @NonNull Matrix4d inverseLightRotation,
+            int mapSize) {
+        // The sphere around the slice, worked out in view space so turning can't change it
+        final Vector3f center = new Vector3f();
+        for (Vector3f ray : rays) {
+            center.fma(near, ray).fma(far, ray);
+        }
+        center.div(2f * rays.length);
+        float radius = 0;
+        for (Vector3f ray : rays) {
+            radius = Math.max(radius, new Vector3f(ray).mul(near).distance(center));
+            radius = Math.max(radius, new Vector3f(ray).mul(far).distance(center));
+        }
+        radius = (float) Math.ceil(radius / RADIUS_STEP) * RADIUS_STEP;
+        // Texels to spare on each side, since snapping moves the center by up to a texel and
+        // the light stage's filter reads two texels around a point
+        final float texelSize = 2 * radius / (mapSize - 2 * MARGIN_TEXELS);
+        final float extent = radius + MARGIN_TEXELS * texelSize;
+
+        // Snap the center to the texel grid in world space, in double precision
+        inverseView.transformPosition(center);
+        final Vector3d world = new Vector3d(center).add(cameraPosition);
+        lightRotation.transformPosition(world);
+        world.x = Math.floor(world.x / texelSize) * texelSize;
+        world.y = Math.floor(world.y / texelSize) * texelSize;
+        inverseLightRotation.transformPosition(world);
+        final Vector3f snapped =
+                new Vector3f(
+                        (float) (world.x - cameraPosition.x()),
+                        (float) (world.y - cameraPosition.y()),
+                        (float) (world.z - cameraPosition.z()));
+
+        final float back = extent + CASTER_REACH;
+        final Vector3f eye =
+                new Vector3f(snapped)
+                        .sub(
+                                (float) (direction.x * back),
+                                (float) (direction.y * back),
+                                (float) (direction.z * back));
+        /*
+         * NOTE(ches) This has to be right handed to match the orthographic projection. With a left handed view,
+         * surfaces closer to the light ended up with larger depth values, so the shadow map kept the surfaces
+         * furthest from the light and shadows were drawn on top of the geometry casting them.
+         */
+        final Matrix4f lightView =
+                new Matrix4f()
+                        .lookAt(
+                                eye,
+                                snapped,
+                                new Vector3f((float) up.x, (float) up.y, (float) up.z));
+        cascade.projViewMatrix
+                .setOrtho(-extent, extent, -extent, extent, 0, back + extent, true)
+                .mul(lightView);
+        cascade.splitDistance = -far;
+        cascade.texelSize = texelSize;
+        cascade.mapSize = mapSize;
+        cascade.cached = false;
+        cascade.redraw = SunShadowCache.Redraw.ALL;
+        cascade.staticCullMatrix.set(cascade.projViewMatrix);
+        cascade.staticCulledAway = false;
     }
 
     /**
@@ -237,7 +329,7 @@ public class CascadeShadowSplit {
      * @param inverseProjection The inverse of the camera's projection matrix.
      * @return The four rays.
      */
-    private static Vector3f[] cornerRays(@NonNull Matrix4fc inverseProjection) {
+    static Vector3f[] cornerRays(@NonNull Matrix4fc inverseProjection) {
         final Vector3f[] rays = new Vector3f[4];
         int corner = 0;
         for (int y = -1; y <= 1; y += 2) {

@@ -49,6 +49,9 @@ import java.util.Map;
 
 public class GraphicsDebug extends GuiWindow {
 
+    /** Texels in a million, for the sun shadow cache's numbers. */
+    private static final double TEXELS_PER_MEGA = 1e6;
+
     public static final String WINDOW_NAME = "Graphics Debug";
 
     private final Checkbox fogEnabled;
@@ -312,6 +315,21 @@ public class GraphicsDebug extends GuiWindow {
                                     "Meshes hidden by occlusion: %,d",
                                     drawn[InstanceDrawUpdate.COUNTER_OCCLUDED]));
                     IkGui.text("Meshes in shadow cascades: " + shadows);
+                    final boolean cache = GraphicsManager.getSettings().sunShadowCache;
+                    if (IkGui.checkbox("Cache sun shadows", cache)) {
+                        GraphicsManager.getSettings().sunShadowCache = !cache;
+                    }
+                    IkGui.setItemTooltip(
+                            "Keep the far cascades in place in the world and draw what doesn't"
+                                    + " move into them only when it changes. Off, every cascade is"
+                                    + " drawn whole every frame.");
+                    final var cacheStats = renderer.getState().sunShadows.stats();
+                    IkGui.text(
+                            String.format(
+                                    "Sun shadow redraws: %,d whole, %,d in part, %,.1f M texels",
+                                    cacheStats.fullRedraws(),
+                                    cacheStats.partRedraws(),
+                                    cacheStats.texelsRedrawn() / TEXELS_PER_MEGA));
                     IkGui.text(
                             String.format(
                                     "Translucent meshes drawn: %,d",

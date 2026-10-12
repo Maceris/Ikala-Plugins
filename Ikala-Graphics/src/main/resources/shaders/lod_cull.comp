@@ -159,6 +159,9 @@ const uint LIST_SCENE_LATE = 1;
 const uint LIST_FIRST_CASCADE = 2;
 const uint LIST_COUNT = 5;
 
+// The passes, as in cull.comp: the cascades cull clusters by the planes for what doesn't move
+const uint PASS_COUNT = 4;
+
 // The counters after the lists' counts, see LodRenderer
 const uint COUNTER_SELECTED = LIST_COUNT;
 const uint COUNTER_TRIANGLES = LIST_COUNT + 1;
@@ -335,7 +338,8 @@ void main()
 
     vec3 center = cluster.tight.xyz + w.renderOffset.xyz;
     float radius = cluster.tight.w;
-    bool inView = inFrustum(pass, center, radius);
+    // Clusters never move, so a cascade culls them by its planes for what doesn't move
+    bool inView = inFrustum(pass > 0 ? PASS_COUNT + pass : pass, center, radius);
 
     if (phase == PHASE_EARLY) {
         if (pass == 0) {

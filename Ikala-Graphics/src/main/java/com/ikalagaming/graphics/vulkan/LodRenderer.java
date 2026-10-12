@@ -165,6 +165,9 @@ public class LodRenderer {
      */
     @Getter private final DeviceTable shownUnits;
 
+    /** Where what the clusters draw changed, for cached shadow maps. */
+    private final ShadowInvalidation shadows;
+
     /** Where each piece's clusters are in the tables. Render thread. */
     private final RangeAllocator ranges = new RangeAllocator(INITIAL_CLUSTERS, Integer.MAX_VALUE);
 
@@ -572,6 +575,10 @@ public class LodRenderer {
         cellFlags = new DeviceTable(state, "lod cell flags", WORD_SIZE, INITIAL_SLOTS);
         hiddenSections = new DeviceTable(state, "lod hidden sections", WORD_SIZE, INITIAL_SLOTS);
         shownUnits = new DeviceTable(state, "lod shown units", WORD_SIZE, INITIAL_SLOTS);
+        shadows =
+                state.shadowInvalidation != null
+                        ? state.shadowInvalidation
+                        : new ShadowInvalidation();
     }
 
     /**
@@ -986,6 +993,7 @@ public class LodRenderer {
         World removed;
         while ((removed = removedWorlds.poll()) != null) {
             for (Piece piece : removed.pieces.values()) {
+                invalidate(removed, piece);
                 retire(removed, piece);
             }
             removed.pieces.clear();
@@ -1218,7 +1226,9 @@ public class LodRenderer {
             }
         }
         for (int unit : residency.toShow()) {
-            setUnitBit(world.unitSlotOf[unit], true);
+            if (setUnitBit(world.unitSlotOf[unit], true)) {
+                invalidate(world, world.unitMembers.get(unit));
+            }
         }
         world.residencyNumbers =
                 new long[] {
@@ -1238,7 +1248,9 @@ public class LodRenderer {
      * @param unit The unit.
      */
     private void evict(@NonNull World world, int unit) {
-        setUnitBit(world.unitSlotOf[unit], false);
+        if (setUnitBit(world.unitSlotOf[unit], false)) {
+            invalidate(world, world.unitMembers.get(unit));
+        }
         for (Member member : world.unitMembers.get(unit)) {
             final Piece piece = member.piece();
             final MeshHandle mesh = piece.meshes[member.index()];
@@ -1256,13 +1268,14 @@ public class LodRenderer {
      *
      * @param slot The slot.
      * @param shown Whether its clusters may be drawn.
+     * @return True if the bit changed.
      */
-    private void setUnitBit(int slot, boolean shown) {
+    private boolean setUnitBit(int slot, boolean shown) {
         final int word = slot / LodCullMath.BITS_PER_WORD;
         final int bit = 1 << (slot % LodCullMath.BITS_PER_WORD);
         if (word >= unitWords.length) {
             if (!shown) {
-                return;
+                return false;
             }
             unitWords = Arrays.copyOf(unitWords, Math.max(word + 1, unitWords.length * 2));
         }
@@ -1270,6 +1283,59 @@ public class LodRenderer {
         if (unitWords[word] != value) {
             unitWords[word] = value;
             dirtyUnitWords.set(word);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Report where a piece's clusters are as changed, for cached shadow maps.
+     *
+     * @param world The world.
+     * @param piece The piece, or null for none.
+     */
+    private void invalidate(@NonNull World world, Piece piece) {
+        if (piece == null) {
+            return;
+        }
+        for (LodStore.PieceCluster cluster : piece.clusters) {
+            shadows.addSphere(world.origin, cluster.cluster().tight());
+        }
+    }
+
+    /**
+     * Report where a unit's clusters are as changed, for cached shadow maps.
+     *
+     * @param world The world.
+     * @param members The unit's clusters.
+     */
+    private void invalidate(@NonNull World world, @NonNull List<Member> members) {
+        for (Member member : members) {
+            shadows.addSphere(
+                    world.origin, member.piece().clusters[member.index()].cluster().tight());
+        }
+    }
+
+    /**
+     * Report the pieces of cells that became stale or stopped being, for cached shadow maps.
+     *
+     * @param world The world.
+     * @param before The stale cells before.
+     * @param after The stale cells after.
+     */
+    private void invalidateChanged(
+            @NonNull World world,
+            @NonNull Set<LodStore.CellKey> before,
+            @NonNull Set<LodStore.CellKey> after) {
+        for (LodStore.CellKey key : before) {
+            if (!after.contains(key)) {
+                invalidate(world, world.pieces.get(key));
+            }
+        }
+        for (LodStore.CellKey key : after) {
+            if (!before.contains(key)) {
+                invalidate(world, world.pieces.get(key));
+            }
         }
     }
 
@@ -1336,6 +1402,7 @@ public class LodRenderer {
         for (LodStore.CellKey key : going) {
             final Piece old = world.pieces.remove(key);
             if (old != null) {
+                invalidate(world, old);
                 retire(world, old);
             }
         }
@@ -1353,6 +1420,7 @@ public class LodRenderer {
         }
         for (int p = 0; p < batch.added().size(); ++p) {
             place(world, batch.added().get(p), meshes[p]);
+            invalidate(world, world.pieces.get(batch.added().get(p).key()));
         }
         for (LiveLod.Piece tops : batch.tops()) {
             final Piece piece = world.pieces.get(tops.key());
@@ -1363,8 +1431,10 @@ public class LodRenderer {
                 final int index = cluster.local() - piece.inputs;
                 piece.clusters[index] = cluster;
                 writeEntry(world, piece, index);
+                shadows.addSphere(world.origin, cluster.cluster().tight());
             }
         }
+        invalidateChanged(world, world.batchStale, batch.stale());
         world.batchStale = new HashSet<>(batch.stale());
         for (Map.Entry<LodStore.SectionPos, Long> entry : batch.covered().entrySet()) {
             world.covered.merge(entry.getKey(), entry.getValue(), Math::max);
@@ -1663,6 +1733,7 @@ public class LodRenderer {
             }
         }
         world.hidden = Set.copyOf(overrides);
+        invalidateChanged(world, world.overrideStale, stale);
         world.overrideStale = stale;
     }
 

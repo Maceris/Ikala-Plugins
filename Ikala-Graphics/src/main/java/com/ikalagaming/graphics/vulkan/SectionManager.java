@@ -171,6 +171,9 @@ public class SectionManager {
     /** Every live section, by id. */
     private final Map<Long, Section> sections = new HashMap<>();
 
+    /** Where changed sections are reported, for cached shadow maps. */
+    private final ShadowInvalidation shadows;
+
     /** Finished bakes, for the render thread. */
     private final Queue<Baked> baked = new ConcurrentLinkedQueue<>();
 
@@ -252,6 +255,16 @@ public class SectionManager {
 
     /** Create the manager and its worker threads. */
     public SectionManager() {
+        this(new ShadowInvalidation());
+    }
+
+    /**
+     * Set up the manager, reporting where sections change to cached shadow maps.
+     *
+     * @param shadows Where changed sections are reported.
+     */
+    public SectionManager(@NonNull ShadowInvalidation shadows) {
+        this.shadows = shadows;
         final int threads = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
         final AtomicInteger counter = new AtomicInteger();
         workers =
@@ -418,6 +431,9 @@ public class SectionManager {
                 return false;
             }
             sections.remove(id);
+            if (section.current != null) {
+                shadows.addSection(section.current.origin());
+            }
             forget(section);
             final Live world = live.get(owner);
             if (world != null && section.position != null) {
@@ -758,6 +774,7 @@ public class SectionManager {
                 }
                 section.current = pending;
                 section.pending = null;
+                shadows.addSection(pending.origin());
                 if (!pending.model().getMeshDataList().isEmpty()) {
                     section.instance =
                             state.instances
@@ -952,6 +969,7 @@ public class SectionManager {
                     overrides.get(section.owner).add(section.position);
                     if (section.opaqueInstance == null
                             && !current.opaqueModel().getMeshDataList().isEmpty()) {
+                        shadows.addSection(current.origin());
                         section.opaqueInstance =
                                 state.instances
                                         .getRegistry()
@@ -966,6 +984,9 @@ public class SectionManager {
                 } else if (section.opaqueInstance != null) {
                     removing.add(new Removal(section.owner, section.opaqueInstance));
                     section.opaqueInstance = null;
+                    if (current != null) {
+                        shadows.addSection(current.origin());
+                    }
                 }
             }
             // Sections taken out show as gaps near the observer until the level of detail drops

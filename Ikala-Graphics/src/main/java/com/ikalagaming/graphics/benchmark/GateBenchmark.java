@@ -10,6 +10,7 @@ import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.SectionHandle;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.graph.MeshData;
+import com.ikalagaming.graphics.graph.SunShadowCache;
 import com.ikalagaming.graphics.lod.CrackCheck;
 import com.ikalagaming.graphics.lod.LodCache;
 import com.ikalagaming.graphics.lod.LodStore;
@@ -420,6 +421,9 @@ public final class GateBenchmark {
     /** Digs a second when they are made on their own from the startup property, by default. */
     private static final double PROPERTY_DIG_RATE = 2;
 
+    /** Texels in a million. */
+    private static final double TEXELS_PER_MEGA = 1e6;
+
     /** Nanoseconds in a second. */
     private static final double NANOS_PER_SECOND = 1e9;
 
@@ -471,6 +475,15 @@ public final class GateBenchmark {
 
     /** Where the camera turns. */
     private volatile Vector3d cameraPosition;
+
+    /** How fast the camera walks along x while it turns, in meters a second, 0 to stand still. */
+    private double walkSpeed;
+
+    /** How far above the ground a walking camera keeps, in blocks. */
+    private static final double WALK_CLEARANCE = 6;
+
+    /** What the sun shadow cache had done when measuring started. */
+    @Nullable private SunShadowCache.Stats shadowCacheAtStart;
 
     /** How long laying out and composing took. */
     private volatile long buildMilliseconds;
@@ -714,6 +727,12 @@ public final class GateBenchmark {
                         Boolean.getBoolean(PROPERTY + ".lod"),
                         Boolean.getBoolean(PROPERTY + ".gate"));
                 current.digsLeft = Integer.getInteger(PROPERTY + ".digs", 0);
+                current.walkSpeed = Double.parseDouble(System.getProperty(PROPERTY + ".walk", "0"));
+                // Off, every cascade is drawn whole every frame, for comparing against the cache
+                final String sunCache = System.getProperty(PROPERTY + ".sunCache");
+                if (sunCache != null) {
+                    GraphicsManager.getSettings().sunShadowCache = Boolean.parseBoolean(sunCache);
+                }
                 current.propertyDigRate =
                         Double.parseDouble(
                                 System.getProperty(
@@ -937,12 +956,13 @@ public final class GateBenchmark {
                 if (--settleLeft <= 0) {
                     phase = Phase.MEASURING;
                     measureStart = System.nanoTime();
+                    shadowCacheAtStart = renderer().getState().sunShadows.stats();
                     renderer().getState().frameTimings.setListener(this::record);
                 }
             }
             case MEASURING -> {
                 final double seconds = (System.nanoTime() - measureStart) / 1e9;
-                placeCamera(scene, seconds / TURN_SECONDS);
+                placeCamera(scene, seconds / TURN_SECONDS, seconds);
                 logResidency(seconds);
                 if (seconds >= TURN_SECONDS) {
                     renderer().getState().frameTimings.setListener(null);
@@ -999,7 +1019,26 @@ public final class GateBenchmark {
      * @param turns How far around, from 0 to 1.
      */
     private void placeCamera(@NonNull Scene scene, double turns) {
-        final Vector3d position = cameraPosition;
+        placeCamera(scene, turns, 0);
+    }
+
+    /**
+     * Put the camera where it turns, walked along x for a while if it walks, facing part of the way
+     * around.
+     *
+     * @param scene The scene.
+     * @param turns How far around, from 0 to 1.
+     * @param seconds How long it has walked.
+     */
+    private void placeCamera(@NonNull Scene scene, double turns, double seconds) {
+        final Vector3d position = new Vector3d(cameraPosition);
+        final SyntheticTerrain world = terrain;
+        if (walkSpeed > 0 && world != null) {
+            position.x += walkSpeed * seconds;
+            final int x = (int) Math.floor(position.x);
+            final int z = (int) Math.floor(position.z);
+            position.y = Math.max(position.y, world.top(x, z) + 1 + WALK_CLEARANCE);
+        }
         scene.getCamera().setPosition(position.x, position.y, position.z);
         scene.getCamera().setRotation(PITCH, (float) (2 * Math.PI * Math.min(1, turns)));
     }
@@ -1370,6 +1409,20 @@ public final class GateBenchmark {
 
     /** Work out the results, report them, and release everything. */
     private void finish() {
+        final SunShadowCache.Stats start = shadowCacheAtStart;
+        if (start != null) {
+            final SunShadowCache.Stats end = renderer().getState().sunShadows.stats();
+            log.info(
+                    "Gate benchmark sun shadow cache while measuring: {} whole cascades and {} parts"
+                            + " drawn again, {} M texels, over {} frames, walking {} m/s",
+                    end.fullRedraws() - start.fullRedraws(),
+                    end.partRedraws() - start.partRedraws(),
+                    String.format(
+                            "%.1f",
+                            (end.texelsRedrawn() - start.texelsRedrawn()) / TEXELS_PER_MEGA),
+                    frames.get(),
+                    walkSpeed);
+        }
         final List<FrameTimings.Timing> timings = new ArrayList<>();
         final List<String> order = new ArrayList<>();
         order.add(FrameTimings.GPU_TOTAL);

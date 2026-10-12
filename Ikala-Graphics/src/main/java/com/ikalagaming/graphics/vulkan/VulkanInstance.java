@@ -22,6 +22,7 @@ import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
+import com.ikalagaming.graphics.graph.SunShadowCache;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.IkIO;
 import com.ikalagaming.graphics.gui.flags.ConfigFlags;
@@ -1171,9 +1172,11 @@ public class VulkanInstance {
         state.textureUploads = new TextureUploads();
         state.geometry = new GeometryArena(state, MeshData.VERTEX_SIZE_IN_BYTES);
         state.bakedGeometry = new GeometryArena(state, BakedVertex.SIZE);
+        state.shadowInvalidation = new ShadowInvalidation();
+        state.sunShadows = new SunShadowCache();
         state.lods = new LodRenderer(state);
         state.bakeSources = new BakeSources();
-        state.sections = new SectionManager();
+        state.sections = new SectionManager(state.shadowInvalidation);
         state.instances = new InstanceTable(state);
         state.frameTimings = new FrameTimings(state);
         textureLoader = new TextureLoaderVulkan(state);
@@ -2080,6 +2083,8 @@ public class VulkanInstance {
         checkError(vkDeviceWaitIdle(state.device.logical));
         renderConfig = config;
         pipeline = pipelineManager.getPipeline(config);
+        // The new pipeline may not have drawn shadows while things changed
+        state.sunShadows.invalidateAll();
     }
 
     /**

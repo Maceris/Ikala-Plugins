@@ -76,4 +76,10 @@ public class GraphicsSettings {
      * lod-cache-max-mb} config value.
      */
     public long lodCacheMaxBytes = 2048L * 1024 * 1024;
+
+    /**
+     * Whether the sun's far shadow cascades are kept in place in the world, so what doesn't move is
+     * drawn into them only when it changes. Off, every cascade is drawn whole every frame.
+     */
+    public boolean sunShadowCache = true;
 }

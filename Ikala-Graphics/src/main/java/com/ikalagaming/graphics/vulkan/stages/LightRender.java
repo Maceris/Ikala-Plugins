@@ -262,6 +262,15 @@ public class LightRender implements RenderStage {
             uniformData.putFloat(
                     offset + ShaderBindings.Light.CascadeShadow.TEXEL_SIZE,
                     cascadeShadowSplits[i].getTexelSize());
+            // What moves is only drawn separately for a cached cascade, and only if there is any
+            final TextureInfoVulkan dynamicMap = frameData.cascadeDynamicShadows[i];
+            uniformData.putInt(
+                    offset + ShaderBindings.Light.CascadeShadow.DYNAMIC_MAP_INDEX,
+                    cascadeShadowSplits[i].isCached()
+                                    && frameData.dynamicShadowCasters
+                                    && dynamicMap != null
+                            ? dynamicMap.bindlessIndex
+                            : -1);
         }
 
         TextureInfoVulkan[] gBuffer = frameData.gBuffer.textures();

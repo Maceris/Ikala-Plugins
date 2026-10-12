@@ -157,6 +157,11 @@ const uint LIST_FIRST_CASCADE = 2;
 const uint LIST_TRANSLUCENT = 5;
 const uint LIST_COUNT = 6;
 
+// The passes: the scene, then each shadow cascade. The frusta buffer holds each pass's planes, then
+// each pass's planes for baked meshes, which cached cascades cull to the part they draw again, see
+// InstanceDrawUpdate.FRUSTA_COUNT
+const uint PASS_COUNT = 4;
+
 // The counter of meshes the occlusion test hid, after one counter per list
 const uint COUNTER_OCCLUDED = LIST_COUNT;
 
@@ -295,7 +300,9 @@ void main()
         vec3 localExtents = (mesh.aabbMax.xyz - mesh.aabbMin.xyz) * 0.5;
         vec3 center = (model * vec4(localCenter, 1.0)).xyz;
         vec3 extents = absolute * localExtents;
-        bool inView = inFrustum(pass, center, extents);
+        // A cascade's baked meshes are culled by their own planes, see PASS_COUNT
+        uint planes = pass > 0 && modelMesh.kind != KIND_STANDARD ? PASS_COUNT + pass : pass;
+        bool inView = inFrustum(planes, center, extents);
         uint entry = instance.info.w + i;
         uint material = overrides.overrides[entry];
         if (material == 0) {

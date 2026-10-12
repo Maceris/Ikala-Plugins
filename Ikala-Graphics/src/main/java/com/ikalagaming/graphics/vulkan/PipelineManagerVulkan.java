@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.*;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
+import com.ikalagaming.graphics.graph.SunShadowCache;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.FontAtlas;
 import com.ikalagaming.graphics.vulkan.stages.*;
@@ -83,6 +84,12 @@ public class PipelineManagerVulkan {
      * frame from writing them while an earlier one reads them.
      */
     private TextureInfoVulkan[] shadowMaps;
+
+    /**
+     * The cascades' maps of what moves, for the cached cascades, null for the others. Shared
+     * between frames like the shadow maps.
+     */
+    private TextureInfoVulkan[] dynamicShadowMaps;
 
     private final AnimationRender stageAnimationRender;
     private final FilterRender stageFilterRender;
@@ -375,28 +382,66 @@ public class PipelineManagerVulkan {
     }
 
     /**
-     * Create the cascade shadow maps, cleared to the far plane and ready to be sampled, and give
-     * them bindless slots. They are a fixed size, so they don't change when the window resizes.
+     * Create the cascade shadow maps, and the maps of what moves for the cached cascades, cleared
+     * to the far plane and ready to be sampled, and give them bindless slots. They are a fixed
+     * size, so they don't change when the window resizes.
      *
      * @param state The Vulkan state.
      */
     private void createShadowMaps(@NonNull VulkanState state) {
         shadowMaps = new TextureInfoVulkan[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
+        dynamicShadowMaps = new TextureInfoVulkan[CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT];
+        final List<TextureInfoVulkan> all = new ArrayList<>();
         for (int i = 0; i < shadowMaps.length; i++) {
+            final boolean cached = SunShadowCache.CACHED[i];
             shadowMaps[i] =
-                    createRenderTarget(
+                    createShadowMap(
                             state,
-                            CascadeShadowSplit.SHADOW_MAP_WIDTH,
-                            CascadeShadowSplit.SHADOW_MAP_HEIGHT,
-                            DEPTH_FORMAT,
-                            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
-                                    | VK_IMAGE_USAGE_SAMPLED_BIT
-                                    | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-                            VK_IMAGE_ASPECT_DEPTH_BIT,
-                            VK_FILTER_LINEAR,
-                            VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER);
-            state.bindlessTextures.register(state, shadowMaps[i]);
+                            cached
+                                    ? SunShadowCache.STATIC_MAP_SIZE
+                                    : CascadeShadowSplit.SHADOW_MAP_SIZE);
+            all.add(shadowMaps[i]);
+            if (cached) {
+                dynamicShadowMaps[i] = createShadowMap(state, SunShadowCache.DYNAMIC_MAP_SIZE);
+                all.add(dynamicShadowMaps[i]);
+            }
         }
+        state.sunShadows.invalidateAll();
+        clearShadowMaps(state, all.toArray(new TextureInfoVulkan[0]));
+    }
+
+    /**
+     * Create one shadow map and give it a bindless slot.
+     *
+     * @param state The Vulkan state.
+     * @param size Its width and height, in texels.
+     * @return The map, in the undefined layout.
+     */
+    private TextureInfoVulkan createShadowMap(@NonNull VulkanState state, int size) {
+        final TextureInfoVulkan map =
+                createRenderTarget(
+                        state,
+                        size,
+                        size,
+                        DEPTH_FORMAT,
+                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+                                | VK_IMAGE_USAGE_SAMPLED_BIT
+                                | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                        VK_IMAGE_ASPECT_DEPTH_BIT,
+                        VK_FILTER_LINEAR,
+                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER);
+        state.bindlessTextures.register(state, map);
+        return map;
+    }
+
+    /**
+     * Clear shadow maps to the far plane and leave them ready to be sampled.
+     *
+     * @param state The Vulkan state.
+     * @param shadowMaps The maps, in the undefined layout.
+     */
+    private static void clearShadowMaps(
+            @NonNull VulkanState state, @NonNull TextureInfoVulkan[] shadowMaps) {
 
         // The light stage samples these even if the shadow stage never draws to them
         state.immediateCommands.submit(
@@ -471,6 +516,13 @@ public class PipelineManagerVulkan {
             shadowMap.destroy(state);
         }
         shadowMaps = null;
+        for (TextureInfoVulkan shadowMap : dynamicShadowMaps) {
+            if (shadowMap != null) {
+                state.bindlessTextures.release(state, shadowMap);
+                shadowMap.destroy(state);
+            }
+        }
+        dynamicShadowMaps = null;
     }
 
     private void createShaderData(@NonNull Window window, @NonNull VulkanState state) {
@@ -583,6 +635,7 @@ public class PipelineManagerVulkan {
             @NonNull PerFrameData data,
             @NonNull VkExtent3D imageExtent) {
         data.cascadeShadows = shadowMaps;
+        data.cascadeDynamicShadows = dynamicShadowMaps;
         for (int shadow = 0; shadow < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; shadow++) {
             data.cascadeShadowSplits[shadow] = new CascadeShadowSplit();
         }
@@ -713,6 +766,7 @@ public class PipelineManagerVulkan {
             @NonNull VulkanState state, @NonNull PerFrameData data) {
         // Shared between frames, cleaned up separately
         data.cascadeShadows = null;
+        data.cascadeDynamicShadows = null;
 
         if (data.gBuffer != null) {
             for (TextureInfoVulkan info : data.gBuffer.textures()) {

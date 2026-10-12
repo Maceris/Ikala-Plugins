@@ -247,25 +247,9 @@ vec3 heatColor(uint count) {
         : mix(vec3(0, 1, 0), vec3(1, 0, 0), heat * 2.0 - 1.0);
 }
 
-// How much of the sun reaches a point through one cascade, from 0 in full shadow to 1, filtered over
-// a 3 by 3 grid of bilinear taps, which read a 4 by 4 block of texels with four gathers. Below 0 if
-// the point is outside the cascade's shadow map.
-float cascadeVisibility(vec3 renderPosition, vec3 renderNormal, int idx) {
-    CascadeShadow cascade = cascadeShadowSplits[idx];
-    vec3 offset = renderNormal * (cascade.texelSize * NORMAL_OFFSET_TEXELS);
-    vec4 shadowMapPosition = cascade.projViewMatrix * vec4(renderPosition + offset, 1);
-    // The shadow maps aren't drawn with a flipped viewport, and Vulkan depth is already [0, 1]
-    vec3 ndc = shadowMapPosition.xyz / shadowMapPosition.w;
-    vec2 uv = ndc.xy * 0.5 + 0.5;
-    if (any(lessThan(uv, vec2(0))) || any(greaterThan(uv, vec2(1)))) {
-        return -1.0;
-    }
-    // Further toward the sun than the map reaches, nothing can shadow it; past its far end,
-    // nothing was drawn
-    if (ndc.z <= 0.0 || ndc.z >= 1.0) {
-        return 1.0;
-    }
-    int map = idx == 0 ? shadowMap0Index : (idx == 1 ? shadowMap1Index : shadowMap2Index);
+// How much of a shadow map lets the sun through at a point, filtered over a 3 by 3 grid of
+// bilinear taps, which read a 4 by 4 block of texels with four gathers
+float filteredVisibility(int map, vec2 uv, float depth) {
     vec2 size = vec2(textureSize(bindlessTextures[nonuniformEXT(map)], 0));
     vec2 texel = uv * size - 0.5;
     vec2 base = floor(texel);
@@ -278,7 +262,7 @@ float cascadeVisibility(vec3 renderPosition, vec3 renderNormal, int idx) {
             // Between texels base - 1 + 2g and base + 2g, so the gather reads those four
             vec2 at = (base + vec2(2 * gx, 2 * gy)) / size;
             vec4 stored = textureGather(bindlessTextures[nonuniformEXT(map)], at, 0);
-            vec4 through = step(vec4(ndc.z), stored);
+            vec4 through = step(vec4(depth), stored);
             // Gathers come back as (left, bottom), (right, bottom), (right, top), (left, top),
             // counting rows up from the lower one
             lit[2 * gx][2 * gy + 1] = through.x;
@@ -297,6 +281,32 @@ float cascadeVisibility(vec3 renderPosition, vec3 renderNormal, int idx) {
         }
     }
     return sum / 9.0;
+}
+
+// How much of the sun reaches a point through one cascade, from 0 in full shadow to 1, filtered as
+// filteredVisibility does. Below 0 if the point is outside the cascade's shadow map.
+float cascadeVisibility(vec3 renderPosition, vec3 renderNormal, int idx) {
+    CascadeShadow cascade = cascadeShadowSplits[idx];
+    vec3 offset = renderNormal * (cascade.texelSize * NORMAL_OFFSET_TEXELS);
+    vec4 shadowMapPosition = cascade.projViewMatrix * vec4(renderPosition + offset, 1);
+    // The shadow maps aren't drawn with a flipped viewport, and Vulkan depth is already [0, 1]
+    vec3 ndc = shadowMapPosition.xyz / shadowMapPosition.w;
+    vec2 uv = ndc.xy * 0.5 + 0.5;
+    if (any(lessThan(uv, vec2(0))) || any(greaterThan(uv, vec2(1)))) {
+        return -1.0;
+    }
+    // Further toward the sun than the map reaches, nothing can shadow it; past its far end,
+    // nothing was drawn
+    if (ndc.z <= 0.0 || ndc.z >= 1.0) {
+        return 1.0;
+    }
+    int map = idx == 0 ? shadowMap0Index : (idx == 1 ? shadowMap1Index : shadowMap2Index);
+    float visibility = filteredVisibility(map, uv, ndc.z);
+    // What moves is drawn into its own map at the same place; either can block the sun
+    if (cascade.dynamicMapIndex >= 0) {
+        visibility *= filteredVisibility(cascade.dynamicMapIndex, uv, ndc.z);
+    }
+    return visibility;
 }
 
 // How much of the sun reaches a point, from 0 in full shadow to 1. Past the shadow distance,

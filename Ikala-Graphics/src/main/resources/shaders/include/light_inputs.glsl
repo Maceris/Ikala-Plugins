@@ -39,6 +39,9 @@ struct CascadeShadow {
     float splitDistance;
     // How wide one texel of the cascade's shadow map is, in meters
     float texelSize;
+    // The bindless index of the cascade's map of what moves, at the same place as its shadow map,
+    // or -1 for none, see SunShadowCache
+    int dynamicMapIndex;
 };
 
 layout(set = 0, binding = 0) uniform Uniforms {

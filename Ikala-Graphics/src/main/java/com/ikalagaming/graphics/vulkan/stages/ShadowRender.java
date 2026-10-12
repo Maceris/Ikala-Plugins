@@ -9,6 +9,7 @@ import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakedVertex;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.MeshData;
+import com.ikalagaming.graphics.graph.SunShadowCache;
 import com.ikalagaming.graphics.lod.LodVertex;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.*;
@@ -25,8 +26,11 @@ import java.nio.LongBuffer;
 import java.util.Arrays;
 
 /**
- * Renders the scene depth from the directional light into each cascade shadow map. The shadow maps
- * are left in the read only layout for the light stage.
+ * Renders the scene depth from the directional light into each cascade shadow map. The near cascade
+ * is drawn whole every frame. The cached ones, see {@link SunShadowCache}, keep what doesn't move
+ * in their maps, drawn again whole or in part only when the cache says, and draw what moves into
+ * their maps of what moves every frame there is any. The shadow maps are left in the read only
+ * layout for the light stage.
  */
 @Slf4j
 public class ShadowRender implements RenderStage {
@@ -151,72 +155,153 @@ public class ShadowRender implements RenderStage {
                 new int[] {ShaderBindings.Shadow.MODEL_MATRICES_BINDING},
                 writtenBuffers[vulkanState.frameIndex]);
 
-        final TextureInfoVulkan[] shadowMaps = frameData.cascadeShadows;
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            // The light stage of an earlier frame may still be reading them
-            transitionShadowMaps(
-                    commandBuffer,
-                    shadowMaps,
-                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                    VK_ACCESS_2_NONE,
-                    VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
-                            | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                    VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT
-                            | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                    VK_IMAGE_LAYOUT_UNDEFINED,
-                    VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                    stack);
-
             ByteBuffer pushConstants = stack.calloc(ShaderBindings.Shadow.PUSH_CONSTANTS_SIZE);
             pushConstants.putLong(
                     ShaderBindings.Shadow.PUSH_CONSTANT_VISIBLE_OFFSET,
                     frameData.visibleInstances.deviceAddress);
             for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
-                cascadeShadowSplits[i]
-                        .getProjViewMatrix()
+                final CascadeShadowSplit cascade = cascadeShadowSplits[i];
+                cascade.getProjViewMatrix()
                         .get(
                                 ShaderBindings.Shadow.PUSH_CONSTANT_PROJECTION_VIEW_MATRIX_OFFSET,
                                 pushConstants);
-                renderCascade(
-                        commandBuffer,
-                        vulkanState,
-                        shadowMaps[i],
-                        InstanceDrawUpdate.LIST_FIRST_CASCADE + i,
-                        pushConstants);
+                final int list = InstanceDrawUpdate.LIST_FIRST_CASCADE + i;
+                final TextureInfoVulkan map = frameData.cascadeShadows[i];
+                if (!cascade.isCached()) {
+                    // Everything, drawn whole every frame; what was there is thrown away
+                    beginWriting(commandBuffer, map, VK_IMAGE_LAYOUT_UNDEFINED, stack);
+                    renderMap(
+                            commandBuffer,
+                            vulkanState,
+                            map,
+                            cascade.getMapSize(),
+                            null,
+                            list,
+                            pushConstants,
+                            true,
+                            true);
+                    endWriting(commandBuffer, map, stack);
+                    continue;
+                }
+                if (cascade.getRedraw() != SunShadowCache.Redraw.NONE) {
+                    // What doesn't move, kept from frame to frame, so it is drawn over
+                    beginWriting(commandBuffer, map, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, stack);
+                    renderMap(
+                            commandBuffer,
+                            vulkanState,
+                            map,
+                            cascade.getMapSize(),
+                            cascade.getRedraw() == SunShadowCache.Redraw.PART
+                                    ? cascade.getRedrawRect()
+                                    : null,
+                            list,
+                            pushConstants,
+                            true,
+                            false);
+                    endWriting(commandBuffer, map, stack);
+                }
+                final TextureInfoVulkan dynamicMap = frameData.cascadeDynamicShadows[i];
+                if (frameData.dynamicShadowCasters && dynamicMap != null) {
+                    beginWriting(commandBuffer, dynamicMap, VK_IMAGE_LAYOUT_UNDEFINED, stack);
+                    renderMap(
+                            commandBuffer,
+                            vulkanState,
+                            dynamicMap,
+                            SunShadowCache.DYNAMIC_MAP_SIZE,
+                            null,
+                            list,
+                            pushConstants,
+                            false,
+                            true);
+                    endWriting(commandBuffer, dynamicMap, stack);
+                }
             }
-
-            transitionShadowMaps(
-                    commandBuffer,
-                    shadowMaps,
-                    VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
-                            | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                    VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                    VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                    VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                    VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                    VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
-                    stack);
         }
     }
 
     /**
-     * Draw the scene depth into one cascade's shadow map.
+     * Make a shadow map ready to draw into, once the light stage of an earlier frame is done
+     * reading it.
+     *
+     * @param commandBuffer The command buffer to record into.
+     * @param map The map.
+     * @param oldLayout Its layout: undefined to throw away what it holds, read only to keep it.
+     * @param stack The stack to allocate on.
+     */
+    private static void beginWriting(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull TextureInfoVulkan map,
+            int oldLayout,
+            @NonNull MemoryStack stack) {
+        transitionShadowMaps(
+                commandBuffer,
+                new TextureInfoVulkan[] {map},
+                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                VK_ACCESS_2_NONE,
+                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
+                        | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT
+                        | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                oldLayout,
+                VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                stack);
+    }
+
+    /**
+     * Leave a shadow map drawn into ready for the light stage to read.
+     *
+     * @param commandBuffer The command buffer to record into.
+     * @param map The map.
+     * @param stack The stack to allocate on.
+     */
+    private static void endWriting(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull TextureInfoVulkan map,
+            @NonNull MemoryStack stack) {
+        transitionShadowMaps(
+                commandBuffer,
+                new TextureInfoVulkan[] {map},
+                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT
+                        | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+                stack);
+    }
+
+    /**
+     * Draw the scene depth into a shadow map, whole or in part.
      *
      * @param commandBuffer The command buffer to record into.
      * @param state The Vulkan state.
      * @param shadowMap The shadow map to render into, as a depth attachment.
+     * @param size The map's width and height, in texels.
+     * @param rect The texels to draw again, min x, min y, max x, max y, or null for the whole map,
+     *     which is cleared first. A part is cleared and drawn, and the rest kept.
      * @param list Which visible list the cascade is, to find its draw commands.
      * @param pushConstants The push constants, with the cascade's matrix already filled out.
+     * @param statics Whether to draw what doesn't move: baked sections and level of detail.
+     * @param dynamics Whether to draw what moves: standard meshes and listed models.
      */
-    private void renderCascade(
+    private void renderMap(
             @NonNull VkCommandBuffer commandBuffer,
             @NonNull VulkanState state,
             @NonNull TextureInfoVulkan shadowMap,
+            int size,
+            int[] rect,
             int list,
-            @NonNull ByteBuffer pushConstants) {
+            @NonNull ByteBuffer pushConstants,
+            boolean statics,
+            boolean dynamics) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
-        final int width = CascadeShadowSplit.SHADOW_MAP_WIDTH;
-        final int height = CascadeShadowSplit.SHADOW_MAP_HEIGHT;
+        final boolean whole = rect == null;
+        final int x0 = whole ? 0 : rect[0];
+        final int y0 = whole ? 0 : rect[1];
+        final int width = whole ? size : rect[2] - rect[0];
+        final int height = whole ? size : rect[3] - rect[1];
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkRenderingAttachmentInfo depthAttachment =
@@ -224,25 +309,45 @@ public class ShadowRender implements RenderStage {
                             .sType$Default()
                             .imageView(shadowMap.view)
                             .imageLayout(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL)
-                            .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
+                            .loadOp(
+                                    whole
+                                            ? VK_ATTACHMENT_LOAD_OP_CLEAR
+                                            : VK_ATTACHMENT_LOAD_OP_LOAD)
                             .storeOp(VK_ATTACHMENT_STORE_OP_STORE);
             depthAttachment.clearValue().depthStencil().depth(1.0f);
             VkRenderingInfo renderingInfo =
                     VkRenderingInfo.calloc(stack)
                             .sType$Default()
-                            .renderArea(area -> area.extent().set(width, height))
+                            .renderArea(
+                                    area -> {
+                                        area.offset().set(x0, y0);
+                                        area.extent().set(width, height);
+                                    })
                             .layerCount(1)
                             .pDepthAttachment(depthAttachment);
             vkCmdBeginRendering(commandBuffer, renderingInfo);
+
+            if (!whole) {
+                // Clear just the part drawn again
+                VkClearAttachment.Buffer clear = VkClearAttachment.calloc(1, stack);
+                clear.get(0).aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT);
+                clear.get(0).clearValue().depthStencil().depth(1.0f);
+                VkClearRect.Buffer clearRect = VkClearRect.calloc(1, stack);
+                clearRect.get(0).layerCount(1);
+                clearRect.get(0).rect().offset().set(x0, y0);
+                clearRect.get(0).rect().extent().set(width, height);
+                vkCmdClearAttachments(commandBuffer, clear, clearRect);
+            }
 
             if (frameData.meshSlotCount + frameData.bakedSlotCount > 0
                     || !frameData.modelDrawInfo.isEmpty()
                     || LodRenderer.hasDraws(frameData)) {
                 // Not flipped, so the light stage can use the shadow map coordinates as is
                 VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
-                viewports.get(0).width(width).height(height).minDepth(0).maxDepth(1);
+                viewports.get(0).width(size).height(size).minDepth(0).maxDepth(1);
                 vkCmdSetViewport(commandBuffer, 0, viewports);
                 VkRect2D.Buffer scissors = VkRect2D.calloc(1, stack);
+                scissors.get(0).offset().set(x0, y0);
                 scissors.get(0).extent().set(width, height);
                 vkCmdSetScissor(commandBuffer, 0, scissors);
 
@@ -264,7 +369,7 @@ public class ShadowRender implements RenderStage {
                 LongBuffer vertexOffsets = stack.callocLong(1);
 
                 // Level of detail clusters, the cut the scene sees, in this cascade's frustum
-                if (LodRenderer.hasDraws(frameData)) {
+                if (statics && LodRenderer.hasDraws(frameData)) {
                     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lodPipeline);
                     state.lods.draw(
                             commandBuffer,
@@ -278,6 +383,9 @@ public class ShadowRender implements RenderStage {
                 // one command per mesh slot. Standard last, which the listed models need.
                 for (int k = MeshKind.ALL.length - 1; k >= 0; --k) {
                     final MeshKind kind = MeshKind.ALL[k];
+                    if (kind.isBaked() ? !statics : !dynamics) {
+                        continue;
+                    }
                     final int slots =
                             InstanceDrawUpdate.slotsOf(
                                     kind, frameData.meshSlotCount, frameData.bakedSlotCount);
@@ -310,8 +418,10 @@ public class ShadowRender implements RenderStage {
                             slots,
                             InstanceDrawUpdate.DRAW_COMMAND_SIZE);
                 }
-                SceneRender.drawListedModels(
-                        commandBuffer, state, frameData, vertexBuffers, vertexOffsets);
+                if (dynamics) {
+                    SceneRender.drawListedModels(
+                            commandBuffer, state, frameData, vertexBuffers, vertexOffsets);
+                }
             }
 
             vkCmdEndRendering(commandBuffer);

@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshKind;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakeSources;
+import com.ikalagaming.graphics.graph.SunShadowCache;
 import com.ikalagaming.graphics.vulkan.stages.LightCull;
 
 import lombok.NonNull;
@@ -46,6 +47,12 @@ public class VulkanState {
 
     /** Level of detail worlds, their clusters and their draws. */
     public LodRenderer lods = null;
+
+    /** Where things that don't move changed, for the cached shadow maps. */
+    public ShadowInvalidation shadowInvalidation = null;
+
+    /** The sun's cascades kept in place in the world, see {@link SunShadowCache}. */
+    public SunShadowCache sunShadows = null;
 
     /** The CPU copies of meshes that sections can be baked from. */
     public BakeSources bakeSources = null;

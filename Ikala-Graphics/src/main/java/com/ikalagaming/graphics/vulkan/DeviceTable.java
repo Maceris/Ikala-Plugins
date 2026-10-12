@@ -49,6 +49,12 @@ public final class DeviceTable {
      */
     @Getter private SharedBuffer buffer;
 
+    /**
+     * How many bytes the table's buffer was made with. Its allocation may be bigger, but copies and
+     * fills must stay within the buffer.
+     */
+    private long bufferBytes;
+
     /** Whether the table has been cleared, since new device memory holds whatever it held. */
     private boolean cleared;
 
@@ -120,9 +126,8 @@ public final class DeviceTable {
             @NonNull VulkanState state, @NonNull String name, int entrySize, int initialEntries) {
         this.name = name;
         this.entrySize = entrySize;
-        buffer =
-                SharedBuffer.allocateDeviceLocal(
-                        (long) Math.max(1, initialEntries) * entrySize, state, USAGE);
+        bufferBytes = (long) Math.max(1, initialEntries) * entrySize;
+        buffer = SharedBuffer.allocateDeviceLocal(bufferBytes, state, USAGE);
     }
 
     /**
@@ -133,9 +138,7 @@ public final class DeviceTable {
      * @return False if the table is cleared, big enough, and nothing changed.
      */
     public boolean hasWork(int capacity, @NonNull Entries entries) {
-        return !cleared
-                || (long) capacity * entrySize > buffer.allocationInfo.size()
-                || entries.count > 0;
+        return !cleared || (long) capacity * entrySize > bufferBytes || entries.count > 0;
     }
 
     /**
@@ -155,13 +158,15 @@ public final class DeviceTable {
             @NonNull Entries entries,
             @NonNull MemoryStack stack) {
         if (!cleared) {
-            vkCmdFillBuffer(commandBuffer, buffer.buffer, 0, buffer.allocationInfo.size(), 0);
+            vkCmdFillBuffer(commandBuffer, buffer.buffer, 0, bufferBytes, 0);
             cleared = true;
             transferBarrier(commandBuffer, stack);
         }
         final long needed = (long) capacity * entrySize;
-        if (needed > buffer.allocationInfo.size()) {
-            buffer = grown(state, commandBuffer, buffer, needed, stack);
+        if (needed > bufferBytes) {
+            final long size = Math.max(needed, bufferBytes * 2);
+            buffer = grown(state, commandBuffer, buffer, bufferBytes, size, stack);
+            bufferBytes = size;
             transferBarrier(commandBuffer, stack);
         }
         final int count = entries.count;
@@ -203,7 +208,8 @@ public final class DeviceTable {
      * @param state The Vulkan state.
      * @param commandBuffer The frame's command buffer.
      * @param old The table.
-     * @param needed How many bytes it must hold.
+     * @param oldSize How many bytes the old buffer was made with.
+     * @param size How many bytes the new one holds.
      * @param stack The stack to allocate on.
      * @return The table to use from now on.
      */
@@ -211,10 +217,9 @@ public final class DeviceTable {
             @NonNull VulkanState state,
             @NonNull VkCommandBuffer commandBuffer,
             @NonNull SharedBuffer old,
-            long needed,
+            long oldSize,
+            long size,
             @NonNull MemoryStack stack) {
-        final long oldSize = old.allocationInfo.size();
-        final long size = Math.max(needed, oldSize * 2);
         log.debug("Growing the {} table from {} to {} bytes", name, oldSize, size);
         SharedBuffer bigger = SharedBuffer.allocateDeviceLocal(size, state, old.usage);
         VkBufferCopy.Buffer region = VkBufferCopy.calloc(1, stack);

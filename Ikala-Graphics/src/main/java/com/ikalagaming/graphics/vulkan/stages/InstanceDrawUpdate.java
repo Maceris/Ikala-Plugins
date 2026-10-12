@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.vulkan.stages;
 
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.MeshKind;
 import com.ikalagaming.graphics.Window;
@@ -73,6 +74,13 @@ public class InstanceDrawUpdate implements RenderStage {
 
     /** How many frusta are culled against: the scene, then each shadow cascade. */
     public static final int PASS_COUNT = 1 + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT;
+
+    /**
+     * How many frusta the culling buffer holds: each pass's, then each pass's again for what
+     * doesn't move, which cached cascades cull to the part they draw again. The scene's second one
+     * is unused.
+     */
+    public static final int FRUSTA_COUNT = 2 * PASS_COUNT;
 
     /** The visible list of what the scene draws before the depth pyramid is built. */
     public static final int LIST_SCENE_EARLY = 0;
@@ -249,8 +257,17 @@ public class InstanceDrawUpdate implements RenderStage {
         frameData.modelDrawInfo.clear();
         readCounters(frameData, instances);
 
-        // Culling needs the cascades before the shadow stage draws them
-        CascadeShadowSplit.updateCascadeShadows(frameData.cascadeShadowSplits, scene);
+        // Culling needs the cascades before the shadow stage draws them, and the cache needs to
+        // know what changed before it decides what to draw again
+        vulkanState.shadowInvalidation.drain(vulkanState.sunShadows::invalidate);
+        vulkanState.sunShadows.plan(
+                frameData.cascadeShadowSplits,
+                scene.getProjection().getInverseProjectionMatrix(),
+                scene.getCamera().getInvViewMatrix(),
+                scene.getCamera().getPosition(),
+                scene.getSceneLights().getDirLight().getDirection(),
+                CascadeShadowSplit.shadowDistance(scene),
+                GraphicsManager.getSettings().sunShadowCache);
 
         final InstanceTable.Snapshot snapshot = instances.getSnapshot();
         final MeshRegistry meshes = vulkanState.geometry.getRegistry();
@@ -297,6 +314,9 @@ public class InstanceDrawUpdate implements RenderStage {
             }
         }
 
+        frameData.dynamicShadowCasters =
+                !listed.isEmpty() || hasStandardInstances(snapshot.models());
+
         // Lay out the listed models after the culled lists
         final int culledCommands = culledCommandCount(meshSlots, bakedSlots);
         int visibleCount = LIST_COUNT * culledEntries;
@@ -337,7 +357,7 @@ public class InstanceDrawUpdate implements RenderStage {
                 (long) commandCount * DRAW_COMMAND_SIZE, vulkanState);
         frameData.animationOffsets.ensureCapacity((long) poseCount * Integer.BYTES, vulkanState);
         frameData.cullFrusta.ensureCapacity(
-                (long) PASS_COUNT * ShaderBindings.Cull.PLANES_PER_PASS * 4 * Float.BYTES,
+                (long) FRUSTA_COUNT * ShaderBindings.Cull.PLANES_PER_PASS * 4 * Float.BYTES,
                 vulkanState);
         frameData.cullCounters.ensureCapacity((long) COUNTER_COUNT * Integer.BYTES, vulkanState);
         writeMaterialTransparency(scene, vulkanState, frameData);
@@ -526,12 +546,12 @@ public class InstanceDrawUpdate implements RenderStage {
         final FloatBuffer planes =
                 MemoryUtil.memFloatBuffer(
                         frameData.cullFrusta.allocationInfo.pMappedData(),
-                        PASS_COUNT * ShaderBindings.Cull.PLANES_PER_PASS * 4);
+                        FRUSTA_COUNT * ShaderBindings.Cull.PLANES_PER_PASS * 4);
         final float[] out = new float[ShaderBindings.Cull.PLANES_PER_PASS * 4];
         if (disabled) {
             FrustumPlanes.acceptAll(out);
-            for (int pass = 0; pass < PASS_COUNT; ++pass) {
-                planes.put(pass * out.length, out);
+            for (int frustum = 0; frustum < FRUSTA_COUNT; ++frustum) {
+                planes.put(frustum * out.length, out);
             }
             return;
         }
@@ -547,7 +567,36 @@ public class InstanceDrawUpdate implements RenderStage {
             final Matrix4fc cascade = cascades[i].getProjViewMatrix();
             FrustumPlanes.extract(cascade, out);
             planes.put((1 + i) * out.length, out);
+            // What doesn't move is only culled into a cascade drawn again, and only where it is
+            if (cascades[i].isStaticCulledAway()) {
+                FrustumPlanes.rejectAll(out);
+            } else {
+                FrustumPlanes.extract(cascades[i].getStaticCullMatrix(), out);
+            }
+            planes.put((PASS_COUNT + 1 + i) * out.length, out);
         }
+    }
+
+    /**
+     * Whether any instance not drawn from listed commands has a standard mesh, which moves and so
+     * is drawn into the cascades' maps of what moves.
+     *
+     * @param models The models with instances.
+     * @return True if one does.
+     */
+    private static boolean hasStandardInstances(@NonNull List<InstanceTable.ModelCount> models) {
+        for (InstanceTable.ModelCount modelCount : models) {
+            if (modelCount.instanceCount() == 0 || modelCount.model().isAnimated()) {
+                continue;
+            }
+            for (MeshData mesh : modelCount.model().getMeshDataList()) {
+                final MeshHandle handle = mesh.getMesh();
+                if (handle != null && handle.kind() == MeshKind.STANDARD) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

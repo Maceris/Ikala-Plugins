@@ -172,6 +172,15 @@ public class PerFrameData {
     public CascadeShadowSplit[] cascadeShadowSplits;
     public TextureInfoVulkan[] cascadeShadows;
 
+    /**
+     * The cascades' maps of what moves, drawn every frame, for the cached cascades; null for one
+     * that isn't cached. Shared between frames like the cascade maps.
+     */
+    public TextureInfoVulkan[] cascadeDynamicShadows;
+
+    /** Whether anything that moves casts shadows this frame: standard meshes or listed models. */
+    public boolean dynamicShadowCasters;
+
     /** Base color, normal, tangent, material, and depth. */
     public GBuffer gBuffer;
 

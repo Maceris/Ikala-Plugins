@@ -70,6 +70,20 @@ public final class FrustumPlanes {
     }
 
     /**
+     * Planes that reject everything, for a pass that draws nothing of some kind.
+     *
+     * @param out Receives the planes, {@link #FLOATS} floats.
+     */
+    public static void rejectAll(float @NonNull [] out) {
+        for (int i = 0; i < 6; ++i) {
+            out[i * 4] = 0;
+            out[i * 4 + 1] = 0;
+            out[i * 4 + 2] = 0;
+            out[i * 4 + 3] = -1;
+        }
+    }
+
+    /**
      * Planes that accept everything, for drawing without culling.
      *
      * @param out Receives the planes, {@link #FLOATS} floats.

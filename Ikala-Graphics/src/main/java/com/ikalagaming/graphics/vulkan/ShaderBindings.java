@@ -638,11 +638,17 @@ public class ShaderBindings {
             public static final int TEXEL_SIZE = SPLIT_DISTANCE + Float.BYTES;
 
             /**
+             * The bindless index of the cascade's map of what moves, at the same place as its
+             * shadow map, or -1 for none this frame.
+             */
+            public static final int DYNAMIC_MAP_INDEX = TEXEL_SIZE + Float.BYTES;
+
+            /**
              * The distance between elements of an array of these structs. Array elements are padded
              * out to 16 bytes under std140 rules.
              */
             public static final int ARRAY_STRIDE =
-                    (int) SharedBuffer.align(TEXEL_SIZE + Float.BYTES);
+                    (int) SharedBuffer.align(DYNAMIC_MAP_INDEX + Integer.BYTES);
 
             /** Private constructor so this class is not instantiated. */
             private CascadeShadow() {
