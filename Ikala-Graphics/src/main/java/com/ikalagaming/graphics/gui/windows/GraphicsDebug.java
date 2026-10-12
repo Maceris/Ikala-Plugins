@@ -52,6 +52,18 @@ public class GraphicsDebug extends GuiWindow {
     /** Texels in a million, for the sun shadow cache's numbers. */
     private static final double TEXELS_PER_MEGA = 1e6;
 
+    /** The brightest the ambient light slider goes, in cd/m^2. */
+    private static final float MAX_AMBIENT_INTENSITY = 2;
+
+    /** The ambient light intensity slider's value. */
+    private final float[] ambientIntensity = new float[1];
+
+    /** The ambient light color picker's value, red, green, blue. */
+    private final float[] ambientColor = new float[3];
+
+    /** The sky light floor slider's value. Render thread only. */
+    private static final float[] SKY_LIGHT_FLOOR = new float[1];
+
     public static final String WINDOW_NAME = "Graphics Debug";
 
     private final Checkbox fogEnabled;
@@ -298,7 +310,7 @@ public class GraphicsDebug extends GuiWindow {
                 if (drawn.length == InstanceDrawUpdate.COUNTER_COUNT) {
                     StringBuilder shadows = new StringBuilder();
                     for (int i = InstanceDrawUpdate.LIST_FIRST_CASCADE;
-                            i < InstanceDrawUpdate.LIST_TRANSLUCENT;
+                            i < InstanceDrawUpdate.LIST_SKY;
                             ++i) {
                         shadows.append(i == InstanceDrawUpdate.LIST_FIRST_CASCADE ? "" : " / ")
                                 .append(String.format("%,d", drawn[i]));
@@ -425,6 +437,7 @@ public class GraphicsDebug extends GuiWindow {
                 directionalLightY.draw(width, height);
                 directionalLightZ.draw(width, height);
                 directionalLightIntensity.draw(width, height);
+                drawAmbientControls();
                 if (!renderingScene) {
                     IkGui.endDisabled();
                 }
@@ -716,6 +729,36 @@ public class GraphicsDebug extends GuiWindow {
                 "Tint each pixel by how many lights its cluster lists, from blue for one to red for "
                         + DebugVisualizers.HEAT_MAP_FULL
                         + " or more.");
+
+        // Sky light under cover, from the sky occlusion map
+        final var settings = GraphicsManager.getSettings();
+        if (IkGui.checkbox("Sky occlusion", settings.skyOcclusion)) {
+            settings.skyOcclusion = !settings.skyOcclusion;
+        }
+        IkGui.setItemTooltip(
+                "Dim ambient light where something stands above a point, from a map of what"
+                        + " doesn't move drawn from straight above, so caves and rooms aren't lit"
+                        + " like open ground.");
+        IkGui.sameLine();
+        if (IkGui.checkbox("Sky occlusion view", visualizers.isSkyOcclusionView())) {
+            visualizers.setSkyOcclusionView(!visualizers.isSkyOcclusionView());
+        }
+        IkGui.setItemTooltip("Show how much sky light reaches each pixel, in gray.");
+        SKY_LIGHT_FLOOR[0] = (float) settings.skyLightFloor;
+        if (IkGui.sliderFloat("Sky light under cover", SKY_LIGHT_FLOOR, 0, 1)) {
+            settings.skyLightFloor = SKY_LIGHT_FLOOR[0];
+        }
+        IkGui.setItemTooltip("The least ambient light a point well under cover gets.");
+        final var skyRenderer = GraphicsManager.getRenderInstance();
+        if (skyRenderer != null && skyRenderer.getState().skyOcclusion != null) {
+            final var skyStats = skyRenderer.getState().skyOcclusion.stats();
+            IkGui.text(
+                    String.format(
+                            "Sky map redraws: %,d whole, %,d in part, %,.1f M texels",
+                            skyStats.fullRedraws(),
+                            skyStats.partRedraws(),
+                            skyStats.texelsRedrawn() / TEXELS_PER_MEGA));
+        }
     }
 
     /**
@@ -868,6 +911,28 @@ public class GraphicsDebug extends GuiWindow {
         scene.getSceneLights().setDirLight(lodPreviousSun);
         scene.getSceneLights().setAmbientLight(lodPreviousAmbient);
         GraphicsManager.swapPipeline(lodPreviousPipeline);
+    }
+
+    /** Edit the scene's ambient light: how bright it is, and its color. */
+    private void drawAmbientControls() {
+        final Scene scene = GraphicsManager.getScene();
+        if (scene == null) {
+            return;
+        }
+        final AmbientLight ambient = scene.getSceneLights().getAmbientLight();
+        ambientIntensity[0] = ambient.getIntensity();
+        if (IkGui.sliderFloat("Ambient intensity", ambientIntensity, 0, MAX_AMBIENT_INTENSITY)) {
+            ambient.setIntensity(ambientIntensity[0]);
+        }
+        IkGui.setItemTooltip(
+                "Light arriving equally from everywhere, dimmed under cover by sky occlusion.");
+        final Vector3f color = ambient.getColor();
+        ambientColor[0] = color.x;
+        ambientColor[1] = color.y;
+        ambientColor[2] = color.z;
+        if (IkGui.colorEdit3("Ambient color", ambientColor)) {
+            color.set(ambientColor[0], ambientColor[1], ambientColor[2]);
+        }
     }
 
     /** Run the gate benchmark and show what it found. */

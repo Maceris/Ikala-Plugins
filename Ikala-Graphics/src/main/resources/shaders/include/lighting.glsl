@@ -19,6 +19,13 @@ const float NORMAL_OFFSET_TEXELS = 1.5;
 // How much of each cascade's slice, at its far end, blends into the next cascade, or for the last
 // one into no shadow, so the change in detail doesn't show as a line
 const float CASCADE_BLEND = 0.1;
+// How far below the highest thing over it a point must be before it loses sky light, in meters,
+// and over how many meters below that it goes from all of it to none. Match SkyOcclusion.
+const float SKY_BIAS = 0.5;
+const float SKY_FADE = 4.0;
+// How far to move a point out along its normal before looking it up in the sky map, in meters, so
+// a pit's walls look up through the pit rather than into the ground beside it
+const float SKY_NORMAL_OFFSET = 0.25;
 const float PI = 3.1415926535897932384626433832795;
 // How strong a fully specular dielectric's reflection is head on, per unit of the material's
 // specular value: 0.5 gives 4%. Matches AmbientMath.DIELECTRIC_SPECULAR_SCALE.
@@ -340,6 +347,35 @@ float sunVisibility(vec3 viewPosition, vec3 renderPosition, vec3 renderNormal) {
     return visibility;
 }
 
+// How much of the sky reaches a point, from 0 well under cover to 1 in the open, from how far below
+// the highest thing over it the point is, averaged over a 4 by 4 block of the sky map's texels with
+// four gathers so the edges of cover are soft
+float skyVisibility(vec3 renderPosition, vec3 renderNormal) {
+    if (skyMapIndex < 0) {
+        return 1.0;
+    }
+    vec4 at = skyProjViewMatrix * vec4(renderPosition + renderNormal * SKY_NORMAL_OFFSET, 1);
+    vec3 ndc = at.xyz / at.w;
+    vec2 uv = ndc.xy * 0.5 + 0.5;
+    if (any(lessThan(uv, vec2(0))) || any(greaterThan(uv, vec2(1)))) {
+        return 1.0;
+    }
+    vec2 size = vec2(textureSize(bindlessTextures[nonuniformEXT(skyMapIndex)], 0));
+    vec2 base = floor(uv * size - 0.5);
+    float sum = 0.0;
+    for (int gy = 0; gy < 2; ++gy) {
+        for (int gx = 0; gx < 2; ++gx) {
+            vec2 gather = (base + vec2(2 * gx, 2 * gy)) / size;
+            vec4 stored = textureGather(bindlessTextures[nonuniformEXT(skyMapIndex)], gather, 0);
+            // Depth grows downward from the map's eye, so below the top is positive
+            vec4 covered = (vec4(ndc.z) - stored) * skyDepthRange;
+            vec4 shade = smoothstep(vec4(SKY_BIAS), vec4(SKY_BIAS + SKY_FADE), covered);
+            sum += dot(vec4(1.0) - shade, vec4(0.25));
+        }
+    }
+    return sum / 4.0;
+}
+
 // Light a surface, in linear light. Positions, normals and tangents are in view space, except the
 // render space position for the shadow lookup.
 //
@@ -351,6 +387,11 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
     // Only the directional light casts shadows, and in full shadow none of it arrives
     vec3 renderNormal = normalize((invViewMatrix * vec4(normal, 0)).xyz);
     float sunVisible = sunVisibility(viewPosition, renderPosition, renderNormal);
+    // Past the cascades' reach, the sky map is all that can tell the sun is covered
+    float sky = skyVisibility(renderPosition, renderNormal);
+    if (-viewPosition.z >= -cascadeShadowSplits[NUM_CASCADES - 1].splitDistance) {
+        sunVisible = min(sunVisible, sky);
+    }
     vec3 color = calcDirLight(baseColor.xyz, material, directionalLight, viewPosition, normal, tangent, bitangent)
         * sunVisible;
 
@@ -362,9 +403,9 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
         Light light = lights[clusterData[firstIndex + i]];
         color += calcLight(baseColor.xyz, material, light, viewPosition, normal, tangent, bitangent);
     }
-    // Ambient light arrives equally from everywhere
+    // Ambient light arrives equally from everywhere the sky can be seen, and dimly under cover
     float nDotV = max(dot(normal, normalize(-viewPosition)), MIN_N_DOT_V);
-    vec3 ambient = ambientLight.intensity * ambientLight.color
+    vec3 ambient = ambientLight.intensity * ambientLight.color * mix(skyLightFloor, 1.0, sky)
         * ambientReflectance(sRGBToLinear(baseColor.rgb), material, nDotV);
     vec3 finalColor = ambient + color;
 

@@ -82,4 +82,16 @@ public class GraphicsSettings {
      * drawn into them only when it changes. Off, every cascade is drawn whole every frame.
      */
     public boolean sunShadowCache = true;
+
+    /**
+     * Whether ambient light is dimmed where something stands above a point, from the sky occlusion
+     * map, so caves and rooms aren't lit like open ground.
+     */
+    public boolean skyOcclusion = true;
+
+    /**
+     * The least ambient light a point well under cover gets, as a part of open ground's, from 0 for
+     * none to 1 for no dimming.
+     */
+    public double skyLightFloor = 0.25;
 }

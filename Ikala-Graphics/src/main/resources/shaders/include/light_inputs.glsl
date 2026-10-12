@@ -66,6 +66,15 @@ layout(set = 0, binding = 0) uniform Uniforms {
     int shadowMap2Index;
     // (CLUSTERS_Z - 1) / ln(viewDistance / FIRST_SLICE_DEPTH)
     float clusterLogScale;
+
+    // The sky occlusion map, see SkyOcclusion: from render space to the map, which looks straight
+    // down, its bindless index or -1 for none, how far down it reaches in meters, the least sky
+    // light a covered point gets, and nonzero to show sky light in gray
+    mat4 skyProjViewMatrix;
+    int skyMapIndex;
+    float skyDepthRange;
+    float skyLightFloor;
+    int skyOcclusionView;
 };
 
 layout(std430, set = 0, binding = 1) readonly buffer Lights {

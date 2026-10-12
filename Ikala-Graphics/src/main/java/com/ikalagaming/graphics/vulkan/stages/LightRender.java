@@ -239,6 +239,22 @@ public class LightRender implements RenderStage {
                 ShaderBindings.Light.CLUSTER_LOG_SCALE_OFFSET,
                 ClusterMath.logScale(scene.getViewDistance()));
 
+        final CascadeShadowSplit sky = frameData.skyView;
+        sky.getProjViewMatrix()
+                .get(ShaderBindings.Light.SKY_PROJECTION_VIEW_MATRIX_OFFSET, uniformData);
+        uniformData.putInt(
+                ShaderBindings.Light.SKY_MAP_INDEX_OFFSET,
+                GraphicsManager.getSettings().skyOcclusion && frameData.skyMap != null
+                        ? frameData.skyMap.bindlessIndex
+                        : -1);
+        uniformData.putFloat(ShaderBindings.Light.SKY_DEPTH_RANGE_OFFSET, sky.getDepthRange());
+        uniformData.putFloat(
+                ShaderBindings.Light.SKY_LIGHT_FLOOR_OFFSET,
+                (float) GraphicsManager.getSettings().skyLightFloor);
+        uniformData.putInt(
+                ShaderBindings.Light.SKY_OCCLUSION_VIEW_OFFSET,
+                scene.getDebugVisualizers().isSkyOcclusionView() ? 1 : 0);
+
         Fog fog = scene.getFog();
         offset = ShaderBindings.Light.FOG_OFFSET;
         fog.getColor().get(offset + ShaderBindings.Light.Fog.COLOR, uniformData);

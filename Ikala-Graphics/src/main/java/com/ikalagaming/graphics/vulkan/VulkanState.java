@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshKind;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakeSources;
+import com.ikalagaming.graphics.graph.SkyOcclusion;
 import com.ikalagaming.graphics.graph.SunShadowCache;
 import com.ikalagaming.graphics.vulkan.stages.LightCull;
 
@@ -53,6 +54,9 @@ public class VulkanState {
 
     /** The sun's cascades kept in place in the world, see {@link SunShadowCache}. */
     public SunShadowCache sunShadows = null;
+
+    /** The sky occlusion map's place in the world, see {@link SkyOcclusion}. */
+    public SkyOcclusion skyOcclusion = null;
 
     /** The CPU copies of meshes that sections can be baked from. */
     public BakeSources bakeSources = null;

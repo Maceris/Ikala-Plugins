@@ -9,6 +9,7 @@ import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakedVertex;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.MeshData;
+import com.ikalagaming.graphics.graph.SkyOcclusion;
 import com.ikalagaming.graphics.graph.SunShadowCache;
 import com.ikalagaming.graphics.lod.LodVertex;
 import com.ikalagaming.graphics.scene.Scene;
@@ -216,6 +217,28 @@ public class ShadowRender implements RenderStage {
                             true);
                     endWriting(commandBuffer, dynamicMap, stack);
                 }
+            }
+
+            // The sky occlusion map, what doesn't move from straight above, when it is due
+            final CascadeShadowSplit sky = frameData.skyView;
+            if (frameData.skyMap != null && sky.getRedraw() != SunShadowCache.Redraw.NONE) {
+                sky.getProjViewMatrix()
+                        .get(
+                                ShaderBindings.Shadow.PUSH_CONSTANT_PROJECTION_VIEW_MATRIX_OFFSET,
+                                pushConstants);
+                beginWriting(
+                        commandBuffer, frameData.skyMap, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, stack);
+                renderMap(
+                        commandBuffer,
+                        vulkanState,
+                        frameData.skyMap,
+                        SkyOcclusion.MAP_SIZE,
+                        sky.getRedraw() == SunShadowCache.Redraw.PART ? sky.getRedrawRect() : null,
+                        InstanceDrawUpdate.LIST_SKY,
+                        pushConstants,
+                        true,
+                        false);
+                endWriting(commandBuffer, frameData.skyMap, stack);
             }
         }
     }

@@ -22,6 +22,7 @@ import com.ikalagaming.graphics.exceptions.RenderException;
 import com.ikalagaming.graphics.exceptions.ShaderException;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
+import com.ikalagaming.graphics.graph.SkyOcclusion;
 import com.ikalagaming.graphics.graph.SunShadowCache;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.IkIO;
@@ -1174,6 +1175,7 @@ public class VulkanInstance {
         state.bakedGeometry = new GeometryArena(state, BakedVertex.SIZE);
         state.shadowInvalidation = new ShadowInvalidation();
         state.sunShadows = new SunShadowCache();
+        state.skyOcclusion = new SkyOcclusion();
         state.lods = new LodRenderer(state);
         state.bakeSources = new BakeSources();
         state.sections = new SectionManager(state.shadowInvalidation);
@@ -2085,6 +2087,7 @@ public class VulkanInstance {
         pipeline = pipelineManager.getPipeline(config);
         // The new pipeline may not have drawn shadows while things changed
         state.sunShadows.invalidateAll();
+        state.skyOcclusion.invalidateAll();
     }
 
     /**

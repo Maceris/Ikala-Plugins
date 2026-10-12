@@ -828,9 +828,29 @@ public class ShaderBindings {
                 SHADOW_MAP_0_INDEX_OFFSET
                         + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT * Integer.BYTES;
 
+        /**
+         * The offset into the uniforms for the sky occlusion map's matrix, from render space to the
+         * map. A matrix starts on a 16 byte boundary under std140 rules.
+         */
+        public static final int SKY_PROJECTION_VIEW_MATRIX_OFFSET =
+                (int) SharedBuffer.align(CLUSTER_LOG_SCALE_OFFSET + Float.BYTES);
+
+        /** The offset into the uniforms for the sky map's bindless index, -1 for none. */
+        public static final int SKY_MAP_INDEX_OFFSET =
+                SKY_PROJECTION_VIEW_MATRIX_OFFSET + 4 * 4 * Float.BYTES;
+
+        /** The offset into the uniforms for how far the sky map reaches down, in meters. */
+        public static final int SKY_DEPTH_RANGE_OFFSET = SKY_MAP_INDEX_OFFSET + Integer.BYTES;
+
+        /** The offset into the uniforms for the least sky light a covered point gets. */
+        public static final int SKY_LIGHT_FLOOR_OFFSET = SKY_DEPTH_RANGE_OFFSET + Float.BYTES;
+
+        /** The offset into the uniforms for whether to show sky light in gray. */
+        public static final int SKY_OCCLUSION_VIEW_OFFSET = SKY_LIGHT_FLOOR_OFFSET + Float.BYTES;
+
         /** The size of the uniforms buffer, padded out to 16 bytes under std140 rules. */
         public static final int UNIFORMS_BUFFER_SIZE =
-                (int) SharedBuffer.align(CLUSTER_LOG_SCALE_OFFSET + Float.BYTES);
+                (int) SharedBuffer.align(SKY_OCCLUSION_VIEW_OFFSET + Integer.BYTES);
 
         /** Uniforms buffer binding. */
         public static final int UNIFORMS_BINDING = 0;

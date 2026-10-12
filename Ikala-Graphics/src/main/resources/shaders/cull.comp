@@ -154,13 +154,14 @@ const uint PHASE_LATE = 1;
 const uint LIST_SCENE_EARLY = 0;
 const uint LIST_SCENE_LATE = 1;
 const uint LIST_FIRST_CASCADE = 2;
-const uint LIST_TRANSLUCENT = 5;
-const uint LIST_COUNT = 6;
+const uint LIST_TRANSLUCENT = 6;
+const uint LIST_COUNT = 7;
 
-// The passes: the scene, then each shadow cascade. The frusta buffer holds each pass's planes, then
+// The passes: the scene, each shadow cascade, then the sky map, which draws to the list after the
+// cascades'. The frusta buffer holds each pass's planes, then
 // each pass's planes for baked meshes, which cached cascades cull to the part they draw again, see
 // InstanceDrawUpdate.FRUSTA_COUNT
-const uint PASS_COUNT = 4;
+const uint PASS_COUNT = 5;
 
 // The counter of meshes the occlusion test hid, after one counter per list
 const uint COUNTER_OCCLUDED = LIST_COUNT;

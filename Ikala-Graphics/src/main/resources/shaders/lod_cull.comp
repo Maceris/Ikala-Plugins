@@ -157,10 +157,11 @@ const uint PHASE_LATE = 1;
 const uint LIST_SCENE_EARLY = 0;
 const uint LIST_SCENE_LATE = 1;
 const uint LIST_FIRST_CASCADE = 2;
-const uint LIST_COUNT = 5;
+const uint LIST_COUNT = 6;
 
-// The passes, as in cull.comp: the cascades cull clusters by the planes for what doesn't move
-const uint PASS_COUNT = 4;
+// The passes, as in cull.comp: the cascades and the sky map cull clusters by the planes for what
+// doesn't move
+const uint PASS_COUNT = 5;
 
 // The counters after the lists' counts, see LodRenderer
 const uint COUNTER_SELECTED = LIST_COUNT;

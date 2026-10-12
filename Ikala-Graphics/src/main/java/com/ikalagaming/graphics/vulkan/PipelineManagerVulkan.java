@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.*;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
+import com.ikalagaming.graphics.graph.SkyOcclusion;
 import com.ikalagaming.graphics.graph.SunShadowCache;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.FontAtlas;
@@ -90,6 +91,9 @@ public class PipelineManagerVulkan {
      * between frames like the shadow maps.
      */
     private TextureInfoVulkan[] dynamicShadowMaps;
+
+    /** The sky occlusion map, shared between frames like the shadow maps. */
+    private TextureInfoVulkan skyMap;
 
     private final AnimationRender stageAnimationRender;
     private final FilterRender stageFilterRender;
@@ -406,7 +410,10 @@ public class PipelineManagerVulkan {
                 all.add(dynamicShadowMaps[i]);
             }
         }
+        skyMap = createShadowMap(state, SkyOcclusion.MAP_SIZE);
+        all.add(skyMap);
         state.sunShadows.invalidateAll();
+        state.skyOcclusion.invalidateAll();
         clearShadowMaps(state, all.toArray(new TextureInfoVulkan[0]));
     }
 
@@ -523,6 +530,9 @@ public class PipelineManagerVulkan {
             }
         }
         dynamicShadowMaps = null;
+        state.bindlessTextures.release(state, skyMap);
+        skyMap.destroy(state);
+        skyMap = null;
     }
 
     private void createShaderData(@NonNull Window window, @NonNull VulkanState state) {
@@ -636,6 +646,8 @@ public class PipelineManagerVulkan {
             @NonNull VkExtent3D imageExtent) {
         data.cascadeShadows = shadowMaps;
         data.cascadeDynamicShadows = dynamicShadowMaps;
+        data.skyMap = skyMap;
+        data.skyView = new CascadeShadowSplit();
         for (int shadow = 0; shadow < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; shadow++) {
             data.cascadeShadowSplits[shadow] = new CascadeShadowSplit();
         }
@@ -767,6 +779,7 @@ public class PipelineManagerVulkan {
         // Shared between frames, cleaned up separately
         data.cascadeShadows = null;
         data.cascadeDynamicShadows = null;
+        data.skyMap = null;
 
         if (data.gBuffer != null) {
             for (TextureInfoVulkan info : data.gBuffer.textures()) {

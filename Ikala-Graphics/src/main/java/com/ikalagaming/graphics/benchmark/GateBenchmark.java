@@ -748,6 +748,14 @@ public final class GateBenchmark {
                 if (sunCache != null) {
                     GraphicsManager.getSettings().sunShadowCache = Boolean.parseBoolean(sunCache);
                 }
+                // Off, ambient light isn't dimmed under cover; the view shows sky light in gray
+                final String sky = System.getProperty(PROPERTY + ".sky");
+                if (sky != null) {
+                    GraphicsManager.getSettings().skyOcclusion = Boolean.parseBoolean(sky);
+                }
+                if (Boolean.getBoolean(PROPERTY + ".skyView")) {
+                    scene.getDebugVisualizers().setSkyOcclusionView(true);
+                }
                 current.propertyDigRate =
                         Double.parseDouble(
                                 System.getProperty(

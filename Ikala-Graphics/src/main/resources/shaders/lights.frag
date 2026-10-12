@@ -41,6 +41,11 @@ void main()
     if (clusterHeatMap != 0 && clusterLights > 0) {
         finalColor = mix(finalColor, heatColor(clusterLights), HEAT_MAP_OPACITY);
     }
+    if (skyOcclusionView != 0) {
+        vec3 renderNormal = normalize((invViewMatrix * vec4(normal, 0)).xyz);
+        float sky = mix(skyLightFloor, 1.0, skyVisibility(renderPosition.xyz, renderNormal));
+        finalColor = vec3(sky);
+    }
 
     // Linear light into the HDR scene color, tone mapped later
     fragColor = vec4(finalColor, 1.0);

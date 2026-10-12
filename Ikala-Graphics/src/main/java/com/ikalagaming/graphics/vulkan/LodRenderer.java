@@ -1712,7 +1712,7 @@ public class LodRenderer {
     /**
      * Set which sections of a live world draw themselves this frame: their leaves are hidden, and
      * their cells and every cell above them are stale, so nothing coarser covers them. Render
-     * thread, after {@link #applyReady()} and before {@link #record}.
+     * thread, after {@link #applyReady(VulkanState)} and before {@link #record}.
      *
      * @param id The world.
      * @param overrides The sections.

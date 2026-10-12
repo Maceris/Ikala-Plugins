@@ -37,7 +37,13 @@ class ShaderBindingsTest {
         assertEquals(500, ShaderBindings.Light.SHADOW_MAP_0_INDEX_OFFSET);
         // float clusterLogScale, then padded to 16 bytes
         assertEquals(512, ShaderBindings.Light.CLUSTER_LOG_SCALE_OFFSET);
-        assertEquals(528, ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
+        // The sky map's matrix starts on the next 16 bytes after the log scale
+        assertEquals(528, ShaderBindings.Light.SKY_PROJECTION_VIEW_MATRIX_OFFSET);
+        assertEquals(592, ShaderBindings.Light.SKY_MAP_INDEX_OFFSET);
+        assertEquals(596, ShaderBindings.Light.SKY_DEPTH_RANGE_OFFSET);
+        assertEquals(600, ShaderBindings.Light.SKY_LIGHT_FLOOR_OFFSET);
+        assertEquals(604, ShaderBindings.Light.SKY_OCCLUSION_VIEW_OFFSET);
+        assertEquals(608, ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
     }
 
     @Test

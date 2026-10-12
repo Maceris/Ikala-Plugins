@@ -178,6 +178,12 @@ public class PerFrameData {
      */
     public TextureInfoVulkan[] cascadeDynamicShadows;
 
+    /** This frame's sky occlusion view: its matrix and what of its map is drawn. */
+    public CascadeShadowSplit skyView;
+
+    /** The sky occlusion map, shared between frames like the shadow maps. */
+    public TextureInfoVulkan skyMap;
+
     /** Whether anything that moves casts shadows this frame: standard meshes or listed models. */
     public boolean dynamicShadowCasters;
 

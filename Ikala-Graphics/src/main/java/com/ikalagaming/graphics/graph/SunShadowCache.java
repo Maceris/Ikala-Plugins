@@ -81,7 +81,7 @@ public class SunShadowCache {
     private static final int BOX_CORNERS = 8;
 
     /** Where a cached cascade is in the world, and what its map holds. */
-    private static final class Placement {
+    static final class Placement {
         /** The center, in the world, on the snapping grid. */
         final Vector3d center = new Vector3d();
 
@@ -108,6 +108,9 @@ public class SunShadowCache {
 
         /** Whether the map holds anything yet. */
         boolean valid;
+
+        /** The width and height of the map, in texels. */
+        int mapSize;
     }
 
     /** Each cascade's placement; unused for those that aren't cached. */
@@ -183,15 +186,24 @@ public class SunShadowCache {
             if (rect == null) {
                 continue;
             }
-            final int[] to = dirty[i];
-            if (to[2] <= to[0] || to[3] <= to[1]) {
-                System.arraycopy(rect, 0, to, 0, RECT_VALUES);
-            } else {
-                to[0] = Math.min(to[0], rect[0]);
-                to[1] = Math.min(to[1], rect[1]);
-                to[2] = Math.max(to[2], rect[2]);
-                to[3] = Math.max(to[3], rect[3]);
-            }
+            addRect(dirty[i], rect);
+        }
+    }
+
+    /**
+     * Grow a rectangle to hold another.
+     *
+     * @param to The rectangle, empty while max <= min.
+     * @param rect The rectangle to add.
+     */
+    static void addRect(int @NonNull [] to, int @NonNull [] rect) {
+        if (to[2] <= to[0] || to[3] <= to[1]) {
+            System.arraycopy(rect, 0, to, 0, RECT_VALUES);
+        } else {
+            to[0] = Math.min(to[0], rect[0]);
+            to[1] = Math.min(to[1], rect[1]);
+            to[2] = Math.max(to[2], rect[2]);
+            to[3] = Math.max(to[3], rect[3]);
         }
     }
 
@@ -203,7 +215,7 @@ public class SunShadowCache {
      * @param max The box's maximum corner, in the world.
      * @return Min x, min y, max x, max y, the max exclusive.
      */
-    private static int[] rectOf(
+    static int[] rectOf(
             @NonNull Placement placement, double @NonNull [] min, double @NonNull [] max) {
         double x0 = Double.POSITIVE_INFINITY;
         double y0 = Double.POSITIVE_INFINITY;
@@ -218,8 +230,8 @@ public class SunShadowCache {
                             1)
                     .sub(placement.center.x, placement.center.y, placement.center.z, 0);
             placement.fromCenter.transform(corner);
-            final double x = (corner.x / corner.w * 0.5 + 0.5) * STATIC_MAP_SIZE;
-            final double y = (corner.y / corner.w * 0.5 + 0.5) * STATIC_MAP_SIZE;
+            final double x = (corner.x / corner.w * 0.5 + 0.5) * placement.mapSize;
+            final double y = (corner.y / corner.w * 0.5 + 0.5) * placement.mapSize;
             x0 = Math.min(x0, x);
             y0 = Math.min(y0, y);
             x1 = Math.max(x1, x);
@@ -228,8 +240,8 @@ public class SunShadowCache {
         final int[] rect = {
             Math.max(0, (int) Math.floor(x0) - DIRTY_MARGIN_TEXELS),
             Math.max(0, (int) Math.floor(y0) - DIRTY_MARGIN_TEXELS),
-            Math.min(STATIC_MAP_SIZE, (int) Math.ceil(x1) + DIRTY_MARGIN_TEXELS),
-            Math.min(STATIC_MAP_SIZE, (int) Math.ceil(y1) + DIRTY_MARGIN_TEXELS)
+            Math.min(placement.mapSize, (int) Math.ceil(x1) + DIRTY_MARGIN_TEXELS),
+            Math.min(placement.mapSize, (int) Math.ceil(y1) + DIRTY_MARGIN_TEXELS)
         };
         return rect[2] <= rect[0] || rect[3] <= rect[1] ? null : rect;
     }
@@ -289,7 +301,11 @@ public class SunShadowCache {
                             ? new Vector3d(sun)
                             : new Vector3d(placement.direction);
             final Placement wanted =
-                    place(depths[i] * (double) cornerLength, facing, cameraPosition);
+                    place(
+                            depths[i] * (double) cornerLength,
+                            facing,
+                            cameraPosition,
+                            STATIC_MAP_SIZE);
             final boolean moved =
                     !placement.valid
                             || !wanted.center.equals(placement.center)
@@ -358,7 +374,7 @@ public class SunShadowCache {
      * @param direction The way the light travels, normalized.
      * @return The up direction.
      */
-    private static Vector3d upFor(@NonNull Vector3dc direction) {
+    static Vector3d upFor(@NonNull Vector3dc direction) {
         return Math.abs(direction.y()) > 0.99 ? new Vector3d(0, 0, 1) : new Vector3d(0, 1, 0);
     }
 
@@ -368,21 +384,25 @@ public class SunShadowCache {
      * @param reach How far from the camera the slice reaches, at its far corners.
      * @param direction The way the sun's light travels, normalized.
      * @param cameraPosition The camera's world position.
+     * @param mapSize The width and height of its map, in texels.
      * @return The placement, not yet valid.
      */
-    private static Placement place(
-            double reach, @NonNull Vector3dc direction, @NonNull Vector3dc cameraPosition) {
+    static Placement place(
+            double reach,
+            @NonNull Vector3dc direction,
+            @NonNull Vector3dc cameraPosition,
+            int mapSize) {
         final Placement placement = new Placement();
         placement.direction.set(direction);
         final double step = reach / RECENTER_STEPS;
         final double radius =
                 Math.ceil((reach + step) / CascadeShadowSplit.RADIUS_STEP)
                         * CascadeShadowSplit.RADIUS_STEP;
-        final double texelSize =
-                2 * radius / (STATIC_MAP_SIZE - 2 * CascadeShadowSplit.MARGIN_TEXELS);
+        final double texelSize = 2 * radius / (mapSize - 2 * CascadeShadowSplit.MARGIN_TEXELS);
         // A whole number of texels, so moving by steps keeps the world on the texel grid
         final double grid = Math.max(1, Math.floor(step / texelSize)) * texelSize;
         placement.radius = radius;
+        placement.mapSize = mapSize;
         placement.texelSize = texelSize;
         placement.extent = radius + CascadeShadowSplit.MARGIN_TEXELS * texelSize;
 
@@ -430,13 +450,14 @@ public class SunShadowCache {
      * @param from The placement to copy.
      * @param to Where it goes.
      */
-    private static void copy(@NonNull Placement from, @NonNull Placement to) {
+    static void copy(@NonNull Placement from, @NonNull Placement to) {
         to.center.set(from.center);
         to.direction.set(from.direction);
         to.radius = from.radius;
         to.extent = from.extent;
         to.texelSize = from.texelSize;
         to.depth = from.depth;
+        to.mapSize = from.mapSize;
         to.fromCenter.set(from.fromCenter);
         to.viewFromCenter.set(from.viewFromCenter);
     }
@@ -449,7 +470,7 @@ public class SunShadowCache {
      * @param cameraPosition The camera's world position, the render space origin.
      * @param splitDistance The view space z of its slice's far end.
      */
-    private static void fill(
+    static void fill(
             @NonNull CascadeShadowSplit cascade,
             @NonNull Placement placement,
             @NonNull Vector3dc cameraPosition,
@@ -458,7 +479,8 @@ public class SunShadowCache {
         toFloat(new Matrix4d(placement.fromCenter).translate(offset), cascade.getProjViewMatrix());
         cascade.splitDistance = splitDistance;
         cascade.texelSize = (float) placement.texelSize;
-        cascade.mapSize = STATIC_MAP_SIZE;
+        cascade.mapSize = placement.mapSize;
+        cascade.depthRange = (float) placement.depth;
         cascade.cached = true;
         switch (cascade.redraw) {
             case ALL -> {
@@ -468,7 +490,7 @@ public class SunShadowCache {
             case PART -> {
                 // An orthographic box around just the texels drawn again
                 final int[] rect = cascade.redrawRect;
-                final double texel = 2 * placement.extent / STATIC_MAP_SIZE;
+                final double texel = 2 * placement.extent / placement.mapSize;
                 final Matrix4d part =
                         new Matrix4d()
                                 .setOrtho(
@@ -497,7 +519,7 @@ public class SunShadowCache {
      * @param from The matrix.
      * @param to Where it goes.
      */
-    private static void toFloat(@NonNull Matrix4d from, @NonNull Matrix4f to) {
+    static void toFloat(@NonNull Matrix4d from, @NonNull Matrix4f to) {
         to.set(
                 (float) from.m00(),
                 (float) from.m01(),
@@ -545,7 +567,7 @@ public class SunShadowCache {
      *
      * @param rect The rectangle.
      */
-    private static void clear(int @NonNull [] rect) {
+    static void clear(int @NonNull [] rect) {
         Arrays.fill(rect, 0);
     }
 }

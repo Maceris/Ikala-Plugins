@@ -111,6 +111,15 @@ public class DebugVisualizers {
     private volatile boolean clusterHeatMap;
 
     /**
+     * Show how much sky light reaches each pixel, from the sky occlusion map, in gray instead of
+     * the lit color. Drawn by the light stage, so {@link #anyEnabled()} ignores it.
+     *
+     * @param skyOcclusionView Whether to show it.
+     * @return Whether it is shown.
+     */
+    private volatile boolean skyOcclusionView;
+
+    /**
      * How many lights in one cluster show as full red on the cluster heat map. Must match
      * HEAT_MAP_FULL in lights.frag.
      */

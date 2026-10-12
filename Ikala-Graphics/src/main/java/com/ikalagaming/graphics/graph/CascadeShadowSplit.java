@@ -135,6 +135,14 @@ public class CascadeShadowSplit {
      */
     boolean staticCulledAway;
 
+    /**
+     * How far its map reaches along the light, in meters, from where depth is 0 to where it is 1.
+     * Set for maps kept in place in the world.
+     *
+     * @return The depth range.
+     */
+    float depthRange;
+
     /** Create a new cascade shadow. */
     public CascadeShadowSplit() {
         projViewMatrix = new Matrix4f();

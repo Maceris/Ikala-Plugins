@@ -9,6 +9,7 @@ import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
+import com.ikalagaming.graphics.graph.SkyOcclusion;
 import com.ikalagaming.graphics.scene.Observer;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
@@ -72,8 +73,11 @@ public class InstanceDrawUpdate implements RenderStage {
     /** The size of one visible instance entry: its slot and its material. */
     public static final int VISIBLE_ENTRY_SIZE = 2 * Integer.BYTES;
 
-    /** How many frusta are culled against: the scene, then each shadow cascade. */
-    public static final int PASS_COUNT = 1 + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT;
+    /** How many frusta are culled against: the scene, each shadow cascade, then the sky map. */
+    public static final int PASS_COUNT = 1 + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT + 1;
+
+    /** The pass of the sky occlusion map, see {@link SkyOcclusion}, after the cascades. */
+    public static final int PASS_SKY = PASS_COUNT - 1;
 
     /**
      * How many frusta the culling buffer holds: each pass's, then each pass's again for what
@@ -96,7 +100,13 @@ public class InstanceDrawUpdate implements RenderStage {
      * stage. They are in no cascade's list, so they don't cast shadows.
      */
     public static final int LIST_TRANSLUCENT =
-            LIST_FIRST_CASCADE + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT;
+            LIST_FIRST_CASCADE + CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT + 1;
+
+    /**
+     * The visible list of the sky occlusion map, after the cascades', so its pass draws to it the
+     * way a cascade's does. Only what doesn't move is drawn from it.
+     */
+    public static final int LIST_SKY = LIST_TRANSLUCENT - 1;
 
     /** How many visible lists there are, each with its own draw commands. */
     public static final int LIST_COUNT = LIST_TRANSLUCENT + 1;
@@ -259,7 +269,11 @@ public class InstanceDrawUpdate implements RenderStage {
 
         // Culling needs the cascades before the shadow stage draws them, and the cache needs to
         // know what changed before it decides what to draw again
-        vulkanState.shadowInvalidation.drain(vulkanState.sunShadows::invalidate);
+        vulkanState.shadowInvalidation.drain(
+                (min, max) -> {
+                    vulkanState.sunShadows.invalidate(min, max);
+                    vulkanState.skyOcclusion.invalidate(min, max);
+                });
         vulkanState.sunShadows.plan(
                 frameData.cascadeShadowSplits,
                 scene.getProjection().getInverseProjectionMatrix(),
@@ -268,6 +282,8 @@ public class InstanceDrawUpdate implements RenderStage {
                 scene.getSceneLights().getDirLight().getDirection(),
                 CascadeShadowSplit.shadowDistance(scene),
                 GraphicsManager.getSettings().sunShadowCache);
+        vulkanState.skyOcclusion.plan(
+                frameData.skyView, scene.getCamera().getPosition(), scene.getViewDistance());
 
         final InstanceTable.Snapshot snapshot = instances.getSnapshot();
         final MeshRegistry meshes = vulkanState.geometry.getRegistry();
@@ -575,6 +591,14 @@ public class InstanceDrawUpdate implements RenderStage {
             }
             planes.put((PASS_COUNT + 1 + i) * out.length, out);
         }
+        // The sky map draws only what doesn't move, and only when it is drawn again
+        FrustumPlanes.rejectAll(out);
+        planes.put(PASS_SKY * out.length, out);
+        final CascadeShadowSplit sky = frameData.skyView;
+        if (!sky.isStaticCulledAway()) {
+            FrustumPlanes.extract(sky.getStaticCullMatrix(), out);
+        }
+        planes.put((PASS_COUNT + PASS_SKY) * out.length, out);
     }
 
     /**
