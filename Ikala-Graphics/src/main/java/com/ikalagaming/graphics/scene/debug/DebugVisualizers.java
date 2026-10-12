@@ -149,6 +149,16 @@ public class DebugVisualizers {
     private volatile boolean occupancyRayView;
 
     /**
+     * Show how many frames of history temporal anti-aliasing holds at each pixel, in gray, red
+     * where it started over this frame, instead of the lit color. Drawn by the anti-aliasing stage,
+     * so {@link #anyEnabled()} ignores it.
+     *
+     * @param taaView Whether to show it.
+     * @return Whether it is shown.
+     */
+    private volatile boolean taaView;
+
+    /**
      * How many lights in one cluster show as full red on the cluster heat map. Must match
      * HEAT_MAP_FULL in lights.frag.
      */

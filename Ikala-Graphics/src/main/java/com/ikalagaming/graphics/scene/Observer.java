@@ -52,7 +52,8 @@ public final class Observer {
     public Observer(@NonNull Camera camera, @NonNull Projection projection) {
         position = new Vector3d(camera.getPosition());
         viewMatrix = new Matrix4f(camera.getViewMatrix());
-        projectionMatrix = new Matrix4f(projection.getProjectionMatrix());
+        // Jittered like the depth the occlusion tests read
+        projectionMatrix = new Matrix4f(projection.getJitteredProjectionMatrix());
     }
 
     /**

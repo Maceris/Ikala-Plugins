@@ -35,6 +35,7 @@ public interface RenderStage {
         OCCUPANCY_CLEAR,
         OCCUPANCY_VOXELIZE,
         SKYBOX,
+        TAA,
         TONEMAP,
         TRANSLUCENT,
         TRANSLUCENT_BAKED,

@@ -212,6 +212,15 @@ public class PerFrameData {
     public TextureInfoVulkan sceneColor;
 
     /**
+     * The scene color after temporal anti-aliasing, in linear light: what the tone map stage reads
+     * while it runs, and the history the next frame blends into. Registered in the bindless array.
+     */
+    public TextureInfoVulkan taaColor;
+
+    /** Whether the temporal anti-aliasing stage wrote {@link #taaColor} this frame. */
+    public boolean taaApplied;
+
+    /**
      * The translucent layers' lit color times opacity times weight, and opacity times weight, added
      * up by the transparent stage and read by the resolve. Registered in the bindless array.
      */

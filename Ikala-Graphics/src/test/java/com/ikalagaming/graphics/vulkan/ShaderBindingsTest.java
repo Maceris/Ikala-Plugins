@@ -58,6 +58,22 @@ class ShaderBindingsTest {
         assertEquals(56, ShaderBindings.Light.LightStruct.SHADOW_MAP);
     }
 
+    /** Matches the push constants in taa.frag, which must fit the 128 bytes every device has. */
+    @Test
+    void taaPushConstantsMatchTheShader() {
+        assertEquals(0, ShaderBindings.Taa.PUSH_CONSTANT_REPROJECTION_OFFSET);
+        assertEquals(64, ShaderBindings.Taa.PUSH_CONSTANT_COLOR_INDEX_OFFSET);
+        assertEquals(68, ShaderBindings.Taa.PUSH_CONSTANT_HISTORY_INDEX_OFFSET);
+        assertEquals(72, ShaderBindings.Taa.PUSH_CONSTANT_DEPTH_INDEX_OFFSET);
+        assertEquals(76, ShaderBindings.Taa.PUSH_CONSTANT_PREVIOUS_DEPTH_INDEX_OFFSET);
+        assertEquals(80, ShaderBindings.Taa.PUSH_CONSTANT_EXTINCTION_INDEX_OFFSET);
+        assertEquals(84, ShaderBindings.Taa.PUSH_CONSTANT_FLAGS_OFFSET);
+        // A vec2 starts on 8 bytes
+        assertEquals(88, ShaderBindings.Taa.PUSH_CONSTANT_SCREEN_SIZE_OFFSET);
+        assertEquals(96, ShaderBindings.Taa.PUSH_CONSTANT_EXPOSURE_OFFSET);
+        assertEquals(100, ShaderBindings.Taa.PUSH_CONSTANTS_SIZE);
+    }
+
     @Test
     void testLightStructOffsets() {
         // Light {vec3 position; float range; vec3 color; float intensity; vec3 direction;

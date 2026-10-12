@@ -132,4 +132,10 @@ public class GraphicsSettings {
      * shine through. At most {@code ShaderBindings.Light.MAX_OCCUPANCY_RAYS}.
      */
     public int occupancyRaysPerPixel = 8;
+
+    /**
+     * Whether temporal anti-aliasing is on: each frame samples its pixels a little apart, and is
+     * blended into the history of the frames before.
+     */
+    public boolean taa = true;
 }

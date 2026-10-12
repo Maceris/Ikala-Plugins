@@ -129,6 +129,9 @@ public class VulkanState {
      */
     public int frameIndex = 0;
 
+    /** How many frames have been submitted, for what changes from frame to frame. */
+    public long frameNumber = 0;
+
     /**
      * Whether we have a dedicated command queue for transfers. We try to have a separate queue,
      * preferably on a separate queue family corresponding to DMA hardware, but could be forced to

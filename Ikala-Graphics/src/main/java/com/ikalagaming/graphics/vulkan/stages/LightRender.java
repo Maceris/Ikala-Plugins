@@ -221,7 +221,7 @@ public class LightRender implements RenderStage {
                         ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
 
         scene.getProjection()
-                .getInverseProjectionMatrix()
+                .getInverseJitteredProjectionMatrix()
                 .get(ShaderBindings.Light.INVERSE_PROJECTION_MATRIX_OFFSET, uniformData);
         scene.getCamera()
                 .getInvViewMatrix()

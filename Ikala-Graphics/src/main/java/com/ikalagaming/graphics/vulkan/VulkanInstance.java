@@ -24,6 +24,7 @@ import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.graph.SkyOcclusion;
 import com.ikalagaming.graphics.graph.SunShadowCache;
+import com.ikalagaming.graphics.graph.TaaMath;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.IkIO;
 import com.ikalagaming.graphics.gui.flags.ConfigFlags;
@@ -1341,6 +1342,20 @@ public class VulkanInstance {
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(RenderStage.Type.TONEMAP, new ShaderVulkan(toneMapModules, state));
 
+        // The same full screen quad again
+        List<ShaderVulkan.ShaderModuleData> taaModules = new ArrayList<>();
+        taaModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/lights.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        taaModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/taa.frag",
+                        ShaderVulkan.Type.FRAGMENT,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(RenderStage.Type.TAA, new ShaderVulkan(taaModules, state));
+
         shaderMap.addShader(
                 RenderStage.Type.TRANSLUCENT,
                 new ShaderVulkan(
@@ -1759,6 +1774,14 @@ public class VulkanInstance {
         // Only sections place baked meshes, so the baked mesh table already covers them all.
         state.sections.registerFinished(state);
         state.bakedGeometry.record(state, commandBuffer);
+        // Each frame samples its pixels a little apart, which temporal anti-aliasing gathers up;
+        // set before anything reads the projection
+        if (GraphicsManager.getSettings().taa) {
+            final double[] jitter = TaaMath.jitter(state.frameNumber);
+            scene.getProjection().setJitter((float) jitter[0], (float) jitter[1]);
+        } else {
+            scene.getProjection().setJitter(0, 0);
+        }
         state.sections.update(state, scene.getObserver());
         // Instances first, so the mesh table recorded after covers every mesh they point at
         state.instances.record(state, commandBuffer, scene.getMaterialCache());
@@ -1831,6 +1854,7 @@ public class VulkanInstance {
         }
 
         state.frameIndex = (state.frameIndex + 1) % GraphicsManager.MAX_FRAMES_IN_FLIGHT;
+        ++state.frameNumber;
         state.recordingFrame = false;
         windowInfo.currentSwapchainIndex = VulkanState.WindowInfo.INVALID_SWAPCHAIN_INDEX;
     }

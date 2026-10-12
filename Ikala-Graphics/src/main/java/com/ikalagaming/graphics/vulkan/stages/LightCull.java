@@ -122,7 +122,7 @@ public class LightCull implements RenderStage {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             ByteBuffer constants = stack.calloc(ShaderBindings.LightCull.PUSH_CONSTANTS_SIZE);
             scene.getProjection()
-                    .getInverseProjectionMatrix()
+                    .getInverseJitteredProjectionMatrix()
                     .get(
                             ShaderBindings.LightCull.PUSH_CONSTANT_INVERSE_PROJECTION_OFFSET,
                             constants);

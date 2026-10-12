@@ -825,6 +825,19 @@ public class GraphicsDebug extends GuiWindow {
                             volume.getTrianglesVoxelized() / TEXELS_PER_MEGA));
         }
 
+        // Temporal anti-aliasing
+        if (IkGui.checkbox("Temporal AA", settings.taa)) {
+            settings.taa = !settings.taa;
+        }
+        IkGui.setItemTooltip(
+                "Sample each frame's pixels a little apart and blend them into the frames before.");
+        IkGui.sameLine();
+        if (IkGui.checkbox("History view", visualizers.isTaaView())) {
+            visualizers.setTaaView(!visualizers.isTaaView());
+        }
+        IkGui.setItemTooltip(
+                "Gray for how many frames each pixel's history holds, red where it started over.");
+
         // Point light shadows: the budget and what it reached
         POINT_SHADOW_BUDGET[0] = settings.pointShadowBudget;
         if (IkGui.sliderInt("Point shadow maps", POINT_SHADOW_BUDGET, 0, PointShadows.MAX_MAPS)) {

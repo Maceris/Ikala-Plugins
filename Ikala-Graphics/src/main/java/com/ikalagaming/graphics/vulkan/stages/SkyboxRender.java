@@ -253,7 +253,7 @@ public class SkyboxRender implements RenderStage {
                         ShaderBindings.Skybox.UNIFORMS_BUFFER_SIZE);
 
         scene.getProjection()
-                .getProjectionMatrix()
+                .getJitteredProjectionMatrix()
                 .get(ShaderBindings.Skybox.PROJECTION_MATRIX_OFFSET, uniformData);
         // The skybox moves with the camera, so only the rotation matters
         viewMatrix.set(scene.getCamera().getViewMatrix());

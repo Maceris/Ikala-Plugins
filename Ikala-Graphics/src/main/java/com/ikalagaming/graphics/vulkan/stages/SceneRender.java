@@ -780,8 +780,9 @@ public class SceneRender implements RenderStage {
                 MemoryUtil.memByteBuffer(
                         frameData.sceneUniforms.allocationInfo.pMappedData(),
                         ShaderBindings.Scene.UNIFORMS_BUFFER_SIZE);
+        // Jittered for temporal anti-aliasing, so each frame samples the pixels a little apart
         scene.getProjection()
-                .getProjectionMatrix()
+                .getJitteredProjectionMatrix()
                 .get(ShaderBindings.Scene.PROJECTION_MATRIX_OFFSET, uniformData);
         scene.getCamera().getViewMatrix().get(ShaderBindings.Scene.VIEW_MATRIX_OFFSET, uniformData);
     }

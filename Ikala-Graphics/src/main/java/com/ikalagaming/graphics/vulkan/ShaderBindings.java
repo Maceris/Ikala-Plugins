@@ -397,6 +397,57 @@ public class ShaderBindings {
         }
     }
 
+    /** Temporal anti-aliasing shader variables, see {@code taa.frag}. */
+    public static class Taa {
+        /** From this frame's clip space, without jitter, to last frame's: a mat4. */
+        public static final int PUSH_CONSTANT_REPROJECTION_OFFSET = 0;
+
+        /** The bindless slot of the new frame's color. */
+        public static final int PUSH_CONSTANT_COLOR_INDEX_OFFSET = 4 * 4 * Float.BYTES;
+
+        /** The bindless slot of the history. */
+        public static final int PUSH_CONSTANT_HISTORY_INDEX_OFFSET =
+                PUSH_CONSTANT_COLOR_INDEX_OFFSET + Integer.BYTES;
+
+        /** The bindless slot of this frame's depth. */
+        public static final int PUSH_CONSTANT_DEPTH_INDEX_OFFSET =
+                PUSH_CONSTANT_HISTORY_INDEX_OFFSET + Integer.BYTES;
+
+        /** The bindless slot of last frame's depth. */
+        public static final int PUSH_CONSTANT_PREVIOUS_DEPTH_INDEX_OFFSET =
+                PUSH_CONSTANT_DEPTH_INDEX_OFFSET + Integer.BYTES;
+
+        /** The bindless slot of the transparency pass's summed extinction. */
+        public static final int PUSH_CONSTANT_EXTINCTION_INDEX_OFFSET =
+                PUSH_CONSTANT_PREVIOUS_DEPTH_INDEX_OFFSET + Integer.BYTES;
+
+        /** The flags, {@link #FLAG_HISTORY} and {@link #FLAG_VIEW}. */
+        public static final int PUSH_CONSTANT_FLAGS_OFFSET =
+                PUSH_CONSTANT_EXTINCTION_INDEX_OFFSET + Integer.BYTES;
+
+        /** The size of the area drawn, in pixels: a vec2. */
+        public static final int PUSH_CONSTANT_SCREEN_SIZE_OFFSET =
+                PUSH_CONSTANT_FLAGS_OFFSET + Integer.BYTES;
+
+        /** What the colors are multiplied by before tone mapping. */
+        public static final int PUSH_CONSTANT_EXPOSURE_OFFSET =
+                PUSH_CONSTANT_SCREEN_SIZE_OFFSET + 2 * Float.BYTES;
+
+        /** The size of the push constants in bytes. */
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_EXPOSURE_OFFSET + Float.BYTES;
+
+        /** The flag for when the history can be read. */
+        public static final int FLAG_HISTORY = 1;
+
+        /** The flag for showing how much history each pixel has. */
+        public static final int FLAG_VIEW = 2;
+
+        /** Private constructor so this class is not instantiated. */
+        private Taa() {
+            cutItOut();
+        }
+    }
+
     /** Tone mapping shader variables, see {@code tonemap.frag}. */
     public static class ToneMap {
         /** The bindless slot of the scene color. */

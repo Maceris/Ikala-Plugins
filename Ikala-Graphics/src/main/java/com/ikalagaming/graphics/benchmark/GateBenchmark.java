@@ -788,6 +788,14 @@ public final class GateBenchmark {
                 if (Boolean.getBoolean(PROPERTY + ".rayView")) {
                     scene.getDebugVisualizers().setOccupancyRayView(true);
                 }
+                // Off, no temporal anti-aliasing; the view shows each pixel's history
+                final String taa = System.getProperty(PROPERTY + ".taa");
+                if (taa != null) {
+                    GraphicsManager.getSettings().taa = Boolean.parseBoolean(taa);
+                }
+                if (Boolean.getBoolean(PROPERTY + ".taaView")) {
+                    scene.getDebugVisualizers().setTaaView(true);
+                }
                 // Off, lights without a shadow map shine through walls
                 final String rays = System.getProperty(PROPERTY + ".lightRays");
                 if (rays != null) {

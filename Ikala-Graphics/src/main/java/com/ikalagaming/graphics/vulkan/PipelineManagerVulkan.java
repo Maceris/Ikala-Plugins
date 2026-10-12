@@ -114,6 +114,9 @@ public class PipelineManagerVulkan {
     /** Turns the scene color into the image shown. */
     private final ToneMap stageToneMap;
 
+    /** Blends each frame into the history of the ones before. */
+    private final Taa stageTaa;
+
     /** Draws translucent geometry into the transparency targets. */
     private final TranslucentRender stageTranslucentRender;
 
@@ -215,6 +218,8 @@ public class PipelineManagerVulkan {
         stageLightRender.initialize(state);
         stageToneMap = new ToneMap(shaders.getShader(RenderStage.Type.TONEMAP), quadMesh);
         stageToneMap.initialize(state);
+        stageTaa = new Taa(shaders.getShader(RenderStage.Type.TAA), quadMesh);
+        stageTaa.initialize(state);
         stageTranslucentRender =
                 new TranslucentRender(
                         shaders.getShader(RenderStage.Type.TRANSLUCENT),
@@ -290,6 +295,8 @@ public class PipelineManagerVulkan {
             stages.add(stageOitIntegrate);
             stages.add(stageTranslucentRender);
             stages.add(stageOitResolve);
+            // Blends this frame into the ones before, in linear light
+            stages.add(stageTaa);
         }
         if (RenderConfig.hasSceneStage(configuration)
                 || RenderConfig.hasSkyboxStage(configuration)) {
@@ -708,6 +715,19 @@ public class PipelineManagerVulkan {
                         VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
         // Read through the bindless array by the tone map stage
         state.bindlessTextures.register(state, data.sceneColor);
+        // Read through the bindless array, filtered, by the next frame's anti-aliasing as history,
+        // and by the tone map stage
+        data.taaColor =
+                createRenderTarget(
+                        state,
+                        imageExtent.width(),
+                        imageExtent.height(),
+                        SCENE_COLOR_FORMAT,
+                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                        VK_IMAGE_ASPECT_COLOR_BIT,
+                        VK_FILTER_LINEAR,
+                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        state.bindlessTextures.register(state, data.taaColor);
         data.oitAccum =
                 createRenderTarget(
                         state,
@@ -770,6 +790,7 @@ public class PipelineManagerVulkan {
         stageGuiRender.cleanup(state);
         stageLightRender.cleanup(state);
         stageToneMap.cleanup(state);
+        stageTaa.cleanup(state);
         stageOitResolve.cleanup(state);
         stageTranslucentRender.cleanup(state);
         stageOitSplat.cleanup(state);
@@ -847,6 +868,11 @@ public class PipelineManagerVulkan {
             state.bindlessTextures.release(state, data.sceneColor);
             data.sceneColor.destroy(state);
             data.sceneColor = null;
+        }
+        if (data.taaColor != null) {
+            state.bindlessTextures.release(state, data.taaColor);
+            data.taaColor.destroy(state);
+            data.taaColor = null;
         }
         if (data.preFilterTexture != null) {
             data.preFilterTexture.destroy(state);
