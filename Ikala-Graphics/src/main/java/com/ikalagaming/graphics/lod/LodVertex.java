@@ -11,7 +11,6 @@ import java.nio.ByteBuffer;
  *
  * <pre>
  * int32 x, y, z       // position on a grid of 1 / {@link #STEPS_PER_UNIT} unit from the world's origin
- * snorm16 normal[2]   // octahedral
  * uint16 material     // index into the material table
  * uint16 flags        // none yet
  * </pre>
@@ -22,12 +21,17 @@ import java.nio.ByteBuffer;
  * step. The shader subtracts the camera's grid position as integers, so positions are exact
  * relative to the camera however far from the origin.
  *
+ * <p>There is no normal: triangles are flat, and the fragment shader works out each one's normal
+ * from how its position changes across the screen. So a vertex is shared by every triangle that
+ * meets there with its material, whichever way they face, which simplified levels, whose triangles
+ * all face slightly different ways, need most.
+ *
  * <p>{@code scene_lod.vert} and {@code shadow_lod.vert} decode this; keep them in step.
  */
 public final class LodVertex {
 
     /** The size of one vertex in bytes. */
-    public static final int SIZE = 20;
+    public static final int SIZE = 16;
 
     /** Grid steps per unit, the baked sections' own precision. */
     public static final int STEPS_PER_UNIT = BakedVertex.STEPS_PER_UNIT;
@@ -35,14 +39,11 @@ public final class LodVertex {
     /** Where the position starts. */
     public static final int POSITION_OFFSET = 0;
 
-    /** Where the octahedral normal starts. */
-    public static final int NORMAL_OFFSET = 12;
-
     /** Where the material index is. */
-    public static final int MATERIAL_OFFSET = 16;
+    public static final int MATERIAL_OFFSET = 12;
 
     /** Where the flags are. */
-    public static final int FLAGS_OFFSET = 18;
+    public static final int FLAGS_OFFSET = 14;
 
     /** The largest material index that fits. */
     public static final int MAX_MATERIAL = 0xFFFF;
@@ -75,16 +76,10 @@ public final class LodVertex {
      * @param out Where it goes, a little endian buffer.
      * @param index Which vertex it is; it goes at {@code index * SIZE}.
      * @param grid Its position, in grid steps.
-     * @param normal Its normal, unit length.
      * @param material Its material index.
      * @throws IllegalArgumentException If the material doesn't fit.
      */
-    public static void put(
-            @NonNull ByteBuffer out,
-            int index,
-            int @NonNull [] grid,
-            float @NonNull [] normal,
-            int material) {
+    public static void put(@NonNull ByteBuffer out, int index, int @NonNull [] grid, int material) {
         if (material < 0 || material > MAX_MATERIAL) {
             throw new IllegalArgumentException("Material " + material + " doesn't fit");
         }
@@ -92,10 +87,6 @@ public final class LodVertex {
         for (int axis = 0; axis < AXES; ++axis) {
             out.putInt(base + POSITION_OFFSET + axis * Integer.BYTES, grid[axis]);
         }
-        final float[] octahedral = new float[2];
-        BakedVertex.octahedral(normal[0], normal[1], normal[2], octahedral);
-        out.putShort(base + NORMAL_OFFSET, BakedVertex.snorm16(octahedral[0]));
-        out.putShort(base + NORMAL_OFFSET + Short.BYTES, BakedVertex.snorm16(octahedral[1]));
         out.putShort(base + MATERIAL_OFFSET, (short) material);
         out.putShort(base + FLAGS_OFFSET, (short) 0);
     }
@@ -112,21 +103,6 @@ public final class LodVertex {
         for (int axis = 0; axis < AXES; ++axis) {
             grid[axis] = in.getInt(base + POSITION_OFFSET + axis * Integer.BYTES);
         }
-    }
-
-    /**
-     * Read a vertex's normal.
-     *
-     * @param in The vertices, little endian.
-     * @param index Which vertex.
-     * @param normal Receives the normal, unit length.
-     */
-    public static void normal(@NonNull ByteBuffer in, int index, float @NonNull [] normal) {
-        final int base = index * SIZE;
-        BakedVertex.fromOctahedral(
-                BakedVertex.unsnorm16(in.getShort(base + NORMAL_OFFSET)),
-                BakedVertex.unsnorm16(in.getShort(base + NORMAL_OFFSET + Short.BYTES)),
-                normal);
     }
 
     /**

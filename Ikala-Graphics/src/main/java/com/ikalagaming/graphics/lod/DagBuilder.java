@@ -71,13 +71,51 @@ public final class DagBuilder {
      * @param visibilityReach How far a leaf triangle's rays must get to count as seen from outside,
      *     as a multiple of the leaves' average edge length; 0 to treat every triangle as open (see
      *     {@link Visibility}).
+     * @param mergePlanar Whether to merge each input's coplanar triangles of a material first,
+     *     which leaves the surface exactly as it was with fewer triangles (see {@link
+     *     PlanarMerge}).
      */
     public record Options(
             double virtualEdgeFactor,
             boolean lockOpenBorder,
             int threads,
             boolean keepLineage,
-            double visibilityReach) {
+            double visibilityReach,
+            boolean mergePlanar) {
+
+        /**
+         * Options that merge coplanar triangles first.
+         *
+         * @param virtualEdgeFactor r for virtual edges, as a multiple of the average edge length.
+         * @param lockOpenBorder Whether the input's open border is locked at every level.
+         * @param threads Worker threads.
+         * @param keepLineage Whether to keep where every triangle came from.
+         * @param visibilityReach How far a leaf triangle's rays must get to count as seen.
+         */
+        public Options(
+                double virtualEdgeFactor,
+                boolean lockOpenBorder,
+                int threads,
+                boolean keepLineage,
+                double visibilityReach) {
+            this(virtualEdgeFactor, lockOpenBorder, threads, keepLineage, visibilityReach, true);
+        }
+
+        /**
+         * The same options, merging coplanar triangles or not.
+         *
+         * @param merge Whether to merge them.
+         * @return The options.
+         */
+        public Options withMergePlanar(boolean merge) {
+            return new Options(
+                    virtualEdgeFactor,
+                    lockOpenBorder,
+                    threads,
+                    keepLineage,
+                    visibilityReach,
+                    merge);
+        }
 
         /**
          * The defaults: r half the leaves' edge length, the open border simplified, every core but
@@ -320,13 +358,41 @@ public final class DagBuilder {
     }
 
     /**
+     * Merge each input's coplanar triangles, on the workers.
+     *
+     * @param inputs The meshes.
+     * @param pool The workers.
+     * @return The merged meshes, in the same order.
+     */
+    private static List<LodMesh> merged(
+            @NonNull List<LodMesh> inputs, @NonNull ExecutorService pool) {
+        final List<java.util.concurrent.Future<LodMesh>> futures = new ArrayList<>();
+        for (LodMesh mesh : inputs) {
+            futures.add(pool.submit(() -> PlanarMerge.merge(mesh)));
+        }
+        final List<LodMesh> out = new ArrayList<>(inputs.size());
+        for (java.util.concurrent.Future<LodMesh> future : futures) {
+            try {
+                out.add(future.get());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted merging planar triangles", e);
+            } catch (java.util.concurrent.ExecutionException e) {
+                throw new IllegalStateException("Merging planar triangles failed", e.getCause());
+            }
+        }
+        return out;
+    }
+
+    /**
      * Split each input into leaf clusters, work out how visible their triangles are, and find the
      * open border.
      *
      * @param inputs The meshes.
      * @param pool The workers.
      */
-    private void leaves(@NonNull List<LodMesh> inputs, @NonNull ExecutorService pool) {
+    private void leaves(@NonNull List<LodMesh> given, @NonNull ExecutorService pool) {
+        final List<LodMesh> inputs = options.mergePlanar() ? merged(given, pool) : given;
         double edgeLength = 0;
         long edgeCount = 0;
         for (int section = 0; section < inputs.size(); ++section) {

@@ -76,7 +76,8 @@ class FidelityTest {
     /** Every point on any level lands on a leaf, near where it started on a flat input. */
     @Test
     void testPointsLandOnLeaves() {
-        final LodDag dag = DagBuilder.build(List.of(halves(48)), OPTIONS);
+        // Unmerged, or the flat grid would be just its border and have nothing to simplify
+        final LodDag dag = DagBuilder.build(List.of(halves(48)), OPTIONS.withMergePlanar(false));
         assertTrue(dag.getLevels() >= 3, dag.getLevels() + " levels");
         final double[] a = new double[3];
         final double[] b = new double[3];

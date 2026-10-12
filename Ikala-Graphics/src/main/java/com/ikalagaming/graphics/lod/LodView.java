@@ -15,6 +15,7 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugLine;
 import com.ikalagaming.graphics.scene.debug.DebugShape;
 import com.ikalagaming.graphics.scene.debug.DebugSphere;
+import com.ikalagaming.graphics.vulkan.LodRenderer;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -413,6 +414,16 @@ public final class LodView implements AutoCloseable {
                     }
                     post(() -> show(built));
                 });
+    }
+
+    /**
+     * How much of the DAG is on the GPU, while the renderer draws it.
+     *
+     * @return The numbers, or null before it is added.
+     */
+    public LodRenderer.LiveStats residency() {
+        final LodHandle added = world;
+        return added == null ? null : graphics.lods().liveStats(added);
     }
 
     /**

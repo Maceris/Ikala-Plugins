@@ -52,4 +52,16 @@ public class GraphicsSettings {
      * Further away, changes show once the level of detail is rebuilt.
      */
     public double lodOverrideDistance = 32;
+
+    /**
+     * Whether level of detail keeps on the GPU only what a cut near the observer can need, loading
+     * and evicting groups as it moves. Off, everything stays on the GPU, for comparisons.
+     */
+    public boolean lodStreaming = true;
+
+    /**
+     * The most level of detail mesh bytes to keep on the GPU; past it, groups no longer wanted go
+     * at once instead of after a delay.
+     */
+    public long lodResidentBytes = 1L << 30;
 }

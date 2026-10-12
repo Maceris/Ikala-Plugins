@@ -208,4 +208,29 @@ class LodStoreTest {
         assertEquals(dag.clusters().size(), id);
         assertTrue(leaves > 0);
     }
+
+    /** Clusters share a piece unit, their consuming group, exactly when the snapshot says so. */
+    @Test
+    void testUnitsMatchSnapshotGroups() {
+        final LodStore store = store(DagTest.terrain(4), 1);
+        store.rebuild();
+        final LodDag dag = store.snapshot();
+        final java.util.Map<String, Integer> groupOfUnit = new java.util.HashMap<>();
+        int id = 0;
+        for (LodStore.CellKey key : store.cellKeys()) {
+            for (LodStore.PieceCluster piece : store.piece(key)) {
+                final String unit = piece.parentCell() + "/" + piece.parentGroup();
+                final Integer group = groupOfUnit.putIfAbsent(unit, dag.consumer(id));
+                assertEquals(
+                        group == null ? dag.consumer(id) : group,
+                        dag.consumer(id),
+                        "Cluster " + id + " in unit " + unit);
+                ++id;
+            }
+        }
+        assertEquals(
+                groupOfUnit.size(),
+                new java.util.HashSet<>(groupOfUnit.values()).size(),
+                "Each unit is one group");
+    }
 }

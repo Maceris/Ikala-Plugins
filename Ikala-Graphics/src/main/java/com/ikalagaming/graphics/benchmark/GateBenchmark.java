@@ -539,6 +539,10 @@ public final class GateBenchmark {
         scene.getMaterialCache().setDirty(true);
         if (lod) {
             lodWorld = graphics.lods().fromSections();
+            final String pixels = System.getProperty(PROPERTY + ".lodPx");
+            if (pixels != null) {
+                graphics.lods().setThreshold(lodWorld, Double.parseDouble(pixels));
+            }
         }
 
         final Thread builder = new Thread(() -> build(sources), "Gate benchmark builder");
@@ -696,12 +700,16 @@ public final class GateBenchmark {
             case MEASURING -> {
                 final double seconds = (System.nanoTime() - measureStart) / 1e9;
                 placeCamera(scene, seconds / TURN_SECONDS);
+                logResidency(seconds);
                 if (seconds >= TURN_SECONDS) {
                     renderer().getState().frameTimings.setListener(null);
                     finish();
                 }
             }
-            case DONE -> updateDigs();
+            case DONE -> {
+                placeView(scene);
+                updateDigs();
+            }
             default -> {
                 // Nothing to do while building, or once stopped
             }
@@ -749,6 +757,71 @@ public final class GateBenchmark {
         }
         frames.incrementAndGet();
         frame.forEach((name, ms) -> samples.computeIfAbsent(name, n -> new ArrayList<>()).add(ms));
+    }
+
+    /** The last whole second of measuring whose residency was logged. */
+    private int residencyLogged = -1;
+
+    /** Bytes in a mebibyte. */
+    private static final double BYTES_PER_MIB = 1024.0 * 1024.0;
+
+    /**
+     * Log how much level of detail is on the GPU, once a second while the camera turns.
+     *
+     * @param seconds How long measuring has gone on.
+     */
+    private void logResidency(double seconds) {
+        if (lodWorld == null || (int) seconds == residencyLogged) {
+            return;
+        }
+        residencyLogged = (int) seconds;
+        final var stats = graphics.lods().liveStats(lodWorld);
+        if (stats != null) {
+            log.info(
+                    "Gate benchmark LOD at {} s: {} of {} units shown, {} MiB on the GPU of {} MiB"
+                            + " ({} MiB wanted), {} loads, {} evictions; the cut draws {}"
+                            + " triangles",
+                    residencyLogged,
+                    stats.shownUnits(),
+                    stats.units(),
+                    String.format("%.1f", stats.loadedBytes() / BYTES_PER_MIB),
+                    String.format("%.1f", stats.totalBytes() / BYTES_PER_MIB),
+                    String.format("%.1f", stats.wantedBytes() / BYTES_PER_MIB),
+                    stats.loads(),
+                    stats.evictions(),
+                    graphics.lods().stats().selectedTriangles());
+        }
+    }
+
+    /** Whether the camera was placed from the startup property's view. */
+    private boolean viewPlaced;
+
+    /** Values in a view: x, y, z, pitch and yaw. */
+    private static final int VIEW_VALUES = 5;
+
+    /**
+     * Once the run is done, put the camera where the startup property's view says, if it says:
+     * {@code x,y,z,pitch,yaw}, the angles in radians. For comparing frames from the same place.
+     *
+     * @param scene The scene.
+     */
+    private void placeView(@NonNull Scene scene) {
+        final String view = System.getProperty(PROPERTY + ".view");
+        if (viewPlaced || view == null) {
+            return;
+        }
+        viewPlaced = true;
+        final String[] parts = view.split(",");
+        if (parts.length != VIEW_VALUES) {
+            log.warn("The benchmark view must be x,y,z,pitch,yaw, not {}", view);
+            return;
+        }
+        final double[] values = new double[VIEW_VALUES];
+        for (int i = 0; i < VIEW_VALUES; ++i) {
+            values[i] = Double.parseDouble(parts[i].trim());
+        }
+        scene.getCamera().setPosition(values[0], values[1], values[2]);
+        scene.getCamera().setRotation((float) values[3], (float) values[4]);
     }
 
     /** Work out the results, report them, and release everything. */

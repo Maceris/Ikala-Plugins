@@ -175,6 +175,7 @@ public final class LodStore {
      * @param parentError The error of the group that consumed it, infinity if none has.
      * @param parentBound That group's sphere, or the cluster's own if none has.
      * @param parentCell The cell holding that group, or null if none has.
+     * @param parentGroup That group's id in its cell's DAG, or -1 if none has.
      * @param section The section a leaf came from, or null above level 0.
      */
     public record PieceCluster(
@@ -183,6 +184,7 @@ public final class LodStore {
             double parentError,
             double @NonNull [] parentBound,
             CellKey parentCell,
+            int parentGroup,
             SectionPos section) {}
 
     /**
@@ -211,7 +213,8 @@ public final class LodStore {
                         options.lockOpenBorder(),
                         options.threads(),
                         false,
-                        options.visibilityReach());
+                        options.visibilityReach(),
+                        options.mergePlanar());
     }
 
     /**
@@ -482,7 +485,7 @@ public final class LodStore {
             final int group = atCell.dag().consumer(atLocal);
             if (group >= 0) {
                 final LodDag.Group g = atCell.dag().groups().get(group);
-                return new PieceCluster(local, cluster, g.error(), g.bound(), at, section);
+                return new PieceCluster(local, cluster, g.error(), g.bound(), at, group, section);
             }
             final CellKey up = at.parent();
             final Cell upCell = cells.get(up);
@@ -490,7 +493,13 @@ public final class LodStore {
                     upCell == null ? -1 : upCell.inputs().indexOf(new Input(at, atLocal));
             if (upLocal < 0) {
                 return new PieceCluster(
-                        local, cluster, Double.POSITIVE_INFINITY, cluster.bound(), null, section);
+                        local,
+                        cluster,
+                        Double.POSITIVE_INFINITY,
+                        cluster.bound(),
+                        null,
+                        -1,
+                        section);
             }
             at = up;
             atCell = upCell;

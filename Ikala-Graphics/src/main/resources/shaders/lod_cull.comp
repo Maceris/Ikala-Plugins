@@ -18,6 +18,10 @@
 // While a live world catches up with its sections, a cell marked stale can't have its clusters
 // above the leaves drawn, a cluster whose parent is in a stale cell treats its parent's error as
 // infinite, and a hidden section's leaves aren't drawn, since the section draws itself.
+//
+// Only some streaming units are on the GPU (see LodResidency): a cluster is drawn only while its
+// unit is shown, and while its children's unit isn't, it is drawn whatever its own error, standing
+// in for them. Shown units are closed upward, so a cluster's parent is always there.
 
 // See LodCullMath for the layout
 struct Cluster {
@@ -29,6 +33,8 @@ struct Cluster {
     // x: world slot + 1 (0 for an empty entry), y: cell slot, z: parent's cell slot (NONE for a
     // root), w: section slot for a leaf (NONE above the leaves)
     uvec4 place;
+    // x: streaming unit slot, y: its children's unit slot (NONE for a leaf), z: level
+    uvec4 unit;
 };
 
 // See LodCullMath for the layout
@@ -92,6 +98,11 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Hid
     uint hidden[];
 };
 
+// One bit per streaming unit slot, set while the unit's clusters may be drawn
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer ShownUnits {
+    uint shownUnits[];
+};
+
 // The frustum planes of each pass, six per pass, in render space. A point p is inside a plane
 // when dot(plane.xyz, p) + plane.w >= 0.
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Frusta {
@@ -120,6 +131,7 @@ layout(push_constant) uniform Constants {
     View view;
     CellFlags cellFlagTable;
     Hidden hiddenTable;
+    ShownUnits shownUnitTable;
     // PHASE_EARLY or PHASE_LATE
     uint phase;
     // How many entries the cluster table has, which is how many commands each list has room for
@@ -245,6 +257,12 @@ bool occluded(vec3 center, vec3 extents)
     return nearest > farthest;
 }
 
+// Whether a unit slot is shown, units with no slot always being
+bool shown(uint unit)
+{
+    return unit == NONE || (shownUnitTable.shownUnits[unit >> 5] & (1u << (unit & 31u))) != 0;
+}
+
 // Whether a cell slot is there and stale
 bool stale(uint cell)
 {
@@ -279,9 +297,14 @@ void main()
     }
     uint world = cluster.place.x - 1;
     World w = worldTable.worlds[world];
-    if (w.info.y == 0) {
+    if (w.info.y == 0 || !shown(cluster.unit.x)) {
+        if (phase == PHASE_LATE) {
+            historyTable.history[entry] = 0u;
+        }
         return;
     }
+    // Standing in for children that aren't there
+    bool forced = cluster.unit.y != NONE && !shown(cluster.unit.y);
 
     // In the cut, from the observer
     float threshold = uintBitsToFloat(w.info.z);
@@ -294,7 +317,7 @@ void main()
     float parent = stale(cluster.place.z)
         ? uintBitsToFloat(0x7F800000u)
         : projected(uintBitsToFloat(cluster.info.y), cluster.parentBound, w.eye.xyz, pixelsPerUnit);
-    bool selected = selectable && own <= threshold && parent > threshold;
+    bool selected = selectable && (own <= threshold || forced) && parent > threshold;
 
     // A cluster with no triangles, or one whose mesh isn't there, draws nothing
     bool drawable = cluster.info.z != NO_MESH;

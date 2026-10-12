@@ -273,7 +273,10 @@ class LodCullMathTest {
                                 piece.parentCell() == null
                                         ? LodCullMath.NONE
                                         : cellSlots.get(piece.parentCell()),
-                                section));
+                                section,
+                                LodCullMath.NONE,
+                                LodCullMath.NONE,
+                                piece.cluster().level()));
                 ++at;
             }
         }
@@ -298,7 +301,14 @@ class LodCullMathTest {
             final double threshold = 0.25 + random.nextDouble() * 16;
             final boolean[] drawn =
                     LodCullMath.select(
-                            entries, at, dag.getOrigin(), view, threshold, flags, hidden);
+                            entries,
+                            at,
+                            dag.getOrigin(),
+                            view,
+                            threshold,
+                            flags,
+                            hidden,
+                            new int[0]);
             final CrackCheck.Result result = check.check(drawn);
             assertTrue(result.overdrawnEdges().isEmpty(), "View " + v + " draws an edge twice");
             for (Grouping.Edge edge : result.openEdges()) {
@@ -330,5 +340,257 @@ class LodCullMathTest {
             }
         }
         return true;
+    }
+
+    /**
+     * A store's clusters packed with their streaming units, in snapshot order, as the renderer
+     * packs them, with the units for {@link LodResidency}.
+     *
+     * @param entries The packed entries.
+     * @param units The units, by slot.
+     */
+    private record Streamed(ByteBuffer entries, List<LodResidency.Unit> units) {}
+
+    /**
+     * Pack a built store's clusters with their units: the group consuming each cluster, or the root
+     * unit, and the unit its producer group consumed.
+     *
+     * @param store The store, built.
+     * @param dag Its snapshot.
+     * @return The entries and units.
+     */
+    private static Streamed streamed(LodStore store, LodDag dag) {
+        record Key(LodStore.CellKey cell, int group) {}
+        final java.util.Map<Key, Integer> slots = new java.util.LinkedHashMap<>();
+        final java.util.List<double[]> bounds = new java.util.ArrayList<>();
+        final java.util.List<Double> errors = new java.util.ArrayList<>();
+        final java.util.List<java.util.Set<Integer>> parents = new java.util.ArrayList<>();
+        final java.util.List<int[]> own = new java.util.ArrayList<>();
+        for (LodStore.CellKey key : store.cellKeys()) {
+            for (LodStore.PieceCluster piece : store.piece(key)) {
+                final Key unit =
+                        piece.parentCell() == null
+                                ? new Key(null, -1)
+                                : new Key(piece.parentCell(), piece.parentGroup());
+                if (!slots.containsKey(unit)) {
+                    slots.put(unit, slots.size());
+                    bounds.add(piece.parentBound());
+                    errors.add(piece.parentError());
+                    parents.add(new java.util.HashSet<>());
+                }
+                own.add(new int[] {slots.get(unit)});
+            }
+        }
+        final ByteBuffer entries =
+                ByteBuffer.allocate(dag.clusters().size() * LodCullMath.CLUSTER_ENTRY_SIZE)
+                        .order(ByteOrder.nativeOrder());
+        int at = 0;
+        for (LodStore.CellKey key : store.cellKeys()) {
+            for (LodStore.PieceCluster piece : store.piece(key)) {
+                final int producer = piece.cluster().producer();
+                final Integer child = producer < 0 ? null : slots.get(new Key(key, producer));
+                if (child != null) {
+                    parents.get(child).add(own.get(at)[0]);
+                }
+                entries.position(at * LodCullMath.CLUSTER_ENTRY_SIZE);
+                LodCullMath.putCluster(
+                        entries,
+                        piece.cluster(),
+                        piece.parentError(),
+                        piece.parentBound(),
+                        0,
+                        0,
+                        new LodCullMath.Place(
+                                0,
+                                LodCullMath.NONE,
+                                LodCullMath.NONE,
+                                LodCullMath.NONE,
+                                own.get(at)[0],
+                                child == null ? LodCullMath.NONE : child,
+                                piece.cluster().level()));
+                ++at;
+            }
+        }
+        final java.util.List<LodResidency.Unit> units = new java.util.ArrayList<>();
+        for (int u = 0; u < slots.size(); ++u) {
+            units.add(
+                    new LodResidency.Unit(
+                            errors.get(u),
+                            bounds.get(u),
+                            1,
+                            parents.get(u).stream().mapToInt(Integer::intValue).toArray()));
+        }
+        return new Streamed(entries, units);
+    }
+
+    /**
+     * The shown unit set as bits.
+     *
+     * @param residency The residency.
+     * @return One bit per unit.
+     */
+    private static int[] shownBits(LodResidency residency) {
+        final int[] bits = new int[residency.size() / LodCullMath.BITS_PER_WORD + 1];
+        for (int u = 0; u < residency.size(); ++u) {
+            if (residency.isShown(u)) {
+                bits[u / LodCullMath.BITS_PER_WORD] |= 1 << (u % LodCullMath.BITS_PER_WORD);
+            }
+        }
+        return bits;
+    }
+
+    /** With any upward-closed set of units on the GPU, cuts have no cracks or overlaps. */
+    @Test
+    void testPartialResidencyIsCrackFree() {
+        final LodStore store = cellStore(DagTest.terrain(2));
+        final LodDag dag = store.snapshot();
+        final Streamed streamed = streamed(store, dag);
+        final CrackCheck check = new CrackCheck(dag);
+        final Random random = new Random(11);
+        int forcedViews = 0;
+        for (int v = 0; v < VIEWS; ++v) {
+            final boolean[] loaded = new boolean[streamed.units().size()];
+            for (int u = 0; u < loaded.length; ++u) {
+                loaded[u] = random.nextDouble() < 0.7;
+            }
+            final LodResidency residency = new LodResidency(streamed.units(), loaded);
+            final LodCut.View view = randomView(random, 2 * SECTION);
+            final double threshold = 0.25 + random.nextDouble() * 16;
+            final boolean[] drawn =
+                    LodCullMath.select(
+                            streamed.entries(),
+                            dag.clusters().size(),
+                            dag.getOrigin(),
+                            view,
+                            threshold,
+                            new int[0],
+                            new int[0],
+                            shownBits(residency));
+            final CrackCheck.Result result = check.check(drawn);
+            assertTrue(
+                    result.isClean(),
+                    "View "
+                            + v
+                            + ": "
+                            + result.openEdges().size()
+                            + " cracks, "
+                            + result.overdrawnEdges().size()
+                            + " edges drawn twice");
+            if (residency.shownCount() < residency.size()) {
+                ++forcedViews;
+            }
+        }
+        assertTrue(forcedViews > 0, "Some views had units missing");
+    }
+
+    /**
+     * With the units wanted at half the threshold on the GPU, the cut is the one with everything
+     * there, from the same eye and from one moved a little.
+     */
+    @Test
+    void testWantedUnitsGiveTheFullCut() {
+        final LodStore store = cellStore(DagTest.terrain(2));
+        final LodDag dag = store.snapshot();
+        final Streamed streamed = streamed(store, dag);
+        final CrackCheck check = new CrackCheck(dag);
+        final Random random = new Random(5);
+        int fewer = 0;
+        for (int v = 0; v < VIEWS; ++v) {
+            // Near and far, so some views leave the finer units out
+            final LodCut.View view = randomView(random, (1 + v % 4) * 8 * SECTION);
+            final double threshold = 0.25 + random.nextDouble() * 16;
+            final boolean[] all = new boolean[streamed.units().size()];
+            java.util.Arrays.fill(all, true);
+            final LodResidency planner = new LodResidency(streamed.units(), all);
+            final double[] eye = {
+                view.x() - dag.getOrigin()[0],
+                view.y() - dag.getOrigin()[1],
+                view.z() - dag.getOrigin()[2]
+            };
+            planner.update(eye, view.pixelsPerUnit(), threshold, 0, true);
+            final boolean[] wanted = new boolean[all.length];
+            int count = 0;
+            for (int u = 0; u < wanted.length; ++u) {
+                wanted[u] = planner.isWanted(u);
+                count += wanted[u] ? 1 : 0;
+            }
+            fewer += count < wanted.length ? 1 : 0;
+            final LodResidency residency = new LodResidency(streamed.units(), wanted);
+            final boolean[] full = LodCut.select(dag, view, threshold);
+            final boolean[] streamedCut =
+                    LodCullMath.select(
+                            streamed.entries(),
+                            dag.clusters().size(),
+                            dag.getOrigin(),
+                            view,
+                            threshold,
+                            new int[0],
+                            new int[0],
+                            shownBits(residency));
+            assertArrayEqualsWithin(full, streamedCut, dag, view, threshold, v);
+            // A step to the side, before the residency catches up
+            final LodCut.View moved =
+                    new LodCut.View(view.x() + 2, view.y(), view.z() + 2, view.pixelsPerUnit());
+            final CrackCheck.Result result =
+                    check.check(
+                            LodCullMath.select(
+                                    streamed.entries(),
+                                    dag.clusters().size(),
+                                    dag.getOrigin(),
+                                    moved,
+                                    threshold,
+                                    new int[0],
+                                    new int[0],
+                                    shownBits(residency)));
+            assertTrue(result.isClean(), "Moved view " + v + " has cracks or overlaps");
+        }
+        assertTrue(fewer > 0, "Some views want fewer than every unit");
+    }
+
+    /**
+     * Check two cuts agree, but for clusters within rounding of the threshold.
+     *
+     * @param expected The full cut.
+     * @param actual The streamed cut.
+     * @param dag The DAG.
+     * @param view The view.
+     * @param threshold The threshold.
+     * @param v Which view, for messages.
+     */
+    private static void assertArrayEqualsWithin(
+            boolean[] expected,
+            boolean[] actual,
+            LodDag dag,
+            LodCut.View view,
+            double threshold,
+            int v) {
+        for (int i = 0; i < expected.length; ++i) {
+            if (expected[i] != actual[i]) {
+                assertTrue(
+                        nearThreshold(dag, i, view, threshold),
+                        "Cluster " + i + " differs in view " + v);
+            }
+        }
+    }
+
+    /**
+     * A store of sections in one-section cells, built.
+     *
+     * @param sections The sections.
+     * @return The store.
+     */
+    private static LodStore cellStore(List<LodMesh> sections) {
+        final LodStore store = new LodStore(new double[3], SECTION, 1, 4, OPTIONS);
+        for (LodMesh mesh : sections) {
+            final double[] origin = mesh.getOrigin();
+            store.put(
+                    new LodStore.SectionPos(
+                            Math.floorDiv((int) origin[0], SECTION),
+                            Math.floorDiv((int) origin[1], SECTION),
+                            Math.floorDiv((int) origin[2], SECTION)),
+                    mesh);
+        }
+        store.rebuild();
+        return store;
     }
 }

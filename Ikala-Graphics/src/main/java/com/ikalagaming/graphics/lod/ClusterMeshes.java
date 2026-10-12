@@ -1,7 +1,5 @@
 package com.ikalagaming.graphics.lod;
 
-import com.ikalagaming.graphics.bake.BakedVertex;
-
 import lombok.NonNull;
 
 import java.nio.ByteBuffer;
@@ -11,10 +9,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Turns clusters into meshes in the {@link LodVertex} format. Normals are flat per triangle, since
- * block worlds are faceted, and vertices are shared only where position, normal and material all
- * match, so every material and every crease gets its own copies. Triangles that collapse to no area
- * on the grid are dropped.
+ * Turns clusters into meshes in the {@link LodVertex} format. Triangles are flat, their normals
+ * worked out when they are drawn, so a vertex is shared wherever position and material match, and
+ * every material gets its own copies. Triangles that collapse to no area on the grid are dropped.
  */
 public final class ClusterMeshes {
 
@@ -27,8 +24,8 @@ public final class ClusterMeshes {
     /** Values in a triangle's corners. */
     private static final int TRIANGLE_VALUES = Clusters.TRIANGLE_VALUES;
 
-    /** How a vertex is told apart from the rest: position, quantized normal and material. */
-    private record Key(int x, int y, int z, short u, short v, int material) {}
+    /** How a vertex is told apart from the rest: position and material. */
+    private record Key(int x, int y, int z, int material) {}
 
     /**
      * One cluster as a mesh.
@@ -72,7 +69,6 @@ public final class ClusterMeshes {
         final Map<Key, Integer> seen = new HashMap<>();
         final int[][] grid = new int[CORNERS][AXES];
         final float[] normal = new float[AXES];
-        final float[] octahedral = new float[2];
         final float[] min = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE};
         final float[] max = {-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
         int vertexCount = 0;
@@ -87,18 +83,15 @@ public final class ClusterMeshes {
             if (!normalOf(grid, normal)) {
                 continue;
             }
-            BakedVertex.octahedral(normal[0], normal[1], normal[2], octahedral);
-            final short u = BakedVertex.snorm16(octahedral[0]);
-            final short v = BakedVertex.snorm16(octahedral[1]);
             final int material = cluster.materials()[t];
             for (int corner = 0; corner < CORNERS; ++corner) {
                 final int[] at = grid[corner];
-                final Key key = new Key(at[0], at[1], at[2], u, v, material);
+                final Key key = new Key(at[0], at[1], at[2], material);
                 Integer index = seen.get(key);
                 if (index == null) {
                     index = vertexCount++;
                     seen.put(key, index);
-                    LodVertex.put(vertices, index, at, normal, material);
+                    LodVertex.put(vertices, index, at, material);
                     for (int axis = 0; axis < AXES; ++axis) {
                         final float units = (float) at[axis] / LodVertex.STEPS_PER_UNIT;
                         min[axis] = Math.min(min[axis], units);

@@ -15,6 +15,7 @@ import com.ikalagaming.graphics.lod.DagBuilder;
 import com.ikalagaming.graphics.lod.LiveLod;
 import com.ikalagaming.graphics.lod.LodMesh;
 import com.ikalagaming.graphics.lod.LodStore;
+import com.ikalagaming.graphics.lod.PlanarMerge;
 import com.ikalagaming.graphics.scene.Observer;
 
 import lombok.NonNull;
@@ -378,8 +379,10 @@ public class SectionManager {
                         position,
                         opaque == null
                                 ? null
-                                : LodMesh.fromBaked(
-                                        opaque, new double[] {origin.x(), origin.y(), origin.z()}),
+                                : PlanarMerge.merge(
+                                        LodMesh.fromBaked(
+                                                opaque,
+                                                new double[] {origin.x(), origin.y(), origin.z()})),
                         generation);
             }
             baked.add(new Baked(id, generation, new Vector3d(request.origin()), result));
@@ -787,7 +790,8 @@ public class SectionManager {
                     new LiveLod(
                             origin,
                             SECTION_SIZE,
-                            DagBuilder.Options.defaults(),
+                            // Sections are merged as they are baked, on the workers
+                            DagBuilder.Options.defaults().withMergePlanar(false),
                             batch -> state.lods.publish(state, id[0], batch));
             id[0] = state.lods.addLive(owner, origin, lod::cellOf, thresholdPixels);
             world = new Live(id[0], lod, new HashMap<>());

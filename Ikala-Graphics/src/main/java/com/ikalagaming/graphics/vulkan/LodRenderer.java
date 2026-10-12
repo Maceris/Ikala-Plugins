@@ -3,10 +3,13 @@ package com.ikalagaming.graphics.vulkan;
 import static org.lwjgl.vulkan.VK10.*;
 import static org.lwjgl.vulkan.VK12.vkCmdDrawIndexedIndirectCount;
 
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.lod.ClusterMeshes;
 import com.ikalagaming.graphics.lod.LiveLod;
+import com.ikalagaming.graphics.lod.LodCut;
 import com.ikalagaming.graphics.lod.LodDag;
+import com.ikalagaming.graphics.lod.LodResidency;
 import com.ikalagaming.graphics.lod.LodStore;
 import com.ikalagaming.graphics.lod.LodVertex;
 import com.ikalagaming.graphics.scene.Observer;
@@ -50,6 +53,13 @@ import java.util.function.Function;
  * (see {@link LodCullMath}). Changes come as batches, whose meshes are uploaded first; a batch is
  * applied in one frame once all of them are resident, so cells that replace each other never show
  * together or leave a gap.
+ *
+ * <p>Only what a cut near the observer can need is on the GPU. A world's clusters are kept in
+ * streaming units, each the clusters one group consumes, and {@link LodResidency} decides a few
+ * times a second which units are wanted, from a cut at half the threshold: those are uploaded,
+ * parents first and nearest first within a budget, and the rest evicted after a delay. Every mesh
+ * stays in memory on the CPU meanwhile. While a unit is missing, the cut draws the coarser clusters
+ * it has, see {@link LodCullMath}.
  *
  * <p>Each frame the culling pass picks every world's cut, culls it against each view and writes
  * compacted draw commands and their counts, one list per view, which the scene and shadow stages
@@ -106,6 +116,9 @@ public class LodRenderer {
     /** Nanoseconds in a millisecond. */
     private static final double NANOS_PER_MILLI = 1e6;
 
+    /** How often each world's residency is worked out again. */
+    private static final long RESIDENCY_INTERVAL_NANOS = 100_000_000L;
+
     /**
      * The clusters' geometry. -- GETTER -- The arena.
      *
@@ -143,6 +156,14 @@ public class LodRenderer {
      */
     @Getter private final DeviceTable hiddenSections;
 
+    /**
+     * One bit per streaming unit slot, set while the unit's clusters may be drawn. -- GETTER -- The
+     * shown units.
+     *
+     * @return The shown unit set.
+     */
+    @Getter private final DeviceTable shownUnits;
+
     /** Where each piece's clusters are in the tables. Render thread. */
     private final RangeAllocator ranges = new RangeAllocator(INITIAL_CLUSTERS, Integer.MAX_VALUE);
 
@@ -157,6 +178,15 @@ public class LodRenderer {
 
     /** World slots. Guarded by {@link #lock}. */
     private final Slots worldSlots = new Slots();
+
+    /** Streaming unit slots, shared by every world. Render thread. */
+    private final Slots unitSlots = new Slots();
+
+    /** The shown unit words as uploaded. Render thread. */
+    private int[] unitWords = new int[INITIAL_SLOTS];
+
+    /** Shown unit words that changed since the last upload. Render thread. */
+    private final BitSet dirtyUnitWords = new BitSet();
 
     /** The cell flags as uploaded. Render thread. */
     private int[] flags = new int[INITIAL_SLOTS];
@@ -224,6 +254,13 @@ public class LodRenderer {
      * @param hiddenSections Sections drawing themselves instead of their leaves.
      * @param lastBuildMillis How long the last applied batch took to build.
      * @param lastLatencyMillis From the oldest change in the last applied batch to applying it.
+     * @param units Its streaming units.
+     * @param shownUnits Units whose clusters may be drawn.
+     * @param loadedBytes Mesh bytes on the GPU.
+     * @param wantedBytes Mesh bytes of the units the observer wants.
+     * @param totalBytes Mesh bytes of every unit, all kept on the CPU.
+     * @param loads Units loaded so far.
+     * @param evictions Units evicted so far.
      */
     public record LiveStats(
             int pieces,
@@ -232,7 +269,14 @@ public class LodRenderer {
             int staleCells,
             int hiddenSections,
             double lastBuildMillis,
-            double lastLatencyMillis) {}
+            double lastLatencyMillis,
+            int units,
+            int shownUnits,
+            long loadedBytes,
+            long wantedBytes,
+            long totalBytes,
+            long loads,
+            long evictions) {}
 
     /** Small integers handed out and taken back, lowest free first. */
     private static final class Slots {
@@ -271,35 +315,74 @@ public class LodRenderer {
         }
     }
 
-    /** One cell of a world on the GPU. */
+    /** One cell of a world: its clusters, in the tables, with whichever meshes are on the GPU. */
     private static final class Piece {
+        /** Its cell. */
+        final LodStore.CellKey key;
+
         /** How many of its cell's first clusters aren't its own. */
         final int inputs;
 
         /** Where its clusters start in the tables. */
         final int first;
 
-        /** Each cluster's mesh, or null if it has no triangles. */
+        /** Its clusters, with what each gives way to; tops are updated as parents are rebuilt. */
+        final LodStore.PieceCluster[] clusters;
+
+        /** Each cluster's mesh data, kept on the CPU. */
+        final List<ClusterMeshes.Mesh> meshData;
+
+        /** Each cluster's mesh on the GPU, or null while it isn't or it has no triangles. */
         final MeshHandle[] meshes;
 
         /** Each cluster's section, or null above the leaves. */
         final LodStore.SectionPos[] sections;
 
+        /** Each cluster's streaming unit, by index in the world's units. */
+        int[] ownUnit;
+
+        /** The unit each cluster's producer group consumed, or -1 for leaves. */
+        int[] producerUnit;
+
         /**
          * Keep a piece.
          *
-         * @param inputs Its cell's input count.
+         * @param added The piece as built.
          * @param first Its first entry.
-         * @param meshes Its meshes.
-         * @param sections Its clusters' sections.
+         * @param meshes Its meshes on the GPU so far.
          */
-        Piece(int inputs, int first, MeshHandle[] meshes, LodStore.SectionPos[] sections) {
-            this.inputs = inputs;
+        Piece(LiveLod.@NonNull Piece added, int first, @NonNull MeshHandle[] meshes) {
+            this.key = added.key();
+            this.inputs = added.inputs();
             this.first = first;
+            this.clusters = added.clusters().toArray(new LodStore.PieceCluster[0]);
+            this.meshData = added.meshes();
             this.meshes = meshes;
-            this.sections = sections;
+            this.sections = new LodStore.SectionPos[clusters.length];
+            this.ownUnit = new int[clusters.length];
+            this.producerUnit = new int[clusters.length];
         }
     }
+
+    /**
+     * A streaming unit's key: the group that consumes it, by its cell and its id there, or the root
+     * unit.
+     *
+     * @param cell The group's cell, or null for the root unit.
+     * @param group The group's id in its cell, or -1 for the root unit.
+     */
+    private record UnitKey(LodStore.CellKey cell, int group) {
+        /** The root unit, of the clusters nothing consumes. */
+        static final UnitKey ROOT = new UnitKey(null, -1);
+    }
+
+    /**
+     * One cluster of a unit.
+     *
+     * @param piece Its piece.
+     * @param index Its index there.
+     */
+    private record Member(@NonNull Piece piece, int index) {}
 
     /** A batch whose meshes are being registered and uploaded. Render thread. */
     private static final class Uploading {
@@ -415,6 +498,42 @@ public class LodRenderer {
         /** Hidden sections, last counted. */
         volatile int hiddenCount;
 
+        /** Which units are on the GPU, or null before the first batch. Render thread. */
+        LodResidency residency;
+
+        /** Each unit's clusters, by unit index. Render thread. */
+        List<List<Member>> unitMembers = List.of();
+
+        /** Each unit's slot, by unit index. Render thread. */
+        int[] unitSlotOf = new int[0];
+
+        /** Each unit key's slot. Render thread. */
+        final Map<UnitKey, Integer> unitSlotByKey = new HashMap<>();
+
+        /** Units to load, most needed first. Render thread. */
+        final ArrayDeque<Integer> loadQueue = new ArrayDeque<>();
+
+        /** Units whose meshes are registered, waiting for them to be uploaded. Render thread. */
+        final List<Integer> uploadingUnits = new ArrayList<>();
+
+        /** When residency was last worked out. Render thread. */
+        long lastResidency;
+
+        /** The observer, from its origin, as of the last frame. Render thread. */
+        double[] eye = new double[3];
+
+        /** Pixels per unit at distance 1, as of the last frame. Render thread. */
+        double pixelsPerUnit;
+
+        /** Residency numbers, for other threads. */
+        volatile long[] residencyNumbers = new long[6];
+
+        /** Units loaded so far. */
+        volatile long loads;
+
+        /** Units evicted so far. */
+        volatile long evictions;
+
         /**
          * Keep a world.
          *
@@ -451,6 +570,7 @@ public class LodRenderer {
         history = new DeviceTable(state, "lod history", WORD_SIZE, INITIAL_CLUSTERS);
         cellFlags = new DeviceTable(state, "lod cell flags", WORD_SIZE, INITIAL_SLOTS);
         hiddenSections = new DeviceTable(state, "lod hidden sections", WORD_SIZE, INITIAL_SLOTS);
+        shownUnits = new DeviceTable(state, "lod shown units", WORD_SIZE, INITIAL_SLOTS);
     }
 
     /**
@@ -480,6 +600,7 @@ public class LodRenderer {
                             dag.parentError(i),
                             dag.parentBound(i),
                             consumed ? WHOLE : null,
+                            dag.consumer(i),
                             null));
         }
         publish(
@@ -641,25 +762,56 @@ public class LodRenderer {
      * @param uploading The batch.
      */
     private void registerSome(
-            @NonNull VulkanState state, @NonNull String owner, @NonNull Uploading uploading) {
+            @NonNull VulkanState state, @NonNull World world, @NonNull Uploading uploading) {
         long bytes = 0;
         while (!uploading.registered() && bytes < REGISTER_BYTES_PER_FRAME) {
-            final List<ClusterMeshes.Mesh> pieceMeshes =
-                    uploading.batch.added().get(uploading.piece).meshes();
+            final LiveLod.Piece piece = uploading.batch.added().get(uploading.piece);
+            final List<ClusterMeshes.Mesh> pieceMeshes = piece.meshes();
             if (uploading.cluster >= pieceMeshes.size()) {
                 uploading.piece += 1;
                 uploading.cluster = 0;
                 continue;
             }
             final ClusterMeshes.Mesh mesh = pieceMeshes.get(uploading.cluster);
-            if (mesh.triangleCount() > 0) {
-                uploading.meshes[uploading.piece][uploading.cluster] = register(state, owner, mesh);
-                bytes +=
-                        (long) mesh.vertexCount() * LodVertex.SIZE
-                                + (long) mesh.indices().length * Integer.BYTES;
+            // Only what the observer wants now; the rest streams in once the batch is applied
+            if (mesh.triangleCount() > 0
+                    && isWanted(world, piece.clusters().get(uploading.cluster))) {
+                uploading.meshes[uploading.piece][uploading.cluster] =
+                        register(state, world.owner, mesh);
+                bytes += bytes(mesh);
             }
             uploading.cluster += 1;
         }
+    }
+
+    /**
+     * Whether the observer wants a cluster's unit, by the rule {@link LodResidency} follows.
+     *
+     * @param world The world.
+     * @param cluster The cluster.
+     * @return True if it is wanted, or streaming is off.
+     */
+    private static boolean isWanted(@NonNull World world, LodStore.@NonNull PieceCluster cluster) {
+        if (!GraphicsManager.getSettings().lodStreaming || cluster.parentCell() == null) {
+            return true;
+        }
+        return LodCut.projected(
+                        cluster.parentError(),
+                        cluster.parentBound(),
+                        world.eye,
+                        world.pixelsPerUnit)
+                > world.thresholdPixels * LodResidency.PREFETCH;
+    }
+
+    /**
+     * The bytes a mesh takes on the GPU.
+     *
+     * @param mesh The mesh.
+     * @return The bytes.
+     */
+    private static long bytes(ClusterMeshes.@NonNull Mesh mesh) {
+        return (long) mesh.vertexCount() * LodVertex.SIZE
+                + (long) mesh.indices().length * Integer.BYTES;
     }
 
     /**
@@ -761,7 +913,14 @@ public class LodRenderer {
                 world.staleCount,
                 world.hiddenCount,
                 world.lastBuildMillis,
-                world.lastLatencyMillis);
+                world.lastLatencyMillis,
+                (int) world.residencyNumbers[0],
+                (int) world.residencyNumbers[1],
+                world.residencyNumbers[2],
+                world.residencyNumbers[3],
+                world.residencyNumbers[4],
+                world.loads,
+                world.evictions);
     }
 
     /**
@@ -834,6 +993,12 @@ public class LodRenderer {
                 cellSlots.give(slot);
             }
             removed.cells.clear();
+            for (int slot : removed.unitSlotByKey.values()) {
+                setUnitBit(slot, false);
+                unitSlots.give(slot);
+            }
+            removed.unitSlotByKey.clear();
+            removed.residency = null;
             removed.incoming.clear();
             if (removed.uploading != null) {
                 releaseAll(removed.uploading.meshes);
@@ -857,17 +1022,253 @@ public class LodRenderer {
                 world.busy = true;
             }
             final Uploading uploading = world.uploading;
-            if (uploading == null) {
-                continue;
-            }
-            if (!uploading.registered()) {
-                registerSome(state, world.owner, uploading);
-            } else if (isResident(uploading.meshes)) {
-                // One batch a frame, so no entry is written twice in a frame
+            if (uploading != null && !uploading.registered()) {
+                registerSome(state, world, uploading);
+            } else if (uploading != null && isResident(uploading.meshes)) {
+                // One batch a frame, and no streaming that frame, so no entry is written twice
                 world.uploading = null;
                 world.busy = false;
                 apply(world, uploading.batch, uploading.meshes);
+                rebuildUnits(world);
+                continue;
             }
+            stream(state, world);
+        }
+    }
+
+    /**
+     * Rebuild a world's streaming units from its pieces, after a batch, keeping what is on the GPU.
+     * Render thread.
+     *
+     * @param world The world.
+     */
+    private void rebuildUnits(@NonNull World world) {
+        final Map<UnitKey, Integer> index = new LinkedHashMap<>();
+        final List<List<Member>> members = new ArrayList<>();
+        final List<double[]> bounds = new ArrayList<>();
+        final List<Double> errors = new ArrayList<>();
+        final List<Long> bytes = new ArrayList<>();
+        for (Piece piece : world.pieces.values()) {
+            for (int i = 0; i < piece.clusters.length; ++i) {
+                final LodStore.PieceCluster cluster = piece.clusters[i];
+                final UnitKey key = ownUnitKey(cluster);
+                Integer unit = index.get(key);
+                if (unit == null) {
+                    unit = members.size();
+                    index.put(key, unit);
+                    members.add(new ArrayList<>());
+                    bounds.add(cluster.parentBound());
+                    errors.add(cluster.parentError());
+                    bytes.add(0L);
+                }
+                members.get(unit).add(new Member(piece, i));
+                bytes.set(unit, bytes.get(unit) + bytes(piece.meshData.get(i)));
+                piece.ownUnit[i] = unit;
+            }
+        }
+        final List<Set<Integer>> parents = new ArrayList<>();
+        for (int u = 0; u < members.size(); ++u) {
+            parents.add(new LinkedHashSet<>());
+        }
+        for (Piece piece : world.pieces.values()) {
+            for (int i = 0; i < piece.clusters.length; ++i) {
+                final int producer = piece.clusters[i].cluster().producer();
+                final Integer unit =
+                        producer < 0 ? null : index.get(new UnitKey(piece.key, producer));
+                piece.producerUnit[i] = unit == null ? -1 : unit;
+                if (unit != null) {
+                    parents.get(unit).add(piece.ownUnit[i]);
+                }
+            }
+        }
+        final List<LodResidency.Unit> units = new ArrayList<>(members.size());
+        final boolean[] loaded = new boolean[members.size()];
+        for (int u = 0; u < members.size(); ++u) {
+            units.add(
+                    new LodResidency.Unit(
+                            errors.get(u),
+                            bounds.get(u),
+                            bytes.get(u),
+                            parents.get(u).stream().mapToInt(Integer::intValue).toArray()));
+            loaded[u] = isLoaded(members.get(u));
+        }
+        world.residency = new LodResidency(units, loaded);
+        world.unitMembers = members;
+        // Slots stay with their keys; the ones gone are given back
+        final Iterator<Map.Entry<UnitKey, Integer>> it = world.unitSlotByKey.entrySet().iterator();
+        while (it.hasNext()) {
+            final Map.Entry<UnitKey, Integer> entry = it.next();
+            if (!index.containsKey(entry.getKey())) {
+                setUnitBit(entry.getValue(), false);
+                unitSlots.give(entry.getValue());
+                it.remove();
+            }
+        }
+        world.unitSlotOf = new int[members.size()];
+        for (Map.Entry<UnitKey, Integer> entry : index.entrySet()) {
+            final int slot = unitSlot(world, entry.getKey());
+            world.unitSlotOf[entry.getValue()] = slot;
+            setUnitBit(slot, world.residency.isShown(entry.getValue()));
+        }
+        world.loadQueue.clear();
+        world.uploadingUnits.clear();
+        // Plan again next frame
+        world.lastResidency = 0;
+    }
+
+    /**
+     * The key of the unit a cluster is in.
+     *
+     * @param cluster The cluster.
+     * @return Its unit's key.
+     */
+    private static UnitKey ownUnitKey(LodStore.@NonNull PieceCluster cluster) {
+        return cluster.parentCell() == null
+                ? UnitKey.ROOT
+                : new UnitKey(cluster.parentCell(), cluster.parentGroup());
+    }
+
+    /**
+     * A unit key's slot, handing one out if it has none.
+     *
+     * @param world The world.
+     * @param key The key.
+     * @return The slot.
+     */
+    private int unitSlot(@NonNull World world, @NonNull UnitKey key) {
+        return world.unitSlotByKey.computeIfAbsent(key, k -> unitSlots.take());
+    }
+
+    /**
+     * Whether every mesh of a unit is on the GPU.
+     *
+     * @param members The unit's clusters.
+     * @return True if all with triangles are uploaded.
+     */
+    private boolean isLoaded(@NonNull List<Member> members) {
+        for (Member member : members) {
+            if (member.piece().meshData.get(member.index()).triangleCount() == 0) {
+                continue;
+            }
+            final MeshHandle mesh = member.piece().meshes[member.index()];
+            if (mesh == null || !arena.getRegistry().isResident(mesh)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Load and evict a world's units: work out what is wanted every so often, register the next
+     * wanted meshes within the budget, and show units once they and their parents are uploaded.
+     * Render thread.
+     *
+     * @param state The Vulkan state.
+     * @param world The world.
+     */
+    private void stream(@NonNull VulkanState state, @NonNull World world) {
+        final LodResidency residency = world.residency;
+        if (residency == null) {
+            return;
+        }
+        final long now = System.nanoTime();
+        if (now - world.lastResidency >= RESIDENCY_INTERVAL_NANOS) {
+            world.lastResidency = now;
+            residency.update(
+                    world.eye,
+                    world.pixelsPerUnit,
+                    world.thresholdPixels,
+                    now,
+                    GraphicsManager.getSettings().lodStreaming);
+            for (int unit :
+                    residency.toEvict(now, GraphicsManager.getSettings().lodResidentBytes)) {
+                evict(world, unit);
+            }
+            world.loadQueue.clear();
+            for (int unit : residency.toLoad()) {
+                if (!world.uploadingUnits.contains(unit)) {
+                    world.loadQueue.add(unit);
+                }
+            }
+        }
+        // Register the next wanted units' meshes
+        long bytes = 0;
+        while (bytes < REGISTER_BYTES_PER_FRAME && !world.loadQueue.isEmpty()) {
+            final int unit = world.loadQueue.poll();
+            for (Member member : world.unitMembers.get(unit)) {
+                final Piece piece = member.piece();
+                final ClusterMeshes.Mesh mesh = piece.meshData.get(member.index());
+                if (piece.meshes[member.index()] == null && mesh.triangleCount() > 0) {
+                    piece.meshes[member.index()] = register(state, world.owner, mesh);
+                    writeEntry(world, piece, member.index());
+                    bytes += bytes(mesh);
+                }
+            }
+            world.uploadingUnits.add(unit);
+        }
+        // Units whose meshes have arrived, then show what can be
+        final Iterator<Integer> it = world.uploadingUnits.iterator();
+        while (it.hasNext()) {
+            final int unit = it.next();
+            if (isLoaded(world.unitMembers.get(unit))) {
+                residency.setLoaded(unit);
+                world.loads += 1;
+                it.remove();
+            }
+        }
+        for (int unit : residency.toShow()) {
+            setUnitBit(world.unitSlotOf[unit], true);
+        }
+        world.residencyNumbers =
+                new long[] {
+                    residency.size(),
+                    residency.shownCount(),
+                    residency.loadedBytes(),
+                    residency.wantedBytes(),
+                    residency.totalBytes()
+                };
+    }
+
+    /**
+     * Take a unit off the GPU: hide it, clear its clusters' meshes from their entries, and release
+     * them. Render thread.
+     *
+     * @param world The world.
+     * @param unit The unit.
+     */
+    private void evict(@NonNull World world, int unit) {
+        setUnitBit(world.unitSlotOf[unit], false);
+        for (Member member : world.unitMembers.get(unit)) {
+            final Piece piece = member.piece();
+            final MeshHandle mesh = piece.meshes[member.index()];
+            if (mesh != null) {
+                piece.meshes[member.index()] = null;
+                arena.release(mesh);
+                writeEntry(world, piece, member.index());
+            }
+        }
+        world.evictions += 1;
+    }
+
+    /**
+     * Set or clear a unit slot's shown bit, noting the change.
+     *
+     * @param slot The slot.
+     * @param shown Whether its clusters may be drawn.
+     */
+    private void setUnitBit(int slot, boolean shown) {
+        final int word = slot / LodCullMath.BITS_PER_WORD;
+        final int bit = 1 << (slot % LodCullMath.BITS_PER_WORD);
+        if (word >= unitWords.length) {
+            if (!shown) {
+                return;
+            }
+            unitWords = Arrays.copyOf(unitWords, Math.max(word + 1, unitWords.length * 2));
+        }
+        final int value = shown ? unitWords[word] | bit : unitWords[word] & ~bit;
+        if (unitWords[word] != value) {
+            unitWords[word] = value;
+            dirtyUnitWords.set(word);
         }
     }
 
@@ -959,7 +1360,8 @@ public class LodRenderer {
             }
             for (LodStore.PieceCluster cluster : tops.clusters()) {
                 final int index = cluster.local() - piece.inputs;
-                writeEntry(world, tops.key(), piece, index, cluster);
+                piece.clusters[index] = cluster;
+                writeEntry(world, piece, index);
             }
         }
         world.batchStale = new HashSet<>(batch.stale());
@@ -1003,11 +1405,10 @@ public class LodRenderer {
         if (first < 0) {
             throw new IllegalStateException("No room for " + count + " more LOD clusters");
         }
-        final LodStore.SectionPos[] sections = new LodStore.SectionPos[count];
-        final Piece piece = new Piece(added.inputs(), first, meshes, sections);
+        final Piece piece = new Piece(added, first, meshes);
         for (int i = 0; i < count; ++i) {
             final LodStore.SectionPos section = added.clusters().get(i).section();
-            sections[i] = section;
+            piece.sections[i] = section;
             if (section != null) {
                 final int[] slot = world.sections.get(section);
                 if (slot == null) {
@@ -1016,7 +1417,7 @@ public class LodRenderer {
                     slot[1] += 1;
                 }
             }
-            writeEntry(world, added.key(), piece, i, added.clusters().get(i));
+            writeEntry(world, piece, i);
             historyEntries.next(first + i);
         }
         world.pieces.put(added.key(), piece);
@@ -1026,19 +1427,14 @@ public class LodRenderer {
      * Write one cluster's entry. Render thread.
      *
      * @param world The world.
-     * @param key The cluster's cell.
-     * @param piece The cell's piece.
+     * @param piece The cluster's piece.
      * @param index The cluster's index in the piece.
-     * @param cluster The cluster, with its parent.
      */
-    private void writeEntry(
-            @NonNull World world,
-            LodStore.@NonNull CellKey key,
-            @NonNull Piece piece,
-            int index,
-            LodStore.@NonNull PieceCluster cluster) {
+    private void writeEntry(@NonNull World world, @NonNull Piece piece, int index) {
+        final LodStore.PieceCluster cluster = piece.clusters[index];
         final MeshHandle mesh = piece.meshes[index];
-        final Integer cell = world.cells.get(key);
+        final Integer cell = world.cells.get(piece.key);
+        final int producer = cluster.cluster().producer();
         final Integer parentCell =
                 cluster.parentCell() == null ? null : world.cells.get(cluster.parentCell());
         final int[] section =
@@ -1054,7 +1450,12 @@ public class LodRenderer {
                         world.slot,
                         cell == null ? LodCullMath.NONE : cell,
                         parentCell == null ? LodCullMath.NONE : parentCell,
-                        section == null ? LodCullMath.NONE : section[0]));
+                        section == null ? LodCullMath.NONE : section[0],
+                        unitSlot(world, ownUnitKey(cluster)),
+                        producer < 0
+                                ? LodCullMath.NONE
+                                : unitSlot(world, new UnitKey(piece.key, producer)),
+                        cluster.cluster().level()));
     }
 
     /**
@@ -1242,6 +1643,7 @@ public class LodRenderer {
         updateFlags();
         final DeviceTable.Entries flagEntries = new DeviceTable.Entries(WORD_SIZE);
         final DeviceTable.Entries wordEntries = new DeviceTable.Entries(WORD_SIZE);
+        final DeviceTable.Entries unitEntries = new DeviceTable.Entries(WORD_SIZE);
         try (MemoryStack stack = MemoryStack.stackPush()) {
             for (int slot = dirtyFlags.nextSetBit(0);
                     slot >= 0;
@@ -1257,6 +1659,13 @@ public class LodRenderer {
                 out.putInt(out.position(), hiddenWords[word]);
             }
             dirtyWords.clear();
+            for (int word = dirtyUnitWords.nextSetBit(0);
+                    word >= 0;
+                    word = dirtyUnitWords.nextSetBit(word + 1)) {
+                final ByteBuffer out = unitEntries.next(word);
+                out.putInt(out.position(), unitWords[word]);
+            }
+            dirtyUnitWords.clear();
             final int capacity = ranges.getCapacity();
             // Every slot handed out is covered, so the culling pass never reads past the end
             final int flagCapacity = Math.max(1, Math.max(flags.length, cellSlots.bound()));
@@ -1267,10 +1676,18 @@ public class LodRenderer {
                                     hiddenWords.length,
                                     (sectionSlots.bound() + LodCullMath.BITS_PER_WORD - 1)
                                             / LodCullMath.BITS_PER_WORD));
+            final int unitCapacity =
+                    Math.max(
+                            1,
+                            Math.max(
+                                    unitWords.length,
+                                    (unitSlots.bound() + LodCullMath.BITS_PER_WORD - 1)
+                                            / LodCullMath.BITS_PER_WORD));
             if (!clusters.hasWork(capacity, clusterEntries)
                     && !history.hasWork(capacity, historyEntries)
                     && !cellFlags.hasWork(flagCapacity, flagEntries)
-                    && !hiddenSections.hasWork(wordCapacity, wordEntries)) {
+                    && !hiddenSections.hasWork(wordCapacity, wordEntries)
+                    && !shownUnits.hasWork(unitCapacity, unitEntries)) {
                 return;
             }
             DeviceTable.barrierBefore(commandBuffer, stack);
@@ -1278,8 +1695,10 @@ public class LodRenderer {
             history.record(state, commandBuffer, capacity, historyEntries, stack);
             cellFlags.record(state, commandBuffer, flagCapacity, flagEntries, stack);
             hiddenSections.record(state, commandBuffer, wordCapacity, wordEntries, stack);
+            shownUnits.record(state, commandBuffer, unitCapacity, unitEntries, stack);
             DeviceTable.barrierAfter(commandBuffer, stack);
         } finally {
+            unitEntries.free();
             wordEntries.free();
             flagEntries.free();
             clusterEntries.free();
@@ -1350,6 +1769,13 @@ public class LodRenderer {
                         Math.max(1, slots) * LodCullMath.WORLD_ENTRY_SIZE);
         MemoryUtil.memSet(MemoryUtil.memAddress(table), 0, table.capacity());
         for (World world : all) {
+            world.eye =
+                    new double[] {
+                        eye.x() - world.origin[0],
+                        eye.y() - world.origin[1],
+                        eye.z() - world.origin[2]
+                    };
+            world.pixelsPerUnit = pixelsPerUnit;
             putWorld(
                     table,
                     world.slot * LodCullMath.WORLD_ENTRY_SIZE,
@@ -1474,6 +1900,7 @@ public class LodRenderer {
         historyEntries.free();
         clusterEntries = new DeviceTable.Entries(LodCullMath.CLUSTER_ENTRY_SIZE);
         historyEntries = new DeviceTable.Entries(WORD_SIZE);
+        shownUnits.cleanup(state);
         hiddenSections.cleanup(state);
         cellFlags.cleanup(state);
         history.cleanup(state);

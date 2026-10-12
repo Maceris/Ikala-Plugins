@@ -1032,20 +1032,16 @@ public class SceneRender implements RenderStage {
     }
 
     /**
-     * Describe the level of detail vertex format, see LodVertex: grid position, octahedral normal,
-     * material and flags.
+     * Describe the level of detail vertex format, see LodVertex: grid position, then material and
+     * flags.
      *
      * @param stack The stack to allocate on.
      * @return The attributes, read from binding 0.
      */
     static VkVertexInputAttributeDescription.Buffer lodVertexAttributes(
             @NonNull MemoryStack stack) {
-        final int[] formats = {
-            VK_FORMAT_R32G32B32_SINT, VK_FORMAT_R16G16_SNORM, VK_FORMAT_R16G16_UINT
-        };
-        final int[] offsets = {
-            LodVertex.POSITION_OFFSET, LodVertex.NORMAL_OFFSET, LodVertex.MATERIAL_OFFSET
-        };
+        final int[] formats = {VK_FORMAT_R32G32B32_SINT, VK_FORMAT_R16G16_UINT};
+        final int[] offsets = {LodVertex.POSITION_OFFSET, LodVertex.MATERIAL_OFFSET};
         VkVertexInputAttributeDescription.Buffer attributes =
                 VkVertexInputAttributeDescription.calloc(formats.length, stack);
         for (int i = 0; i < formats.length; i++) {

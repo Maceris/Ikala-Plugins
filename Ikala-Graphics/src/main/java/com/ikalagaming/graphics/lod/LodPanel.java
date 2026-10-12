@@ -52,6 +52,9 @@ public final class LodPanel implements AutoCloseable {
     /** Coordinates in a position. */
     private static final int AXES = 3;
 
+    /** Bytes in a mebibyte. */
+    private static final double BYTES_PER_MIB = 1024.0 * 1024.0;
+
     /** The plugin's graphics context. */
     private final GraphicsContext graphics;
 
@@ -316,6 +319,17 @@ public final class LodPanel implements AutoCloseable {
                             gpu.occluded(),
                             gpu.early(),
                             gpu.late()));
+            final LodRenderer.LiveStats residency = view.residency();
+            if (residency != null) {
+                IkGui.text(
+                        String.format(
+                                "On the GPU: %,d of %,d groups, %.1f of %.1f MiB (%.1f MiB wanted).",
+                                residency.shownUnits(),
+                                residency.units(),
+                                residency.loadedBytes() / BYTES_PER_MIB,
+                                residency.totalBytes() / BYTES_PER_MIB,
+                                residency.wantedBytes() / BYTES_PER_MIB));
+            }
         }
         if (IkGui.collapsingHeader("Levels##lod", TreeNodeFlags.DEFAULT_OPEN)) {
             LodTables.draw(levels);

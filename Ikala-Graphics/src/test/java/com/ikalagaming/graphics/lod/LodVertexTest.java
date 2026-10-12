@@ -28,18 +28,14 @@ class LodVertexTest {
         final ByteBuffer buffer =
                 ByteBuffer.allocate(2 * LodVertex.SIZE).order(ByteOrder.LITTLE_ENDIAN);
         final int[] grid = {-5, 1 << 30, 123_456};
-        final float[] normal = {0, 0.6f, -0.8f};
-        LodVertex.put(buffer, 1, grid, normal, 40_000);
+        LodVertex.put(buffer, 1, grid, 40_000);
         final int[] back = new int[3];
         LodVertex.position(buffer, 1, back);
         assertArrayEquals(grid, back);
-        final float[] n = new float[3];
-        LodVertex.normal(buffer, 1, n);
-        assertArrayEquals(normal, n, 1e-3f);
         assertEquals(40_000, LodVertex.material(buffer, 1));
         assertThrows(
                 IllegalArgumentException.class,
-                () -> LodVertex.put(buffer, 0, grid, normal, LodVertex.MAX_MATERIAL + 1));
+                () -> LodVertex.put(buffer, 0, grid, LodVertex.MAX_MATERIAL + 1));
     }
 
     /** Leaf positions are on the grid already, and positions too far out are refused. */
@@ -51,8 +47,9 @@ class LodVertexTest {
     }
 
     /**
-     * A cluster becomes a mesh with flat normals, its materials kept, no corner more than half a
-     * step from where it was, and vertices shared only where everything matches.
+     * A cluster becomes a mesh with its materials kept, no corner more than half a step from where
+     * it was, and vertices shared wherever position and material match, whichever way the triangles
+     * face.
      */
     @Test
     void testClusterMesh() {
@@ -79,11 +76,10 @@ class LodVertexTest {
                                 -1,
                                 -1));
         assertEquals(4, mesh.triangleCount(), "The triangle with no area is dropped");
-        // The square's two triangles share two corners; the other material and the upright
-        // triangle get their own
-        assertEquals(4 + 3 + 3, mesh.vertexCount());
+        // The square's two triangles share two corners, the other material gets its own, and the
+        // upright triangle shares the square's corner at the origin
+        assertEquals(4 + 3 + 2, mesh.vertexCount());
         final int[] grid = new int[3];
-        final float[] normal = new float[3];
         final Set<Integer> materials = new HashSet<>();
         for (int i = 0; i < mesh.indices().length; ++i) {
             final int v = mesh.indices()[i];
@@ -93,9 +89,6 @@ class LodVertexTest {
                 final double original = corners[t * 9 + (i % 3) * 3 + axis];
                 assertTrue(Math.abs(grid[axis] / STEPS - original) <= 0.5 / STEPS + 1e-9);
             }
-            LodVertex.normal(mesh.vertices(), v, normal);
-            final float[] expected = t < 3 ? new float[] {0, 1, 0} : new float[] {1, 0, 0};
-            assertArrayEquals(expected, normal, 1e-3f, "Triangle " + t);
             materials.add(LodVertex.material(mesh.vertices(), v));
         }
         assertEquals(Set.of(3, 7), materials);

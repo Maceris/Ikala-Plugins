@@ -83,7 +83,7 @@ public final class LodCut {
      * @param pixelsPerUnit Pixels per world unit at distance 1.
      * @return The error in pixels.
      */
-    static double projected(
+    public static double projected(
             double error, double @NonNull [] sphere, double @NonNull [] eye, double pixelsPerUnit) {
         if (Double.isInfinite(error)) {
             return error;

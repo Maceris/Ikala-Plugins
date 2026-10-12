@@ -10,7 +10,7 @@ import lombok.NonNull;
  * to right seen from outside and v down from the top; on a top or bottom, u follows x and v follows
  * z.
  *
- * <p>{@code scene_lod.vert} does the same; keep the two in step.
+ * <p>{@code scene.frag} does the same with {@code TRIPLANAR} on; keep the two in step.
  */
 public final class LodTexturing {
 

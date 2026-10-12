@@ -186,8 +186,11 @@ public class ShaderBindings {
         /** Device address of the hidden section set, one bit per section slot. */
         public static final int PUSH_CONSTANT_HIDDEN_OFFSET = 9 * Long.BYTES;
 
+        /** Device address of the shown streaming unit set, one bit per unit slot. */
+        public static final int PUSH_CONSTANT_SHOWN_UNITS_OFFSET = 10 * Long.BYTES;
+
         /** Which phase this is, {@link Cull#PHASE_EARLY} or {@link Cull#PHASE_LATE}. */
-        public static final int PUSH_CONSTANT_PHASE_OFFSET = 10 * Long.BYTES;
+        public static final int PUSH_CONSTANT_PHASE_OFFSET = 11 * Long.BYTES;
 
         /**
          * How many entries the cluster table has, which is how many commands each list has room

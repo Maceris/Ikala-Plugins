@@ -242,6 +242,10 @@ public final class LiveLod implements AutoCloseable {
                 Thread.currentThread().interrupt();
                 return;
             } catch (RuntimeException e) {
+                // Closing interrupts a build in progress, which is no failure
+                if (closed) {
+                    return;
+                }
                 log.error("Building level of detail failed", e);
             }
         }

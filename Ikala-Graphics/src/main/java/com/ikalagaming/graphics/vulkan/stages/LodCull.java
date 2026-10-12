@@ -156,6 +156,9 @@ public class LodCull implements RenderStage {
             constants.putLong(
                     ShaderBindings.LodCull.PUSH_CONSTANT_HIDDEN_OFFSET,
                     lods.getHiddenSections().getBuffer().deviceAddress);
+            constants.putLong(
+                    ShaderBindings.LodCull.PUSH_CONSTANT_SHOWN_UNITS_OFFSET,
+                    lods.getShownUnits().getBuffer().deviceAddress);
             constants.putInt(ShaderBindings.LodCull.PUSH_CONSTANT_PHASE_OFFSET, phase);
             constants.putInt(
                     ShaderBindings.LodCull.PUSH_CONSTANT_CAPACITY_OFFSET, frameData.lodCapacity);

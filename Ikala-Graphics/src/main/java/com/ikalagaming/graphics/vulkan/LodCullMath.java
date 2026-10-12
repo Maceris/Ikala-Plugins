@@ -24,6 +24,11 @@ import java.nio.ByteOrder;
  * treats its parent's error as infinite, so the cut goes down to fresh clusters there. A hidden
  * section's leaves aren't drawn at all, since the section draws itself.
  *
+ * <p>Streaming changes it too: a cluster is drawn only while its unit is shown (see {@link
+ * com.ikalagaming.graphics.lod.LodResidency}), and while the unit of its children, the clusters its
+ * producer group consumed, isn't shown, it is drawn whatever its own error, standing in for them.
+ * Shown units are closed upward, so a cluster's parent is always there.
+ *
  * <p>A cluster table entry, {@value #CLUSTER_ENTRY_SIZE} bytes:
  *
  * <pre>
@@ -35,6 +40,8 @@ import java.nio.ByteOrder;
  * uvec4 place       // its world's slot + 1 (0 for an empty entry), its cell's slot, the slot of the
  *                   // cell holding its parent ({@link #NONE} for a root), its section's slot for a
  *                   // leaf ({@link #NONE} above the leaves)
+ * uvec4 unit        // its streaming unit's slot, the slot of its children's unit ({@link #NONE}
+ *                   // for a leaf), its level, unused
  * </pre>
  *
  * <p>A world table entry, {@value #WORLD_ENTRY_SIZE} bytes, one per world slot, rewritten each
@@ -53,7 +60,7 @@ import java.nio.ByteOrder;
 public final class LodCullMath {
 
     /** The size of a cluster table entry, in bytes. */
-    public static final int CLUSTER_ENTRY_SIZE = 5 * 4 * Integer.BYTES;
+    public static final int CLUSTER_ENTRY_SIZE = 6 * 4 * Integer.BYTES;
 
     /** Where a cluster's tight sphere starts. */
     public static final int CLUSTER_TIGHT_OFFSET = 0;
@@ -69,6 +76,9 @@ public final class LodCullMath {
 
     /** Where a cluster's world, cell, parent cell and section slots start. */
     public static final int CLUSTER_PLACE_OFFSET = 4 * 4 * Float.BYTES;
+
+    /** Where a cluster's unit slot, its children's unit slot and its level start. */
+    public static final int CLUSTER_UNIT_OFFSET = 5 * 4 * Float.BYTES;
 
     /** The mesh slot of a cluster without triangles. */
     public static final int NO_MESH = -1;
@@ -116,11 +126,15 @@ public final class LodCullMath {
      * @param cell Its cell's slot.
      * @param parentCell The slot of the cell holding its parent, or {@link #NONE}.
      * @param section Its section's slot for a leaf, or {@link #NONE}.
+     * @param unit Its streaming unit's slot, or {@link #NONE} if everything is shown.
+     * @param childUnit The slot of the unit its producer group consumed, or {@link #NONE}.
+     * @param level Its level.
      */
-    public record Place(int world, int cell, int parentCell, int section) {
+    public record Place(
+            int world, int cell, int parentCell, int section, int unit, int childUnit, int level) {
 
-        /** No world, cell or section: how the cut of a lone DAG is tested. */
-        public static final Place LONE = new Place(0, NONE, NONE, NONE);
+        /** No world, cell, section or units: how the cut of a lone DAG is tested. */
+        public static final Place LONE = new Place(0, NONE, NONE, NONE, NONE, NONE, 0);
     }
 
     /**
@@ -154,6 +168,10 @@ public final class LodCullMath {
         out.putInt(base + CLUSTER_PLACE_OFFSET + Integer.BYTES, place.cell());
         out.putInt(base + CLUSTER_PLACE_OFFSET + 2 * Integer.BYTES, place.parentCell());
         out.putInt(base + CLUSTER_PLACE_OFFSET + 3 * Integer.BYTES, place.section());
+        out.putInt(base + CLUSTER_UNIT_OFFSET, place.unit());
+        out.putInt(base + CLUSTER_UNIT_OFFSET + Integer.BYTES, place.childUnit());
+        out.putInt(base + CLUSTER_UNIT_OFFSET + 2 * Integer.BYTES, place.level());
+        out.putInt(base + CLUSTER_UNIT_OFFSET + 3 * Integer.BYTES, 0);
     }
 
     /**
@@ -247,6 +265,7 @@ public final class LodCullMath {
      * @param thresholdPixels The most error a drawn cluster may have, in pixels.
      * @param cellFlags Each cell slot's flags.
      * @param hidden The hidden section set, one bit per section slot.
+     * @param shownUnits The shown unit set, one bit per unit slot; units with no slot are shown.
      * @return True if it is in the cut.
      */
     public static boolean selected(
@@ -256,7 +275,15 @@ public final class LodCullMath {
             float pixelsPerUnit,
             float thresholdPixels,
             int @NonNull [] cellFlags,
-            int @NonNull [] hidden) {
+            int @NonNull [] hidden,
+            int @NonNull [] shownUnits) {
+        final int unit = entries.getInt(at + CLUSTER_UNIT_OFFSET);
+        if (unit != NONE && !isHidden(shownUnits, unit)) {
+            return false;
+        }
+        final int childUnit = entries.getInt(at + CLUSTER_UNIT_OFFSET + Integer.BYTES);
+        // Standing in for children that aren't there
+        final boolean forced = childUnit != NONE && !isHidden(shownUnits, childUnit);
         final int cell = entries.getInt(at + CLUSTER_PLACE_OFFSET + Integer.BYTES);
         final int parentCell = entries.getInt(at + CLUSTER_PLACE_OFFSET + 2 * Integer.BYTES);
         final int section = entries.getInt(at + CLUSTER_PLACE_OFFSET + 3 * Integer.BYTES);
@@ -281,7 +308,7 @@ public final class LodCullMath {
                                 sphere(entries, at + CLUSTER_PARENT_BOUND_OFFSET),
                                 eye,
                                 pixelsPerUnit);
-        return own <= thresholdPixels && parent > thresholdPixels;
+        return (own <= thresholdPixels || forced) && parent > thresholdPixels;
     }
 
     /**
@@ -296,7 +323,7 @@ public final class LodCullMath {
     }
 
     /**
-     * Whether a section slot is in the hidden set.
+     * Whether a slot's bit is set in a bit set: a hidden section, or a shown unit.
      *
      * @param hidden The set, one bit per slot.
      * @param section The slot.
@@ -325,7 +352,15 @@ public final class LodCullMath {
             entries.position(i * CLUSTER_ENTRY_SIZE);
             putCluster(entries, dag, i, 0, 0);
         }
-        return select(entries, n, dag.getOrigin(), view, thresholdPixels, new int[0], new int[0]);
+        return select(
+                entries,
+                n,
+                dag.getOrigin(),
+                view,
+                thresholdPixels,
+                new int[0],
+                new int[0],
+                new int[0]);
     }
 
     /**
@@ -338,6 +373,7 @@ public final class LodCullMath {
      * @param thresholdPixels The most error a drawn cluster may have, in pixels.
      * @param cellFlags Each cell slot's flags.
      * @param hidden The hidden section set, one bit per section slot.
+     * @param shownUnits The shown unit set, one bit per unit slot.
      * @return Whether each entry is drawn.
      */
     public static boolean[] select(
@@ -347,7 +383,8 @@ public final class LodCullMath {
             LodCut.@NonNull View view,
             double thresholdPixels,
             int @NonNull [] cellFlags,
-            int @NonNull [] hidden) {
+            int @NonNull [] hidden,
+            int @NonNull [] shownUnits) {
         final float[] eye = {
             (float) (view.x() - origin[0]),
             (float) (view.y() - origin[1]),
@@ -363,7 +400,8 @@ public final class LodCullMath {
                             (float) view.pixelsPerUnit(),
                             (float) thresholdPixels,
                             cellFlags,
-                            hidden);
+                            hidden,
+                            shownUnits);
         }
         return drawn;
     }
