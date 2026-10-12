@@ -8,11 +8,13 @@ import com.ikalagaming.graphics.benchmark.BlockMeshes;
 import com.ikalagaming.graphics.benchmark.SyntheticSections;
 import com.ikalagaming.graphics.benchmark.SyntheticTerrain;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
 
 /** Tests for the DAG builder, grouping, cut selection and the crack check. */
+@Tag("slow")
 class DagTest {
 
     /** The seed for the synthetic terrain. */

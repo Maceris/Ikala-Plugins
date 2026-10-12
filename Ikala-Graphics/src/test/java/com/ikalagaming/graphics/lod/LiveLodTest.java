@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ikalagaming.graphics.benchmark.SyntheticTerrain;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -14,6 +15,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /** Tests for keeping the level of detail of a changing world, built batch by batch. */
+@Tag("slow")
 class LiveLodTest {
 
     /** The section size, in units. */

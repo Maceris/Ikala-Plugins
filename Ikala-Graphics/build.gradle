@@ -134,8 +134,43 @@ tasks.register('delombok', DelombokTask) {
     }
 }
 
+// Tests tagged slow (whole DAG builds, crack checks over many cuts) and the Temp* measurement
+// harnesses take minutes, so every build skips them: run slowTest before committing LOD work, and
+// measure for the harnesses
 tasks.named('test') {
+	useJUnitPlatform {
+		excludeTags 'slow'
+	}
+	exclude '**/Temp*'
+	testLogging {
+		exceptionFormat = 'full'
+		events = ['skipped', 'failed']
+		showStandardStreams = true
+	}
+}
+
+tasks.register('slowTest', Test) {
+	description = 'Runs the slow tests every build skips.'
+	group = 'verification'
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	useJUnitPlatform {
+		includeTags 'slow'
+	}
+	testLogging {
+		exceptionFormat = 'full'
+		events = ['skipped', 'failed']
+		showStandardStreams = true
+	}
+}
+
+tasks.register('measure', Test) {
+	description = 'Runs the Temp* measurement harnesses; pick one with --tests.'
+	group = 'verification'
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
 	useJUnitPlatform()
+	include '**/Temp*'
 	testLogging {
 		exceptionFormat = 'full'
 		events = ['skipped', 'failed']

@@ -7,6 +7,7 @@ import com.ikalagaming.graphics.benchmark.SyntheticTerrain;
 import com.ikalagaming.graphics.vulkan.LodCullMath;
 
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.Random;
 
 /** Tests for the cut the GPU picks, against the CPU's. */
+@Tag("slow")
 class LodCullMathTest {
 
     /** Screen pixels per unit at distance 1: 1080 pixels high, 60 degrees. */

@@ -7,12 +7,14 @@ import com.ikalagaming.graphics.benchmark.SyntheticTerrain;
 import com.ikalagaming.graphics.vulkan.LodCullMath;
 
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Random;
 
 /** Tests for checking cuts for cracks, whole and column by column. */
+@Tag("slow")
 class CrackCheckTest {
 
     /** Section size. */

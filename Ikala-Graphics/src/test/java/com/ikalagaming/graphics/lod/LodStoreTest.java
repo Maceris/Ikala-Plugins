@@ -8,11 +8,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ikalagaming.graphics.benchmark.SyntheticTerrain;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 /** Tests for building level of detail in region cells. */
+@Tag("slow")
 class LodStoreTest {
 
     /** The section size, in units. */

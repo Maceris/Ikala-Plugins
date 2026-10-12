@@ -4,11 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 /** Tests for following triangles down to the input and measuring how faithful each level is. */
+@Tag("slow")
 class FidelityTest {
 
     /** Options for a test build, on two threads, keeping the lineage. */
