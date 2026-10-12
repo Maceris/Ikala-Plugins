@@ -89,6 +89,11 @@ layout(set = 0, binding = 0) uniform Uniforms {
     int occupancyView;
     float occupancyAoReach;
     int occupancyAoView;
+    // How many lights without a shadow map march a ray through the occupancy volume a pixel, the
+    // strongest first, 0 for none
+    int occupancyRays;
+    // Nonzero to show how much of the light from lights that march rays gets through, in gray
+    int occupancyRayView;
 };
 
 // One point light shadow cube map: each face's matrix from render space, where it is drawn from in

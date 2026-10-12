@@ -94,6 +94,10 @@ void main()
         vec3 renderGeometric = normalize((invViewMatrix * vec4(geometricNormal, 0)).xyz);
         finalColor = vec3(occupancyAmbient(renderPosition.xyz, renderGeometric));
     }
+    if (occupancyRayView != 0) {
+        // Gray for how much of the marched lights' light gets through, blue where none reaches
+        finalColor = lastRayVisibility < 0.0 ? vec3(0.0, 0.0, 0.25) : vec3(lastRayVisibility);
+    }
     if (skyOcclusionView != 0) {
         vec3 renderNormal = normalize((invViewMatrix * vec4(normal, 0)).xyz);
         float sky = mix(skyLightFloor, 1.0, skyVisibility(renderPosition.xyz, renderNormal));

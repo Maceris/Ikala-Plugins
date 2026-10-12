@@ -120,4 +120,16 @@ public class GraphicsSettings {
      * How far the occupancy volume's ambient occlusion looks for something in the way, in meters.
      */
     public double occupancyAoReach = 8;
+
+    /**
+     * Whether lights without a shadow map are kept from shining through what the occupancy volume
+     * holds, by marching a ray from each surface toward them. Needs {@link #occupancy}.
+     */
+    public boolean occupancyLightRays = true;
+
+    /**
+     * How many lights without a shadow map march a ray a pixel, the strongest there first; the rest
+     * shine through. At most {@code ShaderBindings.Light.MAX_OCCUPANCY_RAYS}.
+     */
+    public int occupancyRaysPerPixel = 8;
 }

@@ -21,6 +21,26 @@ class SyntheticTerrainTest {
     }
 
     @Test
+    void hutsStandOnFlatGroundWithADoorFacingNegativeZ() {
+        SyntheticTerrain huts = terrain(SyntheticTerrain.Recipe.HUTS, 7);
+        final int[] hut = huts.hutNear(0, 0, 1);
+        assertEquals(1, hut[1]);
+        final int x = hut[0];
+        final int z = hut[2];
+        // Flat grass all around, air in the middle, walls on every side but the door
+        assertEquals(SyntheticTerrain.GRASS, huts.block(x + 5, 0, z - 5));
+        assertEquals(SyntheticTerrain.AIR, huts.block(x + 5, 1, z - 5));
+        assertEquals(SyntheticTerrain.AIR, huts.block(x, 1, z));
+        assertEquals(SyntheticTerrain.PLANKS, huts.block(x + 2, 1, z));
+        assertEquals(SyntheticTerrain.PLANKS, huts.block(x - 2, 2, z));
+        assertEquals(SyntheticTerrain.PLANKS, huts.block(x, 3, z + 2));
+        assertEquals(SyntheticTerrain.AIR, huts.block(x, 1, z - 2));
+        assertEquals(SyntheticTerrain.STAIRS, huts.block(x, 1, z - 3));
+        // Open on top
+        assertEquals(SyntheticTerrain.AIR, huts.block(x + 2, 4, z));
+    }
+
+    @Test
     void theSameSeedMakesTheSameWorld() {
         SyntheticTerrain a = terrain(SyntheticTerrain.Recipe.TERRAIN, 7);
         SyntheticTerrain b = terrain(SyntheticTerrain.Recipe.TERRAIN, 7);

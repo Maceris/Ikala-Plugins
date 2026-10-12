@@ -300,6 +300,17 @@ public class LightRender implements RenderStage {
                 ShaderBindings.Light.OCCUPANCY_AO_VIEW_OFFSET,
                 scene.getDebugVisualizers().isOccupancyAoView() ? 1 : 0);
         uniformData.putInt(
+                ShaderBindings.Light.OCCUPANCY_RAY_VIEW_OFFSET,
+                scene.getDebugVisualizers().isOccupancyRayView() ? 1 : 0);
+        uniformData.putInt(
+                ShaderBindings.Light.OCCUPANCY_RAYS_OFFSET,
+                GraphicsManager.getSettings().occupancyLightRays
+                        ? Math.clamp(
+                                GraphicsManager.getSettings().occupancyRaysPerPixel,
+                                0,
+                                ShaderBindings.Light.MAX_OCCUPANCY_RAYS)
+                        : 0);
+        uniformData.putInt(
                 ShaderBindings.Light.POINT_ATLAS_INDEX_OFFSET,
                 frameData.pointAtlas == null ? -1 : frameData.pointAtlas.bindlessIndex);
         uniformData.putInt(

@@ -139,6 +139,16 @@ public class DebugVisualizers {
     private volatile boolean occupancyAoView;
 
     /**
+     * Show how much of the light from lights that march rays through the occupancy volume reaches
+     * each pixel, in gray, blue where none of them reaches, instead of the lit color. Drawn by the
+     * light stage, so {@link #anyEnabled()} ignores it.
+     *
+     * @param occupancyRayView Whether to show it.
+     * @return Whether it is shown.
+     */
+    private volatile boolean occupancyRayView;
+
+    /**
      * How many lights in one cluster show as full red on the cluster heat map. Must match
      * HEAT_MAP_FULL in lights.frag.
      */

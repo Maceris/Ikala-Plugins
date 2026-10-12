@@ -887,9 +887,24 @@ public class ShaderBindings {
         /** The offset into the uniforms for whether to show the ambient occlusion view. */
         public static final int OCCUPANCY_AO_VIEW_OFFSET = OCCUPANCY_AO_REACH_OFFSET + Float.BYTES;
 
+        /**
+         * The offset into the uniforms for how many lights without a shadow map march a ray through
+         * the occupancy volume a pixel, at most {@link #MAX_OCCUPANCY_RAYS}.
+         */
+        public static final int OCCUPANCY_RAYS_OFFSET = OCCUPANCY_AO_VIEW_OFFSET + Integer.BYTES;
+
+        /** The offset into the uniforms for whether to show the occupancy rays view. */
+        public static final int OCCUPANCY_RAY_VIEW_OFFSET = OCCUPANCY_RAYS_OFFSET + Integer.BYTES;
+
+        /**
+         * The most lights a pixel marches occupancy rays for. Matches OCCUPANCY_MAX_RAYS in
+         * occupancy.glsl.
+         */
+        public static final int MAX_OCCUPANCY_RAYS = 8;
+
         /** The size of the uniforms buffer, padded out to 16 bytes under std140 rules. */
         public static final int UNIFORMS_BUFFER_SIZE =
-                (int) SharedBuffer.align(OCCUPANCY_AO_VIEW_OFFSET + Integer.BYTES);
+                (int) SharedBuffer.align(OCCUPANCY_RAY_VIEW_OFFSET + Integer.BYTES);
 
         /** Uniforms buffer binding. */
         public static final int UNIFORMS_BINDING = 0;

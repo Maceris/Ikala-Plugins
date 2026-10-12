@@ -81,6 +81,9 @@ public final class SyntheticTerrain {
     /** How tall a hut's door is, in blocks. */
     private static final int DOOR_HEIGHT = 2;
 
+    /** How far apart the huts recipe's huts are, in blocks: each stands in a cell of this size. */
+    private static final int HUT_GRID = 12;
+
     /** Tree cells at or above this hash get a hut instead, below {@link #GLASS_CELLS}. */
     private static final double HUT_CELLS = 0.9;
 
@@ -129,7 +132,12 @@ public final class SyntheticTerrain {
          * Walls of glass every few blocks on flat ground, with tinted panels, so many see-through
          * layers overlap at different depths.
          */
-        GLASS
+        GLASS,
+        /**
+         * Plank huts in a grid on flat grass, with nothing else around them, to see what gets
+         * through their walls from a light inside.
+         */
+        HUTS
     }
 
     /**
@@ -211,6 +219,7 @@ public final class SyntheticTerrain {
             case CHECKERBOARD -> SECTION - 1;
             case CAVES -> 34;
             case GLASS -> GLASS_WALL_HEIGHT;
+            case HUTS -> HUT_HEIGHT;
         };
     }
 
@@ -225,7 +234,7 @@ public final class SyntheticTerrain {
             case TERRAIN -> -64;
             case CHECKERBOARD -> 0;
             case CAVES -> -96;
-            case GLASS -> 0;
+            case GLASS, HUTS -> 0;
         };
     }
 
@@ -249,6 +258,7 @@ public final class SyntheticTerrain {
             case CHECKERBOARD -> SECTION + 8;
             case CAVES -> 42;
             case GLASS -> GLASS_WALL_HEIGHT / 2.0;
+            case HUTS -> HUT_HEIGHT * 2.0;
         };
     }
 
@@ -278,6 +288,7 @@ public final class SyntheticTerrain {
             case CHECKERBOARD -> ((x + y + z) & 1) == 0 ? STONE : AIR;
             case CAVES -> caves(x, y, z);
             case GLASS -> glass(x, y, z);
+            case HUTS -> huts(x, y, z);
         };
     }
 
@@ -456,6 +467,50 @@ public final class SyntheticTerrain {
     }
 
     /**
+     * The hut nearest a column: in the huts recipe the one whose grid cell holds it, in the terrain
+     * recipe the nearest, searching tree cells out from it.
+     *
+     * @param x The column's x.
+     * @param z The column's z.
+     * @param cells How many tree cells out to search.
+     * @return The hut's middle x, the y of its floor, and its middle z, or null for none.
+     */
+    public int[] hutNear(int x, int z, int cells) {
+        if (recipe == Recipe.HUTS) {
+            return new int[] {
+                Math.floorDiv(x, HUT_GRID) * HUT_GRID + HUT_GRID / 2,
+                1,
+                Math.floorDiv(z, HUT_GRID) * HUT_GRID + HUT_GRID / 2
+            };
+        }
+        final int homeX = Math.floorDiv(x, TREE_SPACING);
+        final int homeZ = Math.floorDiv(z, TREE_SPACING);
+        int[] best = null;
+        long bestDistance = Long.MAX_VALUE;
+        for (int cellZ = homeZ - cells; cellZ <= homeZ + cells; ++cellZ) {
+            for (int cellX = homeX - cells; cellX <= homeX + cells; ++cellX) {
+                final double tree = hash(cellX, 0, cellZ, 2);
+                if (tree < HUT_CELLS || tree >= GLASS_CELLS) {
+                    continue;
+                }
+                final int middleX = cellX * TREE_SPACING + TREE_MIDDLE;
+                final int middleZ = cellZ * TREE_SPACING + TREE_MIDDLE;
+                final int base = (int) Math.floor(height(middleX, middleZ)) + 1;
+                if (base <= WATER_LEVEL + 1) {
+                    continue;
+                }
+                final long distance =
+                        (long) (middleX - x) * (middleX - x) + (long) (middleZ - z) * (middleZ - z);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = new int[] {middleX, base, middleZ};
+                }
+            }
+        }
+        return best;
+    }
+
+    /**
      * A small plank hut in a tree cell: walls around a square, a door on its -z side, and stairs in
      * front of the door, left out under water.
      *
@@ -470,7 +525,26 @@ public final class SyntheticTerrain {
         final int middleX = cellX * TREE_SPACING + TREE_MIDDLE;
         final int middleZ = cellZ * TREE_SPACING + TREE_MIDDLE;
         final int base = (int) Math.floor(height(middleX, middleZ)) + 1;
-        if (base <= WATER_LEVEL + 1 || y < base || y >= base + HUT_HEIGHT) {
+        if (base <= WATER_LEVEL + 1) {
+            return AIR;
+        }
+        return hutAt(x, y, z, middleX, base, middleZ);
+    }
+
+    /**
+     * A plank hut's block at a position: walls around a square, open on top, a door on its -z side,
+     * and stairs in front of the door.
+     *
+     * @param x The block's x.
+     * @param y The block's y.
+     * @param z The block's z.
+     * @param middleX The hut's middle x.
+     * @param base The y of its floor.
+     * @param middleZ The hut's middle z.
+     * @return The block type, air outside the hut.
+     */
+    private static byte hutAt(int x, int y, int z, int middleX, int base, int middleZ) {
+        if (y < base || y >= base + HUT_HEIGHT) {
             return AIR;
         }
         final int dx = x - middleX;
@@ -524,6 +598,27 @@ public final class SyntheticTerrain {
         final int panelY = Math.floorDiv(y - 1, GLASS_PANEL_SIZE);
         final int panelZ = Math.floorDiv(z, GLASS_PANEL_SIZE);
         return hash(x, panelY, panelZ, 4) < GLASS_TINTED ? TINTED_GLASS : GLASS;
+    }
+
+    /**
+     * The huts recipe: flat grass at y 0, a plank hut in the middle of every cell of a grid, the
+     * origin between cells.
+     *
+     * @param x The block's x.
+     * @param y The block's y.
+     * @param z The block's z.
+     * @return The block type.
+     */
+    private byte huts(int x, int y, int z) {
+        if (y <= 0) {
+            if (y == 0) {
+                return GRASS;
+            }
+            return y >= -DIRT_DEPTH ? DIRT : STONE;
+        }
+        final int middleX = Math.floorDiv(x, HUT_GRID) * HUT_GRID + HUT_GRID / 2;
+        final int middleZ = Math.floorDiv(z, HUT_GRID) * HUT_GRID + HUT_GRID / 2;
+        return hutAt(x, y, z, middleX, 1, middleZ);
     }
 
     /**

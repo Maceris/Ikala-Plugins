@@ -104,6 +104,9 @@ public final class GateBenchmark {
     /** How high above the ground each torch is, in meters. */
     private static final double TORCH_HEIGHT = 1.5;
 
+    /** How many tree cells out from the origin to look for a hut for the hut torch. */
+    private static final int HUT_SEARCH_CELLS = 8;
+
     /** Where a run is. */
     public enum Phase {
         /** Laying out the world and composing its sections, on a worker. */
@@ -782,6 +785,18 @@ public final class GateBenchmark {
                 if (Boolean.getBoolean(PROPERTY + ".aoView")) {
                     scene.getDebugVisualizers().setOccupancyAoView(true);
                 }
+                if (Boolean.getBoolean(PROPERTY + ".rayView")) {
+                    scene.getDebugVisualizers().setOccupancyRayView(true);
+                }
+                // Off, lights without a shadow map shine through walls
+                final String rays = System.getProperty(PROPERTY + ".lightRays");
+                if (rays != null) {
+                    GraphicsManager.getSettings().occupancyLightRays = Boolean.parseBoolean(rays);
+                }
+                GraphicsManager.getSettings().occupancyRaysPerPixel =
+                        Integer.getInteger(
+                                PROPERTY + ".raysPerPixel",
+                                GraphicsManager.getSettings().occupancyRaysPerPixel);
                 if (Boolean.getBoolean(PROPERTY + ".skyView")) {
                     scene.getDebugVisualizers().setSkyOcclusionView(true);
                 }
@@ -896,12 +911,51 @@ public final class GateBenchmark {
     }
 
     /**
+     * Put a torch in the middle of the clear hut nearest a column, to see whether light gets
+     * through its walls. On a worker.
+     *
+     * @param terrain The world.
+     * @param where {@code true} for the origin, or the column as {@code x,z}.
+     */
+    private void placeHutTorch(@NonNull SyntheticTerrain terrain, @NonNull String where) {
+        int x = 0;
+        int z = 0;
+        if (!Boolean.parseBoolean(where)) {
+            final String[] parts = where.split(",");
+            if (parts.length != 2) {
+                log.warn("The benchmark hut torch must be true or x,z, not {}", where);
+                return;
+            }
+            x = Integer.parseInt(parts[0].trim());
+            z = Integer.parseInt(parts[1].trim());
+        }
+        final int[] hut = terrain.hutNear(x, z, HUT_SEARCH_CELLS);
+        if (hut == null) {
+            log.warn("Gate benchmark found no hut for the hut torch");
+            return;
+        }
+        final Vector3d at = new Vector3d(hut[0] + 0.5, hut[1] + TORCH_HEIGHT, hut[2] + 0.5);
+        final LightHandle light = graphics.lights().point(at, TORCH_COLOR, TORCH_INTENSITY);
+        log.info("Gate benchmark hut torch at ({}, {}, {})", at.x, at.y, at.z);
+        sectionsLock.lock();
+        try {
+            lights.add(light);
+        } finally {
+            sectionsLock.unlock();
+        }
+    }
+
+    /**
      * Scatter torches over the ground within the view distance, the same ones every run. On a
      * worker.
      *
      * @param terrain The world.
      */
     private void placeLights(@NonNull SyntheticTerrain terrain) {
+        final String hutTorch = System.getProperty(PROPERTY + ".hutTorch");
+        if (hutTorch != null && !"false".equalsIgnoreCase(hutTorch)) {
+            placeHutTorch(terrain, hutTorch);
+        }
         final SplittableRandom random = new SplittableRandom(SEED);
         final double reach = (double) radius * SyntheticTerrain.SECTION;
         for (int i = 0; i < lightCount && phase == Phase.BUILDING; ++i) {

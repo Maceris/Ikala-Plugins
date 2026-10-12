@@ -51,7 +51,9 @@ class ShaderBindingsTest {
         assertEquals(724, ShaderBindings.Light.OCCUPANCY_VIEW_OFFSET);
         assertEquals(728, ShaderBindings.Light.OCCUPANCY_AO_REACH_OFFSET);
         assertEquals(732, ShaderBindings.Light.OCCUPANCY_AO_VIEW_OFFSET);
-        assertEquals(736, ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
+        assertEquals(736, ShaderBindings.Light.OCCUPANCY_RAYS_OFFSET);
+        assertEquals(740, ShaderBindings.Light.OCCUPANCY_RAY_VIEW_OFFSET);
+        assertEquals(752, ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
         // The shadow map index takes the first of the light struct's spare words
         assertEquals(56, ShaderBindings.Light.LightStruct.SHADOW_MAP);
     }

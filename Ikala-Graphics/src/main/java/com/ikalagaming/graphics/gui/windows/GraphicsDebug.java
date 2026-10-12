@@ -34,6 +34,7 @@ import com.ikalagaming.graphics.vulkan.FilterView;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
 import com.ikalagaming.graphics.vulkan.InstanceRegistry;
 import com.ikalagaming.graphics.vulkan.PointShadows;
+import com.ikalagaming.graphics.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.vulkan.VoxelOitMath;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
 import com.ikalagaming.graphics.vulkan.stages.InstanceDrawUpdate;
@@ -64,6 +65,9 @@ public class GraphicsDebug extends GuiWindow {
 
     /** The point shadow budget slider's value. Render thread only. */
     private static final int[] POINT_SHADOW_BUDGET = new int[1];
+
+    /** The occupancy rays a pixel slider's value. Render thread only. */
+    private static final int[] RAYS_PER_PIXEL = new int[1];
 
     /** The sky light floor slider's value. Render thread only. */
     private static final float[] SKY_LIGHT_FLOOR = new float[1];
@@ -791,6 +795,26 @@ public class GraphicsDebug extends GuiWindow {
             settings.occupancyAoReach = AO_REACH[0];
         }
         IkGui.setItemTooltip("How far, in meters, to look for something in the way.");
+        if (IkGui.checkbox("Light rays", settings.occupancyLightRays)) {
+            settings.occupancyLightRays = !settings.occupancyLightRays;
+        }
+        IkGui.setItemTooltip(
+                "Keep lights without a shadow map from shining through what the volume holds.");
+        IkGui.sameLine();
+        if (IkGui.checkbox("Rays view", visualizers.isOccupancyRayView())) {
+            visualizers.setOccupancyRayView(!visualizers.isOccupancyRayView());
+        }
+        IkGui.setItemTooltip(
+                "Gray for how much of the rayed lights' light gets through, blue where none"
+                        + " reaches.");
+        RAYS_PER_PIXEL[0] = settings.occupancyRaysPerPixel;
+        if (IkGui.sliderInt(
+                "Rays a pixel", RAYS_PER_PIXEL, 0, ShaderBindings.Light.MAX_OCCUPANCY_RAYS)) {
+            settings.occupancyRaysPerPixel = RAYS_PER_PIXEL[0];
+        }
+        IkGui.setItemTooltip(
+                "How many lights a pixel marches a ray for, the strongest first; the rest shine"
+                        + " through.");
         final var occupancyRenderer = GraphicsManager.getRenderInstance();
         if (occupancyRenderer != null && occupancyRenderer.getState().occupancy != null) {
             final var volume = occupancyRenderer.getState().occupancy;

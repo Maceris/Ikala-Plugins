@@ -417,6 +417,9 @@ float pointVisibility(Light light, vec3 renderPosition, vec3 renderNormal) {
 
 #ifdef OCCUPANCY_SET
 #include "occupancy.glsl"
+// How much of the light from the lights the last lit surface marched rays for got through, from 0
+// to 1, or -1 when none did, for the rays view
+float lastRayVisibility = -1.0;
 #endif
 
 // Light a surface, in linear light. Positions, normals and tangents are in view space, except the
@@ -441,23 +444,68 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
     vec3 color = calcDirLight(baseColor.xyz, material, directionalLight, viewPosition, normal, tangent, bitangent)
         * sunVisible;
 
+#ifdef OCCUPANCY_SET
+    vec3 renderGeometric = normalize((invViewMatrix * vec4(geometricNormal, 0)).xyz);
+    // The strongest light from lights without a shadow map, strongest first, to march rays for
+    int rayBudget = occupancyEnabled != 0 ? min(occupancyRays, OCCUPANCY_MAX_RAYS) : 0;
+    int rayCount = 0;
+    uint rayLights[OCCUPANCY_MAX_RAYS];
+    vec3 rayLit[OCCUPANCY_MAX_RAYS];
+    float rayStrength[OCCUPANCY_MAX_RAYS];
+#endif
+
     // Only the lights light_cull.comp found can reach this pixel's cluster
     uint cluster = findCluster(screen, -viewPosition.z);
     clusterLights = clusterData[cluster];
     uint firstIndex = CLUSTER_COUNT + cluster * MAX_LIGHTS_PER_CLUSTER;
     for (uint i = 0; i < clusterLights; ++i) {
-        Light light = lights[clusterData[firstIndex + i]];
+        uint index = clusterData[firstIndex + i];
+        Light light = lights[index];
         vec3 lit = calcLight(baseColor.xyz, material, light, viewPosition, normal, tangent, bitangent);
-        if (light.shadowMap >= 0 && any(greaterThan(lit, vec3(0)))) {
+        if (!any(greaterThan(lit, vec3(0)))) {
+            continue;
+        }
+        if (light.shadowMap >= 0) {
             lit *= pointVisibility(light, renderPosition, renderNormal);
         }
+#ifdef OCCUPANCY_SET
+        else if (rayBudget > 0) {
+            // Keep it among the strongest, in order, if it is strong enough
+            float strength = dot(lit, RAY_LUMINANCE);
+            if (rayCount < rayBudget || strength > rayStrength[rayCount - 1]) {
+                int at = min(rayCount, rayBudget - 1);
+                while (at > 0 && rayStrength[at - 1] < strength) {
+                    rayLights[at] = rayLights[at - 1];
+                    rayLit[at] = rayLit[at - 1];
+                    rayStrength[at] = rayStrength[at - 1];
+                    --at;
+                }
+                rayLights[at] = index;
+                rayLit[at] = lit;
+                rayStrength[at] = strength;
+                rayCount = min(rayCount + 1, rayBudget);
+            }
+        }
+#endif
         color += lit;
     }
+#ifdef OCCUPANCY_SET
+    // Take away what the volume keeps from reaching the surface
+    float rayLight = 0.0;
+    float rayThrough = 0.0;
+    for (int r = 0; r < rayCount; ++r) {
+        vec3 renderLight = (invViewMatrix * vec4(lights[rayLights[r]].position, 1)).xyz;
+        float through = occupancyRayVisibility(renderPosition, renderGeometric, renderLight);
+        color -= rayLit[r] * (1.0 - through);
+        rayLight += rayStrength[r];
+        rayThrough += rayStrength[r] * through;
+    }
+    lastRayVisibility = rayLight > 0.0 ? rayThrough / rayLight : -1.0;
+#endif
     // Ambient light arrives equally from everywhere the sky can be seen, and dimly under cover, less
     // what is in the way nearby
 #ifdef OCCUPANCY_SET
-    float open = occupancyAmbient(renderPosition,
-        normalize((invViewMatrix * vec4(geometricNormal, 0)).xyz));
+    float open = occupancyAmbient(renderPosition, renderGeometric);
 #else
     float open = 1.0;
 #endif

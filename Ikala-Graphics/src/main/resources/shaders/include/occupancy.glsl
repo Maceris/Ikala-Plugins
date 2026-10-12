@@ -139,6 +139,74 @@ float occupancyAmbient(vec3 renderPosition, vec3 renderNormal)
     return open / total;
 }
 
+// The most lights a pixel marches a ray for. Matches ShaderBindings.Light.MAX_OCCUPANCY_RAYS.
+const int OCCUPANCY_MAX_RAYS = 8;
+// The most steps a ray takes; a longer ray takes longer steps
+const int RAY_MAX_STEPS = 48;
+// How long a step is, in voxels, at most: two to a voxel, so a wall a voxel thick can't fall
+// between steps
+const float RAY_STEP_VOXELS = 0.5;
+// How far, in voxels, a ray starts out from the surface and stops short of the light, so the
+// voxels holding either, whose blended coverage reaches a voxel past their middle, don't block it
+const float RAY_END_CLEARANCE = 1.5;
+// How bright each channel looks, Rec. 709, to rank the lights a pixel marches rays for
+const vec3 RAY_LUMINANCE = vec3(0.2126, 0.7152, 0.0722);
+// How much more than its blended coverage each ray sample blocks. Two samples a voxel land
+// anywhere along it, and the nearer one to a voxel's middle always reads at least 3/4 of it, so
+// with this gain an opaque voxel always stops a ray, wherever its samples fall; read as it is, a
+// wall a voxel thick let up to 1/16 through in rings
+const float RAY_COVERAGE_GAIN = 4.0 / 3.0;
+// Past this little light, a ray stops: nothing behind it would show
+const float RAY_OPAQUE = 0.01;
+
+// The finest level holding two render space points with a voxel to spare for blending, or
+// OCCUPANCY_LEVELS for none. Levels are boxes, so they hold the segment between the points too.
+int occupancyLevelHolding(vec3 a, vec3 b)
+{
+    for (int level = 0; level < OCCUPANCY_LEVELS; ++level) {
+        vec4 origin = occupancyOrigins[level];
+        vec3 low = min(a, b) - origin.xyz - origin.w;
+        vec3 high = max(a, b) - origin.xyz + origin.w;
+        if (all(greaterThanEqual(low, vec3(0))) && all(lessThan(high, vec3(OCCUPANCY_SIZE * origin.w)))) {
+            return level;
+        }
+    }
+    return OCCUPANCY_LEVELS;
+}
+
+// How much light gets from a light to a surface through what the occupancy volume holds between
+// them, from 0 to 1: a ray marched through the finest level holding both, every step letting
+// through what the steps before it left, less how full it is. Leaves and plants let some through.
+// The normal is best the surface's geometric one.
+float occupancyRayVisibility(vec3 renderPosition, vec3 renderNormal, vec3 renderLight)
+{
+    int level = occupancyLevelHolding(renderPosition, renderLight);
+    if (occupancyEnabled == 0 || level == OCCUPANCY_LEVELS) {
+        return 1.0;
+    }
+    float voxelSize = occupancyOrigins[level].w;
+    float clearance = RAY_END_CLEARANCE * voxelSize;
+    vec3 start = renderPosition + renderNormal * clearance;
+    vec3 toLight = renderLight - start;
+    float span = length(toLight);
+    float march = span - clearance;
+    if (march <= 0.0) {
+        return 1.0;
+    }
+    vec3 direction = toLight / span;
+    int steps = min(int(ceil(march / (RAY_STEP_VOXELS * voxelSize))), RAY_MAX_STEPS);
+    float step = march / float(steps);
+    float through = 1.0;
+    for (int i = 0; i < steps; ++i) {
+        float full = occupancyFullness(start + direction * (step * (float(i) + 0.5)), level);
+        through *= 1.0 - min(full * RAY_COVERAGE_GAIN, 1.0);
+        if (through < RAY_OPAQUE) {
+            return 0.0;
+        }
+    }
+    return through;
+}
+
 // The occupancy view: red where a surface's own voxel is empty, which would be a hole in the
 // voxels; otherwise gray, darker the more of the voxels around the air in front of it are full
 vec3 occupancyViewColor(vec3 renderPosition, vec3 renderNormal)
