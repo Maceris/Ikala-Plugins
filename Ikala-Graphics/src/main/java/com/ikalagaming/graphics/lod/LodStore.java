@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
+import java.util.function.Predicate;
 
 /**
  * The level of detail of a changing world, kept as an octree of region cells so that loading,
@@ -311,6 +312,26 @@ public final class LodStore {
     }
 
     /**
+     * Whether a rebuild has anything it may do now: a dirty level 0 cell that is ready, or parents
+     * to build once no cell is left dirty.
+     *
+     * @param ready Which cells may be built now.
+     * @param parentsReady Whether parents may be built.
+     * @return True if a rebuild would build or take out a cell.
+     */
+    public boolean hasWork(@NonNull Predicate<CellKey> ready, boolean parentsReady) {
+        if (dirty.isEmpty()) {
+            return parentsReady && !unparented.isEmpty();
+        }
+        for (CellKey key : dirty) {
+            if (ready.test(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * How many cells are built.
      *
      * @return The count, over all levels.
@@ -352,9 +373,34 @@ public final class LodStore {
      * @return What was built and taken out, and which cells are stale.
      */
     public Rebuilt rebuild(int maxCells, double @NonNull [] near) {
+        return rebuild(maxCells, near, key -> true, true);
+    }
+
+    /**
+     * Build up to some of the dirty level 0 cells that are ready, nearest a point first, and once
+     * none is left dirty and parents may be built, every parent above a cell rebuilt or removed
+     * since parents were last built, up to the root. Cells that aren't ready stay dirty, and their
+     * parents wait for them.
+     *
+     * @param maxCells The most level 0 cells to build.
+     * @param near The point to build nearest to, in the world.
+     * @param ready Which dirty level 0 cells may be built now.
+     * @param parentsReady Whether parents may be built, such as when no section is still to come.
+     * @return What was built and taken out, and which cells are stale.
+     */
+    public Rebuilt rebuild(
+            int maxCells,
+            double @NonNull [] near,
+            @NonNull Predicate<CellKey> ready,
+            boolean parentsReady) {
         final List<CellKey> built = new ArrayList<>();
         final List<CellKey> removed = new ArrayList<>();
-        final List<CellKey> order = new ArrayList<>(dirty);
+        final List<CellKey> order = new ArrayList<>();
+        for (CellKey key : dirty) {
+            if (ready.test(key)) {
+                order.add(key);
+            }
+        }
         order.sort(Comparator.comparingDouble(key -> distanceSquared(key, near)));
         for (CellKey key : order.subList(0, Math.min(maxCells, order.size()))) {
             dirty.remove(key);
@@ -385,7 +431,7 @@ public final class LodStore {
             unparented.add(key);
             built.add(key);
         }
-        if (dirty.isEmpty() && !unparented.isEmpty()) {
+        if (dirty.isEmpty() && parentsReady && !unparented.isEmpty()) {
             buildParents(built, removed);
             unparented.clear();
         }

@@ -333,6 +333,9 @@ public class SectionManager {
         } finally {
             lock.unlock();
         }
+        if (feeds != null) {
+            feeds.expect(position, generation);
+        }
         inFlight.incrementAndGet();
         final Vector3dc eye = lastEye;
         if (eye != null
@@ -345,6 +348,9 @@ public class SectionManager {
             workers.execute(() -> bake(id, generation, request, feeds, position));
         } catch (RejectedExecutionException e) {
             inFlight.decrementAndGet();
+            if (feeds != null) {
+                feeds.abandon(position, generation);
+            }
             log.debug("Not baking section {} of {}, the renderer is shutting down", id, owner);
         }
     }
@@ -389,6 +395,9 @@ public class SectionManager {
             baked.add(new Baked(id, generation, new Vector3d(request.origin()), result));
         } catch (RuntimeException e) {
             log.error("Baking section {} failed", id, e);
+            if (feeds != null) {
+                feeds.abandon(position, generation);
+            }
         } finally {
             inFlight.decrementAndGet();
         }

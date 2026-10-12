@@ -10,11 +10,14 @@ import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.SectionHandle;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.graph.MeshData;
+import com.ikalagaming.graphics.lod.CrackCheck;
+import com.ikalagaming.graphics.lod.LodCache;
 import com.ikalagaming.graphics.lod.LodStore;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
+import com.ikalagaming.graphics.vulkan.LodRenderer;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
 
 import lombok.NonNull;
@@ -30,6 +33,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -38,6 +42,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SplittableRandom;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.Nullable;
@@ -107,6 +113,10 @@ public final class GateBenchmark {
         SETTLING,
         /** Turning the camera and recording. */
         MEASURING,
+        /** Checking the level of detail's cut for cracks, for the gate. */
+        CHECKING,
+        /** Digging near the camera and timing the edits, for the gate. */
+        EDITING,
         /** Finished, with results. */
         DONE,
         /** Stopped or failed. */
@@ -127,6 +137,7 @@ public final class GateBenchmark {
      * @param passed Whether the GPU's 95th percentile was within budget.
      * @param width The width the scene was drawn at, in pixels.
      * @param height The height the scene was drawn at, in pixels.
+     * @param gate What the level of detail gate found, or null if it wasn't checked.
      */
     public record Results(
             SyntheticTerrain.@NonNull Recipe recipe,
@@ -139,7 +150,130 @@ public final class GateBenchmark {
             @NonNull List<FrameTimings.Timing> timings,
             boolean passed,
             int width,
-            int height) {}
+            int height,
+            @Nullable Gate gate) {}
+
+    /**
+     * One crack check of the level of detail's cut, as the GPU picks it.
+     *
+     * @param where Where the camera was.
+     * @param cracks What the check found.
+     * @param missing Clusters picked whose meshes weren't on the GPU: holes.
+     * @param triangles The triangles the cut draws.
+     * @param hidden Sections drawing themselves instead, whose edges are excused.
+     */
+    public record Check(
+            @NonNull String where,
+            CrackCheck.@NonNull Tiled cracks,
+            int missing,
+            long triangles,
+            int hidden) {
+
+        /**
+         * Whether the cut had no cracks and no holes.
+         *
+         * @return True if it was clean.
+         */
+        public boolean isClean() {
+            return cracks.isClean() && missing == 0;
+        }
+    }
+
+    /**
+     * What the level of detail gate found, besides the GPU time.
+     *
+     * @param lodBytes Level of detail mesh bytes on the GPU once loaded.
+     * @param lodTotalBytes Level of detail mesh bytes kept on the CPU.
+     * @param cacheRead Cells read from the disk cache while loading.
+     * @param cacheBuilt Cells built while loading.
+     * @param checks The crack checks.
+     * @param edits Edits made.
+     * @param editsUnfinished Edits that weren't drawn or didn't reach the level of detail in time.
+     * @param worstDrawnMillis The longest an edit took to be drawn at full resolution.
+     * @param worstDrawnFrames The most frames an edit took to be drawn.
+     * @param lodMillisP95 How long edits took to reach the level of detail, 95th percentile.
+     */
+    public record Gate(
+            long lodBytes,
+            long lodTotalBytes,
+            long cacheRead,
+            long cacheBuilt,
+            @NonNull List<Check> checks,
+            int edits,
+            int editsUnfinished,
+            double worstDrawnMillis,
+            int worstDrawnFrames,
+            double lodMillisP95) {
+
+        /**
+         * Whether every check was clean.
+         *
+         * @return True if no cut had cracks or holes.
+         */
+        public boolean cracksPassed() {
+            return !checks.isEmpty() && checks.stream().allMatch(Check::isClean);
+        }
+
+        /**
+         * Whether every edit was drawn at full resolution in time.
+         *
+         * @return True if they were.
+         */
+        public boolean editsPassed() {
+            return edits == GATE_DIGS && editsUnfinished == 0 && worstDrawnMillis <= EDIT_BUDGET_MS;
+        }
+
+        /**
+         * Whether this was a reload from the cache: something was read.
+         *
+         * @return True if cells were read.
+         */
+        public boolean isReload() {
+            return cacheRead > 0;
+        }
+
+        /**
+         * Whether a reload built nothing.
+         *
+         * @return True if it read every cell.
+         */
+        public boolean reloadPassed() {
+            return isReload() && cacheBuilt == 0;
+        }
+    }
+
+    /** Edits the gate makes. */
+    public static final int GATE_DIGS = 20;
+
+    /** Edits a second the gate makes, as a quick player digs. */
+    public static final double GATE_DIG_RATE = 20;
+
+    /** The longest an edit may take to be drawn at full resolution, in milliseconds. */
+    public static final double EDIT_BUDGET_MS = 250;
+
+    /**
+     * Where the cut is checked for cracks: how far out, as a part of the view distance, and at what
+     * angle around, in degrees. The cut depends on where the eye is, not where it looks.
+     */
+    private static final double[][] CHECK_SPOTS = {{0, 0}, {0.5, 0}, {0.5, 120}, {0.5, 240}};
+
+    /** How high above the ground the camera is at each check, in blocks. */
+    private static final double CHECK_HEIGHT = 6;
+
+    /** Frames everything must stay loaded in a row before the world counts as ready. */
+    private static final int READY_FRAMES = 10;
+
+    /** The width of the columns the crack check works through, in blocks. */
+    private static final double CHECK_COLUMN = 64;
+
+    /** How long a view is held before its cut is checked, so streaming can catch up. */
+    private static final long CHECK_HOLD_NANOS = 1_000_000_000L;
+
+    /** How long the gate's edits may take to reach the level of detail, all told. */
+    private static final long EDIT_TIMEOUT_NANOS = 60_000_000_000L;
+
+    /** The percentile edit times are given at. */
+    private static final double PERCENTILE = 0.95;
 
     /** The run in progress, or the last one. Render thread only. */
     @Nullable private static GateBenchmark current;
@@ -192,6 +326,51 @@ public final class GateBenchmark {
 
     /** Whether the world's opaque blocks are drawn by live level of detail. */
     private final boolean lod;
+
+    /** Whether the run also checks the level of detail gate: cracks, edits and the cache. */
+    private final boolean gate;
+
+    /** The next crack check, by index in {@link #CHECK_SPOTS}, then one after the edits. */
+    private int checkIndex;
+
+    /** When the current view was taken up, from {@link System#nanoTime()}. */
+    private long checkSince;
+
+    /** Where the camera is for the current check. */
+    @Nullable private Vector3d checkPosition;
+
+    /** When everything was first seen loaded in the current run of frames, or 0. */
+    private long readySince;
+
+    /** Frames in a row everything has been loaded. */
+    private int readyFrames;
+
+    /** The crack check running on a worker, or null. */
+    @Nullable private CompletableFuture<CrackCheck.Tiled> checking;
+
+    /** The cut being checked. */
+    @Nullable private LodRenderer.Cut checkCut;
+
+    /** The checks so far. */
+    private final List<Check> checks = new ArrayList<>();
+
+    /** When the gate's edits started, from {@link System#nanoTime()}. */
+    private long editStart;
+
+    /** Edits that didn't finish in time. */
+    private int editsUnfinished;
+
+    /** The most frames an edit took to be drawn. */
+    private int worstDrawnFrames;
+
+    /** Where in a dig's latency the frames until it was drawn are. */
+    private static final int LATENCY_FRAMES = 2;
+
+    /** What the cache had done once the world was loaded, or null. */
+    @Nullable private LodCache.Stats cacheAtLoad;
+
+    /** Level of detail bytes on the GPU and kept, once loaded. */
+    private long[] lodBytesAtLoad = new long[2];
 
     /** The live level of detail world, while there is one. */
     @Nullable private LodHandle lodWorld;
@@ -340,18 +519,21 @@ public final class GateBenchmark {
      * @param lightCount How many torches to scatter over the world.
      * @param keepWorld Whether to leave the world in place when the run finishes.
      * @param lod Whether the world's opaque blocks are drawn by live level of detail.
+     * @param gate Whether to check the level of detail gate too, which draws with it.
      */
     private GateBenchmark(
             SyntheticTerrain.@NonNull Recipe recipe,
             int radius,
             int lightCount,
             boolean keepWorld,
-            boolean lod) {
+            boolean lod,
+            boolean gate) {
         this.recipe = recipe;
         this.radius = radius;
         this.lightCount = lightCount;
         this.keepWorld = keepWorld;
-        this.lod = lod;
+        this.lod = lod || gate;
+        this.gate = gate;
         this.graphics = GraphicsManager.forPlugin(GraphicsPlugin.PLUGIN_NAME);
     }
 
@@ -386,9 +568,33 @@ public final class GateBenchmark {
             int lights,
             boolean keepWorld,
             boolean lod) {
+        start(recipe, radius, lights, keepWorld, lod, false);
+    }
+
+    /**
+     * Start a run, stopping any in progress and removing a kept world. Render thread only.
+     *
+     * @param recipe The world.
+     * @param radius The view distance, in sections.
+     * @param lights How many torches to scatter over the world, to measure many lights.
+     * @param keepWorld Whether to leave the world in place when the run finishes, to look around in
+     *     with the camera, the debug views and a frozen observer.
+     * @param lod Whether the world's opaque blocks are drawn by live level of detail, built from
+     *     its sections, rather than by the sections.
+     * @param gate Whether to check the level of detail gate after the turn: the cut for cracks at
+     *     several headings, then edits near the camera, with the cache's work while loading. Draws
+     *     with level of detail.
+     */
+    public static void start(
+            SyntheticTerrain.@NonNull Recipe recipe,
+            int radius,
+            int lights,
+            boolean keepWorld,
+            boolean lod,
+            boolean gate) {
         stop();
         removeWorld();
-        current = new GateBenchmark(recipe, radius, Math.max(0, lights), keepWorld, lod);
+        current = new GateBenchmark(recipe, radius, Math.max(0, lights), keepWorld, lod, gate);
         current.begin();
     }
 
@@ -472,6 +678,11 @@ public final class GateBenchmark {
                                             (System.nanoTime() - measureStart)
                                                     / 1e9
                                                     / TURN_SECONDS));
+            case CHECKING ->
+                    String.format(
+                            "Checking for cracks: %d of %d",
+                            checkIndex + 1, CHECK_SPOTS.length + 1);
+            case EDITING -> String.format("Editing: %d of %d edits made", digCount, GATE_DIGS);
             case DONE -> "Done";
             case STOPPED -> failure == null ? "Stopped" : "Failed: " + failure;
         };
@@ -500,7 +711,8 @@ public final class GateBenchmark {
                         Integer.getInteger(PROPERTY + ".radius", 12),
                         Integer.getInteger(PROPERTY + ".lights", 0),
                         keep,
-                        Boolean.getBoolean(PROPERTY + ".lod"));
+                        Boolean.getBoolean(PROPERTY + ".lod"),
+                        Boolean.getBoolean(PROPERTY + ".gate"));
                 current.digsLeft = Integer.getInteger(PROPERTY + ".digs", 0);
                 current.propertyDigRate =
                         Double.parseDouble(
@@ -676,11 +888,17 @@ public final class GateBenchmark {
                 } finally {
                     sectionsLock.unlock();
                 }
-                // With level of detail, also until it shows every section's bake
-                final boolean lodCaughtUp =
-                        !lod || renderer().getState().sections.getLodBehind() == 0;
-                if (allResident && stats.baking() == 0 && lodCaughtUp) {
-                    bakeMilliseconds = (System.nanoTime() - composedAt) / 1_000_000;
+                // With level of detail, also until it shows every section's bake with every cell
+                // built and loaded
+                final boolean lodCaughtUp = !lod || isLodSettled();
+                if (!allResident || stats.baking() != 0 || !lodCaughtUp) {
+                    readyFrames = 0;
+                    readySince = 0;
+                } else if (readyFrames++ == 0) {
+                    readySince = System.nanoTime();
+                }
+                if (readyFrames >= READY_FRAMES) {
+                    bakeMilliseconds = (readySince - composedAt) / 1_000_000;
                     load = load.withTriangles(stats.triangles());
                     log.info(
                             "Gate benchmark: {} triangles resident after {} ms",
@@ -693,15 +911,23 @@ public final class GateBenchmark {
                                             .sections
                                             .lodCacheStats(graphics.getOwnerKey())
                                     : null;
+                    cacheAtLoad = cache;
+                    final var live = lodWorld == null ? null : graphics.lods().liveStats(lodWorld);
+                    if (live != null) {
+                        lodBytesAtLoad = new long[] {live.loadedBytes(), live.totalBytes()};
+                    }
                     if (cache != null) {
                         log.info(
                                 "Gate benchmark LOD cache: {} cells read, {} built, {} MiB read,"
-                                        + " {} MiB written, {} MiB in the folder",
+                                        + " {} MiB written, {} in the folder",
                                 cache.hits(),
                                 cache.misses(),
                                 String.format("%.1f", cache.bytesRead() / BYTES_PER_MIB),
                                 String.format("%.1f", cache.bytesWritten() / BYTES_PER_MIB),
-                                String.format("%.1f", cache.folderBytes() / BYTES_PER_MIB));
+                                cache.folderBytes() < 0
+                                        ? "nothing saved, so not counted"
+                                        : String.format(
+                                                "%.1f MiB", cache.folderBytes() / BYTES_PER_MIB));
                     }
                     phase = Phase.SETTLING;
                 }
@@ -720,9 +946,24 @@ public final class GateBenchmark {
                 logResidency(seconds);
                 if (seconds >= TURN_SECONDS) {
                     renderer().getState().frameTimings.setListener(null);
-                    finish();
+                    if (gate && lodWorld != null) {
+                        phase = Phase.CHECKING;
+                        checkSince = System.nanoTime();
+                    } else {
+                        finish();
+                    }
                 }
             }
+            case CHECKING -> {
+                if (checkIndex < CHECK_SPOTS.length) {
+                    final Vector3d at = checkSpot(checkIndex);
+                    checkPosition = at;
+                    scene.getCamera().setPosition(at.x, at.y, at.z);
+                    scene.getCamera().setRotation(PITCH, 0);
+                }
+                stepCheck();
+            }
+            case EDITING -> stepEdits();
             case DONE -> {
                 placeView(scene);
                 updateDigs();
@@ -841,6 +1082,292 @@ public final class GateBenchmark {
         scene.getCamera().setRotation((float) values[3], (float) values[4]);
     }
 
+    /**
+     * Whether the level of detail shows every section's bake, with nothing waiting to be built,
+     * uploaded or loaded. Render thread.
+     *
+     * @return True if it has caught up.
+     */
+    private boolean isLodSettled() {
+        final LodHandle world = lodWorld;
+        if (world == null) {
+            return false;
+        }
+        final var stats = graphics.lods().liveStats(world);
+        return renderer().getState().sections.getLodBehind() == 0
+                && stats != null
+                && stats.pendingBatches() == 0
+                && stats.staleCells() == 0
+                && renderer().getState().lods.isSettled(world.id());
+    }
+
+    /**
+     * Once the view has been held long enough and the level of detail has caught up, work out the
+     * cut the GPU picks and check it for cracks on a worker; when that is done, move on. Render
+     * thread.
+     */
+    private void stepCheck() {
+        final LodHandle world = lodWorld;
+        if (world == null) {
+            finish();
+            return;
+        }
+        final long now = System.nanoTime();
+        final var lods = renderer().getState().lods;
+        if (checking == null) {
+            if (now - checkSince < CHECK_HOLD_NANOS || !isLodSettled()) {
+                return;
+            }
+            final LodRenderer.Cut cut = lods.cut(world.id());
+            if (cut == null) {
+                finish();
+                return;
+            }
+            checkCut = cut;
+            final List<double[]> boxes = sectionBoxes(cut.hidden());
+            checking =
+                    CompletableFuture.supplyAsync(
+                            () ->
+                                    CrackCheck.checkTiled(
+                                            cut.clusters(),
+                                            cut.highest(),
+                                            cut.drawn(),
+                                            CHECK_COLUMN,
+                                            boxes));
+            return;
+        }
+        if (!checking.isDone()) {
+            return;
+        }
+        final Vector3d at = checkPosition;
+        final String where =
+                checkIndex < CHECK_SPOTS.length && at != null
+                        ? String.format("from (%.0f, %.0f, %.0f)", at.x, at.y, at.z)
+                        : "over the edits";
+        final LodRenderer.Cut cut = checkCut;
+        try {
+            final CrackCheck.Tiled cracks = checking.join();
+            final Check check =
+                    new Check(where, cracks, cut.missing(), cut.triangles(), cut.hidden().size());
+            checks.add(check);
+            log.info("Gate benchmark crack check {}", describe(check));
+        } catch (CompletionException e) {
+            log.error("Gate benchmark crack check {} failed", where, e);
+        }
+        checking = null;
+        checkCut = null;
+        checkIndex += 1;
+        checkSince = now;
+        if (checkIndex == CHECK_SPOTS.length) {
+            phase = Phase.EDITING;
+            digsLeft = GATE_DIGS;
+            propertyDigRate = GATE_DIG_RATE;
+            editStart = now;
+        } else if (checkIndex > CHECK_SPOTS.length) {
+            finish();
+        }
+    }
+
+    /**
+     * Where the camera goes for a crack check, above the ground.
+     *
+     * @param index The check.
+     * @return The position.
+     */
+    private Vector3d checkSpot(int index) {
+        final double distance = CHECK_SPOTS[index][0] * radius * SyntheticTerrain.SECTION;
+        final double angle = Math.toRadians(CHECK_SPOTS[index][1]);
+        final int x = (int) Math.floor(distance * Math.cos(angle));
+        final int z = (int) Math.floor(distance * Math.sin(angle));
+        final SyntheticTerrain world = terrain;
+        final double ground = world == null ? 0 : world.top(x, z) + 1;
+        return new Vector3d(x + 0.5, ground + CHECK_HEIGHT, z + 0.5);
+    }
+
+    /**
+     * The boxes of some sections.
+     *
+     * @param positions The sections.
+     * @return Their boxes, min x, y, z then max x, y, z, from the world's origin.
+     */
+    private static List<double[]> sectionBoxes(@NonNull Set<LodStore.SectionPos> positions) {
+        final int size = SyntheticTerrain.SECTION;
+        final List<double[]> boxes = new ArrayList<>();
+        for (LodStore.SectionPos position : positions) {
+            final double x = (double) position.x() * size;
+            final double y = (double) position.y() * size;
+            final double z = (double) position.z() * size;
+            boxes.add(new double[] {x, y, z, x + size, y + size, z + size});
+        }
+        return boxes;
+    }
+
+    /**
+     * Make the gate's edits and wait for each to reach the level of detail, then check the cut over
+     * them. Render thread.
+     */
+    private void stepEdits() {
+        updateDigs();
+        final long now = System.nanoTime();
+        final boolean done = digsLeft == 0 && digs.isEmpty();
+        if (!done && now - editStart < EDIT_TIMEOUT_NANOS) {
+            return;
+        }
+        if (!done) {
+            editsUnfinished = digs.size() + digsLeft;
+            log.warn("Gate benchmark: {} edits didn't finish in time", editsUnfinished);
+            digs.clear();
+            digsLeft = 0;
+        }
+        phase = Phase.CHECKING;
+        checkSince = now;
+    }
+
+    /**
+     * Gather what the gate found.
+     *
+     * @return The gate, or null if it wasn't checked.
+     */
+    @Nullable private Gate gateResults() {
+        if (!gate) {
+            return null;
+        }
+        double worstDrawn = 0;
+        final double[] lodMillis = new double[digLatencies.size()];
+        for (int i = 0; i < lodMillis.length; ++i) {
+            final double[] latency = digLatencies.get(i);
+            worstDrawn = Math.max(worstDrawn, latency[0]);
+            lodMillis[i] = latency[1];
+            worstDrawnFrames = Math.max(worstDrawnFrames, (int) latency[LATENCY_FRAMES]);
+        }
+        Arrays.sort(lodMillis);
+        final double lodP95 =
+                lodMillis.length == 0
+                        ? 0
+                        : lodMillis[
+                                Math.clamp(
+                                        (int) Math.ceil(PERCENTILE * lodMillis.length) - 1,
+                                        0,
+                                        lodMillis.length - 1)];
+        final LodCache.Stats cache = cacheAtLoad;
+        return new Gate(
+                lodBytesAtLoad[0],
+                lodBytesAtLoad[1],
+                cache == null ? 0 : cache.hits(),
+                cache == null ? 0 : cache.misses(),
+                List.copyOf(checks),
+                digLatencies.size() + editsUnfinished,
+                editsUnfinished,
+                worstDrawn,
+                worstDrawnFrames,
+                lodP95);
+    }
+
+    /**
+     * Describe a crack check in a line.
+     *
+     * @param check The check.
+     * @return The line.
+     */
+    private static String describe(@NonNull Check check) {
+        final CrackCheck.Tiled cracks = check.cracks();
+        final StringBuilder out =
+                new StringBuilder(
+                        String.format(
+                                "%s: %,d cracks, %,d overdrawn edges, %,d holes; %,d clusters and"
+                                        + " %,d triangles drawn, %,d edges checked, %,d too long to"
+                                        + " check, %,d on %,d sections drawing themselves",
+                                check.where(),
+                                cracks.openEdges(),
+                                cracks.overdrawnEdges(),
+                                check.missing(),
+                                cracks.drawnClusters(),
+                                check.triangles(),
+                                cracks.checkedEdges(),
+                                cracks.longEdges(),
+                                cracks.excusedEdges(),
+                                check.hidden()));
+        for (double[] at : cracks.examples()) {
+            out.append(String.format("; at (%.2f, %.2f, %.2f)", at[0], at[1], at[2]));
+        }
+        return out.toString();
+    }
+
+    /**
+     * The gate's verdicts, a line each, for the report and the debug window.
+     *
+     * @param results The results.
+     * @return The lines, empty if the gate wasn't checked.
+     */
+    public static List<String> gateLines(@NonNull Results results) {
+        final Gate gate = results.gate();
+        if (gate == null) {
+            return List.of();
+        }
+        final FrameTimings.Timing gpu =
+                results.timings().isEmpty() ? null : results.timings().get(0);
+        final List<String> lines = new ArrayList<>();
+        lines.add(
+                String.format(
+                        "GPU at the 95th percentile: %.2f of %.1f ms, %s",
+                        gpu == null ? Double.NaN : gpu.p95(),
+                        GPU_BUDGET_MS,
+                        verdict(results.passed())));
+        final long cracks = gate.checks().stream().mapToLong(c -> c.cracks().openEdges()).sum();
+        final long overdrawn =
+                gate.checks().stream().mapToLong(c -> c.cracks().overdrawnEdges()).sum();
+        final long holes = gate.checks().stream().mapToLong(Check::missing).sum();
+        lines.add(
+                String.format(
+                        "Cracks: %,d cracks, %,d overdrawn edges and %,d holes in %d cuts, %s",
+                        cracks,
+                        overdrawn,
+                        holes,
+                        gate.checks().size(),
+                        verdict(gate.cracksPassed())));
+        lines.add(
+                String.format(
+                        "Edits: %d of %d at %.0f a second, worst drawn at full resolution after %.1f"
+                                + " ms (%d frames) of %.0f ms, in level of detail after %.0f ms at"
+                                + " the 95th percentile, %s",
+                        gate.edits() - gate.editsUnfinished(),
+                        GATE_DIGS,
+                        GATE_DIG_RATE,
+                        gate.worstDrawnMillis(),
+                        gate.worstDrawnFrames(),
+                        EDIT_BUDGET_MS,
+                        gate.lodMillisP95(),
+                        verdict(gate.editsPassed())));
+        lines.add(
+                gate.isReload()
+                        ? String.format(
+                                "Reload: %,d cells read from the cache and %,d built, ready after"
+                                        + " %.1f s, %s",
+                                gate.cacheRead(),
+                                gate.cacheBuilt(),
+                                results.bakeMilliseconds() / 1e3,
+                                verdict(gate.reloadPassed()))
+                        : String.format(
+                                "First build: %,d cells built, ready after %.1f s; run again to"
+                                        + " check the reload",
+                                gate.cacheBuilt(), results.bakeMilliseconds() / 1e3));
+        lines.add(
+                String.format(
+                        "Level of detail: %.1f of %.1f MiB on the GPU",
+                        gate.lodBytes() / BYTES_PER_MIB, gate.lodTotalBytes() / BYTES_PER_MIB));
+        return lines;
+    }
+
+    /**
+     * A verdict in a word.
+     *
+     * @param passed Whether it passed.
+     * @return The word.
+     */
+    private static String verdict(boolean passed) {
+        return passed ? "passed" : "FAILED";
+    }
+
     /** Work out the results, report them, and release everything. */
     private void finish() {
         final List<FrameTimings.Timing> timings = new ArrayList<>();
@@ -873,7 +1400,8 @@ public final class GateBenchmark {
                         timings,
                         passed,
                         GraphicsManager.getWindow().getWidth(),
-                        GraphicsManager.getWindow().getHeight());
+                        GraphicsManager.getWindow().getHeight(),
+                        gateResults());
         phase = Phase.DONE;
         final String report = report(results);
         log.info("Gate benchmark results:\n{}", report);
@@ -939,6 +1467,15 @@ public final class GateBenchmark {
                     String.format(
                             "  %-24s %9.3f %9.3f %9.3f%n",
                             timing.name(), timing.average(), timing.p95(), timing.max()));
+        }
+        if (results.gate() != null) {
+            for (Check check : results.gate().checks()) {
+                out.append("  Crack check ").append(describe(check)).append(System.lineSeparator());
+            }
+            out.append("  Level of detail gate:").append(System.lineSeparator());
+            for (String line : gateLines(results)) {
+                out.append("    ").append(line).append(System.lineSeparator());
+            }
         }
         return out.toString();
     }
@@ -1072,7 +1609,8 @@ public final class GateBenchmark {
     /**
      * Every dig's latency so far.
      *
-     * @return For each dig, milliseconds until its hole was drawn and until level of detail had it.
+     * @return For each dig, milliseconds until its hole was drawn and until level of detail had it,
+     *     then frames until it was drawn.
      */
     public List<double[]> getDigLatencies() {
         return List.copyOf(digLatencies);
@@ -1117,7 +1655,7 @@ public final class GateBenchmark {
             if (dig.drawn != 0 && inLod) {
                 final double drawnMillis = (dig.drawn - dig.start) / NANOS_PER_MILLI;
                 final double lodMillis = (now - dig.start) / NANOS_PER_MILLI;
-                digLatencies.add(new double[] {drawnMillis, lodMillis});
+                digLatencies.add(new double[] {drawnMillis, lodMillis, dig.frames});
                 log.info(
                         "Dig at ({}, {}, {}): drawn after {} ms ({} frames), in level of detail"
                                 + " after {} ms; {} sections drawing themselves; last bake on the"

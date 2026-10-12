@@ -24,6 +24,7 @@ import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.VkCommandBuffer;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -1431,6 +1432,19 @@ public class LodRenderer {
      * @param index The cluster's index in the piece.
      */
     private void writeEntry(@NonNull World world, @NonNull Piece piece, int index) {
+        putEntry(world, piece, index, clusterEntries.next(piece.first + index));
+    }
+
+    /**
+     * Write one cluster's entry somewhere. Render thread.
+     *
+     * @param world The world.
+     * @param piece The cluster's piece.
+     * @param index The cluster's index in the piece.
+     * @param out Where it goes, from its position.
+     */
+    private void putEntry(
+            @NonNull World world, @NonNull Piece piece, int index, @NonNull ByteBuffer out) {
         final LodStore.PieceCluster cluster = piece.clusters[index];
         final MeshHandle mesh = piece.meshes[index];
         final Integer cell = world.cells.get(piece.key);
@@ -1440,7 +1454,7 @@ public class LodRenderer {
         final int[] section =
                 cluster.section() == null ? null : world.sections.get(cluster.section());
         LodCullMath.putCluster(
-                clusterEntries.next(piece.first + index),
+                out,
                 cluster.cluster(),
                 cluster.parentError(),
                 cluster.parentBound(),
@@ -1456,6 +1470,117 @@ public class LodRenderer {
                                 ? LodCullMath.NONE
                                 : unitSlot(world, new UnitKey(piece.key, producer)),
                         cluster.cluster().level()));
+    }
+
+    /**
+     * The cut of a live world as the GPU picks it from the observer of the last frame, before
+     * culling, worked out on the CPU from the same entries, flags and shown units, for checking.
+     *
+     * @param clusters Every cluster of the world's cells, all at its origin.
+     * @param highest The highest level each stands for its part of the input at: below the level
+     *     its consumer makes, or the top for a root.
+     * @param drawn Whether each is drawn. One picked whose mesh has no triangles counts as drawn,
+     *     since there is nothing of it to draw.
+     * @param missing How many were picked with triangles but no mesh on the GPU: holes.
+     * @param hidden The sections drawing themselves instead.
+     * @param triangles The triangles of the meshes drawn.
+     */
+    public record Cut(
+            @NonNull List<LodDag.Cluster> clusters,
+            int @NonNull [] highest,
+            boolean @NonNull [] drawn,
+            int missing,
+            @NonNull Set<LodStore.SectionPos> hidden,
+            long triangles) {}
+
+    /**
+     * Work out the cut of a world as the GPU picks it from the last frame's observer. Render
+     * thread.
+     *
+     * @param id The world.
+     * @return The cut, or null if there is no such world.
+     */
+    public Cut cut(long id) {
+        final World world = world(id);
+        if (world == null) {
+            return null;
+        }
+        // The level each group was simplified at, below its outputs
+        final Map<UnitKey, Integer> groupLevels = new HashMap<>();
+        int count = 0;
+        int top = 0;
+        for (Piece piece : world.pieces.values()) {
+            for (LodStore.PieceCluster cluster : piece.clusters) {
+                final LodDag.Cluster c = cluster.cluster();
+                top = Math.max(top, c.level());
+                if (c.producer() >= 0) {
+                    groupLevels.merge(
+                            new UnitKey(piece.key, c.producer()), c.level() - 1, Math::max);
+                }
+            }
+            count += piece.clusters.length;
+        }
+        final ByteBuffer entry =
+                ByteBuffer.allocate(LodCullMath.CLUSTER_ENTRY_SIZE).order(ByteOrder.nativeOrder());
+        final float[] eye = {(float) world.eye[0], (float) world.eye[1], (float) world.eye[2]};
+        final List<LodDag.Cluster> clusters = new ArrayList<>(count);
+        final int[] highest = new int[count];
+        final boolean[] drawn = new boolean[count];
+        int missing = 0;
+        long triangles = 0;
+        int k = 0;
+        for (Piece piece : world.pieces.values()) {
+            for (int i = 0; i < piece.clusters.length; ++i, ++k) {
+                final LodStore.PieceCluster cluster = piece.clusters[i];
+                clusters.add(cluster.cluster());
+                highest[k] =
+                        cluster.parentCell() == null
+                                ? top
+                                : groupLevels.getOrDefault(
+                                        new UnitKey(cluster.parentCell(), cluster.parentGroup()),
+                                        top);
+                entry.clear();
+                putEntry(world, piece, i, entry);
+                if (!LodCullMath.selected(
+                        entry,
+                        0,
+                        eye,
+                        (float) world.pixelsPerUnit,
+                        (float) world.thresholdPixels,
+                        flags,
+                        hiddenWords,
+                        unitWords)) {
+                    continue;
+                }
+                final int meshTriangles = piece.meshData.get(i).triangleCount();
+                final MeshHandle mesh = piece.meshes[i];
+                if (meshTriangles == 0) {
+                    drawn[k] = true;
+                } else if (mesh != null && arena.getRegistry().isResident(mesh)) {
+                    drawn[k] = true;
+                    triangles += meshTriangles;
+                } else {
+                    ++missing;
+                }
+            }
+        }
+        return new Cut(clusters, highest, drawn, missing, world.hidden, triangles);
+    }
+
+    /**
+     * Whether a world has nothing waiting: no batch uploading or queued, and no unit loading.
+     * Render thread.
+     *
+     * @param id The world.
+     * @return True if it is settled, or there is no such world.
+     */
+    public boolean isSettled(long id) {
+        final World world = world(id);
+        return world == null
+                || (world.uploading == null
+                        && world.incoming.isEmpty()
+                        && world.loadQueue.isEmpty()
+                        && world.uploadingUnits.isEmpty());
     }
 
     /**

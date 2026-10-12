@@ -100,6 +100,9 @@ public class GraphicsDebug extends GuiWindow {
     /** Whether the benchmark world's opaque blocks are drawn by live level of detail. */
     private final IkBoolean benchmarkLod = new IkBoolean(false);
 
+    /** Whether the benchmark also checks the level of detail gate. */
+    private final IkBoolean benchmarkGate = new IkBoolean(false);
+
     /** Whether the kept benchmark world is being dug on a timer. */
     private final IkBoolean benchmarkRapidDig = new IkBoolean(false);
 
@@ -858,7 +861,7 @@ public class GraphicsDebug extends GuiWindow {
                         + GateBenchmark.GPU_BUDGET_MS
                         + " ms.");
         IkGui.combo("Recipe", benchmarkRecipe, RECIPE_NAMES);
-        IkGui.sliderInt("Radius (sections)", benchmarkRadius, 6, 24);
+        IkGui.sliderInt("Radius (sections)", benchmarkRadius, 6, 32);
         // Its own ID, apart from the Lights header's
         IkGui.sliderInt("Lights##benchmark", benchmarkLights, 0, MAX_BENCHMARK_LIGHTS);
         IkGui.setItemTooltip("Torches scattered over the ground, to measure many lights.");
@@ -874,13 +877,21 @@ public class GraphicsDebug extends GuiWindow {
         IkGui.checkbox("Level of detail##benchmark", benchmarkLod);
         IkGui.setItemTooltip(
                 "Draw the world's opaque blocks with live level of detail built from its sections.");
+        IkGui.sameLine();
+        IkGui.checkbox("Gate checks", benchmarkGate);
+        IkGui.setItemTooltip(
+                "After the turn, check the level of detail's cut for cracks at four headings, dig "
+                        + GateBenchmark.GATE_DIGS
+                        + " blocks near the camera timing each edit, and report what the disk cache"
+                        + " did while loading. Draws with level of detail.");
         if (IkGui.button("Run")) {
             GateBenchmark.start(
                     SyntheticTerrain.Recipe.values()[benchmarkRecipe.get()],
                     benchmarkRadius[0],
                     benchmarkLights[0],
                     benchmarkKeepWorld.get(),
-                    benchmarkLod.get());
+                    benchmarkLod.get(),
+                    benchmarkGate.get());
         }
         IkGui.sameLine();
         if (IkGui.button("Stop")) {
@@ -939,6 +950,9 @@ public class GraphicsDebug extends GuiWindow {
                 String.format(
                         "%,d triangles, %,.0f per section; %,d frames measured",
                         load.triangles(), load.trianglesPerSection(), results.frames()));
+        for (String line : GateBenchmark.gateLines(results)) {
+            IkGui.textWrapped(line);
+        }
         drawTimingTable("benchmark", results.timings());
     }
 }

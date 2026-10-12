@@ -31,6 +31,24 @@ class LiveLodTest {
         /** The world. */
         final LiveLod live = new LiveLod(new double[3], SECTION, 1, OPTIONS, batches::add);
 
+        /** The time its changes are made at, in nanoseconds. */
+        long now;
+
+        /** A world whose cells are built as soon as they change. */
+        Kept() {
+            this(0);
+        }
+
+        /**
+         * A world whose cells wait for their sections to settle.
+         *
+         * @param settleNanos How long they wait.
+         */
+        Kept(long settleNanos) {
+            live.setSettleNanos(settleNanos);
+            live.setClock(() -> now);
+        }
+
         /** The cells the batches leave, with their piece sizes. */
         final Map<LodStore.CellKey, Integer> cells = new TreeMap<>();
 
@@ -145,6 +163,75 @@ class LiveLodTest {
         final List<LiveLod.Batch> batches = kept.settle();
         assertEquals(1, batches.size());
         assertEquals(5L, batches.get(0).covered().get(position(edited)));
+    }
+
+    /**
+     * Loading cells wait until their sections settle, even the observer's, and parents wait for
+     * all; afterwards an edit to the observer's cell is built at once and one elsewhere waits.
+     */
+    @Test
+    void testCellsWaitToSettle() {
+        final List<LodMesh> sections = DagTest.terrain(4);
+        final Kept kept = new Kept(LiveLod.SETTLE_NANOS);
+        final LodMesh own = sections.get(0);
+        final double[] corner = own.getOrigin();
+        kept.live.setNear(corner[0] + 1, corner[1] + 1, corner[2] + 1);
+        putAll(kept, sections, 1);
+        assertTrue(kept.settle().isEmpty(), "Nothing is built while sections arrive");
+        kept.now += LiveLod.SETTLE_NANOS - 1;
+        assertTrue(kept.settle().isEmpty(), "Nothing has settled yet");
+        kept.now += 1;
+        final List<LiveLod.Batch> loaded = kept.settle();
+        assertFalse(loaded.isEmpty());
+        assertTrue(loaded.get(loaded.size() - 1).stale().isEmpty());
+        for (LodMesh mesh : sections) {
+            assertEquals(1L, kept.covered.get(position(mesh)));
+        }
+        // An edit in the observer's cell is built at once, with its chain
+        kept.live.put(position(own), own, 2);
+        final List<LiveLod.Batch> near = kept.settle();
+        assertEquals(1, near.size());
+        assertEquals(kept.live.cellOf(position(own)), near.get(0).added().get(0).key());
+        assertEquals(2L, kept.covered.get(position(own)));
+        // One elsewhere waits for its section to settle
+        final LodMesh edited = sections.get(sections.size() - 1);
+        kept.live.put(position(edited), edited, 2);
+        assertTrue(kept.settle().isEmpty());
+        kept.now += LiveLod.SETTLE_NANOS;
+        assertEquals(1, kept.settle().size());
+        assertEquals(2L, kept.covered.get(position(edited)));
+    }
+
+    /** A cell waits for a bake on the way however long it takes, and not for one abandoned. */
+    @Test
+    void testCellsWaitForExpectedBakes() {
+        final List<LodMesh> sections = DagTest.terrain(2);
+        final Kept kept = new Kept(LiveLod.SETTLE_NANOS);
+        final LodMesh late = sections.get(0);
+        final LodMesh failed = sections.get(sections.size() - 1);
+        kept.live.expect(position(late), 1);
+        kept.live.expect(position(failed), 1);
+        for (LodMesh mesh : sections) {
+            if (mesh != late && mesh != failed) {
+                kept.live.put(position(mesh), mesh, 1);
+            }
+        }
+        kept.now += 10 * LiveLod.SETTLE_NANOS;
+        final List<LiveLod.Batch> early = kept.settle();
+        for (LiveLod.Batch batch : early) {
+            for (LiveLod.Piece piece : batch.added()) {
+                assertTrue(piece.key().level() == 0, "No parent before every cell is built");
+                assertFalse(piece.key().equals(kept.live.cellOf(position(late))));
+                assertFalse(piece.key().equals(kept.live.cellOf(position(failed))));
+            }
+        }
+        kept.live.abandon(position(failed), 1);
+        kept.live.put(position(late), late, 1);
+        kept.now += LiveLod.SETTLE_NANOS;
+        kept.settle();
+        assertEquals(1L, kept.covered.get(position(late)));
+        assertTrue(kept.cells.containsKey(kept.live.cellOf(position(late))));
+        assertTrue(kept.cells.keySet().stream().anyMatch(key -> key.level() > 0));
     }
 
     /** Taking sections out is covered once their cells are rebuilt, or at once if never in. */

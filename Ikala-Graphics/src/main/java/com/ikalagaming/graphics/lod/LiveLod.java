@@ -10,8 +10,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.function.LongSupplier;
+import java.util.function.Predicate;
 
 /**
  * The level of detail of a changing world, kept up to date in the background. Sections are put in
@@ -24,12 +27,22 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>Cells above changed cells that aren't rebuilt yet are reported stale with every batch, so
  * whoever draws the cells can keep the cut from standing on them.
+ *
+ * <p>A level 0 cell is built only once none of its sections has a bake on the way, as {@link
+ * #expect} says, and they have stopped changing for a while, except that an edit to the observer's
+ * own cell once it is built doesn't wait for the while. Parents are built once no level 0 cell is
+ * left to build and no bake is on the way. While an area loads, its cells are built with all their
+ * sections rather than with whichever came first, so they match what a later load of the same area
+ * builds and are read from the cache then instead of built again.
  */
 @Slf4j
 public final class LiveLod implements AutoCloseable {
 
     /** The most level 0 cells one batch builds, so near cells don't wait behind far ones. */
     public static final int CELLS_PER_BATCH = 8;
+
+    /** How long a level 0 cell's sections must stay unchanged before it is built, by default. */
+    public static final long SETTLE_NANOS = TimeUnit.MILLISECONDS.toNanos(500);
 
     /** How long the builder waits for changes before checking whether it was closed. */
     private static final long POLL_MILLIS = 100;
@@ -99,6 +112,9 @@ public final class LiveLod implements AutoCloseable {
     /** Where the world's positions are measured from. */
     private final double[] origin;
 
+    /** The section size, in world units. */
+    private final double sectionSize;
+
     /** The cells. Builder thread only. */
     private final LodStore store;
 
@@ -125,6 +141,18 @@ public final class LiveLod implements AutoCloseable {
 
     /** Changes that left the store as it was, covered by the next batch. Builder thread only. */
     private final Map<LodStore.SectionPos, Long> coveredAsIs = new HashMap<>();
+
+    /** The newest bake asked for of each section that hasn't been put in yet. */
+    private final Map<LodStore.SectionPos, Long> expected = new ConcurrentHashMap<>();
+
+    /** When each dirty level 0 cell's sections last changed. Builder thread only. */
+    private final Map<LodStore.CellKey, Long> lastChange = new HashMap<>();
+
+    /** How long a level 0 cell's sections must stay unchanged before it is built. */
+    private volatile long settleNanos = SETTLE_NANOS;
+
+    /** The time, as {@link System#nanoTime()}; tests replace it. */
+    private LongSupplier clock = System::nanoTime;
 
     /** Where to build nearest to, in the world. */
     private volatile double[] near = new double[AXES];
@@ -189,6 +217,7 @@ public final class LiveLod implements AutoCloseable {
             @NonNull Sink sink,
             LodCache cache) {
         this.origin = origin.clone();
+        this.sectionSize = sectionSize;
         this.cache = cache;
         store =
                 new LodStore(
@@ -208,6 +237,25 @@ public final class LiveLod implements AutoCloseable {
      */
     public LodCache.Stats cacheStats() {
         return cache == null ? null : cache.stats();
+    }
+
+    /**
+     * Set how long a level 0 cell's sections must stay unchanged before it is built. Safe from any
+     * thread.
+     *
+     * @param nanos The time, in nanoseconds; 0 builds every changed cell at once.
+     */
+    public void setSettleNanos(long nanos) {
+        settleNanos = nanos;
+    }
+
+    /**
+     * Replace the clock changes are timed with, for tests. Before any change is put in.
+     *
+     * @param clock The time, in nanoseconds.
+     */
+    void setClock(@NonNull LongSupplier clock) {
+        this.clock = clock;
     }
 
     /**
@@ -237,7 +285,40 @@ public final class LiveLod implements AutoCloseable {
      * @param generation Its bake generation, which grows with each bake.
      */
     public void put(LodStore.@NonNull SectionPos position, LodMesh mesh, long generation) {
-        changes.add(new Change(position, mesh, generation, System.nanoTime()));
+        changes.add(new Change(position, mesh, generation, clock.getAsLong()));
+    }
+
+    /**
+     * Say a section's bake is on the way, so its cell waits for it rather than being built without
+     * it and again with it. Safe from any thread.
+     *
+     * @param position The section.
+     * @param generation The bake's generation.
+     */
+    public void expect(LodStore.@NonNull SectionPos position, long generation) {
+        expected.merge(position, generation, Math::max);
+    }
+
+    /**
+     * Say a bake that was expected won't come, as when it failed, so its cell doesn't wait for it.
+     * Safe from any thread.
+     *
+     * @param position The section.
+     * @param generation The bake's generation.
+     */
+    public void abandon(LodStore.@NonNull SectionPos position, long generation) {
+        arrived(position, generation);
+    }
+
+    /**
+     * Stop waiting for a section's bakes up to a generation.
+     *
+     * @param position The section.
+     * @param generation The generation.
+     */
+    private void arrived(LodStore.@NonNull SectionPos position, long generation) {
+        expected.computeIfPresent(
+                position, (key, waiting) -> waiting <= generation ? null : waiting);
     }
 
     /**
@@ -303,11 +384,16 @@ public final class LiveLod implements AutoCloseable {
         while ((change = changes.poll()) != null) {
             apply(change);
         }
-        if (!store.isDirty() && coveredAsIs.isEmpty()) {
+        final Predicate<LodStore.CellKey> ready = readyCells();
+        // Parents wait for every section on the way, so they are built over all of them at once
+        final boolean parentsReady = expected.isEmpty();
+        if (!store.hasWork(ready, parentsReady) && coveredAsIs.isEmpty()) {
             return false;
         }
         final long start = System.nanoTime();
-        final LodStore.Rebuilt rebuilt = store.rebuild(CELLS_PER_BATCH, near);
+        final LodStore.Rebuilt rebuilt = store.rebuild(CELLS_PER_BATCH, near, ready, parentsReady);
+        rebuilt.built().forEach(lastChange::remove);
+        rebuilt.removed().forEach(lastChange::remove);
         final Map<LodStore.SectionPos, Long> covered = new HashMap<>(coveredAsIs);
         coveredAsIs.clear();
         final List<Piece> added = new ArrayList<>();
@@ -350,12 +436,48 @@ public final class LiveLod implements AutoCloseable {
     }
 
     /**
+     * Which dirty level 0 cells may be built now: those with no bake on the way whose sections have
+     * settled, or that are the observer's own cell and were built before, so an edit there isn't
+     * held back.
+     *
+     * @return The test.
+     */
+    private Predicate<LodStore.CellKey> readyCells() {
+        final Set<LodStore.CellKey> waiting = new HashSet<>();
+        for (LodStore.SectionPos position : expected.keySet()) {
+            waiting.add(store.cellOf(position));
+        }
+        final long settle = settleNanos;
+        if (settle <= 0) {
+            return key -> !waiting.contains(key);
+        }
+        final long now = clock.getAsLong();
+        final double[] point = near;
+        final LodStore.CellKey own =
+                store.cellOf(
+                        new LodStore.SectionPos(
+                                (int) Math.floor((point[0] - origin[0]) / sectionSize),
+                                (int) Math.floor((point[1] - origin[1]) / sectionSize),
+                                (int) Math.floor((point[2] - origin[2]) / sectionSize)));
+        return key -> {
+            if (waiting.contains(key)) {
+                return false;
+            }
+            final Long changed = lastChange.get(key);
+            return changed == null
+                    || now - changed >= settle
+                    || (key.equals(own) && store.contains(key));
+        };
+    }
+
+    /**
      * Put one change into the store. Builder thread.
      *
      * @param change The change.
      */
     private void apply(@NonNull Change change) {
         final LodStore.SectionPos position = change.position();
+        arrived(position, change.generation());
         final Long known = latest.get(position);
         if (known != null && known > change.generation()) {
             return;
@@ -367,6 +489,7 @@ public final class LiveLod implements AutoCloseable {
             latest.put(position, change.generation());
             removedAt.remove(position);
             byCell.computeIfAbsent(cell, k -> new HashSet<>()).add(position);
+            lastChange.merge(cell, change.at(), Math::max);
             return;
         }
         latest.remove(position);
@@ -374,6 +497,7 @@ public final class LiveLod implements AutoCloseable {
             // Its cell is dirty: covered when that is rebuilt
             byCell.computeIfAbsent(cell, k -> new HashSet<>()).add(position);
             removedAt.put(position, change.generation());
+            lastChange.merge(cell, change.at(), Math::max);
         } else {
             // It was never in the store, so the store already shows it
             coveredAsIs.put(position, change.generation());

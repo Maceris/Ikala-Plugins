@@ -57,7 +57,8 @@ public final class LodCache {
      * @param bytesRead Bytes read.
      * @param bytesWritten Bytes written.
      * @param evicted Files deleted to stay under the cap.
-     * @param folderBytes Bytes in the folder, as this cache last knew.
+     * @param folderBytes Bytes in the folder, as this cache last knew, or -1 until it first saves,
+     *     which is when it counts them.
      */
     public record Stats(
             long hits,
