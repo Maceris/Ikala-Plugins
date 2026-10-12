@@ -686,6 +686,23 @@ public final class GateBenchmark {
                             "Gate benchmark: {} triangles resident after {} ms",
                             stats.triangles(),
                             bakeMilliseconds);
+                    final var cache =
+                            lod
+                                    ? renderer()
+                                            .getState()
+                                            .sections
+                                            .lodCacheStats(graphics.getOwnerKey())
+                                    : null;
+                    if (cache != null) {
+                        log.info(
+                                "Gate benchmark LOD cache: {} cells read, {} built, {} MiB read,"
+                                        + " {} MiB written, {} MiB in the folder",
+                                cache.hits(),
+                                cache.misses(),
+                                String.format("%.1f", cache.bytesRead() / BYTES_PER_MIB),
+                                String.format("%.1f", cache.bytesWritten() / BYTES_PER_MIB),
+                                String.format("%.1f", cache.folderBytes() / BYTES_PER_MIB));
+                    }
                     phase = Phase.SETTLING;
                 }
             }

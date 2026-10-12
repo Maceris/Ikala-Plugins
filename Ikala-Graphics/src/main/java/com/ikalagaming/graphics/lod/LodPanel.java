@@ -223,7 +223,8 @@ public final class LodPanel implements AutoCloseable {
                         Sections.SECTION_SIZE,
                         LodStore.DEFAULT_CELL_SECTIONS,
                         LodStore.DEFAULT_STOP_AT,
-                        DagBuilder.Options.defaults());
+                        DagBuilder.Options.defaults(),
+                        LodCache.fromSettings());
         for (LodMesh mesh : sections) {
             final double[] origin = mesh.getOrigin();
             store.put(

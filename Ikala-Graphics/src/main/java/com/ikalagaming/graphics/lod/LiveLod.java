@@ -102,6 +102,9 @@ public final class LiveLod implements AutoCloseable {
     /** The cells. Builder thread only. */
     private final LodStore store;
 
+    /** Where cells are read from and saved, or null. */
+    private final LodCache cache;
+
     /** Where batches go. */
     private final Sink sink;
 
@@ -164,9 +167,47 @@ public final class LiveLod implements AutoCloseable {
             int cellSections,
             DagBuilder.@NonNull Options options,
             @NonNull Sink sink) {
+        this(origin, sectionSize, cellSections, options, sink, null);
+    }
+
+    /**
+     * Set up a live world whose cells are read from and saved in a cache. Nothing is built until
+     * {@link #start()} or {@link #step()}.
+     *
+     * @param origin Where positions are measured from, in the world: a section corner.
+     * @param sectionSize The section size, in world units.
+     * @param cellSections Sections along each side of a level 0 cell.
+     * @param options How to build cells.
+     * @param sink Where batches go.
+     * @param cache Where cells are read from and saved, or null for none.
+     */
+    public LiveLod(
+            double @NonNull [] origin,
+            double sectionSize,
+            int cellSections,
+            DagBuilder.@NonNull Options options,
+            @NonNull Sink sink,
+            LodCache cache) {
         this.origin = origin.clone();
-        store = new LodStore(origin, sectionSize, cellSections, LodStore.DEFAULT_STOP_AT, options);
+        this.cache = cache;
+        store =
+                new LodStore(
+                        origin,
+                        sectionSize,
+                        cellSections,
+                        LodStore.DEFAULT_STOP_AT,
+                        options,
+                        cache);
         this.sink = sink;
+    }
+
+    /**
+     * What its cache has done.
+     *
+     * @return The numbers, or null without a cache.
+     */
+    public LodCache.Stats cacheStats() {
+        return cache == null ? null : cache.stats();
     }
 
     /**

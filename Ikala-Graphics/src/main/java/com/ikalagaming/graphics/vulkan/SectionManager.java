@@ -13,6 +13,7 @@ import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.lod.DagBuilder;
 import com.ikalagaming.graphics.lod.LiveLod;
+import com.ikalagaming.graphics.lod.LodCache;
 import com.ikalagaming.graphics.lod.LodMesh;
 import com.ikalagaming.graphics.lod.LodStore;
 import com.ikalagaming.graphics.lod.PlanarMerge;
@@ -790,9 +791,11 @@ public class SectionManager {
                     new LiveLod(
                             origin,
                             SECTION_SIZE,
+                            LodStore.DEFAULT_CELL_SECTIONS,
                             // Sections are merged as they are baked, on the workers
                             DagBuilder.Options.defaults().withMergePlanar(false),
-                            batch -> state.lods.publish(state, id[0], batch));
+                            batch -> state.lods.publish(state, id[0], batch),
+                            LodCache.fromSettings());
             id[0] = state.lods.addLive(owner, origin, lod::cellOf, thresholdPixels);
             world = new Live(id[0], lod, new HashMap<>());
             live.put(owner, world);
@@ -980,6 +983,22 @@ public class SectionManager {
         }
         overrideCount = count;
         lodBehind = behind;
+    }
+
+    /**
+     * What a plugin's live level of detail world's cache has done.
+     *
+     * @param owner The plugin's key.
+     * @return The numbers, or null if it has no live world or no cache.
+     */
+    public LodCache.Stats lodCacheStats(@NonNull String owner) {
+        lock.lock();
+        try {
+            final Live world = live.get(owner);
+            return world == null ? null : world.lod().cacheStats();
+        } finally {
+            lock.unlock();
+        }
     }
 
     /**

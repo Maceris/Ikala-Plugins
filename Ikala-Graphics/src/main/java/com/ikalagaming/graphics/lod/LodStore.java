@@ -3,6 +3,11 @@ package com.ikalagaming.graphics.lod;
 import lombok.Getter;
 import lombok.NonNull;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 
 /**
@@ -16,6 +21,11 @@ import java.util.*;
  * <p>A changed section marks its level 0 cell dirty; {@link #rebuild()} builds every dirty cell and
  * then every parent above one, bottom up. {@link #snapshot()} flattens the cells into one {@link
  * LodDag}, so cuts, crack checks and the prototype's views work on it unchanged.
+ *
+ * <p>With a {@link LodCache}, every cell has a key: a hash of everything it is built from, which
+ * for a level 0 cell is its sections' leaf meshes and for a parent its children's keys, along with
+ * the builder version and the options. A cell whose key is in the cache is read instead of built,
+ * and every cell built is saved, so an area seen before loads without building.
  *
  * <p>Not thread safe: one thread changes and rebuilds it.
  */
@@ -32,6 +42,13 @@ public final class LodStore {
 
     /** Clusters a cell stops at by default, for its parent to take further. */
     public static final int DEFAULT_STOP_AT = 4;
+
+    /**
+     * The version of what building makes, part of every cache key. Bump it whenever a change to the
+     * builder, the simplifier or anything else changes the cells built from the same input, so
+     * cached cells from before are rebuilt.
+     */
+    public static final int BUILDER_VERSION = 1;
 
     /** How many child cells a parent spans along each axis. */
     private static final int BRANCHING = 2;
@@ -95,7 +112,7 @@ public final class LodStore {
      * @param leafEdge The average leaf edge length under it.
      * @param sections The section each leaf's section index stands for, empty above level 0.
      */
-    private record Cell(
+    record Cell(
             @NonNull LodDag dag,
             @NonNull List<Input> inputs,
             double leafEdge,
@@ -123,7 +140,7 @@ public final class LodStore {
      * @param child The child cell.
      * @param cluster The cluster's id in the child's DAG.
      */
-    private record Input(@NonNull CellKey child, int cluster) {}
+    record Input(@NonNull CellKey child, int cluster) {}
 
     /** Where positions are measured from, in the world. */
     private final double[] origin;
@@ -145,6 +162,26 @@ public final class LodStore {
 
     /** The built cells. */
     private final SortedMap<CellKey, Cell> cells = new TreeMap<>();
+
+    /** Where built cells are read from and saved, or null. */
+    private final LodCache cache;
+
+    /** Each built cell's cache key. */
+    private final Map<CellKey, String> keys = new HashMap<>();
+
+    /**
+     * How many cells were built rather than read from the cache. -- GETTER -- Cells built.
+     *
+     * @return The count.
+     */
+    @Getter private int builtCount;
+
+    /**
+     * How many cells were read from the cache. -- GETTER -- Cells read.
+     *
+     * @return The count.
+     */
+    @Getter private int loadedCount;
 
     /** Level 0 cells whose sections changed since they were built. */
     private final SortedSet<CellKey> dirty = new TreeSet<>();
@@ -203,6 +240,28 @@ public final class LodStore {
             int cellSections,
             int stopAt,
             DagBuilder.@NonNull Options options) {
+        this(origin, sectionSize, cellSections, stopAt, options, null);
+    }
+
+    /**
+     * Start an empty store that reads and saves its cells in a cache.
+     *
+     * @param origin Where positions are measured from, in the world: a section corner, so that
+     *     section corners are exact.
+     * @param sectionSize The section size, in world units.
+     * @param cellSections Sections along each side of a level 0 cell.
+     * @param stopAt Stop building a cell once this many clusters or fewer are left.
+     * @param options How to build each cell; the lineage is never kept.
+     * @param cache Where cells are read from and saved, or null for none.
+     */
+    public LodStore(
+            double @NonNull [] origin,
+            double sectionSize,
+            int cellSections,
+            int stopAt,
+            DagBuilder.@NonNull Options options,
+            LodCache cache) {
+        this.cache = cache;
         this.origin = origin.clone();
         this.sectionSize = sectionSize;
         this.cellSections = cellSections;
@@ -303,15 +362,26 @@ public final class LodStore {
             final List<LodMesh> inside = sectionsIn(key, positions);
             if (inside.isEmpty()) {
                 if (cells.remove(key) != null) {
+                    keys.remove(key);
                     unparented.add(key);
                     removed.add(key);
                 }
                 continue;
             }
-            final double[][] box = box(key);
-            final LodDag dag =
-                    DagBuilder.buildCell(inside, origin, box[0], box[1], stopAt, options);
-            cells.put(key, new Cell(dag, List.of(), dag.getLeafEdge(), List.copyOf(positions)));
+            final String cacheKey = cache == null ? null : leafKey(key, inside, positions);
+            Cell cell = cached(key, cacheKey);
+            if (cell == null) {
+                final double[][] box = box(key);
+                final LodDag dag =
+                        DagBuilder.buildCell(inside, origin, box[0], box[1], stopAt, options);
+                cell = new Cell(dag, List.of(), dag.getLeafEdge(), List.copyOf(positions));
+                ++builtCount;
+                save(key, cacheKey, cell);
+            }
+            cells.put(key, cell);
+            if (cacheKey != null) {
+                keys.put(key, cacheKey);
+            }
             unparented.add(key);
             built.add(key);
         }
@@ -364,6 +434,7 @@ public final class LodStore {
                     final CellKey key = it.next();
                     if (key.level() > root) {
                         it.remove();
+                        keys.remove(key);
                         removed.add(key);
                     }
                 }
@@ -383,6 +454,7 @@ public final class LodStore {
             for (CellKey key : keysAt(level + 1)) {
                 if (!parents.contains(key)) {
                     cells.remove(key);
+                    keys.remove(key);
                     removed.add(key);
                     changed.add(key);
                 }
@@ -396,6 +468,26 @@ public final class LodStore {
                 built.add(parent);
             }
         }
+    }
+
+    /**
+     * A built cell.
+     *
+     * @param key The cell.
+     * @return It, or null if it isn't built.
+     */
+    Cell built(@NonNull CellKey key) {
+        return cells.get(key);
+    }
+
+    /**
+     * A built cell's cache key.
+     *
+     * @param key The cell.
+     * @return Its key, or null without a cache.
+     */
+    String cacheKey(@NonNull CellKey key) {
+        return keys.get(key);
     }
 
     /**
@@ -514,6 +606,14 @@ public final class LodStore {
      * @return The cell.
      */
     private Cell buildParent(@NonNull CellKey key) {
+        final String cacheKey = cache == null ? null : parentKey(key);
+        if (cacheKey != null) {
+            keys.put(key, cacheKey);
+        }
+        final Cell loaded = cached(key, cacheKey);
+        if (loaded != null) {
+            return loaded;
+        }
         final List<LodDag.Cluster> tops = new ArrayList<>();
         final List<Input> inputs = new ArrayList<>();
         double edges = 0;
@@ -535,7 +635,223 @@ public final class LodStore {
         final double[][] box = box(key);
         final LodDag dag =
                 DagBuilder.buildParent(tops, leafEdge, origin, box[0], box[1], stopAt, options);
-        return new Cell(dag, List.copyOf(inputs), leafEdge, List.of());
+        final Cell cell = new Cell(dag, List.copyOf(inputs), leafEdge, List.of());
+        ++builtCount;
+        save(key, cacheKey, cell);
+        return cell;
+    }
+
+    /**
+     * Read a cell from the cache, if it is there and is the cell asked for.
+     *
+     * @param key The cell.
+     * @param cacheKey Its cache key, or null without a cache.
+     * @return The cell, or null.
+     */
+    private Cell cached(@NonNull CellKey key, String cacheKey) {
+        if (cacheKey == null) {
+            return null;
+        }
+        final LodCellFile.Stored stored = cache.load(cacheKey, BUILDER_VERSION);
+        if (stored == null || !stored.key().equals(key)) {
+            return null;
+        }
+        ++loadedCount;
+        return stored.cell();
+    }
+
+    /**
+     * Save a cell built, if there is a cache.
+     *
+     * @param key The cell.
+     * @param cacheKey Its cache key, or null without a cache.
+     * @param cell The cell.
+     */
+    private void save(@NonNull CellKey key, String cacheKey, @NonNull Cell cell) {
+        if (cacheKey != null) {
+            cache.save(cacheKey, BUILDER_VERSION, key, cell);
+        }
+    }
+
+    /**
+     * A level 0 cell's cache key: the builder version, the options, the cell, and every one of its
+     * sections' leaf meshes, whole.
+     *
+     * @param key The cell.
+     * @param inside Its sections' meshes, in position order.
+     * @param positions Their positions.
+     * @return The key.
+     */
+    private String leafKey(
+            @NonNull CellKey key,
+            @NonNull List<LodMesh> inside,
+            @NonNull List<SectionPos> positions) {
+        final KeyHash hash = startKey(key);
+        hash.putInt(inside.size());
+        for (int i = 0; i < inside.size(); ++i) {
+            final SectionPos position = positions.get(i);
+            hash.putInt(position.x()).putInt(position.y()).putInt(position.z());
+            final LodMesh mesh = inside.get(i);
+            for (double value : mesh.getOrigin()) {
+                hash.putDouble(value);
+            }
+            hash.putInt(mesh.getVertexCount());
+            for (int v = 0; v < mesh.getVertexCount() * AXES; ++v) {
+                hash.putFloat(mesh.positions[v]);
+            }
+            for (int v = 0; v < mesh.getVertexCount(); ++v) {
+                hash.putInt(mesh.locked[v] ? 1 : 0);
+            }
+            hash.putInt(mesh.getTriangleCount());
+            for (int t = 0; t < mesh.getTriangleCount() * LodMesh.CORNERS; ++t) {
+                hash.putInt(mesh.triangles[t]);
+            }
+            for (int t = 0; t < mesh.getTriangleCount(); ++t) {
+                hash.putInt(mesh.materials[t]);
+                hash.putFloat(mesh.visibility[t]);
+            }
+        }
+        return hash.hex();
+    }
+
+    /**
+     * A parent cell's cache key: the builder version, the options, the cell, and its children's
+     * keys, in order.
+     *
+     * @param key The parent.
+     * @return The key, or null if a child has none.
+     */
+    private String parentKey(@NonNull CellKey key) {
+        final KeyHash hash = startKey(key);
+        for (CellKey child : cells.keySet()) {
+            if (child.level() != key.level() - 1 || !child.parent().equals(key)) {
+                continue;
+            }
+            final String childKey = keys.get(child);
+            if (childKey == null) {
+                return null;
+            }
+            hash.putInt(child.level()).putInt(child.x()).putInt(child.y()).putInt(child.z());
+            hash.putString(childKey);
+        }
+        return hash.hex();
+    }
+
+    /**
+     * Start a cache key with what every cell's key holds.
+     *
+     * @param key The cell.
+     * @return The hash so far.
+     */
+    private KeyHash startKey(@NonNull CellKey key) {
+        final KeyHash hash = new KeyHash();
+        hash.putInt(BUILDER_VERSION);
+        hash.putDouble(options.virtualEdgeFactor());
+        hash.putInt(options.lockOpenBorder() ? 1 : 0);
+        hash.putDouble(options.visibilityReach());
+        hash.putInt(options.mergePlanar() ? 1 : 0);
+        hash.putDouble(sectionSize).putInt(cellSections).putInt(stopAt);
+        for (double value : origin) {
+            hash.putDouble(value);
+        }
+        hash.putInt(key.level()).putInt(key.x()).putInt(key.y()).putInt(key.z());
+        return hash;
+    }
+
+    /** A SHA-256 hash fed values in little endian, through a buffer. */
+    private static final class KeyHash {
+        /** Bytes buffered before they go to the digest. */
+        private static final int BUFFER = 8192;
+
+        /** The digest. */
+        private final MessageDigest digest;
+
+        /** Values waiting for the digest. */
+        private final ByteBuffer buffer =
+                ByteBuffer.allocate(BUFFER).order(ByteOrder.LITTLE_ENDIAN);
+
+        /** Start a hash. */
+        KeyHash() {
+            try {
+                digest = MessageDigest.getInstance("SHA-256");
+            } catch (NoSuchAlgorithmException e) {
+                throw new IllegalStateException("SHA-256 isn't available", e);
+            }
+        }
+
+        /**
+         * Make room for some bytes.
+         *
+         * @param bytes How many.
+         */
+        private void room(int bytes) {
+            if (buffer.remaining() < bytes) {
+                digest.update(buffer.array(), 0, buffer.position());
+                buffer.clear();
+            }
+        }
+
+        /**
+         * Add an int.
+         *
+         * @param value The value.
+         * @return This hash.
+         */
+        KeyHash putInt(int value) {
+            room(Integer.BYTES);
+            buffer.putInt(value);
+            return this;
+        }
+
+        /**
+         * Add a float, by its bits.
+         *
+         * @param value The value.
+         * @return This hash.
+         */
+        KeyHash putFloat(float value) {
+            room(Float.BYTES);
+            buffer.putInt(Float.floatToIntBits(value));
+            return this;
+        }
+
+        /**
+         * Add a double, by its bits.
+         *
+         * @param value The value.
+         * @return This hash.
+         */
+        KeyHash putDouble(double value) {
+            room(Double.BYTES);
+            buffer.putLong(Double.doubleToLongBits(value));
+            return this;
+        }
+
+        /**
+         * Add a string, with its length.
+         *
+         * @param value The value.
+         * @return This hash.
+         */
+        KeyHash putString(@NonNull String value) {
+            final byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+            putInt(bytes.length);
+            for (byte b : bytes) {
+                room(1);
+                buffer.put(b);
+            }
+            return this;
+        }
+
+        /**
+         * Finish the hash.
+         *
+         * @return It, in lowercase hex.
+         */
+        String hex() {
+            digest.update(buffer.array(), 0, buffer.position());
+            return HexFormat.of().formatHex(digest.digest());
+        }
     }
 
     /**

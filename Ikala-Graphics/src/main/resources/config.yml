@@ -1,3 +1,8 @@
 ---
 icon-path: 'textures/game_icon.png'
 filters-folder: 'shaders/filters'
+# Where built level of detail cells are cached, so an area seen before loads without rebuilding;
+# empty for no cache
+lod-cache-folder: 'cache/lod'
+# The most the cache keeps, in mebibytes; the least recently used cells go first
+lod-cache-max-mb: 2048

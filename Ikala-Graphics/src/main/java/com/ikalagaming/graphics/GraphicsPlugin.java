@@ -4,9 +4,12 @@ import com.ikalagaming.event.Listener;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
+import com.ikalagaming.plugins.config.ConfigManager;
+import com.ikalagaming.plugins.config.PluginConfig;
 import com.ikalagaming.scripting.ScriptManager;
 
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -29,6 +32,15 @@ public class GraphicsPlugin extends Plugin {
 
     /** The global scripts use the retained UI through. */
     public static final String SCRIPT_UI_GLOBAL = "ui";
+
+    /** The config value naming the level of detail cache's folder. */
+    private static final String LOD_CACHE_FOLDER = "lod-cache-folder";
+
+    /** The config value of the level of detail cache's size cap, in mebibytes. */
+    private static final String LOD_CACHE_MAX_MB = "lod-cache-max-mb";
+
+    /** Bytes in a mebibyte. */
+    private static final long BYTES_PER_MIB = 1024L * 1024L;
 
     /**
      * The resource bundle for the Graphics plugin.
@@ -71,6 +83,7 @@ public class GraphicsPlugin extends Plugin {
         GraphicsSettings settings = GraphicsManager.getSettings();
         settings.antiAliasing = true;
         settings.targetFPS = GraphicsManager.TARGET_FPS;
+        readLodCache(settings);
 
         if (!GraphicsManager.createWindow()) {
             return false;
@@ -83,6 +96,22 @@ public class GraphicsPlugin extends Plugin {
                 GraphicsPlugin.PLUGIN_NAME,
                 owner -> owner == null ? null : GraphicsManager.forPlugin(owner).ui().scripts());
         return true;
+    }
+
+    /**
+     * Read where and how big the level of detail cache is from the config, keeping the defaults for
+     * values it doesn't have.
+     *
+     * @param settings The settings to fill in.
+     */
+    private static void readLodCache(@NonNull GraphicsSettings settings) {
+        final PluginConfig config = ConfigManager.loadConfig(GraphicsPlugin.PLUGIN_NAME);
+        if (config.isPresent(LOD_CACHE_FOLDER)) {
+            settings.lodCacheDirectory = config.getString(LOD_CACHE_FOLDER);
+        }
+        if (config.isPresent(LOD_CACHE_MAX_MB)) {
+            settings.lodCacheMaxBytes = config.getLong(LOD_CACHE_MAX_MB) * BYTES_PER_MIB;
+        }
     }
 
     @Override

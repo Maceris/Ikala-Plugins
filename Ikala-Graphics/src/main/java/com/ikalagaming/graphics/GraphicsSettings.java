@@ -64,4 +64,16 @@ public class GraphicsSettings {
      * at once instead of after a delay.
      */
     public long lodResidentBytes = 1L << 30;
+
+    /**
+     * The folder built level of detail cells are cached in, so an area seen before loads without
+     * building; null or blank for no cache. Set from the {@code lod-cache-folder} config value.
+     */
+    public String lodCacheDirectory = "cache/lod";
+
+    /**
+     * The most bytes the level of detail cache keeps, least recently used out. Set from the {@code
+     * lod-cache-max-mb} config value.
+     */
+    public long lodCacheMaxBytes = 2048L * 1024 * 1024;
 }
