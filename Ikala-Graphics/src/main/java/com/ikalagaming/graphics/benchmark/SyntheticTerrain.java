@@ -296,6 +296,59 @@ public final class SyntheticTerrain {
     }
 
     /**
+     * Whether a block is ground to dig: one that is drawn opaque and fills or floors its cell, not
+     * a plant, leaves, glass or water.
+     *
+     * @param block The block.
+     * @return True if it is ground.
+     */
+    public static boolean isGround(byte block) {
+        return block == STONE
+                || block == GRASS
+                || block == DIRT
+                || block == PLANKS
+                || block == SLAB
+                || block == STAIRS;
+    }
+
+    /**
+     * The highest ground block of a column, see {@link #isGround}, whatever stands above it.
+     *
+     * @param x The column's x.
+     * @param z The column's z.
+     * @return Its y, or {@link #minY()} - 1 if the column has no ground that far down.
+     */
+    public int ground(int x, int z) {
+        int y = maxY();
+        while (y >= minY() && !isGround(block(x, y, z))) {
+            --y;
+        }
+        return y;
+    }
+
+    /**
+     * Whether a column's ground is open to the sky: it has ground, and nothing but air and plants
+     * stand above it.
+     *
+     * @param x The column's x.
+     * @param z The column's z.
+     * @return True if it is open.
+     */
+    public boolean isOpen(int x, int z) {
+        final int ground = ground(x, z);
+        if (ground < minY()) {
+            return false;
+        }
+        for (int y = ground + 1; y <= maxY(); ++y) {
+            final byte block = block(x, y, z);
+            if (block != AIR && block != PLANT) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * The highest block of a column that isn't air.
      *
      * @param x The column's x.

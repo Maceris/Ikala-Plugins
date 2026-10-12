@@ -382,6 +382,9 @@ public final class GateBenchmark {
     /** Digs waiting to be drawn and to reach level of detail. Render thread. */
     private final List<Dig> digs = new ArrayList<>();
 
+    /** Where in a dig's block the dug block's id is, after its position. */
+    private static final int DUG_BLOCK = 3;
+
     /** Digs left to make on their own, from the startup property. */
     private int digsLeft;
 
@@ -418,6 +421,18 @@ public final class GateBenchmark {
     /** Whether the camera was placed over the pit for digs from the startup property. */
     private boolean pitView;
 
+    /**
+     * The pit's first cell, x and z, once found: an open patch of ground the digs from the startup
+     * property and the gate make, row by row toward -z. Null until then.
+     */
+    @Nullable private int[] pit;
+
+    /** How much the ground may rise or fall across the pit's patch, in blocks. */
+    private static final int PIT_GROUND_STEP = 1;
+
+    /** How far from where the camera turns to look for an open patch for the pit, in blocks. */
+    private static final int PIT_SEARCH = 96;
+
     /** Digs a second when they are made on their own from the startup property, by default. */
     private static final double PROPERTY_DIG_RATE = 2;
 
@@ -444,7 +459,7 @@ public final class GateBenchmark {
         /** When it was made, from {@link System#nanoTime()}. */
         final long start;
 
-        /** The block dug. */
+        /** The block dug: x, y, z, then which block it was, see {@link #DUG_BLOCK}. */
         final int[] block;
 
         /** When the bake was drawn, or 0. */
@@ -1534,7 +1549,7 @@ public final class GateBenchmark {
     }
 
     /**
-     * Dig out the top block a few blocks in front of the camera and rebake the sections around it,
+     * Dig out the ground a few blocks in front of the camera and rebake the sections around it,
      * timing how long until the hole is drawn and until level of detail has it. Render thread only,
      * once the world is laid out.
      *
@@ -1559,11 +1574,45 @@ public final class GateBenchmark {
                 (int) Math.floor(at.x + (forward.x() * ahead - forward.z() * across) / length);
         final int z =
                 (int) Math.floor(at.z + (forward.z() * ahead + forward.x() * across) / length);
-        final int y = world.top(x, z);
+        return digAt(world, x, z);
+    }
+
+    /**
+     * Dig the next cell of the pit, row by row.
+     *
+     * @return False if there is no world or pit to dig in.
+     */
+    private boolean digPit() {
+        final SyntheticTerrain world = terrain;
+        final int[] origin = pit;
+        if (world == null || released || origin == null) {
+            return false;
+        }
+        final int across = digCount % PIT_WIDTH;
+        final int along = digCount / PIT_WIDTH % PIT_LENGTH;
+        return digAt(world, origin[0] + across, origin[1] - along);
+    }
+
+    /**
+     * Dig out a column's ground block, and any plant standing on it, and rebake the sections around
+     * it, timing how long until the hole is drawn and until level of detail has it.
+     *
+     * @param world The world.
+     * @param x The column's x.
+     * @param z The column's z.
+     * @return False if the column has no ground to dig.
+     */
+    private boolean digAt(@NonNull SyntheticTerrain world, int x, int z) {
+        final int y = world.ground(x, z);
         if (y < world.minY()) {
             return false;
         }
+        final byte dug = world.block(x, y, z);
         world.setBlock(x, y, z, SyntheticTerrain.AIR);
+        if (world.block(x, y + 1, z) == SyntheticTerrain.PLANT) {
+            // It would float
+            world.setBlock(x, y + 1, z, SyntheticTerrain.AIR);
+        }
         final int size = SyntheticTerrain.SECTION;
         final LodStore.SectionPos home =
                 new LodStore.SectionPos(
@@ -1594,7 +1643,7 @@ public final class GateBenchmark {
                             homeHandle,
                             home,
                             renderer().getState().sections.requestedGeneration(homeHandle.id()),
-                            new int[] {x, y, z}));
+                            new int[] {x, y, z, dug}));
         }
         lastDig = System.nanoTime();
         digCount += 1;
@@ -1669,22 +1718,93 @@ public final class GateBenchmark {
         return List.copyOf(digLatencies);
     }
 
+    /**
+     * Find an open patch of ground for the pit, with a column to spare around it and open ground
+     * under the camera, nearest in front of where the camera turns: every column's ground open to
+     * the sky, so the camera above sees each dig. Searches outward in squares.
+     *
+     * @param world The world.
+     * @return The pit's first cell, x and z; in front of the camera if nothing nearby is open.
+     */
+    private static int[] findPit(@NonNull SyntheticTerrain world) {
+        final int startX = -PIT_WIDTH / 2;
+        final int startZ = (int) -DIG_REACH;
+        for (int ring = 0; ring <= PIT_SEARCH; ++ring) {
+            for (int dz = -ring; dz <= ring; ++dz) {
+                for (int dx = -ring; dx <= ring; ++dx) {
+                    if (Math.max(Math.abs(dx), Math.abs(dz)) != ring) {
+                        continue;
+                    }
+                    if (isOpenPatch(world, startX + dx, startZ + dz)) {
+                        return new int[] {startX + dx, startZ + dz};
+                    }
+                }
+            }
+        }
+        return new int[] {startX, startZ};
+    }
+
+    /**
+     * Whether the pit would be open with its first cell somewhere, a column around it and the
+     * ground toward the camera included: grass open to the sky, nearly level.
+     *
+     * @param world The world.
+     * @param x The first cell's x.
+     * @param z The first cell's z.
+     * @return True if every column is open.
+     */
+    private static boolean isOpenPatch(@NonNull SyntheticTerrain world, int x, int z) {
+        final int level = world.ground(x, z);
+        for (int column = x - 1; column <= x + PIT_WIDTH; ++column) {
+            // Up to under the camera, so nothing between it and the pit hides the digs
+            for (int row = z - PIT_LENGTH; row <= z + (int) DIG_REACH + 1; ++row) {
+                if (!world.isOpen(column, row)) {
+                    return false;
+                }
+                // Natural ground, nearly level: no huts, no cliffs
+                final int ground = world.ground(column, row);
+                final byte surface = world.block(column, ground, row);
+                if ((surface != SyntheticTerrain.GRASS && surface != SyntheticTerrain.SLAB)
+                        || Math.abs(ground - level) > PIT_GROUND_STEP) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     /** Make digs that are due, and time the ones in flight. Render thread, once a frame. */
     private void updateDigs() {
         if (digsLeft > 0 && !pitView && terrain != null) {
-            // Look down at where the pit goes
+            // Look down at an open patch of ground where the pit goes
             pitView = true;
+            pit = findPit(terrain);
             final Scene scene = GraphicsManager.getScene();
-            final Vector3d position = cameraPosition;
-            final int top = terrain.top(0, (int) -DIG_REACH);
-            scene.getCamera().setPosition(position.x, top + PIT_VIEW_HEIGHT, position.z);
+            final int middle = pit[0] + PIT_WIDTH / 2;
+            final int ground = terrain.ground(middle, pit[1]);
+            // Back from the middle row by as far as the view reaches looking down, so it is
+            // in the middle of the frame
+            final double z =
+                    pit[1] - PIT_LENGTH / 2 + 0.5 + PIT_VIEW_HEIGHT / Math.tan(PIT_VIEW_PITCH);
+            scene.getCamera().setPosition(middle + 0.5, ground + PIT_VIEW_HEIGHT, z);
             scene.getCamera().setRotation(PIT_VIEW_PITCH, 0);
+            log.info(
+                    "Gate benchmark digging a pit at ({}, {}, {}), {} by {} blocks",
+                    pit[0],
+                    ground,
+                    pit[1],
+                    PIT_WIDTH,
+                    PIT_LENGTH);
         }
         final double rate = digsLeft > 0 ? propertyDigRate : digRate;
         if (rate > 0 && (System.nanoTime() - lastDig) / NANOS_PER_SECOND >= 1 / rate) {
             final Scene scene = GraphicsManager.getScene();
-            if (scene != null && dig(scene) && digsLeft > 0) {
-                --digsLeft;
+            if (digsLeft > 0) {
+                if (digPit()) {
+                    --digsLeft;
+                }
+            } else if (scene != null) {
+                dig(scene);
             }
         }
         final var manager = renderer().getState().sections;
@@ -1710,9 +1830,10 @@ public final class GateBenchmark {
                 final double lodMillis = (now - dig.start) / NANOS_PER_MILLI;
                 digLatencies.add(new double[] {drawnMillis, lodMillis, dig.frames});
                 log.info(
-                        "Dig at ({}, {}, {}): drawn after {} ms ({} frames), in level of detail"
+                        "Dig of block {} at ({}, {}, {}): drawn after {} ms ({} frames), in level of detail"
                                 + " after {} ms; {} sections drawing themselves; last bake on the"
                                 + " render thread {} ms",
+                        dig.block[DUG_BLOCK],
                         dig.block[0],
                         dig.block[1],
                         dig.block[2],
