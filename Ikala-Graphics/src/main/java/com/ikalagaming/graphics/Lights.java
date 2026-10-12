@@ -202,6 +202,21 @@ public final class Lights {
     }
 
     /**
+     * Let a light cast shadows, or stop it. Lights don't cast shadows unless asked. Only the most
+     * important shadow-casting lights get shadow maps each frame, within the budget in {@link
+     * GraphicsSettings#pointShadowBudget}; a tight group of them may share one.
+     *
+     * @param light The light.
+     * @param castsShadows Whether it may cast shadows.
+     */
+    public void setCastsShadows(@Nullable LightHandle light, boolean castsShadows) {
+        LightRegistry registry = registryOrNull();
+        if (registry != null && !registry.setCastsShadows(owner(), light, castsShadows)) {
+            ignored(registry, light, "change the shadows of");
+        }
+    }
+
+    /**
      * Change how far a light reaches.
      *
      * @param light The light.

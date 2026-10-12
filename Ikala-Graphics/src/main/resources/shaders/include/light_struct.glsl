@@ -15,7 +15,9 @@ struct Light {
     float cosOuter;
     float cosInner;
     uint type;
-    vec2 _padding;
+    // The point shadow map it uses, or -1 for none, see PointShadows
+    int shadowMap;
+    float _padding;
 };
 
 #endif

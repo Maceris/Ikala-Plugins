@@ -491,6 +491,18 @@ public final class GateBenchmark {
     /** Where the camera turns. */
     private volatile Vector3d cameraPosition;
 
+    /** How bright the benchmark's sun is. */
+    private static final float SUN_INTENSITY = 3;
+
+    /** How bright the benchmark's ambient light is. */
+    private static final float AMBIENT_INTENSITY = 0.25f;
+
+    /** How bright the ambient light is at night, from the startup property. */
+    private static final float NIGHT_AMBIENT_INTENSITY = 0.01f;
+
+    /** Whether the torches cast shadows, from the startup property. */
+    private static boolean lightShadows = Boolean.getBoolean(PROPERTY + ".lightShadows");
+
     /** How fast the camera walks along x while it turns, in meters a second, 0 to stand still. */
     private double walkSpeed;
 
@@ -891,6 +903,16 @@ public final class GateBenchmark {
                                     new Vector3d(x + 0.5, y + 1 + TORCH_HEIGHT, z + 0.5),
                                     TORCH_COLOR,
                                     TORCH_INTENSITY);
+            if (lightShadows) {
+                graphics.lights().setCastsShadows(light, true);
+            }
+            if (i == 0) {
+                log.info(
+                        "Gate benchmark first torch at ({}, {}, {})",
+                        x + 0.5,
+                        y + 1 + TORCH_HEIGHT,
+                        z + 0.5);
+            }
             sectionsLock.lock();
             try {
                 lights.add(light);
@@ -1031,8 +1053,16 @@ public final class GateBenchmark {
         previousAmbient = scene.getSceneLights().getAmbientLight();
         previousViewDistance = scene.getViewDistance();
         scene.setViewDistance((double) radius * SyntheticTerrain.SECTION);
-        scene.getSceneLights().setDirLight(new DirectionalLight(SUN_COLOR, SUN_DIRECTION, 3));
-        scene.getSceneLights().setAmbientLight(new AmbientLight(new Vector3f(1, 1, 1), 0.25f));
+        // At night only the torches light the world, to look at their shadows
+        final boolean night = Boolean.getBoolean(PROPERTY + ".night");
+        scene.getSceneLights()
+                .setDirLight(
+                        new DirectionalLight(SUN_COLOR, SUN_DIRECTION, night ? 0 : SUN_INTENSITY));
+        scene.getSceneLights()
+                .setAmbientLight(
+                        new AmbientLight(
+                                new Vector3f(1, 1, 1),
+                                night ? NIGHT_AMBIENT_INTENSITY : AMBIENT_INTENSITY));
     }
 
     /**
@@ -1432,6 +1462,16 @@ public final class GateBenchmark {
 
     /** Work out the results, report them, and release everything. */
     private void finish() {
+        final var points = renderer().getState().pointShadows;
+        if (points != null && points.getCastingLights() > 0) {
+            log.info(
+                    "Gate benchmark point shadows: {} of {} shadow-casting lights in {} maps, {}"
+                            + " faces drawn",
+                    points.getShadowedLights(),
+                    points.getCastingLights(),
+                    points.getMapCount(),
+                    points.getFaceRedraws());
+        }
         final SunShadowCache.Stats start = shadowCacheAtStart;
         if (start != null) {
             final SunShadowCache.Stats end = renderer().getState().sunShadows.stats();

@@ -40,7 +40,8 @@ public class LightRender implements RenderStage {
     private static final int[] STORAGE_BINDINGS = {
         ShaderBindings.Light.LIGHTS_BINDING,
         ShaderBindings.Light.MATERIALS_BINDING,
-        ShaderBindings.Light.CLUSTERS_BINDING
+        ShaderBindings.Light.CLUSTERS_BINDING,
+        ShaderBindings.Light.POINT_SHADOWS_BINDING
     };
 
     /** The shader to use for rendering. */
@@ -132,7 +133,12 @@ public class LightRender implements RenderStage {
         SceneRender.writeStorageBindings(
                 vulkanState,
                 descriptorSets[vulkanState.frameIndex],
-                new SharedBuffer[] {frameData.lights, frameData.materials, frameData.lightClusters},
+                new SharedBuffer[] {
+                    frameData.lights,
+                    frameData.materials,
+                    frameData.lightClusters,
+                    frameData.pointShadowMaps
+                },
                 STORAGE_BINDINGS,
                 writtenBuffers[vulkanState.frameIndex]);
 
@@ -254,6 +260,14 @@ public class LightRender implements RenderStage {
         uniformData.putInt(
                 ShaderBindings.Light.SKY_OCCLUSION_VIEW_OFFSET,
                 scene.getDebugVisualizers().isSkyOcclusionView() ? 1 : 0);
+        uniformData.putInt(
+                ShaderBindings.Light.POINT_ATLAS_INDEX_OFFSET,
+                frameData.pointAtlas == null ? -1 : frameData.pointAtlas.bindlessIndex);
+        uniformData.putInt(
+                ShaderBindings.Light.POINT_DYNAMIC_ATLAS_INDEX_OFFSET,
+                frameData.pointDynamicAtlas == null
+                        ? -1
+                        : frameData.pointDynamicAtlas.bindlessIndex);
 
         Fog fog = scene.getFog();
         offset = ShaderBindings.Light.FOG_OFFSET;

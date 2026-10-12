@@ -4,7 +4,9 @@ import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.MeshKind;
+import com.ikalagaming.graphics.Sections;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakedVertex;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
@@ -19,12 +21,19 @@ import com.ikalagaming.graphics.vulkan.RenderStage;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Matrix4f;
+import org.joml.Vector3dc;
+import org.joml.Vector3f;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Renders the scene depth from the directional light into each cascade shadow map. The near cascade
@@ -64,6 +73,21 @@ public class ShadowRender implements RenderStage {
     /** VkPipeline for level of detail clusters, will be VK_NULL_HANDLE if not set up. */
     private long lodPipeline;
 
+    /** The shader for standard meshes in a point light shadow face. */
+    @NonNull private final ShaderVulkan pointShader;
+
+    /** VkPipeline for standard meshes in a point light shadow face. */
+    private long pointPipeline;
+
+    /** The shader for baked sections in a point light shadow face. */
+    @NonNull private final ShaderVulkan pointBakedShader;
+
+    /** VkPipeline for baked sections in a point light shadow face. */
+    private long pointBakedPipeline;
+
+    /** Where in the push constants a point shadow face's placement goes, after the matrix. */
+    private static final int POINT_PLACE_OFFSET = 16 * Float.BYTES;
+
     /** VkDescriptorSetLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorSetLayout;
 
@@ -91,14 +115,20 @@ public class ShadowRender implements RenderStage {
      * @param shader The shader to use for rendering.
      * @param bakedShader The shader for baked sections.
      * @param lodShader The shader for level of detail clusters.
+     * @param pointShader The shader for standard meshes in point light shadow faces.
+     * @param pointBakedShader The shader for baked sections in point light shadow faces.
      */
     public ShadowRender(
             final @NonNull ShaderVulkan shader,
             final @NonNull ShaderVulkan bakedShader,
-            final @NonNull ShaderVulkan lodShader) {
+            final @NonNull ShaderVulkan lodShader,
+            final @NonNull ShaderVulkan pointShader,
+            final @NonNull ShaderVulkan pointBakedShader) {
         this.shader = shader;
         this.bakedShader = bakedShader;
         this.lodShader = lodShader;
+        this.pointShader = pointShader;
+        this.pointBakedShader = pointBakedShader;
         this.bakedPipeline = VK_NULL_HANDLE;
         this.lodPipeline = VK_NULL_HANDLE;
         this.descriptorSetLayout = VK_NULL_HANDLE;
@@ -116,6 +146,8 @@ public class ShadowRender implements RenderStage {
         pipeline = createPipeline(vulkanState, shader, false, false);
         bakedPipeline = createPipeline(vulkanState, bakedShader, true, false);
         lodPipeline = createPipeline(vulkanState, lodShader, false, true);
+        pointPipeline = createPipeline(vulkanState, pointShader, false, false);
+        pointBakedPipeline = createPipeline(vulkanState, pointBakedShader, true, false);
     }
 
     @Override
@@ -130,6 +162,10 @@ public class ShadowRender implements RenderStage {
         bakedPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, lodPipeline, null);
         lodPipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, pointPipeline, null);
+        pointPipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, pointBakedPipeline, null);
+        pointBakedPipeline = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(vulkanState.device.logical, pipelineLayout, null);
         pipelineLayout = VK_NULL_HANDLE;
         vkDestroyDescriptorSetLayout(vulkanState.device.logical, descriptorSetLayout, null);
@@ -240,6 +276,224 @@ public class ShadowRender implements RenderStage {
                         false);
                 endWriting(commandBuffer, frameData.skyMap, stack);
             }
+
+            renderPointShadows(scene, vulkanState, commandBuffer, frameData, stack);
+        }
+    }
+
+    /**
+     * Draw the point light shadow faces that are due into the atlas of what doesn't move, and every
+     * face of maps with something moving in reach into the atlas of what moves.
+     *
+     * @param scene The scene.
+     * @param state The Vulkan state.
+     * @param commandBuffer The command buffer to record into.
+     * @param frameData This frame's data.
+     * @param stack The stack to allocate on.
+     */
+    private void renderPointShadows(
+            @NonNull Scene scene,
+            @NonNull VulkanState state,
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull PerFrameData frameData,
+            @NonNull MemoryStack stack) {
+        final PointShadows points = state.pointShadows;
+        if (frameData.pointAtlas == null) {
+            return;
+        }
+        final Vector3dc camera = scene.getCamera().getPosition();
+        final List<PointShadows.Face> faces = points.facesToDraw();
+        if (!faces.isEmpty()) {
+            beginWriting(
+                    commandBuffer, frameData.pointAtlas, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL, stack);
+            renderFaces(
+                    commandBuffer, state, frameData, frameData.pointAtlas, faces, camera, false);
+            endWriting(commandBuffer, frameData.pointAtlas, stack);
+            faces.forEach(points::drawn);
+        }
+        final List<PointShadows.Face> moving = new ArrayList<>();
+        for (int map : points.maps()) {
+            if (!points.dynamics(map).isEmpty()) {
+                for (int face = 0; face < PointShadows.FACES; ++face) {
+                    moving.add(new PointShadows.Face(map, face));
+                }
+            }
+        }
+        if (!moving.isEmpty()) {
+            beginWriting(
+                    commandBuffer, frameData.pointDynamicAtlas, VK_IMAGE_LAYOUT_UNDEFINED, stack);
+            renderFaces(
+                    commandBuffer,
+                    state,
+                    frameData,
+                    frameData.pointDynamicAtlas,
+                    moving,
+                    camera,
+                    true);
+            endWriting(commandBuffer, frameData.pointDynamicAtlas, stack);
+        }
+    }
+
+    /**
+     * Draw point light shadow faces into an atlas: what doesn't move, clearing each face's tile
+     * first and keeping the rest, or what moves, clearing the whole atlas.
+     *
+     * @param commandBuffer The command buffer to record into.
+     * @param state The Vulkan state.
+     * @param frameData This frame's data.
+     * @param atlas The atlas, as a depth attachment.
+     * @param faces The faces to draw.
+     * @param camera The camera's world position, the render space origin.
+     * @param dynamics True to draw what moves, false for what doesn't.
+     */
+    private void renderFaces(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull VulkanState state,
+            @NonNull PerFrameData frameData,
+            @NonNull TextureInfoVulkan atlas,
+            @NonNull List<PointShadows.Face> faces,
+            @NonNull Vector3dc camera,
+            boolean dynamics) {
+        final PointShadows points = state.pointShadows;
+        final int size = PointShadows.ATLAS_SIZE;
+        final int tile = PointShadows.TILE_SIZE;
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkRenderingAttachmentInfo depthAttachment =
+                    VkRenderingAttachmentInfo.calloc(stack)
+                            .sType$Default()
+                            .imageView(atlas.view)
+                            .imageLayout(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL)
+                            .loadOp(
+                                    dynamics
+                                            ? VK_ATTACHMENT_LOAD_OP_CLEAR
+                                            : VK_ATTACHMENT_LOAD_OP_LOAD)
+                            .storeOp(VK_ATTACHMENT_STORE_OP_STORE);
+            depthAttachment.clearValue().depthStencil().depth(1.0f);
+            VkRenderingInfo renderingInfo =
+                    VkRenderingInfo.calloc(stack)
+                            .sType$Default()
+                            .renderArea(area -> area.extent().set(size, size))
+                            .layerCount(1)
+                            .pDepthAttachment(depthAttachment);
+            vkCmdBeginRendering(commandBuffer, renderingInfo);
+            vkCmdBindDescriptorSets(
+                    commandBuffer,
+                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    pipelineLayout,
+                    0,
+                    stack.longs(descriptorSets[state.frameIndex]),
+                    null);
+            final GeometryArena arena = dynamics ? state.geometry : state.bakedGeometry;
+            vkCmdBindPipeline(
+                    commandBuffer,
+                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    dynamics ? pointPipeline : pointBakedPipeline);
+            vkCmdBindIndexBuffer(commandBuffer, arena.getIndices().buffer, 0, VK_INDEX_TYPE_UINT32);
+            vkCmdBindVertexBuffers(
+                    commandBuffer, 0, stack.longs(arena.getVertices().buffer), stack.longs(0));
+            final MeshRegistry registry = arena.getRegistry();
+            final ByteBuffer pushConstants =
+                    stack.calloc(ShaderBindings.Shadow.PUSH_CONSTANTS_SIZE);
+            final Matrix4f matrix = new Matrix4f();
+            final float[] planes = new float[FrustumPlanes.FLOATS];
+            final Vector3f center = new Vector3f();
+            final Vector3f extents = new Vector3f();
+            final float half = Sections.SECTION_SIZE / 2f;
+            final Map<Integer, List<SectionManager.Caster>> casters = new HashMap<>();
+            VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
+            VkRect2D.Buffer scissors = VkRect2D.calloc(1, stack);
+            VkClearAttachment.Buffer clear = VkClearAttachment.calloc(1, stack);
+            clear.get(0).aspectMask(VK_IMAGE_ASPECT_DEPTH_BIT);
+            clear.get(0).clearValue().depthStencil().depth(1.0f);
+            VkClearRect.Buffer clearRect = VkClearRect.calloc(1, stack);
+            clearRect.get(0).layerCount(1);
+            for (PointShadows.Face face : faces) {
+                final int[] origin = PointShadows.tileOrigin(face.map(), face.face());
+                viewports
+                        .get(0)
+                        .x(origin[0])
+                        .y(origin[1])
+                        .width(tile)
+                        .height(tile)
+                        .minDepth(0)
+                        .maxDepth(1);
+                vkCmdSetViewport(commandBuffer, 0, viewports);
+                scissors.get(0).offset().set(origin[0], origin[1]);
+                scissors.get(0).extent().set(tile, tile);
+                vkCmdSetScissor(commandBuffer, 0, scissors);
+                if (!dynamics) {
+                    clearRect.get(0).rect().offset().set(origin[0], origin[1]);
+                    clearRect.get(0).rect().extent().set(tile, tile);
+                    vkCmdClearAttachments(commandBuffer, clear, clearRect);
+                }
+                points.faceMatrix(face.map(), face.face(), camera, matrix);
+                matrix.get(0, pushConstants);
+                if (dynamics) {
+                    for (PointShadows.Dynamic dynamic : points.dynamics(face.map())) {
+                        pushConstants.putInt(POINT_PLACE_OFFSET, dynamic.slot());
+                        vkCmdPushConstants(
+                                commandBuffer,
+                                pipelineLayout,
+                                VK_SHADER_STAGE_VERTEX_BIT,
+                                0,
+                                pushConstants);
+                        for (MeshHandle mesh : dynamic.meshes()) {
+                            final MeshRegistry.Location at = registry.locate(mesh);
+                            if (at != null) {
+                                vkCmdDrawIndexed(
+                                        commandBuffer,
+                                        mesh.indexCount(),
+                                        1,
+                                        at.firstIndex(),
+                                        at.vertexOffset(),
+                                        0);
+                            }
+                        }
+                    }
+                    continue;
+                }
+                FrustumPlanes.extract(matrix, planes);
+                final List<SectionManager.Caster> nearby =
+                        casters.computeIfAbsent(
+                                face.map(),
+                                m -> state.sections.casters(points.center(m), points.range(m)));
+                for (SectionManager.Caster caster : nearby) {
+                    final Vector3dc corner = caster.origin();
+                    final float x = (float) (corner.x() - camera.x());
+                    final float y = (float) (corner.y() - camera.y());
+                    final float z = (float) (corner.z() - camera.z());
+                    center.set(x + half, y + half, z + half);
+                    extents.set(half);
+                    if (!FrustumPlanes.boxInside(planes, center, extents)) {
+                        continue;
+                    }
+                    final MeshRegistry.Location at = registry.locate(caster.mesh());
+                    if (at == null) {
+                        continue;
+                    }
+                    pushConstants
+                            .putFloat(POINT_PLACE_OFFSET, x)
+                            .putFloat(POINT_PLACE_OFFSET + Float.BYTES, y)
+                            .putFloat(POINT_PLACE_OFFSET + 2 * Float.BYTES, z)
+                            .putFloat(
+                                    POINT_PLACE_OFFSET + 3 * Float.BYTES,
+                                    1f / BakedVertex.STEPS_PER_UNIT);
+                    vkCmdPushConstants(
+                            commandBuffer,
+                            pipelineLayout,
+                            VK_SHADER_STAGE_VERTEX_BIT,
+                            0,
+                            pushConstants);
+                    vkCmdDrawIndexed(
+                            commandBuffer,
+                            caster.mesh().indexCount(),
+                            1,
+                            at.firstIndex(),
+                            at.vertexOffset(),
+                            0);
+                }
+            }
+            vkCmdEndRendering(commandBuffer);
         }
     }
 

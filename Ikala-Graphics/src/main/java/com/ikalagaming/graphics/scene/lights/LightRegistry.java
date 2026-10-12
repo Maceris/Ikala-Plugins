@@ -95,6 +95,20 @@ public class LightRegistry {
          * @return The cosine of the outer angle.
          */
         float cosOuter();
+
+        /**
+         * The light's slot, which stays the same for as long as the light lives.
+         *
+         * @return The slot.
+         */
+        int slot();
+
+        /**
+         * Whether the light casts shadows, if the shadow budget reaches it.
+         *
+         * @return True if it may cast shadows.
+         */
+        boolean castsShadows();
     }
 
     /** One light's settings. */
@@ -110,6 +124,8 @@ public class LightRegistry {
 
         private float cosInner;
         private float cosOuter;
+        private int slot;
+        private boolean castsShadows;
 
         @Override
         public LightType type() {
@@ -151,6 +167,16 @@ public class LightRegistry {
         @Override
         public float cosOuter() {
             return cosOuter;
+        }
+
+        @Override
+        public int slot() {
+            return slot;
+        }
+
+        @Override
+        public boolean castsShadows() {
+            return castsShadows;
         }
     }
 
@@ -197,6 +223,8 @@ public class LightRegistry {
             final int slot = takeSlot();
             Entry entry = entries.get(slot);
             entry.type = LightType.POINT;
+            entry.slot = slot;
+            entry.castsShadows = false;
             entry.position.set(position);
             entry.color.set(color);
             entry.intensity = intensity;
@@ -241,6 +269,8 @@ public class LightRegistry {
             final int slot = takeSlot();
             Entry entry = entries.get(slot);
             entry.type = LightType.SPOT;
+            entry.slot = slot;
+            entry.castsShadows = false;
             entry.position.set(position);
             entry.direction.set(direction).normalize();
             entry.color.set(color);
@@ -343,6 +373,29 @@ public class LightRegistry {
                 return false;
             }
             entry.intensity = intensity;
+            return true;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Let a light cast shadows, or stop it.
+     *
+     * @param owner The key of the plugin asking, which must own it.
+     * @param handle The light.
+     * @param castsShadows Whether it may cast shadows.
+     * @return False if the handle was stale or owned by another plugin.
+     */
+    public boolean setCastsShadows(
+            @NonNull String owner, @Nullable LightHandle handle, boolean castsShadows) {
+        lock.lock();
+        try {
+            Entry entry = ownedLocked(owner, handle);
+            if (entry == null) {
+                return false;
+            }
+            entry.castsShadows = castsShadows;
             return true;
         } finally {
             lock.unlock();

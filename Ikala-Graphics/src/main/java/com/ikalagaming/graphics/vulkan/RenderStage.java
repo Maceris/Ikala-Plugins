@@ -30,6 +30,8 @@ public interface RenderStage {
         SHADOW,
         SHADOW_BAKED,
         SHADOW_LOD,
+        POINT_SHADOW,
+        POINT_SHADOW_BAKED,
         SKYBOX,
         TONEMAP,
         TRANSLUCENT,

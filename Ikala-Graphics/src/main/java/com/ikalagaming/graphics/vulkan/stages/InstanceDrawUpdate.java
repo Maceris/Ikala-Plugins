@@ -19,6 +19,7 @@ import com.ikalagaming.graphics.vulkan.InstanceTable;
 import com.ikalagaming.graphics.vulkan.MeshRegistry;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
+import com.ikalagaming.graphics.vulkan.PointShadows;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 import com.ikalagaming.graphics.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.vulkan.VulkanState;
@@ -27,12 +28,14 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
+import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -273,6 +276,7 @@ public class InstanceDrawUpdate implements RenderStage {
                 (min, max) -> {
                     vulkanState.sunShadows.invalidate(min, max);
                     vulkanState.skyOcclusion.invalidate(min, max);
+                    vulkanState.pointShadows.invalidate(min, max);
                 });
         vulkanState.sunShadows.plan(
                 frameData.cascadeShadowSplits,
@@ -285,7 +289,27 @@ public class InstanceDrawUpdate implements RenderStage {
         vulkanState.skyOcclusion.plan(
                 frameData.skyView, scene.getCamera().getPosition(), scene.getViewDistance());
 
+        // Which point lights get shadow maps, from what the observer can see
+        final Observer pointObserver = scene.getObserver();
+        final float[] observerPlanes = new float[FrustumPlanes.FLOATS];
+        FrustumPlanes.extract(
+                new Matrix4f(pointObserver.getProjectionMatrix())
+                        .mul(pointObserver.getViewMatrix()),
+                pointObserver.getPosition(),
+                scene.getCamera().getPosition(),
+                observerPlanes);
+        vulkanState.pointShadows.plan(
+                scene.getLightRegistry(),
+                pointObserver.getPosition(),
+                observerPlanes,
+                scene.getCamera().getPosition(),
+                GraphicsManager.getSettings().pointShadowBudget,
+                GraphicsManager.getSettings().pointShadowShareExtent);
+
         final InstanceTable.Snapshot snapshot = instances.getSnapshot();
+        if (vulkanState.pointShadows.getMapCount() > 0) {
+            vulkanState.pointShadows.setDynamics(dynamics(snapshot.models(), instances));
+        }
         final MeshRegistry meshes = vulkanState.geometry.getRegistry();
         final MeshRegistry bakedMeshes = vulkanState.bakedGeometry.getRegistry();
         final int meshSlots = meshes.getSlotCapacity();
@@ -599,6 +623,53 @@ public class InstanceDrawUpdate implements RenderStage {
             FrustumPlanes.extract(sky.getStaticCullMatrix(), out);
         }
         planes.put((PASS_COUNT + PASS_SKY) * out.length, out);
+    }
+
+    /**
+     * Everything that moves and casts point light shadows: the instances of models with standard
+     * meshes that aren't animated, with where they are and how far their meshes reach.
+     *
+     * @param models The models with instances.
+     * @param instances The instance table.
+     * @return The instances.
+     */
+    private static List<PointShadows.Dynamic> dynamics(
+            @NonNull List<InstanceTable.ModelCount> models, @NonNull InstanceTable instances) {
+        final List<PointShadows.Dynamic> out = new ArrayList<>();
+        for (InstanceTable.ModelCount modelCount : models) {
+            final Model model = modelCount.model();
+            if (modelCount.instanceCount() == 0 || model.isAnimated()) {
+                continue;
+            }
+            final List<MeshHandle> meshes = new ArrayList<>();
+            double reach = 0;
+            for (MeshData mesh : model.getMeshDataList()) {
+                final MeshHandle handle = mesh.getMesh();
+                if (handle != null && handle.kind() == MeshKind.STANDARD) {
+                    meshes.add(handle);
+                    reach =
+                            Math.max(
+                                    reach,
+                                    Math.max(handle.aabbMin().length(), handle.aabbMax().length()));
+                }
+            }
+            if (meshes.isEmpty()) {
+                continue;
+            }
+            final double modelReach = reach;
+            instances
+                    .getRegistry()
+                    .visitTransforms(
+                            model,
+                            (slot, alive, position, rotation, scale) ->
+                                    out.add(
+                                            new PointShadows.Dynamic(
+                                                    slot,
+                                                    new Vector3d(position),
+                                                    modelReach * scale,
+                                                    meshes)));
+        }
+        return out;
     }
 
     /**

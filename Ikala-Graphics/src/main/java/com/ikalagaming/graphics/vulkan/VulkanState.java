@@ -58,6 +58,9 @@ public class VulkanState {
     /** The sky occlusion map's place in the world, see {@link SkyOcclusion}. */
     public SkyOcclusion skyOcclusion = null;
 
+    /** Which point lights cast shadows, and their cube maps, see {@link PointShadows}. */
+    public PointShadows pointShadows = null;
+
     /** The CPU copies of meshes that sections can be baked from. */
     public BakeSources bakeSources = null;
 

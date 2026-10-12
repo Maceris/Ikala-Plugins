@@ -95,6 +95,12 @@ public class PipelineManagerVulkan {
     /** The sky occlusion map, shared between frames like the shadow maps. */
     private TextureInfoVulkan skyMap;
 
+    /** The point light shadow atlases, of what doesn't move and of what moves. */
+    private TextureInfoVulkan pointAtlas;
+
+    /** The point light shadow atlas of what moves. */
+    private TextureInfoVulkan pointDynamicAtlas;
+
     private final AnimationRender stageAnimationRender;
     private final FilterRender stageFilterRender;
 
@@ -190,7 +196,9 @@ public class PipelineManagerVulkan {
                 new ShadowRender(
                         shaders.getShader(RenderStage.Type.SHADOW),
                         shaders.getShader(RenderStage.Type.SHADOW_BAKED),
-                        shaders.getShader(RenderStage.Type.SHADOW_LOD));
+                        shaders.getShader(RenderStage.Type.SHADOW_LOD),
+                        shaders.getShader(RenderStage.Type.POINT_SHADOW),
+                        shaders.getShader(RenderStage.Type.POINT_SHADOW_BAKED));
         stageShadowRender.initialize(state);
         stageLightCull = new LightCull(shaders.getShader(RenderStage.Type.LIGHT_CULL));
         stageLightCull.initialize(state);
@@ -412,6 +420,11 @@ public class PipelineManagerVulkan {
         }
         skyMap = createShadowMap(state, SkyOcclusion.MAP_SIZE);
         all.add(skyMap);
+        pointAtlas = createShadowMap(state, PointShadows.ATLAS_SIZE);
+        all.add(pointAtlas);
+        pointDynamicAtlas = createShadowMap(state, PointShadows.ATLAS_SIZE);
+        all.add(pointDynamicAtlas);
+        state.pointShadows.invalidateAll();
         state.sunShadows.invalidateAll();
         state.skyOcclusion.invalidateAll();
         clearShadowMaps(state, all.toArray(new TextureInfoVulkan[0]));
@@ -533,6 +546,12 @@ public class PipelineManagerVulkan {
         state.bindlessTextures.release(state, skyMap);
         skyMap.destroy(state);
         skyMap = null;
+        for (TextureInfoVulkan atlas : new TextureInfoVulkan[] {pointAtlas, pointDynamicAtlas}) {
+            state.bindlessTextures.release(state, atlas);
+            atlas.destroy(state);
+        }
+        pointAtlas = null;
+        pointDynamicAtlas = null;
     }
 
     private void createShaderData(@NonNull Window window, @NonNull VulkanState state) {
@@ -579,6 +598,11 @@ public class PipelineManagerVulkan {
                                 ShaderBindings.Light.UNIFORMS_BUFFER_SIZE, state, UNIFORM);
                 state.perFrameData[i].lights =
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
+                state.perFrameData[i].pointShadowMaps =
+                        SharedBuffer.allocate(
+                                (long) PointShadows.MAX_MAPS * PointShadows.MAP_ENTRY_SIZE,
+                                state,
+                                STORAGE);
                 state.perFrameData[i].materialTransparency =
                         SharedBuffer.allocate(DEFERRED_UNTIL_LATER, state, STORAGE);
                 state.perFrameData[i].lightClusters =
@@ -647,6 +671,8 @@ public class PipelineManagerVulkan {
         data.cascadeShadows = shadowMaps;
         data.cascadeDynamicShadows = dynamicShadowMaps;
         data.skyMap = skyMap;
+        data.pointAtlas = pointAtlas;
+        data.pointDynamicAtlas = pointDynamicAtlas;
         data.skyView = new CascadeShadowSplit();
         for (int shadow = 0; shadow < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; shadow++) {
             data.cascadeShadowSplits[shadow] = new CascadeShadowSplit();
@@ -780,6 +806,8 @@ public class PipelineManagerVulkan {
         data.cascadeShadows = null;
         data.cascadeDynamicShadows = null;
         data.skyMap = null;
+        data.pointAtlas = null;
+        data.pointDynamicAtlas = null;
 
         if (data.gBuffer != null) {
             for (TextureInfoVulkan info : data.gBuffer.textures()) {
@@ -837,6 +865,8 @@ public class PipelineManagerVulkan {
         data.lightUniforms = null;
         SharedBuffer.free(data.lights, state);
         data.lights = null;
+        SharedBuffer.free(data.pointShadowMaps, state);
+        data.pointShadowMaps = null;
         SharedBuffer.free(data.materialTransparency, state);
         data.materialTransparency = null;
         SharedBuffer.free(data.lightClusters, state);

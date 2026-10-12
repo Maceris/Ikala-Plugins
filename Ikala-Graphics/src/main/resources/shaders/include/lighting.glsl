@@ -376,6 +376,45 @@ float skyVisibility(vec3 renderPosition, vec3 renderNormal) {
     return sum / 4.0;
 }
 
+// The point shadow atlases' layout, see PointShadows
+const float POINT_ATLAS_SIZE = 4096.0;
+const float POINT_TILE_SIZE = 512.0;
+const int POINT_TILES_ACROSS = 8;
+const float POINT_GUARD_TEXELS = 3.0;
+// How far to move a point out along its normal before looking it up in a point shadow map, in
+// texels of the face at that distance
+const float POINT_NORMAL_OFFSET_TEXELS = 1.5;
+
+// How much of a point light reaches a surface past what its shadow map holds, from 0 to 1: the
+// face looking toward the point, filtered like the sun's maps, times the layer of what moves
+float pointVisibility(Light light, vec3 renderPosition, vec3 renderNormal) {
+    if (light.shadowMap < 0 || pointAtlasIndex < 0) {
+        return 1.0;
+    }
+    PointShadowMap map = pointShadowMaps[light.shadowMap];
+    float distance = length(renderPosition - map.center.xyz);
+    // A texel of a face is about twice the distance over the tile's size wide
+    float texel = 2.0 * distance / (POINT_TILE_SIZE - 2.0 * POINT_GUARD_TEXELS);
+    vec3 at = renderPosition + renderNormal * (texel * POINT_NORMAL_OFFSET_TEXELS);
+    vec3 d = at - map.center.xyz;
+    vec3 a = abs(d);
+    int face = a.x >= a.y && a.x >= a.z ? (d.x > 0 ? 0 : 1)
+        : (a.y >= a.z ? (d.y > 0 ? 2 : 3) : (d.z > 0 ? 4 : 5));
+    vec4 clip = map.faces[face] * vec4(at, 1);
+    vec3 ndc = clip.xyz / clip.w;
+    if (ndc.z <= 0.0 || ndc.z >= 1.0) {
+        return 1.0;
+    }
+    int tile = map.info.x + face;
+    vec2 origin = vec2(tile % POINT_TILES_ACROSS, tile / POINT_TILES_ACROSS) * POINT_TILE_SIZE;
+    vec2 uv = (origin + (ndc.xy * 0.5 + 0.5) * POINT_TILE_SIZE) / POINT_ATLAS_SIZE;
+    float visibility = filteredVisibility(pointAtlasIndex, uv, ndc.z);
+    if (map.info.y != 0 && pointDynamicAtlasIndex >= 0) {
+        visibility *= filteredVisibility(pointDynamicAtlasIndex, uv, ndc.z);
+    }
+    return visibility;
+}
+
 // Light a surface, in linear light. Positions, normals and tangents are in view space, except the
 // render space position for the shadow lookup.
 //
@@ -401,7 +440,11 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
     uint firstIndex = CLUSTER_COUNT + cluster * MAX_LIGHTS_PER_CLUSTER;
     for (uint i = 0; i < clusterLights; ++i) {
         Light light = lights[clusterData[firstIndex + i]];
-        color += calcLight(baseColor.xyz, material, light, viewPosition, normal, tangent, bitangent);
+        vec3 lit = calcLight(baseColor.xyz, material, light, viewPosition, normal, tangent, bitangent);
+        if (light.shadowMap >= 0 && any(greaterThan(lit, vec3(0)))) {
+            lit *= pointVisibility(light, renderPosition, renderNormal);
+        }
+        color += lit;
     }
     // Ambient light arrives equally from everywhere the sky can be seen, and dimly under cover
     float nDotV = max(dot(normal, normalize(-viewPosition)), MIN_N_DOT_V);

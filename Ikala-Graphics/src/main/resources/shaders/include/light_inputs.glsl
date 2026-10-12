@@ -75,6 +75,22 @@ layout(set = 0, binding = 0) uniform Uniforms {
     float skyDepthRange;
     float skyLightFloor;
     int skyOcclusionView;
+
+    // The point shadow atlases, of what doesn't move and of what moves, see PointShadows
+    int pointAtlasIndex;
+    int pointDynamicAtlasIndex;
+};
+
+// One point light shadow cube map: each face's matrix from render space, where it is drawn from in
+// render space with its range, and its first tile and whether it has a layer of what moves
+struct PointShadowMap {
+    mat4 faces[6];
+    vec4 center;
+    ivec4 info;
+};
+
+layout(std430, set = 0, binding = 4) readonly buffer PointShadowMaps {
+    PointShadowMap pointShadowMaps[];
 };
 
 layout(std430, set = 0, binding = 1) readonly buffer Lights {

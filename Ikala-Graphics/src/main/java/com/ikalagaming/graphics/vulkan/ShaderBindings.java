@@ -711,6 +711,9 @@ public class ShaderBindings {
             /** The light's {@link com.ikalagaming.graphics.scene.lights.LightType} shader value. */
             public static final int TYPE = 13 * Float.BYTES;
 
+            /** The index of the point shadow map the light uses, or -1 for none. */
+            public static final int SHADOW_MAP = 14 * Float.BYTES;
+
             /** The size of the struct in bytes, padded out to a multiple of 16. */
             public static final int SIZEOF = 16 * Float.BYTES;
 
@@ -848,9 +851,17 @@ public class ShaderBindings {
         /** The offset into the uniforms for whether to show sky light in gray. */
         public static final int SKY_OCCLUSION_VIEW_OFFSET = SKY_LIGHT_FLOOR_OFFSET + Float.BYTES;
 
+        /** The offset into the uniforms for the point shadow atlas of what doesn't move. */
+        public static final int POINT_ATLAS_INDEX_OFFSET =
+                SKY_OCCLUSION_VIEW_OFFSET + Integer.BYTES;
+
+        /** The offset into the uniforms for the point shadow atlas of what moves. */
+        public static final int POINT_DYNAMIC_ATLAS_INDEX_OFFSET =
+                POINT_ATLAS_INDEX_OFFSET + Integer.BYTES;
+
         /** The size of the uniforms buffer, padded out to 16 bytes under std140 rules. */
         public static final int UNIFORMS_BUFFER_SIZE =
-                (int) SharedBuffer.align(SKY_OCCLUSION_VIEW_OFFSET + Integer.BYTES);
+                (int) SharedBuffer.align(POINT_DYNAMIC_ATLAS_INDEX_OFFSET + Integer.BYTES);
 
         /** Uniforms buffer binding. */
         public static final int UNIFORMS_BINDING = 0;
@@ -863,6 +874,9 @@ public class ShaderBindings {
 
         /** Binding for the cluster buffer that light culling fills. */
         public static final int CLUSTERS_BINDING = 3;
+
+        /** The point shadow map entries binding, see {@link PointShadows}. */
+        public static final int POINT_SHADOWS_BINDING = 4;
 
         /** Private constructor so this class is not instantiated. */
         private Light() {

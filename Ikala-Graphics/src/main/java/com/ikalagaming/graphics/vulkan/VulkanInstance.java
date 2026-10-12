@@ -1176,6 +1176,7 @@ public class VulkanInstance {
         state.shadowInvalidation = new ShadowInvalidation();
         state.sunShadows = new SunShadowCache();
         state.skyOcclusion = new SkyOcclusion();
+        state.pointShadows = new PointShadows();
         state.lods = new LodRenderer(state);
         state.bakeSources = new BakeSources();
         state.sections = new SectionManager(state.shadowInvalidation);
@@ -1561,6 +1562,23 @@ public class VulkanInstance {
                         ShaderVulkan.Type.VERTEX,
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(RenderStage.Type.SHADOW_LOD, new ShaderVulkan(lodModules, state));
+
+        List<ShaderVulkan.ShaderModuleData> pointModules = new ArrayList<>();
+        pointModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/point_shadow.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(RenderStage.Type.POINT_SHADOW, new ShaderVulkan(pointModules, state));
+
+        List<ShaderVulkan.ShaderModuleData> pointBakedModules = new ArrayList<>();
+        pointBakedModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/point_shadow_baked.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(
+                RenderStage.Type.POINT_SHADOW_BAKED, new ShaderVulkan(pointBakedModules, state));
     }
 
     /** Set up the skybox shader and uniforms. */
@@ -2088,6 +2106,7 @@ public class VulkanInstance {
         // The new pipeline may not have drawn shadows while things changed
         state.sunShadows.invalidateAll();
         state.skyOcclusion.invalidateAll();
+        state.pointShadows.invalidateAll();
     }
 
     /**

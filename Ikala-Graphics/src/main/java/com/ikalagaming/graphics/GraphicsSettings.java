@@ -94,4 +94,13 @@ public class GraphicsSettings {
      * none to 1 for no dimming.
      */
     public double skyLightFloor = 0.25;
+
+    /**
+     * The most point light shadow maps a frame, each a cube map one light or a tight group of
+     * lights shares; 0 for no point light shadows. At most {@code PointShadows.MAX_MAPS}.
+     */
+    public int pointShadowBudget = 8;
+
+    /** The farthest apart shadow-casting lights may be and share a map, in meters. */
+    public double pointShadowShareExtent = 2;
 }

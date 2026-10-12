@@ -184,6 +184,15 @@ public class PerFrameData {
     /** The sky occlusion map, shared between frames like the shadow maps. */
     public TextureInfoVulkan skyMap;
 
+    /** The point light shadow atlas of what doesn't move, shared between frames. */
+    public TextureInfoVulkan pointAtlas;
+
+    /** The point light shadow atlas of what moves, shared between frames. */
+    public TextureInfoVulkan pointDynamicAtlas;
+
+    /** This frame's point shadow map entries for the light stage, see {@link PointShadows}. */
+    public SharedBuffer pointShadowMaps;
+
     /** Whether anything that moves casts shadows this frame: standard meshes or listed models. */
     public boolean dynamicShadowCasters;
 

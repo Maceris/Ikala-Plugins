@@ -9,6 +9,7 @@ import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.LightRegistry;
 import com.ikalagaming.graphics.vulkan.ClusterMath;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
+import com.ikalagaming.graphics.vulkan.PointShadows;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 import com.ikalagaming.graphics.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.vulkan.ShaderVulkan;
@@ -213,6 +214,11 @@ public class LightCull implements RenderStage {
         final Matrix4f viewMatrix = scene.getCamera().getViewMatrix();
         final Vector3dc origin = scene.getCamera().getPosition();
         final Vector4f scratch = new Vector4f();
+        state.pointShadows.write(
+                MemoryUtil.memByteBuffer(
+                        frameData.pointShadowMaps.allocationInfo.pMappedData(),
+                        PointShadows.MAX_MAPS * PointShadows.MAP_ENTRY_SIZE),
+                origin);
         final int[] written = {0};
         registry.visit(
                 light -> {
@@ -223,7 +229,8 @@ public class LightCull implements RenderStage {
                                 light,
                                 viewMatrix,
                                 origin,
-                                scratch);
+                                scratch,
+                                state.pointShadows);
                         written[0] += 1;
                     }
                 });
@@ -240,6 +247,7 @@ public class LightCull implements RenderStage {
      * @param viewMatrix The camera view matrix, from render space to view space.
      * @param origin The world position of the render space origin, the camera position.
      * @param scratch A vector to do math in, so we don't allocate one per light.
+     * @param shadows Which point shadow map each light uses this frame.
      */
     private static void putLight(
             @NonNull ByteBuffer buffer,
@@ -247,7 +255,8 @@ public class LightCull implements RenderStage {
             @NonNull LightRegistry.View light,
             @NonNull Matrix4f viewMatrix,
             @NonNull Vector3dc origin,
-            @NonNull Vector4f scratch) {
+            @NonNull Vector4f scratch,
+            @NonNull PointShadows shadows) {
         // Relative to the camera in double precision first, so it stays exact far from the origin
         final Vector3dc position = light.position();
         scratch.set(
@@ -269,6 +278,8 @@ public class LightCull implements RenderStage {
         buffer.putFloat(offset + ShaderBindings.Light.LightStruct.COS_INNER, light.cosInner());
         buffer.putInt(
                 offset + ShaderBindings.Light.LightStruct.TYPE, light.type().getShaderValue());
+        buffer.putInt(
+                offset + ShaderBindings.Light.LightStruct.SHADOW_MAP, shadows.mapOf(light.slot()));
     }
 
     /**

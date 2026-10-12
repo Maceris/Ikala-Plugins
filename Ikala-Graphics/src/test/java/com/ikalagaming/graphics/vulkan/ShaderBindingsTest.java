@@ -43,7 +43,11 @@ class ShaderBindingsTest {
         assertEquals(596, ShaderBindings.Light.SKY_DEPTH_RANGE_OFFSET);
         assertEquals(600, ShaderBindings.Light.SKY_LIGHT_FLOOR_OFFSET);
         assertEquals(604, ShaderBindings.Light.SKY_OCCLUSION_VIEW_OFFSET);
-        assertEquals(608, ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
+        assertEquals(608, ShaderBindings.Light.POINT_ATLAS_INDEX_OFFSET);
+        assertEquals(612, ShaderBindings.Light.POINT_DYNAMIC_ATLAS_INDEX_OFFSET);
+        assertEquals(624, ShaderBindings.Light.UNIFORMS_BUFFER_SIZE);
+        // The shadow map index takes the first of the light struct's spare words
+        assertEquals(56, ShaderBindings.Light.LightStruct.SHADOW_MAP);
     }
 
     @Test

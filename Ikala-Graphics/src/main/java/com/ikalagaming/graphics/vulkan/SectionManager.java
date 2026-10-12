@@ -165,6 +165,9 @@ public class SectionManager {
     /** The size of a section, in blocks: the grid live level of detail cells are built on. */
     private static final int SECTION_SIZE = Sections.SECTION_SIZE;
 
+    /** Coordinates in a position. */
+    private static final int AXES = 3;
+
     /** Guards the sections. */
     private final ReentrantLock lock = new ReentrantLock();
 
@@ -173,6 +176,14 @@ public class SectionManager {
 
     /** Where changed sections are reported, for cached shadow maps. */
     private final ShadowInvalidation shadows;
+
+    /**
+     * A baked mesh that casts point light shadows.
+     *
+     * @param origin Its section's corner, in the world.
+     * @param mesh The mesh, opaque or cut out, in the baked geometry buffers.
+     */
+    public record Caster(@NonNull Vector3dc origin, @NonNull MeshHandle mesh) {}
 
     /** Finished bakes, for the render thread. */
     private final Queue<Baked> baked = new ConcurrentLinkedQueue<>();
@@ -591,6 +602,51 @@ public class SectionManager {
         while ((mesh = releasing.poll()) != null) {
             state.bakedGeometry.release(mesh);
         }
+    }
+
+    /**
+     * The opaque and cut out meshes of every section drawn now whose box reaches into a sphere, for
+     * point light shadows. Render thread.
+     *
+     * @param center The sphere's center, in the world.
+     * @param radius Its radius.
+     * @return The meshes, with their sections' corners.
+     */
+    public List<Caster> casters(@NonNull Vector3dc center, double radius) {
+        final List<Caster> out = new ArrayList<>();
+        lock.lock();
+        try {
+            for (Section section : sections.values()) {
+                final Version current = section.current;
+                if (current == null) {
+                    continue;
+                }
+                final Vector3dc origin = current.origin();
+                double squared = 0;
+                for (int axis = 0; axis < AXES; ++axis) {
+                    final double low = origin.get(axis);
+                    final double d =
+                            Math.max(
+                                    0,
+                                    Math.max(
+                                            low - center.get(axis),
+                                            center.get(axis) - (low + SECTION_SIZE)));
+                    squared += d * d;
+                }
+                if (squared > radius * radius) {
+                    continue;
+                }
+                for (MeshHandle mesh : current.meshes()) {
+                    if (mesh.kind() == MeshKind.BAKED_OPAQUE
+                            || mesh.kind() == MeshKind.BAKED_CUTOUT) {
+                        out.add(new Caster(origin, mesh));
+                    }
+                }
+            }
+        } finally {
+            lock.unlock();
+        }
+        return out;
     }
 
     /**

@@ -33,6 +33,7 @@ import com.ikalagaming.graphics.vulkan.ClusterMath;
 import com.ikalagaming.graphics.vulkan.FilterView;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
 import com.ikalagaming.graphics.vulkan.InstanceRegistry;
+import com.ikalagaming.graphics.vulkan.PointShadows;
 import com.ikalagaming.graphics.vulkan.VoxelOitMath;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
 import com.ikalagaming.graphics.vulkan.stages.InstanceDrawUpdate;
@@ -60,6 +61,9 @@ public class GraphicsDebug extends GuiWindow {
 
     /** The ambient light color picker's value, red, green, blue. */
     private final float[] ambientColor = new float[3];
+
+    /** The point shadow budget slider's value. Render thread only. */
+    private static final int[] POINT_SHADOW_BUDGET = new int[1];
 
     /** The sky light floor slider's value. Render thread only. */
     private static final float[] SKY_LIGHT_FLOOR = new float[1];
@@ -749,7 +753,25 @@ public class GraphicsDebug extends GuiWindow {
             settings.skyLightFloor = SKY_LIGHT_FLOOR[0];
         }
         IkGui.setItemTooltip("The least ambient light a point well under cover gets.");
+        // Point light shadows: the budget and what it reached
+        POINT_SHADOW_BUDGET[0] = settings.pointShadowBudget;
+        if (IkGui.sliderInt("Point shadow maps", POINT_SHADOW_BUDGET, 0, PointShadows.MAX_MAPS)) {
+            settings.pointShadowBudget = POINT_SHADOW_BUDGET[0];
+        }
+        IkGui.setItemTooltip(
+                "The most cube shadow maps a frame for lights that cast shadows; a tight group of"
+                        + " lights shares one.");
         final var skyRenderer = GraphicsManager.getRenderInstance();
+        if (skyRenderer != null && skyRenderer.getState().pointShadows != null) {
+            final PointShadows points = skyRenderer.getState().pointShadows;
+            IkGui.text(
+                    String.format(
+                            "Point shadows: %,d of %,d casting lights in %,d maps, %,d faces drawn",
+                            points.getShadowedLights(),
+                            points.getCastingLights(),
+                            points.getMapCount(),
+                            points.getFaceRedraws()));
+        }
         if (skyRenderer != null && skyRenderer.getState().skyOcclusion != null) {
             final var skyStats = skyRenderer.getState().skyOcclusion.stats();
             IkGui.text(
