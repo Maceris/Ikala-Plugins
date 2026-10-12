@@ -181,7 +181,7 @@ public class OitVolume {
         tilesY = VoxelOitMath.tiles(height);
         final long cells = (long) tilesX * tilesY * VoxelOitMath.SLICES;
         log.debug(
-                "Creating a {} × {} × {} transparency volume", tilesX, tilesY, VoxelOitMath.SLICES);
+                "Creating a {} x {} x {} transparency volume", tilesX, tilesY, VoxelOitMath.SLICES);
 
         extinction =
                 SharedBuffer.allocateDeviceLocal(

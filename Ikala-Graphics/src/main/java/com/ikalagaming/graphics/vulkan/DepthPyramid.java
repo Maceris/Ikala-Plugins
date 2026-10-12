@@ -199,7 +199,7 @@ public class DepthPyramid {
         final int levelWidth = DepthPyramidMath.levelSize(width, 0);
         final int levelHeight = DepthPyramidMath.levelSize(height, 0);
         log.debug(
-                "Creating a {} × {} depth pyramid with {} levels",
+                "Creating a {} x {} depth pyramid with {} levels",
                 levelWidth,
                 levelHeight,
                 imageLevels);
