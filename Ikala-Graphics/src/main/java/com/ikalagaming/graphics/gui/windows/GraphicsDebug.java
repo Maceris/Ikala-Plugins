@@ -68,6 +68,15 @@ public class GraphicsDebug extends GuiWindow {
     /** The sky light floor slider's value. Render thread only. */
     private static final float[] SKY_LIGHT_FLOOR = new float[1];
 
+    /** The occupancy ambient occlusion reach slider's value. Render thread only. */
+    private static final float[] AO_REACH = new float[1];
+
+    /** The shortest reach the AO slider allows, in meters: one finest voxel. */
+    private static final float MIN_AO_REACH = 1;
+
+    /** The longest reach the AO slider allows, in meters. */
+    private static final float MAX_AO_REACH = 32;
+
     public static final String WINDOW_NAME = "Graphics Debug";
 
     private final Checkbox fogEnabled;
@@ -753,6 +762,45 @@ public class GraphicsDebug extends GuiWindow {
             settings.skyLightFloor = SKY_LIGHT_FLOOR[0];
         }
         IkGui.setItemTooltip("The least ambient light a point well under cover gets.");
+        // The occupancy volume
+        if (IkGui.checkbox("Occupancy volume", settings.occupancy)) {
+            settings.occupancy = !settings.occupancy;
+        }
+        IkGui.setItemTooltip(
+                "Keep a voxel volume of what doesn't move around the camera, for ambient occlusion"
+                        + " and light visibility.");
+        IkGui.sameLine();
+        if (IkGui.checkbox("Occupancy view", visualizers.isOccupancyView())) {
+            visualizers.setOccupancyView(!visualizers.isOccupancyView());
+        }
+        IkGui.setItemTooltip(
+                "Gray for how much is around each surface in the volume, red where a surface's own"
+                        + " voxel is empty.");
+        if (IkGui.checkbox("Large-scale AO", settings.occupancyAo)) {
+            settings.occupancyAo = !settings.occupancyAo;
+        }
+        IkGui.setItemTooltip(
+                "Dim ambient light where the occupancy volume has something in the way nearby.");
+        IkGui.sameLine();
+        if (IkGui.checkbox("AO view", visualizers.isOccupancyAoView())) {
+            visualizers.setOccupancyAoView(!visualizers.isOccupancyAoView());
+        }
+        IkGui.setItemTooltip("Show how much ambient light the volume lets through, in gray.");
+        AO_REACH[0] = (float) settings.occupancyAoReach;
+        if (IkGui.sliderFloat("AO reach", AO_REACH, MIN_AO_REACH, MAX_AO_REACH)) {
+            settings.occupancyAoReach = AO_REACH[0];
+        }
+        IkGui.setItemTooltip("How far, in meters, to look for something in the way.");
+        final var occupancyRenderer = GraphicsManager.getRenderInstance();
+        if (occupancyRenderer != null && occupancyRenderer.getState().occupancy != null) {
+            final var volume = occupancyRenderer.getState().occupancy;
+            IkGui.text(
+                    String.format(
+                            "Occupancy: %,d sections waiting, %,.1f M triangles voxelized",
+                            volume.getQueuedSections(),
+                            volume.getTrianglesVoxelized() / TEXELS_PER_MEGA));
+        }
+
         // Point light shadows: the budget and what it reached
         POINT_SHADOW_BUDGET[0] = settings.pointShadowBudget;
         if (IkGui.sliderInt("Point shadow maps", POINT_SHADOW_BUDGET, 0, PointShadows.MAX_MAPS)) {

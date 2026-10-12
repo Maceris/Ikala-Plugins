@@ -415,13 +415,20 @@ float pointVisibility(Light light, vec3 renderPosition, vec3 renderNormal) {
     return visibility;
 }
 
+#ifdef OCCUPANCY_SET
+#include "occupancy.glsl"
+#endif
+
 // Light a surface, in linear light. Positions, normals and tangents are in view space, except the
 // render space position for the shadow lookup.
 //
+// geometricNormal: the surface's own normal, without normal maps, for looking around it in the
+// occupancy volume
 // screen: where the pixel is on the screen, from 0 to 1, y down, to find its cluster
 // clusterLights: how many lights the pixel's cluster lists, for the heat map
 vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 renderPosition,
-    vec3 normal, vec3 tangent, vec3 bitangent, vec2 screen, out uint clusterLights)
+    vec3 normal, vec3 geometricNormal, vec3 tangent, vec3 bitangent, vec2 screen,
+    out uint clusterLights)
 {
     // Only the directional light casts shadows, and in full shadow none of it arrives
     vec3 renderNormal = normalize((invViewMatrix * vec4(normal, 0)).xyz);
@@ -446,9 +453,16 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
         }
         color += lit;
     }
-    // Ambient light arrives equally from everywhere the sky can be seen, and dimly under cover
+    // Ambient light arrives equally from everywhere the sky can be seen, and dimly under cover, less
+    // what is in the way nearby
+#ifdef OCCUPANCY_SET
+    float open = occupancyAmbient(renderPosition,
+        normalize((invViewMatrix * vec4(geometricNormal, 0)).xyz));
+#else
+    float open = 1.0;
+#endif
     float nDotV = max(dot(normal, normalize(-viewPosition)), MIN_N_DOT_V);
-    vec3 ambient = ambientLight.intensity * ambientLight.color * mix(skyLightFloor, 1.0, sky)
+    vec3 ambient = ambientLight.intensity * ambientLight.color * mix(skyLightFloor, 1.0, sky) * open
         * ambientReflectance(sRGBToLinear(baseColor.rgb), material, nDotV);
     vec3 finalColor = ambient + color;
 

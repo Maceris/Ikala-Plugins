@@ -765,6 +765,23 @@ public final class GateBenchmark {
                 if (sky != null) {
                     GraphicsManager.getSettings().skyOcclusion = Boolean.parseBoolean(sky);
                 }
+                if (Boolean.getBoolean(PROPERTY + ".occupancyView")) {
+                    scene.getDebugVisualizers().setOccupancyView(true);
+                }
+                // Off, the occupancy volume isn't kept, so nothing reads it
+                final String occupancy = System.getProperty(PROPERTY + ".occupancy");
+                if (occupancy != null) {
+                    GraphicsManager.getSettings().occupancy = Boolean.parseBoolean(occupancy);
+                }
+                // Off, ambient light isn't dimmed by the occupancy volume; the view shows it in
+                // gray
+                final String ao = System.getProperty(PROPERTY + ".ao");
+                if (ao != null) {
+                    GraphicsManager.getSettings().occupancyAo = Boolean.parseBoolean(ao);
+                }
+                if (Boolean.getBoolean(PROPERTY + ".aoView")) {
+                    scene.getDebugVisualizers().setOccupancyAoView(true);
+                }
                 if (Boolean.getBoolean(PROPERTY + ".skyView")) {
                     scene.getDebugVisualizers().setSkyOcclusionView(true);
                 }

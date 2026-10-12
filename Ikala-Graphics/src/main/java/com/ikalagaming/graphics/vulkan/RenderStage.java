@@ -32,6 +32,8 @@ public interface RenderStage {
         SHADOW_LOD,
         POINT_SHADOW,
         POINT_SHADOW_BAKED,
+        OCCUPANCY_CLEAR,
+        OCCUPANCY_VOXELIZE,
         SKYBOX,
         TONEMAP,
         TRANSLUCENT,

@@ -103,4 +103,21 @@ public class GraphicsSettings {
 
     /** The farthest apart shadow-casting lights may be and share a map, in meters. */
     public double pointShadowShareExtent = 2;
+
+    /**
+     * Whether the occupancy volume is kept up to date: which voxels around the camera hold
+     * something that doesn't move, for ambient occlusion and light visibility.
+     */
+    public boolean occupancy = true;
+
+    /**
+     * Whether the occupancy volume dims ambient light where something nearby blocks the way out, in
+     * corners, under trees and indoors. Needs {@link #occupancy}.
+     */
+    public boolean occupancyAo = true;
+
+    /**
+     * How far the occupancy volume's ambient occlusion looks for something in the way, in meters.
+     */
+    public double occupancyAoReach = 8;
 }

@@ -1,0 +1,38 @@
+#version 460
+
+// Clears a box of one occupancy level, see OccupancyVolume: one thread per voxel, the box given by
+// its first texel and its size, wrapping around the level's texels.
+
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+
+layout(push_constant) uniform ClearConstants {
+    // xyz: the box's first texel in its level, w: the level
+    ivec4 first;
+    // xyz: the box's size, in voxels
+    ivec4 size;
+};
+
+layout(set = 0, binding = 0, r32ui) uniform restrict writeonly uimage3D occupancy;
+// Each level's coverage, see OccupancyVolume
+layout(set = 0, binding = 1, r8) uniform restrict writeonly image3D coverage[3];
+
+// The width of a level, in voxels, a power of two. Matches OccupancyClipmap.SIZE.
+const int SIZE = 128;
+
+void main()
+{
+    ivec3 local = ivec3(gl_GlobalInvocationID);
+    if (any(greaterThanEqual(local, size.xyz))) {
+        return;
+    }
+    ivec3 texel = (first.xyz + local) & (SIZE - 1);
+    imageStore(occupancy, ivec3(texel.xy, first.w * SIZE + texel.z), uvec4(0));
+    // The level is the same for every thread, but index by constants all the same
+    if (first.w == 0) {
+        imageStore(coverage[0], texel, vec4(0));
+    } else if (first.w == 1) {
+        imageStore(coverage[1], texel, vec4(0));
+    } else {
+        imageStore(coverage[2], texel, vec4(0));
+    }
+}

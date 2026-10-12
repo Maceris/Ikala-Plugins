@@ -61,6 +61,9 @@ public class VulkanState {
     /** Which point lights cast shadows, and their cube maps, see {@link PointShadows}. */
     public PointShadows pointShadows = null;
 
+    /** Which voxels around the camera hold something that doesn't move. */
+    public OccupancyVolume occupancy = null;
+
     /** The CPU copies of meshes that sections can be baked from. */
     public BakeSources bakeSources = null;
 

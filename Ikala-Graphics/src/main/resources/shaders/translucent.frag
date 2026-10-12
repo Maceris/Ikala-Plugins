@@ -13,6 +13,8 @@
 // extinction: -log(1 - opacity), whose sum gives exactly how much of the background shows through,
 // whatever the order
 
+// The occupancy volume is set 4, see TranslucentRender
+#define OCCUPANCY_SET 4
 #include "lighting.glsl"
 #define OIT_VOLUME_SET 3
 #include "oit_volume.glsl"
@@ -61,6 +63,7 @@ void main() {
     }
 
     vec3 normal = normalize(outNormal);
+    vec3 geometricNormal = gl_FrontFacing ? normal : -normal;
     if (material.normalMapIndex > 0) {
         mat3 TBN = mat3(outTangent, outBitangent, outNormal);
         vec3 newNormal = texture(bindlessTextures[nonuniformEXT(material.normalMapIndex)], outTextCoord).rgb;
@@ -75,7 +78,7 @@ void main() {
 
     uint clusterLights;
     vec3 color = lightSurface(baseColor, material, outViewPosition.xyz, outWorldPosition.xyz, normal,
-        tangent, bitangent, gl_FragCoord.xy / screenSize, clusterLights);
+        geometricNormal, tangent, bitangent, gl_FragCoord.xy / screenSize, clusterLights);
 
     float depth = -outViewPosition.z;
     float w = voxelWeights != 0

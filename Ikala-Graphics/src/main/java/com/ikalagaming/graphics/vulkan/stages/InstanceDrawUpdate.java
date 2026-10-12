@@ -277,6 +277,7 @@ public class InstanceDrawUpdate implements RenderStage {
                     vulkanState.sunShadows.invalidate(min, max);
                     vulkanState.skyOcclusion.invalidate(min, max);
                     vulkanState.pointShadows.invalidate(min, max);
+                    vulkanState.occupancy.invalidate(min, max);
                 });
         vulkanState.sunShadows.plan(
                 frameData.cascadeShadowSplits,

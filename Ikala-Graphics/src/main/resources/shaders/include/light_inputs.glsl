@@ -79,6 +79,16 @@ layout(set = 0, binding = 0) uniform Uniforms {
     // The point shadow atlases, of what doesn't move and of what moves, see PointShadows
     int pointAtlasIndex;
     int pointDynamicAtlasIndex;
+
+    // The occupancy volume's levels, see OccupancyVolume: each origin in render space with its
+    // voxel size, each origin's texel, whether it can be read, and nonzero to show it; how far its
+    // ambient occlusion reaches in meters, 0 for none, and nonzero to show that in gray
+    vec4 occupancyOrigins[3];
+    ivec4 occupancyTexels[3];
+    int occupancyEnabled;
+    int occupancyView;
+    float occupancyAoReach;
+    int occupancyAoView;
 };
 
 // One point light shadow cube map: each face's matrix from render space, where it is drawn from in

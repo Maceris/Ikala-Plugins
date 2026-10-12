@@ -177,6 +177,9 @@ public class SectionManager {
     /** Where changed sections are reported, for cached shadow maps. */
     private final ShadowInvalidation shadows;
 
+    /** Each section on the section grid, by position. Guarded by {@link #lock}. */
+    private final Map<LodStore.SectionPos, Section> byPosition = new HashMap<>();
+
     /**
      * A baked mesh that casts point light shadows.
      *
@@ -303,6 +306,9 @@ public class SectionManager {
             final Section section = new Section(owner);
             section.position = sectionPos(owner, request.origin());
             sections.put(id, section);
+            if (section.position != null) {
+                byPosition.put(section.position, section);
+            }
         } finally {
             lock.unlock();
         }
@@ -442,6 +448,9 @@ public class SectionManager {
                 return false;
             }
             sections.remove(id);
+            if (section.position != null) {
+                byPosition.remove(section.position, section);
+            }
             if (section.current != null) {
                 shadows.addSection(section.current.origin());
             }
@@ -469,7 +478,21 @@ public class SectionManager {
         lock.lock();
         try {
             int before = sections.size();
-            sections.values().removeIf(section -> section.owner.equals(owner));
+            sections.values()
+                    .removeIf(
+                            section -> {
+                                if (!section.owner.equals(owner)) {
+                                    return false;
+                                }
+                                if (section.position != null) {
+                                    byPosition.remove(section.position, section);
+                                }
+                                // What it drew is gone from shadow maps and the occupancy too
+                                if (section.current != null) {
+                                    shadows.addSection(section.current.origin());
+                                }
+                                return true;
+                            });
             final Live world = live.remove(owner);
             if (world != null) {
                 world.lod().close();
@@ -601,6 +624,35 @@ public class SectionManager {
         MeshHandle mesh;
         while ((mesh = releasing.poll()) != null) {
             state.bakedGeometry.release(mesh);
+        }
+    }
+
+    /**
+     * Every mesh of the section drawn now at a corner of the section grid, opaque, cut out and
+     * translucent, for the occupancy volume. Render thread.
+     *
+     * @param corner The section's corner, in the world.
+     * @return Its meshes with its corner, empty if there is none there or it isn't drawn yet.
+     */
+    public List<Caster> meshesAt(double @NonNull [] corner) {
+        final LodStore.SectionPos position =
+                new LodStore.SectionPos(
+                        (int) Math.floor(corner[0] / SECTION_SIZE),
+                        (int) Math.floor(corner[1] / SECTION_SIZE),
+                        (int) Math.floor(corner[2] / SECTION_SIZE));
+        lock.lock();
+        try {
+            final Section section = byPosition.get(position);
+            if (section == null || section.current == null) {
+                return List.of();
+            }
+            final List<Caster> out = new ArrayList<>();
+            for (MeshHandle mesh : section.current.meshes()) {
+                out.add(new Caster(section.current.origin(), mesh));
+            }
+            return out;
+        } finally {
+            lock.unlock();
         }
     }
 

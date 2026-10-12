@@ -120,6 +120,25 @@ public class DebugVisualizers {
     private volatile boolean skyOcclusionView;
 
     /**
+     * Show the occupancy volume around each pixel instead of the lit color: gray for how few of the
+     * voxels around the surface are full, red where the surface's own voxel is empty. Drawn by the
+     * light stage, so {@link #anyEnabled()} ignores it.
+     *
+     * @param occupancyView Whether to show it.
+     * @return Whether it is shown.
+     */
+    private volatile boolean occupancyView;
+
+    /**
+     * Show how much ambient light the occupancy volume lets reach each pixel, in gray, instead of
+     * the lit color. Drawn by the light stage, so {@link #anyEnabled()} ignores it.
+     *
+     * @param occupancyAoView Whether to show it.
+     * @return Whether it is shown.
+     */
+    private volatile boolean occupancyAoView;
+
+    /**
      * How many lights in one cluster show as full red on the cluster heat map. Must match
      * HEAT_MAP_FULL in lights.frag.
      */

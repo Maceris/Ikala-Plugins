@@ -5,10 +5,36 @@
 // Lights the g-buffer, one full screen quad. The lighting itself is in lighting.glsl, shared with
 // the transparent stage.
 
+// The occupancy volume is the light stage's set 2, see LightRender
+#define OCCUPANCY_SET 2
 #include "lighting.glsl"
 
 layout(location = 0) in vec2 outTextCoord;
 layout(location = 0) out vec4 fragColor;
+
+// The least cosine between the normal rebuilt from depth and the g-buffer's for the first to be
+// trusted
+const float GEOMETRIC_NORMAL_AGREEMENT = 0.5;
+
+// The view space position of the surface at a pixel, from depth, which is already [0, 1] like
+// Vulkan clip space. The scene is drawn with OpenGL style y up, but this quad isn't flipped, so y
+// is flipped back.
+vec3 viewPositionAt(ivec2 pixel, vec2 textCoord)
+{
+    float depth = texelFetch(bindlessTextures[nonuniformEXT(depthSamplerIndex)], pixel, 0).x;
+    vec4 clip = vec4(textCoord.x * 2.0 - 1.0, 1.0 - textCoord.y * 2.0, depth, 1.0);
+    vec4 viewW = invProjectionMatrix * clip;
+    return viewW.xyz / viewW.w;
+}
+
+// Of the steps to the surface at the pixels on either side, the one that changes depth least, so a
+// step across an edge onto another surface is passed over
+vec3 smootherStep(vec3 center, vec3 before, vec3 after)
+{
+    vec3 forward = after - center;
+    vec3 backward = center - before;
+    return abs(forward.z) < abs(backward.z) ? forward : backward;
+}
 
 void main()
 {
@@ -22,24 +48,51 @@ void main()
 
     Material material = materials[materialIndex];
 
-    // Retrieve position from depth, which is already [0, 1] like Vulkan clip space
+    // How far the texture coordinates move a pixel, before any pixel of the quad is discarded
+    vec2 pixelStep = vec2(dFdx(outTextCoord.x), dFdy(outTextCoord.y));
     float depth = texelFetch(bindlessTextures[nonuniformEXT(depthSamplerIndex)], pixel, 0).x;
     if (depth == 1) {
         discard;
     }
-    // The scene is drawn with OpenGL style y up, but this quad isn't flipped, so flip y back
-    vec4 clip = vec4(outTextCoord.x * 2.0 - 1.0, 1.0 - outTextCoord.y * 2.0, depth, 1.0);
-    vec4 viewW = invProjectionMatrix * clip;
-    vec3 viewPosition = viewW.xyz / viewW.w;
+    vec3 viewPosition = viewPositionAt(pixel, outTextCoord);
+    // The surface's own normal, from the positions at the pixels around it, taking the side of
+    // each axis that stays on this surface. Where it still disagrees with the g-buffer's normal,
+    // which normal maps tilt, the g-buffer's is used instead.
+    ivec2 last = textureSize(bindlessTextures[nonuniformEXT(depthSamplerIndex)], 0) - 1;
+    ivec2 left = ivec2(max(pixel.x - 1, 0), pixel.y);
+    ivec2 right = ivec2(min(pixel.x + 1, last.x), pixel.y);
+    ivec2 up = ivec2(pixel.x, max(pixel.y - 1, 0));
+    ivec2 down = ivec2(pixel.x, min(pixel.y + 1, last.y));
+    vec3 stepX = smootherStep(viewPosition,
+        viewPositionAt(left, outTextCoord + vec2(float(left.x - pixel.x) * pixelStep.x, 0)),
+        viewPositionAt(right, outTextCoord + vec2(float(right.x - pixel.x) * pixelStep.x, 0)));
+    vec3 stepY = smootherStep(viewPosition,
+        viewPositionAt(up, outTextCoord + vec2(0, float(up.y - pixel.y) * pixelStep.y)),
+        viewPositionAt(down, outTextCoord + vec2(0, float(down.y - pixel.y) * pixelStep.y)));
+    vec3 geometricNormal = normalize(cross(stepX, stepY));
+    if (dot(geometricNormal, viewPosition) > 0) {
+        geometricNormal = -geometricNormal;
+    }
+    if (!(dot(geometricNormal, normal) >= GEOMETRIC_NORMAL_AGREEMENT)) {
+        geometricNormal = normal;
+    }
     // Render space is world space moved so the camera is at the origin
     vec4 renderPosition = invViewMatrix * vec4(viewPosition, 1);
 
     uint clusterLights;
-    vec3 finalColor = lightSurface(baseColor, material, viewPosition, renderPosition.xyz, normal, tangent,
-        bitangent, outTextCoord, clusterLights);
+    vec3 finalColor = lightSurface(baseColor, material, viewPosition, renderPosition.xyz, normal,
+        geometricNormal, tangent, bitangent, outTextCoord, clusterLights);
 
     if (clusterHeatMap != 0 && clusterLights > 0) {
         finalColor = mix(finalColor, heatColor(clusterLights), HEAT_MAP_OPACITY);
+    }
+    if (occupancyView != 0) {
+        vec3 renderNormal = normalize((invViewMatrix * vec4(normal, 0)).xyz);
+        finalColor = occupancyViewColor(renderPosition.xyz, renderNormal);
+    }
+    if (occupancyAoView != 0) {
+        vec3 renderGeometric = normalize((invViewMatrix * vec4(geometricNormal, 0)).xyz);
+        finalColor = vec3(occupancyAmbient(renderPosition.xyz, renderGeometric));
     }
     if (skyOcclusionView != 0) {
         vec3 renderNormal = normalize((invViewMatrix * vec4(normal, 0)).xyz);

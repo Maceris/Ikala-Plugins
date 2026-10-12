@@ -6,6 +6,7 @@ import static org.lwjgl.vulkan.VK13.*;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
+import com.ikalagaming.graphics.graph.OccupancyClipmap;
 import com.ikalagaming.graphics.scene.Fog;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
@@ -16,6 +17,7 @@ import com.ikalagaming.graphics.vulkan.RenderStage;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Vector3dc;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 import org.lwjgl.system.MemoryStack;
@@ -129,7 +131,7 @@ public class LightRender implements RenderStage {
         final TextureInfoVulkan target = frameData.sceneColor;
 
         // The light cull stage wrote the lights and sorted them into clusters
-        updateUniforms(scene, frameData, frameData.lightCount);
+        updateUniforms(scene, vulkanState, frameData, frameData.lightCount);
         SceneRender.writeStorageBindings(
                 vulkanState,
                 descriptorSets[vulkanState.frameIndex],
@@ -190,7 +192,8 @@ public class LightRender implements RenderStage {
                         0,
                         stack.longs(
                                 descriptorSets[vulkanState.frameIndex],
-                                vulkanState.bindlessTextures.getDescriptorSet()),
+                                vulkanState.bindlessTextures.getDescriptorSet(),
+                                vulkanState.occupancy.getSet()),
                         null);
                 FullScreenPass.draw(commandBuffer, quadMesh, width, height, stack);
             }
@@ -203,11 +206,15 @@ public class LightRender implements RenderStage {
      * Write the uniforms for the current frame.
      *
      * @param scene The scene.
+     * @param vulkanState The Vulkan state.
      * @param frameData The data for the current frame.
      * @param lightCount How many lights are in the lights buffer.
      */
     private static void updateUniforms(
-            @NonNull Scene scene, @NonNull PerFrameData frameData, int lightCount) {
+            @NonNull Scene scene,
+            @NonNull VulkanState vulkanState,
+            @NonNull PerFrameData frameData,
+            int lightCount) {
         ByteBuffer uniformData =
                 MemoryUtil.memByteBuffer(
                         frameData.lightUniforms.allocationInfo.pMappedData(),
@@ -260,6 +267,38 @@ public class LightRender implements RenderStage {
         uniformData.putInt(
                 ShaderBindings.Light.SKY_OCCLUSION_VIEW_OFFSET,
                 scene.getDebugVisualizers().isSkyOcclusionView() ? 1 : 0);
+        // The occupancy levels, from render space
+        final OccupancyClipmap clipmap = vulkanState.occupancy.getClipmap();
+        final Vector3dc camera = scene.getCamera().getPosition();
+        boolean occupancyReady = GraphicsManager.getSettings().occupancy;
+        for (int level = 0; level < OccupancyClipmap.LEVELS; ++level) {
+            final long[] origin = clipmap.origin(level);
+            final int size = OccupancyClipmap.VOXEL_SIZES[level];
+            final int at = ShaderBindings.Light.OCCUPANCY_ORIGINS_OFFSET + level * 4 * Float.BYTES;
+            for (int axis = 0; axis < 3; ++axis) {
+                uniformData.putFloat(
+                        at + axis * Float.BYTES,
+                        (float) ((double) origin[axis] * size - camera.get(axis)));
+                uniformData.putInt(
+                        ShaderBindings.Light.OCCUPANCY_TEXELS_OFFSET
+                                + (level * 4 + axis) * Integer.BYTES,
+                        OccupancyClipmap.texel(origin[axis]));
+            }
+            uniformData.putFloat(at + 3 * Float.BYTES, size);
+            occupancyReady &= clipmap.isValid(level);
+        }
+        uniformData.putInt(ShaderBindings.Light.OCCUPANCY_ENABLED_OFFSET, occupancyReady ? 1 : 0);
+        uniformData.putInt(
+                ShaderBindings.Light.OCCUPANCY_VIEW_OFFSET,
+                scene.getDebugVisualizers().isOccupancyView() ? 1 : 0);
+        uniformData.putFloat(
+                ShaderBindings.Light.OCCUPANCY_AO_REACH_OFFSET,
+                GraphicsManager.getSettings().occupancyAo
+                        ? (float) GraphicsManager.getSettings().occupancyAoReach
+                        : 0);
+        uniformData.putInt(
+                ShaderBindings.Light.OCCUPANCY_AO_VIEW_OFFSET,
+                scene.getDebugVisualizers().isOccupancyAoView() ? 1 : 0);
         uniformData.putInt(
                 ShaderBindings.Light.POINT_ATLAS_INDEX_OFFSET,
                 frameData.pointAtlas == null ? -1 : frameData.pointAtlas.bindlessIndex);
@@ -361,7 +400,8 @@ public class LightRender implements RenderStage {
                             .pSetLayouts(
                                     stack.longs(
                                             descriptorSetLayout,
-                                            state.bindlessTextures.getDescriptorSetLayout()));
+                                            state.bindlessTextures.getDescriptorSetLayout(),
+                                            state.occupancy.getSetLayout()));
             checkError(
                     vkCreatePipelineLayout(
                             state.device.logical, pipelineLayoutCreateInfo, null, longOutput));

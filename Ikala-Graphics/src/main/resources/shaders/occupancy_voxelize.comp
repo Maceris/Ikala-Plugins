@@ -1,0 +1,196 @@
+#version 460
+#extension GL_EXT_buffer_reference : require
+
+// Voxelizes baked section meshes into the occupancy volume, see OccupancyVolume and VoxelizeMath:
+// one thread per triangle, found in the job list by its index, read straight from the baked
+// geometry buffers. The triangle is moved a little way against its surface normal, the average of
+// its vertices' normals, so a face on a plane between voxels marks only the voxel it bounds; then
+// every voxel its bounding box touches, up to MAX_VOXELS, is tested with the separating axis test
+// and marked with the job's bit.
+
+layout(local_size_x = 64) in;
+
+// One section mesh into one level
+struct Job {
+    // The index of its first triangle among all of this dispatch's
+    uint firstTriangle;
+    // Where its indices start in the index buffer
+    uint firstIndex;
+    // Where its vertices start in the vertex buffer, which its indices count from
+    int vertexOffset;
+    // How many triangles it has
+    uint triangleCount;
+    // xyz: the section's corner relative to the level's origin, in meters; w: the level, and the
+    // bit to set shifted left by 8
+    ivec4 corner;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Jobs {
+    Job jobs[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Words {
+    uint words[];
+};
+
+layout(push_constant) uniform VoxelizeConstants {
+    Jobs jobs;
+    Words vertices;
+    Words indices;
+    uint jobCount;
+    uint triangleCount;
+    // Each level's origin modulo the level's size, in voxels
+    ivec4 originTexel[3];
+};
+
+layout(set = 0, binding = 0, r32ui) uniform restrict coherent uimage3D occupancy;
+// Each level's coverage, see OccupancyVolume: 1 where something opaque is
+layout(set = 0, binding = 1, r8) uniform restrict writeonly image3D coverage[3];
+
+// Match OccupancyClipmap and VoxelizeMath
+const int SIZE = 128;
+const float INWARD = 1e-3;
+const int MAX_VOXELS = 64;
+const float TOUCH = 1e-4;
+// A baked vertex: 24 bytes, so 6 words; positions in 1/1024 steps from the section's corner
+const uint VERTEX_WORDS = 6;
+const float STEP = 1.0 / 1024.0;
+// Match OccupancyVolume.OPAQUE_BIT and CUTOUT_BIT
+const uint OPAQUE = 1u;
+const uint CUTOUT = 4u;
+// How much of a voxel holding only cut out surfaces counts as full: leaves and plants are mostly
+// gaps, and let some ambient light through
+const float CUTOUT_COVERAGE = 0.5;
+
+int signExtend(uint bits)
+{
+    return int(bits << 16) >> 16;
+}
+
+vec3 positionOf(uint vertex)
+{
+    uint w0 = vertices.words[vertex * VERTEX_WORDS];
+    uint w1 = vertices.words[vertex * VERTEX_WORDS + 1];
+    return vec3(signExtend(w0 & 0xFFFFu), signExtend(w0 >> 16), signExtend(w1 & 0xFFFFu)) * STEP;
+}
+
+// The octahedral normal at bytes 8 to 11, decoded as BakedVertex.fromOctahedral does
+vec3 normalOf(uint vertex)
+{
+    uint w = vertices.words[vertex * VERTEX_WORDS + 2];
+    vec2 o = max(vec2(-1.0), vec2(signExtend(w & 0xFFFFu), signExtend(w >> 16)) / 32767.0);
+    vec3 n = vec3(o, 1.0 - abs(o.x) - abs(o.y));
+    if (n.z < 0) {
+        n.xy = (1.0 - abs(o.yx)) * vec2(o.x >= 0 ? 1.0 : -1.0, o.y >= 0 ? 1.0 : -1.0);
+    }
+    return normalize(n);
+}
+
+// The separating axis test of a triangle, relative to a voxel's center, against the voxel
+bool overlaps(vec3 v0, vec3 v1, vec3 v2)
+{
+    float box = 0.5 - TOUCH;
+    if (min(v0.x, min(v1.x, v2.x)) > box || max(v0.x, max(v1.x, v2.x)) < -box
+        || min(v0.y, min(v1.y, v2.y)) > box || max(v0.y, max(v1.y, v2.y)) < -box
+        || min(v0.z, min(v1.z, v2.z)) > box || max(v0.z, max(v1.z, v2.z)) < -box) {
+        return false;
+    }
+    vec3 e[3] = vec3[3](v1 - v0, v2 - v1, v0 - v2);
+    vec3 normal = cross(e[0], e[1]);
+    if (abs(dot(normal, v0)) > box * dot(abs(normal), vec3(1))) {
+        return false;
+    }
+    for (int i = 0; i < 3; ++i) {
+        for (int a = 0; a < 3; ++a) {
+            vec3 boxAxis = vec3(a == 0 ? 1 : 0, a == 1 ? 1 : 0, a == 2 ? 1 : 0);
+            vec3 axis = cross(boxAxis, e[i]);
+            float d0 = dot(axis, v0);
+            float d1 = dot(axis, v1);
+            float d2 = dot(axis, v2);
+            float radius = box * dot(abs(axis), vec3(1));
+            if (min(d0, min(d1, d2)) > radius || max(d0, max(d1, d2)) < -radius) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+void main()
+{
+    uint triangle = gl_GlobalInvocationID.x;
+    if (triangle >= triangleCount) {
+        return;
+    }
+    // The last job starting at or before this triangle
+    uint low = 0;
+    uint high = jobCount - 1;
+    while (low < high) {
+        uint mid = (low + high + 1) / 2;
+        if (jobs.jobs[mid].firstTriangle <= triangle) {
+            low = mid;
+        } else {
+            high = mid - 1;
+        }
+    }
+    Job job = jobs.jobs[low];
+    uint local = triangle - job.firstTriangle;
+    if (local >= job.triangleCount) {
+        return;
+    }
+    int level = job.corner.w & 0xFF;
+    uint bit = uint(job.corner.w >> 8);
+    float voxelSize = float(1 << level);
+    uint i0 = indices.words[job.firstIndex + local * 3];
+    uint i1 = indices.words[job.firstIndex + local * 3 + 1];
+    uint i2 = indices.words[job.firstIndex + local * 3 + 2];
+    uint a = uint(job.vertexOffset) + i0;
+    uint b = uint(job.vertexOffset) + i1;
+    uint c = uint(job.vertexOffset) + i2;
+    vec3 corner = vec3(job.corner.xyz);
+    // In the level's voxels from its origin
+    vec3 p0 = (corner + positionOf(a)) / voxelSize;
+    vec3 p1 = (corner + positionOf(b)) / voxelSize;
+    vec3 p2 = (corner + positionOf(c)) / voxelSize;
+    vec3 inward = normalOf(a) + normalOf(b) + normalOf(c);
+    if (dot(inward, inward) > 0) {
+        inward = normalize(inward) * INWARD;
+        p0 -= inward;
+        p1 -= inward;
+        p2 -= inward;
+    }
+    ivec3 low3 = ivec3(floor(min(p0, min(p1, p2))));
+    ivec3 high3 = ivec3(floor(max(p0, max(p1, p2))));
+    low3 = max(low3, ivec3(0));
+    high3 = min(high3, ivec3(SIZE - 1));
+    int tested = 0;
+    for (int z = low3.z; z <= high3.z; ++z) {
+        for (int y = low3.y; y <= high3.y; ++y) {
+            for (int x = low3.x; x <= high3.x; ++x) {
+                if (tested++ >= MAX_VOXELS) {
+                    return;
+                }
+                vec3 center = vec3(x, y, z) + 0.5;
+                if (overlaps(p0 - center, p1 - center, p2 - center)) {
+                    ivec3 texel = (originTexel[level].xyz + ivec3(x, y, z)) & (SIZE - 1);
+                    uint bits = bit
+                        | imageAtomicOr(occupancy, ivec3(texel.xy, level * SIZE + texel.z), bit);
+                    // Cut out jobs run before the rest, with a barrier between, so a voxel opaque
+                    // anywhere ends up fully covered
+                    float covered = (bits & OPAQUE) != 0u ? 1.0
+                        : (bits & CUTOUT) != 0u ? CUTOUT_COVERAGE : 0.0;
+                    // Threads may be on different levels, so index by constants
+                    if (covered > 0.0) {
+                        if (level == 0) {
+                            imageStore(coverage[0], texel, vec4(covered));
+                        } else if (level == 1) {
+                            imageStore(coverage[1], texel, vec4(covered));
+                        } else {
+                            imageStore(coverage[2], texel, vec4(covered));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

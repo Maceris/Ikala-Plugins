@@ -1407,6 +1407,24 @@ public class VulkanInstance {
                                         ShaderVulkan.Location.BUNDLED)),
                         state));
         shaderMap.addShader(
+                RenderStage.Type.OCCUPANCY_CLEAR,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/occupancy_clear.comp",
+                                        ShaderVulkan.Type.COMPUTE,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
+                RenderStage.Type.OCCUPANCY_VOXELIZE,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/occupancy_voxelize.comp",
+                                        ShaderVulkan.Type.COMPUTE,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
                 RenderStage.Type.OIT_INTEGRATE,
                 new ShaderVulkan(
                         List.of(

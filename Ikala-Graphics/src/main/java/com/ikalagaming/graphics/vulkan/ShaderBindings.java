@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.vulkan;
 
 import com.ikalagaming.graphics.ShaderUniforms;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
+import com.ikalagaming.graphics.graph.OccupancyClipmap;
 
 /** Bindings and buffer positions for Vulkan shaders. */
 public class ShaderBindings {
@@ -859,9 +860,36 @@ public class ShaderBindings {
         public static final int POINT_DYNAMIC_ATLAS_INDEX_OFFSET =
                 POINT_ATLAS_INDEX_OFFSET + Integer.BYTES;
 
+        /**
+         * The offset into the uniforms for each occupancy level's origin in render space and its
+         * voxel size, an array of vec4 starting on 16 bytes.
+         */
+        public static final int OCCUPANCY_ORIGINS_OFFSET =
+                (int) SharedBuffer.align(POINT_DYNAMIC_ATLAS_INDEX_OFFSET + Integer.BYTES);
+
+        /** The offset into the uniforms for each occupancy level's origin texel, ivec4s. */
+        public static final int OCCUPANCY_TEXELS_OFFSET =
+                OCCUPANCY_ORIGINS_OFFSET + OccupancyClipmap.LEVELS * 4 * Float.BYTES;
+
+        /** The offset into the uniforms for whether the occupancy volume can be read. */
+        public static final int OCCUPANCY_ENABLED_OFFSET =
+                OCCUPANCY_TEXELS_OFFSET + OccupancyClipmap.LEVELS * 4 * Integer.BYTES;
+
+        /** The offset into the uniforms for whether to show the occupancy view. */
+        public static final int OCCUPANCY_VIEW_OFFSET = OCCUPANCY_ENABLED_OFFSET + Integer.BYTES;
+
+        /**
+         * The offset into the uniforms for how far the occupancy volume's ambient occlusion
+         * reaches, in meters, 0 for none.
+         */
+        public static final int OCCUPANCY_AO_REACH_OFFSET = OCCUPANCY_VIEW_OFFSET + Integer.BYTES;
+
+        /** The offset into the uniforms for whether to show the ambient occlusion view. */
+        public static final int OCCUPANCY_AO_VIEW_OFFSET = OCCUPANCY_AO_REACH_OFFSET + Float.BYTES;
+
         /** The size of the uniforms buffer, padded out to 16 bytes under std140 rules. */
         public static final int UNIFORMS_BUFFER_SIZE =
-                (int) SharedBuffer.align(POINT_DYNAMIC_ATLAS_INDEX_OFFSET + Integer.BYTES);
+                (int) SharedBuffer.align(OCCUPANCY_AO_VIEW_OFFSET + Integer.BYTES);
 
         /** Uniforms buffer binding. */
         public static final int UNIFORMS_BINDING = 0;

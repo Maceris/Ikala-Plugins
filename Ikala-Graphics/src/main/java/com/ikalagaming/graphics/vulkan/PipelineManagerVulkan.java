@@ -128,6 +128,10 @@ public class PipelineManagerVulkan {
 
     private final InstanceDrawUpdate stageInstanceDrawUpdate;
     private final InstanceTransform stageInstanceTransform;
+
+    /** Keeps the occupancy volume up to date. */
+    private final OccupancyVoxelize stageOccupancyVoxelize;
+
     private final InstanceCull stageInstanceCull;
     private final InstanceCull stageInstanceCullLate;
 
@@ -158,6 +162,11 @@ public class PipelineManagerVulkan {
 
         stageInstanceDrawUpdate = new InstanceDrawUpdate();
         stageInstanceDrawUpdate.initialize(state);
+        stageOccupancyVoxelize =
+                new OccupancyVoxelize(
+                        shaders.getShader(RenderStage.Type.OCCUPANCY_CLEAR),
+                        shaders.getShader(RenderStage.Type.OCCUPANCY_VOXELIZE));
+        stageOccupancyVoxelize.initialize(state);
         stageInstanceTransform =
                 new InstanceTransform(shaders.getShader(RenderStage.Type.INSTANCES));
         stageInstanceTransform.initialize(state);
@@ -250,6 +259,7 @@ public class PipelineManagerVulkan {
 
         if (RenderConfig.hasSceneStage(configuration)) {
             stages.add(stageInstanceDrawUpdate);
+            stages.add(stageOccupancyVoxelize);
             stages.add(stageInstanceTransform);
             stages.add(stageInstanceCull);
             stages.add(stageLodCull);
@@ -565,6 +575,7 @@ public class PipelineManagerVulkan {
             state.depthPyramid.resize(state, window.getWidth(), window.getHeight());
             state.oitVolume = new OitVolume(state);
             state.oitVolume.resize(state, window.getWidth(), window.getHeight());
+            state.occupancy = new OccupancyVolume(state);
 
             // SharedBuffer adds device address and transfer destination usage to all of these
             final int STORAGE = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
@@ -765,6 +776,7 @@ public class PipelineManagerVulkan {
         stageOitIntegrate.cleanup(state);
         stageLightCull.cleanup(state);
         stageInstanceDrawUpdate.cleanup(state);
+        stageOccupancyVoxelize.cleanup(state);
         stageInstanceTransform.cleanup(state);
         stageInstanceCull.cleanup(state);
         stageInstanceCullLate.cleanup(state);
@@ -780,6 +792,8 @@ public class PipelineManagerVulkan {
         state.depthPyramid = null;
         state.oitVolume.cleanup(state);
         state.oitVolume = null;
+        state.occupancy.cleanup(state);
+        state.occupancy = null;
         TextureInfoVulkan fontAtlasInfo = state.textureRegistry.remove(fontAtlas);
         if (fontAtlasInfo != null) {
             GraphicsManager.getDeletionQueue().add(fontAtlasInfo);
