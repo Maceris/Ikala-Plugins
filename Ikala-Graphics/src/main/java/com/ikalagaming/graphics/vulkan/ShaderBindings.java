@@ -991,8 +991,16 @@ public class ShaderBindings {
          */
         public static final int PUSH_CONSTANT_LOD_WORLDS_OFFSET = 0;
 
+        /**
+         * Push constant offset for the device address of the level of detail cluster table, right
+         * after the world table's, which {@code scene_lod.vert} reads each draw's cluster from.
+         */
+        public static final int PUSH_CONSTANT_LOD_CLUSTERS_OFFSET =
+                PUSH_CONSTANT_LOD_WORLDS_OFFSET + Long.BYTES;
+
         /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_LOD_WORLDS_OFFSET + Long.BYTES;
+        public static final int PUSH_CONSTANTS_SIZE =
+                PUSH_CONSTANT_LOD_CLUSTERS_OFFSET + Long.BYTES;
 
         /** Offsets into the material struct. */
         public static class Material {
@@ -1094,8 +1102,16 @@ public class ShaderBindings {
         public static final int PUSH_CONSTANT_LOD_WORLDS_OFFSET =
                 PUSH_CONSTANT_VISIBLE_OFFSET + Long.BYTES;
 
+        /**
+         * Push constant offset for the device address of the level of detail cluster table, right
+         * after the world table's, which {@code shadow_lod.vert} reads each draw's cluster from.
+         */
+        public static final int PUSH_CONSTANT_LOD_CLUSTERS_OFFSET =
+                PUSH_CONSTANT_LOD_WORLDS_OFFSET + Long.BYTES;
+
         /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_LOD_WORLDS_OFFSET + Long.BYTES;
+        public static final int PUSH_CONSTANTS_SIZE =
+                PUSH_CONSTANT_LOD_CLUSTERS_OFFSET + Long.BYTES;
 
         /** The binding point for the model matrices buffer. */
         public static final int MODEL_MATRICES_BINDING = 0;

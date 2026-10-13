@@ -41,7 +41,8 @@ import java.nio.ByteOrder;
  *                   // cell holding its parent ({@link #NONE} for a root), its section's slot for a
  *                   // leaf ({@link #NONE} above the leaves)
  * uvec4 unit        // its streaming unit's slot, the slot of its children's unit ({@link #NONE}
- *                   // for a leaf), its level, unused
+ *                   // for a leaf), its level counted from the finest (its cell's level plus its
+ *                   // level within the cell), for the debug coloring, unused
  * </pre>
  *
  * <p>A world table entry, {@value #WORLD_ENTRY_SIZE} bytes, one per world slot, rewritten each
@@ -53,7 +54,7 @@ import java.nio.ByteOrder;
  * vec4 eye            // the observer from the world's origin, which errors are projected from
  * ivec4 cameraGrid    // the camera's grid step from the origin, rounded down, see LodVertex
  * vec4 cameraFraction // the rest of the camera's position
- * uvec4 info          // unused, 1 if it is drawn, float bits of the threshold in pixels and of
+ * uvec4 info          // the debug coloring's ordinal, 1 if it is drawn, float bits of the threshold in pixels and of
  *                     // pixels per unit at distance 1
  * </pre>
  */
@@ -128,7 +129,8 @@ public final class LodCullMath {
      * @param section Its section's slot for a leaf, or {@link #NONE}.
      * @param unit Its streaming unit's slot, or {@link #NONE} if everything is shown.
      * @param childUnit The slot of the unit its producer group consumed, or {@link #NONE}.
-     * @param level Its level.
+     * @param level Its level counted from the finest: its cell's level plus its level within the
+     *     cell.
      */
     public record Place(
             int world, int cell, int parentCell, int section, int unit, int childUnit, int level) {

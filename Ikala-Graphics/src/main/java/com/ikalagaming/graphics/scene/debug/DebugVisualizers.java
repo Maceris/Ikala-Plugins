@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.scene.debug;
 
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 
 /**
@@ -157,6 +158,29 @@ public class DebugVisualizers {
      * @return Whether it is shown.
      */
     private volatile boolean taaView;
+
+    /** What level of detail clusters can be colored by, for debugging, instead of their texture. */
+    public enum LodColors {
+        /** Their textures, as usual. */
+        NONE,
+        /** A color for each cluster. */
+        CLUSTERS,
+        /** A color for each group of clusters that simplify together into the next level. */
+        GROUPS,
+        /** A color for each level of the hierarchy, leaves first. */
+        LEVELS,
+        /** A color for each region cell, the unit the live worlds rebuild. */
+        CELLS
+    }
+
+    /**
+     * What level of detail clusters are colored by, in every level of detail world, instead of
+     * their texture. Still lit, so the shapes stay readable.
+     *
+     * @param lodColors The coloring.
+     * @return The coloring.
+     */
+    @NonNull private volatile LodColors lodColors = LodColors.NONE;
 
     /**
      * How many lights in one cluster show as full red on the cluster heat map. Must match

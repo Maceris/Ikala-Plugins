@@ -1793,7 +1793,8 @@ public class VulkanInstance {
                 state.perFrameData[state.frameIndex],
                 scene.getCamera().getPosition(),
                 scene.getObserver(),
-                windowInfo.window.getHeight());
+                windowInfo.window.getHeight(),
+                scene.getDebugVisualizers().getLodColors());
         state.frameTimings.mark(commandBuffer, state.frameIndex, "Uploads");
 
         // This will record the command buffer

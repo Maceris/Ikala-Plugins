@@ -57,6 +57,8 @@ void main() {
     vec3 tangent = outTangent;
     vec3 bitangent = outBitangent;
     textCoord = outTextCoord;
+    // scene_lod.vert's debug coloring, a hue, or below zero for none
+    float debugHue = TRIPLANAR ? outTextCoord.y : -1.0;
     if (TRIPLANAR) {
         // The flat triangle's normal in render space, turned to face the camera at the origin
         vec3 position = outWorldPosition.xyz;
@@ -112,6 +114,12 @@ void main() {
         normal = normalize(TBN * newNormal);
     }
 
+    if (debugHue >= 0.0) {
+        // A bright, fully saturated hue, still lit like the surface
+        vec3 hue = clamp(abs(fract(debugHue + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0,
+            0.0, 1.0);
+        baseColor = vec4(hue, 1.0);
+    }
     buffBaseColor = baseColor;
     buffNormal = vec4(normal, 1.0);
     buffTangent = vec4(normalize(tangent), 1.0);

@@ -273,9 +273,9 @@ bool stale(uint cell)
     return cell != NONE && (cellFlagTable.cellFlags[cell] & FLAG_STALE) != 0;
 }
 
-// Append a cluster's mesh to a list's draw commands. The world's slot goes in as the instance,
-// which the vertex shaders read their camera with.
-void draw(uint list, Mesh mesh, uint world)
+// Append a cluster's mesh to a list's draw commands. The cluster's entry goes in as the instance,
+// which the vertex shaders read its world, and so their camera, with.
+void draw(uint list, Mesh mesh, uint entry)
 {
     uint index = atomicAdd(countList.counts[list], 1u);
     Command command;
@@ -283,7 +283,7 @@ void draw(uint list, Mesh mesh, uint world)
     command.instanceCount = 1;
     command.firstIndex = mesh.info.y;
     command.vertexOffset = int(mesh.info.x);
-    command.firstInstance = world;
+    command.firstInstance = entry;
     commandList.commands[list * capacity + index] = command;
 }
 
@@ -352,10 +352,10 @@ void main()
             }
             // With occlusion on, what wasn't visible last frame waits for the late test
             if ((view.flags & FLAG_OCCLUSION) == 0 || historyTable.history[entry] != 0) {
-                draw(LIST_SCENE_EARLY, mesh, world);
+                draw(LIST_SCENE_EARLY, mesh, entry);
             }
         } else if (inView) {
-            draw(LIST_FIRST_CASCADE + pass - 1, mesh, world);
+            draw(LIST_FIRST_CASCADE + pass - 1, mesh, entry);
         }
         return;
     }
@@ -368,6 +368,6 @@ void main()
     bool drawnEarly = historyTable.history[entry] != 0;
     historyTable.history[entry] = seen ? 1u : 0u;
     if (seen && !drawnEarly) {
-        draw(LIST_SCENE_LATE, mesh, world);
+        draw(LIST_SCENE_LATE, mesh, entry);
     }
 }

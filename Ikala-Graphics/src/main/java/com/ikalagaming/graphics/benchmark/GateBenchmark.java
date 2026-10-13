@@ -15,6 +15,7 @@ import com.ikalagaming.graphics.lod.CrackCheck;
 import com.ikalagaming.graphics.lod.LodCache;
 import com.ikalagaming.graphics.lod.LodStore;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.scene.lights.AmbientLight;
 import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
@@ -795,6 +796,14 @@ public final class GateBenchmark {
                 }
                 if (Boolean.getBoolean(PROPERTY + ".taaView")) {
                     scene.getDebugVisualizers().setTaaView(true);
+                }
+                // Level of detail colored by CLUSTERS, GROUPS, LEVELS or CELLS
+                final String lodColors = System.getProperty(PROPERTY + ".lodColors");
+                if (lodColors != null) {
+                    scene.getDebugVisualizers()
+                            .setLodColors(
+                                    DebugVisualizers.LodColors.valueOf(
+                                            lodColors.trim().toUpperCase()));
                 }
                 // Off, lights without a shadow map shine through walls
                 final String rays = System.getProperty(PROPERTY + ".lightRays");

@@ -13,6 +13,7 @@ import com.ikalagaming.graphics.lod.LodResidency;
 import com.ikalagaming.graphics.lod.LodStore;
 import com.ikalagaming.graphics.lod.LodVertex;
 import com.ikalagaming.graphics.scene.Observer;
+import com.ikalagaming.graphics.scene.debug.DebugVisualizers;
 import com.ikalagaming.graphics.vulkan.stages.InstanceDrawUpdate;
 
 import lombok.Getter;
@@ -1539,7 +1540,8 @@ public class LodRenderer {
                         producer < 0
                                 ? LodCullMath.NONE
                                 : unitSlot(world, new UnitKey(piece.key, producer)),
-                        cluster.cluster().level()));
+                        // Counted from the finest: the cell's own level plus the level within it
+                        piece.key.level() + cluster.cluster().level()));
     }
 
     /**
@@ -1914,13 +1916,15 @@ public class LodRenderer {
      * @param camera The camera's position, in the world.
      * @param observer Where the cut is seen from, which may be frozen away from the camera.
      * @param heightPixels The height the scene is drawn at.
+     * @param colors What the clusters are colored by, for debugging.
      */
     public void prepare(
             @NonNull VulkanState state,
             @NonNull PerFrameData frameData,
             @NonNull Vector3dc camera,
             @NonNull Observer observer,
-            int heightPixels) {
+            int heightPixels,
+            DebugVisualizers.@NonNull LodColors colors) {
         frameData.lodCounts.ensureCapacity((long) COUNTER_COUNT * Integer.BYTES, state);
         final IntBuffer counts =
                 MemoryUtil.memIntBuffer(
@@ -1980,7 +1984,8 @@ public class LodRenderer {
                     eye,
                     world.visible && world.shown,
                     (float) world.thresholdPixels,
-                    pixelsPerUnit);
+                    pixelsPerUnit,
+                    colors);
         }
     }
 
@@ -1995,6 +2000,7 @@ public class LodRenderer {
      * @param drawn Whether it is drawn.
      * @param thresholdPixels The world's error threshold.
      * @param pixelsPerUnit Pixels per world unit at distance 1.
+     * @param colors What its clusters are colored by, for debugging.
      */
     private static void putWorld(
             @NonNull ByteBuffer out,
@@ -2004,7 +2010,8 @@ public class LodRenderer {
             @NonNull Vector3dc eye,
             boolean drawn,
             float thresholdPixels,
-            float pixelsPerUnit) {
+            float pixelsPerUnit,
+            DebugVisualizers.@NonNull LodColors colors) {
         final double[] at = {camera.x(), camera.y(), camera.z()};
         final double[] from = {eye.x(), eye.y(), eye.z()};
         for (int axis = 0; axis < AXES; ++axis) {
@@ -2022,6 +2029,7 @@ public class LodRenderer {
                     base + LodCullMath.WORLD_CAMERA_FRACTION_OFFSET + axis * Float.BYTES,
                     (float) (relative - step / LodVertex.STEPS_PER_UNIT));
         }
+        out.putInt(base + LodCullMath.WORLD_INFO_OFFSET, colors.ordinal());
         out.putInt(base + LodCullMath.WORLD_INFO_OFFSET + Integer.BYTES, drawn ? 1 : 0);
         out.putFloat(base + LodCullMath.WORLD_INFO_OFFSET + 2 * Integer.BYTES, thresholdPixels);
         out.putFloat(base + LodCullMath.WORLD_INFO_OFFSET + 3 * Integer.BYTES, pixelsPerUnit);
@@ -2044,7 +2052,8 @@ public class LodRenderer {
      * @param commandBuffer The command buffer, inside the rendering, with the pipeline bound.
      * @param frameData The frame's data.
      * @param pipelineLayout The pipeline's layout.
-     * @param worldsOffset Where the world table's address goes in its vertex push constants.
+     * @param worldsOffset Where the world table's address goes in its vertex push constants; the
+     *     cluster table's goes right after it.
      * @param list Which list to draw.
      */
     public void draw(
@@ -2060,8 +2069,9 @@ public class LodRenderer {
             vkCmdBindIndexBuffer(commandBuffer, arena.getIndices().buffer, 0, VK_INDEX_TYPE_UINT32);
             vkCmdBindVertexBuffers(
                     commandBuffer, 0, stack.longs(arena.getVertices().buffer), stack.callocLong(1));
-            final ByteBuffer constants = stack.malloc(Long.BYTES);
+            final ByteBuffer constants = stack.malloc(2 * Long.BYTES);
             constants.putLong(0, frameData.lodWorlds.deviceAddress);
+            constants.putLong(Long.BYTES, clusters.getBuffer().deviceAddress);
             vkCmdPushConstants(
                     commandBuffer,
                     pipelineLayout,

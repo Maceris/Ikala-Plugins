@@ -31,7 +31,7 @@ layout(set = 0, binding = 0) uniform Uniforms {
     mat4 viewMatrix;
 };
 
-// Where the camera is for each LOD world, see LodCullMath; each draw's instance is its world
+// Where the camera is for each LOD world, see LodCullMath
 struct World {
     vec4 renderOffset;
     vec4 eye;
@@ -46,9 +46,47 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Wo
     World worlds[];
 };
 
+// The cluster each draw is, see LodCullMath: each draw's instance is its cluster's entry
+struct Cluster {
+    vec4 tight;
+    vec4 bound;
+    // The same for every cluster of a group
+    vec4 parentBound;
+    uvec4 info;
+    // x: world slot + 1, y: cell slot
+    uvec4 place;
+    // z: level
+    uvec4 unit;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Clusters {
+    Cluster clusters[];
+};
+
 layout(push_constant) uniform LodConstants {
     Worlds worldTable;
+    Clusters clusterTable;
 };
+
+// What a world's clusters are colored by, its info.x, see DebugVisualizers.LodColors
+const uint COLORS_CLUSTERS = 1;
+const uint COLORS_GROUPS = 2;
+const uint COLORS_LEVELS = 3;
+const uint COLORS_CELLS = 4;
+// Spreads hues apart: the golden ratio's fraction
+const float HUE_STEP = 0.61803399;
+// Levels step around the hue circle in sevenths, so neighbors differ and the first few don't repeat
+const float LEVEL_HUE_STEP = 1.0 / 7.0;
+
+// A hue in [0, 1) for an id, well apart from the next id's
+float hueOf(uint id)
+{
+    // A quick integer hash, so neighboring ids don't get neighboring hues
+    id ^= id >> 16;
+    id *= 0x7feb352du;
+    id ^= id >> 15;
+    return fract(float(id & 0xFFFFu) * HUE_STEP);
+}
 
 // Grid steps per unit, and its power of two, see LodVertex
 const float STEPS_PER_UNIT = 1024.0;
@@ -56,7 +94,8 @@ const int STEP_BITS = 10;
 
 void main()
 {
-    World world = worldTable.worlds[gl_InstanceIndex];
+    Cluster cluster = clusterTable.clusters[gl_InstanceIndex];
+    World world = worldTable.worlds[cluster.place.x - 1];
     ivec4 cameraGrid = world.cameraGrid;
     vec4 cameraFraction = world.cameraFraction;
     outMaterialIdx = materialFlags.x;
@@ -71,5 +110,18 @@ void main()
     outNormal = (viewMatrix * vec4(1.0, 0.0, 0.0, 0.0)).xyz;
     outTangent = (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz;
     outBitangent = (viewMatrix * vec4(0.0, 0.0, 1.0, 0.0)).xyz;
-    outTextCoord = vec2(0.0);
+    // y: the debug coloring's hue, or -1 for none
+    float hue = -1.0;
+    uint colors = world.info.x;
+    if (colors == COLORS_CLUSTERS) {
+        hue = hueOf(uint(gl_InstanceIndex));
+    } else if (colors == COLORS_GROUPS) {
+        uvec4 bound = floatBitsToUint(cluster.parentBound);
+        hue = hueOf(bound.x ^ (bound.y * 3u) ^ (bound.z * 7u) ^ (bound.w * 13u));
+    } else if (colors == COLORS_LEVELS) {
+        hue = fract(float(cluster.unit.z) * LEVEL_HUE_STEP);
+    } else if (colors == COLORS_CELLS) {
+        hue = hueOf(cluster.place.y);
+    }
+    outTextCoord = vec2(0.0, hue);
 }

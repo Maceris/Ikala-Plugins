@@ -141,6 +141,14 @@ public class GraphicsDebug extends GuiWindow {
     /** Digs a second when digging on a timer. */
     private static final double RAPID_DIGS_PER_SECOND = 10;
 
+    /** The level of detail colorings' names, in ordinal order. */
+    private static final String[] LOD_COLOR_NAMES = {
+        "Textures", "Clusters", "Groups", "Levels", "Cells"
+    };
+
+    /** The level of detail coloring combo's value. Render thread only. */
+    private static final IkInt LOD_COLORS = new IkInt(DebugVisualizers.LodColors.NONE.ordinal());
+
     /** The benchmark recipes' names, in ordinal order. */
     private static final String[] RECIPE_NAMES =
             Arrays.stream(SyntheticTerrain.Recipe.values()).map(Enum::name).toArray(String[]::new);
@@ -837,6 +845,15 @@ public class GraphicsDebug extends GuiWindow {
         }
         IkGui.setItemTooltip(
                 "Gray for how many frames each pixel's history holds, red where it started over.");
+
+        // Level of detail coloring, for every level of detail world
+        LOD_COLORS.set(visualizers.getLodColors().ordinal());
+        if (IkGui.combo("LOD colors", LOD_COLORS, LOD_COLOR_NAMES)) {
+            visualizers.setLodColors(DebugVisualizers.LodColors.values()[LOD_COLORS.get()]);
+        }
+        IkGui.setItemTooltip(
+                "Color level of detail by cluster, by the group that simplifies together, by"
+                        + " level, or by region cell, still lit.");
 
         // Point light shadows: the budget and what it reached
         POINT_SHADOW_BUDGET[0] = settings.pointShadowBudget;
