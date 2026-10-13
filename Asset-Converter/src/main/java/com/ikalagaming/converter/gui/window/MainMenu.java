@@ -65,6 +65,12 @@ public class MainMenu {
         this.sampleCount = sampleCount;
     }
 
+    /** Where the rows added behind the demo's first row start, along z. */
+    private static final int BEHIND_FIRST_ROW = -1;
+
+    /** The startup property that opens the sphere demo as soon as the menu opens. */
+    private static final String SPHERE_DEMO_PROPERTY = "ikala.test.sphereDemo";
+
     /**
      * Load the menu spec and show it.
      *
@@ -73,20 +79,26 @@ public class MainMenu {
      */
     public SpecInstance open() {
         UiSpec spec = ui.loadSpec(SPEC);
-        return ui.open(
-                spec,
-                new SpecBindings()
-                        .bundle(ConverterPlugin.getResourceBundle())
-                        .handler("start-sphere-demo", this::startSphereDemo)
-                        .handler(
-                                "open-model-loader",
-                                () -> {
-                                    // TODO(ches) model loading UI
-                                })
-                        .handler("open-inspector", this::startInspector)
-                        .handler("open-tool", event -> openTool((Tool) event.item()))
-                        .list("tools", ui.tools())
-                        .value("samples.count", sampleCount));
+        final SpecInstance menu =
+                ui.open(
+                        spec,
+                        new SpecBindings()
+                                .bundle(ConverterPlugin.getResourceBundle())
+                                .handler("start-sphere-demo", this::startSphereDemo)
+                                .handler(
+                                        "open-model-loader",
+                                        () -> {
+                                            // TODO(ches) model loading UI
+                                        })
+                                .handler("open-inspector", this::startInspector)
+                                .handler("open-tool", event -> openTool((Tool) event.item()))
+                                .list("tools", ui.tools())
+                                .value("samples.count", sampleCount));
+        // Straight to the sphere demo, for captures and tests that can't click the menu
+        if (Boolean.getBoolean(SPHERE_DEMO_PROPERTY)) {
+            startSphereDemo();
+        }
+        return menu;
     }
 
     /**
@@ -267,6 +279,43 @@ public class MainMenu {
             Material customMaterial = new Material();
             customMaterial.getBaseColor().set(1.0f, 1.0f, 1.0f, 1.0f);
             customMaterial.setRoughness(0.40f);
+            scene.getMaterialCache().addMaterial(customMaterial);
+
+            instances.setMaterial(ball, 0, customMaterial);
+        }
+
+        // Behind the first row, where the camera sees them: fully metallic, from a mirror to fully
+        // rough, to check the specular lobes and Fresnel
+        for (int i = 0; i <= 10; ++i) {
+            InstanceHandle ball =
+                    instances.place(
+                            ballModel,
+                            new Vector3d(i, 0, BEHIND_FIRST_ROW),
+                            new Quaternionf(),
+                            0.003f);
+
+            Material customMaterial = new Material();
+            customMaterial.getBaseColor().set(1.0f, 0.95f, 0.f, 1.0f);
+            customMaterial.setMetallic(1.0f);
+            customMaterial.setRoughness(0.1f * i);
+            scene.getMaterialCache().addMaterial(customMaterial);
+
+            instances.setMaterial(ball, 0, customMaterial);
+        }
+
+        // Translucent, from nearly clear to opaque
+        for (int i = 0; i <= 10; ++i) {
+            InstanceHandle ball =
+                    instances.place(
+                            ballModel,
+                            new Vector3d(i, 0, BEHIND_FIRST_ROW - 1),
+                            new Quaternionf(),
+                            0.003f);
+
+            Material customMaterial = new Material();
+            customMaterial.getBaseColor().set(0.35f, 0.75f, 0.95f, (i + 1) / 11.0f);
+            customMaterial.setTransparency(Material.Transparency.TRANSLUCENT);
+            customMaterial.setRoughness(0.20f);
             scene.getMaterialCache().addMaterial(customMaterial);
 
             instances.setMaterial(ball, 0, customMaterial);
