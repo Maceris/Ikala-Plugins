@@ -462,11 +462,10 @@ public final class DagBuilder {
             for (int i = 0; i < dag.clusters().size(); ++i) {
                 all.add(i);
             }
-            for (Map.Entry<Grouping.Edge, Integer> edge : Grouping.edgeUses(dag, all).entrySet()) {
-                if (edge.getValue() == 1) {
-                    openBorder.add(edge.getKey().a());
-                    openBorder.add(edge.getKey().b());
-                }
+            for (Grouping.Edge edge :
+                    rim(all.stream().mapToInt(Integer::intValue).toArray(), true)) {
+                openBorder.add(edge.a());
+                openBorder.add(edge.b());
             }
         }
     }
@@ -534,10 +533,12 @@ public final class DagBuilder {
             }
             final int[][] groups = Grouping.group(dag, active);
             final Map<Grouping.Corner, Integer> owners = owners(groups);
+            lockTJunctions(owners, groups);
+            lockFaceContacts(owners, groups);
             if (cellMin != null) {
                 lockCellBoundary(owners, active);
             }
-            final List<Grouping.Edge> rim = rim(active);
+            final List<Grouping.Edge> rim = rim(active, false);
             lockRimNearBorders(owners, rim);
             List<Future<Built>> futures = new ArrayList<>();
             for (int[] group : groups) {
@@ -646,20 +647,242 @@ public final class DagBuilder {
     }
 
     /**
-     * A level's open edges: those only one of its triangles uses.
+     * A level's edges, each once per triangle using it, in the direction that triangle runs.
      *
      * @param active The level's clusters.
-     * @return The edges.
+     * @param tags Receives each edge's cluster's index in {@code active}.
+     * @param open Receives whether each is open, used by one triangle.
+     * @param triangles Receives each edge's triangle, numbered through all of {@code active}'s
+     *     triangles in order.
+     * @return The edges, x, y, z of the start then the end.
      */
-    private List<Grouping.Edge> rim(int @NonNull [] active) {
-        List<Integer> clusters = new ArrayList<>();
+    private List<float[]> edges(
+            int @NonNull [] active,
+            @NonNull IntArrayList tags,
+            @NonNull List<Boolean> open,
+            @NonNull IntArrayList triangles) {
+        final List<Integer> clusters = new ArrayList<>();
         for (int id : active) {
             clusters.add(id);
         }
+        final Map<Grouping.Edge, Integer> uses = Grouping.edgeUses(dag, clusters);
+        final List<float[]> out = new ArrayList<>();
+        int triangle = 0;
+        for (int i = 0; i < active.length; ++i) {
+            final float[] corners = dag.clusters().get(active[i]).corners();
+            for (int t = 0; t < corners.length; t += TRIANGLE_VALUES, ++triangle) {
+                for (int corner = 0; corner < AXES; ++corner) {
+                    final int p = t + corner * AXES;
+                    final int q = t + ((corner + 1) % AXES) * AXES;
+                    final Grouping.Edge edge =
+                            Grouping.Edge.of(
+                                    Grouping.Corner.of(corners, p), Grouping.Corner.of(corners, q));
+                    out.add(
+                            new float[] {
+                                corners[p],
+                                corners[p + 1],
+                                corners[p + 2],
+                                corners[q],
+                                corners[q + 1],
+                                corners[q + 2]
+                            });
+                    tags.addInt(i);
+                    open.add(uses.get(edge) == 1);
+                    triangles.addInt(triangle);
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Lock where groups meet without sharing corners: both ends of every edge that shares a stretch
+     * of its line with another group's edge. Both groups then keep every point where either's edges
+     * end along the line, so neither moves its side off it, nor drops a corner the other's edges
+     * still meet. Edges the groups share exactly are locked already, by their corners.
+     *
+     * @param owners Which group uses each corner; the corners found become -1.
+     * @param groups The groups.
+     */
+    private void lockTJunctions(
+            @NonNull Map<Grouping.Corner, Integer> owners, int @NonNull [][] groups) {
+        int total = 0;
+        for (int[] group : groups) {
+            total += group.length;
+        }
+        final int[] active = new int[total];
+        final int[] groupOf = new int[total];
+        int at = 0;
+        for (int g = 0; g < groups.length; ++g) {
+            for (int id : groups[g]) {
+                active[at] = id;
+                groupOf[at++] = g;
+            }
+        }
+        final IntArrayList tags = new IntArrayList();
+        final List<float[]> edges = edges(active, tags, new ArrayList<>(), new IntArrayList());
+        final TJunctions index = new TJunctions();
+        for (int i = 0; i < edges.size(); ++i) {
+            index.add(start(edges.get(i)), end(edges.get(i)), groupOf[tags.getInt(i)], -1, -1);
+        }
+        for (int i = 0; i < edges.size(); ++i) {
+            final float[] edge = edges.get(i);
+            if (index.overlapsOther(start(edge), end(edge), groupOf[tags.getInt(i)])) {
+                owners.put(Grouping.Corner.of(edge, 0), -1);
+                owners.put(Grouping.Corner.of(edge, AXES), -1);
+            }
+        }
+    }
+
+    /**
+     * Lock where a group's open edge ends against the inside of another group's face, as a slab's
+     * side does against a wall: the face's corners, so the face stays where the edge meets it, and
+     * the edge's ends, so the edge stays on the face. Where the edge runs along one of the face's
+     * edges instead, {@link #lockTJunctions} keeps it.
+     *
+     * @param owners Which group uses each corner; the corners found become -1.
+     * @param groups The groups.
+     */
+    private void lockFaceContacts(
+            @NonNull Map<Grouping.Corner, Integer> owners, int @NonNull [][] groups) {
+        int total = 0;
+        for (int[] group : groups) {
+            total += group.length;
+        }
+        final int[] active = new int[total];
+        final int[] groupOf = new int[total];
+        int at = 0;
+        for (int g = 0; g < groups.length; ++g) {
+            for (int id : groups[g]) {
+                active[at] = id;
+                groupOf[at++] = g;
+            }
+        }
+        // Every triangle of the level, with its cluster's index in active
+        int corners = 0;
+        for (int id : active) {
+            corners += dag.clusters().get(id).corners().length;
+        }
+        final float[] all = new float[corners];
+        final int[] clusterOf = new int[corners / TRIANGLE_VALUES];
+        at = 0;
+        for (int i = 0; i < active.length; ++i) {
+            final float[] own = dag.clusters().get(active[i]).corners();
+            System.arraycopy(own, 0, all, at, own.length);
+            Arrays.fill(clusterOf, at / TRIANGLE_VALUES, (at + own.length) / TRIANGLE_VALUES, i);
+            at += own.length;
+        }
+        final TriangleBvh tree = new TriangleBvh(all);
+        final TriangleBvh.Scratch scratch = new TriangleBvh.Scratch();
+        final double touch = TJunctions.TOUCH * TJunctions.TOUCH;
+        final IntArrayList tags = new IntArrayList();
+        final List<Boolean> open = new ArrayList<>();
+        final IntArrayList triangles = new IntArrayList();
+        final List<float[]> edges = edges(active, tags, open, triangles);
+        final double[] point = new double[AXES];
+        for (int i = 0; i < edges.size(); ++i) {
+            if (!open.get(i)) {
+                continue;
+            }
+            final float[] edge = edges.get(i);
+            final double[] a = start(edge);
+            final double[] b = end(edge);
+            final int mine = tags.getInt(i);
+            final int samples = TJunctions.samples(a, b);
+            boolean contact = false;
+            for (int k = 0; k < samples; ++k) {
+                TJunctions.sample(a, b, k, samples, point);
+                if (tree.nearest(point, touch, touch, triangles.getInt(i), scratch) >= touch) {
+                    continue;
+                }
+                final int other = clusterOf[scratch.triangle];
+                if (groupOf[other] == groupOf[mine]
+                        || onTriangleEdge(all, scratch.triangle, point)) {
+                    continue;
+                }
+                contact = true;
+                for (int corner = 0; corner < AXES; ++corner) {
+                    owners.put(
+                            Grouping.Corner.of(
+                                    all, scratch.triangle * TRIANGLE_VALUES + corner * AXES),
+                            -1);
+                }
+            }
+            if (contact) {
+                owners.put(Grouping.Corner.of(edge, 0), -1);
+                owners.put(Grouping.Corner.of(edge, AXES), -1);
+            }
+        }
+    }
+
+    /**
+     * Whether a point is on one of a triangle's edges.
+     *
+     * @param corners Every triangle's corners.
+     * @param triangle The triangle.
+     * @param point The point.
+     * @return True if it is within touching distance of one.
+     */
+    private static boolean onTriangleEdge(
+            float @NonNull [] corners, int triangle, double @NonNull [] point) {
+        final int base = triangle * TRIANGLE_VALUES;
+        for (int corner = 0; corner < AXES; ++corner) {
+            final int p = base + corner * AXES;
+            final int q = base + ((corner + 1) % AXES) * AXES;
+            final double[] from = {corners[p], corners[p + 1], corners[p + 2]};
+            final double[] to = {corners[q], corners[q + 1], corners[q + 2]};
+            if (Geometry.segmentDistanceSquared(from, to, point, point)
+                    < TJunctions.TOUCH * TJunctions.TOUCH) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * An open edge's start.
+     *
+     * @param edge The edge, start then end.
+     * @return x, y, z.
+     */
+    private static double[] start(float @NonNull [] edge) {
+        return new double[] {edge[0], edge[1], edge[2]};
+    }
+
+    /**
+     * An open edge's end.
+     *
+     * @param edge The edge, start then end.
+     * @return x, y, z.
+     */
+    private static double[] end(float @NonNull [] edge) {
+        return new double[] {edge[AXES], edge[AXES + 1], edge[AXES + 2]};
+    }
+
+    /**
+     * A level's open edges: those only one of its triangles uses, optionally less those that edges
+     * running the other way cover, which are where parts meet at T-junctions rather than the edge
+     * of the input. Ears along a border can be anywhere an edge is open, so guarding them takes
+     * every open edge.
+     *
+     * @param active The level's clusters.
+     * @param seamless Whether to leave out edges where parts meet at T-junctions.
+     * @return The edges.
+     */
+    private List<Grouping.Edge> rim(int @NonNull [] active, boolean seamless) {
         List<Grouping.Edge> out = new ArrayList<>();
-        for (Map.Entry<Grouping.Edge, Integer> edge : Grouping.edgeUses(dag, clusters).entrySet()) {
-            if (edge.getValue() == 1) {
-                out.add(edge.getKey());
+        final List<Boolean> open = new ArrayList<>();
+        final List<float[]> edges = edges(active, new IntArrayList(), open, new IntArrayList());
+        final TJunctions index = new TJunctions();
+        for (float[] edge : edges) {
+            index.add(start(edge), end(edge), 0, -1, -1);
+        }
+        for (int i = 0; i < edges.size(); ++i) {
+            final float[] edge = edges.get(i);
+            if (open.get(i) && !(seamless && index.covered(start(edge), end(edge)))) {
+                out.add(
+                        Grouping.Edge.of(
+                                Grouping.Corner.of(edge, 0), Grouping.Corner.of(edge, AXES)));
             }
         }
         return out;
@@ -688,6 +911,47 @@ public final class DagBuilder {
             }
         }
         lock.forEach(corner -> owners.put(corner, -1));
+    }
+
+    /**
+     * Lock the far end of every open edge of a group's merged mesh that has one end locked, the way
+     * {@link #lockRimNearBorders} does for the level's rim. Welding T-junctions leaves open edges
+     * the level never had, and an ear's tip on one of them, collapsed, would take the only triangle
+     * on the group's side of a locked border edge with it.
+     *
+     * @param mesh The merged mesh, whose locks change.
+     */
+    private static void lockEars(@NonNull LodMesh mesh) {
+        final LongIntMap uses = new LongIntMap(mesh.getTriangleCount() * AXES);
+        final IntArrayList counts = new IntArrayList();
+        for (int t = 0; t < mesh.getTriangleCount(); ++t) {
+            for (int corner = 0; corner < AXES; ++corner) {
+                final int v = mesh.corner(t, corner);
+                final int w = mesh.corner(t, (corner + 1) % AXES);
+                final long key = LongIntMap.pair(Math.min(v, w), Math.max(v, w));
+                final int at = uses.putIfAbsent(key, counts.size());
+                if (at == LongIntMap.MISSING) {
+                    counts.addInt(1);
+                } else {
+                    counts.setInt(at, counts.getInt(at) + 1);
+                }
+            }
+        }
+        final IntArrayList lock = new IntArrayList();
+        for (int t = 0; t < mesh.getTriangleCount(); ++t) {
+            for (int corner = 0; corner < AXES; ++corner) {
+                final int v = mesh.corner(t, corner);
+                final int w = mesh.corner(t, (corner + 1) % AXES);
+                if (counts.getInt(uses.get(LongIntMap.pair(Math.min(v, w), Math.max(v, w)))) != 1
+                        || mesh.isLocked(v) == mesh.isLocked(w)) {
+                    continue;
+                }
+                lock.addInt(mesh.isLocked(v) ? w : v);
+            }
+        }
+        for (int i = 0; i < lock.size(); ++i) {
+            mesh.setLocked(lock.getInt(i), true);
+        }
     }
 
     /**
@@ -904,7 +1168,22 @@ public final class DagBuilder {
             childError = Math.max(childError, cluster.error());
             spheres.add(cluster.bound());
         }
-        final LodMesh merged = builder.build();
+        LodMesh merged = builder.build();
+        // Join the group's parts where they meet at T-junctions, so it simplifies one surface
+        final IntArrayList from = new IntArrayList();
+        final LodMesh welded = TJunctions.weld(merged, from);
+        if (welded != merged) {
+            final int[] clusters = sourceCluster.toIntArray();
+            final int[] triangles = sourceTriangle.toIntArray();
+            sourceCluster.clear();
+            sourceTriangle.clear();
+            for (int i = 0; i < from.size(); ++i) {
+                sourceCluster.addInt(clusters[from.getInt(i)]);
+                sourceTriangle.addInt(triangles[from.getInt(i)]);
+            }
+            merged = welded;
+        }
+        lockEars(merged);
         // Simplify to half, then map materials back
         // Scaled by the group's own edges rather than its level: levels climb faster in region
         // cells, whose parents count up from their highest child, but triangle sizes don't
@@ -946,11 +1225,9 @@ public final class DagBuilder {
             }
         }
         // Measure how far the output is from the base triangles it stands for, and add the bases'
-        // own
-        // error, which is 0 for leaves: by the triangle inequality that bounds how far the output
-        // is
-        // from the leaves, without adding up every level's step on the way. Never under a child's,
-        // so a cluster's error doesn't fall going up.
+        // own error, which is 0 for leaves: by the triangle inequality that bounds how far the
+        // output is from the leaves, without adding up every level's step on the way. Never under
+        // a child's, so a cluster's error doesn't fall going up.
         final long[] bases = basisOf(children);
         double baseError = 0;
         LodMesh.Builder baseBuilder = LodMesh.builder(dag.getOrigin());

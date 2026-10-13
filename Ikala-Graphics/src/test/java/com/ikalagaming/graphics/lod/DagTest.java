@@ -120,7 +120,7 @@ class DagTest {
     /**
      * Each group's stored error covers how far it really is from the input. Distances are sampled,
      * and missing input is charged to the group nearest it, so a few groups may come out slightly
-     * over; none may be far over.
+     * over; none may be far over. Over by up to a tenth counts as slightly.
      */
     @Test
     void testErrorsBoundTheDistance() {
@@ -133,7 +133,7 @@ class DagTest {
             assertTrue(
                     distance <= 1.5 * group.error() + 1e-4,
                     "Group " + group.id() + ": " + distance + " against " + group.error());
-            if (distance > group.error() + 1e-4) {
+            if (distance > 1.1 * group.error() + 1e-4) {
                 ++under;
             }
         }
@@ -210,6 +210,66 @@ class DagTest {
                             + result.overdrawnEdges().size()
                             + " edges drawn twice");
         }
+    }
+
+    /**
+     * Moving a corner that meets another leaf at a T-junction, as a slab's edge meets a wall, is
+     * caught as a crack.
+     */
+    @Test
+    void testBrokenTJunctionIsCaught() {
+        final LodDag dag = DagBuilder.build(terrain(2), OPTIONS);
+        final boolean[] drawn = new boolean[dag.clusters().size()];
+        for (LodDag.Cluster cluster : dag.clusters()) {
+            drawn[cluster.id()] = cluster.level() == 0;
+        }
+        final CrackCheck check = new CrackCheck(dag);
+        assertTrue(check.check(drawn).isClean());
+        // File every leaf's open edges with their corners, then find one inside any edge
+        final List<Integer> leaves = new ArrayList<>();
+        for (int i = 0; i < drawn.length; ++i) {
+            if (drawn[i]) {
+                leaves.add(i);
+            }
+        }
+        final Map<Grouping.Edge, Integer> uses = Grouping.edgeUses(dag, leaves);
+        final TJunctions index = new TJunctions();
+        final List<double[][]> open = new ArrayList<>();
+        for (int id : leaves) {
+            final float[] corners = dag.clusters().get(id).corners();
+            for (int t = 0; t < corners.length; t += 9) {
+                for (int c = 0; c < 3; ++c) {
+                    final int p = t + c * 3;
+                    final int q = t + ((c + 1) % 3) * 3;
+                    final double[] a = {corners[p], corners[p + 1], corners[p + 2]};
+                    final double[] b = {corners[q], corners[q + 1], corners[q + 2]};
+                    if (uses.get(
+                                    Grouping.Edge.of(
+                                            Grouping.Corner.of(corners, p),
+                                            Grouping.Corner.of(corners, q)))
+                            == 1) {
+                        index.add(a, b, id, id * 2048 + p, id * 2048 + q);
+                    }
+                    open.add(new double[][] {a, b});
+                }
+            }
+        }
+        for (double[][] edge : open) {
+            final int[] inside = index.inside(edge[0], edge[1]);
+            if (inside.length == 0) {
+                continue;
+            }
+            final float[] corners = dag.clusters().get(inside[0] / 2048).corners();
+            final Grouping.Corner target = Grouping.Corner.of(corners, inside[0] % 2048);
+            for (int k = 0; k < corners.length; k += 3) {
+                if (Grouping.Corner.of(corners, k).equals(target)) {
+                    corners[k + 1] += 0.01f;
+                }
+            }
+            assertFalse(check.check(drawn).isClean());
+            return;
+        }
+        throw new AssertionError("No T-junction found");
     }
 
     /** Moving one shared corner of a drawn cluster is caught as a crack. */

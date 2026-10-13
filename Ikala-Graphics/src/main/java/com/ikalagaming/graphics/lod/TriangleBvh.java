@@ -290,6 +290,27 @@ final class TriangleBvh {
             double limitSquared,
             double enoughSquared,
             @NonNull Scratch scratch) {
+        return nearest(point, limitSquared, enoughSquared, -1, scratch);
+    }
+
+    /**
+     * The squared distance from a point to the nearest triangle other than one, stopping early once
+     * any is within a distance that is close enough.
+     *
+     * @param point The point.
+     * @param limitSquared Don't look farther than the square root of this.
+     * @param enoughSquared Stop once a triangle is within the square root of this.
+     * @param skip The triangle to leave out, as its index in the input, or -1 for none.
+     * @param scratch Room for the query, which also holds the nearest triangle found.
+     * @return The squared distance, or the limit if no triangle is closer; once a triangle is close
+     *     enough, its distance, which may not be the nearest.
+     */
+    double nearest(
+            double @NonNull [] point,
+            double limitSquared,
+            double enoughSquared,
+            int skip,
+            @NonNull Scratch scratch) {
         scratch.triangle = -1;
         if (corners.length == 0) {
             return limitSquared;
@@ -321,6 +342,9 @@ final class TriangleBvh {
                 continue;
             }
             for (int t = first[node]; t < first[node] + count[node]; ++t) {
+                if (original[t] == skip) {
+                    continue;
+                }
                 final int base = t * TRIANGLE_VALUES;
                 for (int axis = 0; axis < AXES; ++axis) {
                     scratch.a[axis] = corners[base + axis];

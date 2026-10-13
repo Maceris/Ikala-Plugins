@@ -22,6 +22,13 @@ import java.util.Map;
  * level, and those below it whose consumer makes a higher level, as happens where region cells stop
  * at different levels and their parent takes over. In a DAG built in one piece, that is just the
  * level's own clusters.
+ *
+ * <p>Where parts meet at T-junctions, an edge used once can still be closed: another triangle
+ * touches it all along, so the surface goes on past it. Faces that end against the middle of
+ * another meet that way, as a slab's side does against a wall, and so do meshes merged on their own
+ * that meet without sharing corners. An edge the cut uses once is no crack where another drawn
+ * triangle touches it all along, and its level's rim is what nothing in its level touches. Without
+ * T-junctions this is the same as counting uses.
  */
 public final class CrackCheck {
 
@@ -98,6 +105,72 @@ public final class CrackCheck {
     /** How many triangles use each edge in the whole of each level, by level. */
     private final List<Map<Grouping.Edge, Integer>> levelUses = new ArrayList<>();
 
+    /** The triangles of the whole of each level, by level. */
+    private final List<Surface> levelSurfaces = new ArrayList<>();
+
+    /**
+     * Triangles to find what touches an edge in, numbered by their clusters' keys and their index
+     * in each.
+     */
+    private static final class Surface {
+        /** The triangles. */
+        private final TriangleBvh tree;
+
+        /** Where each cluster's triangles start, by its key. */
+        private final Map<Integer, Integer> starts = new HashMap<>();
+
+        /**
+         * Gather some clusters' triangles.
+         *
+         * @param clusters The clusters to pick from.
+         * @param keys Which ones, by index in {@code clusters}, which also becomes their key.
+         */
+        Surface(@NonNull List<LodDag.Cluster> clusters, @NonNull Collection<Integer> keys) {
+            int total = 0;
+            for (int key : keys) {
+                total += clusters.get(key).corners().length;
+            }
+            final float[] all = new float[total];
+            int at = 0;
+            for (int key : keys) {
+                final float[] corners = clusters.get(key).corners();
+                starts.put(key, at / TRIANGLE_VALUES);
+                System.arraycopy(corners, 0, all, at, corners.length);
+                at += corners.length;
+            }
+            tree = new TriangleBvh(all);
+        }
+
+        /**
+         * Whether a triangle other than the edge's own touches it all along.
+         *
+         * @param from The edge's start, x, y, z.
+         * @param to Its end.
+         * @param key The key of the cluster the edge's triangle is in.
+         * @param triangle The triangle's index in it.
+         * @param scratch Room for the queries.
+         * @return True if it does.
+         */
+        boolean touches(
+                double @NonNull [] from,
+                double @NonNull [] to,
+                int key,
+                int triangle,
+                TriangleBvh.@NonNull Scratch scratch) {
+            final int skip = starts.get(key) + triangle;
+            final double touch = TJunctions.TOUCH * TJunctions.TOUCH;
+            final int samples = TJunctions.samples(from, to);
+            final double[] point = new double[AXES];
+            for (int k = 0; k < samples; ++k) {
+                TJunctions.sample(from, to, k, samples, point);
+                if (tree.nearest(point, touch, touch, skip, scratch) >= touch) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
     /** The DAG. */
     private final LodDag dag;
 
@@ -119,7 +192,19 @@ public final class CrackCheck {
         }
         for (List<Integer> clusters : byLevel) {
             levelUses.add(Grouping.edgeUses(dag, clusters));
+            levelSurfaces.add(new Surface(dag.clusters(), clusters));
         }
+    }
+
+    /**
+     * A corner's position.
+     *
+     * @param corners Corner positions.
+     * @param at Where the corner starts.
+     * @return x, y, z.
+     */
+    private static double[] point(float @NonNull [] corners, int at) {
+        return new double[] {corners[at], corners[at + 1], corners[at + 2]};
     }
 
     /**
@@ -185,31 +270,37 @@ public final class CrackCheck {
         for (Map.Entry<Long, List<Integer>> entry : columns.entrySet()) {
             final long key = entry.getKey();
             final List<Integer> members = entry.getValue();
-            // Uses of the column's edges in each level, and in the cut
-            final Map<Integer, Map<Grouping.Edge, Integer>> levelUses = new HashMap<>();
-            final Map<Grouping.Edge, Integer> cutUses = new HashMap<>();
+            // Uses of the edges near the column in each level, and in the cut, with the first
+            // triangle using each
+            final Map<Integer, Map<Grouping.Edge, Use>> levelUses = new HashMap<>();
+            final Map<Grouping.Edge, Use> cutUses = new HashMap<>();
             for (int i : members) {
                 final LodDag.Cluster cluster = clusters.get(i);
                 final int top = highest[i];
                 final boolean inCut = drawn[i];
+                final int owner = i;
                 forEachEdge(
                         cluster,
                         key,
                         column,
-                        longEdges,
-                        edge -> {
+                        null,
+                        false,
+                        (edge, from, to, triangle) -> {
                             for (int level = cluster.level(); level <= top; ++level) {
                                 levelUses
                                         .computeIfAbsent(level, l -> new HashMap<>())
-                                        .merge(edge, 1, Integer::sum);
+                                        .computeIfAbsent(edge, e -> new Use())
+                                        .add(from, to, owner, triangle);
                             }
                             if (inCut) {
-                                cutUses.merge(edge, 1, Integer::sum);
+                                cutUses.computeIfAbsent(edge, e -> new Use())
+                                        .add(from, to, owner, triangle);
                             }
                         });
             }
-            // The most any level drawing an edge uses it
+            // The most any level drawing an edge uses it, and a level that uses it once
             final Map<Grouping.Edge, Integer> allowed = new HashMap<>();
+            final Map<Grouping.Edge, Integer> onceIn = new HashMap<>();
             for (int i : members) {
                 if (!drawn[i]) {
                     continue;
@@ -221,31 +312,79 @@ public final class CrackCheck {
                         key,
                         column,
                         null,
-                        edge -> {
+                        true,
+                        (edge, from, to, triangle) -> {
                             for (int level = cluster.level(); level <= top; ++level) {
-                                allowed.merge(
-                                        edge,
-                                        levelUses.get(level).getOrDefault(edge, 0),
-                                        Math::max);
+                                final Use use = levelUses.get(level).get(edge);
+                                final int count = use == null ? 0 : use.count;
+                                allowed.merge(edge, count, Math::max);
+                                if (count == 1) {
+                                    onceIn.put(edge, level);
+                                }
                             }
                         });
             }
-            for (Map.Entry<Grouping.Edge, Integer> use : cutUses.entrySet()) {
+            // What touches an edge, in the cut and in each level, made when first needed
+            final TriangleBvh.Scratch scratch = new TriangleBvh.Scratch();
+            final Surface[] cutSurface = new Surface[1];
+            final Map<Integer, Surface> levelSurfaces = new HashMap<>();
+            for (Map.Entry<Grouping.Edge, Use> edgeUse : cutUses.entrySet()) {
+                if (!inColumn(edgeUse.getKey(), key, column)) {
+                    continue;
+                }
+                if (tooLong(edgeUse.getKey(), column)) {
+                    ++longEdges[0];
+                    continue;
+                }
                 ++checked;
-                final int most = allowed.getOrDefault(use.getKey(), 0);
-                if (use.getValue() == 1 && most != 1) {
-                    if (onAny(use.getKey(), excused)) {
+                final Use use = edgeUse.getValue();
+                final int most = allowed.getOrDefault(edgeUse.getKey(), 0);
+                if (use.count == 1) {
+                    if (most == 1) {
+                        // Its level's rim, unless something there touches it
+                        final int level = onceIn.get(edgeUse.getKey());
+                        final Surface surface =
+                                levelSurfaces.computeIfAbsent(
+                                        level,
+                                        l -> {
+                                            final List<Integer> standing = new ArrayList<>();
+                                            for (int i : members) {
+                                                if (clusters.get(i).level() <= l
+                                                        && l <= highest[i]) {
+                                                    standing.add(i);
+                                                }
+                                            }
+                                            return new Surface(clusters, standing);
+                                        });
+                        final Use own = levelUses.get(level).get(edgeUse.getKey());
+                        if (!surface.touches(own.from, own.to, own.owner, own.triangle, scratch)) {
+                            continue;
+                        }
+                    }
+                    if (cutSurface[0] == null) {
+                        final List<Integer> inCut = new ArrayList<>();
+                        for (int i : members) {
+                            if (drawn[i]) {
+                                inCut.add(i);
+                            }
+                        }
+                        cutSurface[0] = new Surface(clusters, inCut);
+                    }
+                    if (cutSurface[0].touches(use.from, use.to, use.owner, use.triangle, scratch)) {
+                        continue;
+                    }
+                    if (onAny(edgeUse.getKey(), excused)) {
                         ++excusedCount;
                         continue;
                     }
                     ++open;
                     if (examples.size() < EXAMPLES) {
-                        examples.add(middle(use.getKey()));
+                        examples.add(middle(edgeUse.getKey()));
                     }
-                } else if (use.getValue() > Math.max(most, 1)) {
+                } else if (use.count > Math.max(most, 1)) {
                     ++overdrawn;
                     if (examples.size() < EXAMPLES) {
-                        examples.add(middle(use.getKey()));
+                        examples.add(middle(edgeUse.getKey()));
                     }
                 }
             }
@@ -272,17 +411,91 @@ public final class CrackCheck {
          * Visit an edge.
          *
          * @param edge The edge.
+         * @param from Where the triangle using it runs it from, x, y, z.
+         * @param to Where it runs it to.
+         * @param triangle The triangle's index in its cluster.
          */
-        void visit(Grouping.@NonNull Edge edge);
+        void visit(
+                Grouping.@NonNull Edge edge,
+                double @NonNull [] from,
+                double @NonNull [] to,
+                int triangle);
+    }
+
+    /** How often an edge is used, and the first triangle using it. */
+    private static final class Use {
+        /** How many triangles use it. */
+        int count;
+
+        /** Where the first one runs it from. */
+        double[] from;
+
+        /** Where the first one runs it to. */
+        double[] to;
+
+        /** The key of the first one's cluster. */
+        int owner;
+
+        /** The first one's index in its cluster. */
+        int triangle;
+
+        /**
+         * Count one more use.
+         *
+         * @param start Where it runs from.
+         * @param end Where it runs to.
+         * @param cluster The key of its triangle's cluster.
+         * @param index Its triangle's index there.
+         */
+        void add(double @NonNull [] start, double @NonNull [] end, int cluster, int index) {
+            if (count++ == 0) {
+                from = start;
+                to = end;
+                owner = cluster;
+                triangle = index;
+            }
+        }
     }
 
     /**
-     * Visit every edge of a cluster whose midpoint is in a column, once per triangle using it.
+     * Whether an edge's midpoint is in a column.
+     *
+     * @param edge The edge.
+     * @param key The column.
+     * @param column The column width.
+     * @return True if it is.
+     */
+    private static boolean inColumn(Grouping.@NonNull Edge edge, long key, double column) {
+        final double[] m = middle(edge);
+        return columnKey((int) Math.floor(m[0] / column), (int) Math.floor(m[2] / column)) == key;
+    }
+
+    /**
+     * Whether an edge is longer than a column.
+     *
+     * @param edge The edge.
+     * @param column The column width.
+     * @return True if it is.
+     */
+    private static boolean tooLong(Grouping.@NonNull Edge edge, double column) {
+        final double[] a = position(edge.a());
+        final double[] b = position(edge.b());
+        double d = 0;
+        for (int axis = 0; axis < AXES; ++axis) {
+            d += (a[axis] - b[axis]) * (a[axis] - b[axis]);
+        }
+        return d > column * column;
+    }
+
+    /**
+     * Visit every edge of a cluster, or those whose midpoint is in a column, once per triangle
+     * using it.
      *
      * @param cluster The cluster.
      * @param key The column.
      * @param column The column width.
      * @param longEdges Counts edges in the column too long to check, or null not to count.
+     * @param columnOnly Whether to visit only the column's edges, and none too long to check.
      * @param visitor What to do with each.
      */
     private static void forEachEdge(
@@ -290,6 +503,7 @@ public final class CrackCheck {
             long key,
             double column,
             long[] longEdges,
+            boolean columnOnly,
             @NonNull EdgeVisitor visitor) {
         final float[] corners = cluster.corners();
         for (int t = 0; t < corners.length; t += TRIANGLE_VALUES) {
@@ -298,14 +512,15 @@ public final class CrackCheck {
                 final int q = t + ((corner + 1) % AXES) * AXES;
                 final double mx = ((double) corners[p] + corners[q]) / 2;
                 final double mz = ((double) corners[p + 2] + corners[q + 2]) / 2;
-                if (columnKey((int) Math.floor(mx / column), (int) Math.floor(mz / column))
-                        != key) {
+                if (columnOnly
+                        && columnKey((int) Math.floor(mx / column), (int) Math.floor(mz / column))
+                                != key) {
                     continue;
                 }
                 final double dx = corners[p] - corners[q];
                 final double dy = corners[p + 1] - corners[q + 1];
                 final double dz = corners[p + 2] - corners[q + 2];
-                if (dx * dx + dy * dy + dz * dz > column * column) {
+                if (columnOnly && dx * dx + dy * dy + dz * dz > column * column) {
                     if (longEdges != null) {
                         ++longEdges[0];
                     }
@@ -313,7 +528,10 @@ public final class CrackCheck {
                 }
                 visitor.visit(
                         Grouping.Edge.of(
-                                Grouping.Corner.of(corners, p), Grouping.Corner.of(corners, q)));
+                                Grouping.Corner.of(corners, p), Grouping.Corner.of(corners, q)),
+                        point(corners, p),
+                        point(corners, q),
+                        t / TRIANGLE_VALUES);
             }
         }
     }
@@ -391,32 +609,55 @@ public final class CrackCheck {
             }
         }
         final Map<Grouping.Edge, Integer> uses = Grouping.edgeUses(dag, clusters);
-        // The most any level drawing an edge uses it
+        // The most any level drawing an edge uses it, a level that uses it once, and the triangle
+        // using each edge used once
         final Map<Grouping.Edge, Integer> allowed = new HashMap<>();
+        final Map<Grouping.Edge, Integer> onceIn = new HashMap<>();
+        final Map<Grouping.Edge, int[]> owners = new HashMap<>();
         for (int id : clusters) {
             final LodDag.Cluster cluster = dag.clusters().get(id);
             final float[] corners = cluster.corners();
             for (int t = 0; t < cluster.triangleCount(); ++t) {
                 for (int corner = 0; corner < AXES; ++corner) {
+                    final int p = t * TRIANGLE_VALUES + corner * AXES;
+                    final int q = t * TRIANGLE_VALUES + ((corner + 1) % AXES) * AXES;
                     final Grouping.Edge edge =
                             Grouping.Edge.of(
-                                    Grouping.Corner.of(
-                                            corners, t * TRIANGLE_VALUES + corner * AXES),
-                                    Grouping.Corner.of(
-                                            corners,
-                                            t * TRIANGLE_VALUES + ((corner + 1) % AXES) * AXES));
+                                    Grouping.Corner.of(corners, p), Grouping.Corner.of(corners, q));
+                    if (uses.get(edge) == 1) {
+                        owners.put(edge, new int[] {id, t, p, q});
+                    }
                     for (int level = cluster.level(); level <= highestStanding(cluster); ++level) {
-                        allowed.merge(edge, levelUses.get(level).getOrDefault(edge, 0), Math::max);
+                        final int count = levelUses.get(level).getOrDefault(edge, 0);
+                        allowed.merge(edge, count, Math::max);
+                        if (count == 1) {
+                            onceIn.put(edge, level);
+                        }
                     }
                 }
             }
         }
+        final Surface cut = new Surface(dag.clusters(), clusters);
+        final TriangleBvh.Scratch scratch = new TriangleBvh.Scratch();
         List<Grouping.Edge> open = new ArrayList<>();
         List<Grouping.Edge> overdrawn = new ArrayList<>();
         for (Map.Entry<Grouping.Edge, Integer> entry : uses.entrySet()) {
             final int most = allowed.getOrDefault(entry.getKey(), 0);
-            if (entry.getValue() == 1 && most != 1) {
-                open.add(entry.getKey());
+            if (entry.getValue() == 1) {
+                final int[] owner = owners.get(entry.getKey());
+                final float[] corners = dag.clusters().get(owner[0]).corners();
+                final double[] from = point(corners, owner[2]);
+                final double[] to = point(corners, owner[3]);
+                // Its level's rim, unless something there touches it
+                if (most == 1
+                        && !levelSurfaces
+                                .get(onceIn.get(entry.getKey()))
+                                .touches(from, to, owner[0], owner[1], scratch)) {
+                    continue;
+                }
+                if (!cut.touches(from, to, owner[0], owner[1], scratch)) {
+                    open.add(entry.getKey());
+                }
             } else if (entry.getValue() > Math.max(most, 1)) {
                 overdrawn.add(entry.getKey());
             }

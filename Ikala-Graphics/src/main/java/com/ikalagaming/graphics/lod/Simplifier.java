@@ -378,7 +378,9 @@ public final class Simplifier {
             // Keep the locked end, if there is one
             final int keep = locked[b] ? b : a;
             final int remove = keep == a ? b : a;
-            if (!linkCondition(keep, remove) || createsKeptOpen(keep, remove)) {
+            if (!linkCondition(keep, remove)
+                    || createsKeptOpen(keep, remove)
+                    || dropsLockedEdge(keep, remove)) {
                 ++rejectedLinks;
                 continue;
             }
@@ -535,6 +537,41 @@ public final class Simplifier {
             }
         }
         return true;
+    }
+
+    /**
+     * Whether a collapse would take the last face off an edge between two locked vertices: a face
+     * using both ends goes, and with it its edge from the kept vertex to its third corner, unless
+     * the removed vertex's edge to that corner has another face to carry it over. A border shared
+     * with another group is such an edge, and losing it leaves a crack next to the other group,
+     * however the boundary around it changed since the locks were set.
+     *
+     * @param keep The vertex that stays.
+     * @param remove The vertex that goes.
+     * @return True if it would.
+     */
+    private boolean dropsLockedEdge(int keep, int remove) {
+        if (!locked[keep]) {
+            return false;
+        }
+        final IntArrayList around = vertexFaces[remove];
+        for (int k = 0; k < around.size(); ++k) {
+            final int f = around.getInt(k);
+            if (!faceAlive[f] || !uses(f, keep)) {
+                continue;
+            }
+            for (int corner = 0; corner < CORNERS; ++corner) {
+                final int y = faces[f * CORNERS + corner];
+                if (y != keep
+                        && y != remove
+                        && locked[y]
+                        && sharedFaces(keep, y) == 1
+                        && sharedFaces(remove, y) == 1) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
