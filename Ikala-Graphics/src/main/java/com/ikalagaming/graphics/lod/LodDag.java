@@ -69,8 +69,9 @@ public final class LodDag {
      * @param outputs The clusters it made.
      * @param error Its saturated error.
      * @param bound Its saturated sphere.
-     * @param simplifyError The error simplifying it added, before saturation: how far its output is
-     *     from its children, measured both ways.
+     * @param simplifyError How far its output is from its base geometry, measured both ways: the
+     *     clusters its build started from under it, the leaves or a parent cell's inputs. Its error
+     *     is that plus the bases' own, never under a child's.
      * @param quadricError The simplifier's own estimate of that, a weighted mean distance, for
      *     comparison.
      * @param trianglesIn Triangles going in.

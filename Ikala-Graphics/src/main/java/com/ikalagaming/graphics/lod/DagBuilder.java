@@ -145,7 +145,7 @@ public final class DagBuilder {
      * @param tight Each output cluster's tight sphere.
      * @param error The group's saturated error.
      * @param bound The group's saturated sphere.
-     * @param simplifyError The simplification's own error, measured.
+     * @param simplifyError How far its output is from its base geometry, measured.
      * @param quadricError The simplifier's estimate of it.
      * @param trianglesIn Triangles in.
      * @param trianglesOut Triangles out.
@@ -158,6 +158,7 @@ public final class DagBuilder {
      * @param lineage Where its merged triangles came from, or null if not kept.
      * @param faces Each output cluster's triangles as faces of the merged mesh, or null if not
      *     kept.
+     * @param bases Each output cluster's base triangles, packed by {@link #base}.
      */
     private record Built(
             int[] children,
@@ -179,10 +180,21 @@ public final class DagBuilder {
             int rejectedLinks,
             long nanos,
             Lineage.Group lineage,
-            List<int[]> faces) {}
+            List<int[]> faces,
+            List<long[]> bases) {}
 
     /** The options. */
     private final Options options;
+
+    /**
+     * The base triangles each cluster stands for, by cluster id, each packed by {@link #base}: the
+     * triangles of the clusters the build started from, which are the leaves, or a parent cell's
+     * inputs. When a group splits its output into clusters, each of its base triangles goes to the
+     * output cluster nearest it, so the clusters share them out exactly. A group's error is
+     * measured against its base triangles rather than added up level by level, so it stays the true
+     * distance from them. Written between levels only, so the workers can read it while they build.
+     */
+    private final List<long[]> basis = new ArrayList<>();
 
     /** The DAG being built. */
     private final LodDag dag;
@@ -497,6 +509,15 @@ public final class DagBuilder {
         for (int i = 0; i < active.length; ++i) {
             active[i] = i;
         }
+        // Each cluster the build starts from stands for its own triangles
+        while (basis.size() < dag.clusters().size()) {
+            final int id = basis.size();
+            final long[] own = new long[dag.clusters().get(id).triangleCount()];
+            for (int t = 0; t < own.length; ++t) {
+                own[t] = base(id, t);
+            }
+            basis.add(own);
+        }
         int round = 0;
         while (true) {
             final int top = dag.getLevels() - 1;
@@ -525,10 +546,11 @@ public final class DagBuilder {
             int trianglesIn = 0;
             int trianglesOut = 0;
             IntArrayList next = new IntArrayList();
+            // Every group finishes before any is added, since adding writes what the workers read
+            final List<Built> builts = new ArrayList<>(futures.size());
             for (Future<Built> future : futures) {
-                final Built built;
                 try {
-                    built = future.get();
+                    builts.add(future.get());
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     dag.setStopReason("interrupted");
@@ -536,6 +558,8 @@ public final class DagBuilder {
                 } catch (ExecutionException e) {
                     throw new IllegalStateException("A LOD group failed to build", e.getCause());
                 }
+            }
+            for (Built built : builts) {
                 trianglesIn += built.trianglesIn();
                 trianglesOut += built.trianglesOut();
                 add(built, next);
@@ -723,6 +747,116 @@ public final class DagBuilder {
     }
 
     /**
+     * Pack a base triangle: its cluster's id and its index there.
+     *
+     * @param cluster The cluster's id.
+     * @param triangle The triangle's index in it.
+     * @return The packed triangle.
+     */
+    private static long base(int cluster, int triangle) {
+        return ((long) cluster << Integer.SIZE) | (triangle & 0xFFFFFFFFL);
+    }
+
+    /**
+     * A packed base triangle's cluster.
+     *
+     * @param packed The packed triangle.
+     * @return The cluster's id.
+     */
+    private static int baseCluster(long packed) {
+        return (int) (packed >>> Integer.SIZE);
+    }
+
+    /**
+     * A packed base triangle's index in its cluster.
+     *
+     * @param packed The packed triangle.
+     * @return The index.
+     */
+    private static int baseTriangle(long packed) {
+        return (int) packed;
+    }
+
+    /**
+     * The base triangles some clusters stand for, together.
+     *
+     * @param clusters The clusters.
+     * @return The packed base triangles.
+     */
+    private long[] basisOf(int @NonNull [] clusters) {
+        int total = 0;
+        for (int id : clusters) {
+            total += basis.get(id).length;
+        }
+        final long[] out = new long[total];
+        int at = 0;
+        for (int id : clusters) {
+            final long[] own = basis.get(id);
+            System.arraycopy(own, 0, out, at, own.length);
+            at += own.length;
+        }
+        return out;
+    }
+
+    /**
+     * Share a group's base triangles out among its output clusters: each goes to the cluster with
+     * the triangle nearest its middle.
+     *
+     * @param bases The group's packed base triangles.
+     * @param outCorners Each output cluster's corners.
+     * @return Each output cluster's packed base triangles.
+     */
+    private List<long[]> shareOut(long @NonNull [] bases, @NonNull List<float[]> outCorners) {
+        final List<long[]> out = new ArrayList<>(outCorners.size());
+        if (outCorners.size() == 1) {
+            out.add(bases);
+            return out;
+        }
+        int total = 0;
+        for (float[] corners : outCorners) {
+            total += corners.length;
+        }
+        final float[] all = new float[total];
+        final int[] owner = new int[total / TRIANGLE_VALUES];
+        int at = 0;
+        for (int i = 0; i < outCorners.size(); ++i) {
+            final float[] corners = outCorners.get(i);
+            System.arraycopy(corners, 0, all, at, corners.length);
+            java.util.Arrays.fill(
+                    owner, at / TRIANGLE_VALUES, (at + corners.length) / TRIANGLE_VALUES, i);
+            at += corners.length;
+        }
+        final TriangleBvh tree = new TriangleBvh(all);
+        final TriangleBvh.Scratch scratch = new TriangleBvh.Scratch();
+        final double[] middle = new double[AXES];
+        final List<IntArrayList> chosen = new ArrayList<>(outCorners.size());
+        for (int i = 0; i < outCorners.size(); ++i) {
+            chosen.add(new IntArrayList());
+        }
+        for (int b = 0; b < bases.length; ++b) {
+            final float[] corners = dag.clusters().get(baseCluster(bases[b])).corners();
+            final int t = baseTriangle(bases[b]) * TRIANGLE_VALUES;
+            for (int axis = 0; axis < AXES; ++axis) {
+                middle[axis] =
+                        (corners[t + axis]
+                                        + corners[t + AXES + axis]
+                                        + corners[t + 2 * AXES + axis])
+                                / AXES;
+            }
+            tree.nearest(middle, Double.POSITIVE_INFINITY, scratch);
+            chosen.get(owner[scratch.triangle]).addInt(b);
+        }
+        for (IntArrayList picks : chosen) {
+            final long[] own = new long[picks.size()];
+            for (int i = 0; i < own.length; ++i) {
+                own[i] = bases[picks.getInt(i)];
+            }
+            out.add(own);
+        }
+        return out;
+    }
+
+    /**
      * Merge, simplify and split one group. On a worker.
      *
      * @param children The group's clusters.
@@ -741,7 +875,7 @@ public final class DagBuilder {
             level = Math.max(level, dag.clusters().get(id).level());
         }
         // Merge
-        LodMesh.Builder builder = LodMesh.builder(dag.getOrigin());
+        final LodMesh.Builder builder = LodMesh.builder(dag.getOrigin());
         int trianglesIn = 0;
         double childError = 0;
         List<double[]> spheres = new ArrayList<>();
@@ -811,11 +945,32 @@ public final class DagBuilder {
                 outFaces.add(faces);
             }
         }
-        // Measure how far the output is from the children, and add the children's own error: by the
-        // triangle inequality that bounds how far the output is from the input
+        // Measure how far the output is from the base triangles it stands for, and add the bases'
+        // own
+        // error, which is 0 for leaves: by the triangle inequality that bounds how far the output
+        // is
+        // from the leaves, without adding up every level's step on the way. Never under a child's,
+        // so a cluster's error doesn't fall going up.
+        final long[] bases = basisOf(children);
+        double baseError = 0;
+        LodMesh.Builder baseBuilder = LodMesh.builder(dag.getOrigin());
+        for (long packed : bases) {
+            final LodDag.Cluster base = dag.clusters().get(baseCluster(packed));
+            final int t = baseTriangle(packed);
+            baseError = Math.max(baseError, base.error());
+            final float[] corners = base.corners();
+            final int[] v = new int[AXES];
+            for (int corner = 0; corner < AXES; ++corner) {
+                final int at = t * TRIANGLE_VALUES + corner * AXES;
+                v[corner] = baseBuilder.vertex(corners[at], corners[at + 1], corners[at + 2]);
+            }
+            baseBuilder.triangle(v[0], v[1], v[2], base.materials()[t], base.visibility()[t]);
+        }
         final double simplifyError =
-                Hausdorff.between(result.mesh(), merged, MEASURE_SPACING * edge * EDGE_GROWTH);
-        final double error = childError + simplifyError;
+                Hausdorff.between(
+                        result.mesh(), baseBuilder.build(), MEASURE_SPACING * edge * EDGE_GROWTH);
+        final double error = Math.max(childError, baseError + simplifyError);
+        final List<long[]> outBases = shareOut(bases, outCorners);
         final double[] bound = Clusters.enclose(spheres);
         final int[] edgeCounts = countEdges(merged);
         return new Built(
@@ -843,7 +998,8 @@ public final class DagBuilder {
                                 sourceCluster.toIntArray(),
                                 sourceTriangle.toIntArray())
                         : null,
-                outFaces);
+                outFaces,
+                outBases);
     }
 
     /**
@@ -909,6 +1065,7 @@ public final class DagBuilder {
         final int[] outputs = new int[built.corners().size()];
         for (int i = 0; i < outputs.length; ++i) {
             outputs[i] = dag.clusters().size();
+            basis.add(built.bases().get(i));
             dag.add(
                     new LodDag.Cluster(
                             outputs[i],
