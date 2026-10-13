@@ -1135,8 +1135,12 @@ public final class GateBenchmark {
      * @param scene The scene.
      */
     private void showWorld(@NonNull Scene scene) {
-        GraphicsManager.swapPipeline(
-                RenderConfig.builder().withAnimation().withScene().withSkybox().withGui().build());
+        final RenderConfig.ConfigBuilder config =
+                RenderConfig.builder().withAnimation().withScene().withSkybox().withGui();
+        if (Boolean.getBoolean(PROPERTY + ".wireframe")) {
+            config.withWireframe();
+        }
+        GraphicsManager.swapPipeline(config.build());
         previousSun = scene.getSceneLights().getDirLight();
         previousAmbient = scene.getSceneLights().getAmbientLight();
         previousViewDistance = scene.getViewDistance();

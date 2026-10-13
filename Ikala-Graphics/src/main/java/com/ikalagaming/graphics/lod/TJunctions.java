@@ -26,6 +26,9 @@ public final class TJunctions {
     /** Vertices in a triangle. */
     private static final int CORNERS = 3;
 
+    /** Where a piece being welded keeps whether each edge is still its triangle's own. */
+    private static final int OWN = CORNERS + 1;
+
     /** The step directions are rounded to when filing lines. */
     private static final double DIRECTION_STEP = 1e-5;
 
@@ -313,26 +316,37 @@ public final class TJunctions {
                 }
             }
         }
-        // Split each triangle along one edge at a time; the pieces' new edges run inside, and the
-        // pieces of the split edge have nothing left inside them
+        // Split each triangle along one edge at a time. A piece is its corners, the triangle it
+        // came from, then whether each of its edges is still one of the triangle's own, edge k
+        // running from corner k: only those split, so each splits once and the work ends however
+        // the lines are filed
         final List<int[]> out = new ArrayList<>();
         final IntArrayList outFrom = new IntArrayList();
         final ArrayDeque<int[]> work = new ArrayDeque<>();
         final boolean[] locked = Arrays.copyOf(mesh.locked, mesh.getVertexCount());
         boolean any = false;
         for (int t = 0; t < triangles; ++t) {
-            work.add(new int[] {mesh.corner(t, 0), mesh.corner(t, 1), mesh.corner(t, 2), t});
+            work.add(
+                    new int[] {
+                        mesh.corner(t, 0), mesh.corner(t, 1), mesh.corner(t, 2), t, 1, 1, 1
+                    });
             while (!work.isEmpty()) {
                 final int[] piece = work.poll();
                 boolean split = false;
                 for (int c = 0; c < CORNERS && !split; ++c) {
+                    if (piece[OWN + c] == 0) {
+                        continue;
+                    }
                     final int v = piece[c];
                     final int w = piece[(c + 1) % CORNERS];
                     final int across = piece[(c + 2) % CORNERS];
                     if (uses.getOrDefault(edgeKey(v, w), 0) != 1) {
                         continue;
                     }
-                    final int[] between = index.inside(position(mesh, v), position(mesh, w));
+                    final int[] between =
+                            Arrays.stream(index.inside(position(mesh, v), position(mesh, w)))
+                                    .filter(m -> m != across)
+                                    .toArray();
                     if (between.length == 0) {
                         continue;
                     }
@@ -343,12 +357,25 @@ public final class TJunctions {
                             locked[m] = true;
                         }
                     }
+                    // The first piece keeps the edge from across to v, the last the edge from w to
+                    // across; every other edge of the pieces is new
+                    final int toV = piece[OWN + (c + 2) % CORNERS];
+                    final int fromW = piece[OWN + (c + 1) % CORNERS];
                     int previous = v;
-                    for (int m : between) {
-                        work.add(new int[] {previous, m, across, piece[CORNERS]});
-                        previous = m;
+                    for (int k = 0; k <= between.length; ++k) {
+                        final int next = k < between.length ? between[k] : w;
+                        work.add(
+                                new int[] {
+                                    previous,
+                                    next,
+                                    across,
+                                    piece[CORNERS],
+                                    0,
+                                    k == between.length ? fromW : 0,
+                                    k == 0 ? toV : 0
+                                });
+                        previous = next;
                     }
-                    work.add(new int[] {previous, w, across, piece[CORNERS]});
                 }
                 if (!split) {
                     out.add(piece);

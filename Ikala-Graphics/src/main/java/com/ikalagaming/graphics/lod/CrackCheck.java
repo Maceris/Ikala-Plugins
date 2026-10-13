@@ -84,6 +84,12 @@ public final class CrackCheck {
         }
     }
 
+    /**
+     * How far past a column, as a part of its width, edges are counted that may meet the column's
+     * edges along a line.
+     */
+    private static final double NEAR_COLUMN = 0.25;
+
     /** How many findings a tiled check keeps as examples. */
     public static final int EXAMPLES = 16;
 
@@ -285,16 +291,16 @@ public final class CrackCheck {
                         column,
                         null,
                         false,
-                        (edge, from, to, triangle) -> {
+                        (edge, corners, from, to, triangle) -> {
                             for (int level = cluster.level(); level <= top; ++level) {
                                 levelUses
                                         .computeIfAbsent(level, l -> new HashMap<>())
                                         .computeIfAbsent(edge, e -> new Use())
-                                        .add(from, to, owner, triangle);
+                                        .add(corners, from, to, owner, triangle);
                             }
                             if (inCut) {
                                 cutUses.computeIfAbsent(edge, e -> new Use())
-                                        .add(from, to, owner, triangle);
+                                        .add(corners, from, to, owner, triangle);
                             }
                         });
             }
@@ -313,7 +319,7 @@ public final class CrackCheck {
                         column,
                         null,
                         true,
-                        (edge, from, to, triangle) -> {
+                        (edge, corners, from, to, triangle) -> {
                             for (int level = cluster.level(); level <= top; ++level) {
                                 final Use use = levelUses.get(level).get(edge);
                                 final int count = use == null ? 0 : use.count;
@@ -324,9 +330,12 @@ public final class CrackCheck {
                             }
                         });
             }
-            // What touches an edge, in the cut and in each level, made when first needed
+            // What touches an edge, in the cut and in each level, made when first needed: first
+            // the edges along its line, which settle most, then the triangles
             final TriangleBvh.Scratch scratch = new TriangleBvh.Scratch();
+            final TJunctions[] cutLines = new TJunctions[1];
             final Surface[] cutSurface = new Surface[1];
+            final Map<Integer, TJunctions> levelLines = new HashMap<>();
             final Map<Integer, Surface> levelSurfaces = new HashMap<>();
             for (Map.Entry<Grouping.Edge, Use> edgeUse : cutUses.entrySet()) {
                 if (!inColumn(edgeUse.getKey(), key, column)) {
@@ -343,23 +352,38 @@ public final class CrackCheck {
                     if (most == 1) {
                         // Its level's rim, unless something there touches it
                         final int level = onceIn.get(edgeUse.getKey());
-                        final Surface surface =
-                                levelSurfaces.computeIfAbsent(
-                                        level,
-                                        l -> {
-                                            final List<Integer> standing = new ArrayList<>();
-                                            for (int i : members) {
-                                                if (clusters.get(i).level() <= l
-                                                        && l <= highest[i]) {
-                                                    standing.add(i);
-                                                }
-                                            }
-                                            return new Surface(clusters, standing);
-                                        });
                         final Use own = levelUses.get(level).get(edgeUse.getKey());
-                        if (!surface.touches(own.from, own.to, own.owner, own.triangle, scratch)) {
+                        final boolean along =
+                                levelLines
+                                        .computeIfAbsent(level, l -> lines(levelUses.get(l)))
+                                        .covered(own.from(), own.to());
+                        final Surface surface =
+                                along
+                                        ? null
+                                        : levelSurfaces.computeIfAbsent(
+                                                level,
+                                                l -> {
+                                                    final List<Integer> standing =
+                                                            new ArrayList<>();
+                                                    for (int i : members) {
+                                                        if (clusters.get(i).level() <= l
+                                                                && l <= highest[i]) {
+                                                            standing.add(i);
+                                                        }
+                                                    }
+                                                    return new Surface(clusters, standing);
+                                                });
+                        if (!along
+                                && !surface.touches(
+                                        own.from(), own.to(), own.owner, own.triangle, scratch)) {
                             continue;
                         }
+                    }
+                    if (cutLines[0] == null) {
+                        cutLines[0] = lines(cutUses);
+                    }
+                    if (cutLines[0].covered(use.from(), use.to())) {
+                        continue;
                     }
                     if (cutSurface[0] == null) {
                         final List<Integer> inCut = new ArrayList<>();
@@ -370,7 +394,8 @@ public final class CrackCheck {
                         }
                         cutSurface[0] = new Surface(clusters, inCut);
                     }
-                    if (cutSurface[0].touches(use.from, use.to, use.owner, use.triangle, scratch)) {
+                    if (cutSurface[0].touches(
+                            use.from(), use.to(), use.owner, use.triangle, scratch)) {
                         continue;
                     }
                     if (onAny(edgeUse.getKey(), excused)) {
@@ -411,14 +436,16 @@ public final class CrackCheck {
          * Visit an edge.
          *
          * @param edge The edge.
-         * @param from Where the triangle using it runs it from, x, y, z.
-         * @param to Where it runs it to.
+         * @param corners The corners of the cluster using it.
+         * @param from Where the corner the triangle runs it from starts in them.
+         * @param to Where the corner it runs it to starts.
          * @param triangle The triangle's index in its cluster.
          */
         void visit(
                 Grouping.@NonNull Edge edge,
-                double @NonNull [] from,
-                double @NonNull [] to,
+                float @NonNull [] corners,
+                int from,
+                int to,
                 int triangle);
     }
 
@@ -427,11 +454,14 @@ public final class CrackCheck {
         /** How many triangles use it. */
         int count;
 
-        /** Where the first one runs it from. */
-        double[] from;
+        /** The corners of the first one's cluster. */
+        float[] corners;
 
-        /** Where the first one runs it to. */
-        double[] to;
+        /** Where the corner the first one runs it from starts in them. */
+        int start;
+
+        /** Where the corner it runs it to starts. */
+        int end;
 
         /** The key of the first one's cluster. */
         int owner;
@@ -442,19 +472,59 @@ public final class CrackCheck {
         /**
          * Count one more use.
          *
-         * @param start Where it runs from.
-         * @param end Where it runs to.
+         * @param of The corners of its triangle's cluster.
+         * @param from Where the corner it runs it from starts in them.
+         * @param to Where the corner it runs it to starts.
          * @param cluster The key of its triangle's cluster.
          * @param index Its triangle's index there.
          */
-        void add(double @NonNull [] start, double @NonNull [] end, int cluster, int index) {
+        void add(float @NonNull [] of, int from, int to, int cluster, int index) {
             if (count++ == 0) {
-                from = start;
-                to = end;
+                corners = of;
+                start = from;
+                end = to;
                 owner = cluster;
                 triangle = index;
             }
         }
+
+        /**
+         * Where the first triangle runs the edge from.
+         *
+         * @return x, y, z.
+         */
+        double[] from() {
+            return point(corners, start);
+        }
+
+        /**
+         * Where the first triangle runs the edge to.
+         *
+         * @return x, y, z.
+         */
+        double[] to() {
+            return point(corners, end);
+        }
+    }
+
+    /**
+     * File edges by line: each the way its first triangle runs it, and the other way too if more
+     * than one triangle uses it.
+     *
+     * @param uses The edges' uses.
+     * @return The edges.
+     */
+    private static TJunctions lines(@NonNull Map<Grouping.Edge, Use> uses) {
+        final TJunctions out = new TJunctions();
+        for (Use use : uses.values()) {
+            final double[] from = use.from();
+            final double[] to = use.to();
+            out.add(from, to, 0, -1, -1);
+            if (use.count > 1) {
+                out.add(to, from, 0, -1, -1);
+            }
+        }
+        return out;
     }
 
     /**
@@ -488,14 +558,15 @@ public final class CrackCheck {
     }
 
     /**
-     * Visit every edge of a cluster, or those whose midpoint is in a column, once per triangle
-     * using it.
+     * Visit the edges of a cluster whose midpoint is in a column, once per triangle using it: only
+     * those to check, or also those near enough to meet them along a line.
      *
      * @param cluster The cluster.
      * @param key The column.
      * @param column The column width.
      * @param longEdges Counts edges in the column too long to check, or null not to count.
-     * @param columnOnly Whether to visit only the column's edges, and none too long to check.
+     * @param columnOnly Whether to visit only the column's edges, and none too long to check,
+     *     rather than every edge whose midpoint is within {@link #NEAR_COLUMN} of it.
      * @param visitor What to do with each.
      */
     private static void forEachEdge(
@@ -506,15 +577,18 @@ public final class CrackCheck {
             boolean columnOnly,
             @NonNull EdgeVisitor visitor) {
         final float[] corners = cluster.corners();
+        final double near = columnOnly ? 0 : NEAR_COLUMN * column;
+        final double minX = (key >> Integer.SIZE) * column - near;
+        final double minZ = (int) key * column - near;
+        final double maxX = minX + column + 2 * near;
+        final double maxZ = minZ + column + 2 * near;
         for (int t = 0; t < corners.length; t += TRIANGLE_VALUES) {
             for (int corner = 0; corner < AXES; ++corner) {
                 final int p = t + corner * AXES;
                 final int q = t + ((corner + 1) % AXES) * AXES;
                 final double mx = ((double) corners[p] + corners[q]) / 2;
                 final double mz = ((double) corners[p + 2] + corners[q + 2]) / 2;
-                if (columnOnly
-                        && columnKey((int) Math.floor(mx / column), (int) Math.floor(mz / column))
-                                != key) {
+                if (mx < minX || mx >= maxX || mz < minZ || mz >= maxZ) {
                     continue;
                 }
                 final double dx = corners[p] - corners[q];
@@ -529,8 +603,9 @@ public final class CrackCheck {
                 visitor.visit(
                         Grouping.Edge.of(
                                 Grouping.Corner.of(corners, p), Grouping.Corner.of(corners, q)),
-                        point(corners, p),
-                        point(corners, q),
+                        corners,
+                        p,
+                        q,
                         t / TRIANGLE_VALUES);
             }
         }
