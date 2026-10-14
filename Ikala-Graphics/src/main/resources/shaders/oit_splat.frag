@@ -9,6 +9,11 @@
 
 #include "light_inputs.glsl"
 #include "oit_volume.glsl"
+#include "volume_fade.glsl"
+
+// Whether these are sections' baked blocks, which hand over to their volume bricks with distance,
+// see volume_fade.glsl
+layout(constant_id = 0) const bool VOLUME_FADE = false;
 
 layout(location = 3) in vec2 outTextCoord;
 layout(location = 4) in vec4 outViewPosition;
@@ -25,6 +30,11 @@ layout(push_constant) uniform Constants {
     uvec2 tiles;
     // SLICES / ln(viewDistance / FIRST_DEPTH)
     float logScale;
+    // Where the hand over to volume bricks starts, and how long it is, in meters
+    float volumeFadeStart;
+    float volumeFadeLength;
+    // The frame number, for the hand over's dither
+    uint frame;
 };
 
 // Opacity is kept below 1, so the extinction stays finite. Matches OitMath.MAX_OPACITY.
@@ -37,7 +47,9 @@ void main() {
         alpha = texture(bindlessTextures[nonuniformEXT(material.textureIndex)], outTextCoord).a;
     }
     alpha = min(alpha, MAX_OPACITY);
-    if (alpha <= 0.0) {
+    if (alpha <= 0.0
+            || (VOLUME_FADE && volumeTakes(gl_FragCoord.xy, frame, length(outViewPosition.xyz),
+                volumeFadeStart, volumeFadeLength))) {
         return;
     }
 

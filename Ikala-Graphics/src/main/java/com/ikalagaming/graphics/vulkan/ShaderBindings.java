@@ -325,8 +325,25 @@ public class ShaderBindings {
         public static final int PUSH_CONSTANT_TILES_OFFSET =
                 PUSH_CONSTANT_VOXEL_WEIGHTS_OFFSET + Integer.BYTES;
 
+        /**
+         * Where the hand over from sections' translucent blocks to their volume bricks starts and
+         * how long it is, two floats.
+         */
+        public static final int PUSH_CONSTANT_VOLUME_FADE_OFFSET =
+                PUSH_CONSTANT_TILES_OFFSET + 2 * Float.BYTES;
+
+        /** The frame number, for the hand over's dither. */
+        public static final int PUSH_CONSTANT_FRAME_OFFSET =
+                PUSH_CONSTANT_VOLUME_FADE_OFFSET + 2 * Float.BYTES;
+
         /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_TILES_OFFSET + 2 * Float.BYTES;
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_FRAME_OFFSET + Integer.BYTES;
+
+        /**
+         * The constant_id of {@code VOLUME_FADE} in {@code translucent.frag} and {@code
+         * oit_splat.frag}: whether they draw sections' baked blocks, which hand over to bricks.
+         */
+        public static final int VOLUME_FADE_CONSTANT_ID = 0;
 
         /** The set the transparency volume is read through. */
         public static final int VOLUME_SET = 3;
@@ -353,9 +370,20 @@ public class ShaderBindings {
         public static final int PUSH_CONSTANT_LOG_SCALE_OFFSET =
                 PUSH_CONSTANT_TILES_OFFSET + 2 * Integer.BYTES;
 
+        /**
+         * Where the hand over from sections' translucent blocks to their volume bricks starts and
+         * how long it is, two floats, splatting only.
+         */
+        public static final int PUSH_CONSTANT_VOLUME_FADE_OFFSET =
+                PUSH_CONSTANT_LOG_SCALE_OFFSET + Float.BYTES;
+
+        /** The frame number, for the hand over's dither, splatting only. */
+        public static final int PUSH_CONSTANT_FRAME_OFFSET =
+                PUSH_CONSTANT_VOLUME_FADE_OFFSET + 2 * Float.BYTES;
+
         /** The size of the splat's push constants in bytes. */
         public static final int SPLAT_PUSH_CONSTANTS_SIZE =
-                PUSH_CONSTANT_LOG_SCALE_OFFSET + Float.BYTES;
+                PUSH_CONSTANT_FRAME_OFFSET + Integer.BYTES;
 
         /** The size of the integration's push constants in bytes. */
         public static final int INTEGRATE_PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_LOG_SCALE_OFFSET;
@@ -998,9 +1026,22 @@ public class ShaderBindings {
         public static final int PUSH_CONSTANT_LOD_CLUSTERS_OFFSET =
                 PUSH_CONSTANT_LOD_WORLDS_OFFSET + Long.BYTES;
 
-        /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE =
+        /** The size of the push constants the vertex shaders read, the level of detail's. */
+        public static final int LOD_PUSH_CONSTANTS_SIZE =
                 PUSH_CONSTANT_LOD_CLUSTERS_OFFSET + Long.BYTES;
+
+        /**
+         * Push constant offset for where the hand over from sections' cut out blocks to their
+         * volume bricks starts and how long it is, two floats, which {@code scene.frag} reads.
+         */
+        public static final int PUSH_CONSTANT_VOLUME_FADE_OFFSET = LOD_PUSH_CONSTANTS_SIZE;
+
+        /** Push constant offset for the frame number, for the hand over's dither. */
+        public static final int PUSH_CONSTANT_FRAME_OFFSET =
+                PUSH_CONSTANT_VOLUME_FADE_OFFSET + 2 * Float.BYTES;
+
+        /** The size of the push constants in bytes. */
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_FRAME_OFFSET + Integer.BYTES;
 
         /** Offsets into the material struct. */
         public static class Material {

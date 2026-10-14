@@ -134,6 +134,14 @@ public class GraphicsSettings {
     public int occupancyRaysPerPixel = 8;
 
     /**
+     * How far from the observer, in meters, sections draw their own cut out and translucent blocks,
+     * like leaves and glass. Further away, a volume of each section's blocks is ray marched in
+     * their place, the two blended over a stretch centered here. 0 or less draws every section's
+     * own blocks, with no volumes.
+     */
+    public double volumeDistance = 96;
+
+    /**
      * Whether temporal anti-aliasing is on: each frame samples its pixels a little apart, and is
      * blended into the history of the frames before.
      */

@@ -11,6 +11,7 @@ import com.ikalagaming.graphics.SectionHandle;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.SunShadowCache;
+import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.lod.CrackCheck;
 import com.ikalagaming.graphics.lod.LodCache;
 import com.ikalagaming.graphics.lod.LodStore;
@@ -797,6 +798,12 @@ public final class GateBenchmark {
                 if (Boolean.getBoolean(PROPERTY + ".taaView")) {
                     scene.getDebugVisualizers().setTaaView(true);
                 }
+                // 0 draws every section's own cut out and translucent blocks, with no volumes
+                final String volumeDistance = System.getProperty(PROPERTY + ".volumeDistance");
+                if (volumeDistance != null) {
+                    GraphicsManager.getSettings().volumeDistance =
+                            Double.parseDouble(volumeDistance);
+                }
                 // Level of detail colored by CLUSTERS, GROUPS, LEVELS or CELLS
                 final String lodColors = System.getProperty(PROPERTY + ".lodColors");
                 if (lodColors != null) {
@@ -1554,6 +1561,23 @@ public final class GateBenchmark {
 
     /** Work out the results, report them, and release everything. */
     private void finish() {
+        final var bricks = renderer().getState().volumeBricks;
+        if (bricks != null) {
+            log.info(
+                    "Gate benchmark volumes at {} m: {} bricks ({} queued), {} drawn, {} MiB"
+                            + " atlas, {} section triangles placed",
+                    GraphicsManager.getSettings().volumeDistance,
+                    bricks.brickCount(),
+                    bricks.queuedCount(),
+                    bricks.drawCount(renderer().getState().frameIndex),
+                    VolumeMath.ATLAS_BYTES / BYTES_PER_MIB,
+                    renderer().getState().sections.getPlacedTriangles());
+            final var arena = renderer().getState().bakedGeometry;
+            log.info(
+                    "Gate benchmark baked geometry: {} MiB used of {} MiB",
+                    String.format("%.1f", arena.usedBytes() / BYTES_PER_MIB),
+                    String.format("%.1f", arena.capacityBytes() / BYTES_PER_MIB));
+        }
         final var points = renderer().getState().pointShadows;
         if (points != null && points.getCastingLights() > 0) {
             log.info(

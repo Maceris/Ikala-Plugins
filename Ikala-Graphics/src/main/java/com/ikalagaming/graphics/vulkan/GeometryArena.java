@@ -479,6 +479,25 @@ public class GeometryArena {
     }
 
     /**
+     * How many bytes of the vertex and index buffers meshes take up now.
+     *
+     * @return The size in bytes.
+     */
+    public long usedBytes() {
+        return (long) registry.getVerticesUsed() * vertexStride
+                + (long) registry.getIndicesUsed() * Integer.BYTES;
+    }
+
+    /**
+     * How many bytes the vertex and index buffers hold, used or not.
+     *
+     * @return The size in bytes.
+     */
+    public long capacityBytes() {
+        return vertexBytes() + indexBytes();
+    }
+
+    /**
      * How many bytes the vertex buffer must hold.
      *
      * @return The size in bytes.

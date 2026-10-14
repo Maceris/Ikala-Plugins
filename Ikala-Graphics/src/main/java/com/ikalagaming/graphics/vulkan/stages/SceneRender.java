@@ -12,6 +12,7 @@ import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
+import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.lod.LodVertex;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.*;
@@ -45,6 +46,9 @@ public class SceneRender implements RenderStage {
 
     /** The constant_id of {@code TRIPLANAR} in {@code scene.frag}. */
     private static final int TRIPLANAR_CONSTANT_ID = 1;
+
+    /** The constant_id of {@code VOLUME_FADE} in {@code scene.frag}. */
+    private static final int VOLUME_FADE_CONSTANT_ID = 2;
 
     /** The vertex formats the scene pipelines read. */
     private enum VertexFormat {
@@ -428,6 +432,17 @@ public class SceneRender implements RenderStage {
                         descriptorSets[state.frameIndex],
                         state.bindlessTextures.getDescriptorSet()),
                 null);
+        // Where sections' cut out blocks hand over to their volume bricks
+        final ByteBuffer fade = stack.calloc(3 * Float.BYTES);
+        fade.putFloat(0, VolumeMath.fadeStart(GraphicsManager.getSettings().volumeDistance));
+        fade.putFloat(Float.BYTES, (float) VolumeMath.FADE_LENGTH);
+        fade.putInt(2 * Float.BYTES, (int) state.frameNumber);
+        vkCmdPushConstants(
+                commandBuffer,
+                pipelineLayout,
+                VK_SHADER_STAGE_FRAGMENT_BIT,
+                ShaderBindings.Scene.PUSH_CONSTANT_VOLUME_FADE_OFFSET,
+                fade);
 
         LongBuffer vertexBuffers = stack.callocLong(1);
         LongBuffer vertexOffsets = stack.callocLong(1);
@@ -894,13 +909,21 @@ public class SceneRender implements RenderStage {
                             state.device.logical, descriptorSetLayoutCreateInfo, null, longOutput));
             descriptorSetLayout = longOutput.get(0);
 
-            // Only level of detail clusters use these: where the camera is for each world
-            VkPushConstantRange.Buffer pushConstantRanges = VkPushConstantRange.calloc(1, stack);
+            // Only level of detail clusters read the first: where the camera is for each world.
+            // Sections' cut out blocks read the second: their hand over to volume bricks.
+            VkPushConstantRange.Buffer pushConstantRanges = VkPushConstantRange.calloc(2, stack);
             pushConstantRanges
                     .get(0)
                     .stageFlags(VK_SHADER_STAGE_VERTEX_BIT)
                     .offset(0)
-                    .size(ShaderBindings.Scene.PUSH_CONSTANTS_SIZE);
+                    .size(ShaderBindings.Scene.LOD_PUSH_CONSTANTS_SIZE);
+            pushConstantRanges
+                    .get(1)
+                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT)
+                    .offset(ShaderBindings.Scene.PUSH_CONSTANT_VOLUME_FADE_OFFSET)
+                    .size(
+                            ShaderBindings.Scene.PUSH_CONSTANTS_SIZE
+                                    - ShaderBindings.Scene.PUSH_CONSTANT_VOLUME_FADE_OFFSET);
             VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo =
                     VkPipelineLayoutCreateInfo.calloc(stack)
                             .sType$Default()
@@ -1052,12 +1075,14 @@ public class SceneRender implements RenderStage {
     }
 
     /**
-     * Copy a shader's stages, setting the fragment shader's {@code ALPHA_TEST} and {@code
-     * TRIPLANAR} specialization constants.
+     * Copy a shader's stages, setting the fragment shader's {@code ALPHA_TEST}, {@code TRIPLANAR}
+     * and {@code VOLUME_FADE} specialization constants.
      *
      * @param shader The shader.
      * @param alphaTest Whether to drop pixels the texture's alpha cuts out.
      * @param triplanar Whether its texture coordinates are unwrapped projections.
+     * @param volumeFade Whether it draws sections' cut out blocks, which hand over to volume
+     *     bricks.
      * @param stack The stack to allocate on.
      * @return The stages for the pipeline.
      */
@@ -1065,6 +1090,7 @@ public class SceneRender implements RenderStage {
             @NonNull ShaderVulkan shader,
             boolean alphaTest,
             boolean triplanar,
+            boolean volumeFade,
             @NonNull MemoryStack stack) {
         final int count = shader.shaderModules.length;
         VkPipelineShaderStageCreateInfo.Buffer stages =
@@ -1072,12 +1098,17 @@ public class SceneRender implements RenderStage {
         for (int i = 0; i < count; ++i) {
             stages.get(i).set(shader.shaderStages.get(i));
         }
-        VkSpecializationMapEntry.Buffer entries = VkSpecializationMapEntry.calloc(2, stack);
+        VkSpecializationMapEntry.Buffer entries = VkSpecializationMapEntry.calloc(3, stack);
         entries.get(0).constantID(ALPHA_TEST_CONSTANT_ID).offset(0).size(Integer.BYTES);
         entries.get(1).constantID(TRIPLANAR_CONSTANT_ID).offset(Integer.BYTES).size(Integer.BYTES);
-        final ByteBuffer data = stack.malloc(2 * Integer.BYTES);
+        entries.get(2)
+                .constantID(VOLUME_FADE_CONSTANT_ID)
+                .offset(2 * Integer.BYTES)
+                .size(Integer.BYTES);
+        final ByteBuffer data = stack.malloc(3 * Integer.BYTES);
         data.putInt(0, alphaTest ? 1 : 0);
         data.putInt(Integer.BYTES, triplanar ? 1 : 0);
+        data.putInt(2 * Integer.BYTES, volumeFade ? 1 : 0);
         VkSpecializationInfo specialization =
                 VkSpecializationInfo.calloc(stack).pMapEntries(entries).pData(data);
         for (int i = 0; i < count; ++i) {
@@ -1205,7 +1236,13 @@ public class SceneRender implements RenderStage {
                     .sType$Default()
                     .pNext(renderingCreateInfo)
                     .stageCount(shader.shaderModules.length)
-                    .pStages(stages(shader, alphaTest, format == VertexFormat.LOD, stack))
+                    .pStages(
+                            stages(
+                                    shader,
+                                    alphaTest,
+                                    format == VertexFormat.LOD,
+                                    alphaTest && format == VertexFormat.BAKED,
+                                    stack))
                     .pVertexInputState(vertexInputStateCreateInfo)
                     .pInputAssemblyState(inputAssemblyState)
                     .pViewportState(viewportState)

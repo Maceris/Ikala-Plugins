@@ -64,6 +64,9 @@ public class VulkanState {
     /** Which voxels around the camera hold something that doesn't move. */
     public OccupancyVolume occupancy = null;
 
+    /** The volume bricks standing in for distant sections' cut out and translucent blocks. */
+    public VolumeBricks volumeBricks = null;
+
     /** The CPU copies of meshes that sections can be baked from. */
     public BakeSources bakeSources = null;
 

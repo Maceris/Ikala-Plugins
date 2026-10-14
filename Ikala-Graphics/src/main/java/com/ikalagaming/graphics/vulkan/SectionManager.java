@@ -11,6 +11,7 @@ import com.ikalagaming.graphics.bake.SectionBaker;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
+import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.lod.DagBuilder;
 import com.ikalagaming.graphics.lod.LiveLod;
 import com.ikalagaming.graphics.lod.LodCache;
@@ -114,16 +115,22 @@ public class SectionManager {
      *     section feeding level of detail, all but the opaque one.
      * @param opaqueModel For a section feeding level of detail, the model holding its opaque mesh,
      *     placed only while it is an override; otherwise null.
+     * @param nearModel For a section on the section grid, the model holding its cut out and
+     *     translucent meshes, placed only while it is within the volume distance, past which its
+     *     volume brick stands in for them; otherwise null.
      * @param meshes Its meshes, one per bucket that had anything.
      * @param triangles How many triangles it has.
+     * @param nearTriangles How many of them the near model has.
      */
     private record Version(
             long generation,
             @NonNull Vector3dc origin,
             @NonNull Model model,
             Model opaqueModel,
+            Model nearModel,
             @NonNull List<MeshHandle> meshes,
-            int triangles) {}
+            int triangles,
+            int nearTriangles) {}
 
     /** A section's state. Guarded by {@link #lock}. */
     private static final class Section {
@@ -144,6 +151,21 @@ public class SectionManager {
 
         /** The instance placing the current bake's opaque blocks while it is an override. */
         InstanceHandle opaqueInstance;
+
+        /** The instance placing the current bake's near model while it is near, or null. */
+        InstanceHandle nearInstance;
+
+        /** Whether it drew its own cut out and translucent blocks last frame. */
+        boolean near;
+
+        /**
+         * Whether the current bake's cut out and translucent meshes were taken off the GPU, far
+         * past the volume distance, where its brick stands in for them.
+         */
+        boolean nearReleased;
+
+        /** Whether those meshes are being baked again on the workers, as it comes near. */
+        boolean restoring;
 
         /** What it was last asked to bake, to bake again when it starts feeding level of detail. */
         Request request;
@@ -191,6 +213,31 @@ public class SectionManager {
     /** Finished bakes, for the render thread. */
     private final Queue<Baked> baked = new ConcurrentLinkedQueue<>();
 
+    /**
+     * A section's cut out and translucent meshes baked again, to put back on the GPU.
+     *
+     * @param id The section.
+     * @param generation Which of its bakes they are.
+     * @param result The bake.
+     */
+    private record Restored(long id, long generation, @NonNull SectionBaker.Result result) {}
+
+    /** Meshes baked again, for the render thread. */
+    private final Queue<Restored> restored = new ConcurrentLinkedQueue<>();
+
+    /**
+     * How far past the end of the hand over to volume bricks, in meters, a section's own cut out
+     * and translucent meshes are taken off the GPU, once its brick is up to date.
+     */
+    private static final double RELEASE_MARGIN = 32;
+
+    /**
+     * How far past the end of the hand over, in meters, a section whose meshes were taken off the
+     * GPU has them baked again, ahead of coming near: less than {@link #RELEASE_MARGIN}, so one at
+     * the edge doesn't go back and forth.
+     */
+    private static final double RESTORE_MARGIN = 16;
+
     /** Meshes of removed sections and dropped bakes, to release on the render thread. */
     private final Queue<MeshHandle> releasing = new ConcurrentLinkedQueue<>();
 
@@ -227,6 +274,21 @@ public class SectionManager {
 
     /** How many sections were overrides last frame. */
     private volatile int overrideCount;
+
+    /**
+     * How much further than the volume distance a section drawing its own cut out and translucent
+     * blocks keeps drawing them, in meters, so one at the edge doesn't swap every frame.
+     */
+    private static final double NEAR_HYSTERESIS = 8;
+
+    /** Sections whose bakes changed or were removed, for the volume bricks. Guarded by lock. */
+    private final Set<LodStore.SectionPos> volumeChanges = new HashSet<>();
+
+    /** Sections whose bricks stand in for some or all of their cut out and translucent blocks. */
+    private volatile List<LodStore.SectionPos> volumeSections = List.of();
+
+    /** How many triangles the resident bakes have, less those bricks stood in for last frame. */
+    private volatile long placedTriangles;
 
     /**
      * A bake for the render thread to do at the start of the next frame.
@@ -454,6 +516,9 @@ public class SectionManager {
             if (section.current != null) {
                 shadows.addSection(section.current.origin());
             }
+            if (section.position != null) {
+                volumeChanges.add(section.position);
+            }
             forget(section);
             final Live world = live.get(owner);
             if (world != null && section.position != null) {
@@ -486,6 +551,7 @@ public class SectionManager {
                                 }
                                 if (section.position != null) {
                                     byPosition.remove(section.position, section);
+                                    volumeChanges.add(section.position);
                                 }
                                 // What it drew is gone from shadow maps and the occupancy too
                                 if (section.current != null) {
@@ -515,6 +581,9 @@ public class SectionManager {
         }
         if (section.opaqueInstance != null) {
             removing.add(new Removal(section.owner, section.opaqueInstance));
+        }
+        if (section.nearInstance != null) {
+            removing.add(new Removal(section.owner, section.nearInstance));
         }
         if (section.current != null) {
             releasing.addAll(section.current.meshes());
@@ -590,6 +659,10 @@ public class SectionManager {
         while ((done = baked.poll()) != null) {
             upload(state, done);
         }
+        Restored back;
+        while ((back = restored.poll()) != null) {
+            restore(state, back);
+        }
     }
 
     /**
@@ -612,6 +685,7 @@ public class SectionManager {
     public void update(@NonNull VulkanState state, @NonNull Observer observer) {
         swapResident(state);
         updateOverrides(state, observer);
+        updateNear(state, observer);
         // After swapping, so a replaced bake goes in the same frame its replacement comes in
         Removal removal;
         while ((removal = removing.poll()) != null) {
@@ -721,18 +795,20 @@ public class SectionManager {
             lock.unlock();
         }
         final boolean feedsLod;
+        final boolean onGrid;
         lock.lock();
         try {
             Section section = sections.get(done.id());
-            feedsLod = section != null && section.position != null && live.containsKey(owner);
+            onGrid = section != null && section.position != null;
+            feedsLod = onGrid && live.containsKey(owner);
         } finally {
             lock.unlock();
         }
-        final Model model = new Model("section-" + done.id() + "-" + done.generation());
-        final Model opaqueModel =
-                feedsLod
-                        ? new Model("section-" + done.id() + "-" + done.generation() + "-opaque")
-                        : null;
+        final String name = "section-" + done.id() + "-" + done.generation();
+        final Model model = new Model(name);
+        final Model opaqueModel = feedsLod ? new Model(name + "-opaque") : null;
+        final Model nearModel = onGrid ? new Model(name + "-near") : null;
+        int nearTriangles = 0;
         final List<MeshHandle> meshes = new ArrayList<>();
         for (Material.Transparency transparency : Material.Transparency.values()) {
             final SectionBaker.Bucket bucket = done.result().get(transparency);
@@ -764,6 +840,9 @@ public class SectionManager {
             meshData.setMesh(handle);
             if (opaqueModel != null && transparency == Material.Transparency.OPAQUE) {
                 opaqueModel.getMeshDataList().add(meshData);
+            } else if (nearModel != null && transparency != Material.Transparency.OPAQUE) {
+                nearModel.getMeshDataList().add(meshData);
+                nearTriangles += bucket.indices().length / 3;
             } else {
                 model.getMeshDataList().add(meshData);
             }
@@ -775,8 +854,10 @@ public class SectionManager {
                         done.origin(),
                         model,
                         opaqueModel,
+                        nearModel,
                         meshes,
-                        done.result().triangleCount());
+                        done.result().triangleCount(),
+                        nearTriangles);
         lock.lock();
         try {
             Section section = sections.get(done.id());
@@ -877,11 +958,21 @@ public class SectionManager {
                     removing.add(new Removal(section.owner, section.opaqueInstance));
                     section.opaqueInstance = null;
                 }
+                // Placed again below if it is still near, and its brick voxelized again
+                if (section.nearInstance != null) {
+                    removing.add(new Removal(section.owner, section.nearInstance));
+                    section.nearInstance = null;
+                }
+                if (section.position != null) {
+                    volumeChanges.add(section.position);
+                }
                 if (section.current != null) {
                     releasing.addAll(section.current.meshes());
                 }
                 section.current = pending;
                 section.pending = null;
+                section.nearReleased = false;
+                section.restoring = false;
                 shadows.addSection(pending.origin());
                 if (!pending.model().getMeshDataList().isEmpty()) {
                     section.instance =
@@ -1124,6 +1215,270 @@ public class SectionManager {
     }
 
     /**
+     * Decide which sections draw their own cut out and translucent blocks this frame: those within
+     * the volume distance, or all of them when volumes are off. Place or take out their near
+     * models, and list the rest, whose bricks stand in for them. Render thread.
+     *
+     * @param state The Vulkan state.
+     * @param observer Where the scene is seen from.
+     */
+    private void updateNear(@NonNull VulkanState state, @NonNull Observer observer) {
+        final Vector3dc eye = observer.getPosition();
+        final double reach = GraphicsManager.getSettings().volumeDistance;
+        final List<LodStore.SectionPos> far = new ArrayList<>();
+        final MeshRegistry registry = state.bakedGeometry.getRegistry();
+        long triangles = 0;
+        lock.lock();
+        try {
+            for (Map.Entry<Long, Section> entry : sections.entrySet()) {
+                final Section section = entry.getValue();
+                final Version current = section.current;
+                if (current == null) {
+                    continue;
+                }
+                triangles += current.triangles() - current.nearTriangles();
+                if (current.nearModel() == null
+                        || current.nearModel().getMeshDataList().isEmpty()) {
+                    continue;
+                }
+                // Its blocks draw a share of their places until the hand over ends
+                final double distance = distance(eye, section.position);
+                final double fadeEnd = VolumeMath.fadeEnd(reach);
+                section.near =
+                        reach <= 0
+                                || distance <= fadeEnd
+                                || (section.near && distance <= fadeEnd + NEAR_HYSTERESIS);
+                // Its brick takes over its blocks' places past where the hand over starts, which
+                // can be inside a section still near
+                if (reach > 0
+                        && (!section.near
+                                || farthest(eye, section.position) > VolumeMath.fadeStart(reach))) {
+                    far.add(section.position);
+                }
+                // Meshes taken off the GPU come back ahead of coming near
+                if (section.nearReleased
+                        && !section.restoring
+                        && (section.near || distance <= fadeEnd + RESTORE_MARGIN)) {
+                    restoreLater(entry.getKey(), section);
+                }
+                if (section.near) {
+                    triangles += current.nearTriangles();
+                    if (section.nearInstance == null && nearResident(registry, current)) {
+                        shadows.addSection(current.origin());
+                        section.nearInstance =
+                                state.instances
+                                        .getRegistry()
+                                        .place(
+                                                section.owner,
+                                                current.nearModel(),
+                                                current.origin(),
+                                                new Quaternionf(),
+                                                1.0f / BakedVertex.STEPS_PER_UNIT);
+                    }
+                } else {
+                    if (section.nearInstance != null) {
+                        removing.add(new Removal(section.owner, section.nearInstance));
+                        section.nearInstance = null;
+                        shadows.addSection(current.origin());
+                    }
+                    // Far enough past the hand over that only its brick shows, and that is up to
+                    // date: its own meshes leave the GPU
+                    if (!section.nearReleased
+                            && distance > fadeEnd + RELEASE_MARGIN
+                            && state.volumeBricks != null
+                            && state.volumeBricks.isCurrent(section.position)
+                            && nearResident(registry, current)) {
+                        for (MeshData meshData : current.nearModel().getMeshDataList()) {
+                            releasing.add(meshData.getMesh());
+                            current.meshes().remove(meshData.getMesh());
+                        }
+                        section.nearReleased = true;
+                    }
+                }
+            }
+        } finally {
+            lock.unlock();
+        }
+        volumeSections = far;
+        placedTriangles = triangles;
+    }
+
+    /**
+     * Whether a bake's cut out and translucent meshes are all on the GPU.
+     *
+     * @param registry The baked geometry's registry.
+     * @param version The bake.
+     * @return True if they can be drawn.
+     */
+    private static boolean nearResident(@NonNull MeshRegistry registry, @NonNull Version version) {
+        for (MeshData meshData : version.nearModel().getMeshDataList()) {
+            if (!registry.isResident(meshData.getMesh())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Bake a section's current blocks again on the workers, to put its cut out and translucent
+     * meshes back on the GPU. Not while a newer bake is coming, which brings its own. Hold the
+     * lock.
+     *
+     * @param id The section.
+     * @param section The section.
+     */
+    private void restoreLater(long id, @NonNull Section section) {
+        final Version current = section.current;
+        final Request request = section.request;
+        if (current == null || request == null || section.requested != current.generation()) {
+            return;
+        }
+        section.restoring = true;
+        final long generation = current.generation();
+        try {
+            workers.execute(
+                    () ->
+                            restored.add(
+                                    new Restored(
+                                            id,
+                                            generation,
+                                            SectionBaker.bakeByFace(
+                                                    request.sources(),
+                                                    request.faceMaterials(),
+                                                    request.packedPositions(),
+                                                    request.rotations(),
+                                                    request.faceMasks(),
+                                                    request.userData()))));
+        } catch (RejectedExecutionException e) {
+            section.restoring = false;
+        }
+    }
+
+    /**
+     * Put a section's cut out and translucent meshes back on the GPU from a bake done again, if it
+     * is still the drawn bake and they are still off. Render thread, before the baked geometry is
+     * recorded.
+     *
+     * @param state The Vulkan state.
+     * @param back The bake.
+     */
+    private void restore(@NonNull VulkanState state, @NonNull Restored back) {
+        final String owner;
+        final List<MeshData> nearData;
+        lock.lock();
+        try {
+            final Section section = sections.get(back.id());
+            if (section == null) {
+                return;
+            }
+            final Version current = section.current;
+            if (current == null
+                    || current.generation() != back.generation()
+                    || !section.nearReleased) {
+                section.restoring = false;
+                return;
+            }
+            owner = section.owner;
+            nearData = List.copyOf(current.nearModel().getMeshDataList());
+        } finally {
+            lock.unlock();
+        }
+        final List<MeshHandle> handles = new ArrayList<>();
+        try {
+            for (MeshData meshData : nearData) {
+                final MeshKind kind = meshData.getMesh().kind();
+                final SectionBaker.Bucket bucket =
+                        back.result()
+                                .get(
+                                        kind == MeshKind.BAKED_CUTOUT
+                                                ? Material.Transparency.CUTOUT
+                                                : Material.Transparency.TRANSLUCENT);
+                if (bucket == null) {
+                    throw new IllegalStateException("the bake no longer has a " + kind + " mesh");
+                }
+                handles.add(register(state, owner, kind, bucket));
+            }
+        } catch (IllegalStateException e) {
+            log.error("Section {} couldn't get its meshes back: {}", back.id(), e.getMessage());
+            releasing.addAll(handles);
+            lock.lock();
+            try {
+                final Section section = sections.get(back.id());
+                if (section != null) {
+                    section.restoring = false;
+                }
+            } finally {
+                lock.unlock();
+            }
+            return;
+        }
+        lock.lock();
+        try {
+            final Section section = sections.get(back.id());
+            final Version current = section == null ? null : section.current;
+            if (current == null
+                    || current.generation() != back.generation()
+                    || !section.nearReleased) {
+                releasing.addAll(handles);
+                if (section != null) {
+                    section.restoring = false;
+                }
+                return;
+            }
+            final List<MeshData> data = current.nearModel().getMeshDataList();
+            for (int i = 0; i < data.size(); ++i) {
+                data.get(i).setMesh(handles.get(i));
+                current.meshes().add(handles.get(i));
+            }
+            section.nearReleased = false;
+            section.restoring = false;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Take the sections whose bakes changed or were removed since the last call, for the volume
+     * bricks. Render thread.
+     *
+     * @return The sections.
+     */
+    public List<LodStore.SectionPos> takeVolumeChanges() {
+        lock.lock();
+        try {
+            if (volumeChanges.isEmpty()) {
+                return List.of();
+            }
+            final List<LodStore.SectionPos> out = new ArrayList<>(volumeChanges);
+            volumeChanges.clear();
+            return out;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * The sections whose volume bricks stand in for their cut out and translucent blocks this
+     * frame.
+     *
+     * @return The sections.
+     */
+    public List<LodStore.SectionPos> getVolumeSections() {
+        return volumeSections;
+    }
+
+    /**
+     * How many triangles the resident bakes have, leaving out the cut out and translucent blocks
+     * that bricks stood in for last frame: what the sections draw before culling, when they don't
+     * feed level of detail.
+     *
+     * @return The count.
+     */
+    public long getPlacedTriangles() {
+        return placedTriangles;
+    }
+
+    /**
      * What a plugin's live level of detail world's cache has done.
      *
      * @param owner The plugin's key.
@@ -1195,6 +1550,26 @@ public class SectionManager {
         for (int axis = 0; axis < at.length; ++axis) {
             final double min = (double) corner[axis] * SECTION_SIZE;
             final double d = Math.max(0, Math.max(min - at[axis], at[axis] - (min + SECTION_SIZE)));
+            sum += d * d;
+        }
+        return Math.sqrt(sum);
+    }
+
+    /**
+     * How far a point is from the farthest corner of a section's box.
+     *
+     * @param point The point, in the world.
+     * @param section The section.
+     * @return The distance.
+     */
+    private static double farthest(@NonNull Vector3dc point, LodStore.@NonNull SectionPos section) {
+        final double[] at = {point.x(), point.y(), point.z()};
+        final int[] corner = {section.x(), section.y(), section.z()};
+        double sum = 0;
+        for (int axis = 0; axis < at.length; ++axis) {
+            final double min = (double) corner[axis] * SECTION_SIZE;
+            final double d =
+                    Math.max(Math.abs(min - at[axis]), Math.abs(min + SECTION_SIZE - at[axis]));
             sum += d * d;
         }
         return Math.sqrt(sum);

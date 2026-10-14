@@ -3,7 +3,9 @@ package com.ikalagaming.graphics.vulkan.stages;
 import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
+import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.OitVolume;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
@@ -175,6 +177,14 @@ public class OitSplat implements RenderStage {
             constants.putFloat(
                     ShaderBindings.OitVolume.PUSH_CONSTANT_LOG_SCALE_OFFSET,
                     VoxelOitMath.logScale(scene.getViewDistance()));
+            constants.putFloat(
+                    ShaderBindings.OitVolume.PUSH_CONSTANT_VOLUME_FADE_OFFSET,
+                    VolumeMath.fadeStart(GraphicsManager.getSettings().volumeDistance));
+            constants.putFloat(
+                    ShaderBindings.OitVolume.PUSH_CONSTANT_VOLUME_FADE_OFFSET + Float.BYTES,
+                    (float) VolumeMath.FADE_LENGTH);
+            constants.putInt(
+                    ShaderBindings.OitVolume.PUSH_CONSTANT_FRAME_OFFSET, (int) state.frameNumber);
             vkCmdPushConstants(
                     commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, constants);
             TranslucentRender.drawList(

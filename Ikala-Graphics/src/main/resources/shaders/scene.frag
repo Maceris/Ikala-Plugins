@@ -3,6 +3,8 @@
 #extension GL_GOOGLE_include_directive : require
 
 #include "material.glsl"
+#include "volume_fade.glsl"
+#include "alpha_test.glsl"
 
 layout(location = 0) in vec3 outNormal;
 layout(location = 1) in vec3 outTangent;
@@ -23,6 +25,18 @@ layout(constant_id = 0) const bool ALPHA_TEST = true;
 // the mip level doesn't jump where the fraction wraps. See scene_lod.vert for what its outputs
 // carry then.
 layout(constant_id = 1) const bool TRIPLANAR = false;
+
+// Whether these are sections' baked cut out blocks, which hand over to their volume bricks with
+// distance, see volume_fade.glsl
+layout(constant_id = 2) const bool VOLUME_FADE = false;
+
+// After the level of detail tables' addresses, which only scene_lod.vert reads: where the hand
+// over to volume bricks starts and how long it is, in meters, and the frame number for its dither
+layout(push_constant) uniform SceneConstants {
+    layout(offset = 16) float volumeFadeStart;
+    float volumeFadeLength;
+    uint frame;
+};
 
 layout(location = 0) out vec4 buffBaseColor;
 layout(location = 1) out vec4 buffNormal;
@@ -102,7 +116,19 @@ void main() {
     if (material.textureIndex > 0) {
         baseColor = sampleTexture(material.textureIndex);
     }
-    if (ALPHA_TEST && baseColor.a < 0.5) {
+    if (ALPHA_TEST) {
+        bool covered = baseColor.a >= ALPHA_CUT;
+        if (material.textureIndex > 0) {
+            vec2 size = vec2(textureSize(bindlessTextures[nonuniformEXT(material.textureIndex)], 0));
+            covered = alphaTestPasses(baseColor.a, alphaTestMip(textCoordDx, textCoordDy, size),
+                textCoord, size);
+        }
+        if (!covered) {
+            discard;
+        }
+    }
+    if (VOLUME_FADE && volumeTakes(gl_FragCoord.xy, frame, length(outViewPosition.xyz),
+            volumeFadeStart, volumeFadeLength)) {
         discard;
     }
 

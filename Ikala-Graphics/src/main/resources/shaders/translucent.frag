@@ -11,13 +11,18 @@
 // through to just in front of the surface, read from the voxel-based transparency volume, or
 // McGuire and Bavoil's depth weight to compare against.
 // extinction: -log(1 - opacity), whose sum gives exactly how much of the background shows through,
-// whatever the order
+// whatever the order; in red and green both, since green leaves out volume bricks, for TAA
 
 // The occupancy volume is set 4, see TranslucentRender
 #define OCCUPANCY_SET 4
 #include "lighting.glsl"
 #define OIT_VOLUME_SET 3
 #include "oit_volume.glsl"
+#include "volume_fade.glsl"
+
+// Whether these are sections' baked blocks, which hand over to their volume bricks with distance,
+// see volume_fade.glsl
+layout(constant_id = 0) const bool VOLUME_FADE = false;
 
 layout(location = 0) in vec3 outNormal;
 layout(location = 1) in vec3 outTangent;
@@ -37,10 +42,15 @@ layout(push_constant) uniform Constants {
     int voxelWeights;
     // How many tiles across and down this frame's volume holds
     vec2 tiles;
+    // Where the hand over to volume bricks starts, and how long it is, in meters
+    float volumeFadeStart;
+    float volumeFadeLength;
+    // The frame number, for the hand over's dither
+    uint frame;
 };
 
 layout(location = 0) out vec4 accum;
-layout(location = 1) out float extinction;
+layout(location = 1) out vec2 extinction;
 
 // Opacity is kept below 1, so the extinction stays finite
 const float MAX_OPACITY = 0.999;
@@ -58,7 +68,9 @@ void main() {
         baseColor = texture(bindlessTextures[nonuniformEXT(material.textureIndex)], outTextCoord);
     }
     float alpha = min(baseColor.a, MAX_OPACITY);
-    if (alpha <= 0.0) {
+    if (alpha <= 0.0
+            || (VOLUME_FADE && volumeTakes(gl_FragCoord.xy, frame, length(outViewPosition.xyz),
+                volumeFadeStart, volumeFadeLength))) {
         discard;
     }
 
@@ -85,5 +97,5 @@ void main() {
         ? transmittanceInFront(gl_FragCoord.xy, depth, logScale, tiles)
         : depthWeight(alpha, depth);
     accum = vec4(color * alpha * w, alpha * w);
-    extinction = -log(1.0 - alpha);
+    extinction = vec2(-log(1.0 - alpha));
 }

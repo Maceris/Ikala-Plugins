@@ -1,5 +1,6 @@
 #version 460
 #extension GL_EXT_buffer_reference : require
+#extension GL_GOOGLE_include_directive : require
 
 // Voxelizes baked section meshes into the occupancy volume, see OccupancyVolume and VoxelizeMath:
 // one thread per triangle, found in the job list by its index, read straight from the baked
@@ -29,14 +30,12 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Jo
     Job jobs[];
 };
 
-layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Words {
-    uint words[];
-};
+#include "baked_mesh.glsl"
 
 layout(push_constant) uniform VoxelizeConstants {
     Jobs jobs;
-    Words vertices;
-    Words indices;
+    BakedWords vertices;
+    BakedWords indices;
     uint jobCount;
     uint triangleCount;
     // Each level's origin modulo the level's size, in voxels
@@ -52,39 +51,12 @@ const int SIZE = 128;
 const float INWARD = 1e-3;
 const int MAX_VOXELS = 64;
 const float TOUCH = 1e-4;
-// A baked vertex: 24 bytes, so 6 words; positions in 1/1024 steps from the section's corner
-const uint VERTEX_WORDS = 6;
-const float STEP = 1.0 / 1024.0;
 // Match OccupancyVolume.OPAQUE_BIT and CUTOUT_BIT
 const uint OPAQUE = 1u;
 const uint CUTOUT = 4u;
 // How much of a voxel holding only cut out surfaces counts as full: leaves and plants are mostly
 // gaps, and let some ambient light through
 const float CUTOUT_COVERAGE = 0.5;
-
-int signExtend(uint bits)
-{
-    return int(bits << 16) >> 16;
-}
-
-vec3 positionOf(uint vertex)
-{
-    uint w0 = vertices.words[vertex * VERTEX_WORDS];
-    uint w1 = vertices.words[vertex * VERTEX_WORDS + 1];
-    return vec3(signExtend(w0 & 0xFFFFu), signExtend(w0 >> 16), signExtend(w1 & 0xFFFFu)) * STEP;
-}
-
-// The octahedral normal at bytes 8 to 11, decoded as BakedVertex.fromOctahedral does
-vec3 normalOf(uint vertex)
-{
-    uint w = vertices.words[vertex * VERTEX_WORDS + 2];
-    vec2 o = max(vec2(-1.0), vec2(signExtend(w & 0xFFFFu), signExtend(w >> 16)) / 32767.0);
-    vec3 n = vec3(o, 1.0 - abs(o.x) - abs(o.y));
-    if (n.z < 0) {
-        n.xy = (1.0 - abs(o.yx)) * vec2(o.x >= 0 ? 1.0 : -1.0, o.y >= 0 ? 1.0 : -1.0);
-    }
-    return normalize(n);
-}
 
 // The separating axis test of a triangle, relative to a voxel's center, against the voxel
 bool overlaps(vec3 v0, vec3 v1, vec3 v2)
@@ -149,10 +121,10 @@ void main()
     uint c = uint(job.vertexOffset) + i2;
     vec3 corner = vec3(job.corner.xyz);
     // In the level's voxels from its origin
-    vec3 p0 = (corner + positionOf(a)) / voxelSize;
-    vec3 p1 = (corner + positionOf(b)) / voxelSize;
-    vec3 p2 = (corner + positionOf(c)) / voxelSize;
-    vec3 inward = normalOf(a) + normalOf(b) + normalOf(c);
+    vec3 p0 = (corner + bakedPosition(vertices, a)) / voxelSize;
+    vec3 p1 = (corner + bakedPosition(vertices, b)) / voxelSize;
+    vec3 p2 = (corner + bakedPosition(vertices, c)) / voxelSize;
+    vec3 inward = bakedNormal(vertices, a) + bakedNormal(vertices, b) + bakedNormal(vertices, c);
     if (dot(inward, inward) > 0) {
         inward = normalize(inward) * INWARD;
         p0 -= inward;

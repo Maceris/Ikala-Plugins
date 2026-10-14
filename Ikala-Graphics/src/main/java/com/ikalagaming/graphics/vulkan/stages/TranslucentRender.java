@@ -3,10 +3,12 @@ package com.ikalagaming.graphics.vulkan.stages;
 import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshKind;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakedVertex;
 import com.ikalagaming.graphics.graph.MeshData;
+import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.GeometryArena;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
@@ -218,6 +220,15 @@ public class TranslucentRender implements RenderStage {
                 constants.putFloat(
                         ShaderBindings.Translucent.PUSH_CONSTANT_TILES_OFFSET + Float.BYTES,
                         VoxelOitMath.tiles(height));
+                constants.putFloat(
+                        ShaderBindings.Translucent.PUSH_CONSTANT_VOLUME_FADE_OFFSET,
+                        VolumeMath.fadeStart(GraphicsManager.getSettings().volumeDistance));
+                constants.putFloat(
+                        ShaderBindings.Translucent.PUSH_CONSTANT_VOLUME_FADE_OFFSET + Float.BYTES,
+                        (float) VolumeMath.FADE_LENGTH);
+                constants.putInt(
+                        ShaderBindings.Translucent.PUSH_CONSTANT_FRAME_OFFSET,
+                        (int) state.frameNumber);
                 vkCmdPushConstants(
                         commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, constants);
                 drawList(commandBuffer, state, frameData, pipeline, bakedPipeline, stack);
@@ -319,6 +330,28 @@ public class TranslucentRender implements RenderStage {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
+            // Sections' baked blocks hand over to their volume bricks with distance
+            VkSpecializationMapEntry.Buffer entries = VkSpecializationMapEntry.calloc(1, stack);
+            entries.get(0)
+                    .constantID(ShaderBindings.Translucent.VOLUME_FADE_CONSTANT_ID)
+                    .offset(0)
+                    .size(Integer.BYTES);
+            final ByteBuffer specializationData = stack.malloc(Integer.BYTES);
+            specializationData.putInt(0, baked ? 1 : 0);
+            VkSpecializationInfo specialization =
+                    VkSpecializationInfo.calloc(stack)
+                            .pMapEntries(entries)
+                            .pData(specializationData);
+            final int count = shader.shaderModules.length;
+            VkPipelineShaderStageCreateInfo.Buffer stages =
+                    VkPipelineShaderStageCreateInfo.calloc(count, stack);
+            for (int i = 0; i < count; ++i) {
+                stages.get(i).set(shader.shaderStages.get(i));
+                if (stages.get(i).stage() == VK_SHADER_STAGE_FRAGMENT_BIT) {
+                    stages.get(i).pSpecializationInfo(specialization);
+                }
+            }
+
             VkVertexInputBindingDescription.Buffer vertexBindings =
                     VkVertexInputBindingDescription.calloc(1, stack);
             vertexBindings
@@ -411,8 +444,8 @@ public class TranslucentRender implements RenderStage {
                     .get(0)
                     .sType$Default()
                     .pNext(renderingCreateInfo)
-                    .stageCount(shader.shaderModules.length)
-                    .pStages(shader.shaderStages)
+                    .stageCount(count)
+                    .pStages(stages)
                     .pVertexInputState(vertexInputState)
                     .pInputAssemblyState(inputAssemblyState)
                     .pViewportState(viewportState)

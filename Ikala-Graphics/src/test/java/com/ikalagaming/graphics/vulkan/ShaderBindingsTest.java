@@ -159,11 +159,15 @@ class ShaderBindingsTest {
         assertEquals(8, ShaderBindings.Translucent.PUSH_CONSTANT_LOG_SCALE_OFFSET);
         assertEquals(12, ShaderBindings.Translucent.PUSH_CONSTANT_VOXEL_WEIGHTS_OFFSET);
         assertEquals(16, ShaderBindings.Translucent.PUSH_CONSTANT_TILES_OFFSET);
-        assertEquals(24, ShaderBindings.Translucent.PUSH_CONSTANTS_SIZE);
+        assertEquals(24, ShaderBindings.Translucent.PUSH_CONSTANT_VOLUME_FADE_OFFSET);
+        assertEquals(32, ShaderBindings.Translucent.PUSH_CONSTANT_FRAME_OFFSET);
+        assertEquals(36, ShaderBindings.Translucent.PUSH_CONSTANTS_SIZE);
         // Extinction extinction; uvec2 tiles; float logScale;
         assertEquals(8, ShaderBindings.OitVolume.PUSH_CONSTANT_TILES_OFFSET);
         assertEquals(16, ShaderBindings.OitVolume.PUSH_CONSTANT_LOG_SCALE_OFFSET);
-        assertEquals(20, ShaderBindings.OitVolume.SPLAT_PUSH_CONSTANTS_SIZE);
+        assertEquals(20, ShaderBindings.OitVolume.PUSH_CONSTANT_VOLUME_FADE_OFFSET);
+        assertEquals(28, ShaderBindings.OitVolume.PUSH_CONSTANT_FRAME_OFFSET);
+        assertEquals(32, ShaderBindings.OitVolume.SPLAT_PUSH_CONSTANTS_SIZE);
         assertEquals(16, ShaderBindings.OitVolume.INTEGRATE_PUSH_CONSTANTS_SIZE);
         // int accumIndex; int extinctionIndex; int debugSlice;
         assertEquals(8, ShaderBindings.OitResolve.PUSH_CONSTANT_DEBUG_SLICE_OFFSET);

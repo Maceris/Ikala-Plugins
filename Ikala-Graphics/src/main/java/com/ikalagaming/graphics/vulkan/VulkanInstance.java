@@ -1448,6 +1448,63 @@ public class VulkanInstance {
                                         ShaderVulkan.Type.COMPUTE,
                                         ShaderVulkan.Location.BUNDLED)),
                         state));
+        shaderMap.addShader(
+                RenderStage.Type.VOLUME_VOXELIZE,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/volume_voxelize.comp",
+                                        ShaderVulkan.Type.COMPUTE,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
+                RenderStage.Type.VOLUME_RESOLVE,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/volume_resolve.comp",
+                                        ShaderVulkan.Type.COMPUTE,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
+                RenderStage.Type.VOLUME_SPLAT,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/volume.vert",
+                                        ShaderVulkan.Type.VERTEX,
+                                        ShaderVulkan.Location.BUNDLED),
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/volume_splat.frag",
+                                        ShaderVulkan.Type.FRAGMENT,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
+                RenderStage.Type.VOLUME_DEPTH,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/volume.vert",
+                                        ShaderVulkan.Type.VERTEX,
+                                        ShaderVulkan.Location.BUNDLED),
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/volume_depth.frag",
+                                        ShaderVulkan.Type.FRAGMENT,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
+                RenderStage.Type.VOLUME_COLOR,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/volume.vert",
+                                        ShaderVulkan.Type.VERTEX,
+                                        ShaderVulkan.Location.BUNDLED),
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/volume_color.frag",
+                                        ShaderVulkan.Type.FRAGMENT,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
     }
 
     /**

@@ -42,7 +42,12 @@ public interface RenderStage {
         OIT_RESOLVE,
         OIT_SPLAT,
         OIT_SPLAT_BAKED,
-        OIT_INTEGRATE
+        OIT_INTEGRATE,
+        VOLUME_VOXELIZE,
+        VOLUME_RESOLVE,
+        VOLUME_SPLAT,
+        VOLUME_COLOR,
+        VOLUME_DEPTH
     }
 
     /** Set up the render stage. Must be called before rendering, should not be called twice. */

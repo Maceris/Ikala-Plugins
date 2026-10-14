@@ -158,8 +158,9 @@ void main()
     vec3 mean = moment1 / 9.0;
     vec3 deviation = sqrt(max(moment2 / 9.0 - mean * mean, vec3(0.0)));
 
-    // Translucent surfaces over the pixel, which history can't follow
-    float extinction = texelFetch(bindlessTextures[nonuniformEXT(extinctionIndex)], pixel, 0).x;
+    // Translucent surfaces over the pixel, which history can't follow; volume bricks, which it can,
+    // are left out of this channel
+    float extinction = texelFetch(bindlessTextures[nonuniformEXT(extinctionIndex)], pixel, 0).y;
     float reactive = 1.0 - exp(-max(extinction, 0.0));
 
     // Where the pixel was last frame: moved as the nearest surface around it moved. The scene is

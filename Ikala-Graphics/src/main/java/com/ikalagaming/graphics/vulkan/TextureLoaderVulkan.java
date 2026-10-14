@@ -184,6 +184,9 @@ public class TextureLoaderVulkan {
         sampler = VK_NULL_HANDLE;
     }
 
+    /** The most anisotropic filtering the shared sampler asks for. */
+    private static final float MAX_ANISOTROPY = 16;
+
     /** Create the sampler shared by all the textures we load. */
     private void createSampler() {
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -196,7 +199,16 @@ public class TextureLoaderVulkan {
                             .addressModeU(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
                             .addressModeV(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
                             .addressModeW(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
-                            .anisotropyEnable(false)
+                            // Surfaces seen at a slant, like distant ground, stay sharp along it
+                            .anisotropyEnable(true)
+                            .maxAnisotropy(
+                                    Math.min(
+                                            MAX_ANISOTROPY,
+                                            state.device
+                                                    .physical
+                                                    .deviceProperties
+                                                    .limits()
+                                                    .maxSamplerAnisotropy()))
                             .compareEnable(false)
                             .minLod(0.0f)
                             // Works for any number of mip levels

@@ -61,8 +61,12 @@ public class PipelineManagerVulkan {
      */
     public static final int OIT_ACCUM_FORMAT = VK_FORMAT_R32G32B32A32_SFLOAT;
 
-    /** The format the transparent layers' extinction adds up in. */
-    public static final int OIT_EXTINCTION_FORMAT = VK_FORMAT_R16_SFLOAT;
+    /**
+     * The format the transparent layers' extinction adds up in: red all of it, green only the
+     * translucent surfaces', which have no history of their own for TAA to follow, unlike volume
+     * bricks, which stand in for blocks that don't move.
+     */
+    public static final int OIT_EXTINCTION_FORMAT = VK_FORMAT_R16G16_SFLOAT;
 
     /** Fallback pipeline that does nothing. */
     public static final PipelineVulkan ERROR_PIPELINE =
@@ -128,6 +132,18 @@ public class PipelineManagerVulkan {
 
     /** Integrates the transparency volume into the weights the transparent stage reads. */
     private final OitIntegrate stageOitIntegrate;
+
+    /** Keeps the volume bricks up to date and lists the ones to draw. */
+    private final VolumeVoxelize stageVolumeVoxelize;
+
+    /** Writes the depth of the volume bricks' solid faces. */
+    private final VolumeDepth stageVolumeDepth;
+
+    /** Adds the volume bricks' extinction into the transparency volume. */
+    private final VolumeSplat stageVolumeSplat;
+
+    /** Ray marches the volume bricks into the transparency targets. */
+    private final VolumeColor stageVolumeColor;
 
     private final InstanceDrawUpdate stageInstanceDrawUpdate;
     private final InstanceTransform stageInstanceTransform;
@@ -236,6 +252,29 @@ public class PipelineManagerVulkan {
         stageOitSplat.initialize(state);
         stageOitIntegrate = new OitIntegrate(shaders.getShader(RenderStage.Type.OIT_INTEGRATE));
         stageOitIntegrate.initialize(state);
+        stageVolumeVoxelize =
+                new VolumeVoxelize(
+                        shaders.getShader(RenderStage.Type.VOLUME_VOXELIZE),
+                        shaders.getShader(RenderStage.Type.VOLUME_RESOLVE));
+        stageVolumeVoxelize.initialize(state);
+        stageVolumeDepth =
+                new VolumeDepth(
+                        shaders.getShader(RenderStage.Type.VOLUME_DEPTH),
+                        stageSceneRender,
+                        stageLightRender);
+        stageVolumeDepth.initialize(state);
+        stageVolumeSplat =
+                new VolumeSplat(
+                        shaders.getShader(RenderStage.Type.VOLUME_SPLAT),
+                        stageSceneRender,
+                        stageLightRender);
+        stageVolumeSplat.initialize(state);
+        stageVolumeColor =
+                new VolumeColor(
+                        shaders.getShader(RenderStage.Type.VOLUME_COLOR),
+                        stageSceneRender,
+                        stageLightRender);
+        stageVolumeColor.initialize(state);
         stageOitResolve = new OitResolve(shaders.getShader(RenderStage.Type.OIT_RESOLVE), quadMesh);
         stageOitResolve.initialize(state);
         stageAnimationRender = new AnimationRender(shaders.getShader(RenderStage.Type.ANIMATION));
@@ -291,9 +330,14 @@ public class PipelineManagerVulkan {
         if (RenderConfig.hasSceneStage(configuration)) {
             // Translucent geometry, over the sky too, in any order: what is in front of each
             // surface first, then the surfaces weighted by it
+            // Distant cut out and translucent blocks as volumes, with the frame's materials
+            stages.add(stageVolumeVoxelize);
+            stages.add(stageVolumeDepth);
             stages.add(stageOitSplat);
+            stages.add(stageVolumeSplat);
             stages.add(stageOitIntegrate);
             stages.add(stageTranslucentRender);
+            stages.add(stageVolumeColor);
             stages.add(stageOitResolve);
             // Blends this frame into the ones before, in linear light
             stages.add(stageTaa);
@@ -583,6 +627,7 @@ public class PipelineManagerVulkan {
             state.oitVolume = new OitVolume(state);
             state.oitVolume.resize(state, window.getWidth(), window.getHeight());
             state.occupancy = new OccupancyVolume(state);
+            state.volumeBricks = new VolumeBricks(state);
 
             // SharedBuffer adds device address and transfer destination usage to all of these
             final int STORAGE = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
@@ -795,6 +840,10 @@ public class PipelineManagerVulkan {
         stageTranslucentRender.cleanup(state);
         stageOitSplat.cleanup(state);
         stageOitIntegrate.cleanup(state);
+        stageVolumeVoxelize.cleanup(state);
+        stageVolumeDepth.cleanup(state);
+        stageVolumeSplat.cleanup(state);
+        stageVolumeColor.cleanup(state);
         stageLightCull.cleanup(state);
         stageInstanceDrawUpdate.cleanup(state);
         stageOccupancyVoxelize.cleanup(state);
@@ -815,6 +864,8 @@ public class PipelineManagerVulkan {
         state.oitVolume = null;
         state.occupancy.cleanup(state);
         state.occupancy = null;
+        state.volumeBricks.cleanup(state);
+        state.volumeBricks = null;
         TextureInfoVulkan fontAtlasInfo = state.textureRegistry.remove(fontAtlas);
         if (fontAtlasInfo != null) {
             GraphicsManager.getDeletionQueue().add(fontAtlasInfo);
