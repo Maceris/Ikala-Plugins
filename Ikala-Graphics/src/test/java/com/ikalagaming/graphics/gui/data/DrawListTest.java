@@ -565,4 +565,26 @@ class DrawListTest {
         assertEquals(5, clip[2], 0.001f);
         assertEquals(20, clip[3], 0.001f);
     }
+
+    @Test
+    void testImageView() {
+        TextureHandle texture = new TextureHandle(1, 0, 4, 4, Format.R8G8B8A8_UNORM);
+        TextureView view =
+                new TextureView(TextureView.Channel.ALPHA, 2, 1.5f, true, false, true, true);
+        Command[] commands =
+                draw(list -> list.addImageView(texture, 0, 0, 64, 32, 0.25f, 0, 0.75f, 1, view));
+        assertEquals(1, commands.length);
+        assertCommand(
+                commands[0], DrawList.ElementType.RECTANGLE, DrawList.ElementStyle.TEXTURE, 3);
+        assertEquals(DrawList.COMMAND_FLAG_TEXTURE_VIEW, commands[0].flags());
+        final float[] uv = point(commands[0].pointIndex() + 1);
+        assertEquals(0.25f, uv[0], 0.001f);
+        assertEquals(0.75f, uv[2], 0.001f);
+        // Channel and mip, then exposure and the option bits: nearest, normal and checker
+        final float[] how = point(commands[0].pointIndex() + 2);
+        assertEquals(5, how[0], 0.001f);
+        assertEquals(2, how[1], 0.001f);
+        assertEquals(1.5f, how[2], 0.001f);
+        assertEquals(1 | 4 | 8, (int) how[3]);
+    }
 }

@@ -46,6 +46,9 @@ public class MainMenu {
     /** Shows the asset inspector. */
     private final Runnable openInspector;
 
+    /** Shows the asset workbench. */
+    private final Runnable openWorkbench;
+
     /** How many sample containers have been written, shown under the buttons. */
     private final Observable<Integer> sampleCount;
 
@@ -54,14 +57,17 @@ public class MainMenu {
      *
      * @param ui The converter plugin's UI.
      * @param openInspector Shows the asset inspector.
+     * @param openWorkbench Shows the asset workbench.
      * @param sampleCount How many sample containers have been written.
      */
     public MainMenu(
             @NonNull UI ui,
             @NonNull Runnable openInspector,
+            @NonNull Runnable openWorkbench,
             @NonNull Observable<Integer> sampleCount) {
         this.ui = ui;
         this.openInspector = openInspector;
+        this.openWorkbench = openWorkbench;
         this.sampleCount = sampleCount;
     }
 
@@ -85,11 +91,7 @@ public class MainMenu {
                         new SpecBindings()
                                 .bundle(ConverterPlugin.getResourceBundle())
                                 .handler("start-sphere-demo", this::startSphereDemo)
-                                .handler(
-                                        "open-model-loader",
-                                        () -> {
-                                            // TODO(ches) model loading UI
-                                        })
+                                .handler("open-workbench", this::startWorkbench)
                                 .handler("open-inspector", this::startInspector)
                                 .handler("open-tool", event -> openTool((Tool) event.item()))
                                 .list("tools", ui.tools())
@@ -115,6 +117,12 @@ public class MainMenu {
     private void startInspector() {
         ui.setVisible(SURFACE_ID, false);
         openInspector.run();
+    }
+
+    /** Hide the menu and show the asset workbench. */
+    private void startWorkbench() {
+        ui.setVisible(SURFACE_ID, false);
+        openWorkbench.run();
     }
 
     /** Hide the menu and load the sphere demo. */

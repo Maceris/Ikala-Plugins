@@ -87,6 +87,12 @@ public class DrawList {
      */
     public static final int COMMAND_FLAG_INVERT_EDGE_FADE = 1;
 
+    /**
+     * Command flag for a textured rectangle shown the way an image viewer shows it, with a third
+     * point saying how (see {@link TextureView}). Must line up with the shader.
+     */
+    public static final int COMMAND_FLAG_TEXTURE_VIEW = 2;
+
     /** Extra space around anti-aliased shapes, so the soft edge isn't clipped by the quad. */
     private static final float ANTI_ALIAS_PADDING = 1.0f;
 
@@ -122,8 +128,10 @@ public class DrawList {
      *   <li>Line (bezier) - 3 points (quadratic) or 4 points (cubic), the control points
      *   <li>Line (straight) - 2 points, the end points
      *   <li>Rectangle - 1 point: center, a = width, b = height. Textured rectangles have a second
-     *       point: (min u, min v) with a = max u, b = max v. Then optionally the rectangle the edge
-     *       fade is measured from, if it isn't this one: (min x, min y) with a = max x, b = max y
+     *       point: (min u, min v) with a = max u, b = max v. Texture views ({@link
+     *       #COMMAND_FLAG_TEXTURE_VIEW}) have a third: (channel, mip level) with a = exposure, b =
+     *       options. Then optionally the rectangle the edge fade is measured from, if it isn't this
+     *       one: (min x, min y) with a = max x, b = max y
      *   <li>Polygon - at least 3 points in order, a = u, b = v, for textures. Otherwise ignored.
      *   <li>Text - 2 or 3 points: glyph top left position with a = cos and b = sin of the rotation,
      *       then (atlas x, atlas y) with a = width, b = height. The optional third point is a clip
@@ -143,7 +151,8 @@ public class DrawList {
 
     /**
      * int pointIndex, int detailIndex, int pointCount, int detailCount, int type, int style, float
-     * stroke (borders, line thickness), int flags (see COMMAND_FLAG_INVERT_EDGE_FADE).
+     * stroke (borders, line thickness), int flags (see COMMAND_FLAG_INVERT_EDGE_FADE and
+     * COMMAND_FLAG_TEXTURE_VIEW).
      */
     public ByteBuffer commandBuffer;
 
@@ -2788,6 +2797,73 @@ public class DrawList {
                 ElementType.POLYGON,
                 ElementStyle.TEXTURE,
                 borderStroke);
+    }
+
+    /**
+     * Add an image in an axis aligned rectangle, shown the way an image viewer shows it: one
+     * channel at a time, at a chosen mip level, and so on.
+     *
+     * @param texture The texture to draw.
+     * @param minX The left edge.
+     * @param minY The top edge.
+     * @param maxX The right edge.
+     * @param maxY The bottom edge.
+     * @param minU The texture coordinate at the left edge.
+     * @param minV The texture coordinate at the top edge.
+     * @param maxU The texture coordinate at the right edge.
+     * @param maxV The texture coordinate at the bottom edge.
+     * @param view How to show the texture.
+     */
+    public void addImageView(
+            @NonNull TextureHandle texture,
+            float minX,
+            float minY,
+            float maxX,
+            float maxY,
+            float minU,
+            float minV,
+            float maxU,
+            float maxV,
+            @NonNull TextureView view) {
+        if (!addScreenQuad(
+                minX - FILL_EDGE_PADDING,
+                minY - FILL_EDGE_PADDING,
+                maxX + FILL_EDGE_PADDING,
+                maxY + FILL_EDGE_PADDING)) {
+            return;
+        }
+        final int textureIndex = IkGui.getContext().drawTextures.register(texture);
+
+        SDFPointDetail[] details =
+                getSdfPointDetails(
+                        textureIndex,
+                        0.0f,
+                        0.0f,
+                        0.0f,
+                        0.0f,
+                        0.0f,
+                        ROUND_CORNERS_NONE,
+                        Color.WHITE);
+
+        // The rectangle, the texture coordinates, then how to show it; the ints are small enough
+        // to be exact as floats
+        int pointIndex = addPoint((minX + maxX) / 2, (minY + maxY) / 2, maxX - minX, maxY - minY);
+        addPoint(minU, minV, maxU, maxV);
+        addPoint(view.channel().id, view.mipLevel(), view.exposure(), view.options());
+        int detailIndex = addDetails(details);
+
+        final int pointCount = 3;
+        final int detailCount = details.length;
+        final int borderStroke = 0;
+        addCommand(
+                pointIndex,
+                detailIndex,
+                pointCount,
+                detailCount,
+                ElementType.RECTANGLE,
+                ElementStyle.TEXTURE,
+                borderStroke,
+                COMMAND_FLAG_TEXTURE_VIEW);
     }
 
     public void addImageRounded(

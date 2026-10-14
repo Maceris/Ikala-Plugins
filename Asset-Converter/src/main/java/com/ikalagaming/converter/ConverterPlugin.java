@@ -8,6 +8,7 @@ import com.ikalagaming.converter.gui.window.LodPrototype;
 import com.ikalagaming.converter.gui.window.MainMenu;
 import com.ikalagaming.converter.inspector.AssetInspectorWindow;
 import com.ikalagaming.converter.inspector.AssetSamples;
+import com.ikalagaming.converter.workbench.Workbench;
 import com.ikalagaming.event.Listener;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.UI;
@@ -48,6 +49,12 @@ public class ConverterPlugin extends Plugin {
     /** The level of detail prototype tool, while enabled. */
     private LodPrototype lodPrototype;
 
+    /** The startup property that opens the workbench on a file as soon as the menu opens. */
+    private static final String WORKBENCH_FILE_PROPERTY = "ikala.test.workbench";
+
+    /** The asset workbench, while enabled. */
+    private Workbench workbench;
+
     @Override
     public Set<Listener> getListeners() {
         if (null == this.listeners) {
@@ -79,6 +86,10 @@ public class ConverterPlugin extends Plugin {
         if (lodPrototype != null) {
             lodPrototype.stop();
             lodPrototype = null;
+        }
+        if (workbench != null) {
+            workbench.stop();
+            workbench = null;
         }
         return true;
     }
@@ -120,7 +131,29 @@ public class ConverterPlugin extends Plugin {
         ui.addStyles(AssetInspectorWindow.styles());
         lodPrototype = new LodPrototype(graphics);
         ui.registerTool(LodPrototype.TOOL_ID, LodPrototype.LABEL, lodPrototype::open);
-        new MainMenu(ui, () -> setInspectorVisible(true), sampleCount).open();
+        workbench =
+                new Workbench(
+                        graphics,
+                        ui,
+                        () -> {
+                            ui.setVisible(Workbench.SURFACE_ID, false);
+                            ui.setVisible(MainMenu.SURFACE_ID, true);
+                        });
+        ui.show(workbench.build());
+        ui.setVisible(Workbench.SURFACE_ID, false);
+        new MainMenu(
+                        ui,
+                        () -> setInspectorVisible(true),
+                        () -> ui.setVisible(Workbench.SURFACE_ID, true),
+                        sampleCount)
+                .open();
+        // Straight into the workbench with a file, for captures and tests that can't click
+        final String workbenchFile = System.getProperty(WORKBENCH_FILE_PROPERTY);
+        if (workbenchFile != null) {
+            ui.setVisible(MainMenu.SURFACE_ID, false);
+            ui.setVisible(Workbench.SURFACE_ID, true);
+            workbench.open(Path.of(workbenchFile));
+        }
         // Shown once so later toggles only change its visibility, and keep its state
         ui.show(new AssetInspectorWindow(ui, sampleCount).build());
         ui.setVisible(AssetInspectorWindow.SURFACE_ID, false);

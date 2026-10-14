@@ -15,6 +15,21 @@ const int ELEMENT_STYLE_TEXTURE = 2;
 
 // Command flags
 const int COMMAND_FLAG_INVERT_EDGE_FADE = 1;
+const int COMMAND_FLAG_TEXTURE_VIEW = 2;
+
+// Texture view channels and options, see DrawList.TextureView
+const int VIEW_CHANNEL_RGBA = 0;
+const int VIEW_CHANNEL_RGB = 1;
+const int VIEW_CHANNEL_RED = 2;
+const int VIEW_CHANNEL_GREEN = 3;
+const int VIEW_CHANNEL_BLUE = 4;
+const int VIEW_CHANNEL_ALPHA = 5;
+const int VIEW_OPTION_NEAREST = 1;
+const int VIEW_OPTION_ENCODE_SRGB = 2;
+const int VIEW_OPTION_DECODE_NORMAL = 4;
+const int VIEW_OPTION_CHECKER = 8;
+// The checkerboard's squares, in pixels
+const float VIEW_CHECKER_SIZE = 8.0f;
 
 const vec4 ERROR_COLOR =  vec4(1.0f, 0.0f, 0.0f, 1.0f);
 
@@ -83,6 +98,62 @@ layout(push_constant) uniform DrawListOffsets {
 
 vec4 sampleTexture(int textureIndex, vec2 uv) {
     return texture(bindlessTextures[nonuniformEXT(textureIndices[textureIndex])], uv);
+}
+
+// The exact sRGB curve, as in tonemap.frag
+vec3 viewLinearToSRGB(vec3 color) {
+    vec3 c = clamp(color, 0.0, 1.0);
+    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, greaterThan(c, vec3(0.0031308)));
+}
+
+// Sample a texture the way an image viewer shows it.
+// view.pos = (channel, mip level, or below 0 to pick it from the screen size as usual),
+// view.misc = (exposure in stops, options).
+vec4 sampleTextureView(int textureIndex, vec2 uv, Point view, vec2 fragPos) {
+    const int slot = textureIndices[textureIndex];
+    const int channel = int(view.pos.x);
+    const int options = int(view.misc.y);
+    const int levels = textureQueryLevels(bindlessTextures[nonuniformEXT(slot)]);
+    const bool autoLevel = view.pos.y < 0.0f;
+    const float level = clamp(view.pos.y, 0.0f, float(levels - 1));
+
+    vec4 color;
+    if ((options & VIEW_OPTION_NEAREST) != 0) {
+        const int whole = autoLevel ? 0 : int(level);
+        const ivec2 size = textureSize(bindlessTextures[nonuniformEXT(slot)], whole);
+        const ivec2 texel = clamp(ivec2(floor(uv * vec2(size))), ivec2(0), size - 1);
+        color = texelFetch(bindlessTextures[nonuniformEXT(slot)], texel, whole);
+    } else if (autoLevel) {
+        color = texture(bindlessTextures[nonuniformEXT(slot)], uv);
+    } else {
+        color = textureLod(bindlessTextures[nonuniformEXT(slot)], uv, level);
+    }
+
+    if ((options & VIEW_OPTION_DECODE_NORMAL) != 0) {
+        // Tangent space x and y, with z rebuilt, so two channel maps show the same as three
+        const vec2 xy = color.xy * 2.0f - 1.0f;
+        const float z = sqrt(max(0.0f, 1.0f - dot(xy, xy)));
+        color = vec4(vec3(xy, z) * 0.5f + 0.5f, 1.0f);
+    }
+    color.rgb *= exp2(view.misc.x);
+
+    switch (channel) {
+        case VIEW_CHANNEL_RGB: color.a = 1.0f; break;
+        case VIEW_CHANNEL_RED: color = vec4(color.rrr, 1.0f); break;
+        case VIEW_CHANNEL_GREEN: color = vec4(color.ggg, 1.0f); break;
+        case VIEW_CHANNEL_BLUE: color = vec4(color.bbb, 1.0f); break;
+        case VIEW_CHANNEL_ALPHA: color = vec4(color.aaa, 1.0f); break;
+        default: break;
+    }
+    if ((options & VIEW_OPTION_ENCODE_SRGB) != 0) {
+        color.rgb = viewLinearToSRGB(color.rgb);
+    }
+    if ((options & VIEW_OPTION_CHECKER) != 0) {
+        const ivec2 square = ivec2(floor(fragPos / VIEW_CHECKER_SIZE));
+        const float checker = ((square.x + square.y) & 1) == 0 ? 0.4f : 0.6f;
+        color = vec4(mix(vec3(checker), clamp(color.rgb, 0.0f, 1.0f), clamp(color.a, 0.0f, 1.0f)), 1.0f);
+    }
+    return color;
 }
 
 float hash11(uint n) {
@@ -457,6 +528,8 @@ float rectangleEdgeFade(vec2 fragPos, vec2 fadeMin, vec2 fadeMax, vec4 fades, ve
 // Rectangles with rounded corners.
 // Point 0: pos = center, misc = size.
 // Point 1 (textures only): pos = (min u, min v), misc = (max u, max v).
+// Point 2 (textures with COMMAND_FLAG_TEXTURE_VIEW only): how to show the texture, see
+// sampleTextureView.
 // The next point (optional): pos = top left, misc = bottom right of the rectangle the edge fade is
 // measured from, when it isn't this rectangle. This lets several rectangles fade as one shape, like
 // a window's title bar and background.
@@ -466,9 +539,12 @@ float rectangleEdgeFade(vec2 fragPos, vec2 fadeMin, vec2 fadeMax, vec4 fades, ve
 // corners. The border style fades the same way as the fill, so it can outline a faded fill.
 // Stroke: border thickness for the border style.
 // Flags: COMMAND_FLAG_INVERT_EDGE_FADE inverts the edge fade, so the edges are opaque instead.
+// COMMAND_FLAG_TEXTURE_VIEW shows a texture the way an image viewer does, with point 2.
 void draw_rectangle(Command command, vec2 fragPos) {
-    const int fadeRectIndex = command.style == ELEMENT_STYLE_TEXTURE ? 2 : 1;
-    if (command.pointCount < 1 || command.pointCount > fadeRectIndex + 1
+    const bool textureView = command.style == ELEMENT_STYLE_TEXTURE
+        && (command.flags & COMMAND_FLAG_TEXTURE_VIEW) != 0;
+    const int fadeRectIndex = command.style == ELEMENT_STYLE_TEXTURE ? (textureView ? 3 : 2) : 1;
+    if (command.pointCount < (textureView ? 3 : 1) || command.pointCount > fadeRectIndex + 1
             || command.detailCount != 4) {
         outColor = ERROR_COLOR;
         return;
@@ -541,8 +617,11 @@ void draw_rectangle(Command command, vec2 fragPos) {
                     const Point uvPoint = points[command.pointIndex + 1];
                     uv = mix(uvPoint.pos, uvPoint.misc, uv);
                 }
-                outColor = sampleTexture(relevantDetail.colorOrTextureID, uv)
-                    * intToColor(uint(relevantDetail.tint));
+                const vec4 texel = textureView
+                    ? sampleTextureView(relevantDetail.colorOrTextureID, uv,
+                        points[command.pointIndex + 2], fragPos)
+                    : sampleTexture(relevantDetail.colorOrTextureID, uv);
+                outColor = texel * intToColor(uint(relevantDetail.tint));
                 outColor.a *= fadeMul;
             }
             else {
