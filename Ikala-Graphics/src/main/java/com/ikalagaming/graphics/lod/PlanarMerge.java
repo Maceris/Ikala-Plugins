@@ -27,6 +27,11 @@ import java.util.ArrayDeque;
  *   <li>A collapse must make no triangle degenerate or turn it over, and must pass the link
  *       condition, so the mesh stays as connected as it was.
  * </ul>
+ *
+ * <p>Collapses leave fans of long, thin triangles from the corners that stayed. Afterwards, edges
+ * between two triangles of the same plane and material are flipped until no triangle's circle holds
+ * its neighbor's far corner (Lawson's flips to a Delaunay triangulation), which gives the same
+ * surface and count in the best shaped triangles those corners allow.
  */
 public final class PlanarMerge {
 
@@ -44,6 +49,15 @@ public final class PlanarMerge {
 
     /** The smallest twice-area a triangle may be left with, relative to its edges squared. */
     private static final double MIN_AREA = 1e-9;
+
+    /**
+     * How far below 0 the cotangents of the two angles facing an edge must sum before it flips, so
+     * edges of a square, which could go either way, don't flip back and forth.
+     */
+    private static final double FLIP_MARGIN = 1e-9;
+
+    /** Passes over every edge at most while flipping, as a safety net. */
+    private static final int MAX_FLIP_PASSES = 64;
 
     /** The positions, x, y, z per vertex. */
     private final double[] positions;
@@ -81,7 +95,9 @@ public final class PlanarMerge {
      */
     public static LodMesh merge(@NonNull LodMesh mesh) {
         final PlanarMerge merge = new PlanarMerge(mesh);
-        return merge.run() ? merge.build() : mesh;
+        final boolean collapsed = merge.run();
+        final boolean flipped = merge.flip();
+        return collapsed || flipped ? merge.build() : mesh;
     }
 
     /**
@@ -494,6 +510,147 @@ public final class PlanarMerge {
             }
         }
         return out.toIntArray();
+    }
+
+    /**
+     * Flip edges between two triangles of the same plane and material until the triangulation is
+     * Delaunay: an edge flips when the angles facing it sum to more than half a turn, which the
+     * other diagonal of its quad always improves. Open edges and seams never flip, and a flip must
+     * leave both triangles facing the way they did, so the surface stays exactly as it was.
+     *
+     * @return True if any edge flipped.
+     */
+    private boolean flip() {
+        boolean any = false;
+        for (int pass = 0; pass < MAX_FLIP_PASSES; ++pass) {
+            boolean flipped = false;
+            for (int t = 0; t < alive.length; ++t) {
+                if (!alive[t]) {
+                    continue;
+                }
+                for (int c = 0; c < CORNERS; ++c) {
+                    if (tryFlip(t, c)) {
+                        flipped = true;
+                        break;
+                    }
+                }
+            }
+            if (!flipped) {
+                break;
+            }
+            any = true;
+        }
+        return any;
+    }
+
+    /**
+     * Flip one triangle's edge if that makes it more Delaunay.
+     *
+     * @param t The triangle, with corners a, b, c in order from {@code first}.
+     * @param first The corner the edge starts at; the edge is a to b.
+     * @return True if it flipped.
+     */
+    private boolean tryFlip(int t, int first) {
+        final int a = corners[t * CORNERS + first];
+        final int b = corners[t * CORNERS + (first + 1) % CORNERS];
+        final int c = corners[t * CORNERS + (first + 2) % CORNERS];
+        if (sharedFaces(a, b) != 2) {
+            return false;
+        }
+        // The other triangle on the edge, and its far corner d
+        int s = -1;
+        int d = -1;
+        final IntArrayList faces = around[a];
+        for (int k = 0; k < faces.size(); ++k) {
+            final int other = faces.getInt(k);
+            if (other != t && uses(other, b)) {
+                s = other;
+                for (int corner = 0; corner < CORNERS; ++corner) {
+                    final int w = corners[other * CORNERS + corner];
+                    if (w != a && w != b) {
+                        d = w;
+                    }
+                }
+            }
+        }
+        if (s < 0 || d < 0 || d == c || !sameClass(t, s) || isNeighbor(c, d)) {
+            return false;
+        }
+        if (cotangent(c, a, b) + cotangent(d, a, b) >= -FLIP_MARGIN) {
+            return false;
+        }
+        // The new triangles a, d, c and d, b, c must face as the old ones did
+        final double[] normal = new double[AXES];
+        final double[] facing = slice(normals, t);
+        if (!normalOf(a, d, c, normal)
+                || Geometry.dot(normal, facing) < 1 - SAME_PLANE
+                || !normalOf(d, b, c, normal)
+                || Geometry.dot(normal, facing) < 1 - SAME_PLANE) {
+            return false;
+        }
+        corners[t * CORNERS] = a;
+        corners[t * CORNERS + 1] = d;
+        corners[t * CORNERS + 2] = c;
+        corners[s * CORNERS] = d;
+        corners[s * CORNERS + 1] = b;
+        corners[s * CORNERS + 2] = c;
+        removeFace(b, t);
+        around[d].addInt(t);
+        removeFace(a, s);
+        around[c].addInt(s);
+        return true;
+    }
+
+    /**
+     * The cotangent of the angle at a vertex facing an edge.
+     *
+     * @param apex The vertex.
+     * @param a One end of the edge.
+     * @param b The other end.
+     * @return The cotangent; negative for an obtuse angle.
+     */
+    private double cotangent(int apex, int a, int b) {
+        final double[] u = new double[AXES];
+        final double[] v = new double[AXES];
+        for (int axis = 0; axis < AXES; ++axis) {
+            u[axis] = positions[a * AXES + axis] - positions[apex * AXES + axis];
+            v[axis] = positions[b * AXES + axis] - positions[apex * AXES + axis];
+        }
+        final double cx = u[1] * v[2] - u[2] * v[1];
+        final double cy = u[2] * v[0] - u[0] * v[2];
+        final double cz = u[0] * v[1] - u[1] * v[0];
+        final double cross = Math.sqrt(cx * cx + cy * cy + cz * cz);
+        return cross == 0 ? Double.NEGATIVE_INFINITY : Geometry.dot(u, v) / cross;
+    }
+
+    /**
+     * The unit normal of three vertices.
+     *
+     * @param a The first corner.
+     * @param b The second.
+     * @param c The third.
+     * @param out Receives the normal.
+     * @return False if they are degenerate.
+     */
+    private boolean normalOf(int a, int b, int c, double @NonNull [] out) {
+        final double[] pa = slice(positions, a);
+        final double[] pb = slice(positions, b);
+        final double[] pc = slice(positions, c);
+        final double longest =
+                Math.max(
+                        Geometry.distanceSquared(pa, pb),
+                        Math.max(
+                                Geometry.distanceSquared(pb, pc),
+                                Geometry.distanceSquared(pc, pa)));
+        Geometry.normal(pa, pb, pc, out);
+        final double length = Math.sqrt(Geometry.dot(out, out));
+        if (length <= MIN_AREA * longest || length == 0) {
+            return false;
+        }
+        for (int axis = 0; axis < AXES; ++axis) {
+            out[axis] /= length;
+        }
+        return true;
     }
 
     /**

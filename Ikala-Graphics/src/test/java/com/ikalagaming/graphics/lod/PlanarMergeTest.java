@@ -322,6 +322,43 @@ class PlanarMergeTest {
         assertTrue(kept);
     }
 
+    /**
+     * The smallest angle in a mesh.
+     *
+     * @param mesh The mesh.
+     * @return The angle, in degrees.
+     */
+    private static double smallestAngle(LodMesh mesh) {
+        double smallest = 180;
+        final double[][] p = new double[3][3];
+        for (int t = 0; t < mesh.getTriangleCount(); ++t) {
+            Geometry.corners(mesh, t, p[0], p[1], p[2]);
+            for (int c = 0; c < 3; ++c) {
+                final double[] u = new double[3];
+                final double[] v = new double[3];
+                for (int axis = 0; axis < 3; ++axis) {
+                    u[axis] = p[(c + 1) % 3][axis] - p[c][axis];
+                    v[axis] = p[(c + 2) % 3][axis] - p[c][axis];
+                }
+                final double cos =
+                        Geometry.dot(u, v) / Math.sqrt(Geometry.dot(u, u) * Geometry.dot(v, v));
+                smallest = Math.min(smallest, Math.toDegrees(Math.acos(Math.clamp(cos, -1, 1))));
+            }
+        }
+        return smallest;
+    }
+
+    /** Flips leave a merged grid's fan of slivers as well shaped as its border allows. */
+    @Test
+    void testFlipsRemoveSlivers() {
+        final LodMesh input = grid(8, IDENTITY, null);
+        final LodMesh merged = PlanarMerge.merge(input);
+        assertSameSurface(input, merged);
+        final double smallest = smallestAngle(merged);
+        System.out.printf("Merged 8x8 grid: smallest angle %.1f degrees%n", smallest);
+        assertTrue(smallest > 5, "Smallest angle " + smallest);
+    }
+
     /** Terrain sections keep every plane and material exactly, with far fewer triangles. */
     @Test
     void testTerrainSurfaceUnchanged() {
