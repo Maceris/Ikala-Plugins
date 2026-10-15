@@ -38,8 +38,17 @@ import java.util.function.Predicate;
 @Slf4j
 public final class LiveLod implements AutoCloseable {
 
-    /** The most level 0 cells one batch builds, so near cells don't wait behind far ones. */
+    /**
+     * The most level 0 cells one batch builds, so near cells don't wait behind far ones, at least:
+     * a batch builds {@link #BATCHES_OF_WORKERS} times as many as the store builds at once, if that
+     * is more, so every worker has a cell.
+     */
     public static final int CELLS_PER_BATCH = 8;
+
+    /**
+     * How many rounds of the store's workers a batch has at least, see {@link #CELLS_PER_BATCH}.
+     */
+    private static final int BATCHES_OF_WORKERS = 2;
 
     /** How long a level 0 cell's sections must stay unchanged before it is built, by default. */
     public static final long SETTLE_NANOS = TimeUnit.MILLISECONDS.toNanos(500);
@@ -164,6 +173,14 @@ public final class LiveLod implements AutoCloseable {
     private volatile boolean closed;
 
     /**
+     * Roughly how many bytes its store held when it last ran out of work, see {@link #heldBytes}.
+     */
+    private volatile long heldBytes;
+
+    /** Whether the store changed since {@link #heldBytes} was worked out. Builder thread. */
+    private boolean heldStale = true;
+
+    /**
      * Set up a live world. Nothing is built until {@link #start()} or {@link #step()}.
      *
      * @param origin Where positions are measured from, in the world: a section corner.
@@ -237,6 +254,16 @@ public final class LiveLod implements AutoCloseable {
      */
     public LodCache.Stats cacheStats() {
         return cache == null ? null : cache.stats();
+    }
+
+    /**
+     * Roughly how many bytes its store held the last time it had nothing to build: the sections'
+     * meshes and the cells' DAGs it keeps in memory. Safe from any thread.
+     *
+     * @return The bytes.
+     */
+    public long heldBytes() {
+        return heldBytes;
     }
 
     /**
@@ -383,15 +410,27 @@ public final class LiveLod implements AutoCloseable {
         Change change;
         while ((change = changes.poll()) != null) {
             apply(change);
+            heldStale = true;
         }
         final Predicate<LodStore.CellKey> ready = readyCells();
         // Parents wait for every section on the way, so they are built over all of them at once
         final boolean parentsReady = expected.isEmpty();
         if (!store.hasWork(ready, parentsReady) && coveredAsIs.isEmpty()) {
+            // Idle: a good time to count what the store holds
+            if (heldStale) {
+                heldBytes = store.heldBytes();
+                heldStale = false;
+            }
             return false;
         }
+        heldStale = true;
         final long start = System.nanoTime();
-        final LodStore.Rebuilt rebuilt = store.rebuild(CELLS_PER_BATCH, near, ready, parentsReady);
+        final LodStore.Rebuilt rebuilt =
+                store.rebuild(
+                        Math.max(CELLS_PER_BATCH, BATCHES_OF_WORKERS * store.getCellsAtOnce()),
+                        near,
+                        ready,
+                        parentsReady);
         rebuilt.built().forEach(lastChange::remove);
         rebuilt.removed().forEach(lastChange::remove);
         final Map<LodStore.SectionPos, Long> covered = new HashMap<>(coveredAsIs);

@@ -297,4 +297,28 @@ public final class LodDag {
         }
         return count;
     }
+
+    /**
+     * Roughly how many bytes its clusters' and groups' arrays hold, for memory reports.
+     *
+     * @return The bytes.
+     */
+    public long heldBytes() {
+        long bytes = 0;
+        for (Cluster cluster : clusters) {
+            bytes +=
+                    ((long) cluster.corners().length
+                                            + cluster.materials().length
+                                            + cluster.visibility().length)
+                                    * Integer.BYTES
+                            + ((long) cluster.bound().length + cluster.tight().length)
+                                    * Double.BYTES;
+        }
+        for (Group group : groups) {
+            bytes +=
+                    ((long) group.children().length + group.outputs().length) * Integer.BYTES
+                            + (long) group.bound().length * Double.BYTES;
+        }
+        return bytes;
+    }
 }

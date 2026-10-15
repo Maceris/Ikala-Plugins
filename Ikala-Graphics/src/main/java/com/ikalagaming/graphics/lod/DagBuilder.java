@@ -31,6 +31,9 @@ public final class DagBuilder {
     /** Levels at most, as a safety net. */
     private static final int MAX_LEVELS = 32;
 
+    /** Runs of edges per worker the face contacts are searched in, so uneven runs even out. */
+    private static final int RUNS_PER_THREAD = 4;
+
     /** A level whose triangles are at least this share of the last has stopped halving. */
     private static final double STALLED = 0.95;
 
@@ -99,6 +102,22 @@ public final class DagBuilder {
                 boolean keepLineage,
                 double visibilityReach) {
             this(virtualEdgeFactor, lockOpenBorder, threads, keepLineage, visibilityReach, true);
+        }
+
+        /**
+         * The same options, on some other number of threads.
+         *
+         * @param count The threads.
+         * @return The options.
+         */
+        public Options withThreads(int count) {
+            return new Options(
+                    virtualEdgeFactor,
+                    lockOpenBorder,
+                    count,
+                    keepLineage,
+                    visibilityReach,
+                    mergePlanar);
         }
 
         /**
@@ -534,7 +553,7 @@ public final class DagBuilder {
             final int[][] groups = Grouping.group(dag, active);
             final Map<Grouping.Corner, Integer> owners = owners(groups);
             lockTJunctions(owners, groups);
-            lockFaceContacts(owners, groups);
+            lockFaceContacts(owners, groups, pool);
             if (cellMin != null) {
                 lockCellBoundary(owners, active);
             }
@@ -740,11 +759,17 @@ public final class DagBuilder {
      * the edge's ends, so the edge stays on the face. Where the edge runs along one of the face's
      * edges instead, {@link #lockTJunctions} keeps it.
      *
+     * <p>The open edges are searched on the workers, a run of them each, and what they find is
+     * locked in edge order, so the result doesn't depend on how they were split.
+     *
      * @param owners Which group uses each corner; the corners found become -1.
      * @param groups The groups.
+     * @param pool The workers.
      */
     private void lockFaceContacts(
-            @NonNull Map<Grouping.Corner, Integer> owners, int @NonNull [][] groups) {
+            @NonNull Map<Grouping.Corner, Integer> owners,
+            int @NonNull [][] groups,
+            @NonNull ExecutorService pool) {
         int total = 0;
         for (int[] group : groups) {
             total += group.length;
@@ -773,14 +798,70 @@ public final class DagBuilder {
             at += own.length;
         }
         final TriangleBvh tree = new TriangleBvh(all);
-        final TriangleBvh.Scratch scratch = new TriangleBvh.Scratch();
-        final double touch = TJunctions.TOUCH * TJunctions.TOUCH;
         final IntArrayList tags = new IntArrayList();
         final List<Boolean> open = new ArrayList<>();
         final IntArrayList triangles = new IntArrayList();
         final List<float[]> edges = edges(active, tags, open, triangles);
+        final int runs = Math.max(1, Math.min(edges.size(), options.threads() * RUNS_PER_THREAD));
+        final List<Future<List<Grouping.Corner>>> futures = new ArrayList<>(runs);
+        for (int run = 0; run < runs; ++run) {
+            final int from = (int) ((long) edges.size() * run / runs);
+            final int to = (int) ((long) edges.size() * (run + 1) / runs);
+            futures.add(
+                    pool.submit(
+                            () ->
+                                    faceContacts(
+                                            from, to, edges, open, tags, triangles, tree, all,
+                                            clusterOf, groupOf)));
+        }
+        for (Future<List<Grouping.Corner>> future : futures) {
+            final List<Grouping.Corner> found;
+            try {
+                found = future.get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            } catch (ExecutionException e) {
+                throw new IllegalStateException("Finding face contacts failed", e.getCause());
+            }
+            for (Grouping.Corner corner : found) {
+                owners.put(corner, -1);
+            }
+        }
+    }
+
+    /**
+     * Find where a run of open edges ends against the inside of another group's face, see {@link
+     * #lockFaceContacts}. On a worker.
+     *
+     * @param from The first edge.
+     * @param to Past the last edge.
+     * @param edges Every edge of the level.
+     * @param open Whether each is open.
+     * @param tags Each one's cluster's index in the active clusters.
+     * @param triangles Each one's own triangle, which its search skips.
+     * @param tree Every triangle of the level.
+     * @param all Their corners.
+     * @param clusterOf Each triangle's cluster's index in the active clusters.
+     * @param groupOf Each active cluster's group.
+     * @return The corners to lock, in edge order.
+     */
+    private static List<Grouping.Corner> faceContacts(
+            int from,
+            int to,
+            @NonNull List<float[]> edges,
+            @NonNull List<Boolean> open,
+            @NonNull IntArrayList tags,
+            @NonNull IntArrayList triangles,
+            @NonNull TriangleBvh tree,
+            float @NonNull [] all,
+            int @NonNull [] clusterOf,
+            int @NonNull [] groupOf) {
+        final List<Grouping.Corner> found = new ArrayList<>();
+        final TriangleBvh.Scratch scratch = new TriangleBvh.Scratch();
+        final double touch = TJunctions.TOUCH * TJunctions.TOUCH;
         final double[] point = new double[AXES];
-        for (int i = 0; i < edges.size(); ++i) {
+        for (int i = from; i < to; ++i) {
             if (!open.get(i)) {
                 continue;
             }
@@ -802,17 +883,17 @@ public final class DagBuilder {
                 }
                 contact = true;
                 for (int corner = 0; corner < AXES; ++corner) {
-                    owners.put(
+                    found.add(
                             Grouping.Corner.of(
-                                    all, scratch.triangle * TRIANGLE_VALUES + corner * AXES),
-                            -1);
+                                    all, scratch.triangle * TRIANGLE_VALUES + corner * AXES));
                 }
             }
             if (contact) {
-                owners.put(Grouping.Corner.of(edge, 0), -1);
-                owners.put(Grouping.Corner.of(edge, AXES), -1);
+                found.add(Grouping.Corner.of(edge, 0));
+                found.add(Grouping.Corner.of(edge, AXES));
             }
         }
+        return found;
     }
 
     /**

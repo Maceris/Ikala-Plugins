@@ -35,6 +35,24 @@ import java.nio.LongBuffer;
 @Slf4j
 public class TextureLoaderVulkan {
 
+    /** Channels in an RGBA8 pixel. */
+    private static final int RGBA = 4;
+
+    /** Which channel is alpha. */
+    private static final int ALPHA = 3;
+
+    /** The largest byte value. */
+    private static final int BYTE_MAX = 255;
+
+    /** Each sRGB byte decoded to linear light. */
+    private static final float[] DECODED = new float[BYTE_MAX + 1];
+
+    static {
+        for (int i = 0; i <= BYTE_MAX; ++i) {
+            DECODED[i] = ToneMapMath.decode(i / (float) BYTE_MAX);
+        }
+    }
+
     /** The Vulkan state. */
     private final VulkanState state;
 
@@ -256,6 +274,10 @@ public class TextureLoaderVulkan {
             throw new TextureException(error);
         }
         TextureHandle handle = state.textureRegistry.add(owner, info, width, height, format);
+        final float[] average = buffer == null ? null : average(buffer, format);
+        if (average != null) {
+            state.textureRegistry.setAverage(handle, average);
+        }
 
         final StagingRing.Staging staging;
         try {
@@ -272,6 +294,42 @@ public class TextureLoaderVulkan {
                 new TextureUploads.Request(
                         handle, info, staging, width, height, mipLevels, canClearColor(format)));
         return handle;
+    }
+
+    /**
+     * Work out a texture's average color, as its smallest mip holds it: an sRGB texture's pixels
+     * averaged in linear light, anything else's bytes averaged as stored, then decoded as the
+     * shaders decode it.
+     *
+     * @param buffer The pixel data, from its position to its limit.
+     * @param format Its format.
+     * @return The average linear red, green and blue and the average opacity, or null for a format
+     *     it can't read.
+     */
+    private static float[] average(@NonNull ByteBuffer buffer, @NonNull Format format) {
+        final boolean srgb = format == Format.R8G8B8A8_SRGB;
+        if (!srgb && format != Format.R8G8B8A8_UNORM) {
+            return null;
+        }
+        final int start = buffer.position();
+        final int pixels = buffer.remaining() / RGBA;
+        if (pixels == 0) {
+            return null;
+        }
+        final double[] sums = new double[RGBA];
+        for (int i = 0; i < pixels; ++i) {
+            for (int channel = 0; channel < RGBA; ++channel) {
+                final int value = Byte.toUnsignedInt(buffer.get(start + i * RGBA + channel));
+                sums[channel] +=
+                        srgb && channel < ALPHA ? DECODED[value] : value / (double) BYTE_MAX;
+            }
+        }
+        final float[] average = new float[RGBA];
+        for (int channel = 0; channel < RGBA; ++channel) {
+            final float mean = (float) (sums[channel] / pixels);
+            average[channel] = srgb || channel == ALPHA ? mean : ToneMapMath.decode(mean);
+        }
+        return average;
     }
 
     /**

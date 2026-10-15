@@ -320,6 +320,9 @@ public final class LodPanel implements AutoCloseable {
                             gpu.occluded(),
                             gpu.early(),
                             gpu.late()));
+            if (gpu.levelTriangles().length > 0) {
+                LodTables.draw(LodTables.cutLevels(gpu));
+            }
             final LodRenderer.LiveStats residency = view.residency();
             if (residency != null) {
                 IkGui.text(

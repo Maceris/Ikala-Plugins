@@ -9,6 +9,13 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import java.util.function.Predicate;
 
 /**
@@ -28,7 +35,9 @@ import java.util.function.Predicate;
  * the builder version and the options. A cell whose key is in the cache is read instead of built,
  * and every cell built is saved, so an area seen before loads without building.
  *
- * <p>Not thread safe: one thread changes and rebuilds it.
+ * <p>Not thread safe: one thread changes and rebuilds it. A rebuild builds several cells at once on
+ * workers of its own, each cell from inputs gathered beforehand, so the store's own state is only
+ * touched by the thread calling it.
  */
 public final class LodStore {
 
@@ -53,6 +62,19 @@ public final class LodStore {
 
     /** How many child cells a parent spans along each axis. */
     private static final int BRANCHING = 2;
+
+    /**
+     * The options' threads for each cell built at once: a cell's build spends much of its time on
+     * serial work and on its slowest groups, keeping well under one core busy, so more cells than
+     * cores' worth keep the cores busy.
+     */
+    private static final int THREADS_PER_CELL_AT_ONCE = 2;
+
+    /**
+     * The fewest threads one cell's groups are built on, when as many cells as can be are built at
+     * once; fewer cells at once, as for the last parents, each get more.
+     */
+    private static final int GROUP_THREADS = 4;
 
     /**
      * Added to level 0 cell indices so they are positive and parents halve them evenly. Its bits
@@ -155,7 +177,7 @@ public final class LodStore {
     /** Stop building a cell once this many clusters or fewer are left. */
     private final int stopAt;
 
-    /** How to build. */
+    /** How to build, on all the threads the store was given. */
     private final DagBuilder.Options options;
 
     /** The sections, as leaf meshes. */
@@ -175,14 +197,21 @@ public final class LodStore {
      *
      * @return The count.
      */
-    @Getter private int builtCount;
+    private final AtomicInteger builtCount = new AtomicInteger();
 
     /**
      * How many cells were read from the cache. -- GETTER -- Cells read.
      *
      * @return The count.
      */
-    @Getter private int loadedCount;
+    private final AtomicInteger loadedCount = new AtomicInteger();
+
+    /**
+     * How many cells are built at once. -- GETTER -- Cells built at once.
+     *
+     * @return The count.
+     */
+    @Getter private final int cellsAtOnce;
 
     /** Level 0 cells whose sections changed since they were built. */
     private final SortedSet<CellKey> dirty = new TreeSet<>();
@@ -267,6 +296,9 @@ public final class LodStore {
         this.sectionSize = sectionSize;
         this.cellSections = cellSections;
         this.stopAt = stopAt;
+        // The options' threads go to cells built at once, each with a few for its groups; together
+        // more threads than that, since most of them wait most of the time
+        cellsAtOnce = Math.max(1, options.threads() / THREADS_PER_CELL_AT_ONCE);
         this.options =
                 new DagBuilder.Options(
                         options.virtualEdgeFactor(),
@@ -402,6 +434,8 @@ public final class LodStore {
             }
         }
         order.sort(Comparator.comparingDouble(key -> distanceSquared(key, near)));
+        // What each cell is built from, gathered here, since the workers don't touch the store
+        final List<LeafJob> jobs = new ArrayList<>();
         for (CellKey key : order.subList(0, Math.min(maxCells, order.size()))) {
             dirty.remove(key);
             final List<SectionPos> positions = new ArrayList<>();
@@ -415,21 +449,17 @@ public final class LodStore {
                 continue;
             }
             final String cacheKey = cache == null ? null : leafKey(key, inside, positions);
-            Cell cell = cached(key, cacheKey);
-            if (cell == null) {
-                final double[][] box = box(key);
-                final LodDag dag =
-                        DagBuilder.buildCell(inside, origin, box[0], box[1], stopAt, options);
-                cell = new Cell(dag, List.of(), dag.getLeafEdge(), List.copyOf(positions));
-                ++builtCount;
-                save(key, cacheKey, cell);
+            jobs.add(new LeafJob(key, inside, List.copyOf(positions), cacheKey, box(key)));
+        }
+        final List<Cell> leaves = buildAll(jobs, this::buildLeaf);
+        for (int i = 0; i < jobs.size(); ++i) {
+            final LeafJob job = jobs.get(i);
+            cells.put(job.key(), leaves.get(i));
+            if (job.cacheKey() != null) {
+                keys.put(job.key(), job.cacheKey());
             }
-            cells.put(key, cell);
-            if (cacheKey != null) {
-                keys.put(key, cacheKey);
-            }
-            unparented.add(key);
-            built.add(key);
+            unparented.add(job.key());
+            built.add(job.key());
         }
         if (dirty.isEmpty() && parentsReady && !unparented.isEmpty()) {
             buildParents(built, removed);
@@ -505,11 +535,18 @@ public final class LodStore {
                     changed.add(key);
                 }
             }
+            final List<ParentJob> jobs = new ArrayList<>();
             for (CellKey parent : parents) {
                 if (cells.containsKey(parent) && !nextChanged.contains(parent)) {
                     continue;
                 }
-                cells.put(parent, buildParent(parent));
+                jobs.add(parentJob(parent));
+            }
+            // The parents of a level stand on the level below, done, and not on each other
+            final List<Cell> builtParents = buildAll(jobs, this::buildParent);
+            for (int i = 0; i < jobs.size(); ++i) {
+                final CellKey parent = jobs.get(i).key();
+                cells.put(parent, builtParents.get(i));
                 changed.add(parent);
                 built.add(parent);
             }
@@ -544,6 +581,23 @@ public final class LodStore {
      */
     public boolean contains(@NonNull CellKey key) {
         return cells.containsKey(key);
+    }
+
+    /**
+     * Roughly how many bytes it holds: its sections' meshes and its cells' DAGs, for memory
+     * reports. Whoever owns the store calls it.
+     *
+     * @return The bytes.
+     */
+    public long heldBytes() {
+        long bytes = 0;
+        for (LodMesh mesh : sections.values()) {
+            bytes += mesh.heldBytes();
+        }
+        for (Cell cell : cells.values()) {
+            bytes += cell.dag().heldBytes();
+        }
+        return bytes;
     }
 
     /**
@@ -646,19 +700,119 @@ public final class LodStore {
     }
 
     /**
-     * Build a parent cell from its children's tops.
+     * What a level 0 cell is built from.
+     *
+     * @param key The cell.
+     * @param inside Its sections' meshes, in position order.
+     * @param positions Their positions.
+     * @param cacheKey Its cache key, or null without a cache.
+     * @param box Its box, relative to the origin.
+     */
+    private record LeafJob(
+            @NonNull CellKey key,
+            @NonNull List<LodMesh> inside,
+            @NonNull List<SectionPos> positions,
+            String cacheKey,
+            double @NonNull [] @NonNull [] box) {}
+
+    /**
+     * What a parent cell is built from.
      *
      * @param key The parent.
+     * @param tops Its children's tops.
+     * @param inputs Where each top came from.
+     * @param leafEdge Its children's average leaf edge.
+     * @param cacheKey Its cache key, or null without a cache.
+     * @param box Its box, relative to the origin.
+     */
+    private record ParentJob(
+            @NonNull CellKey key,
+            @NonNull List<LodDag.Cluster> tops,
+            @NonNull List<Input> inputs,
+            double leafEdge,
+            String cacheKey,
+            double @NonNull [] @NonNull [] box) {}
+
+    /**
+     * Build cells, several at once on workers of their own when there is more than one, the results
+     * in the same order. Interrupting the calling thread stops them.
+     *
+     * @param jobs What each cell is built from.
+     * @param build Builds one cell with the options for each, and must not touch the store's state.
+     * @param <J> The kind of job.
+     * @return The cells.
+     * @throws CancellationException If the calling thread was interrupted.
+     * @throws IllegalStateException If a cell failed to build.
+     */
+    private <J> List<Cell> buildAll(
+            @NonNull List<J> jobs, @NonNull BiFunction<J, DagBuilder.Options, Cell> build) {
+        final List<Cell> out = new ArrayList<>(jobs.size());
+        if (jobs.size() <= 1 || cellsAtOnce <= 1) {
+            for (J job : jobs) {
+                out.add(build.apply(job, options));
+            }
+            return out;
+        }
+        // The threads shared out between the cells built at once, so a few last cells get more
+        final int atOnce = Math.min(cellsAtOnce, jobs.size());
+        final DagBuilder.Options each =
+                options.withThreads(
+                        Math.min(
+                                options.threads(),
+                                Math.max(GROUP_THREADS, options.threads() / atOnce)));
+        final ExecutorService pool =
+                Executors.newFixedThreadPool(atOnce, DagBuilder.daemonThreads("LOD cell"));
+        try {
+            final List<Future<Cell>> futures = new ArrayList<>(jobs.size());
+            for (J job : jobs) {
+                futures.add(pool.submit(() -> build.apply(job, each)));
+            }
+            for (Future<Cell> future : futures) {
+                out.add(future.get());
+            }
+            return out;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new CancellationException("Building level of detail cells was interrupted");
+        } catch (ExecutionException e) {
+            throw new IllegalStateException("A level of detail cell failed to build", e.getCause());
+        } finally {
+            // Interrupts the cells still building if one failed or this thread was interrupted
+            pool.shutdownNow();
+        }
+    }
+
+    /**
+     * Build a level 0 cell, or read it from the cache. On a worker.
+     *
+     * @param job What it is built from.
+     * @param each How to build it, on its share of the threads.
      * @return The cell.
      */
-    private Cell buildParent(@NonNull CellKey key) {
+    private Cell buildLeaf(@NonNull LeafJob job, DagBuilder.@NonNull Options each) {
+        final Cell loaded = cached(job.key(), job.cacheKey());
+        if (loaded != null) {
+            return loaded;
+        }
+        final LodDag dag =
+                DagBuilder.buildCell(
+                        job.inside(), origin, job.box()[0], job.box()[1], stopAt, each);
+        final Cell cell = new Cell(dag, List.of(), dag.getLeafEdge(), job.positions());
+        builtCount.incrementAndGet();
+        save(job.key(), job.cacheKey(), cell);
+        return cell;
+    }
+
+    /**
+     * Gather what a parent cell is built from: its children's tops, which must all be built.
+     *
+     * @param key The parent.
+     * @return What it is built from.
+     */
+    private ParentJob parentJob(@NonNull CellKey key) {
         final String cacheKey = cache == null ? null : parentKey(key);
         if (cacheKey != null) {
             keys.put(key, cacheKey);
-        }
-        final Cell loaded = cached(key, cacheKey);
-        if (loaded != null) {
-            return loaded;
         }
         final List<LodDag.Cluster> tops = new ArrayList<>();
         final List<Input> inputs = new ArrayList<>();
@@ -677,14 +831,52 @@ public final class LodStore {
             edges += cell.leafEdge();
             ++children;
         }
-        final double leafEdge = edges / children;
-        final double[][] box = box(key);
+        return new ParentJob(key, tops, inputs, edges / children, cacheKey, box(key));
+    }
+
+    /**
+     * Build a parent cell from its children's tops, or read it from the cache. On a worker.
+     *
+     * @param job What it is built from.
+     * @param each How to build it, on its share of the threads.
+     * @return The cell.
+     */
+    private Cell buildParent(@NonNull ParentJob job, DagBuilder.@NonNull Options each) {
+        final Cell loaded = cached(job.key(), job.cacheKey());
+        if (loaded != null) {
+            return loaded;
+        }
         final LodDag dag =
-                DagBuilder.buildParent(tops, leafEdge, origin, box[0], box[1], stopAt, options);
-        final Cell cell = new Cell(dag, List.copyOf(inputs), leafEdge, List.of());
-        ++builtCount;
-        save(key, cacheKey, cell);
+                DagBuilder.buildParent(
+                        job.tops(),
+                        job.leafEdge(),
+                        origin,
+                        job.box()[0],
+                        job.box()[1],
+                        stopAt,
+                        each);
+        final Cell cell = new Cell(dag, List.copyOf(job.inputs()), job.leafEdge(), List.of());
+        builtCount.incrementAndGet();
+        save(job.key(), job.cacheKey(), cell);
         return cell;
+    }
+
+    /**
+     * How many cells were built rather than read from the cache.
+     *
+     * @return The count.
+     */
+    public int getBuiltCount() {
+        return builtCount.get();
+    }
+
+    /**
+     * How many cells were read from the cache.
+     *
+     * @return The count.
+     */
+    public int getLoadedCount() {
+        return loadedCount.get();
     }
 
     /**
@@ -702,7 +894,7 @@ public final class LodStore {
         if (stored == null || !stored.key().equals(key)) {
             return null;
         }
-        ++loadedCount;
+        loadedCount.incrementAndGet();
         return stored.cell();
     }
 

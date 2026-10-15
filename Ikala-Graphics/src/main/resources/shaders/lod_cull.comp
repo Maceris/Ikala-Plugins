@@ -168,6 +168,11 @@ const uint COUNTER_SELECTED = LIST_COUNT;
 const uint COUNTER_TRIANGLES = LIST_COUNT + 1;
 const uint COUNTER_OUTSIDE = LIST_COUNT + 2;
 const uint COUNTER_OCCLUDED = LIST_COUNT + 3;
+// Then, for each level up to LEVEL_COUNTERS, the cut's clusters, its triangles, and its triangles
+// inside the scene's frustum, each level's three together
+const uint COUNTER_LEVELS = LIST_COUNT + 4;
+const uint LEVEL_COUNTERS = 32u;
+const uint COUNTERS_PER_LEVEL = 3u;
 
 // Set in the view flags when the scene is culled by occlusion
 const uint FLAG_OCCLUSION = 1;
@@ -346,6 +351,13 @@ void main()
         if (pass == 0) {
             atomicAdd(countList.counts[COUNTER_SELECTED], 1u);
             atomicAdd(countList.counts[COUNTER_TRIANGLES], mesh.info.z / 3u);
+            uint levelCounters = COUNTER_LEVELS
+                + min(cluster.unit.z, LEVEL_COUNTERS - 1u) * COUNTERS_PER_LEVEL;
+            atomicAdd(countList.counts[levelCounters], 1u);
+            atomicAdd(countList.counts[levelCounters + 1u], mesh.info.z / 3u);
+            if (inView) {
+                atomicAdd(countList.counts[levelCounters + 2u], mesh.info.z / 3u);
+            }
             if (!inView) {
                 atomicAdd(countList.counts[COUNTER_OUTSIDE], 1u);
                 return;

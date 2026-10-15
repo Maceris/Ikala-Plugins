@@ -134,7 +134,7 @@ public class PipelineManagerVulkan {
     private final OitIntegrate stageOitIntegrate;
 
     /** Keeps the volume bricks up to date and lists the ones to draw. */
-    private final VolumeVoxelize stageVolumeVoxelize;
+    private final VolumeUpload stageVolumeUpload;
 
     /** Writes the depth of the volume bricks' solid faces. */
     private final VolumeDepth stageVolumeDepth;
@@ -184,7 +184,8 @@ public class PipelineManagerVulkan {
         stageOccupancyVoxelize =
                 new OccupancyVoxelize(
                         shaders.getShader(RenderStage.Type.OCCUPANCY_CLEAR),
-                        shaders.getShader(RenderStage.Type.OCCUPANCY_VOXELIZE));
+                        shaders.getShader(RenderStage.Type.OCCUPANCY_VOXELIZE),
+                        shaders.getShader(RenderStage.Type.OCCUPANCY_BRICKS));
         stageOccupancyVoxelize.initialize(state);
         stageInstanceTransform =
                 new InstanceTransform(shaders.getShader(RenderStage.Type.INSTANCES));
@@ -252,11 +253,8 @@ public class PipelineManagerVulkan {
         stageOitSplat.initialize(state);
         stageOitIntegrate = new OitIntegrate(shaders.getShader(RenderStage.Type.OIT_INTEGRATE));
         stageOitIntegrate.initialize(state);
-        stageVolumeVoxelize =
-                new VolumeVoxelize(
-                        shaders.getShader(RenderStage.Type.VOLUME_VOXELIZE),
-                        shaders.getShader(RenderStage.Type.VOLUME_RESOLVE));
-        stageVolumeVoxelize.initialize(state);
+        stageVolumeUpload = new VolumeUpload(shaders.getShader(RenderStage.Type.VOLUME_UPLOAD));
+        stageVolumeUpload.initialize(state);
         stageVolumeDepth =
                 new VolumeDepth(
                         shaders.getShader(RenderStage.Type.VOLUME_DEPTH),
@@ -330,8 +328,8 @@ public class PipelineManagerVulkan {
         if (RenderConfig.hasSceneStage(configuration)) {
             // Translucent geometry, over the sky too, in any order: what is in front of each
             // surface first, then the surfaces weighted by it
-            // Distant cut out and translucent blocks as volumes, with the frame's materials
-            stages.add(stageVolumeVoxelize);
+            // Distant cut out and translucent blocks as volumes
+            stages.add(stageVolumeUpload);
             stages.add(stageVolumeDepth);
             stages.add(stageOitSplat);
             stages.add(stageVolumeSplat);
@@ -840,7 +838,7 @@ public class PipelineManagerVulkan {
         stageTranslucentRender.cleanup(state);
         stageOitSplat.cleanup(state);
         stageOitIntegrate.cleanup(state);
-        stageVolumeVoxelize.cleanup(state);
+        stageVolumeUpload.cleanup(state);
         stageVolumeDepth.cleanup(state);
         stageVolumeSplat.cleanup(state);
         stageVolumeColor.cleanup(state);

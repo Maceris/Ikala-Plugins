@@ -408,4 +408,15 @@ public final class LodMesh {
                     Arrays.copyOf(locked, vertexCount));
         }
     }
+
+    /**
+     * Roughly how many bytes its arrays hold, for memory reports.
+     *
+     * @return The bytes.
+     */
+    public long heldBytes() {
+        return ((long) positions.length + triangles.length + materials.length + visibility.length)
+                        * Integer.BYTES
+                + locked.length;
+    }
 }

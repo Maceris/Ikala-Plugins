@@ -5,14 +5,14 @@ import static org.lwjgl.util.vma.Vma.*;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.MeshHandle;
-import com.ikalagaming.graphics.MeshKind;
 import com.ikalagaming.graphics.graph.VolumeMath;
+import com.ikalagaming.graphics.graph.VolumeVoxelizer;
 import com.ikalagaming.graphics.lod.LodStore;
 
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
@@ -26,8 +26,9 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -38,12 +39,13 @@ import java.util.Set;
  * cubed voxels per section, each holding its surfaces' extinction and average color (see {@link
  * VolumeMath}), in slots of one 3D atlas image.
  *
- * <p>When a section's bake changes, its brick is queued to be voxelized again from its meshes,
- * which {@code VolumeVoxelize} does a batch at a time on the GPU. Each frame it also lists the
- * bricks to draw: those of sections that don't draw their own blocks now, which the transparency
- * stages ray march.
+ * <p>Bricks are voxelized on the bake workers with their sections' bakes (see {@link
+ * VolumeVoxelizer}), and put here as their bakes go in; {@code VolumeUpload} copies the queued ones
+ * into their slots a budget at a time. Each frame it also lists the bricks to draw: those of
+ * sections that don't draw their own blocks now, which the transparency stages ray march.
  *
- * <p>The atlas stays in the general layout. Render thread only.
+ * <p>The atlas stays in the general layout, which compute writes it in, as uploads do. Render
+ * thread only.
  */
 @Slf4j
 public class VolumeBricks {
@@ -51,7 +53,7 @@ public class VolumeBricks {
     /** The atlas's format: color, and the square root of the extinction's share in alpha. */
     public static final int FORMAT = VK_FORMAT_R8G8B8A8_UNORM;
 
-    /** The binding compute shaders write the atlas through. */
+    /** The binding compute shaders write the atlas through, as uploads do. */
     public static final int STORAGE_BINDING = 0;
 
     /** The binding fragment shaders sample the atlas through. */
@@ -76,19 +78,38 @@ public class VolumeBricks {
     public static final int MATERIALS_SIZE =
             VolumeMath.BRICK * VolumeMath.BRICK * VolumeMath.BRICK * Short.BYTES;
 
+    /** The size of one brick's texels. */
+    public static final int TEXELS_SIZE =
+            VolumeMath.BRICK * VolumeMath.BRICK * VolumeMath.BRICK * VolumeMath.BYTES_PER_VOXEL;
+
+    /**
+     * The size of one slot's surface bits, which the occupancy volume reads for sections whose own
+     * meshes are off the GPU, see {@link VolumeVoxelizer.Brick#surfaces}.
+     */
+    public static final int SURFACES_SIZE = VolumeVoxelizer.SURFACE_INTS * Integer.BYTES;
+
+    /**
+     * The size of one brick's block in an upload buffer: its texels, then its masks, its materials
+     * and its surface bits.
+     */
+    public static final int STAGED_SIZE = TEXELS_SIZE + MASKS_SIZE + MATERIALS_SIZE + SURFACES_SIZE;
+
     /**
      * The size of a draw in the draw list: the brick's minimum corner in render space, its slot.
      */
     public static final int DRAW_SIZE = 4 * Float.BYTES;
 
     /**
-     * A section's meshes to voxelize into its brick.
+     * A brick to copy into its slot.
      *
-     * @param slot The brick's slot.
-     * @param origin The section's corner, in the world.
-     * @param meshes Its cut out and translucent meshes.
+     * @param position Its section.
+     * @param slot The slot.
+     * @param brick The brick.
      */
-    public record Batch(int slot, @NonNull Vector3dc origin, @NonNull List<MeshHandle> meshes) {}
+    public record Upload(
+            LodStore.@NonNull SectionPos position,
+            int slot,
+            VolumeVoxelizer.@NonNull Brick brick) {}
 
     /** The layout of the atlas's set. -- GETTER -- The set layout. */
     @Getter private long setLayout;
@@ -111,11 +132,14 @@ public class VolumeBricks {
     /** Filters within a brick, clamped at the atlas's edge. */
     private long sampler;
 
-    /** Each slot's cell masks, which the resolve fills. -- GETTER -- The masks buffer. */
+    /** Each slot's cell masks. -- GETTER -- The masks buffer. */
     @Getter private SharedBuffer masks;
 
-    /** Each voxel's material, which the resolve fills. -- GETTER -- The materials buffer. */
+    /** Each voxel's material. -- GETTER -- The materials buffer. */
     @Getter private SharedBuffer materials;
+
+    /** Each slot's surface bits, read by address. -- GETTER -- The surfaces buffer. */
+    @Getter private SharedBuffer surfaces;
 
     /** Each section's slot. */
     private final Map<LodStore.SectionPos, Integer> slots = new HashMap<>();
@@ -123,11 +147,18 @@ public class VolumeBricks {
     /** Slots no section has. */
     private final ArrayDeque<Integer> free = new ArrayDeque<>();
 
-    /** Whether each slot has been voxelized, so it can be drawn. */
+    /** Whether each slot has had a brick copied in, so it can be drawn. */
     private final boolean[] filled = new boolean[VolumeMath.SLOTS];
 
-    /** Sections whose bricks are to be voxelized again, oldest first. */
-    private final Set<LodStore.SectionPos> queued = new LinkedHashSet<>();
+    /** Bricks waiting to be copied into their sections' slots, oldest first. */
+    private final Map<LodStore.SectionPos, VolumeVoxelizer.Brick> uploads = new LinkedHashMap<>();
+
+    /** How the blocks in an upload buffer are aligned, for the shader's reads. */
+    private static final long BLOCK_ALIGNMENT = 16;
+
+    /** Each frame in flight's upload buffer, written by the CPU, or null before its first use. */
+    private final SharedBuffer[] uploadBuffers =
+            new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
     /** Each frame in flight's draw list, written by the CPU. */
     private final SharedBuffer[] drawLists = new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
@@ -139,8 +170,26 @@ public class VolumeBricks {
     private final SharedBuffer[] hitBuffers =
             new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
+    /**
+     * How far the camera moves before the draw order is sorted again, in meters: nearest first only
+     * matters roughly, for the depth test to drop most of what is behind.
+     */
+    private static final double RESORT_DISTANCE = 4;
+
+    /** The sections the draw order was sorted from, the same list while they don't change. */
+    private List<LodStore.SectionPos> sortedFrom;
+
+    /** The draw order, nearest first. */
+    private List<LodStore.SectionPos> sorted = List.of();
+
+    /** Where the camera was when the draw order was sorted, or null. */
+    private Vector3d sortedAt;
+
     /** Whether the atlas was full, so it is only said once. */
     private boolean warnedFull;
+
+    /** Sections that wanted a brick while the atlas was full, and still have none. */
+    private final Set<LodStore.SectionPos> withoutSlot = new HashSet<>();
 
     /**
      * Set up the atlas, cleared to empty in the general layout.
@@ -286,6 +335,11 @@ public class VolumeBricks {
                             (long) VolumeMath.SLOTS * MATERIALS_SIZE,
                             state,
                             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+            surfaces =
+                    SharedBuffer.allocateDeviceLocal(
+                            (long) VolumeMath.SLOTS * SURFACES_SIZE,
+                            state,
+                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
             VkDescriptorBufferInfo.Buffer materialInfo = VkDescriptorBufferInfo.calloc(1, stack);
             materialInfo.get(0).buffer(materials.buffer).offset(0).range(VK_WHOLE_SIZE);
             VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(4, stack);
@@ -384,82 +438,167 @@ public class VolumeBricks {
     }
 
     /**
-     * Note that sections' bakes changed or were removed, so their bricks are voxelized again.
+     * Give a section a new brick, queued to be copied into its slot. A section gets a slot the
+     * first time, if the atlas has one free.
      *
-     * @param sections The sections.
+     * @param position The section.
+     * @param brick Its brick, or null if it has nothing to stand in for, which gives its slot back.
      */
-    public void changed(@NonNull List<LodStore.SectionPos> sections) {
-        queued.addAll(sections);
+    public void put(LodStore.@NonNull SectionPos position, VolumeVoxelizer.Brick brick) {
+        if (brick == null) {
+            remove(position);
+            return;
+        }
+        if (!slots.containsKey(position)) {
+            if (free.isEmpty()) {
+                if (!warnedFull) {
+                    log.warn(
+                            "The volume atlas is full, at {} bricks; sections past the volume"
+                                    + " distance go without their cut out and translucent blocks",
+                            VolumeMath.SLOTS);
+                    warnedFull = true;
+                }
+                withoutSlot.add(position);
+                return;
+            }
+            slots.put(position, free.poll());
+            withoutSlot.remove(position);
+        }
+        uploads.put(position, brick);
     }
 
     /**
-     * Take the next sections to voxelize, up to a budget, with their meshes as they are now. A
-     * section with no cut out or translucent meshes left gives its slot back.
+     * Take a section's brick out, giving its slot back.
      *
-     * @param sections The section manager.
-     * @param maxBricks The most bricks.
-     * @param maxTriangles The most triangles, once at least one brick is taken.
-     * @return The batches.
+     * @param position The section.
      */
-    public List<Batch> takeBatches(
-            @NonNull SectionManager sections, int maxBricks, long maxTriangles) {
-        final List<Batch> out = new ArrayList<>();
-        long triangles = 0;
-        final Iterator<LodStore.SectionPos> it = queued.iterator();
-        while (it.hasNext() && out.size() < maxBricks && triangles < maxTriangles) {
-            final LodStore.SectionPos position = it.next();
+    public void remove(LodStore.@NonNull SectionPos position) {
+        uploads.remove(position);
+        release(position);
+    }
+
+    /**
+     * Take the next bricks to copy into their slots, up to a budget, and count them as drawable:
+     * the caller records the copies before this frame's draws.
+     *
+     * @param maxBricks The most bricks.
+     * @return The bricks and their slots.
+     */
+    public List<Upload> takeUploads(int maxBricks) {
+        final List<Upload> out = new ArrayList<>();
+        final Iterator<Map.Entry<LodStore.SectionPos, VolumeVoxelizer.Brick>> it =
+                uploads.entrySet().iterator();
+        while (it.hasNext() && out.size() < maxBricks) {
+            final Map.Entry<LodStore.SectionPos, VolumeVoxelizer.Brick> entry = it.next();
             it.remove();
-            final List<MeshHandle> meshes = new ArrayList<>();
-            Vector3dc origin = null;
-            final double size = VolumeMath.BRICK * VolumeMath.VOXEL_SIZE;
-            for (SectionManager.Caster caster :
-                    sections.meshesAt(
-                            new double[] {
-                                position.x() * size, position.y() * size, position.z() * size
-                            })) {
-                final MeshKind kind = caster.mesh().kind();
-                if (kind == MeshKind.BAKED_CUTOUT || kind == MeshKind.BAKED_TRANSLUCENT) {
-                    meshes.add(caster.mesh());
-                    origin = caster.origin();
-                }
-            }
-            if (meshes.isEmpty()) {
-                release(position);
-                continue;
-            }
-            Integer slot = slots.get(position);
-            if (slot == null) {
-                if (free.isEmpty()) {
-                    if (!warnedFull) {
-                        log.warn(
-                                "The volume atlas is full, at {} bricks; sections past the volume"
-                                        + " distance go without their cut out and translucent"
-                                        + " blocks",
-                                VolumeMath.SLOTS);
-                        warnedFull = true;
-                    }
-                    continue;
-                }
-                slot = free.poll();
-                slots.put(position, slot);
-            }
-            for (MeshHandle mesh : meshes) {
-                triangles += mesh.indexCount() / 3;
-            }
-            out.add(new Batch(slot, origin, meshes));
+            final int slot = slots.get(entry.getKey());
+            filled[slot] = true;
+            out.add(new Upload(entry.getKey(), slot, entry.getValue()));
         }
         return out;
     }
 
     /**
-     * Note that a batch's bricks were voxelized, so they can be drawn.
+     * Write bricks into a frame's upload buffer, for {@code VolumeUpload} to copy into their slots:
+     * each brick's slot, then from {@link #blocksOffset} each brick's block of {@link #STAGED_SIZE}
+     * bytes, its texels first. The buffer is only rewritten once that frame is done with it.
      *
-     * @param batches The batches.
+     * @param frame The frame in flight.
+     * @param state The Vulkan state.
+     * @param batch The bricks.
+     * @return The buffer.
      */
-    public void voxelized(@NonNull List<Batch> batches) {
-        for (Batch batch : batches) {
-            filled[batch.slot()] = true;
+    public SharedBuffer writeUploads(
+            int frame, @NonNull VulkanState state, @NonNull List<Upload> batch) {
+        final long bytes = blocksOffset(batch.size()) + (long) batch.size() * STAGED_SIZE;
+        SharedBuffer buffer = uploadBuffers[frame];
+        if (buffer == null) {
+            buffer =
+                    SharedBuffer.allocate(
+                            bytes,
+                            state,
+                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+            uploadBuffers[frame] = buffer;
         }
+        buffer.ensureCapacity(bytes, state);
+        final ByteBuffer data =
+                MemoryUtil.memByteBuffer(buffer.allocationInfo.pMappedData(), (int) bytes);
+        final int blocks = (int) blocksOffset(batch.size());
+        for (int i = 0; i < batch.size(); ++i) {
+            data.putInt(i * Integer.BYTES, batch.get(i).slot());
+            final VolumeVoxelizer.Brick brick = batch.get(i).brick();
+            final int base = blocks + i * STAGED_SIZE;
+            data.put(base, brick.texels());
+            for (int mask = 0; mask < brick.cellMasks().length; ++mask) {
+                data.putInt(base + TEXELS_SIZE + mask * Integer.BYTES, brick.cellMasks()[mask]);
+            }
+            final short[] voxelMaterials = brick.materials();
+            for (int voxel = 0; voxel < voxelMaterials.length; ++voxel) {
+                data.putShort(
+                        base + TEXELS_SIZE + MASKS_SIZE + voxel * Short.BYTES,
+                        voxelMaterials[voxel]);
+            }
+            final int[] voxelSurfaces = brick.surfaces();
+            for (int word = 0; word < voxelSurfaces.length; ++word) {
+                data.putInt(
+                        base + TEXELS_SIZE + MASKS_SIZE + MATERIALS_SIZE + word * Integer.BYTES,
+                        voxelSurfaces[word]);
+            }
+        }
+        return buffer;
+    }
+
+    /**
+     * Where the bricks' blocks start in an upload buffer: after their slots, aligned to 16 bytes.
+     *
+     * @param count How many bricks it holds.
+     * @return The offset, in bytes.
+     */
+    public static long blocksOffset(int count) {
+        final long slotBytes = (long) count * Integer.BYTES;
+        return (slotBytes + BLOCK_ALIGNMENT - 1) / BLOCK_ALIGNMENT * BLOCK_ALIGNMENT;
+    }
+
+    /**
+     * Record copying the bricks' masks, materials and surface bits from a frame's upload buffer
+     * into their slots. The texels go by compute, which writes the atlas in the layout it stays in.
+     *
+     * @param commandBuffer The command buffer.
+     * @param buffer The upload buffer, as {@link #writeUploads} wrote it.
+     * @param batch The bricks.
+     * @param stack The stack to allocate on.
+     */
+    public void recordCopies(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull SharedBuffer buffer,
+            @NonNull List<Upload> batch,
+            @NonNull MemoryStack stack) {
+        final VkBufferCopy.Buffer maskRegions = VkBufferCopy.calloc(batch.size(), stack);
+        final VkBufferCopy.Buffer materialRegions = VkBufferCopy.calloc(batch.size(), stack);
+        final VkBufferCopy.Buffer surfaceRegions = VkBufferCopy.calloc(batch.size(), stack);
+        final long blocks = blocksOffset(batch.size());
+        for (int i = 0; i < batch.size(); ++i) {
+            final int slot = batch.get(i).slot();
+            final long base = blocks + (long) i * STAGED_SIZE;
+            maskRegions
+                    .get(i)
+                    .srcOffset(base + TEXELS_SIZE)
+                    .dstOffset((long) slot * MASKS_SIZE)
+                    .size(MASKS_SIZE);
+            materialRegions
+                    .get(i)
+                    .srcOffset(base + TEXELS_SIZE + MASKS_SIZE)
+                    .dstOffset((long) slot * MATERIALS_SIZE)
+                    .size(MATERIALS_SIZE);
+            surfaceRegions
+                    .get(i)
+                    .srcOffset(base + TEXELS_SIZE + MASKS_SIZE + MATERIALS_SIZE)
+                    .dstOffset((long) slot * SURFACES_SIZE)
+                    .size(SURFACES_SIZE);
+        }
+        vkCmdCopyBuffer(commandBuffer, buffer.buffer, masks.buffer, maskRegions);
+        vkCmdCopyBuffer(commandBuffer, buffer.buffer, materials.buffer, materialRegions);
+        vkCmdCopyBuffer(commandBuffer, buffer.buffer, surfaces.buffer, surfaceRegions);
     }
 
     /**
@@ -468,6 +607,7 @@ public class VolumeBricks {
      * @param position The section.
      */
     private void release(LodStore.@NonNull SectionPos position) {
+        withoutSlot.remove(position);
         final Integer slot = slots.remove(position);
         if (slot != null) {
             filled[slot] = false;
@@ -477,7 +617,8 @@ public class VolumeBricks {
 
     /**
      * Write this frame's draw list: every voxelized brick of the given sections, its corner
-     * relative to the camera, nearest first.
+     * relative to the camera, nearest first. The order is kept while the sections are the same list
+     * and the camera stays within {@link #RESORT_DISTANCE} of where it was sorted for.
      *
      * @param frame The frame in flight.
      * @param state The Vulkan state.
@@ -500,15 +641,23 @@ public class VolumeBricks {
         // Nearest first, so the depth pass writes the near faces before the far boxes behind them,
         // which the depth test then drops before their shaders run
         final double half = size / 2;
-        final List<LodStore.SectionPos> ordered = new ArrayList<>(sections);
-        ordered.sort(
-                Comparator.comparingDouble(
-                        position -> {
-                            final double dx = position.x() * size + half - camera.x();
-                            final double dy = position.y() * size + half - camera.y();
-                            final double dz = position.z() * size + half - camera.z();
-                            return dx * dx + dy * dy + dz * dz;
-                        }));
+        if (sections != sortedFrom
+                || sortedAt == null
+                || sortedAt.distance(camera) > RESORT_DISTANCE) {
+            final List<LodStore.SectionPos> ordered = new ArrayList<>(sections);
+            ordered.sort(
+                    Comparator.comparingDouble(
+                            position -> {
+                                final double dx = position.x() * size + half - camera.x();
+                                final double dy = position.y() * size + half - camera.y();
+                                final double dz = position.z() * size + half - camera.z();
+                                return dx * dx + dy * dy + dz * dz;
+                            }));
+            sorted = ordered;
+            sortedFrom = sections;
+            sortedAt = new Vector3d(camera);
+        }
+        final List<LodStore.SectionPos> ordered = sorted;
         int count = 0;
         for (LodStore.SectionPos position : ordered) {
             final Integer slot = slots.get(position);
@@ -573,15 +722,25 @@ public class VolumeBricks {
     }
 
     /**
-     * Whether a section's brick shows its blocks as they are now: voxelized, and not waiting to be
-     * again.
+     * Whether a section's brick shows its blocks as they are now: copied in, and no newer one
+     * waiting.
      *
      * @param position The section.
      * @return True if it is up to date.
      */
     public boolean isCurrent(LodStore.@NonNull SectionPos position) {
+        return currentSlot(position) >= 0;
+    }
+
+    /**
+     * The slot of a section's brick, if it shows its blocks as they are now.
+     *
+     * @param position The section.
+     * @return The slot, or -1 if it has none or a newer brick is waiting.
+     */
+    public int currentSlot(LodStore.@NonNull SectionPos position) {
         final Integer slot = slots.get(position);
-        return slot != null && filled[slot] && !queued.contains(position);
+        return slot != null && filled[slot] && !uploads.containsKey(position) ? slot : -1;
     }
 
     /**
@@ -594,12 +753,21 @@ public class VolumeBricks {
     }
 
     /**
-     * How many sections wait to be voxelized.
+     * How many sections wanted a brick while the atlas was full, and still have none.
+     *
+     * @return The count.
+     */
+    public int withoutSlotCount() {
+        return withoutSlot.size();
+    }
+
+    /**
+     * How many bricks wait to be copied in.
      *
      * @return The count.
      */
     public int queuedCount() {
-        return queued.size();
+        return uploads.size();
     }
 
     /**
@@ -611,6 +779,10 @@ public class VolumeBricks {
         for (int i = 0; i < drawLists.length; ++i) {
             SharedBuffer.free(drawLists[i], state);
             drawLists[i] = null;
+            if (uploadBuffers[i] != null) {
+                SharedBuffer.free(uploadBuffers[i], state);
+                uploadBuffers[i] = null;
+            }
             if (hitBuffers[i] != null) {
                 SharedBuffer.free(hitBuffers[i], state);
                 hitBuffers[i] = null;
@@ -620,6 +792,8 @@ public class VolumeBricks {
         masks = null;
         SharedBuffer.free(materials, state);
         materials = null;
+        SharedBuffer.free(surfaces, state);
+        surfaces = null;
         vkDestroyDescriptorPool(state.device.logical, descriptorPool, null);
         vkDestroyDescriptorSetLayout(state.device.logical, setLayout, null);
         vkDestroySampler(state.device.logical, sampler, null);

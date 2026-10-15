@@ -366,4 +366,20 @@ public final class BakeSource {
     public int getTriangleCount() {
         return triangleFaces.length;
     }
+
+    /**
+     * Roughly how many bytes its arrays hold, for memory reports.
+     *
+     * @return The bytes.
+     */
+    public long heldBytes() {
+        return ((long) positions.length
+                                + normals.length
+                                + tangents.length
+                                + uvs.length
+                                + indices.length)
+                        * Integer.BYTES
+                + flippedBitangents.length
+                + triangleFaces.length;
+    }
 }

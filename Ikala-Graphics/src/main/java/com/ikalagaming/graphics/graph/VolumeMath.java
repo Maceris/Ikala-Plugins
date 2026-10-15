@@ -3,8 +3,8 @@ package com.ikalagaming.graphics.graph;
 /**
  * The math of volume bricks, which stand in for a section's cut out and translucent surfaces at a
  * distance: each voxel holds how much light its surfaces block per meter and their average color.
- * {@code volume_voxelize.comp}, {@code volume_resolve.comp} and {@code volume.glsl} do the same on
- * the GPU; keep them in step.
+ * {@link VolumeVoxelizer} builds bricks with it, and {@code volume.glsl} reads them on the GPU;
+ * keep them in step.
  *
  * <p>Surfaces become extinction by how often a ray crosses them. For rays in every direction
  * through a voxel, a surface of area A inside a voxel of volume V is crossed A / (2V) times per
@@ -96,7 +96,7 @@ public final class VolumeMath {
     }
 
     /**
-     * Store a see-through voxel's extinction in eight bits, as {@code volume_resolve.comp} does.
+     * Store a see-through voxel's extinction in eight bits, as {@code volume.glsl} reads it.
      *
      * @param extinction The extinction, per meter.
      * @return The stored value, 0 to {@link #MAX_SEE_THROUGH}.
@@ -107,7 +107,7 @@ public final class VolumeMath {
     }
 
     /**
-     * Store a solid voxel in eight bits, as {@code volume_resolve.comp} does.
+     * Store a solid voxel in eight bits, as {@code volume.glsl} reads it.
      *
      * @param coverage How much of its faces the texture covers, 0 to 1.
      * @return The stored value, {@link #FIRST_SOLID} to {@link #MAX_STORED}.

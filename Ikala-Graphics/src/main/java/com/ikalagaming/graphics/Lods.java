@@ -130,7 +130,7 @@ public final class Lods {
      */
     public LodRenderer.Stats stats() {
         final LodRenderer lods = lods();
-        return lods == null ? new LodRenderer.Stats(0, 0, 0, 0, 0, 0) : lods.getStats();
+        return lods == null ? LodRenderer.Stats.NONE : lods.getStats();
     }
 
     /**

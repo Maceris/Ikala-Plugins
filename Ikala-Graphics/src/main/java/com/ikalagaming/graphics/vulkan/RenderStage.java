@@ -34,6 +34,7 @@ public interface RenderStage {
         POINT_SHADOW_BAKED,
         OCCUPANCY_CLEAR,
         OCCUPANCY_VOXELIZE,
+        OCCUPANCY_BRICKS,
         SKYBOX,
         TAA,
         TONEMAP,
@@ -43,8 +44,7 @@ public interface RenderStage {
         OIT_SPLAT,
         OIT_SPLAT_BAKED,
         OIT_INTEGRATE,
-        VOLUME_VOXELIZE,
-        VOLUME_RESOLVE,
+        VOLUME_UPLOAD,
         VOLUME_SPLAT,
         VOLUME_COLOR,
         VOLUME_DEPTH

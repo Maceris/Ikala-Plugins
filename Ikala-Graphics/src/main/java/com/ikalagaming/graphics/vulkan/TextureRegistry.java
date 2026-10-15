@@ -55,6 +55,12 @@ public class TextureRegistry {
     private final State[] states;
 
     /**
+     * Each slot's average linear color and opacity, or null where it wasn't worked out or no handle
+     * owns the slot.
+     */
+    private final float[][] averages;
+
+    /**
      * Create an empty registry.
      *
      * @param capacity The number of bindless slots.
@@ -65,6 +71,7 @@ public class TextureRegistry {
         generations = new int[capacity];
         handles = new TextureHandle[capacity];
         states = new State[capacity];
+        averages = new float[capacity][];
     }
 
     /**
@@ -150,6 +157,43 @@ public class TextureRegistry {
             }
             states[handle.slot()] = State.RESIDENT;
             return true;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Note a texture's average color, for what stands in for it at a distance. Does nothing if the
+     * handle is stale.
+     *
+     * @param handle The texture.
+     * @param average Its average linear red, green and blue and its average opacity.
+     */
+    public void setAverage(@Nullable TextureHandle handle, float @NonNull [] average) {
+        lock.lock();
+        try {
+            if (isValidLocked(handle)) {
+                averages[handle.slot()] = average.clone();
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * A texture's average color.
+     *
+     * @param handle The texture.
+     * @return Its average linear red, green and blue and its average opacity, or null if the handle
+     *     is null or stale or its average wasn't worked out.
+     */
+    public float[] average(@Nullable TextureHandle handle) {
+        lock.lock();
+        try {
+            if (!isValidLocked(handle) || averages[handle.slot()] == null) {
+                return null;
+            }
+            return averages[handle.slot()].clone();
         } finally {
             lock.unlock();
         }
@@ -306,6 +350,7 @@ public class TextureRegistry {
         owners[slot] = null;
         handles[slot] = null;
         states[slot] = null;
+        averages[slot] = null;
         generations[slot] += 1;
         return info;
     }

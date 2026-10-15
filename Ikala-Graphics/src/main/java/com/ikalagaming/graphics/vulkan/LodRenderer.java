@@ -97,8 +97,20 @@ public class LodRenderer {
     /** The counter of clusters in the cut the occlusion test hid. */
     public static final int COUNTER_OCCLUDED = COUNTER_OUTSIDE + 1;
 
+    /**
+     * The first level counters: for each level up to {@link #LEVEL_COUNTERS}, the cut's clusters,
+     * its triangles, and its triangles inside the scene's frustum.
+     */
+    public static final int COUNTER_LEVELS = COUNTER_OCCLUDED + 1;
+
+    /** How many levels have counters; deeper ones count as the last. */
+    public static final int LEVEL_COUNTERS = 32;
+
+    /** Counters per level. */
+    public static final int COUNTERS_PER_LEVEL = 3;
+
     /** How many counters there are. */
-    public static final int COUNTER_COUNT = COUNTER_OCCLUDED + 1;
+    public static final int COUNTER_COUNT = COUNTER_LEVELS + LEVEL_COUNTERS * COUNTERS_PER_LEVEL;
 
     /** How many clusters the tables start with room for. */
     private static final int INITIAL_CLUSTERS = 1024;
@@ -229,7 +241,7 @@ public class LodRenderer {
      *
      * @return The counts.
      */
-    @Getter private volatile Stats stats = new Stats(0, 0, 0, 0, 0, 0);
+    @Getter private volatile Stats stats = Stats.NONE;
 
     /**
      * What the culling pass did in a frame, over every world.
@@ -240,6 +252,9 @@ public class LodRenderer {
      * @param occluded Clusters in the cut the occlusion test hid.
      * @param early Clusters the scene drew before the depth pyramid.
      * @param late Clusters the scene drew after it.
+     * @param levelClusters Clusters in the cut at each level, the last counting any deeper.
+     * @param levelTriangles Triangles in the cut at each level.
+     * @param levelInView Triangles in the cut inside the scene's frustum at each level.
      */
     public record Stats(
             int selectedClusters,
@@ -247,7 +262,35 @@ public class LodRenderer {
             int outside,
             int occluded,
             int early,
-            int late) {}
+            int late,
+            int @NonNull [] levelClusters,
+            int @NonNull [] levelTriangles,
+            int @NonNull [] levelInView) {
+        /** Nothing culled yet. */
+        public static final Stats NONE =
+                new Stats(0, 0, 0, 0, 0, 0, new int[0], new int[0], new int[0]);
+    }
+
+    /**
+     * One of each level's counters, up to the deepest level counted.
+     *
+     * @param counts The counters.
+     * @param which Which of a level's counters: clusters, triangles, or triangles in view.
+     * @return Each level's count.
+     */
+    private static int[] levelCounts(@NonNull IntBuffer counts, int which) {
+        int levels = 0;
+        for (int level = 0; level < LEVEL_COUNTERS; ++level) {
+            if (counts.get(COUNTER_LEVELS + level * COUNTERS_PER_LEVEL) != 0) {
+                levels = level + 1;
+            }
+        }
+        final int[] out = new int[levels];
+        for (int level = 0; level < levels; ++level) {
+            out[level] = counts.get(COUNTER_LEVELS + level * COUNTERS_PER_LEVEL + which);
+        }
+        return out;
+    }
 
     /**
      * How a live world is keeping up.
@@ -1937,7 +1980,10 @@ public class LodRenderer {
                             counts.get(COUNTER_OUTSIDE),
                             counts.get(COUNTER_OCCLUDED),
                             counts.get(InstanceDrawUpdate.LIST_SCENE_EARLY),
-                            counts.get(InstanceDrawUpdate.LIST_SCENE_LATE));
+                            counts.get(InstanceDrawUpdate.LIST_SCENE_LATE),
+                            levelCounts(counts, 0),
+                            levelCounts(counts, 1),
+                            levelCounts(counts, 2));
         }
         for (int i = 0; i < COUNTER_COUNT; ++i) {
             counts.put(i, 0);

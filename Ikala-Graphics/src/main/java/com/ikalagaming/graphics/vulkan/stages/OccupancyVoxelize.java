@@ -6,6 +6,7 @@ import static org.lwjgl.vulkan.VK13.*;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.OccupancyClipmap;
+import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.GeometryArena;
 import com.ikalagaming.graphics.vulkan.MeshRegistry;
@@ -28,7 +29,8 @@ import java.util.List;
 /**
  * Keeps the occupancy volume up to date, see {@link OccupancyVolume}: the levels follow the camera,
  * then the boxes they newly cover and the boxes that changed are cleared, then this frame's queued
- * section meshes are voxelized into them, a thread a triangle.
+ * section meshes are voxelized into them, a thread a triangle, and the surfaces of the volume
+ * bricks standing in for meshes off the GPU marked, a thread a brick voxel.
  */
 @Slf4j
 public class OccupancyVoxelize implements RenderStage {
@@ -46,6 +48,26 @@ public class OccupancyVoxelize implements RenderStage {
     /** The size of the clear push constants: the first texel and level, and the size. */
     private static final int CLEAR_CONSTANTS_SIZE = 8 * Integer.BYTES;
 
+    /** The size of a brick job in its buffer, see occupancy_bricks.comp. */
+    private static final int BRICK_JOB_SIZE = 8 * Integer.BYTES;
+
+    /**
+     * Where the origins start in the brick push constants: after two addresses and the count,
+     * padded to 16 bytes as an ivec4 is aligned.
+     */
+    private static final int BRICK_ORIGINS_OFFSET = 2 * Long.BYTES + 4 * Integer.BYTES;
+
+    /** The size of the brick push constants: the addresses and count, then three origins. */
+    private static final int BRICK_CONSTANTS_SIZE =
+            BRICK_ORIGINS_OFFSET + OccupancyClipmap.LEVELS * 4 * Integer.BYTES;
+
+    /** Threads in a brick workgroup, see occupancy_bricks.comp. */
+    private static final int BRICK_GROUP = 64;
+
+    /** Workgroups a brick job takes: a thread a voxel. */
+    private static final int GROUPS_PER_BRICK =
+            VolumeMath.BRICK * VolumeMath.BRICK * VolumeMath.BRICK / BRICK_GROUP;
+
     /** Threads in a voxelize workgroup. */
     private static final int VOXELIZE_GROUP = 64;
 
@@ -57,6 +79,19 @@ public class OccupancyVoxelize implements RenderStage {
 
     /** The voxelize shader. */
     @NonNull private final ShaderVulkan voxelizeShader;
+
+    /** The brick shader. */
+    @NonNull private final ShaderVulkan brickShader;
+
+    /** VkPipelineLayout of the brick pass. */
+    private long brickLayout;
+
+    /** VkPipeline of the brick pass. */
+    private long brickPipeline;
+
+    /** Each frame in flight's brick job buffer, written by the CPU. */
+    private final SharedBuffer[] brickJobBuffers =
+            new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
     /** VkPipelineLayout of the clear pass. */
     private long clearLayout;
@@ -79,11 +114,15 @@ public class OccupancyVoxelize implements RenderStage {
      *
      * @param clearShader The clear compute shader.
      * @param voxelizeShader The voxelize compute shader.
+     * @param brickShader The brick compute shader.
      */
     public OccupancyVoxelize(
-            @NonNull ShaderVulkan clearShader, @NonNull ShaderVulkan voxelizeShader) {
+            @NonNull ShaderVulkan clearShader,
+            @NonNull ShaderVulkan voxelizeShader,
+            @NonNull ShaderVulkan brickShader) {
         this.clearShader = clearShader;
         this.voxelizeShader = voxelizeShader;
+        this.brickShader = brickShader;
     }
 
     @Override
@@ -94,11 +133,18 @@ public class OccupancyVoxelize implements RenderStage {
             clearPipeline = createPipeline(state, clearShader, clearLayout, stack);
             voxelizeLayout = createLayout(state, VOXELIZE_CONSTANTS_SIZE, stack);
             voxelizePipeline = createPipeline(state, voxelizeShader, voxelizeLayout, stack);
+            brickLayout = createLayout(state, BRICK_CONSTANTS_SIZE, stack);
+            brickPipeline = createPipeline(state, brickShader, brickLayout, stack);
         }
         for (int i = 0; i < jobBuffers.length; ++i) {
             jobBuffers[i] =
                     SharedBuffer.allocate(
                             (long) JOB_SIZE * 1024, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+            brickJobBuffers[i] =
+                    SharedBuffer.allocate(
+                            (long) BRICK_JOB_SIZE * 1024,
+                            state,
+                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
         }
     }
 
@@ -156,9 +202,13 @@ public class OccupancyVoxelize implements RenderStage {
         vkDestroyPipeline(state.device.logical, voxelizePipeline, null);
         vkDestroyPipelineLayout(state.device.logical, clearLayout, null);
         vkDestroyPipelineLayout(state.device.logical, voxelizeLayout, null);
+        vkDestroyPipeline(state.device.logical, brickPipeline, null);
+        vkDestroyPipelineLayout(state.device.logical, brickLayout, null);
         for (int i = 0; i < jobBuffers.length; ++i) {
             SharedBuffer.free(jobBuffers[i], state);
             jobBuffers[i] = null;
+            SharedBuffer.free(brickJobBuffers[i], state);
+            brickJobBuffers[i] = null;
         }
     }
 
@@ -178,8 +228,10 @@ public class OccupancyVoxelize implements RenderStage {
         final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
         volume.follow(scene.getCamera().getPosition());
         final List<OccupancyClipmap.Box> clears = volume.takeClears();
-        final List<OccupancyVolume.Job> jobs = volume.takeJobs(state.sections);
-        if (clears.isEmpty() && jobs.isEmpty()) {
+        final OccupancyVolume.Jobs work = volume.takeJobs(state.sections, state.volumeBricks);
+        final List<OccupancyVolume.Job> jobs = work.meshes();
+        final List<OccupancyVolume.BrickJob> bricks = work.bricks();
+        if (clears.isEmpty() && jobs.isEmpty() && bricks.isEmpty()) {
             return;
         }
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -239,19 +291,30 @@ public class OccupancyVoxelize implements RenderStage {
                 final ByteBuffer constants = stack.calloc(VOXELIZE_CONSTANTS_SIZE);
                 constants.putLong(Long.BYTES, arena.getVertices().deviceAddress);
                 constants.putLong(2 * Long.BYTES, arena.getIndices().deviceAddress);
-                for (int level = 0; level < OccupancyClipmap.LEVELS; ++level) {
-                    final long[] origin = volume.getClipmap().origin(level);
-                    for (int axis = 0; axis < 3; ++axis) {
-                        constants.putInt(
-                                ORIGINS_OFFSET + (level * 4 + axis) * Integer.BYTES,
-                                OccupancyClipmap.texel(origin[axis]));
-                    }
-                }
+                putOrigins(volume, constants, ORIGINS_OFFSET);
                 // Cut out surfaces first, so where an opaque one shares a voxel its full coverage,
                 // written after a barrier, is what stays
                 final long jobs0 = jobBuffers[state.frameIndex].deviceAddress;
                 dispatchJobs(commandBuffer, constants, jobs0, cutoutJobCount, cutoutTriangles);
-                if (cutoutTriangles > 0 && otherTriangles > 0) {
+            }
+            // Bricks only stand in for cut out and translucent surfaces, so they go with the cut
+            // out meshes, before the barrier
+            final boolean marked = markBricks(state, commandBuffer, bricks, sets, stack);
+            if (cutoutTriangles + otherTriangles > 0) {
+                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, voxelizePipeline);
+                vkCmdBindDescriptorSets(
+                        commandBuffer,
+                        VK_PIPELINE_BIND_POINT_COMPUTE,
+                        voxelizeLayout,
+                        0,
+                        sets,
+                        null);
+                final ByteBuffer constants = stack.calloc(VOXELIZE_CONSTANTS_SIZE);
+                putOrigins(volume, constants, ORIGINS_OFFSET);
+                constants.putLong(Long.BYTES, state.bakedGeometry.getVertices().deviceAddress);
+                constants.putLong(2 * Long.BYTES, state.bakedGeometry.getIndices().deviceAddress);
+                final long jobs0 = jobBuffers[state.frameIndex].deviceAddress;
+                if ((cutoutTriangles > 0 || marked) && otherTriangles > 0) {
                     barrier(
                             commandBuffer,
                             VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -277,6 +340,76 @@ public class OccupancyVoxelize implements RenderStage {
                     VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
                     stack);
         }
+    }
+
+    /**
+     * Write each level's origin, as texels, into push constants.
+     *
+     * @param volume The volume.
+     * @param constants The push constants.
+     * @param offset Where the origins start.
+     */
+    private static void putOrigins(
+            @NonNull OccupancyVolume volume, @NonNull ByteBuffer constants, int offset) {
+        for (int level = 0; level < OccupancyClipmap.LEVELS; ++level) {
+            final long[] origin = volume.getClipmap().origin(level);
+            for (int axis = 0; axis < 3; ++axis) {
+                constants.putInt(
+                        offset + (level * 4 + axis) * Integer.BYTES,
+                        OccupancyClipmap.texel(origin[axis]));
+            }
+        }
+    }
+
+    /**
+     * Mark this frame's bricks' surfaces into the volume.
+     *
+     * @param state The Vulkan state.
+     * @param commandBuffer The command buffer to record into.
+     * @param bricks The brick jobs.
+     * @param sets The volume's set.
+     * @param stack The stack to allocate on.
+     * @return Whether anything was dispatched.
+     */
+    private boolean markBricks(
+            @NonNull VulkanState state,
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull List<OccupancyVolume.BrickJob> bricks,
+            @NonNull LongBuffer sets,
+            @NonNull MemoryStack stack) {
+        if (bricks.isEmpty() || state.volumeBricks == null) {
+            return false;
+        }
+        final SharedBuffer buffer = brickJobBuffers[state.frameIndex];
+        buffer.ensureCapacity((long) bricks.size() * BRICK_JOB_SIZE, state);
+        final ByteBuffer out =
+                MemoryUtil.memByteBuffer(
+                        buffer.allocationInfo.pMappedData(), bricks.size() * BRICK_JOB_SIZE);
+        final OccupancyClipmap clipmap = state.occupancy.getClipmap();
+        for (int i = 0; i < bricks.size(); ++i) {
+            final OccupancyVolume.BrickJob job = bricks.get(i);
+            final int base = i * BRICK_JOB_SIZE;
+            final int size = OccupancyClipmap.VOXEL_SIZES[job.level()];
+            final long[] origin = clipmap.origin(job.level());
+            for (int axis = 0; axis < 3; ++axis) {
+                out.putInt(
+                        base + axis * Integer.BYTES,
+                        (int) (job.corner()[axis] - origin[axis] * size));
+            }
+            out.putInt(base + 3 * Integer.BYTES, job.level());
+            out.putInt(base + 4 * Integer.BYTES, job.slot());
+        }
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, brickPipeline);
+        vkCmdBindDescriptorSets(
+                commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, brickLayout, 0, sets, null);
+        final ByteBuffer constants = stack.calloc(BRICK_CONSTANTS_SIZE);
+        constants.putLong(0, buffer.deviceAddress);
+        constants.putLong(Long.BYTES, state.volumeBricks.getSurfaces().deviceAddress);
+        constants.putInt(2 * Long.BYTES, bricks.size());
+        putOrigins(state.occupancy, constants, BRICK_ORIGINS_OFFSET);
+        vkCmdPushConstants(commandBuffer, brickLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
+        vkCmdDispatch(commandBuffer, bricks.size() * GROUPS_PER_BRICK, 1, 1);
+        return true;
     }
 
     /** Whether the volume was kept up to date last frame. */

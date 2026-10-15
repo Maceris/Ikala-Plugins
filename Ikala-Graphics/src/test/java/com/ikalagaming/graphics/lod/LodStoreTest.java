@@ -112,6 +112,44 @@ class LodStoreTest {
         }
     }
 
+    /** Building several cells at once gives exactly what building them one at a time does. */
+    @Test
+    void testCellsAtOnceMatchOneAtATime() {
+        final List<LodMesh> sections = DagTest.terrain(4);
+        final LodStore serial =
+                new LodStore(
+                        new double[3],
+                        SECTION,
+                        1,
+                        STOP_AT,
+                        new DagBuilder.Options(0.5, false, 1, false, 12));
+        final LodStore parallel =
+                new LodStore(
+                        new double[3],
+                        SECTION,
+                        1,
+                        STOP_AT,
+                        new DagBuilder.Options(0.5, false, 16, false, 12));
+        assertEquals(1, serial.getCellsAtOnce());
+        assertTrue(parallel.getCellsAtOnce() > 1, "" + parallel.getCellsAtOnce());
+        for (LodMesh mesh : sections) {
+            serial.put(position(mesh), mesh);
+            parallel.put(position(mesh), mesh);
+        }
+        serial.rebuild();
+        parallel.rebuild();
+        assertEquals(List.copyOf(serial.cellKeys()), List.copyOf(parallel.cellKeys()));
+        assertTrue(serial.cellKeys().stream().anyMatch(key -> key.level() > 0), "Parents built");
+        final LodDag one = serial.snapshot();
+        final LodDag many = parallel.snapshot();
+        assertEquals(one.clusters().size(), many.clusters().size());
+        for (int i = 0; i < one.clusters().size(); ++i) {
+            assertArrayEquals(one.clusters().get(i).corners(), many.clusters().get(i).corners());
+            assertEquals(one.clusters().get(i).error(), many.clusters().get(i).error(), 0);
+            assertEquals(one.consumer(i), many.consumer(i), "" + i);
+        }
+    }
+
     /**
      * Build a store and flatten it.
      *

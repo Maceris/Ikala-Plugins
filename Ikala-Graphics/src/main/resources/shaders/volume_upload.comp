@@ -1,0 +1,46 @@
+#version 460
+#extension GL_EXT_buffer_reference : require
+
+// Copies volume bricks' texels from a frame's upload buffer into their slots of the atlas, see
+// VolumeBricks.writeUploads: a thread a voxel, a workgroup per brick and slab. Done by compute
+// rather than a buffer to image copy, since the atlas stays in the general layout, which storage
+// writes are meant for.
+
+layout(local_size_x = 64) in;
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Words {
+    uint words[];
+};
+
+layout(push_constant) uniform UploadConstants {
+    // Each brick's slot, then from blocksWord each brick's block, its texels first
+    Words uploads;
+    uint count;
+    // Where the blocks start, in words
+    uint blocksWord;
+    // The size of a block, in words
+    uint blockWords;
+};
+
+layout(set = 0, binding = 0, rgba8) uniform restrict writeonly image3D atlas;
+
+// Match VolumeMath
+const uint BRICK = 16u;
+const uint VOXELS = BRICK * BRICK * BRICK;
+const uint SLOTS_X = 32u;
+const uint SLOTS_Y = 16u;
+
+void main()
+{
+    uint groupsPerBrick = VOXELS / gl_WorkGroupSize.x;
+    uint brick = gl_WorkGroupID.x / groupsPerBrick;
+    if (brick >= count) {
+        return;
+    }
+    uint voxel = (gl_WorkGroupID.x % groupsPerBrick) * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
+    uint slot = uploads.words[brick];
+    uvec3 origin = uvec3(slot % SLOTS_X, slot / SLOTS_X % SLOTS_Y, slot / (SLOTS_X * SLOTS_Y)) * BRICK;
+    uvec3 inBrick = uvec3(voxel % BRICK, voxel / BRICK % BRICK, voxel / (BRICK * BRICK));
+    uint texel = uploads.words[blocksWord + brick * blockWords + voxel];
+    imageStore(atlas, ivec3(origin + inBrick), unpackUnorm4x8(texel));
+}

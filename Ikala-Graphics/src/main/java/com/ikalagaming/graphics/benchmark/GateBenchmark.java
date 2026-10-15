@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics.benchmark;
 
+import static org.lwjgl.util.vma.Vma.vmaCalculateStatistics;
+
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
@@ -28,6 +30,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
+import org.lwjgl.system.MemoryStack;
+import org.lwjgl.util.vma.VmaTotalStatistics;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -751,6 +755,12 @@ public final class GateBenchmark {
                 if (keep) {
                     GraphicsManager.getUiManager().setSurfacesHidden(true);
                 }
+                // Another level of detail cache folder, such as an empty one to build every
+                // cell; before starting, which opens the cache
+                final String lodCache = System.getProperty(PROPERTY + ".lodCache");
+                if (lodCache != null) {
+                    GraphicsManager.getSettings().lodCacheDirectory = lodCache;
+                }
                 start(
                         SyntheticTerrain.Recipe.valueOf(recipe.trim().toUpperCase()),
                         Integer.getInteger(PROPERTY + ".radius", 12),
@@ -1038,15 +1048,15 @@ public final class GateBenchmark {
                     release();
                     return;
                 }
-                boolean allResident = true;
+                // Every section the run made has a bake drawn; the counts save asking each one
+                final int made;
                 sectionsLock.lock();
                 try {
-                    for (SectionHandle section : sections) {
-                        allResident &= graphics.sections().isResident(section);
-                    }
+                    made = sections.size();
                 } finally {
                     sectionsLock.unlock();
                 }
+                final boolean allResident = stats.resident() >= made;
                 // With level of detail, also until it shows every section's bake with every cell
                 // built and loaded
                 final boolean lodCaughtUp = !lod || isLodSettled();
@@ -1213,6 +1223,9 @@ public final class GateBenchmark {
 
     /** Bytes in a mebibyte. */
     private static final double BYTES_PER_MIB = 1024.0 * 1024.0;
+
+    /** A share as a percentage. */
+    private static final double PERCENT = 100;
 
     /**
      * Log how much level of detail is on the GPU, once a second while the camera turns.
@@ -1559,25 +1572,98 @@ public final class GateBenchmark {
         return passed ? "passed" : "FAILED";
     }
 
+    /** Log the level of detail cut's clusters and triangles by level, if there is a world. */
+    private void logLevels() {
+        if (lodWorld == null) {
+            return;
+        }
+        final var stats = graphics.lods().stats();
+        final StringBuilder table = new StringBuilder();
+        table.append(
+                String.format(
+                        "%-6s %10s %12s %8s %12s%n",
+                        "Level", "Clusters", "Triangles", "Share", "In view"));
+        for (int level = 0; level < stats.levelTriangles().length; ++level) {
+            table.append(
+                    String.format(
+                            "%-6d %,10d %,12d %7.1f%% %,12d%n",
+                            level,
+                            stats.levelClusters()[level],
+                            stats.levelTriangles()[level],
+                            PERCENT
+                                    * stats.levelTriangles()[level]
+                                    / Math.max(1, stats.selectedTriangles()),
+                            stats.levelInView()[level]));
+        }
+        log.info("Gate benchmark cut by level:\n{}", table);
+    }
+
+    /** Log what the run holds in GPU and CPU memory, by owner. */
+    private void logMemory() {
+        final var state = renderer().getState();
+        final var arena = state.bakedGeometry;
+        final var live = lodWorld == null ? null : graphics.lods().liveStats(lodWorld);
+        long vmaBlocks;
+        long vmaAllocations;
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            final VmaTotalStatistics totals = VmaTotalStatistics.calloc(stack);
+            vmaCalculateStatistics(state.vmaAllocator, totals);
+            vmaBlocks = totals.total().statistics().blockBytes();
+            vmaAllocations = totals.total().statistics().allocationBytes();
+        }
+        // What is left on the heap once everything unreachable is gone
+        System.gc();
+        final Runtime runtime = Runtime.getRuntime();
+        final long heapUsed = runtime.totalMemory() - runtime.freeMemory();
+        log.info(
+                "Gate benchmark memory, GPU: {} MiB in {} MiB of device memory blocks; level of"
+                        + " detail {} MiB, baked geometry {} MiB used of {} MiB, brick atlas {}"
+                        + " MiB",
+                mib(vmaAllocations),
+                mib(vmaBlocks),
+                live == null ? "0" : mib(live.loadedBytes()),
+                mib(arena.usedBytes()),
+                mib(arena.capacityBytes()),
+                mib(VolumeMath.ATLAS_BYTES));
+        log.info(
+                "Gate benchmark memory, CPU: {} MiB of heap used of {} MiB (max {} MiB); section"
+                        + " bake requests {} MiB, level of detail store {} MiB",
+                mib(heapUsed),
+                mib(runtime.totalMemory()),
+                mib(runtime.maxMemory()),
+                mib(state.sections.requestBytes()),
+                mib(state.sections.lodHeldBytes()));
+    }
+
+    /**
+     * Bytes as mebibytes, to one decimal place.
+     *
+     * @param bytes The bytes.
+     * @return The text.
+     */
+    private static String mib(long bytes) {
+        return String.format("%.1f", bytes / BYTES_PER_MIB);
+    }
+
     /** Work out the results, report them, and release everything. */
     private void finish() {
         final var bricks = renderer().getState().volumeBricks;
         if (bricks != null) {
             log.info(
-                    "Gate benchmark volumes at {} m: {} bricks ({} queued), {} drawn, {} MiB"
-                            + " atlas, {} section triangles placed",
+                    "Gate benchmark volumes at {} m: {} bricks ({} queued, {} without a slot), {}"
+                            + " drawn, {} MiB atlas, {} section triangles placed",
                     GraphicsManager.getSettings().volumeDistance,
                     bricks.brickCount(),
                     bricks.queuedCount(),
+                    bricks.withoutSlotCount(),
                     bricks.drawCount(renderer().getState().frameIndex),
                     VolumeMath.ATLAS_BYTES / BYTES_PER_MIB,
                     renderer().getState().sections.getPlacedTriangles());
-            final var arena = renderer().getState().bakedGeometry;
-            log.info(
-                    "Gate benchmark baked geometry: {} MiB used of {} MiB",
-                    String.format("%.1f", arena.usedBytes() / BYTES_PER_MIB),
-                    String.format("%.1f", arena.capacityBytes() / BYTES_PER_MIB));
         }
+        final int[] checks = renderer().getState().sections.getCheckCounts();
+        log.info("Gate benchmark section checks: {} last frame, {} queued", checks[0], checks[1]);
+        logLevels();
+        logMemory();
         final var points = renderer().getState().pointShadows;
         if (points != null && points.getCastingLights() > 0) {
             log.info(

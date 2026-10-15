@@ -1,0 +1,97 @@
+#version 460
+#extension GL_EXT_buffer_reference : require
+
+// Marks volume bricks' surfaces into the occupancy volume, see OccupancyVolume and VolumeVoxelizer:
+// for sections whose cut out and translucent meshes are off the GPU, their bricks' surface bits
+// stand in for voxelizing the meshes. One thread per brick voxel, a workgroup per job and slab; a
+// marked voxel sets its bit in the level's voxel holding it, and its coverage as
+// occupancy_voxelize.comp sets it. Runs with the cut out meshes, before the opaque ones.
+
+layout(local_size_x = 64) in;
+
+// One brick into one level
+struct BrickJob {
+    // xyz: the section's corner relative to the level's origin, in meters; w: the level
+    ivec4 corner;
+    // x: the brick's slot
+    uvec4 slot;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer BrickJobs {
+    BrickJob jobs[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Surfaces {
+    uint words[];
+};
+
+layout(push_constant) uniform BrickConstants {
+    BrickJobs jobs;
+    Surfaces surfaces;
+    uint jobCount;
+    // So the origins start 16-byte aligned
+    uint pad[3];
+    // Each level's origin modulo the level's size, in voxels
+    ivec4 originTexel[3];
+};
+
+layout(set = 0, binding = 0, r32ui) uniform restrict coherent uimage3D occupancy;
+// Each level's coverage, see OccupancyVolume: 1 where something opaque is
+layout(set = 0, binding = 1, r8) uniform restrict writeonly image3D coverage[3];
+
+// Match OccupancyClipmap
+const int SIZE = 128;
+// Match VolumeMath.BRICK and VolumeVoxelizer
+const int BRICK = 16;
+const uint VOXELS = uint(BRICK * BRICK * BRICK);
+const uint SURFACE_BITS = 2u;
+const uint SURFACES_PER_WORD = 32u / SURFACE_BITS;
+const uint CUTOUT_SURFACE = 1u;
+const uint TRANSLUCENT_SURFACE = 2u;
+// Match OccupancyVolume.OPAQUE_BIT, TRANSLUCENT_BIT and CUTOUT_BIT
+const uint OPAQUE = 1u;
+const uint TRANSLUCENT = 2u;
+const uint CUTOUT = 4u;
+// Match occupancy_voxelize.comp
+const float CUTOUT_COVERAGE = 0.5;
+
+void main()
+{
+    uint groupsPerJob = VOXELS / gl_WorkGroupSize.x;
+    uint jobIndex = gl_WorkGroupID.x / groupsPerJob;
+    if (jobIndex >= jobCount) {
+        return;
+    }
+    uint voxel = (gl_WorkGroupID.x % groupsPerJob) * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
+    BrickJob job = jobs.jobs[jobIndex];
+    uint words = VOXELS / SURFACES_PER_WORD;
+    uint surface = (surfaces.words[job.slot.x * words + voxel / SURFACES_PER_WORD]
+                    >> ((voxel % SURFACES_PER_WORD) * SURFACE_BITS))
+        & ((1u << SURFACE_BITS) - 1u);
+    if (surface == 0u) {
+        return;
+    }
+    uint bit = ((surface & CUTOUT_SURFACE) != 0u ? CUTOUT : 0u)
+        | ((surface & TRANSLUCENT_SURFACE) != 0u ? TRANSLUCENT : 0u);
+    int level = job.corner.w;
+    int voxelSize = 1 << level;
+    ivec3 inBrick = ivec3(voxel % BRICK, voxel / BRICK % BRICK, voxel / (BRICK * BRICK));
+    // In the level's voxels from its origin; corners are whole multiples of the voxel size
+    ivec3 at = (job.corner.xyz + inBrick) >> level;
+    if (any(lessThan(at, ivec3(0))) || any(greaterThanEqual(at, ivec3(SIZE)))) {
+        return;
+    }
+    ivec3 texel = (originTexel[level].xyz + at) & (SIZE - 1);
+    uint bits = bit | imageAtomicOr(occupancy, ivec3(texel.xy, level * SIZE + texel.z), bit);
+    float covered = (bits & OPAQUE) != 0u ? 1.0 : (bits & CUTOUT) != 0u ? CUTOUT_COVERAGE : 0.0;
+    // Threads may be on different levels, so index by constants
+    if (covered > 0.0) {
+        if (level == 0) {
+            imageStore(coverage[0], texel, vec4(covered));
+        } else if (level == 1) {
+            imageStore(coverage[1], texel, vec4(covered));
+        } else {
+            imageStore(coverage[2], texel, vec4(covered));
+        }
+    }
+}

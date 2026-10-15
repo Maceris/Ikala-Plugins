@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.lod;
 
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.flags.TableFlags;
+import com.ikalagaming.graphics.vulkan.LodRenderer;
 
 import lombok.NonNull;
 
@@ -32,6 +33,34 @@ final class LodTables {
      * @param rows Each row's cells.
      */
     record Table(@NonNull String title, @NonNull String[] headers, @NonNull List<String[]> rows) {}
+
+    /**
+     * The GPU cut's clusters and triangles by level, and its triangles in view.
+     *
+     * @param gpu What the culling pass counted.
+     * @return The table.
+     */
+    static Table cutLevels(LodRenderer.@NonNull Stats gpu) {
+        final List<String[]> rows = new ArrayList<>();
+        for (int level = 0; level < gpu.levelTriangles().length; ++level) {
+            rows.add(
+                    new String[] {
+                        Integer.toString(level),
+                        String.format("%,d", gpu.levelClusters()[level]),
+                        String.format("%,d", gpu.levelTriangles()[level]),
+                        String.format(
+                                "%.1f%%",
+                                PERCENT
+                                        * gpu.levelTriangles()[level]
+                                        / Math.max(1, gpu.selectedTriangles())),
+                        String.format("%,d", gpu.levelInView()[level])
+                    });
+        }
+        return new Table(
+                "GPU cut by level",
+                new String[] {"level", "clusters", "triangles", "share", "in view"},
+                rows);
+    }
 
     /**
      * The levels table.

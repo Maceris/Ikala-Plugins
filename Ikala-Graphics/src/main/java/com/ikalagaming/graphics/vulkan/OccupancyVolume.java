@@ -7,6 +7,8 @@ import static org.lwjgl.vulkan.VK13.*;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.Sections;
 import com.ikalagaming.graphics.graph.OccupancyClipmap;
+import com.ikalagaming.graphics.graph.VolumeMath;
+import com.ikalagaming.graphics.lod.LodStore;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -30,7 +32,9 @@ import java.util.Set;
  * clipmap levels of {@link OccupancyClipmap#SIZE}^3 voxels, 1, 2 and 4 meters wide, stacked along z
  * in one {@code R32_UINT} image. Bit {@link #OPAQUE_BIT} marks opaque surfaces, bit {@link
  * #CUTOUT_BIT} cut out ones such as leaves, and bit {@link #TRANSLUCENT_BIT} translucent ones.
- * Baked sections are voxelized into it on the GPU, see {@code OccupancyVoxelize}.
+ * Baked sections are voxelized into it on the GPU, see {@code OccupancyVoxelize}: their meshes, and
+ * for a section whose cut out and translucent meshes are off the GPU, its volume brick's surface
+ * bits in their place (see {@link VolumeBricks}).
  *
  * <p>Each frame the levels follow the camera ({@link OccupancyClipmap}): the voxels a level newly
  * covers are cleared, and the sections there are queued to be voxelized into it. A section that
@@ -98,6 +102,30 @@ public class OccupancyVolume {
     public record Job(int level, long @NonNull [] corner, @NonNull MeshHandle mesh, int bit) {}
 
     /**
+     * One section's volume brick to mark its surfaces from into one level.
+     *
+     * @param level The level.
+     * @param corner The section's corner, in the world, in whole meters.
+     * @param slot The brick's slot.
+     */
+    public record BrickJob(int level, long @NonNull [] corner, int slot) {}
+
+    /**
+     * A frame's work.
+     *
+     * @param meshes The meshes to voxelize.
+     * @param bricks The bricks to mark surfaces from.
+     */
+    public record Jobs(@NonNull List<Job> meshes, @NonNull List<BrickJob> bricks) {}
+
+    /**
+     * What one brick job counts as against {@link #MAX_TRIANGLES_PER_FRAME}: a thread a voxel, as a
+     * triangle is a thread.
+     */
+    private static final long BRICK_COST =
+            (long) VolumeMath.BRICK * VolumeMath.BRICK * VolumeMath.BRICK;
+
+    /**
      * The layout of the set the image is read and written through. -- GETTER -- The set layout.
      *
      * @return The VkDescriptorSetLayout.
@@ -150,6 +178,12 @@ public class OccupancyVolume {
     /** Sections to voxelize, by level, as section corners in sections, finest level first. */
     private final List<Set<List<Long>>> queued = new ArrayList<>();
 
+    /**
+     * Sections whose bricks came in after they were voxelized, to mark from them too, by level, as
+     * section corners in sections. Nothing is cleared for them: their bits only add to the voxels.
+     */
+    private final List<Set<List<Long>>> queuedBricks = new ArrayList<>();
+
     /** Triangles voxelized since the volume was made. */
     @Getter private long trianglesVoxelized;
 
@@ -176,6 +210,7 @@ public class OccupancyVolume {
     public OccupancyVolume(@NonNull VulkanState state) {
         for (int level = 0; level < OccupancyClipmap.LEVELS; ++level) {
             queued.add(new LinkedHashSet<>());
+            queuedBricks.add(new LinkedHashSet<>());
         }
         final int size = OccupancyClipmap.SIZE;
         final int levels = OccupancyClipmap.LEVELS;
@@ -468,8 +503,26 @@ public class OccupancyVolume {
     /** Forget everything, so every level is cleared and written again. */
     public void invalidateAll() {
         clipmap.invalidateAll();
-        for (Set<List<Long>> level : queued) {
-            level.clear();
+        for (int level = 0; level < OccupancyClipmap.LEVELS; ++level) {
+            queued.get(level).clear();
+            queuedBricks.get(level).clear();
+        }
+    }
+
+    /**
+     * Note that a section's brick was copied into its slot, for a section whose brick stands in for
+     * meshes off the GPU: mark its surfaces into every level it is in.
+     *
+     * @param position The section.
+     */
+    public void brickArrived(LodStore.@NonNull SectionPos position) {
+        final double size = Sections.SECTION_SIZE;
+        final double[] min = {position.x() * size, position.y() * size, position.z() * size};
+        final double[] max = {min[0] + size, min[1] + size, min[2] + size};
+        final List<Long> corner =
+                List.of((long) position.x(), (long) position.y(), (long) position.z());
+        for (OccupancyClipmap.Box box : clipmap.boxesFor(min, max)) {
+            queuedBricks.get(box.level()).add(corner);
         }
     }
 
@@ -528,13 +581,16 @@ public class OccupancyVolume {
 
     /**
      * Take this frame's sections to voxelize, finest level first, up to the triangle budget. Each
-     * comes with its meshes as they are now; sections with nothing there are dropped.
+     * comes with its meshes as they are now, and its brick if that stands in for some of them;
+     * sections with nothing there are dropped.
      *
      * @param sections The sections.
+     * @param bricks The volume bricks, or null if there are none.
      * @return The jobs.
      */
-    public List<Job> takeJobs(@NonNull SectionManager sections) {
+    public Jobs takeJobs(@NonNull SectionManager sections, VolumeBricks bricks) {
         final List<Job> jobs = new ArrayList<>();
+        final List<BrickJob> brickJobs = new ArrayList<>();
         long triangles = 0;
         final int size = Sections.SECTION_SIZE;
         for (int level = 0; level < OccupancyClipmap.LEVELS; ++level) {
@@ -542,6 +598,8 @@ public class OccupancyVolume {
             while (it.hasNext() && triangles < MAX_TRIANGLES_PER_FRAME) {
                 final List<Long> corner = it.next();
                 it.remove();
+                // Its brick is marked from here, if it stands in
+                queuedBricks.get(level).remove(corner);
                 final double[] min = {
                     (double) corner.get(0) * size,
                     (double) corner.get(1) * size,
@@ -567,15 +625,22 @@ public class OccupancyVolume {
                                     bit));
                     triangles += mesh.indexCount() / 3;
                 }
+                triangles += addBrickJob(sections, bricks, level, corner, brickJobs);
+            }
+            final Iterator<List<Long>> late = queuedBricks.get(level).iterator();
+            while (late.hasNext() && triangles < MAX_TRIANGLES_PER_FRAME) {
+                final List<Long> corner = late.next();
+                late.remove();
+                triangles += addBrickJob(sections, bricks, level, corner, brickJobs);
             }
         }
         trianglesVoxelized += triangles;
         int waiting = 0;
-        for (Set<List<Long>> level : queued) {
-            waiting += level.size();
+        for (int level = 0; level < OccupancyClipmap.LEVELS; ++level) {
+            waiting += queued.get(level).size() + queuedBricks.get(level).size();
         }
         queuedSections = waiting;
-        if (!jobs.isEmpty()) {
+        if (!jobs.isEmpty() || !brickJobs.isEmpty()) {
             if (busySince == 0) {
                 busySince = System.nanoTime();
                 busyTriangles = 0;
@@ -592,7 +657,50 @@ public class OccupancyVolume {
                     String.format("%.1f", (System.nanoTime() - busySince) / NANOS_PER_MILLI));
             busySince = 0;
         }
-        return jobs;
+        return new Jobs(jobs, brickJobs);
+    }
+
+    /**
+     * Add a job marking a section's brick into a level, if the brick stands in for meshes off the
+     * GPU and is up to date. One that isn't yet is marked once it arrives.
+     *
+     * @param sections The sections.
+     * @param bricks The volume bricks, or null.
+     * @param level The level.
+     * @param corner The section's corner, in sections.
+     * @param out Where the job goes.
+     * @return What it counts as against the budget, 0 if there is no job.
+     */
+    private static long addBrickJob(
+            @NonNull SectionManager sections,
+            VolumeBricks bricks,
+            int level,
+            @NonNull List<Long> corner,
+            @NonNull List<BrickJob> out) {
+        if (bricks == null) {
+            return 0;
+        }
+        final LodStore.SectionPos position =
+                new LodStore.SectionPos(
+                        corner.get(0).intValue(),
+                        corner.get(1).intValue(),
+                        corner.get(2).intValue());
+        if (!sections.bricksStandIn(position)) {
+            return 0;
+        }
+        final int slot = bricks.currentSlot(position);
+        if (slot < 0) {
+            return 0;
+        }
+        final int size = Sections.SECTION_SIZE;
+        out.add(
+                new BrickJob(
+                        level,
+                        new long[] {
+                            corner.get(0) * size, corner.get(1) * size, corner.get(2) * size
+                        },
+                        slot));
+        return BRICK_COST;
     }
 
     /**

@@ -1440,29 +1440,29 @@ public class VulkanInstance {
                                         ShaderVulkan.Location.BUNDLED)),
                         state));
         shaderMap.addShader(
+                RenderStage.Type.OCCUPANCY_BRICKS,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/occupancy_bricks.comp",
+                                        ShaderVulkan.Type.COMPUTE,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
+                RenderStage.Type.VOLUME_UPLOAD,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/volume_upload.comp",
+                                        ShaderVulkan.Type.COMPUTE,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
                 RenderStage.Type.OIT_INTEGRATE,
                 new ShaderVulkan(
                         List.of(
                                 new ShaderVulkan.ShaderModuleData(
                                         "shaders/oit_integrate.comp",
-                                        ShaderVulkan.Type.COMPUTE,
-                                        ShaderVulkan.Location.BUNDLED)),
-                        state));
-        shaderMap.addShader(
-                RenderStage.Type.VOLUME_VOXELIZE,
-                new ShaderVulkan(
-                        List.of(
-                                new ShaderVulkan.ShaderModuleData(
-                                        "shaders/volume_voxelize.comp",
-                                        ShaderVulkan.Type.COMPUTE,
-                                        ShaderVulkan.Location.BUNDLED)),
-                        state));
-        shaderMap.addShader(
-                RenderStage.Type.VOLUME_RESOLVE,
-                new ShaderVulkan(
-                        List.of(
-                                new ShaderVulkan.ShaderModuleData(
-                                        "shaders/volume_resolve.comp",
                                         ShaderVulkan.Type.COMPUTE,
                                         ShaderVulkan.Location.BUNDLED)),
                         state));
