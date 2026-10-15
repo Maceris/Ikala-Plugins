@@ -185,6 +185,7 @@ public final class DagBuilder {
             List<float[]> corners,
             List<int[]> materials,
             List<float[]> visibility,
+            List<int[]> attributes,
             List<double[]> tight,
             double error,
             double[] bound,
@@ -354,6 +355,7 @@ public final class DagBuilder {
                             top.corners(),
                             top.materials(),
                             top.visibility(),
+                            top.attributes(),
                             top.error(),
                             top.bound(),
                             top.tight(),
@@ -448,6 +450,7 @@ public final class DagBuilder {
                                 corners,
                                 materials,
                                 visibility,
+                                Clusters.attributes(mesh, triangles),
                                 0,
                                 tight,
                                 tight,
@@ -1226,11 +1229,23 @@ public final class DagBuilder {
         List<double[]> spheres = new ArrayList<>();
         final IntArrayList sourceCluster = new IntArrayList();
         final IntArrayList sourceTriangle = new IntArrayList();
+        // Textured triangles' attributes, to give the output's again, and what meets at each
+        // vertex, to keep seams: where textured triangles meet with different attributes or
+        // materials, or meet projected ones
+        final AttributeTransfer transfer = new AttributeTransfer();
+        final Map<Integer, int[]> meeting = new HashMap<>();
+        boolean anyTextured = false;
+        for (int id : children) {
+            anyTextured |= dag.clusters().get(id).attributes().length > 0;
+        }
         for (int id : children) {
             final LodDag.Cluster cluster = dag.clusters().get(id);
             final float[] corners = cluster.corners();
+            final int[] attributes = cluster.attributes();
             for (int t = 0; t < cluster.triangleCount(); ++t) {
                 final int[] v = new int[AXES];
+                final boolean textured = Attributes.textured(attributes, t);
+                final int material = cluster.materials()[t];
                 for (int corner = 0; corner < AXES; ++corner) {
                     final int at = t * TRIANGLE_VALUES + corner * AXES;
                     v[corner] = builder.vertex(corners[at], corners[at + 1], corners[at + 2]);
@@ -1238,6 +1253,24 @@ public final class DagBuilder {
                     if (owners.getOrDefault(key, -1) < 0 || openBorder.contains(key)) {
                         builder.lock(v[corner]);
                     }
+                    if (anyTextured
+                            && isSeam(
+                                    meeting,
+                                    v[corner],
+                                    textured,
+                                    material,
+                                    attributes,
+                                    t * Attributes.PER_TRIANGLE + corner * Attributes.VALUES)) {
+                        builder.lock(v[corner]);
+                    }
+                }
+                if (textured) {
+                    transfer.add(
+                            corners,
+                            t * TRIANGLE_VALUES,
+                            attributes,
+                            t * Attributes.PER_TRIANGLE,
+                            material);
                 }
                 if (builder.triangle(
                         v[0], v[1], v[2], cluster.materials()[t], cluster.visibility()[t])) {
@@ -1280,6 +1313,7 @@ public final class DagBuilder {
         List<float[]> outCorners = new ArrayList<>();
         List<int[]> outMaterials = new ArrayList<>();
         List<float[]> outVisibility = new ArrayList<>();
+        List<int[]> outAttributes = new ArrayList<>();
         List<double[]> outTight = new ArrayList<>();
         List<int[]> outFaces = options.keepLineage() ? new ArrayList<>() : null;
         final float[] noOffset = new float[AXES];
@@ -1295,6 +1329,8 @@ public final class DagBuilder {
             outCorners.add(corners);
             outMaterials.add(materials);
             outVisibility.add(visibility);
+            outAttributes.add(
+                    transfer.isEmpty() ? Attributes.NONE : transfer.transfer(corners, materials));
             outTight.add(tight);
             spheres.add(tight);
             if (outFaces != null) {
@@ -1337,6 +1373,7 @@ public final class DagBuilder {
                 outCorners,
                 outMaterials,
                 outVisibility,
+                outAttributes,
                 outTight,
                 error,
                 bound,
@@ -1358,6 +1395,40 @@ public final class DagBuilder {
                         : null,
                 outFaces,
                 outBases);
+    }
+
+    /**
+     * Note what meets at a vertex, and whether that makes it a seam the simplifier must keep:
+     * textured triangles meeting there with different attributes or materials, or a textured
+     * triangle meeting a projected one. Projected triangles meeting each other make no seam.
+     *
+     * @param meeting What has met at each vertex so far: textured or not, the material, and for a
+     *     textured triangle its corner's attributes.
+     * @param vertex The vertex.
+     * @param textured Whether this triangle is textured.
+     * @param material Its material.
+     * @param attributes Its cluster's attributes.
+     * @param at Where this corner's start.
+     * @return True if the vertex is a seam.
+     */
+    private static boolean isSeam(
+            @NonNull Map<Integer, int[]> meeting,
+            int vertex,
+            boolean textured,
+            int material,
+            int @NonNull [] attributes,
+            int at) {
+        final int[] here =
+                textured
+                        ? new int[] {
+                            1, material, attributes[at], attributes[at + 1], attributes[at + 2]
+                        }
+                        : new int[] {0, material};
+        final int[] before = meeting.putIfAbsent(vertex, here);
+        if (before == null || (before[0] == 0 && !textured)) {
+            return false;
+        }
+        return !Arrays.equals(before, here);
     }
 
     /**
@@ -1431,6 +1502,7 @@ public final class DagBuilder {
                             built.corners().get(i),
                             built.materials().get(i),
                             built.visibility().get(i),
+                            built.attributes().get(i),
                             built.error(),
                             built.bound(),
                             built.tight().get(i),

@@ -9,6 +9,7 @@ import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.bake.BakedVertex;
 import com.ikalagaming.graphics.bake.SectionBaker;
 import com.ikalagaming.graphics.graph.Material;
+import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.graph.OccupancyClipmap;
@@ -22,6 +23,7 @@ import com.ikalagaming.graphics.lod.LodMesh;
 import com.ikalagaming.graphics.lod.LodStore;
 import com.ikalagaming.graphics.lod.PlanarMerge;
 import com.ikalagaming.graphics.scene.Observer;
+import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -54,6 +56,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.IntPredicate;
 
 /**
  * Bakes sections on worker threads and keeps each one in the scene: its baked meshes, one per
@@ -642,7 +645,8 @@ public class SectionManager {
                                 : PlanarMerge.merge(
                                         LodMesh.fromBaked(
                                                 opaque,
-                                                new double[] {origin.x(), origin.y(), origin.z()})),
+                                                new double[] {origin.x(), origin.y(), origin.z()},
+                                                texturedMaterials())),
                         generation);
             }
             final VolumeMaterials table = volumeMaterials;
@@ -662,6 +666,24 @@ public class SectionManager {
         } finally {
             inFlight.decrementAndGet();
         }
+    }
+
+    /**
+     * Which material indices level of detail keeps texture coordinates and normals for, rather than
+     * projecting their textures: those whose material isn't triplanar. Asks the scene's material
+     * cache, which is safe from any thread, once per material.
+     *
+     * @return The test.
+     */
+    private static IntPredicate texturedMaterials() {
+        final Scene scene = GraphicsManager.getScene();
+        if (scene == null) {
+            return material -> false;
+        }
+        final MaterialCache cache = scene.getMaterialCache();
+        final Map<Integer, Boolean> known = new HashMap<>();
+        return material ->
+                known.computeIfAbsent(material, index -> !cache.getMaterial(index).isTriplanar());
     }
 
     /**

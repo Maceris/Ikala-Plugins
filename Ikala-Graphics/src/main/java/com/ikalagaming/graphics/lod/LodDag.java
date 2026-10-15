@@ -31,6 +31,9 @@ public final class LodDag {
      * @param corners Its triangles' corners, 9 floats per triangle, relative to the DAG's origin.
      * @param materials Each triangle's material.
      * @param visibility How visible each triangle is from outside, 0 to 1.
+     * @param attributes Each textured triangle's corners' normal, tangent and texture coordinates,
+     *     {@link Attributes#PER_TRIANGLE} ints a triangle, zeros for projected triangles; or {@link
+     *     Attributes#NONE} if every triangle is projected.
      * @param error The saturated error of the group that made it, 0 for leaves, in world units: a
      *     bound on how far it is from the input.
      * @param bound The saturated sphere the error is projected from: x, y, z, radius.
@@ -44,6 +47,7 @@ public final class LodDag {
             float @NonNull [] corners,
             int @NonNull [] materials,
             float @NonNull [] visibility,
+            int @NonNull [] attributes,
             double error,
             double @NonNull [] bound,
             double @NonNull [] tight,

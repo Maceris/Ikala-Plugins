@@ -9,9 +9,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Turns clusters into meshes in the {@link LodVertex} format. Triangles are flat, their normals
- * worked out when they are drawn, so a vertex is shared wherever position and material match, and
- * every material gets its own copies. Triangles that collapse to no area on the grid are dropped.
+ * Turns clusters into meshes in the {@link LodVertex} format. Projected triangles are flat, their
+ * normals worked out when they are drawn, so a vertex is shared wherever position and material
+ * match, and every material gets its own copies; a textured triangle's vertex also needs the same
+ * attributes. Triangles that collapse to no area on the grid are dropped.
  */
 public final class ClusterMeshes {
 
@@ -24,8 +25,11 @@ public final class ClusterMeshes {
     /** Values in a triangle's corners. */
     private static final int TRIANGLE_VALUES = Clusters.TRIANGLE_VALUES;
 
-    /** How a vertex is told apart from the rest: position and material. */
-    private record Key(int x, int y, int z, int material) {}
+    /**
+     * How a vertex is told apart from the rest: position, material and, for a textured triangle,
+     * its attributes, which are all zero for a projected one.
+     */
+    private record Key(int x, int y, int z, int material, int normal, int tangent, int uv) {}
 
     /**
      * One cluster as a mesh.
@@ -84,14 +88,28 @@ public final class ClusterMeshes {
                 continue;
             }
             final int material = cluster.materials()[t];
+            final int[] attributes = cluster.attributes();
+            final boolean textured = Attributes.textured(attributes, t);
             for (int corner = 0; corner < CORNERS; ++corner) {
                 final int[] at = grid[corner];
-                final Key key = new Key(at[0], at[1], at[2], material);
+                final int first = t * Attributes.PER_TRIANGLE + corner * Attributes.VALUES;
+                final Key key =
+                        textured
+                                ? new Key(
+                                        at[0],
+                                        at[1],
+                                        at[2],
+                                        material,
+                                        attributes[first],
+                                        attributes[first + 1],
+                                        attributes[first + 2])
+                                : new Key(at[0], at[1], at[2], material, 0, 0, 0);
                 Integer index = seen.get(key);
                 if (index == null) {
                     index = vertexCount++;
                     seen.put(key, index);
-                    LodVertex.put(vertices, index, at, material);
+                    LodVertex.put(
+                            vertices, index, at, material, textured ? attributes : null, first);
                     for (int axis = 0; axis < AXES; ++axis) {
                         final float units = (float) at[axis] / LodVertex.STEPS_PER_UNIT;
                         min[axis] = Math.min(min[axis], units);

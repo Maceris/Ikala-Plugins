@@ -102,6 +102,29 @@ public final class Clusters {
     }
 
     /**
+     * Copy some triangles' corners' attributes out of a mesh.
+     *
+     * @param mesh The mesh.
+     * @param triangles The triangles.
+     * @return The attributes, {@link Attributes#PER_TRIANGLE} ints a triangle, or {@link
+     *     Attributes#NONE} if none of them is textured.
+     */
+    static int[] attributes(@NonNull LodMesh mesh, int @NonNull [] triangles) {
+        boolean any = false;
+        for (int triangle : triangles) {
+            any |= mesh.isTextured(triangle);
+        }
+        if (!any) {
+            return Attributes.NONE;
+        }
+        final int[] out = new int[triangles.length * Attributes.PER_TRIANGLE];
+        for (int i = 0; i < triangles.length; ++i) {
+            mesh.attributes(triangles[i], out, i * Attributes.PER_TRIANGLE);
+        }
+        return out;
+    }
+
+    /**
      * A sphere around some corners: the center of their bounds, and the farthest corner from it.
      *
      * @param corners The corners, 3 floats each.

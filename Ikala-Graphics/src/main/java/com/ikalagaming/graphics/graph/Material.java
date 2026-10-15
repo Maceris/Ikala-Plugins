@@ -87,6 +87,15 @@ public class Material {
     private Transparency transparency;
 
     /**
+     * Whether level of detail projects its texture along each triangle's main axis, one repeat per
+     * unit, and shades triangles flat, instead of keeping the mesh's normals and texture
+     * coordinates. Suits textures laid out on a unit grid, as block faces are, whose seams at every
+     * face would otherwise keep every vertex from being simplified. Off, the default, keeps them,
+     * as authored meshes need.
+     */
+    private boolean triplanar;
+
+    /**
      * The material baked faces pointing up in the world are drawn with instead, such as a grass
      * block's top, or null to use this one. It must be in the material cache too.
      */

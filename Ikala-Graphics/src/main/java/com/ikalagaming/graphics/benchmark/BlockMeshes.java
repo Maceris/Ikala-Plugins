@@ -227,6 +227,8 @@ public final class BlockMeshes {
         material.getBaseColor().set(red, green, blue, 1);
         material.setRoughness(ROUGHNESS);
         material.setTransparency(transparency);
+        // Each block face's texture fills one unit, so level of detail projects it
+        material.setTriplanar(true);
         return material;
     }
 

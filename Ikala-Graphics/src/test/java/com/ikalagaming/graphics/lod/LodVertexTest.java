@@ -28,14 +28,14 @@ class LodVertexTest {
         final ByteBuffer buffer =
                 ByteBuffer.allocate(2 * LodVertex.SIZE).order(ByteOrder.LITTLE_ENDIAN);
         final int[] grid = {-5, 1 << 30, 123_456};
-        LodVertex.put(buffer, 1, grid, 40_000);
+        LodVertex.put(buffer, 1, grid, 40_000, null, 0);
         final int[] back = new int[3];
         LodVertex.position(buffer, 1, back);
         assertArrayEquals(grid, back);
         assertEquals(40_000, LodVertex.material(buffer, 1));
         assertThrows(
                 IllegalArgumentException.class,
-                () -> LodVertex.put(buffer, 0, grid, LodVertex.MAX_MATERIAL + 1));
+                () -> LodVertex.put(buffer, 0, grid, LodVertex.MAX_MATERIAL + 1, null, 0));
     }
 
     /** Leaf positions are on the grid already, and positions too far out are refused. */
@@ -70,6 +70,7 @@ class LodVertexTest {
                                 corners,
                                 new int[] {3, 3, 7, 3, 3},
                                 new float[5],
+                                Attributes.NONE,
                                 1,
                                 new double[4],
                                 new double[4],
@@ -130,6 +131,7 @@ class LodVertexTest {
                 corners,
                 new int[] {1},
                 new float[1],
+                Attributes.NONE,
                 1,
                 new double[4],
                 new double[4],

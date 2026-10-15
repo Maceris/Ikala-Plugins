@@ -137,7 +137,12 @@ public final class SyntheticTerrain {
          * Plank huts in a grid on flat grass, with nothing else around them, to see what gets
          * through their walls from a light inside.
          */
-        HUTS
+        HUTS,
+        /**
+         * The terrain recipe's hills, overhangs, caves, lakes, slabs and plants, with no trees,
+         * huts or glass, so the land itself can be seen from afar.
+         */
+        HILLS
     }
 
     /**
@@ -215,7 +220,7 @@ public final class SyntheticTerrain {
      */
     public int maxY() {
         return switch (recipe) {
-            case TERRAIN -> 48;
+            case TERRAIN, HILLS -> 48;
             case CHECKERBOARD -> SECTION - 1;
             case CAVES -> 34;
             case GLASS -> GLASS_WALL_HEIGHT;
@@ -231,7 +236,7 @@ public final class SyntheticTerrain {
      */
     public int minY() {
         return switch (recipe) {
-            case TERRAIN -> -64;
+            case TERRAIN, HILLS -> -64;
             case CHECKERBOARD -> 0;
             case CAVES -> -96;
             case GLASS, HUTS -> 0;
@@ -254,7 +259,7 @@ public final class SyntheticTerrain {
      */
     public double cameraY() {
         return switch (recipe) {
-            case TERRAIN -> height(0, 0) + 6;
+            case TERRAIN, HILLS -> height(0, 0) + 6;
             case CHECKERBOARD -> SECTION + 8;
             case CAVES -> 42;
             case GLASS -> GLASS_WALL_HEIGHT / 2.0;
@@ -284,7 +289,7 @@ public final class SyntheticTerrain {
             return solidBelow() ? STONE : AIR;
         }
         return switch (recipe) {
-            case TERRAIN -> terrain(x, y, z);
+            case TERRAIN, HILLS -> terrain(x, y, z);
             case CHECKERBOARD -> ((x + y + z) & 1) == 0 ? STONE : AIR;
             case CAVES -> caves(x, y, z);
             case GLASS -> glass(x, y, z);
@@ -434,6 +439,9 @@ public final class SyntheticTerrain {
                 return PLANT;
             }
         }
+        if (recipe == Recipe.HILLS) {
+            return AIR;
+        }
         // A ragged blob of leaves on a few columns, a pane of glass on fewer
         final int cellX = Math.floorDiv(x, TREE_SPACING);
         final int cellZ = Math.floorDiv(z, TREE_SPACING);
@@ -476,6 +484,9 @@ public final class SyntheticTerrain {
      * @return The hut's middle x, the y of its floor, and its middle z, or null for none.
      */
     public int[] hutNear(int x, int z, int cells) {
+        if (recipe == Recipe.HILLS) {
+            return null;
+        }
         if (recipe == Recipe.HUTS) {
             return new int[] {
                 Math.floorDiv(x, HUT_GRID) * HUT_GRID + HUT_GRID / 2,

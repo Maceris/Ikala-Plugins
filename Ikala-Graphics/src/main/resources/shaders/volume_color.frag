@@ -46,7 +46,12 @@ layout(push_constant) uniform VolumeConstants {
     float fadeLength;
     // Each pixel's nearest solid face, see volume_depth.frag
     VolumeHits hitBuffer;
+    // Nonzero to color bricks by source, see DebugVisualizers.volumeSources
+    uint debugSources;
 };
+
+// The flat color bricks take when colored by source
+const vec3 BRICK_SOURCE_COLOR = vec3(0.8, 0.0, 0.8);
 
 // How far past the nearest solid face the walk still goes, as a share of its distance, so the
 // brick it is in still finds it after rounding
@@ -180,6 +185,9 @@ void main() {
                     // the dim light under cover reaches, by how much they cover
                     vec3 under = ambient * skyLightFloor;
                     vec3 albedo = textured ? sRGBToLinear(texel.rgb) : voxel.rgb;
+                    if (debugSources != 0u) {
+                        albedo = BRICK_SOURCE_COLOR;
+                    }
                     float cover = textured ? 1.0 : volumeCoverage(stored.a);
                     vec3 color = albedo * mix(under, light, cover);
                     float weight = voxelWeights != 0

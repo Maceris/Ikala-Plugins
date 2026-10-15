@@ -1040,8 +1040,15 @@ public class ShaderBindings {
         public static final int PUSH_CONSTANT_FRAME_OFFSET =
                 PUSH_CONSTANT_VOLUME_FADE_OFFSET + 2 * Float.BYTES;
 
+        /**
+         * Push constant offset for the debug flags {@code scene.frag} reads: nonzero to color
+         * sections' cut out meshes by source, see {@code DebugVisualizers.volumeSources}.
+         */
+        public static final int PUSH_CONSTANT_DEBUG_OFFSET =
+                PUSH_CONSTANT_FRAME_OFFSET + Integer.BYTES;
+
         /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_FRAME_OFFSET + Integer.BYTES;
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_DEBUG_OFFSET + Integer.BYTES;
 
         /** Offsets into the material struct. */
         public static class Material {

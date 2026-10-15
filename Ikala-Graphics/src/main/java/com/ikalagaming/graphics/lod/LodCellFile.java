@@ -45,8 +45,11 @@ public final class LodCellFile {
     /** The group section. */
     public static final int LGRP = SectionTag.of("LGRP");
 
-    /** The version of every section. */
+    /** The version of every section but the clusters. */
     public static final int VERSION = 1;
+
+    /** The version of the clusters section: 2 added each cluster's attributes. */
+    public static final int CLUSTERS_VERSION = 2;
 
     /** The exporter named in the metadata. */
     public static final String EXPORTER = "Ikala-Graphics LodStore";
@@ -80,7 +83,10 @@ public final class LodCellFile {
      * @return The known sections.
      */
     public static KnownSections known() {
-        return KnownSections.graphics().with(LCEL, VERSION).with(LCLU, VERSION).with(LGRP, VERSION);
+        return KnownSections.graphics()
+                .with(LCEL, VERSION)
+                .with(LCLU, CLUSTERS_VERSION)
+                .with(LGRP, VERSION);
     }
 
     /**
@@ -102,7 +108,7 @@ public final class LodCellFile {
                         AssetMetadata.of(EXPORTER, String.valueOf(builderVersion))
                                 .with(KEY, cacheKey))
                 .section(LCEL, VERSION, true, encodeCell(key, cell))
-                .section(LCLU, VERSION, true, encodeClusters(cell.dag()))
+                .section(LCLU, CLUSTERS_VERSION, true, encodeClusters(cell.dag()))
                 .section(LGRP, VERSION, true, encodeGroups(cell.dag()));
     }
 
@@ -293,6 +299,10 @@ public final class LodCellFile {
             for (float seen : cluster.visibility()) {
                 out.putFloat(seen);
             }
+            out.putInt(cluster.attributes().length);
+            for (int value : cluster.attributes()) {
+                out.putInt(value);
+            }
         }
         return out.flip();
     }
@@ -307,7 +317,9 @@ public final class LodCellFile {
         final int triangles = cluster.triangleCount();
         return Integer.BYTES * 6
                 + Double.BYTES * (1 + 2 * SPHERE_VALUES)
-                + triangles * (TRIANGLE_VALUES * Float.BYTES + Integer.BYTES + Float.BYTES);
+                + triangles * (TRIANGLE_VALUES * Float.BYTES + Integer.BYTES + Float.BYTES)
+                + Integer.BYTES
+                + cluster.attributes().length * Integer.BYTES;
     }
 
     /**
@@ -339,11 +351,30 @@ public final class LodCellFile {
         for (int i = 0; i < triangles; ++i) {
             visibility[i] = in.getFloat();
         }
+        final int attributeCount = in.getInt();
+        if (attributeCount != 0 && attributeCount != triangles * Attributes.PER_TRIANGLE) {
+            throw new IllegalArgumentException(
+                    "Cluster " + id + " has " + attributeCount + " attribute values");
+        }
+        final int[] attributes = attributeCount == 0 ? Attributes.NONE : new int[attributeCount];
+        for (int i = 0; i < attributeCount; ++i) {
+            attributes[i] = in.getInt();
+        }
         if (in.position() - start != size) {
             throw new IllegalArgumentException("Cluster " + id + "'s record size doesn't match");
         }
         return new LodDag.Cluster(
-                id, level, corners, materials, visibility, error, bound, tight, producer, section);
+                id,
+                level,
+                corners,
+                materials,
+                visibility,
+                attributes,
+                error,
+                bound,
+                tight,
+                producer,
+                section);
     }
 
     /**

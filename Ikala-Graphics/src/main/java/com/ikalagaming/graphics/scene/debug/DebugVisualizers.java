@@ -189,6 +189,17 @@ public class DebugVisualizers {
     public static final int HEAT_MAP_FULL = 32;
 
     /**
+     * Whether sections' cut out blocks are drawn in one flat color where their own meshes draw
+     * them, and another where their volume bricks stand in, to tell the two apart in the hand over:
+     * cyan meshes, magenta bricks, still lit so shapes read. Drawn by the scene and volume stages,
+     * so {@link #anyEnabled()} ignores it.
+     *
+     * @param volumeSources Whether to color by source.
+     * @return Whether meshes and bricks are colored by source.
+     */
+    private volatile boolean volumeSources;
+
+    /**
      * Whether translucent surfaces are weighted by the voxel-based transparency volume, which
      * blends them as if sorted, or by weighted blended transparency's depth weights, to compare
      * against. Not a visualizer, so {@link #anyEnabled()} ignores it.

@@ -42,9 +42,10 @@ public class GraphicsSettings {
     /**
      * The most error, in pixels, a level of detail cluster may have and be drawn, for worlds added
      * after it is set; see {@link Lods#setThreshold}. At 1, Nanite's choice, the switch between
-     * levels can't be seen.
+     * levels can't be seen; at 4, the default, the cut on block terrain was 42% smaller and the
+     * difference barely seen (2026-10-14).
      */
-    public double lodThresholdPixels = 1;
+    public double lodThresholdPixels = 4;
 
     /**
      * How near the observer, in world units, a section feeding level of detail draws its own opaque

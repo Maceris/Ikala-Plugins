@@ -12,12 +12,15 @@ import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.IntPredicate;
 
 /**
  * A triangle mesh as level of detail building sees it: positions welded so that vertices in the
- * same place are one vertex, a material per triangle, and a lock flag per vertex. Normals and
- * texture coordinates are dropped; simplification works on geometry only, and appearance is found
- * again afterwards by mapping back to the input (see {@link Correspondence}).
+ * same place are one vertex, a material per triangle, and a lock flag per vertex. Simplification
+ * works on geometry only, and appearance is found again afterwards by mapping back to the input
+ * (see {@link Correspondence}). Textured triangles also keep each corner's normal, tangent and
+ * texture coordinates (see {@link Attributes}), which the leaves are drawn with and simplified
+ * levels take again from them; projected triangles have none.
  *
  * <p>Positions are floats relative to a {@code double} origin, so a mesh far from the world's
  * origin keeps its precision. Everything is in flat arrays.
@@ -68,6 +71,12 @@ public final class LodMesh {
     final boolean[] locked;
 
     /**
+     * Each triangle's corners' attributes, {@link Attributes#PER_TRIANGLE} ints a triangle, zeros
+     * for projected triangles; or null if every triangle is projected.
+     */
+    final int[] attributes;
+
+    /**
      * Create a mesh from arrays it takes ownership of.
      *
      * @param origin Where positions are measured from.
@@ -78,6 +87,8 @@ public final class LodMesh {
      * @param materials The material of each triangle.
      * @param visibility How visible each triangle is, 0 to 1.
      * @param locked Whether each vertex is locked.
+     * @param attributes Each triangle's corners' attributes, or null if every triangle is
+     *     projected.
      */
     LodMesh(
             double @NonNull [] origin,
@@ -87,7 +98,8 @@ public final class LodMesh {
             int triangleCount,
             int @NonNull [] materials,
             float @NonNull [] visibility,
-            boolean @NonNull [] locked) {
+            boolean @NonNull [] locked,
+            int[] attributes) {
         this.origin = origin;
         this.positions = positions;
         this.vertexCount = vertexCount;
@@ -96,6 +108,42 @@ public final class LodMesh {
         this.materials = materials;
         this.visibility = visibility;
         this.locked = locked;
+        this.attributes = attributes;
+    }
+
+    /**
+     * Whether any triangle is textured, with attributes kept.
+     *
+     * @return True if it has attributes.
+     */
+    public boolean hasAttributes() {
+        return attributes != null;
+    }
+
+    /**
+     * Whether a triangle is textured: its corners' attributes are kept.
+     *
+     * @param triangle The triangle.
+     * @return True if it is.
+     */
+    public boolean isTextured(int triangle) {
+        return attributes != null && Attributes.textured(attributes, triangle);
+    }
+
+    /**
+     * Copy a triangle's corners' attributes.
+     *
+     * @param triangle The triangle.
+     * @param out Where they go, {@link Attributes#PER_TRIANGLE} ints.
+     * @param at Where in it.
+     */
+    public void attributes(int triangle, int @NonNull [] out, int at) {
+        if (attributes == null) {
+            Arrays.fill(out, at, at + Attributes.PER_TRIANGLE, 0);
+            return;
+        }
+        System.arraycopy(
+                attributes, triangle * Attributes.PER_TRIANGLE, out, at, Attributes.PER_TRIANGLE);
     }
 
     /**
@@ -208,7 +256,8 @@ public final class LodMesh {
     }
 
     /**
-     * Read a baked section mesh. Each triangle's material is its first vertex's material index.
+     * Read a baked section mesh, every triangle projected. Each triangle's material is its first
+     * vertex's material index.
      *
      * @param bucket The baked mesh.
      * @param sectionOrigin Where the section's positions are measured from, in the world.
@@ -216,6 +265,22 @@ public final class LodMesh {
      */
     public static LodMesh fromBaked(
             SectionBaker.@NonNull Bucket bucket, double @NonNull [] sectionOrigin) {
+        return fromBaked(bucket, sectionOrigin, material -> false);
+    }
+
+    /**
+     * Read a baked section mesh. Each triangle's material is its first vertex's material index, and
+     * a triangle of a textured material keeps its corners' attributes.
+     *
+     * @param bucket The baked mesh.
+     * @param sectionOrigin Where the section's positions are measured from, in the world.
+     * @param textured Which material indices are textured rather than projected.
+     * @return The welded mesh, with its origin at the section's.
+     */
+    public static LodMesh fromBaked(
+            SectionBaker.@NonNull Bucket bucket,
+            double @NonNull [] sectionOrigin,
+            @NonNull IntPredicate textured) {
         Builder builder = builder(sectionOrigin.clone());
         ByteBuffer vertices = bucket.vertices().duplicate().order(ByteOrder.LITTLE_ENDIAN);
         int[] welded = new int[bucket.vertexCount()];
@@ -233,12 +298,28 @@ public final class LodMesh {
                             & UNSIGNED_SHORT_MASK;
         }
         final int[] indices = bucket.indices();
+        final int[] corners = new int[Attributes.PER_TRIANGLE];
         for (int i = 0; i + 2 < indices.length; i += CORNERS) {
-            builder.triangle(
-                    welded[indices[i]],
-                    welded[indices[i + 1]],
-                    welded[indices[i + 2]],
-                    vertexMaterials[indices[i]]);
+            final int material = vertexMaterials[indices[i]];
+            if (textured.test(material)) {
+                for (int corner = 0; corner < CORNERS; ++corner) {
+                    Attributes.fromBaked(
+                            vertices, indices[i + corner], corners, corner * Attributes.VALUES);
+                }
+                builder.triangle(
+                        welded[indices[i]],
+                        welded[indices[i + 1]],
+                        welded[indices[i + 2]],
+                        material,
+                        1,
+                        corners);
+            } else {
+                builder.triangle(
+                        welded[indices[i]],
+                        welded[indices[i + 1]],
+                        welded[indices[i + 2]],
+                        material);
+            }
         }
         return builder.build();
     }
@@ -271,6 +352,9 @@ public final class LodMesh {
 
         /** Locks so far. */
         private boolean[] locked = new boolean[INITIAL_CAPACITY];
+
+        /** Attributes so far, or null until a textured triangle is added. */
+        private int[] attributes;
 
         /** Where each position is, for welding. */
         private final Map<Position, Integer> welding = new HashMap<>();
@@ -374,13 +458,43 @@ public final class LodMesh {
          * @return Whether it was added.
          */
         public boolean triangle(int a, int b, int c, int material, float seen) {
+            return triangle(a, b, c, material, seen, null);
+        }
+
+        /**
+         * Add a triangle, unless it uses a vertex twice.
+         *
+         * @param a The first corner.
+         * @param b The second corner.
+         * @param c The third corner.
+         * @param material Its material.
+         * @param seen How visible it is from outside, 0 to 1.
+         * @param corners Its corners' attributes, {@link Attributes#PER_TRIANGLE} ints, for a
+         *     textured triangle; or null for a projected one.
+         * @return Whether it was added.
+         */
+        public boolean triangle(int a, int b, int c, int material, float seen, int[] corners) {
             if (a == b || b == c || a == c) {
                 return false;
+            }
+            if (corners != null && attributes == null) {
+                attributes = new int[triangles.length / CORNERS * Attributes.PER_TRIANGLE];
             }
             if ((triangleCount + 1) * CORNERS > triangles.length) {
                 triangles = Arrays.copyOf(triangles, triangles.length * 2);
                 materials = Arrays.copyOf(materials, materials.length * 2);
                 visibility = Arrays.copyOf(visibility, visibility.length * 2);
+                if (attributes != null) {
+                    attributes = Arrays.copyOf(attributes, attributes.length * 2);
+                }
+            }
+            if (corners != null) {
+                System.arraycopy(
+                        corners,
+                        0,
+                        attributes,
+                        triangleCount * Attributes.PER_TRIANGLE,
+                        Attributes.PER_TRIANGLE);
             }
             triangles[triangleCount * CORNERS] = a;
             triangles[triangleCount * CORNERS + 1] = b;
@@ -405,7 +519,10 @@ public final class LodMesh {
                     triangleCount,
                     Arrays.copyOf(materials, triangleCount),
                     Arrays.copyOf(visibility, triangleCount),
-                    Arrays.copyOf(locked, vertexCount));
+                    Arrays.copyOf(locked, vertexCount),
+                    attributes == null
+                            ? null
+                            : Arrays.copyOf(attributes, triangleCount * Attributes.PER_TRIANGLE));
         }
     }
 
@@ -415,7 +532,11 @@ public final class LodMesh {
      * @return The bytes.
      */
     public long heldBytes() {
-        return ((long) positions.length + triangles.length + materials.length + visibility.length)
+        return ((long) positions.length
+                                + triangles.length
+                                + materials.length
+                                + visibility.length
+                                + (attributes == null ? 0 : attributes.length))
                         * Integer.BYTES
                 + locked.length;
     }

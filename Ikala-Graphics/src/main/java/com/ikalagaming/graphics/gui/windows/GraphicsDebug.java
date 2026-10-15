@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.gui.windows;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
+import com.ikalagaming.graphics.GraphicsSettings;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.Window;
@@ -148,6 +149,9 @@ public class GraphicsDebug extends GuiWindow {
 
     /** The level of detail coloring combo's value. Render thread only. */
     private static final IkInt LOD_COLORS = new IkInt(DebugVisualizers.LodColors.NONE.ordinal());
+
+    /** The volume distance to go back to when volume bricks are turned on again, in meters. */
+    private static double volumeDistanceWhenOn = new GraphicsSettings().volumeDistance;
 
     /** The benchmark recipes' names, in ordinal order. */
     private static final String[] RECIPE_NAMES =
@@ -892,6 +896,24 @@ public class GraphicsDebug extends GuiWindow {
      */
     private static void drawTransparency(@NonNull Scene scene) {
         final DebugVisualizers visualizers = scene.getDebugVisualizers();
+        final GraphicsSettings settings = GraphicsManager.getSettings();
+        if (IkGui.checkbox("Volume bricks", settings.volumeDistance > 0)) {
+            if (settings.volumeDistance > 0) {
+                volumeDistanceWhenOn = settings.volumeDistance;
+                settings.volumeDistance = 0;
+            } else {
+                settings.volumeDistance = volumeDistanceWhenOn;
+            }
+        }
+        IkGui.setItemTooltip(
+                "Draw distant leaves, glass and water as volume bricks. Off, every section draws"
+                        + " its own cut out and translucent meshes at any distance.");
+        if (IkGui.checkbox("Color by source", visualizers.isVolumeSources())) {
+            visualizers.setVolumeSources(!visualizers.isVolumeSources());
+        }
+        IkGui.setItemTooltip(
+                "Draw sections' cut out meshes cyan and volume bricks magenta, still lit, to see"
+                        + " where each draws and whether they line up in the hand over.");
         if (IkGui.checkbox("Voxel-based weights", visualizers.isVoxelTransparency())) {
             visualizers.setVoxelTransparency(!visualizers.isVoxelTransparency());
         }

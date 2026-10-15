@@ -60,8 +60,11 @@ public class VolumeColor implements RenderStage {
     private static final int HITS_OFFSET =
             (FADE_OFFSET + 2 * Float.BYTES + Long.BYTES - 1) / Long.BYTES * Long.BYTES;
 
+    /** Where the debug flag that colors bricks by source is in the push constants. */
+    private static final int DEBUG_OFFSET = HITS_OFFSET + Long.BYTES;
+
     /** The size of the push constants. */
-    private static final int CONSTANTS_SIZE = HITS_OFFSET + Long.BYTES;
+    private static final int CONSTANTS_SIZE = DEBUG_OFFSET + Integer.BYTES;
 
     /** The shaders. */
     @NonNull private final ShaderVulkan shader;
@@ -194,6 +197,7 @@ public class VolumeColor implements RenderStage {
             constants.putLong(
                     HITS_OFFSET,
                     bricks.hits(state.frameIndex, state, (long) width * height).deviceAddress);
+            constants.putInt(DEBUG_OFFSET, scene.getDebugVisualizers().isVolumeSources() ? 1 : 0);
             vkCmdPushConstants(
                     commandBuffer,
                     pipelineLayout,

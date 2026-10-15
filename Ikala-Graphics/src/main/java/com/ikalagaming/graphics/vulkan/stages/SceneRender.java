@@ -433,10 +433,13 @@ public class SceneRender implements RenderStage {
                         state.bindlessTextures.getDescriptorSet()),
                 null);
         // Where sections' cut out blocks hand over to their volume bricks
-        final ByteBuffer fade = stack.calloc(3 * Float.BYTES);
+        final ByteBuffer fade = stack.calloc(4 * Float.BYTES);
         fade.putFloat(0, VolumeMath.fadeStart(GraphicsManager.getSettings().volumeDistance));
         fade.putFloat(Float.BYTES, (float) VolumeMath.FADE_LENGTH);
         fade.putInt(2 * Float.BYTES, (int) state.frameNumber);
+        fade.putInt(
+                3 * Float.BYTES,
+                GraphicsManager.getScene().getDebugVisualizers().isVolumeSources() ? 1 : 0);
         vkCmdPushConstants(
                 commandBuffer,
                 pipelineLayout,
@@ -1056,16 +1059,28 @@ public class SceneRender implements RenderStage {
     }
 
     /**
-     * Describe the level of detail vertex format, see LodVertex: grid position, then material and
-     * flags.
+     * Describe the level of detail vertex format, see LodVertex: grid position, material and flags,
+     * then a textured triangle's normal, tangent and texture coordinates.
      *
      * @param stack The stack to allocate on.
      * @return The attributes, read from binding 0.
      */
     static VkVertexInputAttributeDescription.Buffer lodVertexAttributes(
             @NonNull MemoryStack stack) {
-        final int[] formats = {VK_FORMAT_R32G32B32_SINT, VK_FORMAT_R16G16_UINT};
-        final int[] offsets = {LodVertex.POSITION_OFFSET, LodVertex.MATERIAL_OFFSET};
+        final int[] formats = {
+            VK_FORMAT_R32G32B32_SINT,
+            VK_FORMAT_R16G16_UINT,
+            VK_FORMAT_R16G16_SNORM,
+            VK_FORMAT_R16G16_SNORM,
+            VK_FORMAT_R16G16_SFLOAT
+        };
+        final int[] offsets = {
+            LodVertex.POSITION_OFFSET,
+            LodVertex.MATERIAL_OFFSET,
+            LodVertex.NORMAL_OFFSET,
+            LodVertex.TANGENT_OFFSET,
+            LodVertex.UV_OFFSET
+        };
         VkVertexInputAttributeDescription.Buffer attributes =
                 VkVertexInputAttributeDescription.calloc(formats.length, stack);
         for (int i = 0; i < formats.length; i++) {

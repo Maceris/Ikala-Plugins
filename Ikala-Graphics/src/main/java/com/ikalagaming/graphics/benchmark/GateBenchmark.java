@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.benchmark;
 
 import static org.lwjgl.util.vma.Vma.vmaCalculateStatistics;
 
+import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.GraphicsPlugin;
@@ -10,7 +11,11 @@ import com.ikalagaming.graphics.LodHandle;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.SectionHandle;
+import com.ikalagaming.graphics.Sections;
+import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.bake.BakeSource;
+import com.ikalagaming.graphics.bake.SectionBaker;
+import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.SunShadowCache;
 import com.ikalagaming.graphics.graph.VolumeMath;
@@ -24,6 +29,7 @@ import com.ikalagaming.graphics.scene.lights.DirectionalLight;
 import com.ikalagaming.graphics.vulkan.FrameTimings;
 import com.ikalagaming.graphics.vulkan.LodRenderer;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
+import com.ikalagaming.util.IntArrayList;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -31,9 +37,11 @@ import org.joml.Vector3d;
 import org.joml.Vector3f;
 import org.joml.Vector3fc;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.util.vma.VmaTotalStatistics;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,6 +50,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -317,6 +326,45 @@ public final class GateBenchmark {
 
     /** The block meshes, by block id. */
     private final MeshHandle[] meshes = new MeshHandle[SyntheticTerrain.BLOCK_TYPES];
+
+    /**
+     * Whether runs place textured test meshes on the terrain (see {@link TestMeshes}), from the
+     * startup property.
+     */
+    private static final boolean TEXTURED_MESHES = Boolean.getBoolean(PROPERTY + ".textured");
+
+    /** How far apart the textured test meshes stand, in blocks. */
+    private static final int TEST_MESH_SPACING = 24;
+
+    /** The textured test mesh, or null if this run has none. */
+    @Nullable private MeshHandle testMesh;
+
+    /**
+     * Each section's cells with a textured test mesh, packed as {@link SectionBaker#pack} packs
+     * them; empty without test meshes. Set before any section is composed, then only read.
+     */
+    private volatile Map<LodStore.SectionPos, IntArrayList> testCells = Map.of();
+
+    /**
+     * A section's placements as composed: the terrain's, then any textured test meshes.
+     *
+     * @param meshes Each placement's mesh.
+     * @param packedPositions Each placement's cell.
+     * @param faceMasks The faces each placement's neighbors hide.
+     */
+    private record Composed(
+            MeshHandle @NonNull [] meshes,
+            int @NonNull [] packedPositions,
+            byte @NonNull [] faceMasks) {
+        /**
+         * How many placements there are.
+         *
+         * @return The count.
+         */
+        int count() {
+            return meshes.length;
+        }
+    }
 
     /**
      * The block meshes' data, made once and kept, so their materials are added to the cache only
@@ -755,11 +803,21 @@ public final class GateBenchmark {
                 if (keep) {
                     GraphicsManager.getUiManager().setSurfacesHidden(true);
                 }
+                // Sections' cut out meshes cyan and volume bricks magenta
+                if (Boolean.getBoolean(PROPERTY + ".volumeSources")) {
+                    GraphicsManager.getScene().getDebugVisualizers().setVolumeSources(true);
+                }
                 // Another level of detail cache folder, such as an empty one to build every
                 // cell; before starting, which opens the cache
                 final String lodCache = System.getProperty(PROPERTY + ".lodCache");
                 if (lodCache != null) {
                     GraphicsManager.getSettings().lodCacheDirectory = lodCache;
+                }
+                // A bigger level of detail cache for test runs, in MiB; players keep the default
+                final String lodCacheMb = System.getProperty(PROPERTY + ".lodCacheMb");
+                if (lodCacheMb != null) {
+                    GraphicsManager.getSettings().lodCacheMaxBytes =
+                            (long) (Long.parseLong(lodCacheMb.trim()) * BYTES_PER_MIB);
                 }
                 start(
                         SyntheticTerrain.Recipe.valueOf(recipe.trim().toUpperCase()),
@@ -868,6 +926,9 @@ public final class GateBenchmark {
                                     blockMeshes[block], BlockMeshes.BOX_MIN, BlockMeshes.BOX_MAX);
             sources[block] = graphics.meshes().faceInfo(meshes[block]);
         }
+        if (TEXTURED_MESHES && testMesh == null) {
+            testMesh = registerTestMesh(scene);
+        }
         scene.getMaterialCache().setDirty(true);
         if (lod) {
             lodWorld = graphics.lods().fromSections();
@@ -893,38 +954,26 @@ public final class GateBenchmark {
             final SyntheticTerrain terrain = new SyntheticTerrain(recipe, SEED, sources);
             this.terrain = terrain;
             final GateScene.Layout layout = GateScene.build(terrain, radius);
-            final int size = SyntheticTerrain.SECTION;
+            if (testMesh != null) {
+                testCells = testCells(terrain);
+            }
+            final Set<LodStore.SectionPos> composed = new HashSet<>();
             for (GateScene.Section section : layout.sections()) {
                 if (phase != Phase.BUILDING) {
                     return;
                 }
-                final SyntheticTerrain.Placements placements = section.placements();
-                final int count = placements.count();
-                final MeshHandle[] placed = new MeshHandle[count];
-                for (int i = 0; i < count; ++i) {
-                    placed[i] = meshes[placements.blocks()[i]];
-                }
-                final SectionHandle handle =
-                        graphics.sections()
-                                .compose(
-                                        new Vector3d(
-                                                section.x() * size,
-                                                section.y() * size,
-                                                section.z() * size))
-                                .placements(
-                                        placed,
-                                        placements.packedPositions(),
-                                        new byte[count],
-                                        placements.faceMasks(),
-                                        new short[count])
-                                .submit();
-                sectionsLock.lock();
-                try {
-                    sections.add(handle);
-                    sectionAt.put(
-                            new LodStore.SectionPos(section.x(), section.y(), section.z()), handle);
-                } finally {
-                    sectionsLock.unlock();
+                final LodStore.SectionPos position =
+                        new LodStore.SectionPos(section.x(), section.y(), section.z());
+                compose(position, section.placements());
+                composed.add(position);
+            }
+            // Test meshes standing in sections with nothing else
+            for (LodStore.SectionPos position : testCells.keySet()) {
+                if (!composed.contains(position)) {
+                    compose(
+                            position,
+                            new SyntheticTerrain.Placements(
+                                    0, new byte[0], new int[0], new byte[0]));
                 }
             }
             placeLights(terrain);
@@ -1901,6 +1950,146 @@ public final class GateBenchmark {
     }
 
     /**
+     * Compose a section for the first time, with any textured test meshes in it, unless it has
+     * nothing at all.
+     *
+     * @param position The section.
+     * @param placements The terrain's placements in it.
+     */
+    private void compose(
+            LodStore.@NonNull SectionPos position,
+            SyntheticTerrain.@NonNull Placements placements) {
+        final Composed placed = withTestMeshes(position, placements);
+        if (placed.count() == 0) {
+            return;
+        }
+        final SectionHandle handle = request(position, placed).submit();
+        sectionsLock.lock();
+        try {
+            sections.add(handle);
+            sectionAt.put(position, handle);
+        } finally {
+            sectionsLock.unlock();
+        }
+    }
+
+    /**
+     * A section's request to compose or bake again.
+     *
+     * @param position The section.
+     * @param placed Its placements.
+     * @return The request.
+     */
+    private Sections.Request request(
+            LodStore.@NonNull SectionPos position, @NonNull Composed placed) {
+        final int size = SyntheticTerrain.SECTION;
+        final int count = placed.count();
+        return graphics.sections()
+                .compose(
+                        new Vector3d(position.x() * size, position.y() * size, position.z() * size))
+                .placements(
+                        placed.meshes(),
+                        placed.packedPositions(),
+                        new byte[count],
+                        placed.faceMasks(),
+                        new short[count]);
+    }
+
+    /**
+     * A section's placements: the terrain's, then the textured test meshes standing in it.
+     *
+     * @param position The section.
+     * @param placements The terrain's placements in it.
+     * @return Everything placed in it.
+     */
+    private Composed withTestMeshes(
+            LodStore.@NonNull SectionPos position,
+            SyntheticTerrain.@NonNull Placements placements) {
+        final IntArrayList extra = testCells.get(position);
+        final int terrain = placements.count();
+        final int count = terrain + (extra == null ? 0 : extra.size());
+        final MeshHandle[] placed = new MeshHandle[count];
+        final int[] packed = Arrays.copyOf(placements.packedPositions(), count);
+        final byte[] faceMasks = Arrays.copyOf(placements.faceMasks(), count);
+        for (int i = 0; i < terrain; ++i) {
+            placed[i] = meshes[placements.blocks()[i]];
+        }
+        for (int i = terrain; i < count; ++i) {
+            placed[i] = testMesh;
+            packed[i] = extra.getInt(i - terrain);
+        }
+        return new Composed(placed, packed, faceMasks);
+    }
+
+    /**
+     * Load the textured test mesh's texture and material, and register the mesh for baking.
+     *
+     * @param scene The scene, whose material cache takes the material.
+     * @return The mesh.
+     */
+    private MeshHandle registerTestMesh(@NonNull Scene scene) {
+        final byte[] pixels = TestMeshes.checkerPixels();
+        final ByteBuffer buffer = MemoryUtil.memAlloc(pixels.length);
+        final TextureHandle texture;
+        try {
+            buffer.put(pixels).flip();
+            texture =
+                    graphics.textures()
+                            .load(
+                                    buffer,
+                                    Format.R8G8B8A8_UNORM,
+                                    TestMeshes.TEXTURE_SIZE,
+                                    TestMeshes.TEXTURE_SIZE);
+        } finally {
+            MemoryUtil.memFree(buffer);
+        }
+        final Material material = TestMeshes.material();
+        material.setTexture(texture);
+        scene.getMaterialCache().addMaterial(material);
+        return graphics.meshes()
+                .registerBakeable(
+                        TestMeshes.torus(material), BlockMeshes.BOX_MIN, BlockMeshes.BOX_MAX);
+    }
+
+    /**
+     * Where the textured test meshes stand: on top of whatever is highest in their columns, tree
+     * tops included, so they show above the canopy, on a grid {@link #TEST_MESH_SPACING} blocks
+     * apart, within the run's radius.
+     *
+     * @param terrain The terrain.
+     * @return Each section's cells with a test mesh.
+     */
+    private Map<LodStore.SectionPos, IntArrayList> testCells(@NonNull SyntheticTerrain terrain) {
+        final Map<LodStore.SectionPos, IntArrayList> cells = new HashMap<>();
+        final int size = SyntheticTerrain.SECTION;
+        final int reach = radius * size;
+        int count = 0;
+        for (int x = -reach; x <= reach; x += TEST_MESH_SPACING) {
+            for (int z = -reach; z <= reach; z += TEST_MESH_SPACING) {
+                final int top = terrain.top(x, z);
+                if ((long) x * x + (long) z * z > (long) reach * reach || top < terrain.minY()) {
+                    continue;
+                }
+                final int y = top + 1;
+                final LodStore.SectionPos position =
+                        new LodStore.SectionPos(
+                                Math.floorDiv(x, size),
+                                Math.floorDiv(y, size),
+                                Math.floorDiv(z, size));
+                cells.computeIfAbsent(position, key -> new IntArrayList())
+                        .add(
+                                SectionBaker.pack(
+                                        Math.floorMod(x, size),
+                                        Math.floorMod(y, size),
+                                        Math.floorMod(z, size)));
+                ++count;
+            }
+        }
+        log.info("Gate benchmark placed {} textured test meshes", count);
+        return cells;
+    }
+
+    /**
      * Bake a section again from the edited world, or compose it if it had nothing before.
      *
      * @param world The world.
@@ -1909,27 +2098,11 @@ public final class GateBenchmark {
      */
     @Nullable private SectionHandle rebake(
             @NonNull SyntheticTerrain world, LodStore.@NonNull SectionPos position) {
-        final SyntheticTerrain.Placements placements =
-                world.placements(position.x(), position.y(), position.z());
-        final int count = placements.count();
-        final MeshHandle[] placed = new MeshHandle[count];
-        for (int i = 0; i < count; ++i) {
-            placed[i] = meshes[placements.blocks()[i]];
-        }
-        final int size = SyntheticTerrain.SECTION;
-        final var request =
-                graphics.sections()
-                        .compose(
-                                new Vector3d(
-                                        position.x() * size,
-                                        position.y() * size,
-                                        position.z() * size))
-                        .placements(
-                                placed,
-                                placements.packedPositions(),
-                                new byte[count],
-                                placements.faceMasks(),
-                                new short[count]);
+        final Composed placed =
+                withTestMeshes(
+                        position, world.placements(position.x(), position.y(), position.z()));
+        final int count = placed.count();
+        final var request = request(position, placed);
         sectionsLock.lock();
         try {
             final SectionHandle handle = sectionAt.get(position);

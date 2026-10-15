@@ -74,6 +74,12 @@ public final class PlanarMerge {
     /** Whether each vertex is locked. */
     private final boolean[] locked;
 
+    /**
+     * Whether each triangle is textured: left as it is, since merging would have to keep its
+     * texture coordinates one affine map, and its corners kept, as if locked.
+     */
+    private final boolean[] textured;
+
     /** Whether each vertex has gone. */
     private final boolean[] removed;
 
@@ -116,7 +122,16 @@ public final class PlanarMerge {
         corners = mesh.triangles.clone();
         materials = mesh.materials;
         alive = new boolean[triangleCount];
-        locked = mesh.locked;
+        locked = mesh.locked.clone();
+        textured = new boolean[triangleCount];
+        for (int t = 0; t < triangleCount; ++t) {
+            textured[t] = mesh.isTextured(t);
+            if (textured[t]) {
+                for (int c = 0; c < CORNERS; ++c) {
+                    locked[corners[t * CORNERS + c]] = true;
+                }
+            }
+        }
         removed = new boolean[vertexCount];
         around = new IntArrayList[vertexCount];
         for (int v = 0; v < vertexCount; ++v) {
@@ -551,6 +566,9 @@ public final class PlanarMerge {
      * @return True if it flipped.
      */
     private boolean tryFlip(int t, int first) {
+        if (textured[t]) {
+            return false;
+        }
         final int a = corners[t * CORNERS + first];
         final int b = corners[t * CORNERS + (first + 1) % CORNERS];
         final int c = corners[t * CORNERS + (first + 2) % CORNERS];
@@ -573,7 +591,7 @@ public final class PlanarMerge {
                 }
             }
         }
-        if (s < 0 || d < 0 || d == c || !sameClass(t, s) || isNeighbor(c, d)) {
+        if (s < 0 || d < 0 || d == c || textured[s] || !sameClass(t, s) || isNeighbor(c, d)) {
             return false;
         }
         if (cotangent(c, a, b) + cotangent(d, a, b) >= -FLIP_MARGIN) {
@@ -673,13 +691,21 @@ public final class PlanarMerge {
                     remap[v] =
                             builder.vertex(
                                     mesh.position(v, 0), mesh.position(v, 1), mesh.position(v, 2));
-                    if (locked[v]) {
+                    if (mesh.isLocked(v)) {
                         builder.lock(remap[v]);
                     }
                 }
                 out[c] = remap[v];
             }
-            builder.triangle(out[0], out[1], out[2], materials[t], mesh.visibility(t));
+            // A textured triangle is as it came, so its corners' attributes still fit
+            if (textured[t]) {
+                final int[] attributes = new int[Attributes.PER_TRIANGLE];
+                mesh.attributes(t, attributes, 0);
+                builder.triangle(
+                        out[0], out[1], out[2], materials[t], mesh.visibility(t), attributes);
+            } else {
+                builder.triangle(out[0], out[1], out[2], materials[t], mesh.visibility(t));
+            }
         }
         return builder.build();
     }

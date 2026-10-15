@@ -998,7 +998,8 @@ public final class Simplifier {
                         t,
                         outMaterials,
                         outVisibility,
-                        outLocked);
+                        outLocked,
+                        null);
         return new Result(
                 mesh,
                 maxError,

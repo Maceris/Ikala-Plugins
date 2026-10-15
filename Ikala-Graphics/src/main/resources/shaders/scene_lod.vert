@@ -6,17 +6,25 @@
 // exactly; subtracting the camera's grid position as integers keeps positions exact relative to
 // the camera however far from the origin.
 //
-// There is no normal: scene.frag, with TRIPLANAR on, works out each flat triangle's normal from how
-// its position changes across the screen, and projects the material's texture along the
-// triangle's main axis, one repeat per block (see LodTexturing). So the outputs it would otherwise
-// get carry what it needs for that, the same at every vertex of a draw:
+// A textured triangle's vertices carry the mesh's normal, tangent and texture coordinates, and are
+// passed on as scene_baked_vertex.glsl passes them, with outViewPosition.w 0 to say so.
+//
+// A projected triangle's have none: scene.frag, with TRIPLANAR on, works out each flat triangle's
+// normal from how its position changes across the screen, and projects the material's texture
+// along the triangle's main axis, one repeat per block (see LodTexturing). So the outputs it would
+// otherwise get carry what it needs for that, the same at every vertex of a draw:
 // - outNormal, outTangent, outBitangent: the world's x, y and z axes in view space
 // - outViewPosition.xyz: where the camera is within its block, which added to the render space
-//   position gives coordinates whose fractions are the world's exactly
-// - outWorldPosition: the position in render space, as scene.vert gives it
+//   position gives coordinates whose fractions are the world's exactly; w is 1
+//
+// Either way outWorldPosition.xyz is the position in render space, as scene.vert gives it, and its
+// w the debug coloring's hue, or -1 for none.
 
 layout(location = 0) in ivec3 position;      // grid steps from the world's origin
 layout(location = 1) in uvec2 materialFlags; // x: material index, y: flags
+layout(location = 2) in vec2 normalOct;      // octahedral, for textured triangles
+layout(location = 3) in vec2 tangentOct;     // octahedral, for textured triangles
+layout(location = 4) in vec2 texCoord;       // for textured triangles
 
 layout(location = 0) out vec3 outNormal;
 layout(location = 1) out vec3 outTangent;
@@ -92,6 +100,20 @@ float hueOf(uint id)
 const float STEPS_PER_UNIT = 1024.0;
 const int STEP_BITS = 10;
 
+// LodVertex's flags
+const uint FLAG_FLIPPED_BITANGENT = 1;
+const uint FLAG_TEXTURED = 2;
+
+// Undo the octahedral folding BakedVertex.octahedral does
+vec3 fromOctahedral(vec2 e)
+{
+    vec3 v = vec3(e, 1.0 - abs(e.x) - abs(e.y));
+    if (v.z < 0.0) {
+        v.xy = (1.0 - abs(v.yx)) * vec2(v.x >= 0.0 ? 1.0 : -1.0, v.y >= 0.0 ? 1.0 : -1.0);
+    }
+    return normalize(v);
+}
+
 void main()
 {
     Cluster cluster = clusterTable.clusters[gl_InstanceIndex];
@@ -101,16 +123,28 @@ void main()
     outMaterialIdx = materialFlags.x;
 
     vec3 render = vec3(position - cameraGrid.xyz) / STEPS_PER_UNIT - cameraFraction.xyz;
-    outWorldPosition = vec4(render, 1.0);
-    gl_Position = projectionMatrix * viewMatrix * outWorldPosition;
+    gl_Position = projectionMatrix * viewMatrix * vec4(render, 1.0);
 
-    // The camera within its block: the steps past the block's corner, and the rest
-    ivec3 block = (cameraGrid.xyz >> STEP_BITS) << STEP_BITS;
-    outViewPosition = vec4(vec3(cameraGrid.xyz - block) / STEPS_PER_UNIT + cameraFraction.xyz, 1.0);
-    outNormal = (viewMatrix * vec4(1.0, 0.0, 0.0, 0.0)).xyz;
-    outTangent = (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz;
-    outBitangent = (viewMatrix * vec4(0.0, 0.0, 1.0, 0.0)).xyz;
-    // y: the debug coloring's hue, or -1 for none
+    if ((materialFlags.y & FLAG_TEXTURED) != 0) {
+        vec3 normal = fromOctahedral(normalOct);
+        vec3 tangent = fromOctahedral(tangentOct);
+        float handedness = (materialFlags.y & FLAG_FLIPPED_BITANGENT) != 0 ? -1.0 : 1.0;
+        outNormal = normalize((viewMatrix * vec4(normal, 0.0)).xyz);
+        outTangent = normalize((viewMatrix * vec4(tangent, 0.0)).xyz);
+        outBitangent = normalize((viewMatrix * vec4(handedness * cross(normal, tangent), 0.0)).xyz);
+        outTextCoord = texCoord;
+        outViewPosition = vec4(0.0);
+    } else {
+        // The camera within its block: the steps past the block's corner, and the rest
+        ivec3 block = (cameraGrid.xyz >> STEP_BITS) << STEP_BITS;
+        outViewPosition =
+            vec4(vec3(cameraGrid.xyz - block) / STEPS_PER_UNIT + cameraFraction.xyz, 1.0);
+        outNormal = (viewMatrix * vec4(1.0, 0.0, 0.0, 0.0)).xyz;
+        outTangent = (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz;
+        outBitangent = (viewMatrix * vec4(0.0, 0.0, 1.0, 0.0)).xyz;
+        outTextCoord = vec2(0.0);
+    }
+    // The debug coloring's hue, or -1 for none
     float hue = -1.0;
     uint colors = world.info.x;
     if (colors == COLORS_CLUSTERS) {
@@ -123,5 +157,5 @@ void main()
     } else if (colors == COLORS_CELLS) {
         hue = hueOf(cluster.place.y);
     }
-    outTextCoord = vec2(0.0, hue);
+    outWorldPosition = vec4(render, hue);
 }

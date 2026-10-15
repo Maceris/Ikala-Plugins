@@ -58,7 +58,7 @@ public final class LodStore {
      * builder, the simplifier or anything else changes the cells built from the same input, so
      * cached cells from before are rebuilt.
      */
-    public static final int BUILDER_VERSION = 4;
+    public static final int BUILDER_VERSION = 5;
 
     /** How many child cells a parent spans along each axis. */
     private static final int BRANCHING = 2;
@@ -948,6 +948,13 @@ public final class LodStore {
                 hash.putInt(mesh.materials[t]);
                 hash.putFloat(mesh.visibility[t]);
             }
+            final int[] attributes = mesh.attributes;
+            hash.putInt(attributes == null ? 0 : attributes.length);
+            if (attributes != null) {
+                for (int value : attributes) {
+                    hash.putInt(value);
+                }
+            }
         }
         return hash.hex();
     }
@@ -1186,6 +1193,7 @@ public final class LodStore {
                                 c.corners(),
                                 c.materials(),
                                 c.visibility(),
+                                c.attributes(),
                                 c.error(),
                                 c.bound(),
                                 c.tight(),

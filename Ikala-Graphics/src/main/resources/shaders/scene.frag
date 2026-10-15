@@ -18,12 +18,12 @@ layout(location = 6) flat in uint outMaterialIdx;
 // depth test can run before the shader.
 layout(constant_id = 0) const bool ALPHA_TEST = true;
 
-// Whether this is a level of detail cluster from scene_lod.vert, which has flat triangles and no
-// texture coordinates. Then each triangle's normal comes from how its position changes across the
-// screen, and the texture is projected along its main axis, one repeat per block, with the same
-// rules as LodTexturing: the fraction of unwrapped coordinates is sampled with their gradients, so
-// the mip level doesn't jump where the fraction wraps. See scene_lod.vert for what its outputs
-// carry then.
+// Whether this is a level of detail cluster from scene_lod.vert. Its textured triangles are drawn
+// as meshes are. Its projected ones, which outViewPosition.w marks, are flat and have no texture
+// coordinates: each triangle's normal comes from how its position changes across the screen, and
+// the texture is projected along its main axis, one repeat per block, with the same rules as
+// LodTexturing: the fraction of unwrapped coordinates is sampled with their gradients, so the mip
+// level doesn't jump where the fraction wraps. See scene_lod.vert for what its outputs carry.
 layout(constant_id = 1) const bool TRIPLANAR = false;
 
 // Whether these are sections' baked cut out blocks, which hand over to their volume bricks with
@@ -36,7 +36,12 @@ layout(push_constant) uniform SceneConstants {
     layout(offset = 16) float volumeFadeStart;
     float volumeFadeLength;
     uint frame;
+    // Nonzero to color sections' cut out meshes by source, see DebugVisualizers.volumeSources
+    uint debugSources;
 };
+
+// The flat color sections' cut out meshes take when colored by source
+const vec3 MESH_SOURCE_COLOR = vec3(0.0, 0.8, 0.8);
 
 layout(location = 0) out vec4 buffBaseColor;
 layout(location = 1) out vec4 buffNormal;
@@ -49,6 +54,9 @@ layout(std430, set = 0, binding = 2) readonly buffer Materials {
     Material materials[];
 };
 
+// Whether this pixel's texture is projected, on a level of detail cluster's projected triangle
+bool projected;
+
 // This pixel's texture coordinates, with their gradients for projected ones
 vec2 textCoord;
 vec2 textCoordDx;
@@ -57,7 +65,7 @@ vec2 textCoordDy;
 // Sample one of the bindless textures at this pixel's texture coordinates
 vec4 sampleTexture(int index)
 {
-    if (TRIPLANAR) {
+    if (projected) {
         return textureGrad(
             bindlessTextures[nonuniformEXT(index)], fract(textCoord), textCoordDx, textCoordDy);
     }
@@ -72,8 +80,9 @@ void main() {
     vec3 bitangent = outBitangent;
     textCoord = outTextCoord;
     // scene_lod.vert's debug coloring, a hue, or below zero for none
-    float debugHue = TRIPLANAR ? outTextCoord.y : -1.0;
-    if (TRIPLANAR) {
+    float debugHue = TRIPLANAR ? outWorldPosition.w : -1.0;
+    projected = TRIPLANAR && outViewPosition.w > 0.5;
+    if (projected) {
         // The flat triangle's normal in render space, turned to face the camera at the origin
         vec3 position = outWorldPosition.xyz;
         vec3 normal = normalize(cross(dFdx(position), dFdy(position)));
@@ -140,6 +149,9 @@ void main() {
         normal = normalize(TBN * newNormal);
     }
 
+    if (VOLUME_FADE && debugSources != 0u) {
+        baseColor.rgb = MESH_SOURCE_COLOR;
+    }
     if (debugHue >= 0.0) {
         // A bright, fully saturated hue, still lit like the surface
         vec3 hue = clamp(abs(fract(debugHue + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0,

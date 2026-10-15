@@ -408,7 +408,8 @@ public final class TJunctions {
                 out.size(),
                 materials,
                 visibility,
-                locked);
+                locked,
+                null);
     }
 
     /**
