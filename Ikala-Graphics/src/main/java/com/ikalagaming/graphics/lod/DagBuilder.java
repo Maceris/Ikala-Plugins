@@ -29,6 +29,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class DagBuilder {
 
     /** Levels at most, as a safety net. */
+    /** A projected triangle's kind, for seams. */
+    private static final int KIND_PROJECTED = 0;
+
+    /** A textured triangle's kind, for seams. */
+    private static final int KIND_TEXTURED = 1;
+
+    /** An averaged triangle's kind, for seams: textured, with no texture coordinates. */
+    private static final int KIND_AVERAGED = 2;
+
     private static final int MAX_LEVELS = 32;
 
     /** Runs of edges per worker the face contacts are searched in, so uneven runs even out. */
@@ -451,7 +460,7 @@ public final class DagBuilder {
                                 materials,
                                 visibility,
                                 Clusters.attributes(mesh, triangles),
-                                0,
+                                mesh.getLeafError(),
                                 tight,
                                 tight,
                                 -1,
@@ -1399,11 +1408,13 @@ public final class DagBuilder {
 
     /**
      * Note what meets at a vertex, and whether that makes it a seam the simplifier must keep:
-     * textured triangles meeting there with different attributes or materials, or a textured
-     * triangle meeting a projected one. Projected triangles meeting each other make no seam.
+     * textured triangles meeting there with different attributes or materials, or triangles of
+     * different kinds meeting: textured, projected or averaged. Projected triangles meeting each
+     * other make no seam, nor do averaged ones: they have no texture coordinates to keep whole, and
+     * their normals are smooth, taken again from the input after every simplification.
      *
-     * @param meeting What has met at each vertex so far: textured or not, the material, and for a
-     *     textured triangle its corner's attributes.
+     * @param meeting What has met at each vertex so far: the kind, and for a textured triangle its
+     *     material and its corner's attributes.
      * @param vertex The vertex.
      * @param textured Whether this triangle is textured.
      * @param material Its material.
@@ -1418,14 +1429,20 @@ public final class DagBuilder {
             int material,
             int @NonNull [] attributes,
             int at) {
+        final int kind =
+                !textured
+                        ? KIND_PROJECTED
+                        : Attributes.noTextureCoordinates(attributes[at + 2])
+                                ? KIND_AVERAGED
+                                : KIND_TEXTURED;
         final int[] here =
-                textured
+                kind == KIND_TEXTURED
                         ? new int[] {
-                            1, material, attributes[at], attributes[at + 1], attributes[at + 2]
+                            kind, material, attributes[at], attributes[at + 1], attributes[at + 2]
                         }
-                        : new int[] {0, material};
+                        : new int[] {kind};
         final int[] before = meeting.putIfAbsent(vertex, here);
-        if (before == null || (before[0] == 0 && !textured)) {
+        if (before == null || (kind != KIND_TEXTURED && before[0] == kind)) {
             return false;
         }
         return !Arrays.equals(before, here);

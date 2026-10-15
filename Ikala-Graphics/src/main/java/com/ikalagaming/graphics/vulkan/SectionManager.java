@@ -43,6 +43,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -358,6 +359,12 @@ public class SectionManager {
      */
     private record Live(
             long world, @NonNull LiveLod lod, @NonNull Map<LodStore.SectionPos, Long> removed) {}
+
+    /**
+     * The sections with a pending bake, so swapping them in doesn't look through every section.
+     * Guarded by {@link #lock}.
+     */
+    private final Set<Section> pendingSections = new LinkedHashSet<>();
 
     /** Each plugin's live world, by owner. Guarded by {@link #lock}. */
     private final Map<String, Live> live = new HashMap<>();
@@ -836,6 +843,7 @@ public class SectionManager {
         if (section.pending != null) {
             releasing.addAll(section.pending.meshes());
         }
+        pendingSections.remove(section);
     }
 
     /**
@@ -1176,6 +1184,7 @@ public class SectionManager {
                 releasing.addAll(section.pending.meshes());
             }
             section.pending = version;
+            pendingSections.add(section);
             section.pendingBrick = done.brick();
             if (section.failed) {
                 --failedCount;
@@ -1249,9 +1258,12 @@ public class SectionManager {
         final MeshRegistry registry = state.bakedGeometry.getRegistry();
         lock.lock();
         try {
-            for (Section section : sections.values()) {
+            final Iterator<Section> waiting = pendingSections.iterator();
+            while (waiting.hasNext()) {
+                final Section section = waiting.next();
                 final Version pending = section.pending;
-                if (pending == null) {
+                if (pending == null || section.removed) {
+                    waiting.remove();
                     continue;
                 }
                 boolean resident = true;
@@ -1287,6 +1299,7 @@ public class SectionManager {
                 residentTriangles += pending.triangles();
                 section.current = pending;
                 section.pending = null;
+                waiting.remove();
                 section.pendingBrick = null;
                 section.restoring = false;
                 section.rebricking = false;

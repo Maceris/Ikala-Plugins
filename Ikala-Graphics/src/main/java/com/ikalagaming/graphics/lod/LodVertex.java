@@ -15,7 +15,7 @@ import java.nio.ByteBuffer;
  * snorm16 tangent[2]  // octahedral, for textured triangles
  * half u, v           // for textured triangles
  * uint16 material     // index into the material table
- * uint16 flags        // FLAG_FLIPPED_BITANGENT, FLAG_TEXTURED
+ * uint16 flags        // FLAG_FLIPPED_BITANGENT, FLAG_TEXTURED, FLAG_AVERAGED
  * </pre>
  *
  * <p>Every cluster of a world shares one grid, so a vertex two clusters share, such as one on a
@@ -64,6 +64,12 @@ public final class LodVertex {
 
     /** The flag of a textured triangle's vertex, whose normal and texture coordinates count. */
     public static final int FLAG_TEXTURED = 1 << 1;
+
+    /**
+     * Set with {@link #FLAG_TEXTURED} for a vertex with no texture coordinates ({@link
+     * Attributes#NO_UV}): its triangle takes its materials' average colors.
+     */
+    public static final int FLAG_AVERAGED = 1 << 2;
 
     /** The largest material index that fits. */
     public static final int MAX_MATERIAL = 0xFFFF;
@@ -126,6 +132,9 @@ public final class LodVertex {
             out.putInt(base + TANGENT_OFFSET, Attributes.tangentBits(attributes[at + 1]));
             out.putInt(base + UV_OFFSET, attributes[at + 2]);
             flags = FLAG_TEXTURED;
+            if (Attributes.noTextureCoordinates(attributes[at + 2])) {
+                flags |= FLAG_AVERAGED;
+            }
             if (Attributes.flipped(attributes[at + 1])) {
                 flags |= FLAG_FLIPPED_BITANGENT;
             }

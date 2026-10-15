@@ -84,17 +84,101 @@ public final class LodStore {
      */
     static final int BIAS = 0x55555;
 
+    /** Murmur3's constants for mixing a block into a hash. */
+    private static final int MIX_C1 = 0xCC9E_2D51;
+
+    /** Murmur3's second block constant. */
+    private static final int MIX_C2 = 0x1B87_3593;
+
+    /** How far Murmur3 turns a block. */
+    private static final int MIX_ROTATE = 15;
+
+    /** How far Murmur3 turns the hash after a block. */
+    private static final int MIX_ROTATE_HASH = 13;
+
+    /** Murmur3's per-block multiplier. */
+    private static final int MIX_M = 5;
+
+    /** Murmur3's per-block addend. */
+    private static final int MIX_N = 0xE654_6B64;
+
+    /** Murmur3's finalizer shifts and multipliers. */
+    private static final int FINAL_SHIFT_1 = 16;
+
+    /** Murmur3's finalizer's first multiplier. */
+    private static final int FINAL_M1 = 0x85EB_CA6B;
+
+    /** Murmur3's finalizer's middle shift. */
+    private static final int FINAL_SHIFT_2 = 13;
+
+    /** Murmur3's finalizer's second multiplier. */
+    private static final int FINAL_M2 = 0xC2B2_AE35;
+
     /**
-     * A section's place in the world, in sections.
+     * Mix one int into a Murmur3 hash.
      *
-     * @param x Along x.
+     * @param h The hash so far.
+     * @param k The int.
+     * @return The hash with it.
+     */
+    private static int mixIn(int h, int k) {
+        final int mixed = h ^ Integer.rotateLeft(k * MIX_C1, MIX_ROTATE) * MIX_C2;
+        return Integer.rotateLeft(mixed, MIX_ROTATE_HASH) * MIX_M + MIX_N;
+    }
+
+    /**
+     * A well mixed hash of four ints, Murmur3's, for keys whose fields overlap in range: records'
+     * own hashes, 31 times one plus the next, collide all over such keys and turn hash maps'
+     * buckets into slow trees, as a cell's key and a group index in the hundreds did.
+     *
+     * @param a The first.
+     * @param b The second.
+     * @param c The third.
+     * @param d The fourth.
+     * @return The hash.
+     */
+    public static int hashOf(int a, int b, int c, int d) {
+        int h = mixIn(mixIn(mixIn(mixIn(0, a), b), c), d);
+        h ^= h >>> FINAL_SHIFT_1;
+        h *= FINAL_M1;
+        h ^= h >>> FINAL_SHIFT_2;
+        h *= FINAL_M2;
+        h ^= h >>> FINAL_SHIFT_1;
+        return h;
+    }
+
+    /**
+     * A section's place in the world, in sections, and its level: 0 for full detail, or a coarse
+     * section of a level above, which covers 2^level sections along each side from its corner and
+     * stands in for them at a distance. A coarse section and the sections it stands for can be in
+     * the store at once, while one hands over to the other.
+     *
+     * @param x Along x, the corner's.
      * @param y Along y.
      * @param z Along z.
+     * @param level 0 for full detail, higher for coarser.
      */
-    public record SectionPos(int x, int y, int z) implements Comparable<SectionPos> {
+    public record SectionPos(int x, int y, int z, int level) implements Comparable<SectionPos> {
+
+        @Override
+        public int hashCode() {
+            return hashOf(x, y, z, level);
+        }
+
+        /**
+         * A full detail section's place.
+         *
+         * @param x Along x.
+         * @param y Along y.
+         * @param z Along z.
+         */
+        public SectionPos(int x, int y, int z) {
+            this(x, y, z, 0);
+        }
+
         @Override
         public int compareTo(@NonNull SectionPos o) {
-            return Arrays.compare(new int[] {x, y, z}, new int[] {o.x, o.y, o.z});
+            return Arrays.compare(new int[] {x, y, z, level}, new int[] {o.x, o.y, o.z, o.level});
         }
     }
 
@@ -929,7 +1013,9 @@ public final class LodStore {
         for (int i = 0; i < inside.size(); ++i) {
             final SectionPos position = positions.get(i);
             hash.putInt(position.x()).putInt(position.y()).putInt(position.z());
+            hash.putInt(position.level());
             final LodMesh mesh = inside.get(i);
+            hash.putDouble(mesh.getLeafError());
             for (double value : mesh.getOrigin()) {
                 hash.putDouble(value);
             }

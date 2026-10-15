@@ -7,7 +7,9 @@
 // the camera however far from the origin.
 //
 // A textured triangle's vertices carry the mesh's normal, tangent and texture coordinates, and are
-// passed on as scene_baked_vertex.glsl passes them, with outViewPosition.w 0 to say so.
+// passed on as scene_baked_vertex.glsl passes them, with outViewPosition.w 0 to say so; or 2 if
+// they have no texture coordinates (FLAG_AVERAGED), as coarse stand-ins don't, for scene.frag to
+// draw the materials' average colors.
 //
 // A projected triangle's have none: scene.frag, with TRIPLANAR on, works out each flat triangle's
 // normal from how its position changes across the screen, and projects the material's texture
@@ -103,6 +105,7 @@ const int STEP_BITS = 10;
 // LodVertex's flags
 const uint FLAG_FLIPPED_BITANGENT = 1;
 const uint FLAG_TEXTURED = 2;
+const uint FLAG_AVERAGED = 4;
 
 // Undo the octahedral folding BakedVertex.octahedral does
 vec3 fromOctahedral(vec2 e)
@@ -132,8 +135,9 @@ void main()
         outNormal = normalize((viewMatrix * vec4(normal, 0.0)).xyz);
         outTangent = normalize((viewMatrix * vec4(tangent, 0.0)).xyz);
         outBitangent = normalize((viewMatrix * vec4(handedness * cross(normal, tangent), 0.0)).xyz);
-        outTextCoord = texCoord;
-        outViewPosition = vec4(0.0);
+        bool averaged = (materialFlags.y & FLAG_AVERAGED) != 0;
+        outTextCoord = averaged ? vec2(0.0) : texCoord;
+        outViewPosition = vec4(0.0, 0.0, 0.0, averaged ? 2.0 : 0.0);
     } else {
         // The camera within its block: the steps past the block's corner, and the rest
         ivec3 block = (cameraGrid.xyz >> STEP_BITS) << STEP_BITS;

@@ -162,7 +162,10 @@ public final class LodCullMath {
         putSphere(out, base + CLUSTER_TIGHT_OFFSET, cluster.tight());
         putSphere(out, base + CLUSTER_BOUND_OFFSET, cluster.bound());
         putSphere(out, base + CLUSTER_PARENT_BOUND_OFFSET, parentBound);
-        out.putFloat(base + CLUSTER_INFO_OFFSET, (float) cluster.error());
+        // A leaf has nothing finer under it, so whatever its error, it is fine enough to draw;
+        // coarse leaves' errors count only in the groups above them
+        out.putFloat(
+                base + CLUSTER_INFO_OFFSET, cluster.level() == 0 ? 0 : (float) cluster.error());
         out.putFloat(base + CLUSTER_INFO_OFFSET + Integer.BYTES, (float) parentError);
         out.putInt(base + CLUSTER_INFO_OFFSET + 2 * Integer.BYTES, meshSlot);
         out.putInt(base + CLUSTER_INFO_OFFSET + 3 * Integer.BYTES, generation);

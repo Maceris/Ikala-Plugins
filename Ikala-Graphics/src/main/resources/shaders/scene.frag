@@ -23,7 +23,9 @@ layout(constant_id = 0) const bool ALPHA_TEST = true;
 // coordinates: each triangle's normal comes from how its position changes across the screen, and
 // the texture is projected along its main axis, one repeat per block, with the same rules as
 // LodTexturing: the fraction of unwrapped coordinates is sampled with their gradients, so the mip
-// level doesn't jump where the fraction wraps. See scene_lod.vert for what its outputs carry.
+// level doesn't jump where the fraction wraps. Its averaged ones, with outViewPosition.w 2, have
+// normals but no texture coordinates, and take each texture's average, its smallest mip. See
+// scene_lod.vert for what its outputs carry.
 layout(constant_id = 1) const bool TRIPLANAR = false;
 
 // Whether these are sections' baked cut out blocks, which hand over to their volume bricks with
@@ -57,6 +59,12 @@ layout(std430, set = 0, binding = 2) readonly buffer Materials {
 // Whether this pixel's texture is projected, on a level of detail cluster's projected triangle
 bool projected;
 
+// Whether this pixel takes its textures' averages, on a level of detail cluster's averaged triangle
+bool averaged;
+
+// A mip level past any texture's smallest, which sampling clamps to it
+const float SMALLEST_MIP = 32.0;
+
 // This pixel's texture coordinates, with their gradients for projected ones
 vec2 textCoord;
 vec2 textCoordDx;
@@ -65,6 +73,9 @@ vec2 textCoordDy;
 // Sample one of the bindless textures at this pixel's texture coordinates
 vec4 sampleTexture(int index)
 {
+    if (averaged) {
+        return textureLod(bindlessTextures[nonuniformEXT(index)], vec2(0.5), SMALLEST_MIP);
+    }
     if (projected) {
         return textureGrad(
             bindlessTextures[nonuniformEXT(index)], fract(textCoord), textCoordDx, textCoordDy);
@@ -81,7 +92,8 @@ void main() {
     textCoord = outTextCoord;
     // scene_lod.vert's debug coloring, a hue, or below zero for none
     float debugHue = TRIPLANAR ? outWorldPosition.w : -1.0;
-    projected = TRIPLANAR && outViewPosition.w > 0.5;
+    projected = TRIPLANAR && outViewPosition.w > 0.5 && outViewPosition.w < 1.5;
+    averaged = TRIPLANAR && outViewPosition.w > 1.5;
     if (projected) {
         // The flat triangle's normal in render space, turned to face the camera at the origin
         vec3 position = outWorldPosition.xyz;

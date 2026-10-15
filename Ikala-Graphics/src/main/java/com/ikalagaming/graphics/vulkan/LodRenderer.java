@@ -31,6 +31,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -386,12 +387,6 @@ public class LodRenderer {
         /** Each cluster's section, or null above the leaves. */
         final LodStore.SectionPos[] sections;
 
-        /** Each cluster's streaming unit, by index in the world's units. */
-        int[] ownUnit;
-
-        /** The unit each cluster's producer group consumed, or -1 for leaves. */
-        int[] producerUnit;
-
         /**
          * Keep a piece.
          *
@@ -407,8 +402,6 @@ public class LodRenderer {
             this.meshData = added.meshes();
             this.meshes = meshes;
             this.sections = new LodStore.SectionPos[clusters.length];
-            this.ownUnit = new int[clusters.length];
-            this.producerUnit = new int[clusters.length];
         }
     }
 
@@ -422,6 +415,13 @@ public class LodRenderer {
     private record UnitKey(LodStore.CellKey cell, int group) {
         /** The root unit, of the clusters nothing consumes. */
         static final UnitKey ROOT = new UnitKey(null, -1);
+
+        @Override
+        public int hashCode() {
+            return cell == null
+                    ? group
+                    : LodStore.hashOf(cell.hashCode(), cell.level(), group, cell.x());
+        }
     }
 
     /**
@@ -431,6 +431,35 @@ public class LodRenderer {
      * @param index Its index there.
      */
     private record Member(@NonNull Piece piece, int index) {}
+
+    /**
+     * What a streaming unit is made of, kept as pieces come and go so the units needn't be worked
+     * out again from every cluster after each batch. Render thread.
+     */
+    private static final class UnitState {
+        /** The bound of the group that consumes its clusters. */
+        final double[] bound;
+
+        /** That group's error. */
+        final double error;
+
+        /** Its clusters. */
+        final Set<Member> members = new LinkedHashSet<>();
+
+        /** Its clusters' mesh bytes. */
+        long bytes;
+
+        /**
+         * A unit state.
+         *
+         * @param bound The consuming group's bound.
+         * @param error The consuming group's error.
+         */
+        UnitState(double @NonNull [] bound, double error) {
+            this.bound = bound;
+            this.error = error;
+        }
+    }
 
     /** A batch whose meshes are being registered and uploaded. Render thread. */
     private static final class Uploading {
@@ -550,7 +579,22 @@ public class LodRenderer {
         LodResidency residency;
 
         /** Each unit's clusters, by unit index. Render thread. */
-        List<List<Member>> unitMembers = List.of();
+        List<Set<Member>> unitMembers = List.of();
+
+        /** Each unit's makeup, by key, in a stable order. Render thread. */
+        final Map<UnitKey, UnitState> unitStates = new LinkedHashMap<>();
+
+        /**
+         * For each unit key, the units of the clusters its group produced, counted: its parents.
+         * Render thread.
+         */
+        final Map<UnitKey, Map<UnitKey, Integer>> unitParents = new HashMap<>();
+
+        /** Units changed since the last rebuild. Render thread. */
+        final Set<UnitKey> dirtyUnits = new HashSet<>();
+
+        /** Each unit key's index at the last rebuild. Render thread. */
+        Map<UnitKey, Integer> unitIndex = Map.of();
 
         /** Each unit's slot, by unit index. Render thread. */
         int[] unitSlotOf = new int[0];
@@ -1051,6 +1095,9 @@ public class LodRenderer {
                 unitSlots.give(slot);
             }
             removed.unitSlotByKey.clear();
+            removed.unitStates.clear();
+            removed.unitParents.clear();
+            removed.dirtyUnits.clear();
             removed.residency = null;
             removed.incoming.clear();
             if (removed.uploading != null) {
@@ -1096,55 +1143,41 @@ public class LodRenderer {
      * @param world The world.
      */
     private void rebuildUnits(@NonNull World world) {
-        final Map<UnitKey, Integer> index = new LinkedHashMap<>();
-        final List<List<Member>> members = new ArrayList<>();
-        final List<double[]> bounds = new ArrayList<>();
-        final List<Double> errors = new ArrayList<>();
-        final List<Long> bytes = new ArrayList<>();
-        for (Piece piece : world.pieces.values()) {
-            for (int i = 0; i < piece.clusters.length; ++i) {
-                final LodStore.PieceCluster cluster = piece.clusters[i];
-                final UnitKey key = ownUnitKey(cluster);
-                Integer unit = index.get(key);
-                if (unit == null) {
-                    unit = members.size();
-                    index.put(key, unit);
-                    members.add(new ArrayList<>());
-                    bounds.add(cluster.parentBound());
-                    errors.add(cluster.parentError());
-                    bytes.add(0L);
-                }
-                members.get(unit).add(new Member(piece, i));
-                bytes.set(unit, bytes.get(unit) + bytes(piece.meshData.get(i)));
-                piece.ownUnit[i] = unit;
-            }
-        }
-        final List<Set<Integer>> parents = new ArrayList<>();
-        for (int u = 0; u < members.size(); ++u) {
-            parents.add(new LinkedHashSet<>());
-        }
-        for (Piece piece : world.pieces.values()) {
-            for (int i = 0; i < piece.clusters.length; ++i) {
-                final int producer = piece.clusters[i].cluster().producer();
-                final Integer unit =
-                        producer < 0 ? null : index.get(new UnitKey(piece.key, producer));
-                piece.producerUnit[i] = unit == null ? -1 : unit;
-                if (unit != null) {
-                    parents.get(unit).add(piece.ownUnit[i]);
-                }
-            }
+        final Map<UnitKey, Integer> index = new HashMap<>();
+        final List<Set<Member>> members = new ArrayList<>(world.unitStates.size());
+        for (Map.Entry<UnitKey, UnitState> entry : world.unitStates.entrySet()) {
+            index.put(entry.getKey(), members.size());
+            members.add(entry.getValue().members);
         }
         final List<LodResidency.Unit> units = new ArrayList<>(members.size());
         final boolean[] loaded = new boolean[members.size()];
-        for (int u = 0; u < members.size(); ++u) {
+        final LodResidency before = world.residency;
+        int u = 0;
+        for (Map.Entry<UnitKey, UnitState> entry : world.unitStates.entrySet()) {
+            final UnitState state = entry.getValue();
+            final Map<UnitKey, Integer> parentKeys =
+                    world.unitParents.getOrDefault(entry.getKey(), Map.of());
+            final int[] parents = new int[parentKeys.size()];
+            int count = 0;
+            for (UnitKey parent : parentKeys.keySet()) {
+                final Integer at = index.get(parent);
+                if (at != null) {
+                    parents[count++] = at;
+                }
+            }
             units.add(
                     new LodResidency.Unit(
-                            errors.get(u),
-                            bounds.get(u),
-                            bytes.get(u),
-                            parents.get(u).stream().mapToInt(Integer::intValue).toArray()));
-            loaded[u] = isLoaded(members.get(u));
+                            state.error, state.bound, state.bytes, Arrays.copyOf(parents, count)));
+            // Only changed units are checked again; the rest are as the last residency had them
+            final Integer was = world.unitIndex.get(entry.getKey());
+            loaded[u] =
+                    before == null || was == null || world.dirtyUnits.contains(entry.getKey())
+                            ? isLoaded(members.get(u))
+                            : before.isLoaded(was);
+            ++u;
         }
+        world.dirtyUnits.clear();
+        world.unitIndex = index;
         world.residency = new LodResidency(units, loaded);
         world.unitMembers = members;
         // Slots stay with their keys; the ones gone are given back
@@ -1167,6 +1200,65 @@ public class LodRenderer {
         world.uploadingUnits.clear();
         // Plan again next frame
         world.lastResidency = 0;
+    }
+
+    /**
+     * Count a piece's cluster into its unit, and its unit into its producer's parents.
+     *
+     * @param world The world.
+     * @param piece The piece.
+     * @param i The cluster's index in it.
+     */
+    private void joinUnits(@NonNull World world, @NonNull Piece piece, int i) {
+        final LodStore.PieceCluster cluster = piece.clusters[i];
+        final UnitKey own = ownUnitKey(cluster);
+        final UnitState state =
+                world.unitStates.computeIfAbsent(
+                        own, key -> new UnitState(cluster.parentBound(), cluster.parentError()));
+        state.members.add(new Member(piece, i));
+        state.bytes += bytes(piece.meshData.get(i));
+        world.dirtyUnits.add(own);
+        final int producer = cluster.cluster().producer();
+        if (producer >= 0) {
+            final UnitKey made = new UnitKey(piece.key, producer);
+            world.unitParents
+                    .computeIfAbsent(made, key -> new HashMap<>())
+                    .merge(own, 1, Integer::sum);
+            world.dirtyUnits.add(made);
+        }
+    }
+
+    /**
+     * Take a piece's cluster out of its unit and its producer's parents, as {@link #joinUnits}
+     * counted it.
+     *
+     * @param world The world.
+     * @param piece The piece.
+     * @param i The cluster's index in it.
+     */
+    private void leaveUnits(@NonNull World world, @NonNull Piece piece, int i) {
+        final LodStore.PieceCluster cluster = piece.clusters[i];
+        final UnitKey own = ownUnitKey(cluster);
+        final UnitState state = world.unitStates.get(own);
+        if (state != null && state.members.remove(new Member(piece, i))) {
+            state.bytes -= bytes(piece.meshData.get(i));
+            if (state.members.isEmpty()) {
+                world.unitStates.remove(own);
+            }
+            world.dirtyUnits.add(own);
+        }
+        final int producer = cluster.cluster().producer();
+        if (producer >= 0) {
+            final UnitKey made = new UnitKey(piece.key, producer);
+            final Map<UnitKey, Integer> parents = world.unitParents.get(made);
+            if (parents != null) {
+                parents.computeIfPresent(own, (key, n) -> n > 1 ? n - 1 : null);
+                if (parents.isEmpty()) {
+                    world.unitParents.remove(made);
+                }
+            }
+            world.dirtyUnits.add(made);
+        }
     }
 
     /**
@@ -1198,7 +1290,7 @@ public class LodRenderer {
      * @param members The unit's clusters.
      * @return True if all with triangles are uploaded.
      */
-    private boolean isLoaded(@NonNull List<Member> members) {
+    private boolean isLoaded(@NonNull Collection<Member> members) {
         for (Member member : members) {
             if (member.piece().meshData.get(member.index()).triangleCount() == 0) {
                 continue;
@@ -1353,7 +1445,7 @@ public class LodRenderer {
      * @param world The world.
      * @param members The unit's clusters.
      */
-    private void invalidate(@NonNull World world, @NonNull List<Member> members) {
+    private void invalidate(@NonNull World world, @NonNull Collection<Member> members) {
         for (Member member : members) {
             shadows.addSphere(
                     world.origin, member.piece().clusters[member.index()].cluster().tight());
@@ -1446,6 +1538,9 @@ public class LodRenderer {
         for (LodStore.CellKey key : going) {
             final Piece old = world.pieces.remove(key);
             if (old != null) {
+                for (int i = 0; i < old.clusters.length; ++i) {
+                    leaveUnits(world, old, i);
+                }
                 invalidate(world, old);
                 retire(world, old);
             }
@@ -1473,7 +1568,9 @@ public class LodRenderer {
             }
             for (LodStore.PieceCluster cluster : tops.clusters()) {
                 final int index = cluster.local() - piece.inputs;
+                leaveUnits(world, piece, index);
                 piece.clusters[index] = cluster;
+                joinUnits(world, piece, index);
                 writeEntry(world, piece, index);
                 shadows.addSphere(world.origin, cluster.cluster().tight());
             }
@@ -1536,6 +1633,9 @@ public class LodRenderer {
             historyEntries.next(first + i);
         }
         world.pieces.put(added.key(), piece);
+        for (int i = 0; i < piece.clusters.length; ++i) {
+            joinUnits(world, piece, i);
+        }
     }
 
     /**

@@ -409,7 +409,8 @@ public final class TJunctions {
                 materials,
                 visibility,
                 locked,
-                null);
+                null,
+                mesh.getLeafError());
     }
 
     /**

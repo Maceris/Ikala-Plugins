@@ -108,6 +108,46 @@ public final class DeviceTable {
             return data;
         }
 
+        /**
+         * Put the entries in index order, an index written more than once keeping its last entry,
+         * so consecutive indices make one copy region however they were written: entries for one
+         * piece of work are often written scattered, and drivers slow down with many regions.
+         */
+        void sortByIndex() {
+            boolean sorted = true;
+            for (int i = 1; i < count && sorted; ++i) {
+                sorted = indices[i] > indices[i - 1];
+            }
+            if (sorted) {
+                return;
+            }
+            // The index high, the write order low, so the last write of an index sorts last
+            final long[] order = new long[count];
+            for (int i = 0; i < count; ++i) {
+                order[i] = ((long) indices[i] << Integer.SIZE) | i;
+            }
+            Arrays.sort(order);
+            final ByteBuffer packed = MemoryUtil.memAlloc(indices.length * entrySize);
+            final int[] packedIndices = new int[indices.length];
+            int kept = 0;
+            for (int k = 0; k < count; ++k) {
+                final int index = (int) (order[k] >>> Integer.SIZE);
+                if (k + 1 < count && (int) (order[k + 1] >>> Integer.SIZE) == index) {
+                    continue;
+                }
+                final int from = (int) order[k];
+                MemoryUtil.memCopy(
+                        MemoryUtil.memAddress0(data) + (long) from * entrySize,
+                        MemoryUtil.memAddress0(packed) + (long) kept * entrySize,
+                        entrySize);
+                packedIndices[kept++] = index;
+            }
+            MemoryUtil.memFree(data);
+            data = packed;
+            indices = packedIndices;
+            count = kept;
+        }
+
         /** Free the native memory. */
         public void free() {
             MemoryUtil.memFree(data);
@@ -169,10 +209,11 @@ public final class DeviceTable {
             bufferBytes = size;
             transferBarrier(commandBuffer, stack);
         }
-        final int count = entries.count;
-        if (count == 0) {
+        if (entries.count == 0) {
             return;
         }
+        entries.sortByIndex();
+        final int count = entries.count;
         entries.data.position(0).limit(count * entrySize);
         final StagingRing.Staging staging = state.stagingRing.stage(state, entries.data);
         state.deferFree(() -> state.stagingRing.free(state, staging));

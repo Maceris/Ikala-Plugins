@@ -77,6 +77,15 @@ public final class LodMesh {
     final int[] attributes;
 
     /**
+     * How far it is from the surface it stands for, in world units: 0 for full detail, more for a
+     * coarse stand-in. Its leaves carry it as their error, so what is built on them counts from it.
+     * -- GETTER -- The leaf error.
+     *
+     * @return The error.
+     */
+    @Getter private final double leafError;
+
+    /**
      * Create a mesh from arrays it takes ownership of.
      *
      * @param origin Where positions are measured from.
@@ -89,6 +98,7 @@ public final class LodMesh {
      * @param locked Whether each vertex is locked.
      * @param attributes Each triangle's corners' attributes, or null if every triangle is
      *     projected.
+     * @param leafError How far it is from the surface it stands for.
      */
     LodMesh(
             double @NonNull [] origin,
@@ -99,7 +109,8 @@ public final class LodMesh {
             int @NonNull [] materials,
             float @NonNull [] visibility,
             boolean @NonNull [] locked,
-            int[] attributes) {
+            int[] attributes,
+            double leafError) {
         this.origin = origin;
         this.positions = positions;
         this.vertexCount = vertexCount;
@@ -109,6 +120,7 @@ public final class LodMesh {
         this.visibility = visibility;
         this.locked = locked;
         this.attributes = attributes;
+        this.leafError = leafError;
     }
 
     /**
@@ -356,6 +368,20 @@ public final class LodMesh {
         /** Attributes so far, or null until a textured triangle is added. */
         private int[] attributes;
 
+        /** How far the mesh is from the surface it stands for. */
+        private double leafError;
+
+        /**
+         * Say how far the mesh is from the surface it stands for, for a coarse stand-in.
+         *
+         * @param error The error, in world units.
+         * @return This builder.
+         */
+        public Builder leafError(double error) {
+            leafError = error;
+            return this;
+        }
+
         /** Where each position is, for welding. */
         private final Map<Position, Integer> welding = new HashMap<>();
 
@@ -522,7 +548,8 @@ public final class LodMesh {
                     Arrays.copyOf(locked, vertexCount),
                     attributes == null
                             ? null
-                            : Arrays.copyOf(attributes, triangleCount * Attributes.PER_TRIANGLE));
+                            : Arrays.copyOf(attributes, triangleCount * Attributes.PER_TRIANGLE),
+                    leafError);
         }
     }
 

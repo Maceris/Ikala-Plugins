@@ -677,7 +677,8 @@ public final class PlanarMerge {
      * @return The mesh.
      */
     private LodMesh build() {
-        final LodMesh.Builder builder = LodMesh.builder(mesh.getOrigin().clone());
+        final LodMesh.Builder builder =
+                LodMesh.builder(mesh.getOrigin().clone()).leafError(mesh.getLeafError());
         final int[] remap = new int[removed.length];
         java.util.Arrays.fill(remap, -1);
         for (int t = 0; t < alive.length; ++t) {

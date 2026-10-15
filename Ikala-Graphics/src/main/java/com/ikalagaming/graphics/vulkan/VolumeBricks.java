@@ -179,8 +179,20 @@ public class VolumeBricks {
     /** The sections the draw order was sorted from, the same list while they don't change. */
     private List<LodStore.SectionPos> sortedFrom;
 
-    /** The draw order, nearest first. */
-    private List<LodStore.SectionPos> sorted = List.of();
+    /**
+     * One brick to draw.
+     *
+     * @param position Its section.
+     * @param slot Its slot in the atlas.
+     * @param distance How far its middle is from the camera, squared.
+     */
+    private record Draw(LodStore.@NonNull SectionPos position, int slot, double distance) {}
+
+    /** The bricks to draw, nearest first. */
+    private List<Draw> sorted = List.of();
+
+    /** Whether a slot was taken, filled or given back since the draws were sorted. */
+    private boolean slotsChanged = true;
 
     /** Where the camera was when the draw order was sorted, or null. */
     private Vector3d sortedAt;
@@ -462,6 +474,7 @@ public class VolumeBricks {
                 return;
             }
             slots.put(position, free.poll());
+            slotsChanged = true;
             withoutSlot.remove(position);
         }
         uploads.put(position, brick);
@@ -493,6 +506,7 @@ public class VolumeBricks {
             it.remove();
             final int slot = slots.get(entry.getKey());
             filled[slot] = true;
+            slotsChanged = true;
             out.add(new Upload(entry.getKey(), slot, entry.getValue()));
         }
         return out;
@@ -611,6 +625,7 @@ public class VolumeBricks {
         final Integer slot = slots.remove(position);
         if (slot != null) {
             filled[slot] = false;
+            slotsChanged = true;
             free.add(slot);
         }
     }
@@ -641,34 +656,37 @@ public class VolumeBricks {
         // Nearest first, so the depth pass writes the near faces before the far boxes behind them,
         // which the depth test then drops before their shaders run
         final double half = size / 2;
+        // Only filled bricks are sorted, each distance worked out once: the sections drawn as
+        // volumes change most frames while the camera moves, and are many more than fit the atlas
         if (sections != sortedFrom
+                || slotsChanged
                 || sortedAt == null
                 || sortedAt.distance(camera) > RESORT_DISTANCE) {
-            final List<LodStore.SectionPos> ordered = new ArrayList<>(sections);
-            ordered.sort(
-                    Comparator.comparingDouble(
-                            position -> {
-                                final double dx = position.x() * size + half - camera.x();
-                                final double dy = position.y() * size + half - camera.y();
-                                final double dz = position.z() * size + half - camera.z();
-                                return dx * dx + dy * dy + dz * dz;
-                            }));
-            sorted = ordered;
+            final List<Draw> draws = new ArrayList<>();
+            for (LodStore.SectionPos position : sections) {
+                final Integer slot = slots.get(position);
+                if (slot == null || !filled[slot]) {
+                    continue;
+                }
+                final double dx = position.x() * size + half - camera.x();
+                final double dy = position.y() * size + half - camera.y();
+                final double dz = position.z() * size + half - camera.z();
+                draws.add(new Draw(position, slot, dx * dx + dy * dy + dz * dz));
+            }
+            draws.sort(Comparator.comparingDouble(Draw::distance));
+            sorted = draws;
             sortedFrom = sections;
             sortedAt = new Vector3d(camera);
+            slotsChanged = false;
         }
-        final List<LodStore.SectionPos> ordered = sorted;
         int count = 0;
-        for (LodStore.SectionPos position : ordered) {
-            final Integer slot = slots.get(position);
-            if (slot == null || !filled[slot]) {
-                continue;
-            }
+        for (Draw draw : sorted) {
+            final LodStore.SectionPos position = draw.position();
             final int base = count * DRAW_SIZE;
             out.putFloat(base, (float) (position.x() * size - camera.x()));
             out.putFloat(base + Float.BYTES, (float) (position.y() * size - camera.y()));
             out.putFloat(base + 2 * Float.BYTES, (float) (position.z() * size - camera.z()));
-            out.putInt(base + 3 * Float.BYTES, slot);
+            out.putInt(base + 3 * Float.BYTES, draw.slot());
             ++count;
         }
         drawCounts[frame] = count;

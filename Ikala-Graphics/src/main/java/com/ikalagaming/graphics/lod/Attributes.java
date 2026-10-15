@@ -16,6 +16,19 @@ import java.nio.ByteBuffer;
  */
 public final class Attributes {
 
+    /**
+     * Texture coordinates saying a corner has none: two half float NaNs. Its triangle is drawn in
+     * its materials' average colors, as coarse stand-ins a plugin supplies may be: normals but
+     * nothing to place a texture by.
+     */
+    public static final int NO_UV = 0x7E00_7E00;
+
+    /** A half float's exponent bits, all set for a NaN or infinity. */
+    private static final int HALF_EXPONENT = 0x7C00;
+
+    /** A half float's mantissa bits, some set for a NaN. */
+    private static final int HALF_MANTISSA = 0x03FF;
+
     /** Ints per corner. */
     public static final int VALUES = 3;
 
@@ -87,6 +100,37 @@ public final class Attributes {
             }
         }
         return false;
+    }
+
+    /**
+     * Whether packed texture coordinates say there are none, as {@link #NO_UV} does: blending keeps
+     * them NaN, though perhaps not the same NaN.
+     *
+     * @param uv The two packed half floats.
+     * @return True if the first is NaN.
+     */
+    public static boolean noTextureCoordinates(int uv) {
+        return (uv & HALF_EXPONENT) == HALF_EXPONENT && (uv & HALF_MANTISSA) != 0;
+    }
+
+    /**
+     * Set a corner's attributes for a surface with a normal but no texture coordinates: a tangent
+     * at right angles to the normal, and {@link #NO_UV}.
+     *
+     * @param normal The normal; it needn't be unit length, but mustn't be zero.
+     * @param out Where the corner goes.
+     * @param at Where in it.
+     */
+    public static void untextured(float @NonNull [] normal, int @NonNull [] out, int at) {
+        // Any direction at right angles will do: cross with whichever axis the normal is least
+        // along
+        final float[] tangent =
+                Math.abs(normal[0]) <= Math.abs(normal[1])
+                        ? new float[] {0, normal[2], -normal[1]}
+                        : new float[] {-normal[2], 0, normal[0]};
+        out[at + NORMAL] = encodeDirection(normal);
+        out[at + TANGENT] = encodeDirection(tangent) & ~FLIP_BIT;
+        out[at + UV] = NO_UV;
     }
 
     /**

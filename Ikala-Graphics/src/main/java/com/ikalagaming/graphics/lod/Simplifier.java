@@ -999,7 +999,8 @@ public final class Simplifier {
                         outMaterials,
                         outVisibility,
                         outLocked,
-                        null);
+                        null,
+                        input.getLeafError());
         return new Result(
                 mesh,
                 maxError,
