@@ -37,6 +37,9 @@ struct Material
 const int MATERIAL_FLAG_NORMAL_GREEN_DOWN = 1;
 // The packed occlusion, roughness and metal map's red channel is occlusion; some leave it unused
 const int MATERIAL_FLAG_PACKED_OCCLUSION = 2;
+// The normal map is baked data: normal x and y in red and green, roughness in blue, metalness in
+// alpha, standing in for the material's, as level of detail bakes write it
+const int MATERIAL_FLAG_BAKED_DATA = 4;
 
 // A tangent space normal from a normal map texel: x and y from red and green, z rebuilt, so two
 // channel (BC5) maps read the same as three channel ones. Green flips for maps made DirectX's way.

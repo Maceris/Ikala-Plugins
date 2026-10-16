@@ -1120,6 +1120,9 @@ public class ShaderBindings {
             /** Flag: the packed occlusion, roughness and metal map's red channel is occlusion. */
             public static final int FLAG_PACKED_OCCLUSION = 2;
 
+            /** Flag: the normal map's blue and alpha are roughness and metalness, baked. */
+            public static final int FLAG_BAKED_DATA = 4;
+
             /** Total size of the struct in bytes, padded to 16 bytes. */
             public static final int SIZEOF = FLAGS + 2 * Integer.BYTES;
 

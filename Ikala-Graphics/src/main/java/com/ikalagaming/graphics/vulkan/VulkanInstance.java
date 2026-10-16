@@ -387,6 +387,8 @@ public class VulkanInstance {
         shaderMap.clearAll();
         // Uploads that never happened, then whatever plugins didn't release
         state.textureUploads.clear(state);
+        // Bake pages are the graphics plugin's own, and go before the rest
+        state.lodBakes.cleanup(state);
         state.textureRegistry.removeAll().forEach(textureLoader::delete);
         state.geometry.cleanup(state);
         state.bakedGeometry.cleanup(state);
@@ -1225,6 +1227,7 @@ public class VulkanInstance {
         state.skyOcclusion = new SkyOcclusion();
         state.pointShadows = new PointShadows();
         state.lods = new LodRenderer(state);
+        state.lodBakes = new LodBakes();
         state.bakeSources = new BakeSources();
         state.sections = new SectionManager(state.shadowInvalidation);
         state.instances = new InstanceTable(state);
@@ -1499,6 +1502,15 @@ public class VulkanInstance {
                         List.of(
                                 new ShaderVulkan.ShaderModuleData(
                                         "shaders/occupancy_bricks.comp",
+                                        ShaderVulkan.Type.COMPUTE,
+                                        ShaderVulkan.Location.BUNDLED)),
+                        state));
+        shaderMap.addShader(
+                RenderStage.Type.LOD_BAKE,
+                new ShaderVulkan(
+                        List.of(
+                                new ShaderVulkan.ShaderModuleData(
+                                        "shaders/lod_bake.comp",
                                         ShaderVulkan.Type.COMPUTE,
                                         ShaderVulkan.Location.BUNDLED)),
                         state));

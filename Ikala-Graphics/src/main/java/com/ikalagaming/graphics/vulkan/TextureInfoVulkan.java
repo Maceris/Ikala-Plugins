@@ -56,6 +56,13 @@ public class TextureInfoVulkan {
      */
     public boolean ownsSampler = false;
 
+    /**
+     * The layout shaders sample the image in, which its bindless descriptor says: read only for
+     * loaded textures, general for ones compute writes into while they are also sampled, like level
+     * of detail bake pages.
+     */
+    public int layout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
+
     /** Image sampler handle. 0 if unused. */
     public long sampler = VK_NULL_HANDLE;
 

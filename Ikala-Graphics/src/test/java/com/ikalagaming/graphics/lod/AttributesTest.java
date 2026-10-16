@@ -21,7 +21,7 @@ class AttributesTest {
     private static final int MATERIAL = 3;
 
     /** Options for a test build: two threads, the open border simplified, no visibility. */
-    private static final DagBuilder.Options OPTIONS =
+    static final DagBuilder.Options OPTIONS =
             new DagBuilder.Options(0.5, false, 2, false, 0, false);
 
     /**
@@ -69,7 +69,7 @@ class AttributesTest {
      *
      * @return The mesh.
      */
-    private static LodMesh sphere() {
+    static LodMesh sphere() {
         final LodMesh.Builder builder = LodMesh.builder(new double[3]);
         final int[][] vertex = new int[RINGS + 1][SEGMENTS + 1];
         for (int ring = 0; ring <= RINGS; ++ring) {

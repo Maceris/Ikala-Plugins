@@ -264,7 +264,7 @@ public class BindlessTextures {
                     .get(0)
                     .sampler(texture.sampler)
                     .imageView(texture.view)
-                    .imageLayout(VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+                    .imageLayout(texture.layout);
 
             VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(1, stack);
             writes.get(0)

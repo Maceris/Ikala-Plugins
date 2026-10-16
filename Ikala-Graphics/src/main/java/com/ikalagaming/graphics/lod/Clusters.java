@@ -125,6 +125,28 @@ public final class Clusters {
     }
 
     /**
+     * The surface some triangles cover.
+     *
+     * @param corners Their corners, {@link #TRIANGLE_VALUES} floats a triangle.
+     * @return The area they add up to.
+     */
+    static double area(float @NonNull [] corners) {
+        final double[] a = new double[3];
+        final double[] b = new double[3];
+        final double[] c = new double[3];
+        double total = 0;
+        for (int at = 0; at + TRIANGLE_VALUES <= corners.length; at += TRIANGLE_VALUES) {
+            for (int axis = 0; axis < 3; ++axis) {
+                a[axis] = corners[at + axis];
+                b[axis] = corners[at + 3 + axis];
+                c[axis] = corners[at + 6 + axis];
+            }
+            total += Geometry.area(a, b, c);
+        }
+        return total;
+    }
+
+    /**
      * A sphere around some corners: the center of their bounds, and the farthest corner from it.
      *
      * @param corners The corners, 3 floats each.

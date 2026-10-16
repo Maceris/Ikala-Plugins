@@ -594,7 +594,8 @@ public final class LodCellFile {
                 virtualEdges,
                 rejectedFlips,
                 rejectedLinks,
-                buildNanos);
+                buildNanos,
+                new int[0]);
     }
 
     /**

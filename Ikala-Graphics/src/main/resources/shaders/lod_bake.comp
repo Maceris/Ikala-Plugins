@@ -1,0 +1,122 @@
+#version 460
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_GOOGLE_include_directive : require
+
+#include "color.glsl"
+#include "material.glsl"
+
+// Bakes a level of detail cluster's appearance into its tile of a bake page, see LodBakes: a thread
+// a texel. Each texel's record says which of the job's source materials to sample and where, the
+// source triangle's tangent frame there, and the baked triangle's, which the normal is turned into.
+// The color page is written through a UNORM view, sRGB encoded, and sampled through an sRGB one;
+// the data page holds the normal's x and y, roughness and metalness, see MATERIAL_FLAG_BAKED_DATA.
+
+layout(local_size_x = 64) in;
+
+// Two uvec4 a texel: material slot (or EMPTY), u, v bits, source normal; source tangent, baked
+// normal, baked tangent, footprint bits
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Records {
+    uvec4 records[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer SourceMaterials {
+    Material materials[];
+};
+
+layout(push_constant) uniform BakeConstants {
+    Records texels;
+    SourceMaterials sources;
+    // The tile's corner in the page, in texels, and its side
+    ivec2 origin;
+    int size;
+    int padding;
+};
+
+layout(set = 0, binding = 0, rgba8) uniform restrict writeonly image2D colorPage;
+layout(set = 0, binding = 1, rgba8) uniform restrict writeonly image2D dataPage;
+
+layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
+
+// Match LodBakes
+const uint EMPTY = 0xFFFFFFFFu;
+
+// Undo the octahedral folding BakedVertex.octahedral does
+vec3 fromOctahedral(vec2 e)
+{
+    vec3 v = vec3(e, 1.0 - abs(e.x) - abs(e.y));
+    if (v.z < 0.0) {
+        v.xy = (1.0 - abs(v.yx)) * vec2(v.x >= 0.0 ? 1.0 : -1.0, v.y >= 0.0 ? 1.0 : -1.0);
+    }
+    return normalize(v);
+}
+
+// A tangent frame from a packed normal and a packed tangent whose lowest bit flips the bitangent
+mat3 frame(uint normalBits, uint tangentBits)
+{
+    vec3 n = fromOctahedral(unpackSnorm2x16(normalBits));
+    vec3 t = fromOctahedral(unpackSnorm2x16(tangentBits & ~1u));
+    t = normalize(t - n * dot(n, t));
+    vec3 b = cross(n, t) * ((tangentBits & 1u) != 0u ? -1.0 : 1.0);
+    return mat3(t, b, n);
+}
+
+// A source texture's texel, at the mip whose texels are about as big as a bake texel
+vec4 sampleSource(int index, vec2 uv, float footprint)
+{
+    vec2 size = vec2(textureSize(bindlessTextures[nonuniformEXT(index)], 0));
+    float lod = log2(max(footprint * max(size.x, size.y), 1.0));
+    return textureLod(bindlessTextures[nonuniformEXT(index)], uv, lod);
+}
+
+void main()
+{
+    uint texel = gl_GlobalInvocationID.x;
+    if (texel >= uint(size * size)) {
+        return;
+    }
+    uvec4 first = texels.records[texel * 2u];
+    if (first.x == EMPTY) {
+        return;
+    }
+    uvec4 second = texels.records[texel * 2u + 1u];
+    Material material = sources.materials[first.x];
+    vec2 uv = uintBitsToFloat(first.yz);
+    float footprint = uintBitsToFloat(second.w);
+    mat3 source = frame(first.w, second.x);
+    mat3 baked = frame(second.y, second.z);
+
+    // Base color as the scene draws it: the texture in place of the color, sRGB encoded
+    vec4 color = material.baseColor;
+    if (material.textureIndex > 0) {
+        color = sampleSource(material.textureIndex, uv, footprint);
+        color.rgb = linearToSRGB(color.rgb);
+    }
+
+    // The source's shading normal in the world, then in the baked triangle's tangent space
+    vec3 normal = source[2];
+    float roughness = material.roughness;
+    float metallic = material.metallic;
+    if (material.normalMapIndex > 0) {
+        vec4 normalTexel = sampleSource(material.normalMapIndex, uv, footprint);
+        normal = normalize(source * normalFromMap(normalTexel, material));
+        if ((material.flags & MATERIAL_FLAG_BAKED_DATA) != 0) {
+            roughness = normalTexel.b;
+            metallic = normalTexel.a;
+        }
+    }
+    if (material.occlusionRoughnessMetalIndex > 0) {
+        vec3 packedValues = sampleSource(material.occlusionRoughnessMetalIndex, uv, footprint).rgb;
+        roughness = packedValues.g;
+        metallic = packedValues.b;
+    }
+    vec3 inBaked = transpose(baked) * normal;
+    if (inBaked.z < 0.0) {
+        // Facing away from the baked surface, which no normal map can say; lay it along it
+        inBaked = normalize(vec3(inBaked.xy, 0.0));
+    }
+
+    ivec2 at = origin + ivec2(int(texel) % size, int(texel) / size);
+    imageStore(colorPage, at, vec4(color.rgb, 1.0));
+    imageStore(dataPage, at, vec4(inBaked.xy * 0.5 + 0.5, roughness, metallic));
+}

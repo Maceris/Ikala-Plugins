@@ -1327,7 +1327,8 @@ public final class LodStore {
                                 g.virtualEdges(),
                                 g.rejectedFlips(),
                                 g.rejectedLinks(),
-                                g.buildNanos()));
+                                g.buildNanos(),
+                                g.bakeTiles()));
             }
             globalIds.put(entry.getKey(), ids);
             edges += cell.leafEdge();

@@ -5,7 +5,9 @@ import lombok.NonNull;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A level of detail DAG, as Nanite builds it: clusters of triangles at several levels, where each
@@ -86,6 +88,8 @@ public final class LodDag {
      * @param rejectedFlips Collapses rejected for flipping a triangle.
      * @param rejectedLinks Collapses rejected by the link condition.
      * @param buildNanos How long it took to build.
+     * @param bakeTiles The side, in texels, of each output's bake tile, in output order, when it
+     *     baked its children's appearance rather than keeping their materials; empty if it didn't.
      */
     public record Group(
             int id,
@@ -103,7 +107,31 @@ public final class LodDag {
             int virtualEdges,
             int rejectedFlips,
             int rejectedLinks,
-            long buildNanos) {}
+            long buildNanos,
+            int @NonNull [] bakeTiles) {
+
+        /**
+         * How many of its outputs carry a baked texture.
+         *
+         * @return The count, 0 if it didn't bake.
+         */
+        public int bakedClusters() {
+            return bakeTiles.length;
+        }
+
+        /**
+         * The texels its outputs' bake tiles hold.
+         *
+         * @return The count.
+         */
+        public long bakedTexels() {
+            long total = 0;
+            for (int tile : bakeTiles) {
+                total += (long) tile * tile;
+            }
+            return total;
+        }
+    }
 
     /**
      * Where cluster positions are measured from, in the world.
@@ -157,6 +185,9 @@ public final class LodDag {
      */
     @Getter private Lineage lineage;
 
+    /** What each baked cluster's tile texels stand for, by cluster id. */
+    private final Map<Integer, BakeTexels> bakes = new HashMap<>();
+
     /**
      * Start an empty DAG.
      *
@@ -207,6 +238,26 @@ public final class LodDag {
      */
     void setLineage(@NonNull Lineage lineage) {
         this.lineage = lineage;
+    }
+
+    /**
+     * Keep what a baked cluster's tile texels stand for.
+     *
+     * @param cluster The cluster's id.
+     * @param texels The mapping.
+     */
+    void setBake(int cluster, @NonNull BakeTexels texels) {
+        bakes.put(cluster, texels);
+    }
+
+    /**
+     * What a baked cluster's tile texels stand for, until it is baked.
+     *
+     * @param cluster The cluster's id.
+     * @return The mapping, or null if the cluster isn't baked or the mapping wasn't kept.
+     */
+    public BakeTexels bakeOf(int cluster) {
+        return bakes.get(cluster);
     }
 
     /**

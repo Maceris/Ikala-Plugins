@@ -17,6 +17,7 @@ import com.ikalagaming.graphics.lod.LodVertex;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.*;
 import com.ikalagaming.graphics.vulkan.RenderStage;
+import com.ikalagaming.graphics.vulkan.TextureRegistry;
 
 import lombok.Getter;
 import lombok.NonNull;
@@ -95,47 +96,62 @@ public class SceneRender implements RenderStage {
                         materialCount * MATERIAL_SIZE);
 
         for (int i = 0; i < materialCount; ++i) {
-            Material material = cache.getMaterial(i);
-
-            Vector4f baseColor = material.getBaseColor();
-            materialData.putFloat(baseColor.x);
-            materialData.putFloat(baseColor.y);
-            materialData.putFloat(baseColor.z);
-            materialData.putFloat(baseColor.w);
-
-            materialData.putFloat(material.getAnisotropic());
-            materialData.putFloat(material.getClearcoat());
-            materialData.putFloat(material.getClearcoatGloss());
-            materialData.putFloat(material.getMetallic());
-
-            materialData.putFloat(material.getRoughness());
-            materialData.putFloat(material.getSheen());
-            materialData.putFloat(material.getSheenTint());
-            materialData.putFloat(material.getSpecular());
-
-            materialData.putFloat(material.getSpecularTint());
-            materialData.putFloat(material.getSubsurface());
-            materialData.putInt(state.textureRegistry.slotOrDefault(material.getNormalMap()));
-            materialData.putInt(state.textureRegistry.slotOrDefault(material.getTexture()));
-
-            final Vector3f emissive = material.getEmissive();
-            materialData.putFloat(emissive.x);
-            materialData.putFloat(emissive.y);
-            materialData.putFloat(emissive.z);
-            // Full ambient light, unless a pixel's occlusion texture says less
-            materialData.putFloat(1.0f);
-            materialData.putInt(
-                    state.textureRegistry.slotOrDefault(material.getOcclusionRoughnessMetal()));
-            materialData.putInt(state.textureRegistry.slotOrDefault(material.getEmissiveMap()));
-            materialData.putInt(
-                    (material.isNormalGreenDown()
-                                    ? ShaderBindings.Scene.Material.FLAG_NORMAL_GREEN_DOWN
-                                    : 0)
-                            | (material.isPackedOcclusion()
-                                    ? ShaderBindings.Scene.Material.FLAG_PACKED_OCCLUSION
-                                    : 0));
-            materialData.putInt(0);
+            writeMaterial(materialData, cache.getMaterial(i), state.textureRegistry);
         }
+    }
+
+    /**
+     * Write a material as shaders read it, see {@code material.glsl}, at the buffer's position,
+     * moving it past.
+     *
+     * @param materialData Where to write it.
+     * @param material The material.
+     * @param textures The texture registry, for the textures' bindless slots.
+     */
+    public static void writeMaterial(
+            @NonNull ByteBuffer materialData,
+            @NonNull Material material,
+            @NonNull TextureRegistry textures) {
+        Vector4f baseColor = material.getBaseColor();
+        materialData.putFloat(baseColor.x);
+        materialData.putFloat(baseColor.y);
+        materialData.putFloat(baseColor.z);
+        materialData.putFloat(baseColor.w);
+
+        materialData.putFloat(material.getAnisotropic());
+        materialData.putFloat(material.getClearcoat());
+        materialData.putFloat(material.getClearcoatGloss());
+        materialData.putFloat(material.getMetallic());
+
+        materialData.putFloat(material.getRoughness());
+        materialData.putFloat(material.getSheen());
+        materialData.putFloat(material.getSheenTint());
+        materialData.putFloat(material.getSpecular());
+
+        materialData.putFloat(material.getSpecularTint());
+        materialData.putFloat(material.getSubsurface());
+        materialData.putInt(textures.slotOrDefault(material.getNormalMap()));
+        materialData.putInt(textures.slotOrDefault(material.getTexture()));
+
+        final Vector3f emissive = material.getEmissive();
+        materialData.putFloat(emissive.x);
+        materialData.putFloat(emissive.y);
+        materialData.putFloat(emissive.z);
+        // Full ambient light, unless a pixel's occlusion texture says less
+        materialData.putFloat(1.0f);
+        materialData.putInt(textures.slotOrDefault(material.getOcclusionRoughnessMetal()));
+        materialData.putInt(textures.slotOrDefault(material.getEmissiveMap()));
+        materialData.putInt(
+                (material.isNormalGreenDown()
+                                ? ShaderBindings.Scene.Material.FLAG_NORMAL_GREEN_DOWN
+                                : 0)
+                        | (material.isPackedOcclusion()
+                                ? ShaderBindings.Scene.Material.FLAG_PACKED_OCCLUSION
+                                : 0)
+                        | (material.isBakedData()
+                                ? ShaderBindings.Scene.Material.FLAG_BAKED_DATA
+                                : 0));
+        materialData.putInt(0);
     }
 
     /** The shader to use for rendering. */

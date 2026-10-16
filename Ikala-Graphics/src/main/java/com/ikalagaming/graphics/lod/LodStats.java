@@ -14,6 +14,12 @@ public final class LodStats {
     /** Coordinates in a position. */
     private static final int AXES = 3;
 
+    /** Bytes a baked texel takes: a color page and a page of normal, roughness and metal. */
+    static final int BAKE_BYTES_PER_TEXEL = 8;
+
+    /** Bytes in a mebibyte. */
+    private static final double BYTES_PER_MIB = 1024.0 * 1024.0;
+
     /** Nanoseconds in a millisecond. */
     private static final double NANOS_PER_MILLI = 1e6;
 
@@ -37,6 +43,8 @@ public final class LodStats {
      * @param virtualEdges Virtual edges added in this level's groups.
      * @param rejectedFlips Collapses rejected for flipping in this level's groups.
      * @param rejectedLinks Collapses rejected by the link condition in this level's groups.
+     * @param bakedClusters Clusters this level's groups baked.
+     * @param bakedTexels Texels in their bake tiles.
      */
     public record Level(
             int level,
@@ -52,7 +60,9 @@ public final class LodStats {
             double @NonNull [] buildMillis,
             int virtualEdges,
             int rejectedFlips,
-            int rejectedLinks) {}
+            int rejectedLinks,
+            int bakedClusters,
+            long bakedTexels) {}
 
     /**
      * What an edit would rebuild.
@@ -120,6 +130,8 @@ public final class LodStats {
             int virtual = 0;
             int flips = 0;
             int links = 0;
+            int baked = 0;
+            long texels = 0;
             for (LodDag.Group group : dag.groups()) {
                 if (group.level() != level) {
                     continue;
@@ -132,6 +144,8 @@ public final class LodStats {
                 virtual += group.virtualEdges();
                 flips += group.rejectedFlips();
                 links += group.rejectedLinks();
+                baked += group.bakedClusters();
+                texels += group.bakedTexels();
             }
             out.add(
                     new Level(
@@ -150,7 +164,9 @@ public final class LodStats {
                             times(times),
                             virtual,
                             flips,
-                            links));
+                            links,
+                            baked,
+                            texels));
         }
         return out;
     }
@@ -269,7 +285,7 @@ public final class LodStats {
         out.append('\n');
         out.append(
                 String.format(
-                        "%5s %9s %8s %6s %7s %9s %9s %14s %16s %7s %26s %8s %6s %6s%n",
+                        "%5s %9s %8s %6s %7s %9s %9s %14s %16s %7s %26s %8s %6s %6s %6s %9s%n",
                         "level",
                         "tris",
                         "clusters",
@@ -283,11 +299,14 @@ public final class LodStats {
                         "build ms (sum/p50/p95/max)",
                         "virtual",
                         "flips",
-                        "links"));
+                        "links",
+                        "baked",
+                        "bake MiB"));
         for (Level l : levels(dag)) {
             out.append(
                     String.format(
-                            "%5d %9d %8d %6d %7.3f %9.4f %9.4f %14s %16s %6.1f%% %26s %8d %6d %6d%n",
+                            "%5d %9d %8d %6d %7.3f %9.4f %9.4f %14s %16s %6.1f%% %26s %8d %6d %6d"
+                                    + " %6d %9.1f%n",
                             l.level(),
                             l.triangles(),
                             l.clusters(),
@@ -314,7 +333,9 @@ public final class LodStats {
                                     l.buildMillis()[3]),
                             l.virtualEdges(),
                             l.rejectedFlips(),
-                            l.rejectedLinks()));
+                            l.rejectedLinks(),
+                            l.bakedClusters(),
+                            l.bakedTexels() * BAKE_BYTES_PER_TEXEL / BYTES_PER_MIB));
         }
         for (Footprint f : footprints) {
             out.append(

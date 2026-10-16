@@ -100,6 +100,13 @@ public class Material {
     private boolean normalGreenDown;
 
     /**
+     * Whether the normal map holds baked data: the tangent space normal's x and y in red and green,
+     * roughness in blue and metalness in alpha, which stand in for the material's own, as a level
+     * of detail bake writes them.
+     */
+    private boolean bakedData;
+
+    /**
      * How the material lets light through, which decides which faces it hides when baked and how it
      * is drawn.
      */

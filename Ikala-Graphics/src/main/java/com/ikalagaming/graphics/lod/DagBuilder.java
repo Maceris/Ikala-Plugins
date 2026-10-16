@@ -67,6 +67,9 @@ public final class DagBuilder {
     /** Values in a triangle's corners. */
     private static final int TRIANGLE_VALUES = Clusters.TRIANGLE_VALUES;
 
+    /** The low 16 bits of an int. */
+    private static final int LOW_16 = 0xFFFF;
+
     /**
      * How to build.
      *
@@ -86,6 +89,10 @@ public final class DagBuilder {
      * @param averages What each material looks like averaged, so groups far enough out that
      *     textures can't be told apart blend their input's look per vertex instead of keeping one
      *     material a triangle (see {@link AverageTransfer}); null to keep materials at every level.
+     * @param bakeTile The side, in texels, of the texture tile each output cluster of a baking
+     *     group gets; 0 never to bake. A group of textured triangles bakes once a tile that size is
+     *     fine enough for its error (see {@link #bakes}), and then simplifies its geometry alone,
+     *     with no seams or material borders held.
      */
     public record Options(
             double virtualEdgeFactor,
@@ -94,7 +101,38 @@ public final class DagBuilder {
             boolean keepLineage,
             double visibilityReach,
             boolean mergePlanar,
-            MaterialAverages averages) {
+            MaterialAverages averages,
+            int bakeTile) {
+
+        /**
+         * Options that never bake.
+         *
+         * @param virtualEdgeFactor r for virtual edges, as a multiple of the average edge length.
+         * @param lockOpenBorder Whether the input's open border is locked at every level.
+         * @param threads Worker threads.
+         * @param keepLineage Whether to keep where every triangle came from.
+         * @param visibilityReach How far a leaf triangle's rays must get to count as seen.
+         * @param mergePlanar Whether to merge each input's coplanar triangles first.
+         * @param averages What each material looks like averaged, or null.
+         */
+        public Options(
+                double virtualEdgeFactor,
+                boolean lockOpenBorder,
+                int threads,
+                boolean keepLineage,
+                double visibilityReach,
+                boolean mergePlanar,
+                MaterialAverages averages) {
+            this(
+                    virtualEdgeFactor,
+                    lockOpenBorder,
+                    threads,
+                    keepLineage,
+                    visibilityReach,
+                    mergePlanar,
+                    averages,
+                    0);
+        }
 
         /**
          * Options that keep materials at every level.
@@ -155,7 +193,8 @@ public final class DagBuilder {
                     keepLineage,
                     visibilityReach,
                     mergePlanar,
-                    averages);
+                    averages,
+                    bakeTile);
         }
 
         /**
@@ -172,7 +211,8 @@ public final class DagBuilder {
                     keepLineage,
                     visibilityReach,
                     mergePlanar,
-                    materialAverages);
+                    materialAverages,
+                    bakeTile);
         }
 
         /**
@@ -189,7 +229,26 @@ public final class DagBuilder {
                     keepLineage,
                     visibilityReach,
                     merge,
-                    averages);
+                    averages,
+                    bakeTile);
+        }
+
+        /**
+         * The same options, baking far textured groups into tiles of a size, or never if 0.
+         *
+         * @param tile The tile's side, in texels.
+         * @return The options.
+         */
+        public Options withBakeTile(int tile) {
+            return new Options(
+                    virtualEdgeFactor,
+                    lockOpenBorder,
+                    threads,
+                    keepLineage,
+                    visibilityReach,
+                    mergePlanar,
+                    averages,
+                    tile);
         }
 
         /**
@@ -257,7 +316,9 @@ public final class DagBuilder {
             long nanos,
             Lineage.Group lineage,
             List<int[]> faces,
-            List<long[]> bases) {}
+            List<long[]> bases,
+            int[] bakeTiles,
+            List<BakeTexels> bakes) {}
 
     /** The options. */
     private final Options options;
@@ -1294,6 +1355,9 @@ public final class DagBuilder {
         // Far enough out that textures can't be told apart, the input's look is blended per
         // vertex instead, and no seam of texture coordinates or materials holds simplifying back
         final boolean averaging = averages(children);
+        // Far enough out that a tile per cluster holds the input's look finely enough, the output
+        // is baked instead, so nothing about appearance holds simplifying back
+        final boolean baking = !averaging && bakes(children);
         final AverageTransfer average = averaging ? new AverageTransfer() : null;
         final float[] look = new float[MaterialAverages.VALUES];
         for (int id : children) {
@@ -1345,13 +1409,17 @@ public final class DagBuilder {
         // where seams meet or end they stay put; each side's triangles give the output its
         // attributes again
         final Seams seams =
-                anyTextured && !averaging ? seams(merged, sourceCluster, sourceTriangle) : null;
+                anyTextured && !averaging && !baking
+                        ? seams(merged, sourceCluster, sourceTriangle)
+                        : null;
         if (seams != null) {
             for (int v = 0; v < merged.getVertexCount(); ++v) {
                 if (seams.isCorner(v)) {
                     merged.setLocked(v, true);
                 }
             }
+        }
+        if (anyTextured && !averaging) {
             addSources(transfer, seams, sourceCluster, sourceTriangle);
         }
         // Simplify to half, then map materials back
@@ -1377,7 +1445,7 @@ public final class DagBuilder {
         List<float[]> outVisibility = new ArrayList<>();
         List<int[]> outAttributes = new ArrayList<>();
         List<double[]> outTight = new ArrayList<>();
-        List<int[]> outFaces = options.keepLineage() ? new ArrayList<>() : null;
+        List<int[]> outFaces = options.keepLineage() || baking ? new ArrayList<>() : null;
         final float[] noOffset = new float[AXES];
         for (int[] triangles : Clusters.split(result.mesh(), Clusters.MAX_TRIANGLES)) {
             final float[] corners = Clusters.corners(result.mesh(), triangles, noOffset);
@@ -1412,7 +1480,7 @@ public final class DagBuilder {
                                     ? AttributeTransfer.ANY_CHART
                                     : seams.charts[result.faceIds()[triangles[i]]];
                 }
-                outAttributes.add(
+                final int[] transferred =
                         transfer.isEmpty()
                                 ? Attributes.NONE
                                 : transfer.transfer(
@@ -1423,7 +1491,9 @@ public final class DagBuilder {
                                                 result.faceIds(),
                                                 triangles,
                                                 sourceCluster,
-                                                sourceTriangle)));
+                                                sourceTriangle));
+                // A baked cluster's are laid out once the group's error is known, see below
+                outAttributes.add(transferred);
             }
             outTight.add(tight);
             spheres.add(tight);
@@ -1458,6 +1528,26 @@ public final class DagBuilder {
                 Hausdorff.between(
                         result.mesh(), baseBuilder.build(), MEASURE_SPACING * edge * EDGE_GROWTH);
         final double error = Math.max(childError, baseError + simplifyError);
+        final int[] bakeTiles = baking ? new int[outCorners.size()] : new int[0];
+        final List<BakeTexels> bakes = new ArrayList<>();
+        final Correspondence map = baking ? new Correspondence(merged, result.history()) : null;
+        for (int i = 0; i < bakeTiles.length; ++i) {
+            final BakeLayout layout = layoutFor(outCorners.get(i), error);
+            bakeTiles[i] = layout.tile();
+            outAttributes.set(i, bakedAttributes(outCorners.get(i), outAttributes.get(i), layout));
+            bakes.add(
+                    BakeTexels.of(
+                            outCorners.get(i),
+                            layout.uvs(),
+                            layout.tile(),
+                            outFaces.get(i),
+                            map,
+                            face ->
+                                    new int[] {
+                                        sourceCluster.getInt(face), sourceTriangle.getInt(face)
+                                    },
+                            dag));
+        }
         final List<long[]> outBases = shareOut(bases, outCorners);
         final double[] bound = Clusters.enclose(spheres);
         final int[] edgeCounts = countEdges(merged);
@@ -1487,8 +1577,202 @@ public final class DagBuilder {
                                 sourceCluster.toIntArray(),
                                 sourceTriangle.toIntArray())
                         : null,
-                outFaces,
-                outBases);
+                options.keepLineage() ? outFaces : null,
+                outBases,
+                bakeTiles,
+                bakes);
+    }
+
+    /**
+     * The attributes of a baked cluster: each corner keeps the normal it was given, or its
+     * triangle's own where it had none, and takes its place in the cluster's bake tile as its
+     * texture coordinates, with a tangent along the tile's u.
+     *
+     * @param corners The cluster's corners.
+     * @param transferred The attributes it was given, or {@link Attributes#NONE}.
+     * @param layout Its layout in its tile.
+     * @return Its attributes.
+     */
+    private static int[] bakedAttributes(
+            float @NonNull [] corners, int @NonNull [] transferred, @NonNull BakeLayout layout) {
+        final float[] uv = layout.uvs();
+        final int triangles = corners.length / TRIANGLE_VALUES;
+        final int[] out = new int[triangles * Attributes.PER_TRIANGLE];
+        final double[] a = new double[AXES];
+        final double[] b = new double[AXES];
+        final double[] c = new double[AXES];
+        final double[] face = new double[AXES];
+        final double[] tangent = new double[AXES];
+        final double[] bitangent = new double[AXES];
+        final float[] normal = new float[AXES];
+        final float[] along = new float[AXES];
+        for (int t = 0; t < triangles; ++t) {
+            final int base = t * TRIANGLE_VALUES;
+            for (int axis = 0; axis < AXES; ++axis) {
+                a[axis] = corners[base + axis];
+                b[axis] = corners[base + AXES + axis];
+                c[axis] = corners[base + 2 * AXES + axis];
+            }
+            Geometry.normal(a, b, c, face);
+            normalize(face);
+            tangentFrame(a, b, c, uv, t * AXES * 2, face, tangent, bitangent);
+            final boolean keepsNormal =
+                    Attributes.textured(transferred, t)
+                            && !Attributes.isAveraged(transferred, t * Attributes.PER_TRIANGLE);
+            for (int corner = 0; corner < AXES; ++corner) {
+                final int at = t * Attributes.PER_TRIANGLE + corner * Attributes.VALUES;
+                if (keepsNormal) {
+                    Attributes.decodeDirection(transferred[at], normal);
+                } else {
+                    normal[0] = (float) face[0];
+                    normal[1] = (float) face[1];
+                    normal[2] = (float) face[2];
+                }
+                // The tangent at right angles to this corner's normal
+                final double along0 =
+                        tangent[0] * normal[0] + tangent[1] * normal[1] + tangent[2] * normal[2];
+                along[0] = (float) (tangent[0] - normal[0] * along0);
+                along[1] = (float) (tangent[1] - normal[1] * along0);
+                along[2] = (float) (tangent[2] - normal[2] * along0);
+                final double cx = normal[1] * along[2] - normal[2] * along[1];
+                final double cy = normal[2] * along[0] - normal[0] * along[2];
+                final double cz = normal[0] * along[1] - normal[1] * along[0];
+                final boolean flipped =
+                        cx * bitangent[0] + cy * bitangent[1] + cz * bitangent[2] < 0;
+                out[at] = Attributes.encodeDirection(normal);
+                out[at + 1] = (Attributes.encodeDirection(along) & ~1) | (flipped ? 1 : 0);
+                final int place = (t * AXES + corner) * 2;
+                out[at + 2] =
+                        (Float.floatToFloat16(uv[place]) & LOW_16)
+                                | (Float.floatToFloat16(uv[place + 1]) << Short.SIZE);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The directions a triangle's texture coordinates increase along, in the world.
+     *
+     * @param a Its first corner.
+     * @param b Its second.
+     * @param c Its third.
+     * @param uv Texture coordinates, u and v of each corner.
+     * @param at Where the triangle's start in them.
+     * @param face Its unnormalized normal, for a fallback.
+     * @param tangent Receives the direction of increasing u, normalized.
+     * @param bitangent Receives the direction of increasing v, normalized.
+     */
+    private static void tangentFrame(
+            double @NonNull [] a,
+            double @NonNull [] b,
+            double @NonNull [] c,
+            float @NonNull [] uv,
+            int at,
+            double @NonNull [] face,
+            double @NonNull [] tangent,
+            double @NonNull [] bitangent) {
+        final double du1 = uv[at + 2] - uv[at];
+        final double dv1 = uv[at + 3] - uv[at + 1];
+        final double du2 = uv[at + 4] - uv[at];
+        final double dv2 = uv[at + 5] - uv[at + 1];
+        final double det = du1 * dv2 - du2 * dv1;
+        for (int axis = 0; axis < AXES; ++axis) {
+            final double e1 = b[axis] - a[axis];
+            final double e2 = c[axis] - a[axis];
+            tangent[axis] = det == 0 ? 0 : (e1 * dv2 - e2 * dv1) / det;
+            bitangent[axis] = det == 0 ? 0 : (e2 * du1 - e1 * du2) / det;
+        }
+        if (Geometry.dot(tangent, tangent) == 0) {
+            // No texture area: any direction across the face will do
+            for (int axis = 0; axis < AXES; ++axis) {
+                tangent[axis] = b[axis] - a[axis];
+            }
+            bitangent[0] = face[1] * tangent[2] - face[2] * tangent[1];
+            bitangent[1] = face[2] * tangent[0] - face[0] * tangent[2];
+            bitangent[2] = face[0] * tangent[1] - face[1] * tangent[0];
+        }
+        normalize(tangent);
+        normalize(bitangent);
+    }
+
+    /**
+     * Scale a vector to unit length, unless it is zero.
+     *
+     * @param v The vector.
+     */
+    private static void normalize(double @NonNull [] v) {
+        final double length = Math.sqrt(Geometry.dot(v, v));
+        if (length > 0) {
+            v[0] /= length;
+            v[1] /= length;
+            v[2] /= length;
+        }
+    }
+
+    /** The smallest bake tile's side, in texels. */
+    static final int MIN_BAKE_TILE = 8;
+
+    /**
+     * Lay a baked cluster out in the smallest power of two tile, from {@value #MIN_BAKE_TILE}
+     * texels up to the options' tile, whose texels are no wider than the cluster's error, so that
+     * it looks no blurrier than the cut allows; if even that tile is too coarse, as when many small
+     * charts' gaps fill it, one twice as wide.
+     *
+     * @param corners The cluster's corners.
+     * @param error The cluster's error.
+     * @return The layout.
+     */
+    private BakeLayout layoutFor(float @NonNull [] corners, double error) {
+        BakeLayout layout = null;
+        for (int tile = MIN_BAKE_TILE; tile <= options.bakeTile(); tile *= 2) {
+            layout = BakeLayout.of(corners, tile);
+            if (layout.texelSize() <= error) {
+                return layout;
+            }
+        }
+        return layout != null && layout.texelSize() <= error
+                ? layout
+                : BakeLayout.of(corners, 2 * Math.max(MIN_BAKE_TILE, options.bakeTile()));
+    }
+
+    /** The share of a tile charts are packed into, the rest gaps and corners left over. */
+    static final double BAKE_PACKING = 0.6;
+
+    /**
+     * Whether a group bakes its output: when baking is on and a child was baked, or some of its
+     * input is textured and a tile per output cluster gives texels no wider than its children's
+     * error, which the group's own is never under. Drawn only where its error is under the
+     * threshold, a texel then covers no more than that many pixels, so the bake looks no blurrier
+     * than the cut allows. Each output cluster stands for about twice the surface of a child,
+     * simplified to half.
+     *
+     * @param children The group's children.
+     * @return True if it bakes.
+     */
+    private boolean bakes(int @NonNull [] children) {
+        if (options.bakeTile() <= 0) {
+            return false;
+        }
+        double childError = 0;
+        double area = 0;
+        boolean textured = false;
+        for (int id : children) {
+            final LodDag.Cluster cluster = dag.clusters().get(id);
+            if (cluster.producer() >= 0
+                    && dag.groups().get(cluster.producer()).bakedClusters() > 0) {
+                // Baked children have only their tiles' charts left to keep; carry on baking
+                return true;
+            }
+            childError = Math.max(childError, cluster.error());
+            textured |= cluster.attributes().length > 0;
+            area += Clusters.area(cluster.corners());
+        }
+        if (!textured || childError <= 0) {
+            return false;
+        }
+        final double clusterArea = 2 * area / children.length;
+        final double texels = BAKE_PACKING * options.bakeTile() * options.bakeTile();
+        return Math.sqrt(clusterArea / texels) <= childError;
     }
 
     /**
@@ -1683,13 +1967,13 @@ public final class DagBuilder {
      * triangle is in.
      *
      * @param transfer The transfer.
-     * @param seams The group's seams.
+     * @param seams The group's seams, or null to give every source in no chart.
      * @param sourceCluster Each merged triangle's source cluster.
      * @param sourceTriangle Each merged triangle's triangle in it.
      */
     private void addSources(
             @NonNull AttributeTransfer transfer,
-            @NonNull Seams seams,
+            Seams seams,
             @NonNull IntArrayList sourceCluster,
             @NonNull IntArrayList sourceTriangle) {
         final LongIntMap added = new LongIntMap(sourceCluster.size());
@@ -1707,7 +1991,7 @@ public final class DagBuilder {
                     cluster.attributes(),
                     s * Attributes.PER_TRIANGLE,
                     cluster.materials()[s],
-                    seams.charts[t]);
+                    seams == null ? AttributeTransfer.ANY_CHART : seams.charts[t]);
         }
     }
 
@@ -1789,6 +2073,9 @@ public final class DagBuilder {
                             groupId,
                             -1));
             next.addInt(outputs[i]);
+            if (i < built.bakes().size()) {
+                dag.setBake(outputs[i], built.bakes().get(i));
+            }
             if (dag.getLineage() != null) {
                 dag.getLineage().addCluster(built.faces().get(i));
             }
@@ -1813,6 +2100,7 @@ public final class DagBuilder {
                         built.virtualEdges(),
                         built.rejectedFlips(),
                         built.rejectedLinks(),
-                        built.nanos()));
+                        built.nanos(),
+                        built.bakeTiles()));
     }
 }

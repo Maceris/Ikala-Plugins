@@ -2,6 +2,7 @@ package com.ikalagaming.graphics;
 
 import com.ikalagaming.graphics.lod.ClusterMeshes;
 import com.ikalagaming.graphics.lod.LodDag;
+import com.ikalagaming.graphics.vulkan.LodBakes;
 import com.ikalagaming.graphics.vulkan.LodRenderer;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
 
@@ -43,12 +44,17 @@ public final class Lods {
      */
     public LodHandle add(@NonNull LodDag dag) {
         context.checkOpen();
+        final VulkanInstance renderer = renderer();
+        // Baked clusters are drawn from their tiles, see LodBakes
+        final LodBakes.Plan plan =
+                renderer.getState()
+                        .lodBakes
+                        .plan(dag, GraphicsManager.getScene().getMaterialCache());
         final List<ClusterMeshes.Mesh> meshes = new ArrayList<>(dag.clusters().size());
         for (LodDag.Cluster cluster : dag.clusters()) {
-            meshes.add(ClusterMeshes.of(cluster));
+            meshes.add(ClusterMeshes.of(plan == null ? cluster : plan.cluster(cluster)));
         }
-        final VulkanInstance renderer = renderer();
-        return new LodHandle(
+        final long id =
                 renderer.getState()
                         .lods
                         .add(
@@ -56,7 +62,11 @@ public final class Lods {
                                 context.getOwnerKey(),
                                 dag,
                                 meshes,
-                                GraphicsManager.getSettings().lodThresholdPixels));
+                                GraphicsManager.getSettings().lodThresholdPixels);
+        if (plan != null) {
+            renderer.getState().lodBakes.attach(id, context.getOwnerKey(), plan);
+        }
+        return new LodHandle(id);
     }
 
     /**
@@ -166,6 +176,7 @@ public final class Lods {
         if (renderer != null && renderer.getState().lods != null) {
             renderer.getState().sections.stopLive(context.getOwnerKey(), world.id());
             renderer.getState().lods.remove(world.id(), context.getOwnerKey());
+            renderer.getState().lodBakes.release(world.id());
         }
     }
 

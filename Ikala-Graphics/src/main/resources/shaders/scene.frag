@@ -165,9 +165,11 @@ void main() {
     }
 
     vec3 normal = surfaceNormal;
+    vec4 normalTexel = vec4(0.5, 0.5, 1.0, 1.0);
     if (!averaged && material.normalMapIndex > 0) {
         mat3 TBN = mat3(tangent, bitangent, surfaceNormal);
-        normal = normalize(TBN * normalFromMap(sampleTexture(material.normalMapIndex), material));
+        normalTexel = sampleTexture(material.normalMapIndex);
+        normal = normalize(TBN * normalFromMap(normalTexel, material));
     }
 
     // Light given off, and roughness, metalness and occlusion from a packed texture, which stand
@@ -185,6 +187,11 @@ void main() {
             if ((material.flags & MATERIAL_FLAG_PACKED_OCCLUSION) != 0) {
                 occlusion = packedValues.r;
             }
+            packedLook = true;
+        } else if ((material.flags & MATERIAL_FLAG_BAKED_DATA) != 0
+                && material.normalMapIndex > 0) {
+            // A bake's roughness and metalness ride along with its normal
+            packedValues = vec3(1.0, normalTexel.b, normalTexel.a);
             packedLook = true;
         }
     }

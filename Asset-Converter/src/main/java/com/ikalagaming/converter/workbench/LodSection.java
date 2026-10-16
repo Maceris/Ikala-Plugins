@@ -82,6 +82,15 @@ final class LodSection {
      */
     private final IkBoolean keepAttributes = new IkBoolean(true);
 
+    /**
+     * Whether far groups bake their appearance into texture tiles and simplify their geometry
+     * alone, rather than keep their materials and texture seams (see {@code LodBakes}).
+     */
+    private final IkBoolean bake = new IkBoolean(true);
+
+    /** The side of the largest regular bake tile, in texels. */
+    private static final int BAKE_TILE = 64;
+
     /** Whether to keep the lineage, to measure how faithful each level is. */
     private final IkBoolean measureFidelity = new IkBoolean(true);
 
@@ -158,6 +167,7 @@ final class LodSection {
         }
         IkGui.checkbox("Join separate pieces (slow, needs a lot of memory)", virtualEdges);
         IkGui.checkbox("Keep normals and texture coordinates", keepAttributes);
+        IkGui.checkbox("Bake far textures", bake);
         IkGui.checkbox("Blend materials far out", blendFar);
         IkGui.checkbox("Measure fidelity", measureFidelity);
         IkGui.textWrapped(
@@ -243,7 +253,8 @@ final class LodSection {
                 measureFidelity.get(),
                 defaults.visibilityReach(),
                 defaults.mergePlanar(),
-                blendFar.get() ? averages : null);
+                blendFar.get() ? averages : null,
+                bake.get() ? BAKE_TILE : 0);
     }
 
     /**

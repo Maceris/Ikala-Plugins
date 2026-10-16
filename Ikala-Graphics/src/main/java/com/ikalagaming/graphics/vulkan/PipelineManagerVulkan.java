@@ -139,6 +139,9 @@ public class PipelineManagerVulkan {
     /** Keeps the volume bricks up to date and lists the ones to draw. */
     private final VolumeUpload stageVolumeUpload;
 
+    /** Bakes level of detail clusters' appearance into their tiles. */
+    private final LodBake stageLodBake;
+
     /** Writes the depth of the volume bricks' solid faces. */
     private final VolumeDepth stageVolumeDepth;
 
@@ -264,6 +267,8 @@ public class PipelineManagerVulkan {
         stageOitIntegrate.initialize(state);
         stageVolumeUpload = new VolumeUpload(shaders.getShader(RenderStage.Type.VOLUME_UPLOAD));
         stageVolumeUpload.initialize(state);
+        stageLodBake = new LodBake(shaders.getShader(RenderStage.Type.LOD_BAKE));
+        stageLodBake.initialize(state);
         stageVolumeDepth =
                 new VolumeDepth(
                         shaders.getShader(RenderStage.Type.VOLUME_DEPTH),
@@ -309,6 +314,8 @@ public class PipelineManagerVulkan {
         }
 
         if (RenderConfig.hasSceneStage(configuration)) {
+            // Bakes first, so what they write is drawn this frame
+            stages.add(stageLodBake);
             stages.add(stageInstanceDrawUpdate);
             stages.add(stageOccupancyVoxelize);
             stages.add(stageInstanceTransform);
@@ -848,6 +855,7 @@ public class PipelineManagerVulkan {
         stageOitSplat.cleanup(state);
         stageOitIntegrate.cleanup(state);
         stageVolumeUpload.cleanup(state);
+        stageLodBake.cleanup(state);
         stageVolumeDepth.cleanup(state);
         stageVolumeSplat.cleanup(state);
         stageVolumeColor.cleanup(state);
