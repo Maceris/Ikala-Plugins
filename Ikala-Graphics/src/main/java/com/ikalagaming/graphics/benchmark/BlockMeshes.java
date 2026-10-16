@@ -71,6 +71,21 @@ public final class BlockMeshes {
     /** Corners in a quad. */
     private static final int QUAD = 4;
 
+    /** The grid the jumble recipe's shapes are drawn on, sixteenths of a block like Minecraft's. */
+    private static final int GRID = 16;
+
+    /** Half the grid, in sixteenths. */
+    private static final int MID = GRID / 2;
+
+    /** How thick a glass pane is, in sixteenths. */
+    private static final int PANE = 2;
+
+    /** How much a chest is inset from its cell on every side but the bottom, in sixteenths. */
+    private static final int CHEST_INSET = 1;
+
+    /** How far a lectern's desk tilts toward its front, in degrees. */
+    private static final double DESK_TILT = 22.5;
+
     /**
      * Blocks with textures, and what to release when done with them.
      *
@@ -117,7 +132,145 @@ public final class BlockMeshes {
         meshes[SyntheticTerrain.STAIRS] =
                 stairs(material(0.62f, 0.45f, 0.26f, Material.Transparency.OPAQUE));
         meshes[SyntheticTerrain.WATER] = box(zero, one, water());
+        jumble(meshes);
         return meshes;
+    }
+
+    /**
+     * Make the jumble recipe's blocks. Each kind shares one material, so level of detail sees the
+     * many shapes as one surface to merge.
+     *
+     * @param meshes The meshes by block id, to fill in.
+     */
+    private static void jumble(MeshData @NonNull [] meshes) {
+        final Material stone = material(0.5f, 0.5f, 0.48f, Material.Transparency.OPAQUE);
+        meshes[SyntheticTerrain.STONE_SLAB] = shape(stone, 0, new int[] {0, 0, 0, GRID, MID, GRID});
+        meshes[SyntheticTerrain.STONE_SLAB_TOP] =
+                shape(stone, 0, new int[] {0, MID, 0, GRID, GRID, GRID});
+        final Material wood = material(0.62f, 0.45f, 0.26f, Material.Transparency.OPAQUE);
+        for (int shape = 0; shape < SyntheticTerrain.STAIR_SHAPES; ++shape) {
+            for (int facing = 0; facing < SyntheticTerrain.FACINGS; ++facing) {
+                for (boolean upsideDown : new boolean[] {false, true}) {
+                    meshes[SyntheticTerrain.stairs(shape, upsideDown, facing)] =
+                            shape(wood, facing, stairBoxes(shape, upsideDown));
+                }
+            }
+        }
+        final Material pane = glass(0.7f, 0.85f, 0.95f, CLEAR_GLASS_OPACITY);
+        final int[] alongX = {0, 0, MID - PANE / 2, GRID, GRID, MID + PANE / 2};
+        final int[] alongZ = {MID - PANE / 2, 0, 0, MID + PANE / 2, GRID, GRID};
+        meshes[SyntheticTerrain.PANE_X] = shape(pane, 0, alongX);
+        meshes[SyntheticTerrain.PANE_Z] = shape(pane, 0, alongZ);
+        meshes[SyntheticTerrain.PANE_CROSS] = shape(pane, 0, alongX, alongZ);
+        for (int facing = 0; facing < SyntheticTerrain.FACINGS; ++facing) {
+            meshes[SyntheticTerrain.LECTERN_FIRST + facing] = lectern(wood, facing);
+            meshes[SyntheticTerrain.CHEST_FIRST + facing] =
+                    shape(
+                            wood,
+                            facing,
+                            new int[] {
+                                CHEST_INSET,
+                                0,
+                                CHEST_INSET,
+                                GRID - CHEST_INSET,
+                                GRID - CHEST_INSET,
+                                GRID - CHEST_INSET
+                            },
+                            // The latch, on the front, out to the cell's side
+                            new int[] {MID - 1, MID, 0, MID + 1, MID + 4, CHEST_INSET});
+        }
+    }
+
+    /**
+     * Stairs' boxes, climbing toward +z: a slab, and a step on half, three quarters or a quarter of
+     * it.
+     *
+     * @param shape {@link SyntheticTerrain#STAIRS_STRAIGHT}, {@link SyntheticTerrain#STAIRS_INNER}
+     *     or {@link SyntheticTerrain#STAIRS_OUTER}.
+     * @param upsideDown Whether the slab is on top and the step below.
+     * @return The boxes, in sixteenths.
+     */
+    private static int[][] stairBoxes(int shape, boolean upsideDown) {
+        final int slabLow = upsideDown ? MID : 0;
+        final int stepLow = upsideDown ? 0 : MID;
+        final int[] slab = {0, slabLow, 0, GRID, slabLow + MID, GRID};
+        final int[] back = {0, stepLow, MID, GRID, stepLow + MID, GRID};
+        final int[] frontRight = {MID, stepLow, 0, GRID, stepLow + MID, MID};
+        final int[] backRight = {MID, stepLow, MID, GRID, stepLow + MID, GRID};
+        return switch (shape) {
+            case SyntheticTerrain.STAIRS_STRAIGHT -> new int[][] {slab, back};
+            case SyntheticTerrain.STAIRS_INNER -> new int[][] {slab, back, frontRight};
+            default -> new int[][] {slab, backRight};
+        };
+    }
+
+    /**
+     * A lectern, its front toward -z before turning: a base plate, a post, and a desk on top tilted
+     * down toward the front, only its bottom flat against its cell.
+     *
+     * @param material The material.
+     * @param facing How many quarter turns about y.
+     * @return The mesh.
+     */
+    private static MeshData lectern(Material material, int facing) {
+        final Builder builder = new Builder();
+        builder.boxes(
+                facing,
+                new int[] {0, 0, 0, GRID, 2, GRID},
+                // Its top inside the desk all the way across
+                new int[] {MID - 4, 2, MID - 4, MID + 4, 12, MID + 4});
+        // The desk: 16 wide, 14 deep and 4 thick, its middle at y 11.4 sixteenths so its back
+        // corner stays just under the top of the cell once tilted
+        final double tilt = Math.toRadians(DESK_TILT);
+        final float cos = (float) Math.cos(tilt);
+        final float sin = (float) Math.sin(tilt);
+        final float middleY = 11.4f / GRID;
+        final float[] min = {0, -2f / GRID, -7f / GRID};
+        final float[] max = {1, 2f / GRID, 7f / GRID};
+        for (int axis = 0; axis < AXES; ++axis) {
+            for (int sign = -1; sign <= 1; sign += 2) {
+                final float[][] corners = Builder.rectCorners(axis, sign, min, max);
+                for (float[] corner : corners) {
+                    // Tilt about x, raising the back, then move up and turn about y
+                    final float y = corner[1] * cos + corner[2] * sin;
+                    final float z = -corner[1] * sin + corner[2] * cos;
+                    corner[1] = y + middleY;
+                    corner[2] = z + HALF;
+                    turn(corner, facing);
+                }
+                builder.quadProjected(corners);
+            }
+        }
+        return builder.build(new float[] {0, 0, 0}, new float[] {1, 1, 1}, material);
+    }
+
+    /**
+     * Turn a point in its cell a number of quarter turns about y, around the cell's middle.
+     *
+     * @param point The point, changed in place.
+     * @param facing How many quarter turns.
+     */
+    private static void turn(float[] point, int facing) {
+        for (int i = 0; i < facing; ++i) {
+            final float x = point[0];
+            point[0] = 1 - point[2];
+            point[2] = x;
+        }
+    }
+
+    /**
+     * A block made of boxes on the sixteenths grid, turned about y, with only the faces between
+     * filled and empty sixteenths, merged into as few rectangles as each slice allows.
+     *
+     * @param material The material.
+     * @param facing How many quarter turns about y.
+     * @param boxes The boxes, each {minX, minY, minZ, maxX, maxY, maxZ} in sixteenths.
+     * @return The mesh.
+     */
+    private static MeshData shape(Material material, int facing, int[]... boxes) {
+        final Builder builder = new Builder();
+        builder.boxes(facing, boxes);
+        return builder.build(new float[] {0, 0, 0}, new float[] {1, 1, 1}, material);
     }
 
     /**
@@ -154,6 +307,9 @@ public final class BlockMeshes {
         texture(meshes[SyntheticTerrain.LEAVES], loaded.get(BlockTextures.Tile.LEAVES));
         texture(meshes[SyntheticTerrain.PLANT], loaded.get(BlockTextures.Tile.LEAVES));
         texture(meshes[SyntheticTerrain.WATER], loaded.get(BlockTextures.Tile.WATER));
+        // The jumble's kinds share a material each, so texturing one textures them all
+        texture(meshes[SyntheticTerrain.STONE_SLAB], loaded.get(BlockTextures.Tile.STONE));
+        texture(meshes[SyntheticTerrain.STAIRS_FIRST], loaded.get(BlockTextures.Tile.PLANKS));
         for (int block : new int[] {SyntheticTerrain.GRASS, SyntheticTerrain.SLAB}) {
             final Material side = meshes[block].getMaterial();
             side.setTexture(loaded.get(BlockTextures.Tile.GRASS_SIDE));
@@ -318,24 +474,170 @@ public final class BlockMeshes {
          * @param max Its maximum corner; its own axis's value is ignored.
          */
         void rect(int axis, int sign, float[] min, float[] max) {
+            final float[][] corners = rectCorners(axis, sign, min, max);
+            final float[][] uvs = new float[QUAD][];
+            for (int i = 0; i < QUAD; ++i) {
+                uvs[i] = uv(axis, sign, corners[i]);
+            }
+            quad(corners, uvs);
+        }
+
+        /**
+         * The corners of an axis-aligned rectangle facing along an axis, counter-clockwise seen
+         * from the side it faces.
+         *
+         * @param axis The axis it faces along.
+         * @param sign 1 to face up the axis, -1 down it.
+         * @param min Its minimum corner; its own axis's value is ignored.
+         * @param max Its maximum corner; its own axis's value is ignored.
+         * @return The four corners.
+         */
+        static float[][] rectCorners(int axis, int sign, float[] min, float[] max) {
             // e1 x e2 is the axis, so (0,0), (1,0), (1,1), (0,1) is counter-clockwise from +axis
             final int e1 = (axis + 1) % AXES;
             final int e2 = (axis + 2) % AXES;
             final float plane = sign > 0 ? max[axis] : min[axis];
             final float[][] square = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
             final float[][] corners = new float[QUAD][];
-            final float[][] uvs = new float[QUAD][];
             for (int i = 0; i < QUAD; ++i) {
                 final float[] corner = new float[AXES];
                 corner[axis] = plane;
                 corner[e1] = square[i][0] == 0 ? min[e1] : max[e1];
                 corner[e2] = square[i][1] == 0 ? min[e2] : max[e2];
                 // Reversed for faces pointing down the axis
-                final int at = sign > 0 ? i : QUAD - 1 - i;
-                corners[at] = corner;
-                uvs[at] = uv(axis, sign, corner);
+                corners[sign > 0 ? i : QUAD - 1 - i] = corner;
+            }
+            return corners;
+        }
+
+        /**
+         * Add a quad facing any way, textured as if projected along the axis it faces most.
+         *
+         * @param corners Four corners, counter-clockwise seen from the side it faces.
+         */
+        void quadProjected(float[][] corners) {
+            final float[] normal =
+                    cross(
+                            subtract(corners[1], corners[0]),
+                            subtract(corners[QUAD - 1], corners[0]));
+            int axis = 0;
+            for (int i = 1; i < AXES; ++i) {
+                if (Math.abs(normal[i]) > Math.abs(normal[axis])) {
+                    axis = i;
+                }
+            }
+            final int sign = normal[axis] > 0 ? 1 : -1;
+            final float[][] uvs = new float[QUAD][];
+            for (int i = 0; i < QUAD; ++i) {
+                uvs[i] = uv(axis, sign, corners[i]);
             }
             quad(corners, uvs);
+        }
+
+        /**
+         * Add the outside of a union of boxes on the sixteenths grid: every face between a filled
+         * sixteenth and an empty one or the cell's outside, merged greedily within each layer.
+         *
+         * @param facing How many quarter turns about y to turn the boxes.
+         * @param boxes The boxes, each {minX, minY, minZ, maxX, maxY, maxZ} in sixteenths.
+         */
+        void boxes(int facing, int[]... boxes) {
+            final boolean[][][] filled = new boolean[GRID][GRID][GRID];
+            for (int[] box : boxes) {
+                for (int x = box[0]; x < box[3]; ++x) {
+                    for (int y = box[1]; y < box[4]; ++y) {
+                        for (int z = box[2]; z < box[5]; ++z) {
+                            // Turn the sixteenth's middle, then fill the one it lands in
+                            final float[] middle = {(x + HALF) / GRID, 0, (z + HALF) / GRID};
+                            turn(middle, facing);
+                            filled[(int) (middle[0] * GRID)][y][(int) (middle[2] * GRID)] = true;
+                        }
+                    }
+                }
+            }
+            final int[] at = new int[AXES];
+            for (int axis = 0; axis < AXES; ++axis) {
+                final int e1 = (axis + 1) % AXES;
+                final int e2 = (axis + 2) % AXES;
+                for (int sign = -1; sign <= 1; sign += 2) {
+                    for (int layer = 0; layer < GRID; ++layer) {
+                        // Which sixteenths of this layer show a face toward the sign
+                        final boolean[][] open = new boolean[GRID][GRID];
+                        for (int a = 0; a < GRID; ++a) {
+                            for (int b = 0; b < GRID; ++b) {
+                                at[axis] = layer;
+                                at[e1] = a;
+                                at[e2] = b;
+                                if (!filled[at[0]][at[1]][at[2]]) {
+                                    continue;
+                                }
+                                final int next = layer + sign;
+                                at[axis] = next;
+                                open[a][b] =
+                                        next < 0 || next >= GRID || !filled[at[0]][at[1]][at[2]];
+                            }
+                        }
+                        mergeLayer(open, axis, sign, layer);
+                    }
+                }
+            }
+        }
+
+        /**
+         * Cover a layer's open sixteenths with as few rectangles as a greedy sweep finds.
+         *
+         * @param open Which sixteenths show a face, by e1 then e2, cleared as they are covered.
+         * @param axis The axis the faces point along.
+         * @param sign Which way along it.
+         * @param layer The layer of sixteenths, along the axis.
+         */
+        private void mergeLayer(boolean[][] open, int axis, int sign, int layer) {
+            final int e1 = (axis + 1) % AXES;
+            final int e2 = (axis + 2) % AXES;
+            for (int a = 0; a < GRID; ++a) {
+                for (int b = 0; b < GRID; ++b) {
+                    if (!open[a][b]) {
+                        continue;
+                    }
+                    int bEnd = b + 1;
+                    while (bEnd < GRID && open[a][bEnd]) {
+                        ++bEnd;
+                    }
+                    int aEnd = a + 1;
+                    while (aEnd < GRID && rowOpen(open[aEnd], b, bEnd)) {
+                        ++aEnd;
+                    }
+                    for (int i = a; i < aEnd; ++i) {
+                        Arrays.fill(open[i], b, bEnd, false);
+                    }
+                    final float[] min = new float[AXES];
+                    final float[] max = new float[AXES];
+                    min[axis] = (float) layer / GRID;
+                    max[axis] = (float) (layer + 1) / GRID;
+                    min[e1] = (float) a / GRID;
+                    max[e1] = (float) aEnd / GRID;
+                    min[e2] = (float) b / GRID;
+                    max[e2] = (float) bEnd / GRID;
+                    rect(axis, sign, min, max);
+                }
+            }
+        }
+
+        /**
+         * Whether a run of a row is all open.
+         *
+         * @param row The row.
+         * @param from The first in the run.
+         * @param to Past the last in the run.
+         * @return True if every one is open.
+         */
+        private static boolean rowOpen(boolean[] row, int from, int to) {
+            for (int i = from; i < to; ++i) {
+                if (!row[i]) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         /**

@@ -157,22 +157,6 @@ public class GraphicsDebug extends GuiWindow {
     private static final String[] RECIPE_NAMES =
             Arrays.stream(SyntheticTerrain.Recipe.values()).map(Enum::name).toArray(String[]::new);
 
-    /** The synthetic terrain's block names, by block id, for the level of detail reports. */
-    private static final String[] LOD_BLOCK_NAMES = {
-        "air",
-        "stone",
-        "grass",
-        "slab",
-        "plant",
-        "leaves",
-        "glass",
-        "tinted glass",
-        "dirt",
-        "planks",
-        "stairs",
-        "water"
-    };
-
     /** The level of detail recipe picked, by ordinal. */
     private final IkInt lodRecipe = new IkInt(SyntheticTerrain.Recipe.TERRAIN.ordinal());
 
@@ -984,8 +968,7 @@ public class GraphicsDebug extends GuiWindow {
         final Map<Integer, String> materialNames = new HashMap<>();
         for (int block = 1; block < meshes.length; ++block) {
             final Material material = meshes[block].getMaterial();
-            final String name =
-                    block < LOD_BLOCK_NAMES.length ? LOD_BLOCK_NAMES[block] : "block " + block;
+            final String name = SyntheticTerrain.name(block);
             sides[block] = scene.getMaterialCache().getMaterialIndex(material);
             tops[block] = scene.getMaterialCache().getMaterialIndex(material.forTop());
             bottoms[block] = scene.getMaterialCache().getMaterialIndex(material.forBottom());

@@ -103,6 +103,53 @@ class SyntheticTerrainTest {
     }
 
     @Test
+    void theJumbleMixesEveryShapeEvenlyOverTheHills() {
+        SyntheticTerrain jumble = terrain(SyntheticTerrain.Recipe.JUMBLE, 5);
+        SyntheticTerrain hills = terrain(SyntheticTerrain.Recipe.HILLS, 5);
+        final int[] counts = new int[SyntheticTerrain.BLOCK_TYPES];
+        int jumbled = 0;
+        for (int x = -60; x < 60; ++x) {
+            for (int z = -60; z < 60; ++z) {
+                final int surface = (int) Math.floor(jumble.height(x, z));
+                for (int y = surface - 3; y <= surface; ++y) {
+                    final byte block = jumble.block(x, y, z);
+                    // The same land as the hills: open where they are, but for their plants and
+                    // slabs on the ground
+                    final byte hill = hills.block(x, y, z);
+                    assertEquals(
+                            hill == SyntheticTerrain.AIR
+                                    || hill == SyntheticTerrain.PLANT
+                                    || hill == SyntheticTerrain.SLAB,
+                            block == SyntheticTerrain.AIR,
+                            "Shape at " + x + ", " + y + ", " + z);
+                    if (block != SyntheticTerrain.AIR && block != SyntheticTerrain.WATER) {
+                        ++counts[block];
+                        ++jumbled;
+                    }
+                }
+            }
+        }
+        for (int block = 1; block < SyntheticTerrain.BLOCK_TYPES; ++block) {
+            final boolean mixed =
+                    block == SyntheticTerrain.STONE
+                            || block == SyntheticTerrain.LEAVES
+                            || block == SyntheticTerrain.GLASS
+                            || block == SyntheticTerrain.TINTED_GLASS
+                            || block >= SyntheticTerrain.STONE_SLAB;
+            assertEquals(mixed, counts[block] > 0, SyntheticTerrain.name(block));
+        }
+        // Each of the eight kinds about an eighth
+        final int stairs =
+                java.util.Arrays.stream(
+                                counts,
+                                SyntheticTerrain.STAIRS_FIRST,
+                                SyntheticTerrain.STAIRS_FIRST + SyntheticTerrain.STAIR_VARIANTS)
+                        .sum();
+        assertEquals(1 / 8.0, stairs / (double) jumbled, 0.02, "Stairs");
+        assertEquals(1 / 8.0, counts[SyntheticTerrain.LEAVES] / (double) jumbled, 0.02, "Leaves");
+    }
+
+    @Test
     void theCheckerboardHidesNothing() {
         SyntheticTerrain terrain = terrain(SyntheticTerrain.Recipe.CHECKERBOARD, 1);
         SyntheticTerrain.Placements placements = terrain.placements(0, 0, 0);

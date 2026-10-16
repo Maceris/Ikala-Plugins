@@ -34,7 +34,7 @@ These are Java system properties, given before `-jar`:
 
 | Option | Default | What it does |
 | --- | --- | --- |
-| `-Dikala.benchmark=<recipe>` | not set | Runs the benchmark at startup. `<recipe>` is the world: `TERRAIN` (hills, caves, plants and trees, tuned to the expected load), `CHECKERBOARD` (a block in every other cell, the worst case for face culling), `CAVES` (rock full of caves under a solid roof, the worst case for occlusion) or `GLASS` (walls of clear and tinted glass every few blocks, the worst case for transparency). |
+| `-Dikala.benchmark=<recipe>` | not set | Runs the benchmark at startup. `<recipe>` is the world: `TERRAIN` (hills, caves, plants and trees, tuned to the expected load), `CHECKERBOARD` (a block in every other cell, the worst case for face culling), `CAVES` (rock full of caves under a solid roof, the worst case for occlusion) `GLASS` (walls of clear and tinted glass every few blocks, the worst case for transparency) or `JUMBLE` (the hills, their top six blocks an even mix of cubes, slabs, stairs of every shape and facing, glass panes, lecterns and chests, the worst case for face culling and level of detail on real shapes). |
 | `-Dikala.benchmark.radius=<sections>` | `12` | The view distance, in 16-block sections. |
 | `-Dikala.benchmark.lights=<count>` | `0` | Scatters this many torches (point lights reaching 10 m) over the ground, the same ones every run, to measure many lights. |
 | `-Dikala.benchmark.keep=true` | `false` | Keeps the world once the run finishes, so you can fly around it, and hides plugin menus that would cover it. Without this, the app closes when the run finishes. |

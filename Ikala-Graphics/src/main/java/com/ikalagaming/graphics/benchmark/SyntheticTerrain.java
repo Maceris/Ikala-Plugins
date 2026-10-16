@@ -63,8 +63,53 @@ public final class SyntheticTerrain {
     /** A water cube, see-through. */
     public static final byte WATER = 11;
 
+    /** A stone slab, filling the bottom half of its cell. */
+    public static final byte STONE_SLAB = 12;
+
+    /** A stone slab, filling the top half of its cell. */
+    public static final byte STONE_SLAB_TOP = 13;
+
+    /**
+     * The first of the jumble recipe's wooden stairs, see {@link #stairs(int, boolean, int)} for
+     * the rest.
+     */
+    public static final byte STAIRS_FIRST = 14;
+
+    /** Straight stairs, a step on the back half. */
+    public static final int STAIRS_STRAIGHT = 0;
+
+    /** Inner corner stairs, a step on three quarters. */
+    public static final int STAIRS_INNER = 1;
+
+    /** Outer corner stairs, a step on one quarter. */
+    public static final int STAIRS_OUTER = 2;
+
+    /** How many stair shapes there are. */
+    public static final int STAIR_SHAPES = 3;
+
+    /** How many ways a turnable block can face, quarter turns about y. */
+    public static final int FACINGS = 4;
+
+    /** How many stairs block types there are: every shape, both ways up, facing every way. */
+    public static final int STAIR_VARIANTS = STAIR_SHAPES * 2 * FACINGS;
+
+    /** A thin glass pane, running along x through the middle of its cell. */
+    public static final byte PANE_X = STAIRS_FIRST + STAIR_VARIANTS;
+
+    /** A thin glass pane, running along z through the middle of its cell. */
+    public static final byte PANE_Z = PANE_X + 1;
+
+    /** Thin glass panes crossing in the middle of their cell. */
+    public static final byte PANE_CROSS = PANE_Z + 1;
+
+    /** The first of four wooden lecterns, one facing each way: a base, a post and a tilted desk. */
+    public static final byte LECTERN_FIRST = PANE_CROSS + 1;
+
+    /** The first of four wooden chests, one facing each way: a little gap all round but below. */
+    public static final byte CHEST_FIRST = LECTERN_FIRST + FACINGS;
+
     /** How many block types there are, air included. */
-    public static final int BLOCK_TYPES = 12;
+    public static final int BLOCK_TYPES = CHEST_FIRST + FACINGS;
 
     /** How many blocks of dirt lie under the grass. */
     private static final int DIRT_DEPTH = 3;
@@ -117,6 +162,21 @@ public final class SyntheticTerrain {
     /** How far apart trees and glass panes are, in blocks: each takes one cell of this size. */
     private static final int TREE_SPACING = 9;
 
+    /**
+     * How deep under the ground's height the jumble recipe's mix of shapes goes, in blocks. Below
+     * it is plain stone.
+     */
+    private static final int JUMBLE_DEPTH = 6;
+
+    /**
+     * The kinds of block the jumble recipe mixes, picked between evenly: solid, see-through and cut
+     * out cubes, slabs, stairs, panes, lecterns and chests.
+     */
+    private static final int JUMBLE_KINDS = 8;
+
+    /** How much of the jumble recipe's glass is tinted. */
+    private static final double JUMBLE_TINTED = 0.25;
+
     /** What the world is made of. */
     public enum Recipe {
         /**
@@ -142,7 +202,13 @@ public final class SyntheticTerrain {
          * The terrain recipe's hills, overhangs, caves, lakes, slabs and plants, with no trees,
          * huts or glass, so the land itself can be seen from afar.
          */
-        HILLS
+        HILLS,
+        /**
+         * The hills recipe's land, its top few blocks an even jumble of cubes (solid, glass and
+         * leaves), slabs, stairs of every shape and facing, glass panes, lecterns and chests, so
+         * few faces hide each other and level of detail has many small, odd parts to simplify.
+         */
+        JUMBLE
     }
 
     /**
@@ -220,7 +286,7 @@ public final class SyntheticTerrain {
      */
     public int maxY() {
         return switch (recipe) {
-            case TERRAIN, HILLS -> 48;
+            case TERRAIN, HILLS, JUMBLE -> 48;
             case CHECKERBOARD -> SECTION - 1;
             case CAVES -> 34;
             case GLASS -> GLASS_WALL_HEIGHT;
@@ -236,7 +302,7 @@ public final class SyntheticTerrain {
      */
     public int minY() {
         return switch (recipe) {
-            case TERRAIN, HILLS -> -64;
+            case TERRAIN, HILLS, JUMBLE -> -64;
             case CHECKERBOARD -> 0;
             case CAVES -> -96;
             case GLASS, HUTS -> 0;
@@ -259,7 +325,7 @@ public final class SyntheticTerrain {
      */
     public double cameraY() {
         return switch (recipe) {
-            case TERRAIN, HILLS -> height(0, 0) + 6;
+            case TERRAIN, HILLS, JUMBLE -> height(0, 0) + 6;
             case CHECKERBOARD -> SECTION + 8;
             case CAVES -> 42;
             case GLASS -> GLASS_WALL_HEIGHT / 2.0;
@@ -294,7 +360,66 @@ public final class SyntheticTerrain {
             case CAVES -> caves(x, y, z);
             case GLASS -> glass(x, y, z);
             case HUTS -> huts(x, y, z);
+            case JUMBLE -> jumble(x, y, z);
         };
+    }
+
+    /**
+     * One of the jumble recipe's stairs.
+     *
+     * @param shape {@link #STAIRS_STRAIGHT}, {@link #STAIRS_INNER} or {@link #STAIRS_OUTER}.
+     * @param upsideDown Whether the slab is on top and the step hangs below it.
+     * @param facing How many quarter turns about y from climbing toward +z.
+     * @return The block type.
+     */
+    public static byte stairs(int shape, boolean upsideDown, int facing) {
+        return (byte) (STAIRS_FIRST + (shape * 2 + (upsideDown ? 1 : 0)) * FACINGS + facing);
+    }
+
+    /**
+     * A block type's name, for reports.
+     *
+     * @param block The block type.
+     * @return Its name.
+     */
+    public static String name(int block) {
+        final String[] plain = {
+            "air",
+            "stone",
+            "grass",
+            "slab",
+            "plant",
+            "leaves",
+            "glass",
+            "tinted glass",
+            "dirt",
+            "planks",
+            "stairs",
+            "water",
+            "stone slab",
+            "stone slab top"
+        };
+        if (block >= 0 && block < plain.length) {
+            return plain[block];
+        }
+        if (block >= STAIRS_FIRST && block < STAIRS_FIRST + STAIR_VARIANTS) {
+            final int variant = block - STAIRS_FIRST;
+            final String[] shapes = {"straight", "inner", "outer"};
+            return shapes[variant / (2 * FACINGS)]
+                    + ((variant / FACINGS) % 2 == 1 ? " upside down" : "")
+                    + " stairs "
+                    + variant % FACINGS;
+        }
+        if (block == PANE_X || block == PANE_Z || block == PANE_CROSS) {
+            return "pane " + (block == PANE_X ? "x" : block == PANE_Z ? "z" : "cross");
+        }
+        if (block >= LECTERN_FIRST && block < LECTERN_FIRST + FACINGS) {
+            return "lectern " + (block - LECTERN_FIRST);
+        }
+        if (block >= CHEST_FIRST && block < CHEST_FIRST + FACINGS) {
+            return "chest " + (block - CHEST_FIRST);
+        }
+        return "block " + block;
     }
 
     /**
@@ -324,7 +449,11 @@ public final class SyntheticTerrain {
                 || block == DIRT
                 || block == PLANKS
                 || block == SLAB
-                || block == STAIRS;
+                || block == STAIRS
+                || block == STONE_SLAB
+                || block == STONE_SLAB_TOP
+                || (block >= STAIRS_FIRST && block < STAIRS_FIRST + STAIR_VARIANTS)
+                || (block >= LECTERN_FIRST && block < CHEST_FIRST + FACINGS);
     }
 
     /**
@@ -475,6 +604,41 @@ public final class SyntheticTerrain {
     }
 
     /**
+     * The jumble recipe: the hills recipe's ground and caves, its top {@link #JUMBLE_DEPTH} blocks
+     * a mix of shapes picked by hash, stone below, and lakes.
+     *
+     * @param x The block's x.
+     * @param y The block's y.
+     * @param z The block's z.
+     * @return The block type.
+     */
+    private byte jumble(int x, int y, int z) {
+        final double height = height(x, z);
+        if (!solid(x, y, z, height)) {
+            return y <= WATER_LEVEL ? WATER : AIR;
+        }
+        if (y < height - 4
+                && y > height - 24
+                && Math.abs(fbm3(x / 24.0, y / 16.0, z / 24.0, 2) - 0.5) < 0.07) {
+            return AIR;
+        }
+        if (y < height - JUMBLE_DEPTH) {
+            return STONE;
+        }
+        final double variant = hash(x, y, z, 6);
+        return switch ((int) (hash(x, y, z, 5) * JUMBLE_KINDS)) {
+            case 0 -> STONE;
+            case 1 -> variant < JUMBLE_TINTED ? TINTED_GLASS : GLASS;
+            case 2 -> LEAVES;
+            case 3 -> variant < 0.5 ? STONE_SLAB : STONE_SLAB_TOP;
+            case 4 -> (byte) (STAIRS_FIRST + (int) (variant * STAIR_VARIANTS));
+            case 5 -> (byte) (PANE_X + (int) (variant * 3));
+            case 6 -> (byte) (LECTERN_FIRST + (int) (variant * FACINGS));
+            default -> (byte) (CHEST_FIRST + (int) (variant * FACINGS));
+        };
+    }
+
+    /**
      * The hut nearest a column: in the huts recipe the one whose grid cell holds it, in the terrain
      * recipe the nearest, searching tree cells out from it.
      *
@@ -484,7 +648,7 @@ public final class SyntheticTerrain {
      * @return The hut's middle x, the y of its floor, and its middle z, or null for none.
      */
     public int[] hutNear(int x, int z, int cells) {
-        if (recipe == Recipe.HILLS) {
+        if (recipe == Recipe.HILLS || recipe == Recipe.JUMBLE) {
             return null;
         }
         if (recipe == Recipe.HUTS) {
