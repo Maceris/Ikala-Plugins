@@ -39,8 +39,23 @@ class VolumeVoxelizerTest {
      * @return The baked mesh.
      */
     private static SectionBaker.Bucket bake(List<int[]> cells) {
+        return bake(cells, List.of());
+    }
+
+    /**
+     * Bake blocks at cells, each dropping the faces its neighbors among them, or among other blocks
+     * not baked here, hide.
+     *
+     * @param cells The cells, {x, y, z} each.
+     * @param others Other blocks' cells, which hide faces but aren't baked.
+     * @return The baked mesh.
+     */
+    private static SectionBaker.Bucket bake(List<int[]> cells, List<int[]> others) {
         final Set<Long> filled = new HashSet<>();
         for (int[] cell : cells) {
+            filled.add(key(cell[0], cell[1], cell[2]));
+        }
+        for (int[] cell : others) {
             filled.add(key(cell[0], cell[1], cell[2]));
         }
         final int count = cells.size();
@@ -181,6 +196,40 @@ class VolumeVoxelizerTest {
         // Nothing above or below it
         assertEquals(0, stored(brick, 3, 9, 3));
         assertEquals(0, stored(brick, 3, 5, 3));
+    }
+
+    /**
+     * A cut out block resting on an opaque one, whose bottom face that hides, fills nothing under
+     * it: not the opaque block, and not the column below it to the brick's bottom.
+     */
+    @Test
+    void testOpaqueEndsFill() {
+        final int[] leaf = {3, 8, 3};
+        final int[] stone = {3, 7, 3};
+        final SectionBaker.Bucket leaves = bake(List.of(leaf), List.of(stone));
+        // An opaque face isn't hidden by a cut out neighbor, so the stone keeps its top
+        final SectionBaker.Bucket stones = bake(List.of(stone));
+        final VolumeVoxelizer.Brick without =
+                VolumeVoxelizer.voxelize(List.of(new VolumeVoxelizer.Input(leaves, false)), TABLE);
+        assertNotNull(without);
+        assertTrue(
+                VolumeMath.isSolid(stored(without, 3, 2, 3)),
+                "Without the stone, the column under the leaf fills");
+        final VolumeVoxelizer.Brick brick =
+                VolumeVoxelizer.voxelize(
+                        List.of(
+                                new VolumeVoxelizer.Input(leaves, false),
+                                new VolumeVoxelizer.Input(stones, false, true)),
+                        TABLE);
+        assertNotNull(brick);
+        assertTrue(VolumeMath.isSolid(stored(brick, 3, 8, 3)), "The leaf");
+        for (int y = 0; y <= 7; ++y) {
+            assertEquals(0, stored(brick, 3, y, 3), "y " + y);
+        }
+        // The stone alone makes no brick
+        assertNull(
+                VolumeVoxelizer.voxelize(
+                        List.of(new VolumeVoxelizer.Input(stones, false, true)), TABLE));
     }
 
     /**

@@ -128,8 +128,23 @@ public final class VolumeVoxelizer {
      *
      * @param bucket The baked mesh, its positions from the section's corner.
      * @param translucent Whether its blocks are translucent, whose faces fill nothing.
+     * @param blocker Whether it is the section's opaque blocks, which the brick doesn't hold but
+     *     which end a column's fill: a cut out block's bottom face is hidden by an opaque block
+     *     under it, and without them the voxels below it, through the opaque block, would be filled
+     *     down to the brick's bottom.
      */
-    public record Input(SectionBaker.@NonNull Bucket bucket, boolean translucent) {}
+    public record Input(SectionBaker.@NonNull Bucket bucket, boolean translucent, boolean blocker) {
+
+        /**
+         * A mesh of cut out or translucent blocks to voxelize.
+         *
+         * @param bucket The baked mesh, its positions from the section's corner.
+         * @param translucent Whether its blocks are translucent.
+         */
+        public Input(SectionBaker.@NonNull Bucket bucket, boolean translucent) {
+            this(bucket, translucent, false);
+        }
+    }
 
     /**
      * What each voxel gathers: area times optical depth of surfaces that aren't block faces; the
@@ -144,6 +159,9 @@ public final class VolumeVoxelizer {
     private final double[] faceDepth = new double[VOXELS];
     private final double[] faceArea = new double[VOXELS];
     private final int[] faceMaterial = new int[VOXELS];
+
+    /** Which voxels hold an opaque block, from its faces; they are never filled. */
+    private final boolean[] blocked = new boolean[VOXELS];
 
     /** Which surfaces touch each voxel, packed as {@link Brick#surfaces}. */
     private final int[] surfaces = new int[SURFACE_INTS];
@@ -174,7 +192,8 @@ public final class VolumeVoxelizer {
         final VolumeVoxelizer voxelizer = new VolumeVoxelizer(table);
         boolean any = false;
         for (Input input : inputs) {
-            any |= voxelizer.add(input);
+            // Opaque blocks only end fills; they give a brick nothing to draw
+            any |= voxelizer.add(input) && !input.blocker();
         }
         return any || voxelizer.missingMaterial ? voxelizer.resolve() : null;
     }
@@ -210,7 +229,15 @@ public final class VolumeVoxelizer {
                     normal);
             final int material =
                     Short.toUnsignedInt(vertices.getShort(first + BakedVertex.MATERIAL_OFFSET));
-            any |= addTriangle(p, normal, material, input.translucent(), point, middle);
+            any |=
+                    addTriangle(
+                            p,
+                            normal,
+                            material,
+                            input.translucent(),
+                            input.blocker(),
+                            point,
+                            middle);
         }
         return any;
     }
@@ -232,6 +259,7 @@ public final class VolumeVoxelizer {
      * @param normal Its first corner's normal.
      * @param material Its material index.
      * @param translucent Whether its block is translucent.
+     * @param blocker Whether it is an opaque block's, which only marks its voxels blocked.
      * @param point Scratch space for a sample point.
      * @param middle Scratch space for its middle.
      * @return Whether it touched any voxel.
@@ -241,6 +269,7 @@ public final class VolumeVoxelizer {
             float[] normal,
             int material,
             boolean translucent,
+            boolean blocker,
             double[] point,
             double[] middle) {
         final double ux = p[1][0] - p[0][0];
@@ -259,7 +288,7 @@ public final class VolumeVoxelizer {
         // The surface's average color and opacity, as the scene takes the texture over the color;
         // where it is marked counts even if it stops no light
         final float[] color = table.color(material);
-        if (color == null) {
+        if (color == null && !blocker) {
             missingMaterial = true;
         }
         final double opacity =
@@ -307,6 +336,10 @@ public final class VolumeVoxelizer {
                 point[a] = onFace + (middle[a] - onFace) * INSET + (a == axis ? inward : 0);
             }
             final int voxel = voxelAt(point);
+            if (blocker) {
+                blocked[voxel] = true;
+                continue;
+            }
             surfaces[voxel / SURFACES_PER_INT] |=
                     surface << (voxel % SURFACES_PER_INT * SURFACE_BITS);
             if (opacity <= 0) {
@@ -414,12 +447,15 @@ public final class VolumeVoxelizer {
         boolean solid = (ownBits & ~TRANSLUCENT_FACE) != 0;
         // The voxel whose faces make this one solid, if any
         int source = voxel;
-        if (!solid && ownBits == 0) {
+        // A column's fill ends at an opaque block, and never fills one
+        if (!solid && ownBits == 0 && !blocked[voxel]) {
             boolean decided = false;
             for (int up = y + 1; up < VolumeMath.BRICK && !decided; ++up) {
                 final int at = index(x, up, z);
                 final int bits = faceBits[at] & (TOP | BOTTOM);
-                if (bits != 0) {
+                if (blocked[at]) {
+                    decided = true;
+                } else if (bits != 0) {
                     decided = true;
                     solid = (bits & BOTTOM) == 0;
                     source = at;
@@ -428,7 +464,9 @@ public final class VolumeVoxelizer {
             for (int down = y - 1; down >= 0 && !decided; --down) {
                 final int at = index(x, down, z);
                 final int bits = faceBits[at] & (TOP | BOTTOM);
-                if (bits != 0) {
+                if (blocked[at]) {
+                    decided = true;
+                } else if (bits != 0) {
                     decided = true;
                     solid = (bits & TOP) == 0;
                     source = at;

@@ -760,6 +760,11 @@ public class SectionManager {
         } finally {
             lock.unlock();
         }
+        // Opaque blocks end the fills under cut out blocks resting on them
+        final SectionBaker.Bucket opaque = result.get(Material.Transparency.OPAQUE);
+        if (opaque != null && !inputs.isEmpty()) {
+            inputs.add(new VolumeVoxelizer.Input(opaque, false, true));
+        }
     }
 
     /**
