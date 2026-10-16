@@ -49,6 +49,12 @@ public class FrameTimings {
     public static final String CPU = "CPU";
 
     /**
+     * The name of the time from one frame's start to the next's, which shows dropped frames that
+     * neither the GPU's nor the recording's time does, like the render thread waiting on the CPU.
+     */
+    public static final String FRAME_INTERVAL = "Frame interval";
+
+    /**
      * One part of a frame's timings.
      *
      * @param name What it is.
@@ -115,6 +121,9 @@ public class FrameTimings {
 
     /** When the current frame's CPU work started, from {@link System#nanoTime()}. */
     private long cpuStart;
+
+    /** Each frame in flight's time since the frame before it started, in milliseconds. */
+    private final double[] intervalMilliseconds = new double[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
     /** Guards {@link #rolling}. */
     private final ReentrantLock lock = new ReentrantLock();
@@ -210,6 +219,7 @@ public class FrameTimings {
      */
     public void begin(
             @NonNull VkCommandBuffer commandBuffer, int frame, @NonNull VulkanState state) {
+        final long previous = cpuStart;
         cpuStart = System.nanoTime();
         if (!supported) {
             return;
@@ -217,6 +227,7 @@ public class FrameTimings {
         if (pending[frame]) {
             readBack(frame, state);
         }
+        intervalMilliseconds[frame] = previous == 0 ? 0 : (cpuStart - previous) / 1_000_000.0;
         vkCmdResetQueryPool(commandBuffer, queryPool, frame * MAX_MARKS, MAX_MARKS);
         names.get(frame).clear();
         mark(commandBuffer, frame, "");
@@ -297,6 +308,7 @@ public class FrameTimings {
                     millisecondsBetween(
                             results.get(0), results.get(count - 1), validBits, tickNanoseconds));
             frameTimes.put(CPU, cpuMilliseconds[frame]);
+            frameTimes.put(FRAME_INTERVAL, intervalMilliseconds[frame]);
             record(frameTimes);
         }
     }
@@ -339,7 +351,7 @@ public class FrameTimings {
         lock.lock();
         try {
             final List<Timing> timings = new ArrayList<>();
-            for (String first : new String[] {GPU_TOTAL, CPU}) {
+            for (String first : new String[] {GPU_TOTAL, CPU, FRAME_INTERVAL}) {
                 final Rolling samples = rolling.get(first);
                 if (samples != null) {
                     timings.add(samples.summarize(first));
@@ -347,7 +359,9 @@ public class FrameTimings {
             }
             rolling.forEach(
                     (name, samples) -> {
-                        if (!GPU_TOTAL.equals(name) && !CPU.equals(name)) {
+                        if (!GPU_TOTAL.equals(name)
+                                && !CPU.equals(name)
+                                && !FRAME_INTERVAL.equals(name)) {
                             timings.add(samples.summarize(name));
                         }
                     });

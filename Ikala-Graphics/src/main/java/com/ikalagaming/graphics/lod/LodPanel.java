@@ -227,7 +227,11 @@ public final class LodPanel implements AutoCloseable {
                                     return;
                                 }
                                 final long measuring = System.nanoTime();
-                                final Fidelity fidelity = Fidelity.measure(dag);
+                                // Half the cores, at the lowest priority, so the view stays smooth
+                                final Fidelity fidelity =
+                                        Fidelity.measure(
+                                                dag,
+                                                Runtime.getRuntime().availableProcessors() / 2);
                                 fidelityTables = LodTables.fidelity(fidelity, materialName);
                                 log.info(
                                         "Measured LOD fidelity for {} in {} ms\n{}",

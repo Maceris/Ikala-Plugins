@@ -5,6 +5,8 @@ import com.ikalagaming.util.IntArrayList;
 import lombok.NonNull;
 
 import java.util.*;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ForkJoinWorkerThread;
 import java.util.function.IntFunction;
 import java.util.stream.IntStream;
 
@@ -241,7 +243,41 @@ public final class Fidelity {
     }
 
     /**
-     * Sample every triangle of a DAG and follow the samples to the input. Runs on the common pool.
+     * Sample every triangle of a DAG and follow the samples to the input, on a pool of its own of
+     * lowest priority daemon threads, so measuring in the background leaves the rest of the CPU,
+     * and the render thread, alone.
+     *
+     * @param dag The DAG, built with its lineage kept.
+     * @param threads How many threads to measure on.
+     * @return The measurements.
+     * @throws IllegalArgumentException If the lineage wasn't kept.
+     */
+    public static Fidelity measure(@NonNull LodDag dag, int threads) {
+        final ForkJoinPool pool =
+                new ForkJoinPool(
+                        Math.max(1, threads),
+                        owner -> {
+                            final ForkJoinWorkerThread worker =
+                                    ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(
+                                            owner);
+                            worker.setName("LOD fidelity " + worker.getPoolIndex());
+                            worker.setDaemon(true);
+                            worker.setPriority(Thread.MIN_PRIORITY);
+                            return worker;
+                        },
+                        null,
+                        false);
+        try {
+            // Parallel streams run on the pool of the task that starts them
+            return pool.submit(() -> measure(dag)).join();
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    /**
+     * Sample every triangle of a DAG and follow the samples to the input. Runs on the common pool,
+     * or the pool of the task it is called from.
      *
      * @param dag The DAG, built with its lineage kept.
      * @return The measurements.

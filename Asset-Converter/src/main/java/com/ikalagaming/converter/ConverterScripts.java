@@ -5,6 +5,7 @@ import com.ikalagaming.converter.inspector.AssetInspectorWindow;
 import com.ikalagaming.converter.workbench.Workbench;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.vulkan.FrameTimings;
 import com.ikalagaming.plugins.PluginInfo;
 import com.ikalagaming.plugins.PluginManager;
 
@@ -66,6 +67,28 @@ public final class ConverterScripts {
     }
 
     /**
+     * Write how long each part of a frame takes to the log, averaged over the last couple of
+     * seconds, for checks that measure.
+     *
+     * @param label What the line is about, in plain ASCII.
+     */
+    public static void logTimings(String label) {
+        final var renderer = GraphicsManager.getRenderInstance();
+        if (renderer == null || renderer.getState().frameTimings == null) {
+            log.info("Timings {}: none", label);
+            return;
+        }
+        final StringBuilder line = new StringBuilder();
+        for (FrameTimings.Timing timing : renderer.getState().frameTimings.snapshot()) {
+            line.append(
+                    String.format(
+                            "%n    %-28s %8.3f ms avg %8.3f ms p95 %8.3f ms max",
+                            timing.name(), timing.average(), timing.p95(), timing.max()));
+        }
+        log.info("Timings {}:{}", label, line);
+    }
+
+    /**
      * Open the workbench on a file, or on a preview shape named as "preview:sphere", "preview:cube"
      * or "preview:plane", hiding the main menu.
      *
@@ -98,6 +121,24 @@ public final class ConverterScripts {
                             final var camera = GraphicsManager.getScene().getCamera();
                             camera.setPosition(x, y, z);
                             camera.setRotation((float) pitch, (float) yaw);
+                        });
+    }
+
+    /**
+     * Move the camera by some amount, for checks that fly through a scene a frame at a time.
+     *
+     * @param dx How far along x.
+     * @param dy How far along y.
+     * @param dz How far along z.
+     */
+    public static void moveCamera(double dx, double dy, double dz) {
+        graphics()
+                .ui()
+                .post(
+                        () -> {
+                            final var camera = GraphicsManager.getScene().getCamera();
+                            final var at = camera.getPosition();
+                            camera.setPosition(at.x + dx, at.y + dy, at.z + dz);
                         });
     }
 

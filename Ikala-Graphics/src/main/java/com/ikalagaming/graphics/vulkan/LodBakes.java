@@ -396,6 +396,12 @@ public final class LodBakes {
     /** Each world's loaded clusters, by id. */
     private final Map<Long, Map<Integer, Loaded>> byWorld = new HashMap<>();
 
+    /** Tiles loaded, over every world. */
+    private long loadedTiles;
+
+    /** The bytes they take. */
+    private long loadedBytes;
+
     /** The descriptor set layout bakes write pages through. Render thread. */
     private long setLayout = VK_NULL_HANDLE;
 
@@ -496,6 +502,8 @@ public final class LodBakes {
             jobs.add(job);
             byWorld.computeIfAbsent(world, w -> new HashMap<>())
                     .put(baked.cluster().id(), new Loaded(tile, job));
+            ++loadedTiles;
+            loadedBytes += (long) tile.texels() * bytesPerTexel(baked.emissive());
         } finally {
             lock.unlock();
         }
@@ -551,6 +559,9 @@ public final class LodBakes {
         if (tile.job != null) {
             jobs.remove(tile.job);
         }
+        --loadedTiles;
+        loadedBytes -=
+                (long) tile.tile.texels() * bytesPerTexel(pages.get(tile.tile.page()).emissive);
         pages.get(tile.tile.page())
                 .give(tile.tile.x(), tile.tile.y(), tile.tile.width(), tile.tile.height());
         if (loaded.isEmpty()) {
@@ -566,16 +577,6 @@ public final class LodBakes {
     public Stats stats() {
         lock.lock();
         try {
-            long tiles = 0;
-            long bytes = 0;
-            for (Map<Integer, Loaded> loaded : byWorld.values()) {
-                for (Loaded tile : loaded.values()) {
-                    ++tiles;
-                    bytes +=
-                            (long) tile.tile.texels()
-                                    * bytesPerTexel(pages.get(tile.tile.page()).emissive);
-                }
-            }
             int made = 0;
             long pageBytes = 0;
             for (Page page : pages) {
@@ -584,7 +585,7 @@ public final class LodBakes {
                     pageBytes += (long) PAGE * PAGE * bytesPerTexel(page.emissive);
                 }
             }
-            return new Stats(tiles, bytes, made, pageBytes);
+            return new Stats(loadedTiles, loadedBytes, made, pageBytes);
         } finally {
             lock.unlock();
         }
@@ -1428,6 +1429,8 @@ public final class LodBakes {
             pages.clear();
             jobs.clear();
             byWorld.clear();
+            loadedTiles = 0;
+            loadedBytes = 0;
         } finally {
             lock.unlock();
         }

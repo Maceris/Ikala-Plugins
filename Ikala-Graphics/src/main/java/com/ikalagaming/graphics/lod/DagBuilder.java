@@ -558,7 +558,8 @@ public final class DagBuilder {
     }
 
     /**
-     * Name the worker threads, and make them daemons.
+     * Name the worker threads, make them daemons, and give them the lowest priority, so building in
+     * the background never takes the CPU from the render thread.
      *
      * @param prefix The name prefix.
      * @return The factory.
@@ -568,6 +569,7 @@ public final class DagBuilder {
         return runnable -> {
             Thread thread = new Thread(runnable, prefix + " " + count.incrementAndGet());
             thread.setDaemon(true);
+            thread.setPriority(Thread.MIN_PRIORITY);
             return thread;
         };
     }
