@@ -7,9 +7,12 @@
 // the camera however far from the origin.
 //
 // A textured triangle's vertices carry the mesh's normal, tangent and texture coordinates, and are
-// passed on as scene_baked_vertex.glsl passes them, with outViewPosition.w 0 to say so; or 2 if
-// they have no texture coordinates (FLAG_AVERAGED), as coarse stand-ins don't, for scene.frag to
-// draw the materials' average colors.
+// passed on as scene_baked_vertex.glsl passes them, with outViewPosition.w 0 to say so.
+//
+// An averaged triangle's (FLAG_AVERAGED) carry a normal and, in place of a tangent and texture
+// coordinates, their own look blended from the surface they stand for (see Attributes.averaged).
+// outViewPosition.w is 2 to say so, outNormal is the normal, outTangent the color in sRGB as a
+// texture's would be, outTextCoord the roughness and metallic, and outBitangent.x the specular.
 //
 // A projected triangle's have none: scene.frag, with TRIPLANAR on, works out each flat triangle's
 // normal from how its position changes across the screen, and projects the material's texture
@@ -27,6 +30,8 @@ layout(location = 1) in uvec2 materialFlags; // x: material index, y: flags
 layout(location = 2) in vec2 normalOct;      // octahedral, for textured triangles
 layout(location = 3) in vec2 tangentOct;     // octahedral, for textured triangles
 layout(location = 4) in vec2 texCoord;       // for textured triangles
+layout(location = 5) in uint tangentBits;    // the tangent's bytes whole, for averaged triangles
+layout(location = 6) in uint texCoordBits;   // the texture coordinates' bytes whole, likewise
 
 layout(location = 0) out vec3 outNormal;
 layout(location = 1) out vec3 outTangent;
@@ -135,9 +140,19 @@ void main()
         outNormal = normalize((viewMatrix * vec4(normal, 0.0)).xyz);
         outTangent = normalize((viewMatrix * vec4(tangent, 0.0)).xyz);
         outBitangent = normalize((viewMatrix * vec4(handedness * cross(normal, tangent), 0.0)).xyz);
-        bool averaged = (materialFlags.y & FLAG_AVERAGED) != 0;
-        outTextCoord = averaged ? vec2(0.0) : texCoord;
-        outViewPosition = vec4(0.0, 0.0, 0.0, averaged ? 2.0 : 0.0);
+        if ((materialFlags.y & FLAG_AVERAGED) != 0) {
+            // Red, green and blue in sRGB and the roughness, a byte each; then past the texture
+            // coordinates' NaN, the metallic and specular
+            vec4 look = unpackUnorm4x8(tangentBits);
+            vec4 more = unpackUnorm4x8(texCoordBits);
+            outTangent = look.rgb;
+            outTextCoord = vec2(look.a, more.z);
+            outBitangent = vec3(more.w, 0.0, 0.0);
+            outViewPosition = vec4(0.0, 0.0, 0.0, 2.0);
+        } else {
+            outTextCoord = texCoord;
+            outViewPosition = vec4(0.0);
+        }
     } else {
         // The camera within its block: the steps past the block's corner, and the rest
         ivec3 block = (cameraGrid.xyz >> STEP_BITS) << STEP_BITS;

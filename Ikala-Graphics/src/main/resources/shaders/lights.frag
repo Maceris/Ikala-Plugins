@@ -47,6 +47,15 @@ void main()
     uint materialIndex = texelFetch(bindlessUintTextures[nonuniformEXT(materialSamplerIndex)], pixel, 0).r;
 
     Material material = materials[materialIndex];
+    // An averaged level of detail surface's own look, in place of its material's, see scene.frag
+    float override = texelFetch(bindlessTextures[nonuniformEXT(normalSamplerIndex)], pixel, 0).w;
+    if (override >= 0.0) {
+        material.roughness = override;
+        material.metallic =
+            texelFetch(bindlessTextures[nonuniformEXT(tangentSamplerIndex)], pixel, 0).w;
+        material.specular = baseColor.a;
+        baseColor.a = 1.0;
+    }
 
     // How far the texture coordinates move a pixel, before any pixel of the quad is discarded
     vec2 pixelStep = vec2(dFdx(outTextCoord.x), dFdy(outTextCoord.y));

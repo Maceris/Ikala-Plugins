@@ -23,9 +23,9 @@ layout(constant_id = 0) const bool ALPHA_TEST = true;
 // coordinates: each triangle's normal comes from how its position changes across the screen, and
 // the texture is projected along its main axis, one repeat per block, with the same rules as
 // LodTexturing: the fraction of unwrapped coordinates is sampled with their gradients, so the mip
-// level doesn't jump where the fraction wraps. Its averaged ones, with outViewPosition.w 2, have
-// normals but no texture coordinates, and take each texture's average, its smallest mip. See
-// scene_lod.vert for what its outputs carry.
+// level doesn't jump where the fraction wraps. Its averaged ones, with outViewPosition.w 2, carry
+// their own color, roughness, metallic and specular instead of textures, which go to the g-buffer
+// for lights.frag to use in place of the material's. See scene_lod.vert for what its outputs carry.
 layout(constant_id = 1) const bool TRIPLANAR = false;
 
 // Whether these are sections' baked cut out blocks, which hand over to their volume bricks with
@@ -59,11 +59,12 @@ layout(std430, set = 0, binding = 2) readonly buffer Materials {
 // Whether this pixel's texture is projected, on a level of detail cluster's projected triangle
 bool projected;
 
-// Whether this pixel takes its textures' averages, on a level of detail cluster's averaged triangle
+// Whether this pixel is on a level of detail cluster's averaged triangle, which carries its own look
 bool averaged;
 
-// A mip level past any texture's smallest, which sampling clamps to it
-const float SMALLEST_MIP = 32.0;
+// What the g-buffer normal's w holds when the material's own roughness, metallic and specular
+// stand, see lights.frag
+const float NO_OVERRIDE = -1.0;
 
 // This pixel's texture coordinates, with their gradients for projected ones
 vec2 textCoord;
@@ -73,9 +74,6 @@ vec2 textCoordDy;
 // Sample one of the bindless textures at this pixel's texture coordinates
 vec4 sampleTexture(int index)
 {
-    if (averaged) {
-        return textureLod(bindlessTextures[nonuniformEXT(index)], vec2(0.5), SMALLEST_MIP);
-    }
     if (projected) {
         return textureGrad(
             bindlessTextures[nonuniformEXT(index)], fract(textCoord), textCoordDx, textCoordDy);
@@ -134,7 +132,14 @@ void main() {
     textCoordDy = dFdy(textCoord);
 
     vec4 baseColor = material.baseColor;
-    if (material.textureIndex > 0) {
+    if (averaged) {
+        baseColor = vec4(outTangent, 1.0);
+        surfaceNormal = normalize(outNormal);
+        // Any direction at right angles will do for the tangent
+        vec3 across = abs(surfaceNormal.x) < 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
+        tangent = normalize(cross(surfaceNormal, across));
+        bitangent = cross(surfaceNormal, tangent);
+    } else if (material.textureIndex > 0) {
         baseColor = sampleTexture(material.textureIndex);
     }
     if (ALPHA_TEST) {
@@ -154,7 +159,7 @@ void main() {
     }
 
     vec3 normal = surfaceNormal;
-    if (material.normalMapIndex > 0) {
+    if (!averaged && material.normalMapIndex > 0) {
         mat3 TBN = mat3(tangent, bitangent, surfaceNormal);
         vec3 newNormal = sampleTexture(material.normalMapIndex).rgb;
         newNormal = newNormal * 2.0 - 1.0;
@@ -170,8 +175,15 @@ void main() {
             0.0, 1.0);
         baseColor = vec4(hue, 1.0);
     }
-    buffBaseColor = baseColor;
-    buffNormal = vec4(normal, 1.0);
-    buffTangent = vec4(normalize(tangent), 1.0);
+    if (averaged && debugHue < 0.0) {
+        // The look it carries, in place of the material's: roughness, metallic and specular
+        buffBaseColor = vec4(baseColor.rgb, outBitangent.x);
+        buffNormal = vec4(normal, outTextCoord.x);
+        buffTangent = vec4(normalize(tangent), outTextCoord.y);
+    } else {
+        buffBaseColor = baseColor;
+        buffNormal = vec4(normal, NO_OVERRIDE);
+        buffTangent = vec4(normalize(tangent), 1.0);
+    }
     buffMaterial = outMaterialIdx;
 }

@@ -29,7 +29,9 @@ import java.nio.ByteBuffer;
  * out its normal from how its position changes across the screen and projects its texture along its
  * main axis, so a vertex is shared by every projected triangle that meets there with its material,
  * whichever way they face. A textured triangle carries its normal, tangent and texture coordinates,
- * as the mesh it came from did.
+ * as the mesh it came from did. An averaged one, far enough out that textures can't be told apart,
+ * carries its normal and in place of the rest its own color, roughness, metallic and specular,
+ * blended from the surface it stands for ({@link Attributes#averaged}).
  *
  * <p>{@code scene_lod.vert} and {@code shadow_lod.vert} decode this; keep them in step.
  */
@@ -66,8 +68,9 @@ public final class LodVertex {
     public static final int FLAG_TEXTURED = 1 << 1;
 
     /**
-     * Set with {@link #FLAG_TEXTURED} for a vertex with no texture coordinates ({@link
-     * Attributes#NO_UV}): its triangle takes its materials' average colors.
+     * Set with {@link #FLAG_TEXTURED} for an averaged vertex ({@link Attributes#averaged}): in
+     * place of a tangent and texture coordinates it carries its own color, roughness, metallic and
+     * specular.
      */
     public static final int FLAG_AVERAGED = 1 << 2;
 
@@ -129,14 +132,17 @@ public final class LodVertex {
             out.putInt(base + UV_OFFSET, 0);
         } else {
             out.putInt(base + NORMAL_OFFSET, attributes[at]);
-            out.putInt(base + TANGENT_OFFSET, Attributes.tangentBits(attributes[at + 1]));
             out.putInt(base + UV_OFFSET, attributes[at + 2]);
             flags = FLAG_TEXTURED;
-            if (Attributes.noTextureCoordinates(attributes[at + 2])) {
+            if (Attributes.isAveraged(attributes, at)) {
+                // Its color and roughness, whole: no tangent, so no flip
+                out.putInt(base + TANGENT_OFFSET, attributes[at + 1]);
                 flags |= FLAG_AVERAGED;
-            }
-            if (Attributes.flipped(attributes[at + 1])) {
-                flags |= FLAG_FLIPPED_BITANGENT;
+            } else {
+                out.putInt(base + TANGENT_OFFSET, Attributes.tangentBits(attributes[at + 1]));
+                if (Attributes.flipped(attributes[at + 1])) {
+                    flags |= FLAG_FLIPPED_BITANGENT;
+                }
             }
         }
         out.putShort(base + MATERIAL_OFFSET, (short) material);

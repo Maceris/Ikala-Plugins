@@ -12,7 +12,8 @@ import java.util.Map;
  * Turns clusters into meshes in the {@link LodVertex} format. Projected triangles are flat, their
  * normals worked out when they are drawn, so a vertex is shared wherever position and material
  * match, and every material gets its own copies; a textured triangle's vertex also needs the same
- * attributes. Triangles that collapse to no area on the grid are dropped.
+ * attributes. An averaged triangle's vertex is shared whatever the material, since it carries its
+ * own color. Triangles that collapse to no area on the grid are dropped.
  */
 public final class ClusterMeshes {
 
@@ -30,6 +31,9 @@ public final class ClusterMeshes {
      * its attributes, which are all zero for a projected one.
      */
     private record Key(int x, int y, int z, int material, int normal, int tangent, int uv) {}
+
+    /** The material an averaged vertex's key has, whatever its triangle's. */
+    private static final int AVERAGED_MATERIAL = -1;
 
     /**
      * One cluster as a mesh.
@@ -93,13 +97,17 @@ public final class ClusterMeshes {
             for (int corner = 0; corner < CORNERS; ++corner) {
                 final int[] at = grid[corner];
                 final int first = t * Attributes.PER_TRIANGLE + corner * Attributes.VALUES;
+                // An averaged vertex carries its own color, so its material matters little and
+                // isn't told apart by: one material's copy serves the triangles of every other
                 final Key key =
                         textured
                                 ? new Key(
                                         at[0],
                                         at[1],
                                         at[2],
-                                        material,
+                                        Attributes.isAveraged(attributes, first)
+                                                ? AVERAGED_MATERIAL
+                                                : material,
                                         attributes[first],
                                         attributes[first + 1],
                                         attributes[first + 2])

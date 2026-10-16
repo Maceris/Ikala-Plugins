@@ -1072,12 +1072,17 @@ public class SceneRender implements RenderStage {
             VK_FORMAT_R16G16_UINT,
             VK_FORMAT_R16G16_SNORM,
             VK_FORMAT_R16G16_SNORM,
-            VK_FORMAT_R16G16_SFLOAT
+            VK_FORMAT_R16G16_SFLOAT,
+            // The same bytes whole, for an averaged vertex's color and values
+            VK_FORMAT_R32_UINT,
+            VK_FORMAT_R32_UINT
         };
         final int[] offsets = {
             LodVertex.POSITION_OFFSET,
             LodVertex.MATERIAL_OFFSET,
             LodVertex.NORMAL_OFFSET,
+            LodVertex.TANGENT_OFFSET,
+            LodVertex.UV_OFFSET,
             LodVertex.TANGENT_OFFSET,
             LodVertex.UV_OFFSET
         };

@@ -1,6 +1,7 @@
 package com.ikalagaming.graphics.lod;
 
 import com.ikalagaming.graphics.bake.BakedVertex;
+import com.ikalagaming.graphics.vulkan.ToneMapMath;
 
 import lombok.NonNull;
 
@@ -17,11 +18,18 @@ import java.nio.ByteBuffer;
 public final class Attributes {
 
     /**
-     * Texture coordinates saying a corner has none: two half float NaNs. Its triangle is drawn in
-     * its materials' average colors, as coarse stand-ins a plugin supplies may be: normals but
-     * nothing to place a texture by.
+     * The low half of an averaged corner's texture coordinates: a half float NaN, which no real
+     * texture coordinate is. An averaged corner has no texture coordinates; it carries its own
+     * color, roughness, metallic and specular, blended from what its triangle stands for, in the
+     * tangent's int and the high half of this one (see {@link #averaged}).
      */
-    public static final int NO_UV = 0x7E00_7E00;
+    public static final int NO_UV = 0x7E00;
+
+    /** The most a byte holds, for values from 0 to 1. */
+    private static final int BYTE_MAX = 0xFF;
+
+    /** Bits in a byte. */
+    private static final int BYTE_BITS = 8;
 
     /** A half float's exponent bits, all set for a NaN or infinity. */
     private static final int HALF_EXPONENT = 0x7C00;
@@ -103,8 +111,8 @@ public final class Attributes {
     }
 
     /**
-     * Whether packed texture coordinates say there are none, as {@link #NO_UV} does: blending keeps
-     * them NaN, though perhaps not the same NaN.
+     * Whether packed texture coordinates say there are none, as an averaged corner's do: their low
+     * half is a NaN, as {@link #NO_UV} is.
      *
      * @param uv The two packed half floats.
      * @return True if the first is NaN.
@@ -114,23 +122,94 @@ public final class Attributes {
     }
 
     /**
-     * Set a corner's attributes for a surface with a normal but no texture coordinates: a tangent
-     * at right angles to the normal, and {@link #NO_UV}.
+     * Set an averaged corner's attributes: its normal, then in place of a tangent its color,
+     * encoded as sRGB as textures are (the scene's g-buffer holds base colors that way, and it
+     * keeps precision in the darks), and its roughness, a byte each; in place of texture
+     * coordinates {@link #NO_UV}, then its metallic and specular, a byte each.
      *
      * @param normal The normal; it needn't be unit length, but mustn't be zero.
+     * @param average Its {@link MaterialAverages#VALUES} values, its color linear.
      * @param out Where the corner goes.
      * @param at Where in it.
      */
-    public static void untextured(float @NonNull [] normal, int @NonNull [] out, int at) {
-        // Any direction at right angles will do: cross with whichever axis the normal is least
-        // along
-        final float[] tangent =
-                Math.abs(normal[0]) <= Math.abs(normal[1])
-                        ? new float[] {0, normal[2], -normal[1]}
-                        : new float[] {-normal[2], 0, normal[0]};
+    public static void averaged(
+            float @NonNull [] normal, float @NonNull [] average, int @NonNull [] out, int at) {
         out[at + NORMAL] = encodeDirection(normal);
-        out[at + TANGENT] = encodeDirection(tangent) & ~FLIP_BIT;
-        out[at + UV] = NO_UV;
+        int color = 0;
+        for (int c = 0; c < AXES; ++c) {
+            color |=
+                    toByte(ToneMapMath.encode(average[MaterialAverages.RED + c]))
+                            << (c * BYTE_BITS);
+        }
+        out[at + TANGENT] =
+                color | toByte(average[MaterialAverages.ROUGHNESS]) << (AXES * BYTE_BITS);
+        out[at + UV] =
+                NO_UV
+                        | toByte(average[MaterialAverages.METALLIC]) << SHORT_BITS
+                        | toByte(average[MaterialAverages.SPECULAR]) << (SHORT_BITS + BYTE_BITS);
+    }
+
+    /**
+     * A textured corner's texture coordinates.
+     *
+     * @param attributes Corners' ints.
+     * @param at Where the corner starts.
+     * @return Its u and v.
+     */
+    public static float[] textureCoordinates(int @NonNull [] attributes, int at) {
+        final int uv = attributes[at + UV];
+        return new float[] {
+            Float.float16ToFloat((short) (uv & LOW_16)),
+            Float.float16ToFloat((short) (uv >>> SHORT_BITS))
+        };
+    }
+
+    /**
+     * Whether a corner is averaged.
+     *
+     * @param attributes Corners' ints.
+     * @param at Where the corner starts.
+     * @return True if it carries its own color rather than texture coordinates.
+     */
+    public static boolean isAveraged(int @NonNull [] attributes, int at) {
+        return noTextureCoordinates(attributes[at + UV]);
+    }
+
+    /**
+     * Read an averaged corner's values back.
+     *
+     * @param attributes Corners' ints.
+     * @param at Where the corner starts.
+     * @param out Receives its {@link MaterialAverages#VALUES} values, its color linear.
+     */
+    public static void averageOf(int @NonNull [] attributes, int at, float @NonNull [] out) {
+        final int color = attributes[at + TANGENT];
+        for (int c = 0; c < AXES; ++c) {
+            out[MaterialAverages.RED + c] = ToneMapMath.decode(fromByte(color >>> (c * BYTE_BITS)));
+        }
+        out[MaterialAverages.ROUGHNESS] = fromByte(color >>> (AXES * BYTE_BITS));
+        out[MaterialAverages.METALLIC] = fromByte(attributes[at + UV] >>> SHORT_BITS);
+        out[MaterialAverages.SPECULAR] = fromByte(attributes[at + UV] >>> (SHORT_BITS + BYTE_BITS));
+    }
+
+    /**
+     * A value from 0 to 1 as a byte.
+     *
+     * @param value The value, clamped.
+     * @return The byte, in the low bits.
+     */
+    private static int toByte(double value) {
+        return (int) Math.round(Math.clamp(value, 0, 1) * BYTE_MAX);
+    }
+
+    /**
+     * A byte back as a value from 0 to 1.
+     *
+     * @param bits The byte, in the low bits; higher bits are ignored.
+     * @return The value.
+     */
+    private static float fromByte(int bits) {
+        return (bits & BYTE_MAX) / (float) BYTE_MAX;
     }
 
     /**

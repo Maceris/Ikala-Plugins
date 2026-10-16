@@ -58,7 +58,7 @@ public final class LodStore {
      * builder, the simplifier or anything else changes the cells built from the same input, so
      * cached cells from before are rebuilt.
      */
-    public static final int BUILDER_VERSION = 5;
+    public static final int BUILDER_VERSION = 7;
 
     /** How many child cells a parent spans along each axis. */
     private static final int BRANCHING = 2;
@@ -390,7 +390,8 @@ public final class LodStore {
                         options.threads(),
                         false,
                         options.visibilityReach(),
-                        options.mergePlanar());
+                        options.mergePlanar(),
+                        options.averages());
     }
 
     /**
@@ -1039,6 +1040,28 @@ public final class LodStore {
             if (attributes != null) {
                 for (int value : attributes) {
                     hash.putInt(value);
+                }
+            }
+        }
+        // What the leaves' materials average to, as far-out groups blend it: a changed texture
+        // changes them
+        final MaterialAverages averages = options.averages();
+        hash.putInt(averages == null ? 0 : 1);
+        if (averages != null) {
+            final TreeSet<Integer> materials = new TreeSet<>();
+            for (LodMesh mesh : inside) {
+                for (int t = 0; t < mesh.getTriangleCount(); ++t) {
+                    materials.add(mesh.materials[t]);
+                }
+            }
+            for (int material : materials) {
+                hash.putInt(material);
+                final float[] average = averages.average(material);
+                hash.putInt(average == null ? 0 : average.length);
+                if (average != null) {
+                    for (float value : average) {
+                        hash.putFloat(value);
+                    }
                 }
             }
         }

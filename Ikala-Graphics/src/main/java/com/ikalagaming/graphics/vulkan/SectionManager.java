@@ -21,6 +21,7 @@ import com.ikalagaming.graphics.lod.LiveLod;
 import com.ikalagaming.graphics.lod.LodCache;
 import com.ikalagaming.graphics.lod.LodMesh;
 import com.ikalagaming.graphics.lod.LodStore;
+import com.ikalagaming.graphics.lod.MaterialAverages;
 import com.ikalagaming.graphics.lod.PlanarMerge;
 import com.ikalagaming.graphics.scene.Observer;
 import com.ikalagaming.graphics.scene.Scene;
@@ -31,6 +32,7 @@ import org.joml.Quaternionf;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.joml.Vector3f;
+import org.joml.Vector4fc;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
@@ -50,6 +52,7 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -694,6 +697,52 @@ public class SectionManager {
     }
 
     /**
+     * What each of the scene's materials looks like averaged, for level of detail far enough out:
+     * its texture's average where it has one, as the scene draws the texture in place of the base
+     * color, else its base color, in linear light, with its roughness, metallic and specular. Asks
+     * the material cache and texture registry, which are safe from any thread; a material whose
+     * texture's average isn't worked out yet is asked again next time.
+     *
+     * @param state The Vulkan state.
+     * @return The averages.
+     */
+    private static MaterialAverages materialAverages(@NonNull VulkanState state) {
+        final Map<Integer, float[]> known = new ConcurrentHashMap<>();
+        return material -> {
+            final float[] cached = known.get(material);
+            if (cached != null) {
+                return cached;
+            }
+            final Scene scene = GraphicsManager.getScene();
+            if (scene == null || material < 0) {
+                return null;
+            }
+            final Material found = scene.getMaterialCache().getMaterial(material);
+            if (found == null) {
+                return null;
+            }
+            final float[] out = new float[MaterialAverages.VALUES];
+            if (found.getTexture() != null) {
+                final float[] texture = state.textureRegistry.average(found.getTexture());
+                if (texture == null) {
+                    return null;
+                }
+                System.arraycopy(texture, 0, out, MaterialAverages.RED, AXES);
+            } else {
+                final Vector4fc color = found.getBaseColor();
+                out[MaterialAverages.RED] = ToneMapMath.decode(color.x());
+                out[MaterialAverages.RED + 1] = ToneMapMath.decode(color.y());
+                out[MaterialAverages.RED + 2] = ToneMapMath.decode(color.z());
+            }
+            out[MaterialAverages.ROUGHNESS] = found.getRoughness();
+            out[MaterialAverages.METALLIC] = found.getMetallic();
+            out[MaterialAverages.SPECULAR] = found.getSpecular();
+            known.put(material, out);
+            return out;
+        };
+    }
+
+    /**
      * Voxelize a bake's cut out and translucent blocks into a volume brick.
      *
      * @param result The bake.
@@ -710,6 +759,11 @@ public class SectionManager {
         final SectionBaker.Bucket translucent = result.get(Material.Transparency.TRANSLUCENT);
         if (translucent != null) {
             inputs.add(new VolumeVoxelizer.Input(translucent, true));
+        }
+        // Opaque blocks end the fills under cut out blocks resting on them
+        final SectionBaker.Bucket opaque = result.get(Material.Transparency.OPAQUE);
+        if (opaque != null && !inputs.isEmpty()) {
+            inputs.add(new VolumeVoxelizer.Input(opaque, false, true));
         }
         return VolumeVoxelizer.voxelize(inputs, table);
     }
@@ -759,11 +813,6 @@ public class SectionManager {
             return true;
         } finally {
             lock.unlock();
-        }
-        // Opaque blocks end the fills under cut out blocks resting on them
-        final SectionBaker.Bucket opaque = result.get(Material.Transparency.OPAQUE);
-        if (opaque != null && !inputs.isEmpty()) {
-            inputs.add(new VolumeVoxelizer.Input(opaque, false, true));
         }
     }
 
@@ -1361,7 +1410,12 @@ public class SectionManager {
                             SECTION_SIZE,
                             LodStore.DEFAULT_CELL_SECTIONS,
                             // Sections are merged as they are baked, on the workers
-                            DagBuilder.Options.defaults().withMergePlanar(false),
+                            DagBuilder.Options.defaults()
+                                    .withMergePlanar(false)
+                                    .withAverages(
+                                            GraphicsManager.getSettings().lodAverageMaterials
+                                                    ? materialAverages(state)
+                                                    : null),
                             batch -> state.lods.publish(state, id[0], batch),
                             LodCache.fromSettings());
             id[0] = state.lods.addLive(owner, origin, lod::cellOf, thresholdPixels);

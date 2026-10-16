@@ -29,6 +29,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class DagBuilder {
 
     /** Levels at most, as a safety net. */
+    /** How far apart a projected triangle's texture repeats: once a unit, as a block's does. */
+    private static final double PROJECTED_REPEAT = 1;
+
+    /** The look of a material with no average known: mid grey, half rough, not metal. */
+    private static final float[] UNKNOWN_LOOK = {0.18f, 0.18f, 0.18f, 0.5f, 0, 0.5f};
+
     /** A projected triangle's kind, for seams. */
     private static final int KIND_PROJECTED = 0;
 
@@ -86,6 +92,9 @@ public final class DagBuilder {
      * @param mergePlanar Whether to merge each input's coplanar triangles of a material first,
      *     which leaves the surface exactly as it was with fewer triangles (see {@link
      *     PlanarMerge}).
+     * @param averages What each material looks like averaged, so groups far enough out that
+     *     textures can't be told apart blend their input's look per vertex instead of keeping one
+     *     material a triangle (see {@link AverageTransfer}); null to keep materials at every level.
      */
     public record Options(
             double virtualEdgeFactor,
@@ -93,7 +102,35 @@ public final class DagBuilder {
             int threads,
             boolean keepLineage,
             double visibilityReach,
-            boolean mergePlanar) {
+            boolean mergePlanar,
+            MaterialAverages averages) {
+
+        /**
+         * Options that keep materials at every level.
+         *
+         * @param virtualEdgeFactor r for virtual edges, as a multiple of the average edge length.
+         * @param lockOpenBorder Whether the input's open border is locked at every level.
+         * @param threads Worker threads.
+         * @param keepLineage Whether to keep where every triangle came from.
+         * @param visibilityReach How far a leaf triangle's rays must get to count as seen.
+         * @param mergePlanar Whether to merge each input's coplanar triangles first.
+         */
+        public Options(
+                double virtualEdgeFactor,
+                boolean lockOpenBorder,
+                int threads,
+                boolean keepLineage,
+                double visibilityReach,
+                boolean mergePlanar) {
+            this(
+                    virtualEdgeFactor,
+                    lockOpenBorder,
+                    threads,
+                    keepLineage,
+                    visibilityReach,
+                    mergePlanar,
+                    null);
+        }
 
         /**
          * Options that merge coplanar triangles first.
@@ -126,7 +163,25 @@ public final class DagBuilder {
                     count,
                     keepLineage,
                     visibilityReach,
-                    mergePlanar);
+                    mergePlanar,
+                    averages);
+        }
+
+        /**
+         * The same options, averaging materials far out by these averages, or not if null.
+         *
+         * @param materialAverages The averages, or null.
+         * @return The options.
+         */
+        public Options withAverages(MaterialAverages materialAverages) {
+            return new Options(
+                    virtualEdgeFactor,
+                    lockOpenBorder,
+                    threads,
+                    keepLineage,
+                    visibilityReach,
+                    mergePlanar,
+                    materialAverages);
         }
 
         /**
@@ -142,7 +197,8 @@ public final class DagBuilder {
                     threads,
                     keepLineage,
                     visibilityReach,
-                    merge);
+                    merge,
+                    averages);
         }
 
         /**
@@ -1247,6 +1303,11 @@ public final class DagBuilder {
         for (int id : children) {
             anyTextured |= dag.clusters().get(id).attributes().length > 0;
         }
+        // Far enough out that textures can't be told apart, the input's look is blended per
+        // vertex instead, and no seam of texture coordinates or materials holds simplifying back
+        final boolean averaging = averages(children);
+        final AverageTransfer average = averaging ? new AverageTransfer() : null;
+        final float[] look = new float[MaterialAverages.VALUES];
         for (int id : children) {
             final LodDag.Cluster cluster = dag.clusters().get(id);
             final float[] corners = cluster.corners();
@@ -1263,6 +1324,7 @@ public final class DagBuilder {
                         builder.lock(v[corner]);
                     }
                     if (anyTextured
+                            && !averaging
                             && isSeam(
                                     meeting,
                                     v[corner],
@@ -1273,7 +1335,10 @@ public final class DagBuilder {
                         builder.lock(v[corner]);
                     }
                 }
-                if (textured) {
+                if (averaging) {
+                    lookOf(attributes, t, material, look);
+                    average.add(corners, t * TRIANGLE_VALUES, cluster.visibility()[t], look);
+                } else if (textured) {
                     transfer.add(
                             corners,
                             t * TRIANGLE_VALUES,
@@ -1318,6 +1383,11 @@ public final class DagBuilder {
                         Simplifier.Options.toCount(merged.getTriangleCount() / 2, radius)
                                 .keepingOpen(keepOpen(builder, merged, rim)));
         Correspondence.assignMaterials(merged, result);
+        // Blended over about what the group's error spans, and at least an edge
+        final int[] averaged =
+                averaging && !average.isEmpty()
+                        ? average.transfer(result.mesh(), Math.max(childError, edge))
+                        : null;
         // Split
         List<float[]> outCorners = new ArrayList<>();
         List<int[]> outMaterials = new ArrayList<>();
@@ -1338,8 +1408,23 @@ public final class DagBuilder {
             outCorners.add(corners);
             outMaterials.add(materials);
             outVisibility.add(visibility);
-            outAttributes.add(
-                    transfer.isEmpty() ? Attributes.NONE : transfer.transfer(corners, materials));
+            if (averaged != null) {
+                final int[] attributes = new int[triangles.length * Attributes.PER_TRIANGLE];
+                for (int i = 0; i < triangles.length; ++i) {
+                    System.arraycopy(
+                            averaged,
+                            triangles[i] * Attributes.PER_TRIANGLE,
+                            attributes,
+                            i * Attributes.PER_TRIANGLE,
+                            Attributes.PER_TRIANGLE);
+                }
+                outAttributes.add(attributes);
+            } else {
+                outAttributes.add(
+                        transfer.isEmpty()
+                                ? Attributes.NONE
+                                : transfer.transfer(corners, materials));
+            }
             outTight.add(tight);
             spheres.add(tight);
             if (outFaces != null) {
@@ -1404,6 +1489,102 @@ public final class DagBuilder {
                         : null,
                 outFaces,
                 outBases);
+    }
+
+    /**
+     * Whether a group blends its input's look per vertex: when averages are given and its
+     * children's error is at least as big as the largest texture repeat among their triangles, so a
+     * repeat covers no more than the error threshold's pixels where the group is drawn and its
+     * texture can't be told apart. A projected triangle's texture repeats every unit; a textured
+     * one's every unit of texture coordinates, measured on it; an averaged one has no texture left.
+     *
+     * @param children The group's children.
+     * @return True if it averages.
+     */
+    private boolean averages(int @NonNull [] children) {
+        if (options.averages() == null) {
+            return false;
+        }
+        double childError = 0;
+        double repeat = 0;
+        for (int id : children) {
+            final LodDag.Cluster cluster = dag.clusters().get(id);
+            childError = Math.max(childError, cluster.error());
+            for (int t = 0; t < cluster.triangleCount(); ++t) {
+                repeat = Math.max(repeat, repeatOf(cluster, t));
+            }
+        }
+        return childError > 0 && childError >= repeat;
+    }
+
+    /**
+     * How far apart, in world units, a triangle's texture repeats.
+     *
+     * @param cluster Its cluster.
+     * @param t The triangle.
+     * @return The distance; 0 for an averaged triangle, infinite for texture coordinates that don't
+     *     change across it, whose texture never repeats.
+     */
+    private static double repeatOf(LodDag.@NonNull Cluster cluster, int t) {
+        final int[] attributes = cluster.attributes();
+        if (!Attributes.textured(attributes, t)) {
+            return PROJECTED_REPEAT;
+        }
+        final int first = t * Attributes.PER_TRIANGLE;
+        if (Attributes.isAveraged(attributes, first)) {
+            return 0;
+        }
+        final float[] corners = cluster.corners();
+        final int at = t * TRIANGLE_VALUES;
+        final double[] u = new double[AXES];
+        final double[] v = new double[AXES];
+        for (int axis = 0; axis < AXES; ++axis) {
+            u[axis] = corners[at + AXES + axis] - corners[at + axis];
+            v[axis] = corners[at + 2 * AXES + axis] - corners[at + axis];
+        }
+        final double cx = u[1] * v[2] - u[2] * v[1];
+        final double cy = u[2] * v[0] - u[0] * v[2];
+        final double cz = u[0] * v[1] - u[1] * v[0];
+        final double worldArea = Math.sqrt(cx * cx + cy * cy + cz * cz) / 2;
+        final float[][] uv = new float[LodMesh.CORNERS][];
+        for (int c = 0; c < LodMesh.CORNERS; ++c) {
+            uv[c] = Attributes.textureCoordinates(attributes, first + c * Attributes.VALUES);
+        }
+        final double uvArea =
+                Math.abs(
+                                (uv[1][0] - uv[0][0]) * (uv[2][1] - uv[0][1])
+                                        - (uv[2][0] - uv[0][0]) * (uv[1][1] - uv[0][1]))
+                        / 2;
+        if (uvArea <= 0) {
+            return worldArea <= 0 ? 0 : Double.POSITIVE_INFINITY;
+        }
+        return Math.sqrt(worldArea / uvArea);
+    }
+
+    /**
+     * What an input triangle looks like averaged: an averaged triangle's corners' looks, evened
+     * out, or else its material's average.
+     *
+     * @param attributes Its cluster's attributes.
+     * @param t The triangle.
+     * @param material Its material.
+     * @param out Receives the {@link MaterialAverages#VALUES} values.
+     */
+    private void lookOf(int @NonNull [] attributes, int t, int material, float @NonNull [] out) {
+        final int first = t * Attributes.PER_TRIANGLE;
+        if (Attributes.textured(attributes, t) && Attributes.isAveraged(attributes, first)) {
+            Arrays.fill(out, 0);
+            final float[] corner = new float[MaterialAverages.VALUES];
+            for (int c = 0; c < LodMesh.CORNERS; ++c) {
+                Attributes.averageOf(attributes, first + c * Attributes.VALUES, corner);
+                for (int k = 0; k < out.length; ++k) {
+                    out[k] += corner[k] / LodMesh.CORNERS;
+                }
+            }
+            return;
+        }
+        final float[] average = options.averages().average(material);
+        System.arraycopy(average == null ? UNKNOWN_LOOK : average, 0, out, 0, out.length);
     }
 
     /**

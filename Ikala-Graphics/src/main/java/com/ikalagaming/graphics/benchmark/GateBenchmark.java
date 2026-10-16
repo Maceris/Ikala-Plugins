@@ -819,6 +819,12 @@ public final class GateBenchmark {
                     GraphicsManager.getSettings().lodCacheMaxBytes =
                             (long) (Long.parseLong(lodCacheMb.trim()) * BYTES_PER_MIB);
                 }
+                // Whether far level of detail blends its materials' looks, for comparisons
+                final String average = System.getProperty(PROPERTY + ".average");
+                if (average != null) {
+                    GraphicsManager.getSettings().lodAverageMaterials =
+                            Boolean.parseBoolean(average.trim());
+                }
                 start(
                         SyntheticTerrain.Recipe.valueOf(recipe.trim().toUpperCase()),
                         Integer.getInteger(PROPERTY + ".radius", 12),
