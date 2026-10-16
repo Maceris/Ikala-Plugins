@@ -13,7 +13,10 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * One region cell of a {@link LodStore} in an {@code .ika} file, so a cell whose inputs haven't
@@ -48,8 +51,14 @@ public final class LodCellFile {
     /** The version of every section but the clusters. */
     public static final int VERSION = 1;
 
-    /** The version of the clusters section: 2 added each cluster's attributes. */
-    public static final int CLUSTERS_VERSION = 2;
+    /**
+     * The version of the clusters section: 2 added each cluster's attributes; 3 stores each
+     * cluster's distinct vertices once, with a 16-bit index per corner, about half the size.
+     */
+    public static final int CLUSTERS_VERSION = 3;
+
+    /** The most vertices a cluster's table can hold, as its corners index it with 16 bits. */
+    private static final int MAX_VERTICES = 1 << Short.SIZE;
 
     /** The exporter named in the metadata. */
     public static final String EXPORTER = "Ikala-Graphics LodStore";
@@ -274,14 +283,19 @@ public final class LodCellFile {
      * @return The data.
      */
     private static ByteBuffer encodeClusters(@NonNull LodDag dag) {
+        final List<Packed> packed = new ArrayList<>(dag.clusters().size());
         int size = Integer.BYTES;
         for (LodDag.Cluster cluster : dag.clusters()) {
-            size += clusterSize(cluster);
+            final Packed one = pack(cluster);
+            packed.add(one);
+            size += clusterSize(cluster, one);
         }
         final ByteBuffer out = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN);
         out.putInt(dag.clusters().size());
-        for (LodDag.Cluster cluster : dag.clusters()) {
-            out.putInt(clusterSize(cluster));
+        for (int c = 0; c < packed.size(); ++c) {
+            final LodDag.Cluster cluster = dag.clusters().get(c);
+            final Packed one = packed.get(c);
+            out.putInt(clusterSize(cluster, one));
             out.putInt(cluster.id());
             out.putInt(cluster.level());
             out.putInt(cluster.triangleCount());
@@ -290,8 +304,18 @@ public final class LodCellFile {
             out.putDouble(cluster.error());
             putSphere(out, cluster.bound());
             putSphere(out, cluster.tight());
-            for (float corner : cluster.corners()) {
-                out.putFloat(corner);
+            out.putInt(one.vertexCount());
+            out.putInt(one.attributes() == null ? 0 : 1);
+            for (float value : one.positions()) {
+                out.putFloat(value);
+            }
+            if (one.attributes() != null) {
+                for (int value : one.attributes()) {
+                    out.putInt(value);
+                }
+            }
+            for (short index : one.indices()) {
+                out.putShort(index);
             }
             for (int material : cluster.materials()) {
                 out.putInt(material);
@@ -299,27 +323,96 @@ public final class LodCellFile {
             for (float seen : cluster.visibility()) {
                 out.putFloat(seen);
             }
-            out.putInt(cluster.attributes().length);
-            for (int value : cluster.attributes()) {
-                out.putInt(value);
-            }
         }
         return out.flip();
+    }
+
+    /**
+     * A cluster's corners as a table of distinct vertices and an index per corner.
+     *
+     * @param vertexCount How many distinct vertices there are.
+     * @param positions Their positions, three floats each.
+     * @param attributes Their attributes, {@link Attributes#VALUES} ints each, or null if the
+     *     cluster has none.
+     * @param indices Each corner's vertex, unsigned.
+     */
+    private record Packed(int vertexCount, float[] positions, int[] attributes, short[] indices) {}
+
+    /**
+     * A vertex's identity: its position's bits and its attributes.
+     *
+     * @param x The x bits.
+     * @param y The y bits.
+     * @param z The z bits.
+     * @param normal The normal, or 0.
+     * @param tangent The tangent, or 0.
+     * @param uv The texture coordinates, or 0.
+     */
+    private record VertexKey(int x, int y, int z, int normal, int tangent, int uv) {}
+
+    /**
+     * Find a cluster's distinct vertices.
+     *
+     * @param cluster The cluster.
+     * @return Its table and indices.
+     */
+    private static Packed pack(LodDag.@NonNull Cluster cluster) {
+        final float[] corners = cluster.corners();
+        final int[] attributes = cluster.attributes();
+        final boolean any = attributes.length > 0;
+        final int cornerCount = corners.length / AXES;
+        final Map<VertexKey, Integer> seen = new HashMap<>();
+        final float[] positions = new float[corners.length];
+        final int[] kept = any ? new int[cornerCount * Attributes.VALUES] : null;
+        final short[] indices = new short[cornerCount];
+        int count = 0;
+        for (int c = 0; c < cornerCount; ++c) {
+            final int a = c * Attributes.VALUES;
+            final VertexKey key =
+                    new VertexKey(
+                            Float.floatToRawIntBits(corners[c * AXES]),
+                            Float.floatToRawIntBits(corners[c * AXES + 1]),
+                            Float.floatToRawIntBits(corners[c * AXES + 2]),
+                            any ? attributes[a] : 0,
+                            any ? attributes[a + 1] : 0,
+                            any ? attributes[a + 2] : 0);
+            Integer index = seen.get(key);
+            if (index == null) {
+                index = count++;
+                seen.put(key, index);
+                System.arraycopy(corners, c * AXES, positions, index * AXES, AXES);
+                if (any) {
+                    System.arraycopy(
+                            attributes, a, kept, index * Attributes.VALUES, Attributes.VALUES);
+                }
+            }
+            indices[c] = (short) (int) index;
+        }
+        if (count > MAX_VERTICES) {
+            throw new IllegalArgumentException("A cluster has too many vertices: " + count);
+        }
+        return new Packed(
+                count,
+                Arrays.copyOf(positions, count * AXES),
+                any ? Arrays.copyOf(kept, count * Attributes.VALUES) : null,
+                indices);
     }
 
     /**
      * The size of a cluster's record.
      *
      * @param cluster The cluster.
+     * @param packed Its vertex table.
      * @return The bytes.
      */
-    private static int clusterSize(LodDag.@NonNull Cluster cluster) {
+    private static int clusterSize(LodDag.@NonNull Cluster cluster, @NonNull Packed packed) {
         final int triangles = cluster.triangleCount();
-        return Integer.BYTES * 6
+        return Integer.BYTES * 8
                 + Double.BYTES * (1 + 2 * SPHERE_VALUES)
-                + triangles * (TRIANGLE_VALUES * Float.BYTES + Integer.BYTES + Float.BYTES)
-                + Integer.BYTES
-                + cluster.attributes().length * Integer.BYTES;
+                + packed.vertexCount() * AXES * Float.BYTES
+                + (packed.attributes() == null ? 0 : packed.attributes().length * Integer.BYTES)
+                + triangles * LodMesh.CORNERS * Short.BYTES
+                + triangles * (Integer.BYTES + Float.BYTES);
     }
 
     /**
@@ -339,9 +432,36 @@ public final class LodCellFile {
         final double error = in.getDouble();
         final double[] bound = getSphere(in);
         final double[] tight = getSphere(in);
+        final int vertexCount = count(in.getInt());
+        final boolean any = in.getInt() != 0;
+        final float[] positions = new float[vertexCount * AXES];
+        for (int i = 0; i < positions.length; ++i) {
+            positions[i] = in.getFloat();
+        }
+        final int[] table = any ? new int[vertexCount * Attributes.VALUES] : null;
+        if (table != null) {
+            for (int i = 0; i < table.length; ++i) {
+                table[i] = in.getInt();
+            }
+        }
         final float[] corners = new float[triangles * TRIANGLE_VALUES];
-        for (int i = 0; i < corners.length; ++i) {
-            corners[i] = in.getFloat();
+        final int[] attributes =
+                any ? new int[triangles * Attributes.PER_TRIANGLE] : Attributes.NONE;
+        for (int c = 0; c < triangles * LodMesh.CORNERS; ++c) {
+            final int index = Short.toUnsignedInt(in.getShort());
+            if (index >= vertexCount) {
+                throw new IllegalArgumentException(
+                        "Cluster " + id + " has a corner past its " + vertexCount + " vertices");
+            }
+            System.arraycopy(positions, index * AXES, corners, c * AXES, AXES);
+            if (table != null) {
+                System.arraycopy(
+                        table,
+                        index * Attributes.VALUES,
+                        attributes,
+                        c * Attributes.VALUES,
+                        Attributes.VALUES);
+            }
         }
         final int[] materials = new int[triangles];
         for (int i = 0; i < triangles; ++i) {
@@ -350,15 +470,6 @@ public final class LodCellFile {
         final float[] visibility = new float[triangles];
         for (int i = 0; i < triangles; ++i) {
             visibility[i] = in.getFloat();
-        }
-        final int attributeCount = in.getInt();
-        if (attributeCount != 0 && attributeCount != triangles * Attributes.PER_TRIANGLE) {
-            throw new IllegalArgumentException(
-                    "Cluster " + id + " has " + attributeCount + " attribute values");
-        }
-        final int[] attributes = attributeCount == 0 ? Attributes.NONE : new int[attributeCount];
-        for (int i = 0; i < attributeCount; ++i) {
-            attributes[i] = in.getInt();
         }
         if (in.position() - start != size) {
             throw new IllegalArgumentException("Cluster " + id + "'s record size doesn't match");
