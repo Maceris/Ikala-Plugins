@@ -180,7 +180,11 @@ void main() {
     vec3 packedValues = vec3(1.0);
     if (!averaged) {
         if (material.emissiveIndex > 0) {
-            emission *= sampleTexture(material.emissiveIndex).rgb;
+            vec4 emissionTexel = sampleTexture(material.emissiveIndex);
+            // A bake's emission page holds the light itself, see encodeEmission
+            emission = (material.flags & MATERIAL_FLAG_BAKED_DATA) != 0
+                ? decodeEmission(emissionTexel)
+                : emission * emissionTexel.rgb;
         }
         if (material.occlusionRoughnessMetalIndex > 0) {
             packedValues = sampleTexture(material.occlusionRoughnessMetalIndex).rgb;

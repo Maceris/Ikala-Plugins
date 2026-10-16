@@ -386,18 +386,15 @@ public final class LodPanel implements AutoCloseable {
                                 residency.totalBytes() / BYTES_PER_MIB,
                                 residency.wantedBytes() / BYTES_PER_MIB));
             }
-            final long allBaked = bakedBytes(view.getDag());
-            if (allBaked > 0) {
+            if (hasBakes(view.getDag())) {
                 final LodBakes.Stats bakes = graphics.lods().bakeStats();
                 IkGui.text(
                         String.format(
-                                "Baked tiles: %,d loaded, %.1f of %.1f MiB, in %d pages of %.0f"
-                                        + " MiB.",
+                                "Baked tiles: %,d loaded, %.1f MiB, in %d pages of %.1f MiB.",
                                 bakes.tiles(),
-                                bakes.texels() * LodBakes.BYTES_PER_TEXEL / BYTES_PER_MIB,
-                                allBaked / BYTES_PER_MIB,
+                                bakes.bytes() / BYTES_PER_MIB,
                                 bakes.pages(),
-                                bakes.pages() * LodBakes.PAGE_BYTES / BYTES_PER_MIB));
+                                bakes.pageBytes() / BYTES_PER_MIB));
             }
             // Below the totals, which a long table would push out of sight
             if (gpu.levelTriangles().length > 0) {
@@ -421,17 +418,18 @@ public final class LodPanel implements AutoCloseable {
     }
 
     /**
-     * The bytes every baked cluster's tile of a DAG would take on the GPU.
+     * Whether any cluster of a DAG is baked.
      *
      * @param dag The DAG.
-     * @return The bytes.
+     * @return True if one is.
      */
-    private static long bakedBytes(@NonNull LodDag dag) {
-        long texels = 0;
+    private static boolean hasBakes(@NonNull LodDag dag) {
         for (LodDag.Group group : dag.groups()) {
-            texels += group.bakedTexels();
+            if (group.bakedClusters() > 0) {
+                return true;
+            }
         }
-        return texels * LodBakes.BYTES_PER_TEXEL;
+        return false;
     }
 
     /**

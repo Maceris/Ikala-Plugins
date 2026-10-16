@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.lod;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.vulkan.LodBakes;
 
@@ -283,6 +284,37 @@ class BakingTest {
             }
         }
         assertTrue(checked > 0, "No texel over a baked child");
+    }
+
+    /** A baked cluster needs an emission page only when a material it samples gives off light. */
+    @Test
+    void testEmittingSourcesMakeEmissiveBakes() {
+        final LodDag dag = DagBuilder.build(List.of(AttributesTest.sphere()), OPTIONS);
+        final MaterialCache dark = new MaterialCache();
+        final LodBakes.Plan darkPlan = LodBakes.plan(dag, dark);
+        assertTrue(darkPlan != null);
+        for (LodBakes.Baked baked : darkPlan.clusters().values()) {
+            assertFalse(baked.emissive(), "Cluster " + baked.cluster().id());
+        }
+        // The sphere's material, index 3, glowing
+        final MaterialCache glowing = new MaterialCache();
+        Material material = null;
+        while (glowing.getMaterialIndex(material) != 3) {
+            material = new Material();
+            glowing.addMaterial(material);
+        }
+        material.getEmissive().set(2, 1, 0);
+        final LodBakes.Plan glowingPlan = LodBakes.plan(dag, glowing);
+        assertTrue(glowingPlan != null);
+        for (LodBakes.Baked baked : glowingPlan.clusters().values()) {
+            assertTrue(baked.emissive(), "Cluster " + baked.cluster().id());
+            assertTrue(
+                    baked.bytes()
+                            == (long) baked.width()
+                                    * baked.height()
+                                    * (LodBakes.BYTES_PER_TEXEL
+                                            + LodBakes.EMISSION_BYTES_PER_TEXEL));
+        }
     }
 
     /**

@@ -10,7 +10,8 @@
 // a texel. Each texel's record says which of the job's source materials to sample and where, the
 // source triangle's tangent frame there, and the baked triangle's, which the normal is turned into.
 // The color page is written through a UNORM view, sRGB encoded, and sampled through an sRGB one;
-// the data page holds the normal's x and y, roughness and metalness, see MATERIAL_FLAG_BAKED_DATA.
+// the data page holds the normal's x and y, roughness and metalness, see MATERIAL_FLAG_BAKED_DATA;
+// pages of emitting tiles have an emission page too, written by encodeEmission.
 
 layout(local_size_x = 64) in;
 
@@ -30,10 +31,16 @@ layout(push_constant) uniform BakeConstants {
     // The tile's corner in the page, in texels, and its width and height
     ivec2 origin;
     ivec2 extent;
+    // Whether the tile's page has an emission page to write; if not, binding 2 is its data page
+    int emitting;
+    int padding0;
+    int padding1;
+    int padding2;
 };
 
 layout(set = 0, binding = 0, rgba8) uniform restrict writeonly image2D colorPage;
 layout(set = 0, binding = 1, rgba8) uniform restrict writeonly image2D dataPage;
+layout(set = 0, binding = 2, rgba8) uniform writeonly image2D emissionPage;
 
 layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
 
@@ -118,4 +125,11 @@ void main()
     ivec2 at = origin + ivec2(int(texel) % extent.x, int(texel) / extent.x);
     imageStore(colorPage, at, vec4(color.rgb, 1.0));
     imageStore(dataPage, at, vec4(inBaked.xy * 0.5 + 0.5, roughness, metallic));
+    if (emitting != 0) {
+        vec3 emission = material.emissive;
+        if (material.emissiveIndex > 0) {
+            emission *= sampleSource(material.emissiveIndex, uv, footprint).rgb;
+        }
+        imageStore(emissionPage, at, encodeEmission(emission));
+    }
 }

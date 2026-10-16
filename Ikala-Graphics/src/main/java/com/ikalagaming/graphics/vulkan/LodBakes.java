@@ -78,6 +78,12 @@ public final class LodBakes {
     /** The data page's binding. */
     private static final int DATA_BINDING = 1;
 
+    /** The emission page's binding, which pages without one fill with their data page. */
+    private static final int EMISSION_BINDING = 2;
+
+    /** The storage bindings a page's set has. */
+    private static final int BINDINGS = 3;
+
     /** Coordinates in a position. */
     private static final int AXES = 3;
 
@@ -111,19 +117,30 @@ public final class LodBakes {
     /** Bytes a baked texel takes on the GPU: a texel of each page. */
     public static final int BYTES_PER_TEXEL = 8;
 
-    /** Bytes a page takes on the GPU, both textures. */
-    public static final long PAGE_BYTES = (long) PAGE * PAGE * BYTES_PER_TEXEL;
+    /** Bytes a baked texel's emission takes on the GPU, in pages of emitting tiles. */
+    public static final int EMISSION_BYTES_PER_TEXEL = 4;
 
     /**
      * What is loaded.
      *
      * @param tiles Tiles loaded, over every world.
-     * @param texels The texels they hold.
+     * @param bytes The bytes they take.
      * @param pages Pages made, whether or not they hold anything.
+     * @param pageBytes The bytes the pages take.
      */
-    public record Stats(long tiles, long texels, int pages) {
+    public record Stats(long tiles, long bytes, int pages, long pageBytes) {
         /** Nothing loaded. */
-        public static final Stats NONE = new Stats(0, 0, 0);
+        public static final Stats NONE = new Stats(0, 0, 0, 0);
+    }
+
+    /**
+     * The bytes a texel takes on the GPU.
+     *
+     * @param emissive Whether it is in a page of emitting tiles.
+     * @return The bytes.
+     */
+    private static int bytesPerTexel(boolean emissive) {
+        return BYTES_PER_TEXEL + (emissive ? EMISSION_BYTES_PER_TEXEL : 0);
     }
 
     /**
@@ -136,6 +153,7 @@ public final class LodBakes {
      * @param sources The materials its texels sample, which records refer to by index.
      * @param records Each texel's record, row by row, {@link #RECORD_SIZE} bytes each.
      * @param worldPerTexel World units a texel spans.
+     * @param emissive Whether any of its sources give off light, so it needs an emission page.
      */
     public record Baked(
             LodDag.@NonNull Cluster cluster,
@@ -143,7 +161,8 @@ public final class LodBakes {
             int height,
             @NonNull List<Material> sources,
             @NonNull ByteBuffer records,
-            double worldPerTexel) {
+            double worldPerTexel,
+            boolean emissive) {
 
         /**
          * The bytes its tile takes on the GPU.
@@ -151,7 +170,7 @@ public final class LodBakes {
          * @return The bytes.
          */
         public long bytes() {
-            return (long) width * height * BYTES_PER_TEXEL;
+            return (long) width * height * bytesPerTexel(emissive);
         }
     }
 
@@ -203,9 +222,10 @@ public final class LodBakes {
     }
 
     /**
-     * A page: two textures, their material, and which of it is free. Tiles are packed in along a
-     * skyline, the height of each column taken so far; tiles given back go on a free list that
-     * later tiles are cut from, and the page starts over once every tile is back.
+     * A page: two textures, three for emitting tiles, their material, and which of it is free.
+     * Tiles are packed in along a skyline, the height of each column taken so far; tiles given back
+     * go on a free list that later tiles are cut from, and the page starts over once every tile is
+     * back.
      */
     private static final class Page {
         /** Its index. */
@@ -213,6 +233,9 @@ public final class LodBakes {
 
         /** Its material, which baked triangles are drawn with. */
         final Material material;
+
+        /** Whether it holds emitting tiles, and so has an emission texture. */
+        final boolean emissive;
 
         /** Its index in the material cache. */
         final int materialIndex;
@@ -232,6 +255,9 @@ public final class LodBakes {
         /** The data texture, once made. */
         TextureHandle data;
 
+        /** The emission texture, once made, if it has one. */
+        TextureHandle emission;
+
         /** The color image's UNORM view, which bakes write through. */
         long colorStorageView = VK_NULL_HANDLE;
 
@@ -244,10 +270,12 @@ public final class LodBakes {
          * @param index Its index.
          * @param material Its material.
          * @param materialIndex The material's index.
+         * @param emissive Whether it holds emitting tiles.
          */
-        Page(int index, Material material, int materialIndex) {
+        Page(int index, Material material, int materialIndex, boolean emissive) {
             this.index = index;
             this.material = material;
+            this.emissive = emissive;
             this.materialIndex = materialIndex;
         }
 
@@ -458,7 +486,12 @@ public final class LodBakes {
         lock.lock();
         try {
             unloadLocked(world, baked.cluster().id());
-            tile = allocate(Math.min(baked.width(), PAGE), Math.min(baked.height(), PAGE), cache);
+            tile =
+                    allocate(
+                            Math.min(baked.width(), PAGE),
+                            Math.min(baked.height(), PAGE),
+                            baked.emissive(),
+                            cache);
             final Job job = new Job(tile, baked, world);
             jobs.add(job);
             byWorld.computeIfAbsent(world, w -> new HashMap<>())
@@ -528,24 +561,30 @@ public final class LodBakes {
     /**
      * What is loaded. Safe from any thread.
      *
-     * @return The tiles, their texels and the pages.
+     * @return The tiles, their bytes and the pages.
      */
     public Stats stats() {
         lock.lock();
         try {
             long tiles = 0;
-            long texels = 0;
+            long bytes = 0;
             for (Map<Integer, Loaded> loaded : byWorld.values()) {
                 for (Loaded tile : loaded.values()) {
                     ++tiles;
-                    texels += tile.tile.texels();
+                    bytes +=
+                            (long) tile.tile.texels()
+                                    * bytesPerTexel(pages.get(tile.tile.page()).emissive);
                 }
             }
             int made = 0;
+            long pageBytes = 0;
             for (Page page : pages) {
-                made += page.color == null ? 0 : 1;
+                if (page.color != null) {
+                    ++made;
+                    pageBytes += (long) PAGE * PAGE * bytesPerTexel(page.emissive);
+                }
             }
-            return new Stats(tiles, texels, made);
+            return new Stats(tiles, bytes, made, pageBytes);
         } finally {
             lock.unlock();
         }
@@ -556,11 +595,15 @@ public final class LodBakes {
      *
      * @param width The tile's width.
      * @param height The tile's height.
+     * @param emissive Whether it needs an emission page.
      * @param cache The scene's materials, for a new page's.
      * @return The tile.
      */
-    private Tile allocate(int width, int height, @NonNull MaterialCache cache) {
+    private Tile allocate(int width, int height, boolean emissive, @NonNull MaterialCache cache) {
         for (Page page : pages) {
+            if (page.emissive != emissive) {
+                continue;
+            }
             final long corner = page.take(width, height);
             if (corner >= 0) {
                 return new Tile(page.index, unpackX(corner), unpackY(corner), width, height);
@@ -571,7 +614,11 @@ public final class LodBakes {
         }
         final Material material = new Material();
         material.setBakedData(true);
-        final Page page = new Page(pages.size(), material, cache.addMaterial(material));
+        if (emissive) {
+            // The emission page holds the light itself, see decodeEmission in material.glsl
+            material.getEmissive().set(1, 1, 1);
+        }
+        final Page page = new Page(pages.size(), material, cache.addMaterial(material), emissive);
         cache.setDirty(true);
         pages.add(page);
         final long corner = page.take(width, height);
@@ -726,7 +773,12 @@ public final class LodBakes {
             records.putInt(at + 6 * Integer.BYTES, own[1]);
             records.putFloat(at + 7 * Integer.BYTES, (float) footprint);
         }
-        return new Baked(cluster, width, height, sources, records, worldPerTexel);
+        boolean emissive = false;
+        for (Material source : sources) {
+            final org.joml.Vector3f light = source.getEmissive();
+            emissive |= light.x > 0 || light.y > 0 || light.z > 0;
+        }
+        return new Baked(cluster, width, height, sources, records, worldPerTexel, emissive);
     }
 
     /** How far from a place in a tile to look for a texel with anything in it, in texels. */
@@ -956,10 +1008,11 @@ public final class LodBakes {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             final LongBuffer output = stack.callocLong(1);
             VkDescriptorSetLayoutBinding.Buffer bindings =
-                    VkDescriptorSetLayoutBinding.calloc(2, stack);
-            for (int i = 0; i < 2; ++i) {
+                    VkDescriptorSetLayoutBinding.calloc(BINDINGS, stack);
+            final int[] numbers = {COLOR_BINDING, DATA_BINDING, EMISSION_BINDING};
+            for (int i = 0; i < BINDINGS; ++i) {
                 bindings.get(i)
-                        .binding(i == 0 ? COLOR_BINDING : DATA_BINDING)
+                        .binding(numbers[i])
                         .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
                         .descriptorCount(1)
                         .stageFlags(VK_SHADER_STAGE_COMPUTE_BIT);
@@ -974,7 +1027,9 @@ public final class LodBakes {
                             output));
             setLayout = output.get(0);
             VkDescriptorPoolSize.Buffer sizes = VkDescriptorPoolSize.calloc(1, stack);
-            sizes.get(0).type(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE).descriptorCount(2 * MAX_PAGES);
+            sizes.get(0)
+                    .type(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+                    .descriptorCount(BINDINGS * MAX_PAGES);
             checkError(
                     vkCreateDescriptorPool(
                             state.device.logical,
@@ -1016,6 +1071,7 @@ public final class LodBakes {
         getSetLayout(state);
         final long[] colorImage = new long[2];
         final long[] dataImage = new long[2];
+        final long[] emissionImage = new long[2];
         try (MemoryStack stack = MemoryStack.stackPush()) {
             final LongBuffer output = stack.callocLong(1);
             image(state, true, colorImage, stack);
@@ -1023,16 +1079,27 @@ public final class LodBakes {
             final long colorSampled = view(state, colorImage[0], VK_FORMAT_R8G8B8A8_SRGB, stack);
             page.colorStorageView = view(state, colorImage[0], VK_FORMAT_R8G8B8A8_UNORM, stack);
             final long dataView = view(state, dataImage[0], VK_FORMAT_R8G8B8A8_UNORM, stack);
+            long emissionView = dataView;
+            if (page.emissive) {
+                image(state, false, emissionImage, stack);
+                emissionView = view(state, emissionImage[0], VK_FORMAT_R8G8B8A8_UNORM, stack);
+            }
             state.immediateCommands.submit(
                     state,
                     commandBuffer -> {
                         try (MemoryStack inner = MemoryStack.stackPush()) {
                             clear(commandBuffer, colorImage[0], inner);
                             clear(commandBuffer, dataImage[0], inner);
+                            if (page.emissive) {
+                                clear(commandBuffer, emissionImage[0], inner);
+                            }
                         }
                     });
             page.color = register(state, colorImage, colorSampled, Format.R8G8B8A8_SRGB);
             page.data = register(state, dataImage, dataView, Format.R8G8B8A8_UNORM);
+            if (page.emissive) {
+                page.emission = register(state, emissionImage, emissionView, Format.R8G8B8A8_UNORM);
+            }
             final LongBuffer sets = stack.mallocLong(1);
             checkError(
                     vkAllocateDescriptorSets(
@@ -1047,7 +1114,10 @@ public final class LodBakes {
             color.get(0).imageView(page.colorStorageView).imageLayout(VK_IMAGE_LAYOUT_GENERAL);
             VkDescriptorImageInfo.Buffer data = VkDescriptorImageInfo.calloc(1, stack);
             data.get(0).imageView(dataView).imageLayout(VK_IMAGE_LAYOUT_GENERAL);
-            VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(2, stack);
+            // A page without emission names its data page here, which bakes then leave alone
+            VkDescriptorImageInfo.Buffer emission = VkDescriptorImageInfo.calloc(1, stack);
+            emission.get(0).imageView(emissionView).imageLayout(VK_IMAGE_LAYOUT_GENERAL);
+            VkWriteDescriptorSet.Buffer writes = VkWriteDescriptorSet.calloc(BINDINGS, stack);
             writes.get(0)
                     .sType$Default()
                     .dstSet(page.set)
@@ -1062,12 +1132,23 @@ public final class LodBakes {
                     .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
                     .descriptorCount(1)
                     .pImageInfo(data);
+            writes.get(2)
+                    .sType$Default()
+                    .dstSet(page.set)
+                    .dstBinding(EMISSION_BINDING)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+                    .descriptorCount(1)
+                    .pImageInfo(emission);
             vkUpdateDescriptorSets(state.device.logical, writes, null);
         }
         page.material.setTexture(page.color);
         page.material.setNormalMap(page.data);
+        page.material.setEmissiveMap(page.emission);
         GraphicsManager.getScene().getMaterialCache().setDirty(true);
-        log.debug("Made level of detail bake page {}", page.index);
+        log.debug(
+                "Made level of detail bake page {}{}",
+                page.index,
+                page.emissive ? ", with emission" : "");
     }
 
     /**
@@ -1326,7 +1407,11 @@ public final class LodBakes {
                             ? null
                             : GraphicsManager.getScene().getMaterialCache();
             for (Page page : pages) {
-                for (TextureHandle handle : new TextureHandle[] {page.color, page.data}) {
+                for (TextureHandle handle :
+                        new TextureHandle[] {page.color, page.data, page.emission}) {
+                    if (handle == null) {
+                        continue;
+                    }
                     final TextureInfoVulkan info = state.textureRegistry.remove(handle);
                     if (info != null) {
                         state.bindlessTextures.release(state, info);

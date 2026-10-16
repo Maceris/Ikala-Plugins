@@ -30,8 +30,11 @@ public class LodBake implements RenderStage {
     /** The most texels baked in a frame, though a frame always bakes at least one tile. */
     private static final long TEXELS_PER_FRAME = 1L << 22;
 
-    /** The size of the push constants: two addresses, the tile's corner and its size. */
-    private static final int CONSTANTS_SIZE = 2 * Long.BYTES + 4 * Integer.BYTES;
+    /**
+     * The size of the push constants: two addresses, the tile's corner and its size, whether it
+     * emits, padding.
+     */
+    private static final int CONSTANTS_SIZE = 2 * Long.BYTES + 8 * Integer.BYTES;
 
     /** Threads in a workgroup, see lod_bake.comp. */
     private static final int GROUP = 64;
@@ -131,6 +134,8 @@ public class LodBake implements RenderStage {
                 constants.putInt(2 * Long.BYTES + Integer.BYTES, job.tile().y());
                 constants.putInt(2 * Long.BYTES + 2 * Integer.BYTES, job.tile().width());
                 constants.putInt(2 * Long.BYTES + 3 * Integer.BYTES, job.tile().height());
+                constants.putInt(
+                        2 * Long.BYTES + 4 * Integer.BYTES, job.baked().emissive() ? 1 : 0);
                 vkCmdPushConstants(
                         commandBuffer, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
                 final int texels = job.tile().texels();
