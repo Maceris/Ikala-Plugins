@@ -21,7 +21,9 @@ import java.util.Arrays;
  * </ul>
  *
  * <p>Added for level of detail: locked vertices never move or go, so borders shared with
- * neighboring groups stay exactly as they were; and collapses that would flip a triangle over are
+ * neighboring groups stay exactly as they were; vertices along a seam, where the triangles on
+ * either side don't agree on their appearance (see {@link Seams}), only slide along it onto their
+ * neighbor there, so each side stays whole; and collapses that would flip a triangle over are
  * rejected. Appearance is not considered while collapsing; it is found again afterwards through the
  * collapse history ({@link Correspondence}).
  */
@@ -59,13 +61,15 @@ public final class Simplifier {
      *     Correspondence}.
      * @param keepOpen Edges no collapse may create, as vertex pairs packed by {@link
      *     LongIntMap#pair} with the lower vertex first, sorted.
+     * @param seams Seam edges, packed the same way: their vertices only collapse along them.
      */
     public record Options(
             int targetTriangles,
             double virtualEdgeRadius,
             double maxError,
             boolean recordHistory,
-            long @NonNull [] keepOpen) {
+            long @NonNull [] keepOpen,
+            long @NonNull [] seams) {
 
         /**
          * Simplify to a triangle count with no error limit, recording history.
@@ -80,6 +84,7 @@ public final class Simplifier {
                     virtualEdgeRadius,
                     Double.POSITIVE_INFINITY,
                     true,
+                    new long[0],
                     new long[0]);
         }
 
@@ -92,7 +97,19 @@ public final class Simplifier {
         public Options keepingOpen(long @NonNull [] edges) {
             final long[] sorted = edges.clone();
             Arrays.sort(sorted);
-            return new Options(targetTriangles, virtualEdgeRadius, maxError, recordHistory, sorted);
+            return new Options(
+                    targetTriangles, virtualEdgeRadius, maxError, recordHistory, sorted, seams);
+        }
+
+        /**
+         * The same options, with seams whose vertices only slide along them.
+         *
+         * @param edges The seam edges, packed vertex pairs, lower vertex first.
+         * @return The options.
+         */
+        public Options followingSeams(long @NonNull [] edges) {
+            return new Options(
+                    targetTriangles, virtualEdgeRadius, maxError, recordHistory, keepOpen, edges);
         }
     }
 
@@ -194,6 +211,9 @@ public final class Simplifier {
     /** The vertices joined to each vertex by an edge, real or virtual. */
     private final IntArrayList[] neighbors;
 
+    /** The vertices joined to each vertex by a seam edge. */
+    private final IntArrayList[] seamNeighbors;
+
     /** Candidate collapses. */
     private final EdgeHeap heap = new EdgeHeap();
 
@@ -232,6 +252,9 @@ public final class Simplifier {
 
     /** The new vertex position chosen by the last {@link #cost} call. */
     private final double[] chosen = new double[AXES];
+
+    /** The end the last {@link #cost} call keeps; the other goes. */
+    private int chosenKeep;
 
     /**
      * Each vertex's boundary area quadric, the sum over its boundary edges, kept until the vertex's
@@ -288,9 +311,11 @@ public final class Simplifier {
         faceCount = m;
         vertexFaces = new IntArrayList[n];
         neighbors = new IntArrayList[n];
+        seamNeighbors = new IntArrayList[n];
         for (int v = 0; v < n; ++v) {
             vertexFaces[v] = new IntArrayList();
             neighbors[v] = new IntArrayList();
+            seamNeighbors[v] = new IntArrayList();
         }
         history = options.recordHistory() ? new History() : null;
     }
@@ -338,6 +363,9 @@ public final class Simplifier {
             Quadric.addFace(quadrics, vb * Quadric.STRIDE, a, b, c, weight);
             Quadric.addFace(quadrics, vc * Quadric.STRIDE, a, b, c, weight);
         }
+        for (long seam : options.seams()) {
+            linkSeam((int) (seam >>> Integer.SIZE), (int) seam);
+        }
         final int[] virtual = VirtualEdges.find(input, options.virtualEdgeRadius());
         for (int i = 0; i + 1 < virtual.length; i += 2) {
             link(virtual[i], virtual[i + 1]);
@@ -375,8 +403,8 @@ public final class Simplifier {
                 // The heap is ordered by cost, not error, so cheaper-looking edges may still fit
                 continue;
             }
-            // Keep the locked end, if there is one
-            final int keep = locked[b] ? b : a;
+            // The end cost() chose to keep: a locked one, or one on a seam
+            final int keep = chosenKeep;
             final int remove = keep == a ? b : a;
             if (!linkCondition(keep, remove)
                     || createsKeptOpen(keep, remove)
@@ -412,10 +440,13 @@ public final class Simplifier {
      *
      * @param a One end.
      * @param b The other end.
-     * @return The cost, or NaN if it can't collapse (both ends locked).
+     * @return The cost, or NaN if it can't collapse: neither end can go, since both are locked, or
+     *     on seams this edge doesn't follow.
      */
     private double cost(int a, int b) {
-        if (locked[a] && locked[b]) {
+        final boolean aGoes = removable(a, b);
+        final boolean bGoes = removable(b, a);
+        if (!aGoes && !bGoes) {
             return Double.NaN;
         }
         Arrays.fill(scratch, 0);
@@ -424,10 +455,29 @@ public final class Simplifier {
         // The memoryless boundary area term, from the boundary edges at either end
         Quadric.add(scratch, 0, boundaryOf(a), a * Quadric.STRIDE);
         Quadric.add(scratch, 0, boundaryOf(b), b * Quadric.STRIDE);
-        if (locked[a] || locked[b]) {
-            load(locked[a] ? a : b, chosen);
-            return Quadric.error(scratch, 0, chosen);
+        final boolean aFixed = locked[a] || onSeam(a);
+        final boolean bFixed = locked[b] || onSeam(b);
+        if (aFixed || bFixed) {
+            // The new vertex stays where a fixed end is: a locked vertex doesn't move, and one on
+            // a seam moves only along it, onto its neighbor there
+            double best = Double.NaN;
+            if (aFixed && bGoes) {
+                load(a, chosen);
+                best = Quadric.error(scratch, 0, chosen);
+                chosenKeep = a;
+            }
+            if (bFixed && aGoes) {
+                load(b, point);
+                final double atB = Quadric.error(scratch, 0, point);
+                if (Double.isNaN(best) || atB < best) {
+                    best = atB;
+                    System.arraycopy(point, 0, chosen, 0, AXES);
+                    chosenKeep = b;
+                }
+            }
+            return best;
         }
+        chosenKeep = a;
         if (Quadric.minimum(scratch, 0, chosen)) {
             return Quadric.error(scratch, 0, chosen);
         }
@@ -453,8 +503,60 @@ public final class Simplifier {
     }
 
     /**
+     * Whether a vertex can go in a collapse of one of its edges: not if it is locked, and if it is
+     * on a seam, only along the seam.
+     *
+     * @param v The vertex.
+     * @param other The edge's other end.
+     * @return True if it can go.
+     */
+    private boolean removable(int v, int other) {
+        return !locked[v] && (!onSeam(v) || isSeamEdge(v, other));
+    }
+
+    /**
+     * Whether a vertex is on a seam.
+     *
+     * @param v The vertex.
+     * @return True if a seam edge reaches it.
+     */
+    private boolean onSeam(int v) {
+        return !seamNeighbors[v].isEmpty();
+    }
+
+    /**
+     * Whether two vertices are joined by a seam edge.
+     *
+     * @param a One vertex.
+     * @param b The other.
+     * @return True if a seam edge joins them.
+     */
+    private boolean isSeamEdge(int a, int b) {
+        final IntArrayList around = seamNeighbors[a];
+        for (int k = 0; k < around.size(); ++k) {
+            if (around.getInt(k) == b) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Join two vertices by a seam edge, unless they already are.
+     *
+     * @param a One vertex.
+     * @param b The other.
+     */
+    private void linkSeam(int a, int b) {
+        if (a != b && !isSeamEdge(a, b)) {
+            seamNeighbors[a].addInt(b);
+            seamNeighbors[b].addInt(a);
+        }
+    }
+
+    /**
      * Make sure a vertex's boundary area quadric, the sum over every boundary edge at it, is
-     * current.
+     * current. Seam edges count as boundary edges, so seams keep their shape as open borders do.
      *
      * @param v The vertex.
      * @return The array holding it, at {@code v * Quadric.STRIDE}.
@@ -468,7 +570,7 @@ public final class Simplifier {
         final IntArrayList around = neighbors[v];
         for (int k = 0; k < around.size(); ++k) {
             final int u = around.getInt(k);
-            if (sharedFaces(v, u) == 1) {
+            if (sharedFaces(v, u) == 1 || isSeamEdge(v, u)) {
                 load(v, point);
                 load(u, other);
                 Quadric.addBoundaryEdge(boundary, at, point, other);
@@ -731,6 +833,16 @@ public final class Simplifier {
         }
         neighbors[remove] = new IntArrayList();
         neighbors[keep].removeInt(remove);
+        // A seam the removed vertex was on now runs through the kept one
+        final IntArrayList seamEdges = seamNeighbors[remove];
+        for (int k = 0; k < seamEdges.size(); ++k) {
+            final int u = seamEdges.getInt(k);
+            seamNeighbors[u].removeInt(remove);
+            if (u != keep) {
+                linkSeam(keep, u);
+            }
+        }
+        seamNeighbors[remove] = new IntArrayList();
         vertexAlive[remove] = false;
         if (history != null) {
             recordAfter(keep);

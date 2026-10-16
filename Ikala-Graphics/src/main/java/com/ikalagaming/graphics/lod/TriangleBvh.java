@@ -5,6 +5,7 @@ import com.ikalagaming.util.IntArrayList;
 import lombok.NonNull;
 
 import java.util.Arrays;
+import java.util.function.IntPredicate;
 
 /**
  * A bounding volume hierarchy over triangles, for asking whether a ray hits anything within a
@@ -311,6 +312,26 @@ final class TriangleBvh {
             double enoughSquared,
             int skip,
             @NonNull Scratch scratch) {
+        return nearest(point, limitSquared, enoughSquared, t -> t != skip, scratch);
+    }
+
+    /**
+     * The squared distance from a point to the nearest triangle that passes a test.
+     *
+     * @param point The point.
+     * @param limitSquared Don't look farther than the square root of this.
+     * @param enoughSquared Stop once a triangle is within the square root of this.
+     * @param accept Which triangles may be found, by their index in the input.
+     * @param scratch Room for the query, which also holds the nearest triangle found.
+     * @return The squared distance, or the limit if no triangle is closer; once a triangle is close
+     *     enough, its distance, which may not be the nearest.
+     */
+    double nearest(
+            double @NonNull [] point,
+            double limitSquared,
+            double enoughSquared,
+            @NonNull IntPredicate accept,
+            @NonNull Scratch scratch) {
         scratch.triangle = -1;
         if (corners.length == 0) {
             return limitSquared;
@@ -342,7 +363,7 @@ final class TriangleBvh {
                 continue;
             }
             for (int t = first[node]; t < first[node] + count[node]; ++t) {
-                if (original[t] == skip) {
+                if (!accept.test(original[t])) {
                     continue;
                 }
                 final int base = t * TRIANGLE_VALUES;

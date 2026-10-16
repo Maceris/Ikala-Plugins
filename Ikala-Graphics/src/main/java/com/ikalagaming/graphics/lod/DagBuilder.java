@@ -35,15 +35,6 @@ public final class DagBuilder {
     /** The look of a material with no average known: mid grey, half rough, not metal. */
     private static final float[] UNKNOWN_LOOK = {0.18f, 0.18f, 0.18f, 0.5f, 0, 0.5f};
 
-    /** A projected triangle's kind, for seams. */
-    private static final int KIND_PROJECTED = 0;
-
-    /** A textured triangle's kind, for seams. */
-    private static final int KIND_TEXTURED = 1;
-
-    /** An averaged triangle's kind, for seams: textured, with no texture coordinates. */
-    private static final int KIND_AVERAGED = 2;
-
     private static final int MAX_LEVELS = 32;
 
     /** Runs of edges per worker the face contacts are searched in, so uneven runs even out. */
@@ -1294,11 +1285,8 @@ public final class DagBuilder {
         List<double[]> spheres = new ArrayList<>();
         final IntArrayList sourceCluster = new IntArrayList();
         final IntArrayList sourceTriangle = new IntArrayList();
-        // Textured triangles' attributes, to give the output's again, and what meets at each
-        // vertex, to keep seams: where textured triangles meet with different attributes or
-        // materials, or meet projected ones
+        // Textured triangles' attributes, to give the output's again
         final AttributeTransfer transfer = new AttributeTransfer();
-        final Map<Integer, int[]> meeting = new HashMap<>();
         boolean anyTextured = false;
         for (int id : children) {
             anyTextured |= dag.clusters().get(id).attributes().length > 0;
@@ -1314,7 +1302,6 @@ public final class DagBuilder {
             final int[] attributes = cluster.attributes();
             for (int t = 0; t < cluster.triangleCount(); ++t) {
                 final int[] v = new int[AXES];
-                final boolean textured = Attributes.textured(attributes, t);
                 final int material = cluster.materials()[t];
                 for (int corner = 0; corner < AXES; ++corner) {
                     final int at = t * TRIANGLE_VALUES + corner * AXES;
@@ -1323,28 +1310,10 @@ public final class DagBuilder {
                     if (owners.getOrDefault(key, -1) < 0 || openBorder.contains(key)) {
                         builder.lock(v[corner]);
                     }
-                    if (anyTextured
-                            && !averaging
-                            && isSeam(
-                                    meeting,
-                                    v[corner],
-                                    textured,
-                                    material,
-                                    attributes,
-                                    t * Attributes.PER_TRIANGLE + corner * Attributes.VALUES)) {
-                        builder.lock(v[corner]);
-                    }
                 }
                 if (averaging) {
                     lookOf(attributes, t, material, look);
                     average.add(corners, t * TRIANGLE_VALUES, cluster.visibility()[t], look);
-                } else if (textured) {
-                    transfer.add(
-                            corners,
-                            t * TRIANGLE_VALUES,
-                            attributes,
-                            t * Attributes.PER_TRIANGLE,
-                            material);
                 }
                 if (builder.triangle(
                         v[0], v[1], v[2], cluster.materials()[t], cluster.visibility()[t])) {
@@ -1372,6 +1341,19 @@ public final class DagBuilder {
             merged = welded;
         }
         lockEars(merged);
+        // Where textured triangles' appearance breaks, seams' vertices only slide along them, and
+        // where seams meet or end they stay put; each side's triangles give the output its
+        // attributes again
+        final Seams seams =
+                anyTextured && !averaging ? seams(merged, sourceCluster, sourceTriangle) : null;
+        if (seams != null) {
+            for (int v = 0; v < merged.getVertexCount(); ++v) {
+                if (seams.isCorner(v)) {
+                    merged.setLocked(v, true);
+                }
+            }
+            addSources(transfer, seams, sourceCluster, sourceTriangle);
+        }
         // Simplify to half, then map materials back
         // Scaled by the group's own edges rather than its level: levels climb faster in region
         // cells, whose parents count up from their highest child, but triangle sizes don't
@@ -1381,7 +1363,8 @@ public final class DagBuilder {
                 Simplifier.simplify(
                         merged,
                         Simplifier.Options.toCount(merged.getTriangleCount() / 2, radius)
-                                .keepingOpen(keepOpen(builder, merged, rim)));
+                                .keepingOpen(keepOpen(builder, merged, rim))
+                                .followingSeams(seams == null ? new long[0] : seams.edges));
         Correspondence.assignMaterials(merged, result);
         // Blended over about what the group's error spans, and at least an edge
         final int[] averaged =
@@ -1420,10 +1403,27 @@ public final class DagBuilder {
                 }
                 outAttributes.add(attributes);
             } else {
+                // Each output triangle stays in the chart it started in, so it takes its
+                // attributes from that side of any seam
+                final int[] charts = new int[triangles.length];
+                for (int i = 0; i < triangles.length; ++i) {
+                    charts[i] =
+                            seams == null
+                                    ? AttributeTransfer.ANY_CHART
+                                    : seams.charts[result.faceIds()[triangles[i]]];
+                }
                 outAttributes.add(
                         transfer.isEmpty()
                                 ? Attributes.NONE
-                                : transfer.transfer(corners, materials));
+                                : transfer.transfer(
+                                        corners,
+                                        materials,
+                                        charts,
+                                        origins(
+                                                result.faceIds(),
+                                                triangles,
+                                                sourceCluster,
+                                                sourceTriangle)));
             }
             outTight.add(tight);
             spheres.add(tight);
@@ -1588,45 +1588,127 @@ public final class DagBuilder {
     }
 
     /**
-     * Note what meets at a vertex, and whether that makes it a seam the simplifier must keep:
-     * textured triangles meeting there with different attributes or materials, or triangles of
-     * different kinds meeting: textured, projected or averaged. Projected triangles meeting each
-     * other make no seam, nor do averaged ones: they have no texture coordinates to keep whole, and
-     * their normals are smooth, taken again from the input after every simplification.
+     * Find a merged group's seams, from its triangles' sources: each corner takes its source
+     * triangle's attributes where it lies, which are the source corner's own except where welding
+     * T-junctions split a triangle.
      *
-     * @param meeting What has met at each vertex so far: the kind, and for a textured triangle its
-     *     material and its corner's attributes.
-     * @param vertex The vertex.
-     * @param textured Whether this triangle is textured.
-     * @param material Its material.
-     * @param attributes Its cluster's attributes.
-     * @param at Where this corner's start.
-     * @return True if the vertex is a seam.
+     * @param merged The merged group.
+     * @param sourceCluster Each merged triangle's source cluster.
+     * @param sourceTriangle Each merged triangle's triangle in it.
+     * @return The seams.
      */
-    private static boolean isSeam(
-            @NonNull Map<Integer, int[]> meeting,
-            int vertex,
-            boolean textured,
-            int material,
-            int @NonNull [] attributes,
-            int at) {
-        final int kind =
-                !textured
-                        ? KIND_PROJECTED
-                        : Attributes.noTextureCoordinates(attributes[at + 2])
-                                ? KIND_AVERAGED
-                                : KIND_TEXTURED;
-        final int[] here =
-                kind == KIND_TEXTURED
-                        ? new int[] {
-                            kind, material, attributes[at], attributes[at + 1], attributes[at + 2]
-                        }
-                        : new int[] {kind};
-        final int[] before = meeting.putIfAbsent(vertex, here);
-        if (before == null || (kind != KIND_TEXTURED && before[0] == kind)) {
-            return false;
+    private Seams seams(
+            @NonNull LodMesh merged,
+            @NonNull IntArrayList sourceCluster,
+            @NonNull IntArrayList sourceTriangle) {
+        final int triangles = merged.getTriangleCount();
+        final int[] kinds = new int[triangles];
+        final int[] attributes = new int[triangles * Attributes.PER_TRIANGLE];
+        final double[] position = new double[AXES];
+        final double[] weights = new double[AXES];
+        for (int t = 0; t < triangles; ++t) {
+            final LodDag.Cluster cluster = dag.clusters().get(sourceCluster.getInt(t));
+            final int s = sourceTriangle.getInt(t);
+            final int[] source = cluster.attributes();
+            if (!Attributes.textured(source, s)) {
+                kinds[t] = Seams.KIND_PROJECTED;
+                continue;
+            }
+            if (Attributes.noTextureCoordinates(source[s * Attributes.PER_TRIANGLE + 2])) {
+                kinds[t] = Seams.KIND_AVERAGED;
+                continue;
+            }
+            kinds[t] = Seams.KIND_TEXTURED;
+            for (int corner = 0; corner < AXES; ++corner) {
+                final int v = merged.corner(t, corner);
+                for (int axis = 0; axis < AXES; ++axis) {
+                    position[axis] = merged.position(v, axis);
+                }
+                AttributeTransfer.weights(
+                        cluster.corners(), s * TRIANGLE_VALUES, position, weights);
+                Attributes.blend(
+                        source,
+                        s * Attributes.PER_TRIANGLE,
+                        weights,
+                        attributes,
+                        t * Attributes.PER_TRIANGLE + corner * Attributes.VALUES);
+            }
         }
-        return !Arrays.equals(before, here);
+        return Seams.find(merged, kinds, attributes);
+    }
+
+    /**
+     * The source triangles output triangles started as: each output triangle keeps the identity of
+     * a merged triangle through simplifying, and each merged triangle came from a child's triangle.
+     *
+     * @param faceIds Which merged triangle each simplified triangle started as.
+     * @param triangles The simplified triangles in this cluster.
+     * @param sourceCluster Each merged triangle's source cluster.
+     * @param sourceTriangle Each merged triangle's triangle in it.
+     * @return Their origins.
+     */
+    private AttributeTransfer.Origins origins(
+            int @NonNull [] faceIds,
+            int @NonNull [] triangles,
+            @NonNull IntArrayList sourceCluster,
+            @NonNull IntArrayList sourceTriangle) {
+        final float[] corners = new float[triangles.length * TRIANGLE_VALUES];
+        final int[] attributes = new int[triangles.length * Attributes.PER_TRIANGLE];
+        final int[] materials = new int[triangles.length];
+        for (int i = 0; i < triangles.length; ++i) {
+            final int f = faceIds[triangles[i]];
+            final LodDag.Cluster cluster = dag.clusters().get(sourceCluster.getInt(f));
+            final int s = sourceTriangle.getInt(f);
+            System.arraycopy(
+                    cluster.corners(),
+                    s * TRIANGLE_VALUES,
+                    corners,
+                    i * TRIANGLE_VALUES,
+                    TRIANGLE_VALUES);
+            if (cluster.attributes().length > 0) {
+                System.arraycopy(
+                        cluster.attributes(),
+                        s * Attributes.PER_TRIANGLE,
+                        attributes,
+                        i * Attributes.PER_TRIANGLE,
+                        Attributes.PER_TRIANGLE);
+            }
+            materials[i] = cluster.materials()[s];
+        }
+        return new AttributeTransfer.Origins(corners, attributes, materials);
+    }
+
+    /**
+     * Give the attribute transfer each textured source triangle once, in the chart its merged
+     * triangle is in.
+     *
+     * @param transfer The transfer.
+     * @param seams The group's seams.
+     * @param sourceCluster Each merged triangle's source cluster.
+     * @param sourceTriangle Each merged triangle's triangle in it.
+     */
+    private void addSources(
+            @NonNull AttributeTransfer transfer,
+            @NonNull Seams seams,
+            @NonNull IntArrayList sourceCluster,
+            @NonNull IntArrayList sourceTriangle) {
+        final LongIntMap added = new LongIntMap(sourceCluster.size());
+        for (int t = 0; t < sourceCluster.size(); ++t) {
+            final int id = sourceCluster.getInt(t);
+            final int s = sourceTriangle.getInt(t);
+            final LodDag.Cluster cluster = dag.clusters().get(id);
+            if (!Attributes.textured(cluster.attributes(), s)
+                    || added.putIfAbsent(LongIntMap.pair(id, s), 0) != LongIntMap.MISSING) {
+                continue;
+            }
+            transfer.add(
+                    cluster.corners(),
+                    s * TRIANGLE_VALUES,
+                    cluster.attributes(),
+                    s * Attributes.PER_TRIANGLE,
+                    cluster.materials()[s],
+                    seams.charts[t]);
+        }
     }
 
     /**

@@ -121,7 +121,10 @@ class AttributesTest {
     /**
      * Simplified levels keep their textured triangles' attributes: every corner's normal points out
      * from the sphere's center, its texture coordinates are where the sphere's mapping puts it, and
-     * no triangle spans the seam.
+     * no small triangle spans the seam. The seam's vertices slide along it as the sphere
+     * simplifies, so coarse levels get triangles reaching most of the way around, whose u rightly
+     * spans more than half; a small one beside the seam whose u went from one end to the other
+     * would take attributes from the wrong side.
      */
     @Test
     void testAttributesSurviveSimplification() {
@@ -140,6 +143,7 @@ class AttributesTest {
             for (int t = 0; t < cluster.triangleCount(); ++t) {
                 float minU = Float.MAX_VALUE;
                 float maxU = -Float.MAX_VALUE;
+                final boolean small = isSmallAndAwayFromPoles(corners, t);
                 for (int c = 0; c < LodMesh.CORNERS; ++c) {
                     final int at = t * Attributes.PER_TRIANGLE + c * Attributes.VALUES;
                     final int p = t * Clusters.TRIANGLE_VALUES + c * LodMesh.CORNERS;
@@ -173,12 +177,47 @@ class AttributesTest {
                     ++checked;
                 }
                 assertTrue(
-                        maxU - minU < 0.5,
+                        !small || maxU - minU < 0.5,
                         "Cluster " + cluster.id() + " triangle " + t + " spans the seam");
             }
         }
         assertTrue(levels >= 2, "Simplified at least twice, got " + levels);
         assertTrue(checked > 0);
+    }
+
+    /**
+     * Whether a triangle's corners are within 60 degrees of each other seen from the sphere's
+     * center, and away from the poles, where u is undefined.
+     *
+     * @param corners Triangles' corners.
+     * @param t The triangle.
+     * @return True if it is small enough that its u can't rightly span half the sphere.
+     */
+    private static boolean isSmallAndAwayFromPoles(float[] corners, int t) {
+        final double[][] d = new double[LodMesh.CORNERS][3];
+        for (int c = 0; c < LodMesh.CORNERS; ++c) {
+            final int p = t * Clusters.TRIANGLE_VALUES + c * LodMesh.CORNERS;
+            final double length =
+                    Math.sqrt(
+                            corners[p] * corners[p]
+                                    + corners[p + 1] * corners[p + 1]
+                                    + corners[p + 2] * corners[p + 2]);
+            for (int axis = 0; axis < 3; ++axis) {
+                d[c][axis] = corners[p + axis] / length;
+            }
+            if (Math.abs(d[c][1]) > 0.9) {
+                return false;
+            }
+        }
+        final double limit = Math.cos(Math.toRadians(60));
+        for (int a = 0; a < LodMesh.CORNERS; ++a) {
+            final double[] u = d[a];
+            final double[] w = d[(a + 1) % LodMesh.CORNERS];
+            if (u[0] * w[0] + u[1] * w[1] + u[2] * w[2] < limit) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Untextured meshes keep no attributes at any level. */
