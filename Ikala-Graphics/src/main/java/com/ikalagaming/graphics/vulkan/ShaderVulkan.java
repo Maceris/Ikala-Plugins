@@ -13,6 +13,7 @@ import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.lwjgl.Version;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.util.shaderc.ShadercIncludeResolve;
@@ -28,12 +29,18 @@ import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * A shader program, compiled from GLSL to SPIR-V modules. Shaders can share code with {@code
  * #include "name.glsl"} (and {@code #extension GL_GOOGLE_include_directive : require}), which reads
- * the bundled {@value #INCLUDE_FOLDER} folder.
+ * the bundled {@value #INCLUDE_FOLDER} folder. Compiled modules are kept in a {@link ShaderCache},
+ * so a module whose source and includes haven't changed is read instead of compiled.
  */
 @Slf4j
 public class ShaderVulkan {
@@ -65,10 +72,32 @@ public class ShaderVulkan {
     /** Where {@code #include} finds files, in the bundled resources. */
     public static final String INCLUDE_FOLDER = "shaders/include/";
 
+    /** An include directive, capturing the included name. */
+    private static final Pattern INCLUDE =
+            Pattern.compile("^\\s*#\\s*include\\s*[\"<]([^\">]+)[\">]", Pattern.MULTILINE);
+
     /** It's always just main. */
     private static final String ENTRY_POINT = "main";
 
     private static final ByteBuffer ENTRY_POINT_AS_BUFFER = MemoryUtil.memASCII(ENTRY_POINT);
+
+    /** The optimization level modules are compiled at. */
+    private static final int OPTIMIZATION_LEVEL = shaderc_optimization_level_performance;
+
+    /** The Vulkan version modules are compiled for. */
+    private static final int TARGET_VERSION = shaderc_env_version_vulkan_1_3;
+
+    /**
+     * What compiles modules and how, for {@link ShaderCache} keys. The LWJGL version stands in for
+     * the shaderc version it bundles.
+     */
+    private static final String COMPILER_ID =
+            "lwjgl "
+                    + Version.getVersion()
+                    + " opt "
+                    + OPTIMIZATION_LEVEL
+                    + " vk "
+                    + TARGET_VERSION;
 
     /** The VkShaderModule's. */
     public final long[] shaderModules;
@@ -80,11 +109,14 @@ public class ShaderVulkan {
     @NonNull private final VulkanState state;
 
     /**
-     * Compile a module to SPIR-V and return the VkShaderModule handle.
+     * Compile a module to SPIR-V, or read it from the cache if it was compiled before, and return
+     * the VkShaderModule handle.
      *
      * @param moduleData The module we want to compile.
+     * @param state The Vulkan state to make the module with.
      * @param compiler The shaderc compiler handle.
      * @param options The shaderc compiler options.
+     * @param cache Where compiled modules are kept, or null to always compile.
      * @return The VkShaderModule handle.
      * @throws RenderException If there were compilation errors.
      */
@@ -92,15 +124,30 @@ public class ShaderVulkan {
             @NonNull ShaderModuleData moduleData,
             @NonNull VulkanState state,
             long compiler,
-            long options) {
+            long options,
+            ShaderCache cache) {
+        String sourceCode = readModule(moduleData);
+
+        int shaderType = mapShaderTypeToShaderc(moduleData.shaderType());
+        String shaderName = Paths.get(moduleData.shaderFile()).getFileName().toString();
+
+        String key = null;
+        if (cache != null) {
+            key = ShaderCache.key(withIncludes(sourceCode), shaderType, COMPILER_ID);
+            byte[] cached = cache.load(key);
+            if (cached != null) {
+                ByteBuffer spirvBytes = MemoryUtil.memAlloc(cached.length);
+                try {
+                    spirvBytes.put(cached).flip();
+                    return createModule(state, spirvBytes);
+                } finally {
+                    MemoryUtil.memFree(spirvBytes);
+                }
+            }
+        }
+
         long result = 0;
-
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            String sourceCode = readModule(moduleData);
-
-            int shaderType = mapShaderTypeToShaderc(moduleData.shaderType());
-            String shaderName = Paths.get(moduleData.shaderFile()).getFileName().toString();
-
+        try {
             result =
                     shaderc_compile_into_spv(
                             compiler, sourceCode, shaderType, shaderName, ENTRY_POINT, options);
@@ -114,6 +161,90 @@ public class ShaderVulkan {
 
             ByteBuffer spirvBytes = shaderc_result_get_bytes(result);
             assert spirvBytes != null;
+            log.trace("Compiled shader {}", moduleData.shaderFile());
+            if (key != null) {
+                cache.save(key, spirvBytes);
+            }
+            return createModule(state, spirvBytes);
+        } finally {
+            shaderc_result_release(result);
+        }
+    }
+
+    /**
+     * A module's source followed by every file it includes, directly or through other includes,
+     * each once, for a cache key. Finding includes in Java is far faster than shaderc's
+     * preprocessor, which builds glslang's built-in tables on every call. An include that is
+     * commented out or in an inactive branch still counts, which only means editing it compiles the
+     * module again.
+     *
+     * @param sourceCode The module's source.
+     * @return The source and its includes, each marked with its name.
+     */
+    private static String withIncludes(@NonNull String sourceCode) {
+        Set<String> seen = new LinkedHashSet<>();
+        List<String> pending = new ArrayList<>();
+        StringBuilder text = new StringBuilder(sourceCode);
+        addIncludes(sourceCode, seen, pending);
+        while (!pending.isEmpty()) {
+            String name = pending.remove(pending.size() - 1);
+            String content = readInclude(name);
+            // So a file's name and its neighbors' text can't run into each other
+            text.append('\0').append(name).append('\0');
+            if (content == null) {
+                text.append("missing");
+                continue;
+            }
+            text.append(content);
+            addIncludes(content, seen, pending);
+        }
+        return text.toString();
+    }
+
+    /**
+     * Queue the includes in some source not seen before.
+     *
+     * @param source The source.
+     * @param seen The names already queued, which this adds to.
+     * @param pending The names to read, which this adds to.
+     */
+    private static void addIncludes(
+            @NonNull String source, @NonNull Set<String> seen, @NonNull List<String> pending) {
+        Matcher matcher = INCLUDE.matcher(source);
+        while (matcher.find()) {
+            String name = matcher.group(1);
+            if (seen.add(name)) {
+                pending.add(name);
+            }
+        }
+    }
+
+    /**
+     * Read a bundled include.
+     *
+     * @param name The name in the include directive.
+     * @return Its text, or null if it is missing or can't be read.
+     */
+    private static String readInclude(@NonNull String name) {
+        try (InputStream stream =
+                ShaderVulkan.class.getClassLoader().getResourceAsStream(INCLUDE_FOLDER + name)) {
+            return stream == null
+                    ? null
+                    : new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Make a VkShaderModule from SPIR-V.
+     *
+     * @param state The Vulkan state to make it with.
+     * @param spirvBytes The SPIR-V, a direct buffer.
+     * @return The VkShaderModule handle.
+     */
+    private static long createModule(@NonNull VulkanState state, @NonNull ByteBuffer spirvBytes) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
             VkShaderModuleCreateInfo shaderModuleCreateInfo =
                     VkShaderModuleCreateInfo.calloc(stack).sType$Default().pCode(spirvBytes);
 
@@ -122,8 +253,6 @@ public class ShaderVulkan {
                     vkCreateShaderModule(
                             state.device.logical, shaderModuleCreateInfo, null, longOutput));
             return longOutput.get(0);
-        } finally {
-            shaderc_result_release(result);
         }
     }
 
@@ -222,15 +351,9 @@ public class ShaderVulkan {
             long requestingSource,
             long includeDepth) {
         final String name = MemoryUtil.memUTF8(requestedSource);
-        String content;
-        try (InputStream stream =
-                ShaderVulkan.class.getClassLoader().getResourceAsStream(INCLUDE_FOLDER + name)) {
-            content =
-                    stream == null
-                            ? "#error Missing include " + name + "\n"
-                            : new String(stream.readAllBytes(), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            content = "#error Couldn't read include " + name + "\n";
+        String content = readInclude(name);
+        if (content == null) {
+            content = "#error Missing include " + name + "\n";
         }
         ShadercIncludeResult result = ShadercIncludeResult.calloc();
         result.source_name(MemoryUtil.memUTF8(name, false));
@@ -264,22 +387,21 @@ public class ShaderVulkan {
         long compiler = shaderc_compiler_initialize();
         long options = shaderc_compile_options_initialize();
 
-        shaderc_compile_options_set_optimization_level(
-                options, shaderc_optimization_level_performance);
-        shaderc_compile_options_set_target_env(
-                options, shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
+        shaderc_compile_options_set_optimization_level(options, OPTIMIZATION_LEVEL);
+        shaderc_compile_options_set_target_env(options, shaderc_target_env_vulkan, TARGET_VERSION);
         ShadercIncludeResolve resolver = ShadercIncludeResolve.create(ShaderVulkan::resolveInclude);
         ShadercIncludeResultRelease releaser =
                 ShadercIncludeResultRelease.create(ShaderVulkan::releaseInclude);
         shaderc_compile_options_set_include_callbacks(options, resolver, releaser, 0);
 
         shaderStages = VkPipelineShaderStageCreateInfo.calloc(shaderModuleDataList.size());
+        ShaderCache cache = ShaderCache.fromSettings();
 
         try {
             shaderModules = new long[shaderModuleDataList.size()];
             for (int i = 0; i < shaderModuleDataList.size(); i++) {
                 ShaderModuleData data = shaderModuleDataList.get(i);
-                shaderModules[i] = compileModule(data, state, compiler, options);
+                shaderModules[i] = compileModule(data, state, compiler, options, cache);
                 shaderStages
                         .get(i)
                         .sType$Default()
