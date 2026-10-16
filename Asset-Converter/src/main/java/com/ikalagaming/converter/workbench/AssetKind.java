@@ -8,8 +8,11 @@ import java.util.Set;
 
 /** The kinds of raw asset the workbench opens, by file extension. */
 public enum AssetKind {
-    /** An image stb can decode, like a PNG or HDR file. */
-    IMAGE(Set.of("png", "jpg", "jpeg", "tga", "bmp", "psd", "gif", "hdr", "pic", "pnm", "ppm")),
+    /** An image: a DDS texture, or one stb can decode, like a PNG or HDR file. */
+    IMAGE(
+            Set.of(
+                    "dds", "png", "jpg", "jpeg", "tga", "bmp", "psd", "gif", "hdr", "pic", "pnm",
+                    "ppm")),
     /** Anything else. */
     UNKNOWN(Set.of());
 

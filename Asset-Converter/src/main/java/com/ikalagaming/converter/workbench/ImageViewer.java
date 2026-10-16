@@ -1,6 +1,8 @@
 package com.ikalagaming.converter.workbench;
 
+import com.ikalagaming.graphics.ColorSpace;
 import com.ikalagaming.graphics.TextureHandle;
+import com.ikalagaming.graphics.Textures;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.DrawList;
 import com.ikalagaming.graphics.gui.data.IkIO;
@@ -15,14 +17,14 @@ import lombok.Getter;
 import lombok.NonNull;
 import org.joml.Vector2f;
 
-import java.util.Locale;
 import javax.annotation.Nullable;
 
 /**
  * Shows an image the way an image viewer does: pan by dragging, zoom with the wheel around the
  * cursor, one channel at a time, any mip level, with an exposure for HDR images, and the value of
- * the pixel under the mouse. Draws with plain IkGui calls inside the workbench's immediate areas.
- * Render thread only.
+ * the pixel under the mouse. Textures whose format can be sRGB or linear can be switched between
+ * the two while shown. Draws with plain IkGui calls inside the workbench's immediate areas. Render
+ * thread only.
  */
 public class ImageViewer {
     /** The view's background, behind the image. */
@@ -54,6 +56,12 @@ public class ImageViewer {
      */
     @Getter private @Nullable TextureHandle texture;
 
+    /** The color space the texture is read in. */
+    private ColorSpace colorSpace = ColorSpace.SRGB;
+
+    /** Switches textures between color spaces. */
+    private final Textures textures;
+
     /** Where the image sits in the view. */
     private final ImageViewport viewport = new ImageViewport();
 
@@ -72,7 +80,10 @@ public class ImageViewer {
     /** How many stops brighter to show the colors. */
     private final float[] exposure = {0};
 
-    /** Whether the image holds linear values to encode to sRGB, like HDR images. */
+    /**
+     * Whether a texture that can't be sRGB holds linear light to encode to sRGB to show, like an
+     * HDR image. Textures read as sRGB are always encoded.
+     */
     private boolean linear;
 
     /** Whether to rebuild a tangent space normal from x and y. */
@@ -93,24 +104,41 @@ public class ImageViewer {
     /** The hovered pixel's value, reused. */
     private final float[] hoverValue = new float[ImageFile.CHANNELS];
 
+    /** Whether the hovered pixel could be read back. */
+    private boolean hoverKnown;
+
     /** Scratch for reading the mouse and layout, reused. */
     private final Vector2f scratch = new Vector2f();
+
+    /**
+     * Set up the viewer.
+     *
+     * @param textures Switches the shown texture between color spaces.
+     */
+    public ImageViewer(@NonNull Textures textures) {
+        this.textures = textures;
+    }
 
     /**
      * Show a new image, fitted to the view, with the view settings guessed from it.
      *
      * @param newImage The image.
      * @param newTexture The texture it was loaded as.
+     * @param loadedAs The color space it was loaded in.
      */
-    public void show(@NonNull ImageFile newImage, @NonNull TextureHandle newTexture) {
+    public void show(
+            @NonNull ImageFile newImage,
+            @NonNull TextureHandle newTexture,
+            @NonNull ColorSpace loadedAs) {
         image = newImage;
         texture = newTexture;
+        colorSpace = loadedAs;
         fitPending = true;
         mipLevel[0] = -1;
         exposure[0] = 0;
         channel = TextureView.Channel.RGBA;
         linear = newImage.depth() == ImageFile.Depth.HALF;
-        normalMap = looksLikeNormalMap(newImage.path().getFileName().toString());
+        normalMap = ImageFile.looksLikeNormalMap(newImage.path().getFileName().toString());
         hoverX = -1;
         hoverY = -1;
     }
@@ -119,29 +147,6 @@ public class ImageViewer {
     public void clear() {
         image = null;
         texture = null;
-    }
-
-    /**
-     * Guess from a file name whether it is a normal map, like {@code brick_normal.png} or {@code
-     * rock_nrm.tga}.
-     *
-     * @param name The file name.
-     * @return Whether it looks like a normal map.
-     */
-    static boolean looksLikeNormalMap(@NonNull String name) {
-        final String lower = name.toLowerCase(Locale.ROOT);
-        return lower.contains("normal") || lower.contains("_nrm") || lower.contains("_nor.");
-    }
-
-    /**
-     * How many mip levels a texture of this size has: down to 1 by 1, halving each time.
-     *
-     * @param width The width.
-     * @param height The height.
-     * @return The level count.
-     */
-    static int mipLevels(int width, int height) {
-        return 32 - Integer.numberOfLeadingZeros(Math.max(1, Math.max(width, height)));
     }
 
     /**
@@ -206,7 +211,7 @@ public class ImageViewer {
             if (x >= 0 && y >= 0 && x < shown.width() && y < shown.height()) {
                 hoverX = x;
                 hoverY = y;
-                shown.pixel(x, y, hoverValue);
+                hoverKnown = shown.pixel(x, y, hoverValue) != null;
                 outlineHovered(drawList, origin.x, origin.y);
             }
         }
@@ -283,12 +288,15 @@ public class ImageViewer {
      * @return The view.
      */
     TextureView currentView() {
+        final ImageFile shown = image;
+        // Textures read as sRGB are encoded by the GUI already
+        final boolean encode = linear && shown != null && !ColorSpace.canSwitch(shown.format());
         return new TextureView(
                 channel,
                 mipLevel[0],
                 exposure[0],
                 nearestWhenZoomed && viewport.getScale() > 1,
-                linear,
+                encode,
                 normalMap,
                 checker && channel == TextureView.Channel.RGBA);
     }
@@ -306,16 +314,34 @@ public class ImageViewer {
         }
         IkGui.separatorText("Image");
         if (IkGui.beginTable("info", 2, TableFlags.ROW_BACKGROUND)) {
-            final int levels = mipLevels(shown.width(), shown.height());
             row("File", shown.path().getFileName().toString());
             row("Size", shown.width() + " x " + shown.height());
-            row("Channels", channelText(shown.sourceChannels()));
-            row("Depth", shown.depth().label);
-            row("Loaded as", shown.depth().format.name());
-            row("Mip levels", Integer.toString(levels));
+            row("Channels", shown.channels());
+            if (shown.dds() == null) {
+                row("Depth", shown.depth().label);
+            }
+            row("Read as", colorSpace.apply(shown.format()).name());
+            row(
+                    "Mip levels",
+                    shown.mipLevels() + (shown.dds() == null ? ", made on load" : ", stored"));
             row("File size", sizeText(shown.fileSize()));
-            row("In memory", sizeText(shown.decodedBytes()));
+            row("Data size", sizeText(shown.dataBytes()));
             IkGui.endTable();
+        }
+
+        if (ColorSpace.canSwitch(shown.format())) {
+            IkGui.separatorText("Color space");
+            for (ColorSpace option : ColorSpace.values()) {
+                if (option != ColorSpace.SRGB) {
+                    IkGui.sameLine();
+                }
+                final String label = option == ColorSpace.SRGB ? "sRGB (color)" : "Linear (data)";
+                if (IkGui.radioButton(label, colorSpace == option) && colorSpace != option) {
+                    colorSpace = option;
+                    textures.setColorSpace(texture, option);
+                }
+            }
+            IkGui.textDisabled("Colors like base color are sRGB; normal and packed maps linear");
         }
 
         IkGui.separatorText("View");
@@ -327,15 +353,17 @@ public class ImageViewer {
                 channel = option;
             }
         }
-        final int levels = mipLevels(shown.width(), shown.height());
-        IkGui.sliderInt("Mip level", mipLevel, -1, levels - 1, mipLevel[0] < 0 ? "auto" : "%d");
+        IkGui.sliderInt(
+                "Mip level", mipLevel, -1, shown.mipLevels() - 1, mipLevel[0] < 0 ? "auto" : "%d");
         IkGui.sliderFloat("Exposure", exposure, -EXPOSURE_RANGE, EXPOSURE_RANGE, "%.1f stops");
-        if (IkGui.checkbox("Linear values (encode to sRGB)", linear)) {
-            linear = !linear;
+        if (!ColorSpace.canSwitch(shown.format())) {
+            if (IkGui.checkbox("Linear light (encode to sRGB)", linear)) {
+                linear = !linear;
+            }
+            IkGui.setItemTooltip(
+                    "For images that store light linearly, like HDR images. This format can't be"
+                            + " read as sRGB.");
         }
-        IkGui.setItemTooltip(
-                "For images that store light linearly, like HDR images. Color images saved"
-                        + " from paint programs are already sRGB.");
         if (IkGui.checkbox("Normal map", normalMap)) {
             normalMap = !normalMap;
         }
@@ -362,7 +390,12 @@ public class ImageViewer {
             IkGui.textDisabled("Hover over the image");
         } else {
             IkGui.text("x " + hoverX + ", y " + hoverY);
-            IkGui.text(pixelText(shown.depth(), hoverValue));
+            if (hoverKnown) {
+                IkGui.text(pixelText(shown.depth(), hoverValue));
+                IkGui.textDisabled("As stored in the top level");
+            } else {
+                IkGui.textDisabled("Can't read back " + shown.format().name());
+            }
         }
     }
 
@@ -384,23 +417,6 @@ public class ImageViewer {
         }
         return String.format(
                 "R %.4f  G %.4f  B %.4f  A %.4f", value[0], value[1], value[2], value[3]);
-    }
-
-    /**
-     * Describe a channel count.
-     *
-     * @param channels The count.
-     * @return For example "3 (RGB)".
-     */
-    private static String channelText(int channels) {
-        final String names =
-                switch (channels) {
-                    case 1 -> "gray";
-                    case 2 -> "gray, alpha";
-                    case 3 -> "RGB";
-                    default -> "RGBA";
-                };
-        return channels + " (" + names + ")";
     }
 
     /**

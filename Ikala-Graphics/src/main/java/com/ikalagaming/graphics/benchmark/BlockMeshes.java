@@ -293,7 +293,7 @@ public final class BlockMeshes {
                         tile,
                         textures.load(
                                 buffer,
-                                Format.R8G8B8A8_UNORM,
+                                Format.R8G8B8A8_SRGB,
                                 BlockTextures.SIZE,
                                 BlockTextures.SIZE));
             } finally {

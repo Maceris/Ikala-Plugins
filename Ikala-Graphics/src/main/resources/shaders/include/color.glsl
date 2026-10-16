@@ -8,4 +8,11 @@ vec3 sRGBToLinear(vec3 color) {
     return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), greaterThan(c, vec3(0.04045)));
 }
 
+// The inverse: linear light to the sRGB curve. Textures read as sRGB sample in linear light, and
+// the g-buffer and lighting take base colors sRGB encoded, so their samples go back through this.
+vec3 linearToSRGB(vec3 color) {
+    vec3 c = clamp(color, 0.0, 1.0);
+    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, greaterThan(c, vec3(0.0031308)));
+}
+
 #endif

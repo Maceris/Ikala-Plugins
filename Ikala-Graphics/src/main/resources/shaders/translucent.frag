@@ -66,6 +66,8 @@ void main() {
     vec4 baseColor = material.baseColor;
     if (material.textureIndex > 0) {
         baseColor = texture(bindlessTextures[nonuniformEXT(material.textureIndex)], outTextCoord);
+        // Sampled in linear light; lighting takes base colors sRGB encoded, as materials give them
+        baseColor.rgb = linearToSRGB(baseColor.rgb);
     }
     float alpha = min(baseColor.a, MAX_OPACITY);
     if (alpha <= 0.0

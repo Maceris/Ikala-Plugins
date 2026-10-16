@@ -559,6 +559,9 @@ public class VulkanInstance {
             VkPhysicalDeviceFeatures enabledVkFeatures = VkPhysicalDeviceFeatures.calloc(stack);
             enabledVkFeatures
                     .samplerAnisotropy(true)
+                    // Block compressed textures, like most DDS files, where the device has them
+                    .textureCompressionBC(
+                            state.device.physical.deviceFeatures.textureCompressionBC())
                     .fillModeNonSolid(true)
                     // Scene draws use indirect commands with several draws and base instances
                     .multiDrawIndirect(true)

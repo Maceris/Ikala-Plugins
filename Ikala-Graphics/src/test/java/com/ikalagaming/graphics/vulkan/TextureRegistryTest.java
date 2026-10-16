@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ikalagaming.graphics.ColorSpace;
 import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.TextureHandle;
 
@@ -189,5 +190,32 @@ class TextureRegistryTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> add(OWNER_A, inSlot(TextureInfoVulkan.NO_BINDLESS_INDEX)));
+    }
+
+    @Test
+    void alternateViewChangesSlotAndColorSpace() {
+        TextureInfoVulkan info = inSlot(3);
+        TextureHandle handle = add(OWNER_A, info);
+        registry.markResident(handle);
+        assertEquals(ColorSpace.LINEAR, registry.colorSpaceOf(handle));
+
+        // An sRGB view in another slot, only sampled once it is active
+        info.alternate = inSlot(5);
+        assertEquals(3, registry.slotOrDefault(handle));
+        info.alternateActive = true;
+        assertEquals(5, registry.slotOrDefault(handle));
+        assertEquals(ColorSpace.SRGB, registry.colorSpaceOf(handle));
+    }
+
+    @Test
+    void averagesInLinearLight() {
+        // Black and white average to half the light, which is brighter than half the sRGB value
+        byte[] pixels = {0, 0, 0, 0, -1, -1, -1, -1};
+        float[] srgb = TextureLoaderVulkan.average(pixels, 0, 2, true);
+        assertEquals(0.5f, srgb[0], 0.0001f);
+        assertEquals(0.5f, srgb[3], 0.0001f);
+        float[] linear = TextureLoaderVulkan.average(new byte[] {64, 0, 0, -1}, 0, 1, false);
+        assertEquals(64 / 255.0f, linear[0], 0.0001f);
+        assertEquals(1, linear[3], 0.0001f);
     }
 }

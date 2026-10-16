@@ -1,5 +1,6 @@
 package com.ikalagaming.converter.workbench;
 
+import com.ikalagaming.graphics.ColorSpace;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.UI;
@@ -62,7 +63,7 @@ public class Workbench {
     private final FileBrowser browser;
 
     /** Shows the open image. */
-    private final ImageViewer viewer = new ImageViewer();
+    private final ImageViewer viewer;
 
     /** Decodes files off the render thread, one at a time. */
     private final ExecutorService loader =
@@ -105,6 +106,7 @@ public class Workbench {
         this.graphics = graphics;
         this.ui = ui;
         this.back = back;
+        viewer = new ImageViewer(graphics.textures());
         browser = new FileBrowser(Path.of(""));
         path = new TextInput("path", "").onSubmit(this::openPath).width(Sizing.grow());
         files = new Column("files").align(Align.STRETCH);
@@ -219,7 +221,8 @@ public class Workbench {
         final Path absolute = file.toAbsolutePath().normalize();
         final AssetKind kind = AssetKind.of(absolute);
         if (kind != AssetKind.IMAGE) {
-            status.text("Can't open " + absolute.getFileName() + " yet, only images");
+            status.text(
+                    "Can't open " + absolute.getFileName() + " yet, only images and DDS textures");
             return;
         }
         final int request = requests.incrementAndGet();
@@ -247,15 +250,18 @@ public class Workbench {
         final long start = System.nanoTime();
         try {
             final ImageFile image = ImageFile.read(file);
+            final ColorSpace colorSpace = image.defaultColorSpace();
             final TextureHandle texture =
-                    graphics.textures()
-                            .load(
-                                    image.pixels(),
-                                    image.depth().format,
-                                    image.width(),
-                                    image.height());
+                    image.dds() != null
+                            ? graphics.textures().load(image.dds(), colorSpace)
+                            : graphics.textures()
+                                    .load(
+                                            image.pixels(),
+                                            colorSpace.apply(image.format()),
+                                            image.width(),
+                                            image.height());
             final long millis = (System.nanoTime() - start) / 1_000_000;
-            ui.post(() -> loaded(request, image, texture, millis));
+            ui.post(() -> loaded(request, image, texture, colorSpace, millis));
         } catch (IOException | RuntimeException e) {
             log.warn("Could not open {}", file, e);
             final String message = "Can't open " + file.getFileName() + ": " + e.getMessage();
@@ -273,15 +279,21 @@ public class Workbench {
      * @param request Which request this was.
      * @param image The image.
      * @param texture Its texture.
+     * @param colorSpace The color space it was loaded in.
      * @param millis How long decoding took.
      */
-    private void loaded(int request, ImageFile image, TextureHandle texture, long millis) {
+    private void loaded(
+            int request,
+            ImageFile image,
+            TextureHandle texture,
+            ColorSpace colorSpace,
+            long millis) {
         if (request != requests.get()) {
             graphics.textures().release(texture);
             return;
         }
         releaseTexture();
-        viewer.show(image, texture);
+        viewer.show(image, texture, colorSpace);
         status.text(String.format("Opened %s in %d ms", image.path().getFileName(), millis));
     }
 

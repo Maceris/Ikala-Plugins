@@ -1,8 +1,12 @@
 package com.ikalagaming.converter.workbench;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ikalagaming.graphics.ColorSpace;
 import com.ikalagaming.graphics.Format;
 
 import org.junit.jupiter.api.Test;
@@ -11,6 +15,8 @@ import org.junit.jupiter.api.io.TempDir;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,9 +39,9 @@ class ImageFileTest {
         ImageFile image = ImageFile.read(file);
         assertEquals(3, image.width());
         assertEquals(2, image.height());
-        assertEquals(4, image.sourceChannels());
+        assertEquals("4 (RGBA)", image.channels());
         assertEquals(ImageFile.Depth.UNORM8, image.depth());
-        assertEquals(Format.R8G8B8A8_UNORM, image.depth().format);
+        assertEquals(Format.R8G8B8A8_UNORM, image.format());
         assertEquals(3 * 2 * 4, image.pixels().remaining());
 
         float[] pixel = image.pixel(0, 0, new float[4]);
@@ -58,7 +64,7 @@ class ImageFileTest {
         ImageIO.write(source, "png", file.toFile());
 
         ImageFile image = ImageFile.read(file);
-        assertEquals(1, image.sourceChannels());
+        assertEquals("1 (gray)", image.channels());
         float[] pixel = image.pixel(1, 0, new float[4]);
         for (int c = 0; c < 3; ++c) {
             assertEquals(200 / 255.0f, pixel[c], 0.001f);
@@ -75,7 +81,7 @@ class ImageFileTest {
 
         ImageFile image = ImageFile.read(file);
         assertEquals(ImageFile.Depth.UNORM16, image.depth());
-        assertEquals(Format.R16G16B16A16_UNORM, image.depth().format);
+        assertEquals(Format.R16G16B16A16_UNORM, image.format());
         assertEquals(1000 / 65_535.0f, image.pixel(0, 0, new float[4])[0], 0.000_01f);
     }
 
@@ -93,7 +99,7 @@ class ImageFileTest {
 
         ImageFile image = ImageFile.read(file);
         assertEquals(ImageFile.Depth.HALF, image.depth());
-        assertEquals(Format.R16G16B16A16_SFLOAT, image.depth().format);
+        assertEquals(Format.R16G16B16A16_SFLOAT, image.format());
         assertEquals(2 * 4 * Short.BYTES, image.pixels().remaining());
         float[] pixel = image.pixel(0, 0, new float[4]);
         assertEquals(1, pixel[0], 0.001f);
@@ -118,5 +124,66 @@ class ImageFileTest {
         ImageIO.write(source, "png", file.toFile());
         ImageFile image = ImageFile.read(file);
         assertThrows(IndexOutOfBoundsException.class, () -> image.pixel(1, 0, new float[4]));
+    }
+
+    /**
+     * Write a one level 4x4 DDS file holding one block.
+     *
+     * @param file Where to write it.
+     * @param fourCC The four character code.
+     * @param block The block's bytes.
+     * @throws IOException If it can't be written.
+     */
+    private static void writeDds(Path file, String fourCC, byte[] block) throws IOException {
+        ByteBuffer out = ByteBuffer.allocate(128 + block.length).order(ByteOrder.LITTLE_ENDIAN);
+        out.putInt(0, 0x20534444);
+        out.putInt(4, 124);
+        out.putInt(8, 0x1 | 0x2 | 0x4 | 0x1000);
+        out.putInt(12, 4);
+        out.putInt(16, 4);
+        out.putInt(76, 32);
+        out.putInt(80, 0x4);
+        out.put(84, fourCC.getBytes(StandardCharsets.US_ASCII));
+        out.put(128, block);
+        Files.write(file, out.array());
+    }
+
+    @Test
+    void testDds() throws IOException {
+        // BC1, red and blue end points, every pixel index 0, so all red
+        Path file = folder.resolve("Brick_BaseColor.dds");
+        writeDds(file, "DXT1", new byte[] {0x00, (byte) 0xF8, 0x1F, 0x00, 0, 0, 0, 0});
+        ImageFile image = ImageFile.read(file);
+        assertNotNull(image.dds());
+        assertEquals(Format.BC1_RGBA_UNORM_BLOCK, image.format());
+        assertEquals(1, image.mipLevels());
+        assertEquals(8, image.dataBytes());
+        assertEquals(ColorSpace.SRGB, image.defaultColorSpace());
+        float[] pixel = image.pixel(3, 3, new float[4]);
+        assertEquals(1, pixel[0], 0.001f);
+        assertEquals(0, pixel[2], 0.001f);
+    }
+
+    @Test
+    void testDdsWithoutReadBack() throws IOException {
+        // BC5 normal maps decode; their format can't be sRGB, so they load linear
+        Path normal = folder.resolve("Brick_Normal.dds");
+        writeDds(normal, "ATI2", new byte[16]);
+        ImageFile image = ImageFile.read(normal);
+        assertEquals(ColorSpace.LINEAR, image.defaultColorSpace());
+        assertNotNull(image.pixel(0, 0, new float[4]));
+    }
+
+    @Test
+    void testColorSpaceGuess() {
+        assertTrue(ImageFile.looksLikeData("Antenna_Metal_Specular.dds"));
+        assertTrue(ImageFile.looksLikeData("rock_nrm.png"));
+        assertTrue(ImageFile.looksLikeData("wall_roughness.png"));
+        assertFalse(ImageFile.looksLikeData("Antenna_Metal_BaseColor.dds"));
+        assertFalse(ImageFile.looksLikeData("sky.png"));
+        assertTrue(ImageFile.looksLikeNormalMap("Antenna_Metal_Normal.dds"));
+        assertEquals(
+                java.util.List.of("wood", "base", "color", "2k"),
+                ImageFile.words("Wood_BaseColor-2k.dds"));
     }
 }

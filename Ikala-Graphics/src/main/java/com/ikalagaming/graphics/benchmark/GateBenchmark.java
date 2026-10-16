@@ -2043,7 +2043,7 @@ public final class GateBenchmark {
                     graphics.textures()
                             .load(
                                     buffer,
-                                    Format.R8G8B8A8_UNORM,
+                                    Format.R8G8B8A8_SRGB,
                                     TestMeshes.TEXTURE_SIZE,
                                     TestMeshes.TEXTURE_SIZE);
         } finally {

@@ -3,6 +3,7 @@ package com.ikalagaming.graphics.vulkan.stages;
 import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
+import com.ikalagaming.graphics.ColorSpace;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.TextureHandle;
@@ -462,19 +463,31 @@ public class GuiRender implements RenderStage {
     }
 
     /**
-     * Look up the bindless slot for a texture used by the GUI.
+     * Set in a GUI texture index for a texture read in the sRGB color space, which shaders sample
+     * in linear light, so the GUI encodes it back to show it as stored. Must line up with
+     * ikgui.frag.
+     */
+    static final int SRGB_TEXTURE_FLAG = 1 << 30;
+
+    /**
+     * Look up the bindless slot for a texture used by the GUI, flagged if it is read as sRGB.
      *
      * @param state The Vulkan state.
      * @param texture The texture.
      * @return The bindless slot, or the default white texture while the texture is still loading or
-     *     after it was released.
+     *     after it was released, with {@link #SRGB_TEXTURE_FLAG} set for sRGB textures.
      */
     private static int getBindlessIndex(
             @NonNull VulkanState state, @NonNull TextureHandle texture) {
         if (!state.textureRegistry.isValid(texture)) {
             log.warn("Can't render texture {} in the GUI, it was released", texture);
         }
-        return state.textureRegistry.slotOrDefault(texture);
+        final int slot = state.textureRegistry.slotOrDefault(texture);
+        if (slot != ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX
+                && state.textureRegistry.colorSpaceOf(texture) == ColorSpace.SRGB) {
+            return slot | SRGB_TEXTURE_FLAG;
+        }
+        return slot;
     }
 
     /**

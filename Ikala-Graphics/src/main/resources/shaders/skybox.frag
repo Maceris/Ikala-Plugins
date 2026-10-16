@@ -18,11 +18,12 @@ layout(set = 0, binding = 0) uniform Uniforms {
 
 layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
 
-// The sky is authored in sRGB; the scene color is linear light, tone mapped later
+// The scene color is linear light, tone mapped later. The sky's texture samples in linear light
+// already; its color is given sRGB encoded, as material colors are.
 void main()
 {
-    vec4 color = hasTexture == 1
-        ? texture(bindlessTextures[nonuniformEXT(textureIndex)], outTextCoord)
-        : diffuse;
-    fragColor = vec4(sRGBToLinear(color.rgb), 1.0);
+    vec3 color = hasTexture == 1
+        ? texture(bindlessTextures[nonuniformEXT(textureIndex)], outTextCoord).rgb
+        : sRGBToLinear(diffuse.rgb);
+    fragColor = vec4(color, 1.0);
 }

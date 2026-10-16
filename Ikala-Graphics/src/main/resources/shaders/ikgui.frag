@@ -96,23 +96,37 @@ layout(push_constant) uniform DrawListOffsets {
     int detailOffset;
 };
 
-vec4 sampleTexture(int textureIndex, vec2 uv) {
-    return texture(bindlessTextures[nonuniformEXT(textureIndices[textureIndex])], uv);
-}
+// Set in a texture index for a texture read as sRGB, which samples in linear light, so it is
+// encoded back to show as stored. See GuiRender.SRGB_TEXTURE_FLAG.
+const int SRGB_TEXTURE_FLAG = 1 << 30;
 
 // The exact sRGB curve, as in tonemap.frag
-vec3 viewLinearToSRGB(vec3 color) {
+vec3 linearToSRGB(vec3 color) {
     vec3 c = clamp(color, 0.0, 1.0);
     return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, greaterThan(c, vec3(0.0031308)));
+}
+
+vec4 sampleTexture(int textureIndex, vec2 uv) {
+    const int entry = textureIndices[textureIndex];
+    vec4 color = texture(bindlessTextures[nonuniformEXT(entry & ~SRGB_TEXTURE_FLAG)], uv);
+    if ((entry & SRGB_TEXTURE_FLAG) != 0) {
+        color.rgb = linearToSRGB(color.rgb);
+    }
+    return color;
 }
 
 // Sample a texture the way an image viewer shows it.
 // view.pos = (channel, mip level, or below 0 to pick it from the screen size as usual),
 // view.misc = (exposure in stops, options).
 vec4 sampleTextureView(int textureIndex, vec2 uv, Point view, vec2 fragPos) {
-    const int slot = textureIndices[textureIndex];
+    const int entry = textureIndices[textureIndex];
+    const int slot = entry & ~SRGB_TEXTURE_FLAG;
     const int channel = int(view.pos.x);
-    const int options = int(view.misc.y);
+    int options = int(view.misc.y);
+    if ((entry & SRGB_TEXTURE_FLAG) != 0) {
+        // Sampled in linear light already
+        options |= VIEW_OPTION_ENCODE_SRGB;
+    }
     const int levels = textureQueryLevels(bindlessTextures[nonuniformEXT(slot)]);
     const bool autoLevel = view.pos.y < 0.0f;
     const float level = clamp(view.pos.y, 0.0f, float(levels - 1));
@@ -146,7 +160,7 @@ vec4 sampleTextureView(int textureIndex, vec2 uv, Point view, vec2 fragPos) {
         default: break;
     }
     if ((options & VIEW_OPTION_ENCODE_SRGB) != 0) {
-        color.rgb = viewLinearToSRGB(color.rgb);
+        color.rgb = linearToSRGB(color.rgb);
     }
     if ((options & VIEW_OPTION_CHECKER) != 0) {
         const ivec2 square = ivec2(floor(fragPos / VIEW_CHECKER_SIZE));

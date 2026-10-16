@@ -184,7 +184,8 @@ void main() {
                     // Without a texture, the face's holes show the canopy's inside, which only
                     // the dim light under cover reaches, by how much they cover
                     vec3 under = ambient * skyLightFloor;
-                    vec3 albedo = textured ? sRGBToLinear(texel.rgb) : voxel.rgb;
+                    // Textures sample in linear light already
+                    vec3 albedo = textured ? texel.rgb : voxel.rgb;
                     if (debugSources != 0u) {
                         albedo = BRICK_SOURCE_COLOR;
                     }

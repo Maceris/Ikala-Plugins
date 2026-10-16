@@ -2,6 +2,7 @@
 #extension GL_EXT_nonuniform_qualifier : enable
 #extension GL_GOOGLE_include_directive : require
 
+#include "color.glsl"
 #include "material.glsl"
 #include "volume_fade.glsl"
 #include "alpha_test.glsl"
@@ -140,7 +141,10 @@ void main() {
         tangent = normalize(cross(surfaceNormal, across));
         bitangent = cross(surfaceNormal, tangent);
     } else if (material.textureIndex > 0) {
+        // Sampled in linear light (sRGB textures are decoded by the GPU); the g-buffer holds base
+        // colors sRGB encoded, as material colors are given
         baseColor = sampleTexture(material.textureIndex);
+        baseColor.rgb = linearToSRGB(baseColor.rgb);
     }
     if (ALPHA_TEST) {
         bool covered = baseColor.a >= ALPHA_CUT;

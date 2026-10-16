@@ -3,6 +3,8 @@ package com.ikalagaming.graphics.vulkan;
 import static org.lwjgl.util.vma.Vma.vmaDestroyImage;
 import static org.lwjgl.vulkan.VK13.*;
 
+import com.ikalagaming.graphics.Format;
+
 import lombok.NonNull;
 
 /** Tracks handles for a texture, but does not handle the lifetimes. */
@@ -18,6 +20,35 @@ public class TextureInfoVulkan {
      * @see BindlessTextures
      */
     public int bindlessIndex = NO_BINDLESS_INDEX;
+
+    /**
+     * The same image read in its format's other color space, sRGB for UNORM or UNORM for sRGB, with
+     * its own view and bindless slot. Only the view, sampler and slot are set. Null until a color
+     * space switch first asks for it.
+     *
+     * @see com.ikalagaming.graphics.ColorSpace
+     */
+    public TextureInfoVulkan alternate;
+
+    /** Whether shaders sample {@link #alternate} instead of this texture's own view. */
+    public volatile boolean alternateActive;
+
+    /** The format the image was created with. Null if unknown. */
+    public Format format;
+
+    /** How many mip levels the image has. */
+    public int mipLevels = 1;
+
+    /**
+     * The bindless slot shaders should sample: the alternate view's while it is active, otherwise
+     * this texture's own.
+     *
+     * @return The slot.
+     */
+    public int activeIndex() {
+        final TextureInfoVulkan other = alternate;
+        return alternateActive && other != null ? other.bindlessIndex : bindlessIndex;
+    }
 
     /**
      * Whether the sampler belongs to this texture and should be destroyed with it, as opposed to
@@ -82,12 +113,16 @@ public class TextureInfoVulkan {
     }
 
     /**
-     * Destroy the view, the image, and the sampler if this texture owns it, then clear the handles.
-     * This does not release the bindless slot. The GPU must be done with the texture.
+     * Destroy the views, the image, and the sampler if this texture owns it, then clear the
+     * handles. This does not release the bindless slot. The GPU must be done with the texture.
      *
      * @param state The Vulkan state.
      */
     public void destroy(@NonNull VulkanState state) {
+        if (alternate != null) {
+            vkDestroyImageView(state.device.logical, alternate.view, null);
+            alternate.view = VK_NULL_HANDLE;
+        }
         vkDestroyImageView(state.device.logical, view, null);
         view = VK_NULL_HANDLE;
         if (ownsSampler) {

@@ -13,7 +13,7 @@ reloaded plugin starts clean. Each part of the API is a method on the context:
 
 | Call          | What it provides                                                                                               |
 |---------------|----------------------------------------------------------------------------------------------------------------|
-| `textures()`  | Load textures (`load(path)`) as handles; their average colors are kept for distant drawing.                    |
+| `textures()`  | Load textures (`load(path, colorSpace)`, DDS or stb images) as handles; color or data, switchable later.       |
 | `meshes()`    | Register meshes and models for drawing, or `registerBakeable` for meshes that sections place.                  |
 | `instances()` | Place, move, rotate, scale and remove models in the world, set their materials and animations.                 |
 | `lights()`    | Point and spot lights with color, intensity, range, cone and whether they cast shadows.                        |
@@ -97,7 +97,10 @@ What the renderer does and the work it builds on.
 
 - Deferred shading into a G-buffer, linear HDR lighting, tone mapped once with
   [Khronos PBR Neutral](https://github.com/KhronosGroup/ToneMapping). Colors are authored in sRGB
-  and decoded exactly.
+  and decoded exactly: color textures load as `_SRGB` formats the GPU decodes and filters in linear
+  light, data textures such as normal maps as `_UNORM`, and either can be switched while loaded.
+- DDS textures load with their stored mip levels, block compressed (BC1 to BC7) as they are; their
+  average colors, kept for distant drawing, come from a small level decoded on the CPU.
 - Bindless textures and materials in storage buffers; one fixed set of global bindings.
 - GPU-driven culling: a compute pass culls instances, sections and LOD clusters by frustum and
   two-phase Hi-Z occlusion against a depth pyramid, and writes indirect draws with counts.

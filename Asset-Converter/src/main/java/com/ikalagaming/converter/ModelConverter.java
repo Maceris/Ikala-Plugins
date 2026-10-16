@@ -1,5 +1,6 @@
 package com.ikalagaming.converter;
 
+import com.ikalagaming.graphics.ColorSpace;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.Textures;
 import com.ikalagaming.graphics.exceptions.ModelException;
@@ -615,7 +616,7 @@ public class ModelConverter {
         String normalMapPath = aiNormalMapPath.dataString();
         if (!normalMapPath.isEmpty()) {
             normalMapPath = modelDir + File.separator + new File(normalMapPath).getName();
-            material.setNormalMap(textures.load(normalMapPath));
+            material.setNormalMap(textures.load(normalMapPath, ColorSpace.LINEAR));
         }
 
         return material;

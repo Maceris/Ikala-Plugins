@@ -4,10 +4,13 @@ import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.util.vma.Vma.*;
 import static org.lwjgl.vulkan.VK13.*;
 
+import com.ikalagaming.graphics.ColorSpace;
 import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.exceptions.TextureException;
+import com.ikalagaming.graphics.texture.BlockDecoder;
+import com.ikalagaming.graphics.texture.DdsFile;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
@@ -19,16 +22,21 @@ import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.util.vma.VmaAllocationCreateInfo;
 import org.lwjgl.vulkan.*;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
+import java.nio.file.Path;
+import java.util.Locale;
 
 /**
  * Loads textures onto the GPU. Every texture is registered in the bindless texture array, and in
  * the {@link TextureRegistry} under the plugin that owns it.
  *
  * <p>Textures end up in {@link VK13#VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL}, ready to be sampled. When
- * data is provided, mipmaps are generated if the format supports it. {@link #load(String,
+ * data is provided, mipmaps are generated if the format supports it, unless the data holds them
+ * already, as DDS files do. Images whose format has an sRGB and a UNORM version can be read either
+ * way, see {@link #applyColorSpace(TextureInfoVulkan, ColorSpace)}. {@link #load(String,
  * ByteBuffer, Format, int, int)} queues the upload and works from any thread; everything else is
  * for the render thread.
  */
@@ -259,9 +267,66 @@ public class TextureLoaderVulkan {
             int width,
             int height) {
         final int mipLevels = mipLevels(buffer != null, format, width, height);
-        TextureInfoVulkan info =
-                createImage(format.getVkFormat(), width, height, mipLevels, mipLevels > 1);
+        TextureInfoVulkan info = createImage(format, width, height, mipLevels, mipLevels > 1);
+        final float[] average = buffer == null ? null : average(buffer, format);
+        return queue(owner, info, buffer, format, width, height, average, null);
+    }
 
+    /**
+     * Start loading a texture from a DDS file, with the mip levels it holds. Safe from any thread,
+     * as {@link #load(String, ByteBuffer, Format, int, int)} is.
+     *
+     * @param owner The owner key the texture is tracked under.
+     * @param dds The file.
+     * @param colorSpace The color space to read it in, for formats that can be either.
+     * @return The handle for the texture, pending until uploaded.
+     * @throws TextureException If the format is not supported, or there are no bindless slots left.
+     */
+    public TextureHandle load(
+            @NonNull String owner, @NonNull DdsFile dds, @NonNull ColorSpace colorSpace) {
+        final Format format = colorSpace.apply(dds.getFormat());
+        formatFeatures(format);
+        final int width = dds.getWidth();
+        final int height = dds.getHeight();
+        TextureInfoVulkan info = createImage(format, width, height, dds.getMipLevels(), false);
+        final int[] offsets = new int[dds.getMipLevels()];
+        for (int level = 0; level < offsets.length; ++level) {
+            offsets[level] = dds.levelOffset(level);
+        }
+        return queue(
+                owner,
+                info,
+                dds.getData(),
+                format,
+                width,
+                height,
+                average(dds, ColorSpace.of(format)),
+                offsets);
+    }
+
+    /**
+     * Reserve a slot for a created texture, track it, stage its data, and queue the upload.
+     *
+     * @param owner The owner key the texture is tracked under.
+     * @param info The texture, with its image and view.
+     * @param buffer The data, from its position to its limit, or null to clear the texture.
+     * @param format The format.
+     * @param width The width in pixels.
+     * @param height The height in pixels.
+     * @param average Its average color, or null if it couldn't be worked out.
+     * @param levelOffsets Where each level starts in the data, or null to generate the mip levels.
+     * @return The handle for the texture, pending until uploaded.
+     * @throws TextureException If there are no bindless slots left.
+     */
+    private TextureHandle queue(
+            String owner,
+            TextureInfoVulkan info,
+            ByteBuffer buffer,
+            Format format,
+            int width,
+            int height,
+            float[] average,
+            int[] levelOffsets) {
         if (state.bindlessTextures.reserve(info)
                 == ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX) {
             // Out of slots, since the default texture already has that slot. Never used by the
@@ -274,7 +339,6 @@ public class TextureLoaderVulkan {
             throw new TextureException(error);
         }
         TextureHandle handle = state.textureRegistry.add(owner, info, width, height, format);
-        final float[] average = buffer == null ? null : average(buffer, format);
         if (average != null) {
             state.textureRegistry.setAverage(handle, average);
         }
@@ -292,42 +356,89 @@ public class TextureLoaderVulkan {
         }
         state.textureUploads.add(
                 new TextureUploads.Request(
-                        handle, info, staging, width, height, mipLevels, canClearColor(format)));
+                        handle,
+                        info,
+                        staging,
+                        width,
+                        height,
+                        info.mipLevels,
+                        canClearColor(format),
+                        levelOffsets));
         return handle;
     }
 
     /**
-     * Work out a texture's average color, as its smallest mip holds it: an sRGB texture's pixels
-     * averaged in linear light, anything else's bytes averaged as stored, then decoded as the
-     * shaders decode it.
+     * Work out an 8 bit RGBA texture's average color from its pixels.
      *
      * @param buffer The pixel data, from its position to its limit.
      * @param format Its format.
-     * @return The average linear red, green and blue and the average opacity, or null for a format
-     *     it can't read.
+     * @return The average, see {@link #average(byte[], int, int, boolean)}, or null for a format it
+     *     can't read.
      */
     private static float[] average(@NonNull ByteBuffer buffer, @NonNull Format format) {
-        final boolean srgb = format == Format.R8G8B8A8_SRGB;
-        if (!srgb && format != Format.R8G8B8A8_UNORM) {
+        if (format != Format.R8G8B8A8_SRGB && format != Format.R8G8B8A8_UNORM) {
             return null;
         }
-        final int start = buffer.position();
-        final int pixels = buffer.remaining() / RGBA;
-        if (pixels == 0) {
+        final byte[] pixels = new byte[buffer.remaining()];
+        buffer.get(buffer.position(), pixels);
+        return average(pixels, 0, pixels.length / RGBA, ColorSpace.of(format) == ColorSpace.SRGB);
+    }
+
+    /** The most pixels a DDS texture's average is worked out from. */
+    static final int AVERAGE_PIXELS = 64 * 64;
+
+    /**
+     * Work out a DDS texture's average color, from a small mip level decoded on the CPU: the
+     * largest with at most {@link #AVERAGE_PIXELS} pixels, or the smallest the file holds.
+     *
+     * @param dds The file.
+     * @param colorSpace The color space it is read in.
+     * @return The average, see {@link #average(byte[], int, int, boolean)}, or null for a format
+     *     that can't be decoded, like BC7.
+     */
+    static float[] average(@NonNull DdsFile dds, @NonNull ColorSpace colorSpace) {
+        if (!BlockDecoder.canDecode(dds.getFormat())) {
+            return null;
+        }
+        int level = dds.getMipLevels() - 1;
+        while (level > 0
+                && (long) dds.levelWidth(level - 1) * dds.levelHeight(level - 1)
+                        <= AVERAGE_PIXELS) {
+            --level;
+        }
+        final byte[] pixels = BlockDecoder.decode(dds, level);
+        if (pixels == null) {
+            return null;
+        }
+        return average(pixels, 0, pixels.length / RGBA, colorSpace == ColorSpace.SRGB);
+    }
+
+    /**
+     * Work out the average color of 8 bit RGBA pixels: sRGB colors averaged in linear light, linear
+     * ones as stored.
+     *
+     * @param pixels The pixels.
+     * @param start Where the first pixel starts.
+     * @param count How many pixels.
+     * @param srgb Whether the colors are sRGB encoded.
+     * @return The average linear red, green and blue and the average opacity, or null if there are
+     *     no pixels.
+     */
+    static float[] average(byte @NonNull [] pixels, int start, int count, boolean srgb) {
+        if (count <= 0) {
             return null;
         }
         final double[] sums = new double[RGBA];
-        for (int i = 0; i < pixels; ++i) {
+        for (int i = 0; i < count; ++i) {
             for (int channel = 0; channel < RGBA; ++channel) {
-                final int value = Byte.toUnsignedInt(buffer.get(start + i * RGBA + channel));
+                final int value = Byte.toUnsignedInt(pixels[start + i * RGBA + channel]);
                 sums[channel] +=
                         srgb && channel < ALPHA ? DECODED[value] : value / (double) BYTE_MAX;
             }
         }
         final float[] average = new float[RGBA];
         for (int channel = 0; channel < RGBA; ++channel) {
-            final float mean = (float) (sums[channel] / pixels);
-            average[channel] = srgb || channel == ALPHA ? mean : ToneMapMath.decode(mean);
+            average[channel] = (float) (sums[channel] / count);
         }
         return average;
     }
@@ -377,6 +488,17 @@ public class TextureLoaderVulkan {
             recordInitializeEmpty(commandBuffer, request.info(), request.clear());
             return;
         }
+        if (request.levelOffsets() != null) {
+            recordLevels(
+                    commandBuffer,
+                    request.info(),
+                    request.staging().buffer(),
+                    request.staging().offset(),
+                    request.width(),
+                    request.height(),
+                    request.levelOffsets());
+            return;
+        }
         recordCopy(
                 commandBuffer,
                 request.info(),
@@ -385,6 +507,70 @@ public class TextureLoaderVulkan {
                 request.width(),
                 request.height(),
                 request.mipLevels());
+    }
+
+    /**
+     * Record copying every mip level from staged data that holds them all, and moving the image to
+     * the read only layout.
+     *
+     * @param commandBuffer The command buffer to record into.
+     * @param info The texture.
+     * @param source The VkBuffer holding the levels.
+     * @param sourceOffset Where the data starts in the buffer, in bytes.
+     * @param width The width of level 0 in pixels.
+     * @param height The height of level 0 in pixels.
+     * @param levelOffsets Where each level starts, from the start of the data.
+     */
+    private static void recordLevels(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull TextureInfoVulkan info,
+            long source,
+            long sourceOffset,
+            int width,
+            int height,
+            int @NonNull [] levelOffsets) {
+        final int levels = levelOffsets.length;
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkImageMemoryBarrier2.Buffer barrier = VkImageMemoryBarrier2.calloc(1, stack);
+            transferBarrier(
+                    barrier.get(0),
+                    info.texture,
+                    VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    colorRange(stack, 0, levels));
+            recordBarriers(commandBuffer, barrier, stack);
+
+            VkBufferImageCopy.Buffer regions = VkBufferImageCopy.calloc(levels, stack);
+            for (int level = 0; level < levels; ++level) {
+                final int mipLevel = level;
+                final int levelWidth = Math.max(1, width >> level);
+                final int levelHeight = Math.max(1, height >> level);
+                regions.get(level)
+                        .bufferOffset(sourceOffset + levelOffsets[level])
+                        // Zero means tightly packed, in whole blocks for compressed formats
+                        .bufferRowLength(0)
+                        .bufferImageHeight(0)
+                        .imageSubresource(
+                                layers ->
+                                        layers.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                                .mipLevel(mipLevel)
+                                                .layerCount(1))
+                        .imageExtent(e -> e.set(levelWidth, levelHeight, 1));
+            }
+            vkCmdCopyBufferToImage(
+                    commandBuffer,
+                    source,
+                    info.texture,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    regions);
+
+            readOnlyBarrier(
+                    barrier.get(0),
+                    info.texture,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    colorRange(stack, 0, levels));
+            recordBarriers(commandBuffer, barrier, stack);
+        }
     }
 
     /**
@@ -398,6 +584,23 @@ public class TextureLoaderVulkan {
      * @throws TextureException If the format is not supported.
      */
     private int mipLevels(boolean hasData, @NonNull Format format, int width, int height) {
+        final int features = formatFeatures(format);
+        final int mipFeatures =
+                VK_FORMAT_FEATURE_BLIT_SRC_BIT
+                        | VK_FORMAT_FEATURE_BLIT_DST_BIT
+                        | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+        final boolean generateMips = hasData && (features & mipFeatures) == mipFeatures;
+        return generateMips ? 32 - Integer.numberOfLeadingZeros(Math.max(width, height)) : 1;
+    }
+
+    /**
+     * Check that a format can be used for textures.
+     *
+     * @param format The format.
+     * @return Its optimal tiling features.
+     * @throws TextureException If the format is not supported.
+     */
+    private int formatFeatures(@NonNull Format format) {
         final int features;
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkFormatProperties formatProperties = VkFormatProperties.calloc(stack);
@@ -414,13 +617,7 @@ public class TextureLoaderVulkan {
             log.error(error);
             throw new TextureException(error);
         }
-
-        final int mipFeatures =
-                VK_FORMAT_FEATURE_BLIT_SRC_BIT
-                        | VK_FORMAT_FEATURE_BLIT_DST_BIT
-                        | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
-        final boolean generateMips = hasData && (features & mipFeatures) == mipFeatures;
-        return generateMips ? 32 - Integer.numberOfLeadingZeros(Math.max(width, height)) : 1;
+        return features;
     }
 
     /**
@@ -437,8 +634,7 @@ public class TextureLoaderVulkan {
     private TextureInfoVulkan createTexture(
             ByteBuffer buffer, @NonNull Format format, int width, int height) {
         final int mipLevels = mipLevels(buffer != null, format, width, height);
-        TextureInfoVulkan info =
-                createImage(format.getVkFormat(), width, height, mipLevels, mipLevels > 1);
+        TextureInfoVulkan info = createImage(format, width, height, mipLevels, mipLevels > 1);
 
         if (buffer != null) {
             upload(info, buffer, width, height, mipLevels);
@@ -453,9 +649,10 @@ public class TextureLoaderVulkan {
     }
 
     /**
-     * Create the image and view, using the shared sampler.
+     * Create the image and view, using the shared sampler. Formats with an sRGB and a UNORM version
+     * are created mutable between the two, so the texture can be read in either color space.
      *
-     * @param vkFormat The VkFormat.
+     * @param format The format.
      * @param width The width in pixels.
      * @param height The height in pixels.
      * @param mipLevels The number of mip levels.
@@ -463,7 +660,9 @@ public class TextureLoaderVulkan {
      * @return The texture info with the handles filled out.
      */
     private TextureInfoVulkan createImage(
-            int vkFormat, int width, int height, int mipLevels, boolean generateMips) {
+            @NonNull Format format, int width, int height, int mipLevels, boolean generateMips) {
+        final int vkFormat = format.getVkFormat();
+        final Format twin = ColorSpace.twin(format);
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
             PointerBuffer pointerOutput = stack.callocPointer(1);
@@ -486,6 +685,15 @@ public class TextureLoaderVulkan {
                             .usage(usage)
                             .sharingMode(VK_SHARING_MODE_EXCLUSIVE)
                             .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED);
+            if (twin != null) {
+                // Listing both formats lets drivers keep compression a fully mutable image loses
+                imageCreateInfo
+                        .flags(VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT)
+                        .pNext(
+                                VkImageFormatListCreateInfo.calloc(stack)
+                                        .sType$Default()
+                                        .pViewFormats(stack.ints(vkFormat, twin.getVkFormat())));
+            }
             VmaAllocationCreateInfo allocationCreateInfo =
                     VmaAllocationCreateInfo.calloc(stack).usage(VMA_MEMORY_USAGE_AUTO);
             checkError(
@@ -508,11 +716,15 @@ public class TextureLoaderVulkan {
                             .subresourceRange(colorRange(stack, 0, mipLevels));
             checkError(vkCreateImageView(state.device.logical, viewCreateInfo, null, longOutput));
 
-            return new TextureInfoVulkan()
-                    .texture(image)
-                    .textureAllocation(allocation)
-                    .view(longOutput.get(0))
-                    .sampler(sampler);
+            TextureInfoVulkan info =
+                    new TextureInfoVulkan()
+                            .texture(image)
+                            .textureAllocation(allocation)
+                            .view(longOutput.get(0))
+                            .sampler(sampler);
+            info.format = format;
+            info.mipLevels = mipLevels;
+            return info;
         }
     }
 
@@ -723,16 +935,31 @@ public class TextureLoaderVulkan {
     }
 
     /**
-     * Start loading a texture from an image file. Safe from any thread: the file is decoded on the
-     * calling thread, and the upload happens as in {@link #load(String, ByteBuffer, Format, int,
-     * int)}.
+     * Start loading a texture from an image file: a DDS file with the mip levels it holds, or
+     * anything stb reads as 8 bit RGBA. Safe from any thread: the file is read on the calling
+     * thread, and the upload happens as in {@link #load(String, ByteBuffer, Format, int, int)}.
      *
      * @param owner The owner key the texture is tracked under.
      * @param texturePath The full path to the texture.
+     * @param colorSpace The color space to read it in.
      * @return The handle for the texture, pending until uploaded.
      * @throws TextureException If the image can't be read, or the texture can't be created.
      */
-    public TextureHandle load(@NonNull String owner, @NonNull String texturePath) {
+    public TextureHandle load(
+            @NonNull String owner, @NonNull String texturePath, @NonNull ColorSpace colorSpace) {
+        if (texturePath.toLowerCase(Locale.ROOT).endsWith(".dds")) {
+            final DdsFile dds;
+            try {
+                dds = DdsFile.read(Path.of(texturePath));
+            } catch (IOException | RuntimeException e) {
+                final String error =
+                        SafeResourceLoader.format(
+                                "Image file {} not loaded: {}", texturePath, e.getMessage());
+                log.info(error);
+                throw new TextureException(error);
+            }
+            return load(owner, dds, colorSpace);
+        }
         TextureHandle result;
         try (MemoryStack stack = MemoryStack.stackPush()) {
             IntBuffer width = stack.mallocInt(1);
@@ -751,12 +978,62 @@ public class TextureLoaderVulkan {
             }
 
             try {
-                result = load(owner, buffer, Format.R8G8B8A8_UNORM, width.get(0), height.get(0));
+                result =
+                        load(
+                                owner,
+                                buffer,
+                                colorSpace.apply(Format.R8G8B8A8_UNORM),
+                                width.get(0),
+                                height.get(0));
             } finally {
                 STBImage.stbi_image_free(buffer);
             }
         }
         return result;
+    }
+
+    /**
+     * Read a texture in a color space from now on, making its alternate view the first time it is
+     * needed. The view gets a fresh bindless slot, so nothing a frame in flight samples changes.
+     * Does nothing for a format with only one version. Render thread only.
+     *
+     * @param info The texture, uploaded.
+     * @param colorSpace The color space to read it in.
+     */
+    void applyColorSpace(@NonNull TextureInfoVulkan info, @NonNull ColorSpace colorSpace) {
+        final Format format = info.format;
+        final Format twin = format == null ? null : ColorSpace.twin(format);
+        if (twin == null) {
+            return;
+        }
+        final boolean wantAlternate = ColorSpace.of(format) != colorSpace;
+        if (wantAlternate && info.alternate == null) {
+            final long view;
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                LongBuffer longOutput = stack.callocLong(1);
+                VkImageViewCreateInfo viewCreateInfo =
+                        VkImageViewCreateInfo.calloc(stack)
+                                .sType$Default()
+                                .image(info.texture)
+                                .viewType(VK_IMAGE_VIEW_TYPE_2D)
+                                .format(twin.getVkFormat())
+                                .subresourceRange(colorRange(stack, 0, info.mipLevels));
+                checkError(
+                        vkCreateImageView(state.device.logical, viewCreateInfo, null, longOutput));
+                view = longOutput.get(0);
+            }
+            TextureInfoVulkan alternate = new TextureInfoVulkan().view(view).sampler(info.sampler);
+            if (state.bindlessTextures.register(state, alternate)
+                    == ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX) {
+                vkDestroyImageView(state.device.logical, view, null);
+                log.warn("No bindless slot left to read a texture as {}", colorSpace);
+                return;
+            }
+            alternate.format = twin;
+            alternate.mipLevels = info.mipLevels;
+            info.alternate = alternate;
+        }
+        info.alternateActive = wantAlternate;
     }
 
     /**

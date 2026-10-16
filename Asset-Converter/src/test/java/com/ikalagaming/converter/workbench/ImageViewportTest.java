@@ -63,19 +63,19 @@ class ImageViewportTest {
 
     @Test
     void testMipLevels() {
-        assertEquals(1, ImageViewer.mipLevels(1, 1));
-        assertEquals(11, ImageViewer.mipLevels(1024, 1024));
-        assertEquals(11, ImageViewer.mipLevels(1024, 3));
-        assertEquals(11, ImageViewer.mipLevels(1025, 1));
-        assertEquals(12, ImageViewer.mipLevels(2048, 1));
+        assertEquals(1, ImageFile.fullChain(1, 1));
+        assertEquals(11, ImageFile.fullChain(1024, 1024));
+        assertEquals(11, ImageFile.fullChain(1024, 3));
+        assertEquals(11, ImageFile.fullChain(1025, 1));
+        assertEquals(12, ImageFile.fullChain(2048, 1));
     }
 
     @Test
     void testNormalMapNames() {
-        assertTrue(ImageViewer.looksLikeNormalMap("Antenna_Metal_Normal.dds"));
-        assertTrue(ImageViewer.looksLikeNormalMap("rock_nrm.tga"));
-        assertTrue(ImageViewer.looksLikeNormalMap("brick_nor.png"));
-        assertFalse(ImageViewer.looksLikeNormalMap("brick_BaseColor.png"));
+        assertTrue(ImageFile.looksLikeNormalMap("Antenna_Metal_Normal.dds"));
+        assertTrue(ImageFile.looksLikeNormalMap("rock_nrm.tga"));
+        assertTrue(ImageFile.looksLikeNormalMap("brick_nor.png"));
+        assertFalse(ImageFile.looksLikeNormalMap("brick_BaseColor.png"));
     }
 
     @Test

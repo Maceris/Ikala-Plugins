@@ -217,13 +217,17 @@ public class BindlessTextures {
     }
 
     /**
-     * Release a texture's slot so that it can be reused. Reuse is deferred until no frame in flight
-     * can still be sampling the old texture. The default texture slot is never released.
+     * Release a texture's slot, and its alternate view's if it has one, so that they can be reused.
+     * Reuse is deferred until no frame in flight can still be sampling the old texture. The default
+     * texture slot is never released.
      *
      * @param state The Vulkan state.
      * @param texture The texture whose slot to release. Its index is reset afterward.
      */
     public void release(@NonNull VulkanState state, @NonNull TextureInfoVulkan texture) {
+        if (texture.alternate != null) {
+            release(state, texture.alternate);
+        }
         final int slot = texture.bindlessIndex;
         texture.bindlessIndex = TextureInfoVulkan.NO_BINDLESS_INDEX;
         if (slot == TextureInfoVulkan.NO_BINDLESS_INDEX

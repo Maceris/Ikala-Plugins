@@ -1,5 +1,6 @@
 package com.ikalagaming.graphics.vulkan;
 
+import com.ikalagaming.graphics.ColorSpace;
 import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.TextureHandle;
 
@@ -218,15 +219,38 @@ public class TextureRegistry {
      * The bindless slot a shader should sample for a handle.
      *
      * @param handle The handle.
-     * @return The handle's slot, or the default texture's slot if the handle is null, stale, or not
-     *     resident yet.
+     * @return The slot of the view it is read through, or the default texture's slot if the handle
+     *     is null, stale, or not resident yet.
      */
     public int slotOrDefault(@Nullable TextureHandle handle) {
         lock.lock();
         try {
             return isValidLocked(handle) && states[handle.slot()] == State.RESIDENT
-                    ? handle.slot()
+                    ? infos[handle.slot()].activeIndex()
                     : ShaderBindings.BindlessTextures.DEFAULT_TEXTURE_INDEX;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * The color space a texture is read in now, which a color space switch may have changed from
+     * the one its format says.
+     *
+     * @param handle The handle.
+     * @return The color space, or null if the handle is null or stale.
+     */
+    public @Nullable ColorSpace colorSpaceOf(@Nullable TextureHandle handle) {
+        lock.lock();
+        try {
+            if (!isValidLocked(handle)) {
+                return null;
+            }
+            final ColorSpace own = ColorSpace.of(handle.format());
+            if (!infos[handle.slot()].alternateActive) {
+                return own;
+            }
+            return own == ColorSpace.SRGB ? ColorSpace.LINEAR : ColorSpace.SRGB;
         } finally {
             lock.unlock();
         }
