@@ -80,8 +80,8 @@ void main() {
     vec3 geometricNormal = gl_FrontFacing ? normal : -normal;
     if (material.normalMapIndex > 0) {
         mat3 TBN = mat3(outTangent, outBitangent, outNormal);
-        vec3 newNormal = texture(bindlessTextures[nonuniformEXT(material.normalMapIndex)], outTextCoord).rgb;
-        normal = normalize(TBN * (newNormal * 2.0 - 1.0));
+        vec4 texel = texture(bindlessTextures[nonuniformEXT(material.normalMapIndex)], outTextCoord);
+        normal = normalize(TBN * normalFromMap(texel));
     }
     // Both sides of a pane are drawn, and the back is lit from behind
     if (!gl_FrontFacing) {

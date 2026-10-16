@@ -1,9 +1,15 @@
 package com.ikalagaming.converter.workbench;
 
+import com.ikalagaming.converter.scene.ImportedScene;
+import com.ikalagaming.converter.scene.SceneImporter;
+import com.ikalagaming.converter.scene.ScenePlacement;
 import com.ikalagaming.graphics.ColorSpace;
 import com.ikalagaming.graphics.GraphicsContext;
+import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.TextureHandle;
+import com.ikalagaming.graphics.TextureWrap;
 import com.ikalagaming.graphics.UI;
+import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.ui.Align;
 import com.ikalagaming.graphics.ui.Anchors;
 import com.ikalagaming.graphics.ui.Button;
@@ -11,12 +17,13 @@ import com.ikalagaming.graphics.ui.Column;
 import com.ikalagaming.graphics.ui.Immediate;
 import com.ikalagaming.graphics.ui.Insets;
 import com.ikalagaming.graphics.ui.Label;
+import com.ikalagaming.graphics.ui.Length;
 import com.ikalagaming.graphics.ui.Row;
 import com.ikalagaming.graphics.ui.Scroll;
 import com.ikalagaming.graphics.ui.Selectable;
 import com.ikalagaming.graphics.ui.Sizing;
-import com.ikalagaming.graphics.ui.Surface;
 import com.ikalagaming.graphics.ui.TextInput;
+import com.ikalagaming.graphics.ui.UiFrame;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -31,24 +38,54 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
 /**
- * The asset workbench: browse for raw assets and open them. For now it opens images, shown in an
- * {@link ImageViewer}; meshes, scenes and materials come later. Built on retained UI, with the
- * viewer drawn in {@link Immediate} areas.
+ * The asset workbench: browse for raw assets and open them. Images, DDS textures included, show in
+ * an {@link ImageViewer}; models and whole scenes are put in the world and shown through a {@link
+ * SceneView}, with an outliner of their nodes. Built on retained UI, as separate surfaces around
+ * the edges of the screen, so the scene shows in the middle and the mouse reaches it there.
  *
- * <p>Files are decoded on a background thread, so a large image doesn't stall the editor, and the
- * result is handed to the render thread through {@link UI#post}. Everything else is render thread
- * only, except {@link #stop}.
+ * <p>Files are read on a background thread, so a large file doesn't stall the editor, and results
+ * are handed to the render thread through {@link UI#post}. Everything else is render thread only,
+ * except {@link #stop}.
  */
 @Slf4j
 public class Workbench {
-    /** The ID of the workbench surface. */
+    /** The ID of the top bar surface, with the path and buttons. */
     public static final String SURFACE_ID = "converter/workbench";
 
-    /** The width of the file list. */
-    private static final float BROWSER_WIDTH = 260;
+    /** The ID of the left surface, with the files and outliner. */
+    static final String FILES_ID = "converter/workbench-files";
+
+    /** The ID of the right surface, with the properties. */
+    static final String PROPERTIES_ID = "converter/workbench-properties";
+
+    /** The ID of the middle surface, with the image view. */
+    static final String IMAGE_ID = "converter/workbench-image";
+
+    /** Every surface, for showing and hiding them together. */
+    private static final List<String> SURFACES =
+            List.of(SURFACE_ID, FILES_ID, PROPERTIES_ID, IMAGE_ID);
+
+    /** The height of the top bar. */
+    private static final float TOP_HEIGHT = 74;
+
+    /** The width of the left panel. */
+    private static final float FILES_WIDTH = 300;
 
     /** The width of the properties panel. */
-    private static final float PROPERTIES_WIDTH = 330;
+    private static final float PROPERTIES_WIDTH = 380;
+
+    /** The gap between panels and the screen's edges. */
+    private static final float GAP = 4;
+
+    /** What the middle of the screen shows. */
+    enum Mode {
+        /** Nothing open. */
+        NONE,
+        /** An image, over the scene if one is open. */
+        IMAGE,
+        /** A scene. */
+        SCENE
+    }
 
     /** The plugin's graphics context, which owns the textures. */
     private final GraphicsContext graphics;
@@ -65,7 +102,10 @@ public class Workbench {
     /** Shows the open image. */
     private final ImageViewer viewer;
 
-    /** Decodes files off the render thread, one at a time. */
+    /** Shows the open scene. */
+    private final SceneView sceneView;
+
+    /** Reads files off the render thread, one at a time. */
     private final ExecutorService loader =
             Executors.newSingleThreadExecutor(
                     task -> {
@@ -79,6 +119,9 @@ public class Workbench {
      * dropped.
      */
     private final AtomicInteger requests = new AtomicInteger();
+
+    /** Counts scenes, so textures still loading for a closed scene stop. */
+    private final AtomicInteger scenes = new AtomicInteger();
 
     /** The path of the folder or file being looked at. */
     private final TextInput path;
@@ -95,18 +138,25 @@ public class Workbench {
     /** The open file, if any. */
     private @Nullable Path openFile;
 
+    /** What the middle of the screen shows. */
+    private Mode mode = Mode.NONE;
+
+    /** Whether the workbench is showing. */
+    private boolean showing;
+
     /**
      * Create the workbench, browsing the working directory.
      *
      * @param graphics The plugin's graphics context.
      * @param ui The UI to show the workbench through.
-     * @param back Goes back to the menu.
+     * @param back Goes back to the menu, once the workbench has hidden itself.
      */
     public Workbench(@NonNull GraphicsContext graphics, @NonNull UI ui, @NonNull Runnable back) {
         this.graphics = graphics;
         this.ui = ui;
         this.back = back;
         viewer = new ImageViewer(graphics.textures());
+        sceneView = new SceneView(graphics);
         browser = new FileBrowser(Path.of(""));
         path = new TextInput("path", "").onSubmit(this::openPath).width(Sizing.grow());
         files = new Column("files").align(Align.STRETCH);
@@ -116,20 +166,60 @@ public class Workbench {
     }
 
     /**
-     * Build the workbench surface, ready to show.
+     * Anchors stretching between two fractions of the screen, with offsets in units.
      *
-     * @return The surface.
+     * @param minX The left anchor.
+     * @param minY The top anchor.
+     * @param maxX The right anchor.
+     * @param maxY The bottom anchor.
+     * @param left Moves the left edge.
+     * @param top Moves the top edge.
+     * @param right Moves the right edge.
+     * @param bottom Moves the bottom edge.
+     * @return The anchors.
      */
-    public Surface build() {
+    private static Anchors edges(
+            float minX,
+            float minY,
+            float maxX,
+            float maxY,
+            float left,
+            float top,
+            float right,
+            float bottom) {
+        return new Anchors(
+                minX,
+                minY,
+                maxX,
+                maxY,
+                Length.u(left),
+                Length.u(top),
+                Length.u(right),
+                Length.u(bottom));
+    }
+
+    /** Make the surfaces and show them hidden, so later toggles keep their state. */
+    public void install() {
         Row toolbar =
                 new Row("toolbar")
                         .gap(8)
                         .add(
-                                new Button("back", "Back").onClick(back),
+                                new Button("back", "Back").onClick(this::goBack),
                                 path,
                                 new Button("up", "Up").onClick(this::up),
                                 new Button("open", "Open").onClick(() -> openPath(path.text())),
                                 filter);
+        Column top =
+                new Column("top")
+                        .padding(Insets.all(4))
+                        .gap(4)
+                        .align(Align.STRETCH)
+                        .add(toolbar, status);
+        ui.show(
+                ui.surface(SURFACE_ID)
+                        .anchors(edges(0, 0, 1, 0, 0, 0, 0, 0))
+                        .height(Sizing.fixed(TOP_HEIGHT))
+                        .content(top));
 
         Row drives = new Row("drives").gap(4);
         List<Path> roots = browser.roots();
@@ -139,39 +229,120 @@ public class Workbench {
                 drives.add(new Button("root" + i, root.toString()).onClick(() -> navigate(root)));
             }
         }
-
-        Column browserColumn =
-                new Column("browser")
-                        .width(Sizing.fixed(BROWSER_WIDTH))
-                        .height(Sizing.grow())
+        Column left =
+                new Column("left")
+                        .padding(Insets.all(4))
                         .gap(4)
                         .align(Align.STRETCH)
-                        .add(drives, new Scroll("list").border(true).content(files));
-
-        Immediate view = new Immediate("view", viewer::drawView).border(true);
-
-        Column properties =
-                new Column("properties")
-                        .width(Sizing.fixed(PROPERTIES_WIDTH))
-                        .height(Sizing.grow())
-                        .align(Align.STRETCH)
-                        .add(new Immediate("details", viewer::drawProperties));
-
-        Column content =
-                new Column("content")
-                        .padding(Insets.all(4))
-                        .gap(8)
-                        .align(Align.STRETCH)
                         .add(
-                                toolbar,
-                                new Row("body")
+                                drives,
+                                new Scroll("list")
+                                        .border(true)
                                         .height(Sizing.grow())
-                                        .gap(8)
-                                        .align(Align.STRETCH)
-                                        .add(browserColumn, view, properties),
-                                status);
+                                        .content(files),
+                                new Label("outliner-title", "Outliner"),
+                                new Immediate("outliner", sceneView::drawOutliner).border(true));
+        ui.show(
+                ui.surface(FILES_ID)
+                        .anchors(edges(0, 0, 0, 1, GAP, TOP_HEIGHT + GAP, 0, -GAP))
+                        .width(Sizing.fixed(FILES_WIDTH))
+                        .content(left));
 
-        return ui.surface(SURFACE_ID).anchors(Anchors.fill()).content(content);
+        ui.show(
+                ui.surface(PROPERTIES_ID)
+                        .anchors(edges(1, 0, 1, 1, -GAP, TOP_HEIGHT + GAP, 0, -GAP))
+                        .width(Sizing.fixed(PROPERTIES_WIDTH))
+                        .content(
+                                new Column("right")
+                                        .padding(Insets.all(4))
+                                        .align(Align.STRETCH)
+                                        .add(new Immediate("details", this::drawProperties))));
+
+        ui.show(
+                ui.surface(IMAGE_ID)
+                        .anchors(
+                                edges(
+                                        0,
+                                        0,
+                                        1,
+                                        1,
+                                        FILES_WIDTH + 2 * GAP,
+                                        TOP_HEIGHT + GAP,
+                                        -(PROPERTIES_WIDTH + 2 * GAP),
+                                        -GAP))
+                        .content(
+                                new Column("middle")
+                                        .padding(Insets.all(4))
+                                        .align(Align.STRETCH)
+                                        .add(new Immediate("view", viewer::drawView))));
+        for (String surface : SURFACES) {
+            ui.setVisible(surface, false);
+        }
+    }
+
+    /**
+     * Show or hide the workbench. Hiding it closes any open scene, putting the renderer back.
+     *
+     * @param visible Whether to show it.
+     */
+    public void setVisible(boolean visible) {
+        showing = visible;
+        if (!visible) {
+            scenes.incrementAndGet();
+            sceneView.close();
+            if (mode == Mode.SCENE) {
+                mode = Mode.NONE;
+            }
+        }
+        updateSurfaces();
+    }
+
+    /** Hide the workbench and go back to the menu. */
+    private void goBack() {
+        setVisible(false);
+        back.run();
+    }
+
+    /** Show the surfaces the mode needs, if the workbench is showing. */
+    private void updateSurfaces() {
+        ui.setVisible(SURFACE_ID, showing);
+        ui.setVisible(FILES_ID, showing);
+        ui.setVisible(PROPERTIES_ID, showing);
+        ui.setVisible(IMAGE_ID, showing && mode != Mode.SCENE);
+    }
+
+    /**
+     * Draw the properties of whatever the middle shows.
+     *
+     * @param frame The current frame.
+     */
+    private void drawProperties(UiFrame frame) {
+        if (mode == Mode.SCENE) {
+            sceneView.drawProperties(frame, this::closeScene);
+            return;
+        }
+        viewer.drawProperties(frame);
+        if (sceneView.getPlacement() != null) {
+            IkGui.separator();
+            if (IkGui.button("Back to the scene")) {
+                frame.fire(this::showScene);
+            }
+        }
+    }
+
+    /** Show the open scene in the middle again, after looking at an image. */
+    private void showScene() {
+        mode = Mode.SCENE;
+        updateSurfaces();
+    }
+
+    /** Close the open scene. */
+    private void closeScene() {
+        scenes.incrementAndGet();
+        sceneView.close();
+        mode = viewer.getImage() != null ? Mode.IMAGE : Mode.NONE;
+        updateSurfaces();
+        status.text("Closed the scene");
     }
 
     /**
@@ -213,16 +384,15 @@ public class Workbench {
     }
 
     /**
-     * Open a file, decoding it in the background.
+     * Open a file, reading it in the background.
      *
      * @param file The file.
      */
     public void open(@NonNull Path file) {
         final Path absolute = file.toAbsolutePath().normalize();
         final AssetKind kind = AssetKind.of(absolute);
-        if (kind != AssetKind.IMAGE) {
-            status.text(
-                    "Can't open " + absolute.getFileName() + " yet, only images and DDS textures");
+        if (kind == AssetKind.UNKNOWN) {
+            status.text("Can't open " + absolute.getFileName() + ", it isn't an image or model");
             return;
         }
         final int request = requests.incrementAndGet();
@@ -234,7 +404,89 @@ public class Workbench {
         }
         status.text("Loading " + absolute.getFileName() + "...");
         refresh();
-        loader.execute(() -> load(absolute, request));
+        if (kind == AssetKind.MODEL) {
+            loader.execute(() -> loadScene(absolute, request));
+        } else {
+            loader.execute(() -> load(absolute, request));
+        }
+    }
+
+    /**
+     * Post a change to the render thread, unless the plugin unloaded.
+     *
+     * @param change The change.
+     */
+    private void post(Runnable change) {
+        try {
+            ui.post(change);
+        } catch (IllegalStateException unloaded) {
+            // The plugin unloaded while loading, so there is nothing to tell
+        }
+    }
+
+    /**
+     * Read a model and work out how to place it. On the loader thread.
+     *
+     * @param file The model.
+     * @param request Which request this is, to drop it if a newer one was made.
+     */
+    private void loadScene(Path file, int request) {
+        if (request != requests.get()) {
+            return;
+        }
+        try {
+            final ImportedScene imported =
+                    SceneImporter.read(
+                            file,
+                            message -> {
+                                if (request == requests.get()) {
+                                    post(() -> status.text(message));
+                                }
+                            });
+            final ScenePlacement placement = ScenePlacement.prepare(graphics, imported);
+            post(() -> sceneLoaded(request, placement));
+        } catch (IOException | RuntimeException e) {
+            log.warn("Could not open {}", file, e);
+            final String message = "Can't open " + file.getFileName() + ": " + e.getMessage();
+            post(() -> failed(request, message));
+        }
+    }
+
+    /**
+     * Put a read scene in the world and show it, unless a newer file was asked for, then start
+     * loading its textures. Render thread.
+     *
+     * @param request Which request this was.
+     * @param placement The scene, ready to place.
+     */
+    private void sceneLoaded(int request, ScenePlacement placement) {
+        if (request != requests.get() || !showing) {
+            return;
+        }
+        final int scene = scenes.incrementAndGet();
+        placement.place();
+        sceneView.show(placement);
+        mode = Mode.SCENE;
+        updateSurfaces();
+        final ImportedScene imported = placement.getImported();
+        status.text(
+                String.format(
+                        "Opened %s in %,d ms: %,d triangles",
+                        imported.file().getFileName(),
+                        imported.readMillis(),
+                        imported.drawnTriangles()));
+        loader.execute(
+                () ->
+                        placement.loadTextures(
+                                this::post,
+                                () -> scene != scenes.get(),
+                                progress ->
+                                        post(
+                                                () -> {
+                                                    if (scene == scenes.get()) {
+                                                        sceneView.setTextureProgress(progress);
+                                                    }
+                                                })));
     }
 
     /**
@@ -253,7 +505,8 @@ public class Workbench {
             final ColorSpace colorSpace = image.defaultColorSpace();
             final TextureHandle texture =
                     image.dds() != null
-                            ? graphics.textures().load(image.dds(), colorSpace)
+                            // Shown whole, so its edges mustn't blend with the opposite ones
+                            ? graphics.textures().load(image.dds(), colorSpace, TextureWrap.CLAMP)
                             : graphics.textures()
                                     .load(
                                             image.pixels(),
@@ -261,15 +514,11 @@ public class Workbench {
                                             image.width(),
                                             image.height());
             final long millis = (System.nanoTime() - start) / 1_000_000;
-            ui.post(() -> loaded(request, image, texture, colorSpace, millis));
+            post(() -> loaded(request, image, texture, colorSpace, millis));
         } catch (IOException | RuntimeException e) {
             log.warn("Could not open {}", file, e);
             final String message = "Can't open " + file.getFileName() + ": " + e.getMessage();
-            try {
-                ui.post(() -> failed(request, message));
-            } catch (IllegalStateException unloaded) {
-                // The plugin unloaded while loading, so there is nothing to tell
-            }
+            post(() -> failed(request, message));
         }
     }
 
@@ -294,6 +543,8 @@ public class Workbench {
         }
         releaseTexture();
         viewer.show(image, texture, colorSpace);
+        mode = Mode.IMAGE;
+        updateSurfaces();
         status.text(String.format("Opened %s in %d ms", image.path().getFileName(), millis));
     }
 
@@ -319,12 +570,24 @@ public class Workbench {
     }
 
     /**
-     * Stop loading and let go of the image. The texture itself goes with the plugin's graphics
-     * context. Safe from any thread.
+     * Stop loading and close the scene. Textures, meshes and the like go with the plugin's graphics
+     * context; the renderer is put back through the UI manager's queue, which outlives the plugin.
+     * Safe from any thread.
      */
     public void stop() {
         requests.incrementAndGet();
+        scenes.incrementAndGet();
         loader.shutdownNow();
+        GraphicsManager.getUiManager()
+                .post(
+                        () -> {
+                            try {
+                                sceneView.close();
+                            } catch (IllegalStateException unloaded) {
+                                // What the plugin owned went with it; the renderer is put back
+                                log.debug("Closing the scene after unloading", unloaded);
+                            }
+                        });
     }
 
     /** Update the retained nodes from the browser, after anything changes. */

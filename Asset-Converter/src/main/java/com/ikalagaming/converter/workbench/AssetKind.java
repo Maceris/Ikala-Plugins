@@ -13,6 +13,11 @@ public enum AssetKind {
             Set.of(
                     "dds", "png", "jpg", "jpeg", "tga", "bmp", "psd", "gif", "hdr", "pic", "pnm",
                     "ppm")),
+    /** A model or whole scene assimp reads. */
+    MODEL(
+            Set.of(
+                    "fbx", "obj", "gltf", "glb", "dae", "3ds", "blend", "ply", "stl", "x", "lwo",
+                    "ms3d")),
     /** Anything else. */
     UNKNOWN(Set.of());
 

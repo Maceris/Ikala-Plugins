@@ -165,9 +165,7 @@ void main() {
     vec3 normal = surfaceNormal;
     if (!averaged && material.normalMapIndex > 0) {
         mat3 TBN = mat3(tangent, bitangent, surfaceNormal);
-        vec3 newNormal = sampleTexture(material.normalMapIndex).rgb;
-        newNormal = newNormal * 2.0 - 1.0;
-        normal = normalize(TBN * newNormal);
+        normal = normalize(TBN * normalFromMap(sampleTexture(material.normalMapIndex)));
     }
 
     if (VOLUME_FADE && debugSources != 0u) {

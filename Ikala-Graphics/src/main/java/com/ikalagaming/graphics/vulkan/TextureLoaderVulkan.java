@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.ColorSpace;
 import com.ikalagaming.graphics.Format;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.TextureHandle;
+import com.ikalagaming.graphics.TextureWrap;
 import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.graphics.texture.BlockDecoder;
 import com.ikalagaming.graphics.texture.DdsFile;
@@ -64,8 +65,11 @@ public class TextureLoaderVulkan {
     /** The Vulkan state. */
     private final VulkanState state;
 
-    /** Sampler shared by every loaded texture. Linear filtering, clamped to the edge. */
-    private long sampler;
+    /** Sampler shared by textures that tile. Linear, anisotropic, repeating. */
+    private long repeatSampler;
+
+    /** Sampler shared by textures that don't tile. Linear, anisotropic, clamped to the edge. */
+    private long clampSampler;
 
     /** A 1x1 white texture that lives in the default bindless slot. */
     private TextureInfoVulkan defaultTexture;
@@ -176,14 +180,15 @@ public class TextureLoaderVulkan {
     }
 
     /**
-     * Set up the shared sampler and the default texture. The bindless texture array and immediate
+     * Set up the shared samplers and the default texture. The bindless texture array and immediate
      * commands in the state must already exist.
      *
      * @param state The Vulkan state.
      */
     public TextureLoaderVulkan(@NonNull VulkanState state) {
         this.state = state;
-        createSampler();
+        repeatSampler = createSampler(VK_SAMPLER_ADDRESS_MODE_REPEAT);
+        clampSampler = createSampler(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
 
         ByteBuffer white = MemoryUtil.memAlloc(4);
         white.put(0, new byte[] {-1, -1, -1, -1});
@@ -200,21 +205,28 @@ public class TextureLoaderVulkan {
     }
 
     /**
-     * Destroy the default texture and shared sampler. The GPU must be idle, and every texture using
-     * the shared sampler must already be destroyed.
+     * Destroy the default texture and shared samplers. The GPU must be idle, and every texture
+     * using the shared samplers must already be destroyed.
      */
     public void cleanup() {
         defaultTexture.destroy(state);
         defaultTexture = null;
-        vkDestroySampler(state.device.logical, sampler, null);
-        sampler = VK_NULL_HANDLE;
+        vkDestroySampler(state.device.logical, repeatSampler, null);
+        vkDestroySampler(state.device.logical, clampSampler, null);
+        repeatSampler = VK_NULL_HANDLE;
+        clampSampler = VK_NULL_HANDLE;
     }
 
-    /** The most anisotropic filtering the shared sampler asks for. */
+    /** The most anisotropic filtering the shared samplers ask for. */
     private static final float MAX_ANISOTROPY = 16;
 
-    /** Create the sampler shared by all the textures we load. */
-    private void createSampler() {
+    /**
+     * Create a sampler shared by the textures we load.
+     *
+     * @param addressMode The VkSamplerAddressMode for every axis.
+     * @return The VkSampler.
+     */
+    private long createSampler(int addressMode) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkSamplerCreateInfo samplerCreateInfo =
                     VkSamplerCreateInfo.calloc(stack)
@@ -222,9 +234,9 @@ public class TextureLoaderVulkan {
                             .magFilter(VK_FILTER_LINEAR)
                             .minFilter(VK_FILTER_LINEAR)
                             .mipmapMode(VK_SAMPLER_MIPMAP_MODE_LINEAR)
-                            .addressModeU(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
-                            .addressModeV(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
-                            .addressModeW(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
+                            .addressModeU(addressMode)
+                            .addressModeV(addressMode)
+                            .addressModeW(addressMode)
                             // Surfaces seen at a slant, like distant ground, stay sharp along it
                             .anisotropyEnable(true)
                             .maxAnisotropy(
@@ -241,8 +253,18 @@ public class TextureLoaderVulkan {
                             .maxLod(VK_LOD_CLAMP_NONE);
             LongBuffer longOutput = stack.callocLong(1);
             checkError(vkCreateSampler(state.device.logical, samplerCreateInfo, null, longOutput));
-            sampler = longOutput.get(0);
+            return longOutput.get(0);
         }
+    }
+
+    /**
+     * The shared sampler for a wrap.
+     *
+     * @param wrap The wrap.
+     * @return The VkSampler.
+     */
+    private long sampler(@NonNull TextureWrap wrap) {
+        return wrap == TextureWrap.REPEAT ? repeatSampler : clampSampler;
     }
 
     /**
@@ -257,6 +279,7 @@ public class TextureLoaderVulkan {
      * @param format The format of the image data.
      * @param width The width of the texture, in pixels.
      * @param height The height of the texture, in pixels.
+     * @param wrap What it shows outside its texture coordinates.
      * @return The handle for the texture, pending until uploaded.
      * @throws TextureException If the format is not supported, or there are no bindless slots left.
      */
@@ -265,30 +288,36 @@ public class TextureLoaderVulkan {
             ByteBuffer buffer,
             @NonNull Format format,
             int width,
-            int height) {
+            int height,
+            @NonNull TextureWrap wrap) {
         final int mipLevels = mipLevels(buffer != null, format, width, height);
-        TextureInfoVulkan info = createImage(format, width, height, mipLevels, mipLevels > 1);
+        TextureInfoVulkan info = createImage(format, width, height, mipLevels, mipLevels > 1, wrap);
         final float[] average = buffer == null ? null : average(buffer, format);
         return queue(owner, info, buffer, format, width, height, average, null);
     }
 
     /**
      * Start loading a texture from a DDS file, with the mip levels it holds. Safe from any thread,
-     * as {@link #load(String, ByteBuffer, Format, int, int)} is.
+     * as {@link #load(String, ByteBuffer, Format, int, int, TextureWrap)} is.
      *
      * @param owner The owner key the texture is tracked under.
      * @param dds The file.
      * @param colorSpace The color space to read it in, for formats that can be either.
+     * @param wrap What it shows outside its texture coordinates.
      * @return The handle for the texture, pending until uploaded.
      * @throws TextureException If the format is not supported, or there are no bindless slots left.
      */
     public TextureHandle load(
-            @NonNull String owner, @NonNull DdsFile dds, @NonNull ColorSpace colorSpace) {
+            @NonNull String owner,
+            @NonNull DdsFile dds,
+            @NonNull ColorSpace colorSpace,
+            @NonNull TextureWrap wrap) {
         final Format format = colorSpace.apply(dds.getFormat());
         formatFeatures(format);
         final int width = dds.getWidth();
         final int height = dds.getHeight();
-        TextureInfoVulkan info = createImage(format, width, height, dds.getMipLevels(), false);
+        TextureInfoVulkan info =
+                createImage(format, width, height, dds.getMipLevels(), false, wrap);
         final int[] offsets = new int[dds.getMipLevels()];
         for (int level = 0; level < offsets.length; ++level) {
             offsets[level] = dds.levelOffset(level);
@@ -634,7 +663,9 @@ public class TextureLoaderVulkan {
     private TextureInfoVulkan createTexture(
             ByteBuffer buffer, @NonNull Format format, int width, int height) {
         final int mipLevels = mipLevels(buffer != null, format, width, height);
-        TextureInfoVulkan info = createImage(format, width, height, mipLevels, mipLevels > 1);
+        // Used whole, like the GUI's font atlas, so never tiled
+        TextureInfoVulkan info =
+                createImage(format, width, height, mipLevels, mipLevels > 1, TextureWrap.CLAMP);
 
         if (buffer != null) {
             upload(info, buffer, width, height, mipLevels);
@@ -649,7 +680,7 @@ public class TextureLoaderVulkan {
     }
 
     /**
-     * Create the image and view, using the shared sampler. Formats with an sRGB and a UNORM version
+     * Create the image and view, using a shared sampler. Formats with an sRGB and a UNORM version
      * are created mutable between the two, so the texture can be read in either color space.
      *
      * @param format The format.
@@ -660,7 +691,12 @@ public class TextureLoaderVulkan {
      * @return The texture info with the handles filled out.
      */
     private TextureInfoVulkan createImage(
-            @NonNull Format format, int width, int height, int mipLevels, boolean generateMips) {
+            @NonNull Format format,
+            int width,
+            int height,
+            int mipLevels,
+            boolean generateMips,
+            @NonNull TextureWrap wrap) {
         final int vkFormat = format.getVkFormat();
         final Format twin = ColorSpace.twin(format);
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -721,7 +757,7 @@ public class TextureLoaderVulkan {
                             .texture(image)
                             .textureAllocation(allocation)
                             .view(longOutput.get(0))
-                            .sampler(sampler);
+                            .sampler(sampler(wrap));
             info.format = format;
             info.mipLevels = mipLevels;
             return info;
@@ -937,16 +973,21 @@ public class TextureLoaderVulkan {
     /**
      * Start loading a texture from an image file: a DDS file with the mip levels it holds, or
      * anything stb reads as 8 bit RGBA. Safe from any thread: the file is read on the calling
-     * thread, and the upload happens as in {@link #load(String, ByteBuffer, Format, int, int)}.
+     * thread, and the upload happens as in {@link #load(String, ByteBuffer, Format, int, int,
+     * TextureWrap)}.
      *
      * @param owner The owner key the texture is tracked under.
      * @param texturePath The full path to the texture.
      * @param colorSpace The color space to read it in.
+     * @param wrap What it shows outside its texture coordinates.
      * @return The handle for the texture, pending until uploaded.
      * @throws TextureException If the image can't be read, or the texture can't be created.
      */
     public TextureHandle load(
-            @NonNull String owner, @NonNull String texturePath, @NonNull ColorSpace colorSpace) {
+            @NonNull String owner,
+            @NonNull String texturePath,
+            @NonNull ColorSpace colorSpace,
+            @NonNull TextureWrap wrap) {
         if (texturePath.toLowerCase(Locale.ROOT).endsWith(".dds")) {
             final DdsFile dds;
             try {
@@ -958,7 +999,7 @@ public class TextureLoaderVulkan {
                 log.info(error);
                 throw new TextureException(error);
             }
-            return load(owner, dds, colorSpace);
+            return load(owner, dds, colorSpace, wrap);
         }
         TextureHandle result;
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -984,7 +1025,8 @@ public class TextureLoaderVulkan {
                                 buffer,
                                 colorSpace.apply(Format.R8G8B8A8_UNORM),
                                 width.get(0),
-                                height.get(0));
+                                height.get(0),
+                                wrap);
             } finally {
                 STBImage.stbi_image_free(buffer);
             }

@@ -55,23 +55,44 @@ public final class Textures {
     }
 
     /**
-     * Start loading a texture from an image file: a DDS file with the mip levels it holds, or any
-     * image stb reads, as 8 bit RGBA with mip levels generated. The image is read on the calling
-     * thread. Normal maps and other data load as {@link ColorSpace#LINEAR}.
+     * Start loading a texture from an image file, tiling: a DDS file with the mip levels it holds,
+     * or any image stb reads, as 8 bit RGBA with mip levels generated. The image is read on the
+     * calling thread. Normal maps and other data load as {@link ColorSpace#LINEAR}.
      *
      * @param texturePath The full path to the image.
      * @param colorSpace The color space its values are in.
      * @return The handle for the new texture, which becomes resident once uploaded.
      * @throws TextureException If the image can't be read, or the texture can't be created.
      * @throws IllegalStateException If the plugin was unloaded, or the renderer isn't running.
+     * @see #load(String, ColorSpace, TextureWrap)
      */
     public TextureHandle load(@NonNull String texturePath, @NonNull ColorSpace colorSpace) {
-        context.checkOpen();
-        return renderer().getTextureLoader().load(context.getOwnerKey(), texturePath, colorSpace);
+        return load(texturePath, colorSpace, TextureWrap.REPEAT);
     }
 
     /**
-     * Start loading a texture from a DDS file already read, with the mip levels it holds.
+     * Start loading a texture from an image file, as {@link #load(String, ColorSpace)} does, with a
+     * chosen wrap.
+     *
+     * @param texturePath The full path to the image.
+     * @param colorSpace The color space its values are in.
+     * @param wrap What it shows outside its texture coordinates.
+     * @return The handle for the new texture, which becomes resident once uploaded.
+     * @throws TextureException If the image can't be read, or the texture can't be created.
+     * @throws IllegalStateException If the plugin was unloaded, or the renderer isn't running.
+     */
+    public TextureHandle load(
+            @NonNull String texturePath,
+            @NonNull ColorSpace colorSpace,
+            @NonNull TextureWrap wrap) {
+        context.checkOpen();
+        return renderer()
+                .getTextureLoader()
+                .load(context.getOwnerKey(), texturePath, colorSpace, wrap);
+    }
+
+    /**
+     * Start loading a tiling texture from a DDS file already read, with the mip levels it holds.
      *
      * @param dds The file.
      * @param colorSpace The color space its values are in, for formats that can be either; the
@@ -79,10 +100,26 @@ public final class Textures {
      * @return The handle for the new texture, which becomes resident once uploaded.
      * @throws TextureException If the format isn't supported, or the texture can't be created.
      * @throws IllegalStateException If the plugin was unloaded, or the renderer isn't running.
+     * @see #load(DdsFile, ColorSpace, TextureWrap)
      */
     public TextureHandle load(@NonNull DdsFile dds, @NonNull ColorSpace colorSpace) {
+        return load(dds, colorSpace, TextureWrap.REPEAT);
+    }
+
+    /**
+     * Start loading a texture from a DDS file already read, with a chosen wrap.
+     *
+     * @param dds The file.
+     * @param colorSpace The color space its values are in, for formats that can be either.
+     * @param wrap What it shows outside its texture coordinates.
+     * @return The handle for the new texture, which becomes resident once uploaded.
+     * @throws TextureException If the format isn't supported, or the texture can't be created.
+     * @throws IllegalStateException If the plugin was unloaded, or the renderer isn't running.
+     */
+    public TextureHandle load(
+            @NonNull DdsFile dds, @NonNull ColorSpace colorSpace, @NonNull TextureWrap wrap) {
         context.checkOpen();
-        return renderer().getTextureLoader().load(context.getOwnerKey(), dds, colorSpace);
+        return renderer().getTextureLoader().load(context.getOwnerKey(), dds, colorSpace, wrap);
     }
 
     /**
@@ -120,8 +157,9 @@ public final class Textures {
     }
 
     /**
-     * Start loading a texture from raw pixel data. The data is copied before this returns, so the
-     * buffer can be reused or freed right away.
+     * Start loading a texture from raw pixel data, clamped at its edges, as suits images shown
+     * whole and tiles that don't wrap. The data is copied before this returns, so the buffer can be
+     * reused or freed right away.
      *
      * @param buffer The tightly packed pixel data, from its position to its limit. If null, the
      *     texture is cleared to transparent black where the format allows.
@@ -133,13 +171,36 @@ public final class Textures {
      * @return The handle for the new texture, which becomes resident once uploaded.
      * @throws TextureException If the format isn't supported, or the texture can't be created.
      * @throws IllegalStateException If the plugin was unloaded, or the renderer isn't running.
+     * @see #load(ByteBuffer, Format, int, int, TextureWrap)
      */
     public TextureHandle load(
             @Nullable ByteBuffer buffer, @NonNull Format format, int width, int height) {
+        return load(buffer, format, width, height, TextureWrap.CLAMP);
+    }
+
+    /**
+     * Start loading a texture from raw pixel data, as {@link #load(ByteBuffer, Format, int, int)}
+     * does, with a chosen wrap.
+     *
+     * @param buffer The tightly packed pixel data, from its position to its limit, or null.
+     * @param format The format of the pixel data.
+     * @param width The width in pixels.
+     * @param height The height in pixels.
+     * @param wrap What it shows outside its texture coordinates.
+     * @return The handle for the new texture, which becomes resident once uploaded.
+     * @throws TextureException If the format isn't supported, or the texture can't be created.
+     * @throws IllegalStateException If the plugin was unloaded, or the renderer isn't running.
+     */
+    public TextureHandle load(
+            @Nullable ByteBuffer buffer,
+            @NonNull Format format,
+            int width,
+            int height,
+            @NonNull TextureWrap wrap) {
         context.checkOpen();
         return renderer()
                 .getTextureLoader()
-                .load(context.getOwnerKey(), buffer, format, width, height);
+                .load(context.getOwnerKey(), buffer, format, width, height, wrap);
     }
 
     /**
