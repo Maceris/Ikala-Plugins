@@ -477,6 +477,7 @@ public class GraphicsDebug extends GuiWindow {
                 IkGui.textWrapped(
                         "The filter can show a g-buffer texture instead of the lit scene. The"
                                 + " g-buffer is only drawn while rendering the scene.");
+                drawLodColors(scene);
             }
 
             if (IkGui.collapsingHeader("Retained UI")) {
@@ -650,6 +651,36 @@ public class GraphicsDebug extends GuiWindow {
         directionalLightY.setValue(directionalLightDir.y());
         directionalLightZ.setValue(directionalLightDir.z());
         directionalLightIntensity.setValue(directionalLight.getIntensity());
+    }
+
+    /**
+     * The level of detail coloring, for every level of detail world and instance, offered while
+     * there are any.
+     *
+     * @param scene The scene.
+     */
+    private static void drawLodColors(@NonNull Scene scene) {
+        final DebugVisualizers visualizers = scene.getDebugVisualizers();
+        final VulkanInstance renderer = GraphicsManager.getRenderInstance();
+        final boolean any =
+                renderer != null
+                        && renderer.getState().lods != null
+                        && renderer.getState().lods.hasWorlds();
+        if (!any) {
+            IkGui.beginDisabled();
+        }
+        LOD_COLORS.set(visualizers.getLodColors().ordinal());
+        if (IkGui.combo("LOD colors", LOD_COLORS, LOD_COLOR_NAMES)) {
+            visualizers.setLodColors(DebugVisualizers.LodColors.values()[LOD_COLORS.get()]);
+        }
+        IkGui.setItemTooltip(
+                any
+                        ? "Color level of detail by cluster, by the group that simplifies"
+                                + " together, by level, or by region cell, still lit."
+                        : "There is no level of detail to color yet.");
+        if (!any) {
+            IkGui.endDisabled();
+        }
     }
 
     /** Show how long each part of a frame takes, over the last couple of seconds. */
@@ -833,15 +864,6 @@ public class GraphicsDebug extends GuiWindow {
         }
         IkGui.setItemTooltip(
                 "Gray for how many frames each pixel's history holds, red where it started over.");
-
-        // Level of detail coloring, for every level of detail world
-        LOD_COLORS.set(visualizers.getLodColors().ordinal());
-        if (IkGui.combo("LOD colors", LOD_COLORS, LOD_COLOR_NAMES)) {
-            visualizers.setLodColors(DebugVisualizers.LodColors.values()[LOD_COLORS.get()]);
-        }
-        IkGui.setItemTooltip(
-                "Color level of detail by cluster, by the group that simplifies together, by"
-                        + " level, or by region cell, still lit.");
 
         // Point light shadows: the budget and what it reached
         POINT_SHADOW_BUDGET[0] = settings.pointShadowBudget;
