@@ -175,10 +175,15 @@ public class PipelineManagerVulkan {
     public PipelineManagerVulkan(
             @NonNull Window window, @NonNull ShaderMap shaders, @NonNull VulkanState state) {
 
+        log.trace("Initializing pipeline manager");
+
         renderers = new HashMap<>();
         createShadowMaps(state);
+        log.trace("Created shadow maps");
         createShaderData(window, state);
+        log.trace("Created shader data");
         createGuiFont();
+        log.trace("Created GUI font");
         skybox = new SkyboxModel(state);
         quadMesh = QuadMesh.getInstance(state);
 

@@ -1,5 +1,8 @@
 package com.ikalagaming.graphics.vulkan;
 
+import static org.lwjgl.glfw.GLFW.GLFW_ICONIFIED;
+import static org.lwjgl.glfw.GLFW.GLFW_VISIBLE;
+import static org.lwjgl.glfw.GLFW.glfwGetWindowAttrib;
 import static org.lwjgl.glfw.GLFWVulkan.glfwCreateWindowSurface;
 import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
 import static org.lwjgl.system.MemoryUtil.NULL;
@@ -683,12 +686,18 @@ public class VulkanInstance {
      */
     private boolean createSwapchain(@NonNull VulkanState.WindowInfo windowInfo) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
+            long swapTimer = System.nanoTime();
             VkSurfaceCapabilitiesKHR capabilities = state.device.physical.capabilities;
             checkError(
                     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
                             state.device.physical.physicalDevice,
                             windowInfo.surfaceHandle,
                             capabilities));
+            log.trace(
+                    "Swapchain: surface capabilities took {} ms, window visible {}, iconified {}",
+                    (System.nanoTime() - swapTimer) / 1_000_000.0,
+                    glfwGetWindowAttrib(windowInfo.window.getWindowHandle(), GLFW_VISIBLE),
+                    glfwGetWindowAttrib(windowInfo.window.getWindowHandle(), GLFW_ICONIFIED));
 
             final int width;
             final int height;
@@ -747,9 +756,21 @@ public class VulkanInstance {
                             .clipped(true)
                             .oldSwapchain(oldSwapchain);
 
+            log.trace(
+                    "Swapchain: creating {}x{}, {} images, format {}, present mode {}",
+                    width,
+                    height,
+                    imageCount,
+                    SWAPCHAIN_FORMAT,
+                    swapchainCreateInfo.presentMode());
+            swapTimer = System.nanoTime();
             checkError(
                     vkCreateSwapchainKHR(
                             state.device.logical, swapchainCreateInfo, null, longOutput));
+            log.trace(
+                    "Swapchain: vkCreateSwapchainKHR took {} ms",
+                    (System.nanoTime() - swapTimer) / 1_000_000.0);
+            swapTimer = System.nanoTime();
             windowInfo.swapchainHandle = longOutput.get(0);
             windowInfo.swapchainWidth = width;
             windowInfo.swapchainHeight = height;
@@ -768,6 +789,12 @@ public class VulkanInstance {
             checkError(
                     vkGetSwapchainImagesKHR(
                             state.device.logical, windowInfo.swapchainHandle, intOutput, images));
+
+            log.trace(
+                    "Swapchain: cleanup and vkGetSwapchainImagesKHR ({} images) took {} ms",
+                    actualImageCount,
+                    (System.nanoTime() - swapTimer) / 1_000_000.0);
+            swapTimer = System.nanoTime();
 
             windowInfo.swapchainImages = new long[actualImageCount];
             images.get(0, windowInfo.swapchainImages);
@@ -799,6 +826,10 @@ public class VulkanInstance {
                                 state.device.logical, semaphoreCreateInfo, null, longOutput));
                 windowInfo.renderCompleteSemaphores[i] = longOutput.get(0);
             }
+
+            log.trace(
+                    "Swapchain: image views and semaphores took {} ms",
+                    (System.nanoTime() - swapTimer) / 1_000_000.0);
 
             windowInfo.lastSwapchainGeneration = System.currentTimeMillis();
             windowInfo.updateSwapchain = false;
@@ -1091,8 +1122,11 @@ public class VulkanInstance {
      * @return Whether we were successful. False if there were (unrecoverable) errors.
      */
     public boolean initialize(@NonNull Window window) {
+        log.trace("Initializing Vulkan");
         createVulkanInstance(window);
+        log.trace("Created Vulkan instance");
         createSurface(window);
+        log.trace("Created surface");
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VmaVulkanFunctions vkFunctions =
@@ -1108,12 +1142,15 @@ public class VulkanInstance {
             checkError(vmaCreateAllocator(vmaAllocatorCreateInfo, pointerOutput));
             state.vmaAllocator = pointerOutput.get(0);
         }
+        log.trace("Created VMA allocator");
 
         VulkanState.WindowInfo windowInfo = state.windows.get(window);
         if (!createSwapchain(windowInfo)) {
             // Started minimized, try again once it has a size
             windowInfo.updateSwapchain = true;
         }
+        log.trace("Created swapchain");
+
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkCommandPoolCreateInfo commandPoolCreateInfo =
                     VkCommandPoolCreateInfo.calloc(stack)
@@ -1124,6 +1161,8 @@ public class VulkanInstance {
                     vkCreateCommandPool(
                             state.device.logical, commandPoolCreateInfo, null, longOutput));
             state.commandPoolGraphics = longOutput.get(0);
+
+            log.trace("Created graphics command pool");
 
             VkCommandBufferAllocateInfo commandBufferAllocateInfo =
                     VkCommandBufferAllocateInfo.calloc(stack)
@@ -1141,6 +1180,7 @@ public class VulkanInstance {
                         new VkCommandBuffer(commandBuffers.get(i), state.device.logical);
             }
         }
+        log.trace("Created graphics command buffers");
 
         if (state.hasSeparateTransferQueue) {
             try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -1154,6 +1194,8 @@ public class VulkanInstance {
                         vkCreateCommandPool(
                                 state.device.logical, commandPoolCreateInfo, null, longOutput));
                 state.commandPoolTransfer = longOutput.get(0);
+
+                log.trace("Created transfer command pool");
 
                 VkCommandBufferAllocateInfo commandBufferAllocateInfo =
                         VkCommandBufferAllocateInfo.calloc(stack)
@@ -1169,6 +1211,7 @@ public class VulkanInstance {
                         new VkCommandBuffer(commandBuffers.get(0), state.device.logical);
             }
         }
+        log.trace("Created transfer command buffers");
 
         state.immediateCommands = new ImmediateCommands(state);
         state.bindlessTextures = new BindlessTextures(state);
@@ -1188,13 +1231,21 @@ public class VulkanInstance {
         state.frameTimings = new FrameTimings(state);
         textureLoader = new TextureLoaderVulkan(state);
         shaderMap = new ShaderMap();
+        log.trace("Created state storage");
+
         initializeShaders();
+        log.trace("Initialized shaders");
         initializeGui(window);
+        log.trace("Initialized GUI");
         pipelineManager = new PipelineManagerVulkan(window, shaderMap, state);
+        log.trace("Created pipeline manager");
         renderConfig = RenderConfig.builder().withGui().build();
         pipeline = pipelineManager.getPipeline(renderConfig);
+        log.trace("Built initial pipeline");
 
         createSynchronizationInfo();
+        log.trace("Created synchronization info");
+
         return true;
     }
 
