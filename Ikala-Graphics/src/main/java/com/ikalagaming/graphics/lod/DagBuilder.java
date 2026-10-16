@@ -89,10 +89,11 @@ public final class DagBuilder {
      * @param averages What each material looks like averaged, so groups far enough out that
      *     textures can't be told apart blend their input's look per vertex instead of keeping one
      *     material a triangle (see {@link AverageTransfer}); null to keep materials at every level.
-     * @param bakeTile The side, in texels, of the texture tile each output cluster of a baking
-     *     group gets; 0 never to bake. A group of textured triangles bakes once a tile that size is
-     *     fine enough for its error (see {@link #bakes}), and then simplifies its geometry alone,
-     *     with no seams or material borders held.
+     * @param bakeTile The side, in texels, of the texture tile an output cluster of a baking group
+     *     is expected to need; 0 never to bake. A group of textured triangles bakes once a tile
+     *     that size is fine enough for its error (see {@link #bakes}), and then simplifies its
+     *     geometry alone, with no seams or material borders held. Each cluster's tile is then as
+     *     small as its error allows, with sides up to twice this.
      */
     public record Options(
             double virtualEdgeFactor,
@@ -1533,13 +1534,14 @@ public final class DagBuilder {
         final Correspondence map = baking ? new Correspondence(merged, result.history()) : null;
         for (int i = 0; i < bakeTiles.length; ++i) {
             final BakeLayout layout = layoutFor(outCorners.get(i), error);
-            bakeTiles[i] = layout.tile();
+            bakeTiles[i] = LodDag.packTile(layout.width(), layout.height());
             outAttributes.set(i, bakedAttributes(outCorners.get(i), outAttributes.get(i), layout));
             bakes.add(
                     BakeTexels.of(
                             outCorners.get(i),
                             layout.uvs(),
-                            layout.tile(),
+                            layout.width(),
+                            layout.height(),
                             outFaces.get(i),
                             map,
                             face ->
@@ -1709,30 +1711,17 @@ public final class DagBuilder {
         }
     }
 
-    /** The smallest bake tile's side, in texels. */
-    static final int MIN_BAKE_TILE = 8;
-
     /**
-     * Lay a baked cluster out in the smallest power of two tile, from {@value #MIN_BAKE_TILE}
-     * texels up to the options' tile, whose texels are no wider than the cluster's error, so that
-     * it looks no blurrier than the cut allows; if even that tile is too coarse, as when many small
-     * charts' gaps fill it, one twice as wide.
+     * Lay a baked cluster out in the smallest tile whose texels are as wide as the cluster's error,
+     * so that it looks no blurrier than the cut allows, with sides up to twice the options' tile,
+     * for clusters whose many small charts' gaps take up much of it.
      *
      * @param corners The cluster's corners.
      * @param error The cluster's error.
      * @return The layout.
      */
     private BakeLayout layoutFor(float @NonNull [] corners, double error) {
-        BakeLayout layout = null;
-        for (int tile = MIN_BAKE_TILE; tile <= options.bakeTile(); tile *= 2) {
-            layout = BakeLayout.of(corners, tile);
-            if (layout.texelSize() <= error) {
-                return layout;
-            }
-        }
-        return layout != null && layout.texelSize() <= error
-                ? layout
-                : BakeLayout.of(corners, 2 * Math.max(MIN_BAKE_TILE, options.bakeTile()));
+        return BakeLayout.at(corners, error, 2 * options.bakeTile());
     }
 
     /** The share of a tile charts are packed into, the rest gaps and corners left over. */

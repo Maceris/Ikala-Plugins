@@ -30,8 +30,8 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * The pages level of detail bakes go into, and the bakes waiting for the GPU. A baked cluster (see
- * {@link com.ikalagaming.graphics.lod.BakeLayout}) gets a square tile in a page; each page is a
- * color texture and a data texture of normal, roughness and metalness, drawn through one material
+ * {@link com.ikalagaming.graphics.lod.BakeLayout}) gets a rectangular tile in a page; each page is
+ * a color texture and a data texture of normal, roughness and metalness, drawn through one material
  * with {@link Material#isBakedData()} set, so baked clusters are ordinary textured triangles.
  *
  * <p>When a world with baked clusters is added, {@link #plan} gives each a tile, points its texture
@@ -52,11 +52,11 @@ public final class LodBakes {
      */
     public static final int PAGE = 512;
 
-    /** The smallest tile's side, in texels. */
-    private static final int MIN_TILE = 8;
+    /** Tiles' sides are whole multiples of this many texels, as BakeLayout lays them out. */
+    private static final int ALIGN = 4;
 
-    /** Tile sizes a page splits into, from {@link #MIN_TILE} up to the page. */
-    private static final int LEVELS = Integer.numberOfTrailingZeros(PAGE / MIN_TILE) + 1;
+    /** Columns of {@link #ALIGN} texels across a page. */
+    private static final int COLUMNS = PAGE / ALIGN;
 
     /** Who the pages' textures belong to in the texture registry: no plugin, so none takes them. */
     private static final String OWNER = "LOD bakes";
@@ -91,9 +91,20 @@ public final class LodBakes {
      * @param page The page.
      * @param x Its left, in texels.
      * @param y Its top.
-     * @param size Its side.
+     * @param width Its width, in texels.
+     * @param height Its height.
      */
-    public record Tile(int page, int x, int y, int size) {}
+    public record Tile(int page, int x, int y, int width, int height) {
+
+        /**
+         * The texels it holds.
+         *
+         * @return The count.
+         */
+        public int texels() {
+            return width * height;
+        }
+    }
 
     /**
      * One tile to bake.
@@ -136,7 +147,11 @@ public final class LodBakes {
         }
     }
 
-    /** A page: two textures, their material, and which tiles are free. */
+    /**
+     * A page: two textures, their material, and which of it is free. Tiles are packed in along a
+     * skyline, the height of each column taken so far; tiles given back go on a free list that
+     * later tiles are cut from, and the page starts over once every tile is back.
+     */
     private static final class Page {
         /** Its index. */
         final int index;
@@ -147,8 +162,14 @@ public final class LodBakes {
         /** Its index in the material cache. */
         final int materialIndex;
 
-        /** Free tiles of each size, from the smallest, as packed x and y. */
-        final List<Set<Long>> free = new ArrayList<>();
+        /** How far down each column of {@link #ALIGN} texels is taken, in texels. */
+        final int[] sky = new int[COLUMNS];
+
+        /** Rectangles given back, as x, y, width and height. */
+        final List<int[]> free = new ArrayList<>();
+
+        /** Tiles taken and not given back. */
+        int used;
 
         /** The color texture, once made. */
         TextureHandle color;
@@ -173,80 +194,110 @@ public final class LodBakes {
             this.index = index;
             this.material = material;
             this.materialIndex = materialIndex;
-            for (int level = 0; level < LEVELS; ++level) {
-                free.add(new HashSet<>());
-            }
-            free.get(LEVELS - 1).add(pack(0, 0));
         }
 
         /**
-         * Take a tile, splitting a bigger one if none that size is free.
+         * Take a tile: the tightest rectangle given back that holds it, cutting off what is left,
+         * or else the place along the skyline where its bottom would be highest, then leftmost.
          *
-         * @param size The tile's side, a power of two from {@link #MIN_TILE} to {@link #PAGE}.
+         * @param width The tile's width, a whole multiple of {@link #ALIGN} up to {@link #PAGE}.
+         * @param height Its height, the same.
          * @return Its corner, packed, or -1 if the page has no room.
          */
-        long take(int size) {
-            final int level = levelOf(size);
-            int from = level;
-            while (from < LEVELS && free.get(from).isEmpty()) {
-                ++from;
+        long take(int width, int height) {
+            int[] tightest = null;
+            for (int[] rectangle : free) {
+                if (rectangle[2] >= width
+                        && rectangle[3] >= height
+                        && (tightest == null
+                                || rectangle[2] * rectangle[3] < tightest[2] * tightest[3])) {
+                    tightest = rectangle;
+                }
             }
-            if (from >= LEVELS) {
+            if (tightest != null) {
+                free.remove(tightest);
+                cut(tightest, width, height);
+                ++used;
+                return pack(tightest[0], tightest[1]);
+            }
+            final int columns = width / ALIGN;
+            int bestColumn = -1;
+            int bestTop = Integer.MAX_VALUE;
+            for (int column = 0; column + columns <= COLUMNS; ++column) {
+                int top = 0;
+                for (int c = column; c < column + columns; ++c) {
+                    top = Math.max(top, sky[c]);
+                }
+                if (top + height <= PAGE && top < bestTop) {
+                    bestTop = top;
+                    bestColumn = column;
+                }
+            }
+            if (bestColumn < 0) {
                 return -1;
             }
-            long block = free.get(from).iterator().next();
-            free.get(from).remove(block);
-            // Split down, keeping the first quarter and freeing the rest
-            while (from > level) {
-                --from;
-                final int half = MIN_TILE << from;
-                final int x = unpackX(block);
-                final int y = unpackY(block);
-                free.get(from).add(pack(x + half, y));
-                free.get(from).add(pack(x, y + half));
-                free.get(from).add(pack(x + half, y + half));
+            for (int c = bestColumn; c < bestColumn + columns; ++c) {
+                if (sky[c] < bestTop) {
+                    // The gap the tile bridges over is free to later, smaller tiles
+                    free.add(new int[] {c * ALIGN, sky[c], ALIGN, bestTop - sky[c]});
+                }
+                sky[c] = bestTop + height;
             }
-            return block;
+            ++used;
+            return pack(bestColumn * ALIGN, bestTop);
         }
 
         /**
-         * Give a tile back, merging it with its siblings when they are all free.
+         * Free what a tile leaves of a rectangle it is cut from: the strip beside it and the strip
+         * under it, the longer of the two running the rectangle's full length.
+         *
+         * @param rectangle The rectangle, x, y, width and height.
+         * @param width The tile's width.
+         * @param height The tile's height.
+         */
+        private void cut(int @NonNull [] rectangle, int width, int height) {
+            final int x = rectangle[0];
+            final int y = rectangle[1];
+            final int right = rectangle[2] - width;
+            final int below = rectangle[3] - height;
+            if (right * rectangle[3] > below * rectangle[2]) {
+                addFree(x + width, y, right, rectangle[3]);
+                addFree(x, y + height, width, below);
+            } else {
+                addFree(x + width, y, right, height);
+                addFree(x, y + height, rectangle[2], below);
+            }
+        }
+
+        /**
+         * Put a rectangle on the free list, if it has any texels.
          *
          * @param x Its left.
          * @param y Its top.
-         * @param size Its side.
+         * @param width Its width.
+         * @param height Its height.
          */
-        void give(int x, int y, int size) {
-            int level = levelOf(size);
-            int bx = x;
-            int by = y;
-            while (level < LEVELS - 1) {
-                final int side = MIN_TILE << level;
-                final int px = bx & ~(2 * side - 1);
-                final int py = by & ~(2 * side - 1);
-                final long[] siblings = {
-                    pack(px, py),
-                    pack(px + side, py),
-                    pack(px, py + side),
-                    pack(px + side, py + side)
-                };
-                boolean allFree = true;
-                for (long sibling : siblings) {
-                    if (sibling != pack(bx, by) && !free.get(level).contains(sibling)) {
-                        allFree = false;
-                    }
-                }
-                if (!allFree) {
-                    break;
-                }
-                for (long sibling : siblings) {
-                    free.get(level).remove(sibling);
-                }
-                bx = px;
-                by = py;
-                ++level;
+        private void addFree(int x, int y, int width, int height) {
+            if (width > 0 && height > 0) {
+                free.add(new int[] {x, y, width, height});
             }
-            free.get(level).add(pack(bx, by));
+        }
+
+        /**
+         * Give a tile back, starting the page over once it is empty.
+         *
+         * @param x Its left.
+         * @param y Its top.
+         * @param width Its width.
+         * @param height Its height.
+         */
+        void give(int x, int y, int width, int height) {
+            if (--used == 0) {
+                Arrays.fill(sky, 0);
+                free.clear();
+                return;
+            }
+            addFree(x, y, width, height);
         }
     }
 
@@ -309,16 +360,6 @@ public final class LodBakes {
     }
 
     /**
-     * Which split level a tile size is.
-     *
-     * @param size The side.
-     * @return The level, 0 for the smallest.
-     */
-    private static int levelOf(int size) {
-        return Integer.numberOfTrailingZeros(Math.max(size, MIN_TILE) / MIN_TILE);
-    }
-
-    /**
      * Give a world's baked clusters tiles, and work out what each texel samples. Safe from any
      * thread.
      *
@@ -344,7 +385,12 @@ public final class LodBakes {
         lock.lock();
         try {
             for (int[] b : baked) {
-                tiles.put(b[0], allocate(Math.min(b[1], PAGE), cache));
+                tiles.put(
+                        b[0],
+                        allocate(
+                                Math.min(LodDag.tileWidth(b[1]), PAGE),
+                                Math.min(LodDag.tileHeight(b[1]), PAGE),
+                                cache));
             }
         } finally {
             lock.unlock();
@@ -365,15 +411,16 @@ public final class LodBakes {
     /**
      * Take a tile from the first page with room, starting a page if none has. Lock held.
      *
-     * @param size The tile's side.
+     * @param width The tile's width.
+     * @param height The tile's height.
      * @param cache The scene's materials, for a new page's.
      * @return The tile.
      */
-    private Tile allocate(int size, @NonNull MaterialCache cache) {
+    private Tile allocate(int width, int height, @NonNull MaterialCache cache) {
         for (Page page : pages) {
-            final long corner = page.take(size);
+            final long corner = page.take(width, height);
             if (corner >= 0) {
-                return new Tile(page.index, unpackX(corner), unpackY(corner), size);
+                return new Tile(page.index, unpackX(corner), unpackY(corner), width, height);
             }
         }
         if (pages.size() >= MAX_PAGES) {
@@ -384,8 +431,8 @@ public final class LodBakes {
         final Page page = new Page(pages.size(), material, cache.addMaterial(material));
         cache.setDirty(true);
         pages.add(page);
-        final long corner = page.take(size);
-        return new Tile(page.index, unpackX(corner), unpackY(corner), size);
+        final long corner = page.take(width, height);
+        return new Tile(page.index, unpackX(corner), unpackY(corner), width, height);
     }
 
     /**
@@ -400,8 +447,8 @@ public final class LodBakes {
         final int[] attributes = cluster.attributes().clone();
         for (int at = 0; at + Attributes.VALUES <= attributes.length; at += Attributes.VALUES) {
             final float[] uv = Attributes.textureCoordinates(attributes, at);
-            final float u = (tile.x() + uv[0] * tile.size()) / PAGE;
-            final float v = (tile.y() + uv[1] * tile.size()) / PAGE;
+            final float u = (tile.x() + uv[0] * tile.width()) / PAGE;
+            final float v = (tile.y() + uv[1] * tile.height()) / PAGE;
             attributes[at + 2] =
                     (Float.floatToFloat16(u) & 0xFFFF) | (Float.floatToFloat16(v) << Short.SIZE);
         }
@@ -447,17 +494,17 @@ public final class LodBakes {
             @NonNull Map<Integer, LodDag.Cluster> drawn,
             @NonNull MaterialCache cache) {
         final BakeTexels bake = dag.bakeOf(cluster.id());
-        final int size = bake.tile();
+        final int texels = bake.width() * bake.height();
         final ByteBuffer records =
-                ByteBuffer.allocate(size * size * RECORD_SIZE).order(ByteOrder.LITTLE_ENDIAN);
+                ByteBuffer.allocate(texels * RECORD_SIZE).order(ByteOrder.LITTLE_ENDIAN);
         final List<Material> sources = new ArrayList<>();
         final Map<Material, Integer> slots = new IdentityHashMap<>();
         final double[] weights = new double[CORNERS];
         final int[] child = new int[Attributes.VALUES];
         final int[] own = new int[Attributes.VALUES];
         final float[] direction = new float[AXES];
-        final double worldPerTexel = worldPerTexel(cluster, size);
-        for (int texel = 0; texel < size * size; ++texel) {
+        final double worldPerTexel = worldPerTexel(cluster, bake.width(), bake.height());
+        for (int texel = 0; texel < texels; ++texel) {
             final int at = texel * RECORD_SIZE;
             final int childId = bake.childCluster(texel);
             if (childId == BakeTexels.EMPTY) {
@@ -520,10 +567,11 @@ public final class LodBakes {
      * longest for its length.
      *
      * @param cluster The cluster, with coordinates in its tile from 0 to 1.
-     * @param size Its tile's side.
+     * @param width Its tile's width.
+     * @param height Its tile's height.
      * @return World units a texel spans.
      */
-    private static double worldPerTexel(LodDag.@NonNull Cluster cluster, int size) {
+    private static double worldPerTexel(LodDag.@NonNull Cluster cluster, int width, int height) {
         final float[] corners = cluster.corners();
         final int[] attributes = cluster.attributes();
         double best = 0;
@@ -536,7 +584,7 @@ public final class LodBakes {
                 final float[] b =
                         Attributes.textureCoordinates(
                                 attributes, t * Attributes.PER_TRIANGLE + d * Attributes.VALUES);
-                final double texels = Math.hypot(b[0] - a[0], b[1] - a[1]) * size;
+                final double texels = Math.hypot((b[0] - a[0]) * width, (b[1] - a[1]) * height);
                 if (texels > 1) {
                     best = Math.max(best, distance(corners, t, c, d) / texels);
                 }
@@ -657,7 +705,7 @@ public final class LodBakes {
             jobs.removeIf(job -> job.world() == world);
             if (tiles != null) {
                 for (Tile tile : tiles) {
-                    pages.get(tile.page()).give(tile.x(), tile.y(), tile.size());
+                    pages.get(tile.page()).give(tile.x(), tile.y(), tile.width(), tile.height());
                 }
             }
         } finally {
@@ -702,7 +750,7 @@ public final class LodBakes {
             while (!jobs.isEmpty() && (taken.isEmpty() || total < texels)) {
                 final Job job = jobs.remove(0);
                 taken.add(job);
-                total += (long) job.tile().size() * job.tile().size();
+                total += job.tile().texels();
                 final Page page = pages.get(job.tile().page());
                 if (page.color == null && !toMake.contains(page)) {
                     toMake.add(page);

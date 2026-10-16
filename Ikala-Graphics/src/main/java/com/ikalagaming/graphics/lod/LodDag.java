@@ -88,8 +88,9 @@ public final class LodDag {
      * @param rejectedFlips Collapses rejected for flipping a triangle.
      * @param rejectedLinks Collapses rejected by the link condition.
      * @param buildNanos How long it took to build.
-     * @param bakeTiles The side, in texels, of each output's bake tile, in output order, when it
-     *     baked its children's appearance rather than keeping their materials; empty if it didn't.
+     * @param bakeTiles The size of each output's bake tile, packed by {@link #packTile}, in output
+     *     order, when it baked its children's appearance rather than keeping their materials; empty
+     *     if it didn't.
      */
     public record Group(
             int id,
@@ -127,10 +128,41 @@ public final class LodDag {
         public long bakedTexels() {
             long total = 0;
             for (int tile : bakeTiles) {
-                total += (long) tile * tile;
+                total += (long) tileWidth(tile) * tileHeight(tile);
             }
             return total;
         }
+    }
+
+    /**
+     * Pack a bake tile's size into an int.
+     *
+     * @param width Its width, in texels, under 2^16.
+     * @param height Its height, in texels, under 2^16.
+     * @return The packed size.
+     */
+    public static int packTile(int width, int height) {
+        return width << Short.SIZE | height;
+    }
+
+    /**
+     * A packed bake tile's width.
+     *
+     * @param tile The size, from {@link #packTile}.
+     * @return The width, in texels.
+     */
+    public static int tileWidth(int tile) {
+        return tile >>> Short.SIZE;
+    }
+
+    /**
+     * A packed bake tile's height.
+     *
+     * @param tile The size, from {@link #packTile}.
+     * @return The height, in texels.
+     */
+    public static int tileHeight(int tile) {
+        return tile & 0xFFFF;
     }
 
     /**

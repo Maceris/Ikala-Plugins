@@ -12,8 +12,8 @@ import java.util.List;
 /** Tests for laying clusters out in bake tiles. */
 class BakeLayoutTest {
 
-    /** The tile's side, in texels. */
-    private static final int TILE = 64;
+    /** The largest a tile's side may be, in texels. */
+    private static final int MAX_SIDE = 128;
 
     /**
      * The triangles of a unit cube's faces, facing out.
@@ -84,7 +84,8 @@ class BakeLayoutTest {
     }
 
     /**
-     * Check what every layout must be: inside the tile, clear of its edge by the gap, no two
+     * Check what every layout must be: a tile whose sides are whole multiples of the alignment and
+     * no more than the largest, everything inside it and clear of its edge by the gap, no two
      * triangles overlapping, and every triangle at the layout's texels per world unit, less only
      * what laying a tilted triangle flat on its chart's plane takes off.
      *
@@ -94,9 +95,17 @@ class BakeLayoutTest {
     private static void assertSound(float[] corners, BakeLayout layout) {
         final float[] uv = layout.uvs();
         final int triangles = corners.length / 9;
-        final double margin = (BakeLayout.GUTTER - 1e-3) / TILE;
-        for (float value : uv) {
-            assertTrue(value >= margin && value <= 1 - margin, "Out of the tile: " + value);
+        final int width = layout.width();
+        final int height = layout.height();
+        assertTrue(
+                width % BakeLayout.ALIGN == 0
+                        && height % BakeLayout.ALIGN == 0
+                        && width <= MAX_SIDE
+                        && height <= MAX_SIDE,
+                width + " by " + height);
+        for (int i = 0; i < uv.length; ++i) {
+            final double margin = (BakeLayout.GUTTER - 1e-3) / (i % 2 == 0 ? width : height);
+            assertTrue(uv[i] >= margin && uv[i] <= 1 - margin, "Out of the tile: " + uv[i]);
         }
         final double[] flat = new double[uv.length];
         for (int i = 0; i < uv.length; ++i) {
@@ -124,8 +133,8 @@ class BakeLayoutTest {
                                             - (uv[t * 6 + 4] - uv[t * 6])
                                                     * (uv[t * 6 + 3] - uv[t * 6 + 1]))
                             / 2
-                            * TILE
-                            * TILE;
+                            * width
+                            * height;
             final double full = world * texels * texels;
             final double tilted = Math.cos(Math.toRadians(BakeLayout.CHART_DEGREES)) * full;
             assertTrue(
@@ -137,21 +146,48 @@ class BakeLayoutTest {
     @Test
     void testCubeFacesAreCharts() {
         final float[] corners = cube();
-        final BakeLayout layout = BakeLayout.of(corners, TILE);
+        final BakeLayout layout = BakeLayout.at(corners, 0.1, MAX_SIDE);
         assertEquals(6, layout.chartCount());
         // Each face's two triangles share a chart
         for (int face = 0; face < 6; ++face) {
             assertEquals(layout.charts()[face * 2], layout.charts()[face * 2 + 1]);
         }
         assertSound(corners, layout);
-        // Six unit squares with their gaps fill a fair part of the tile
-        assertTrue(layout.texelSize() < 0.1, "Texel " + layout.texelSize());
+        // At the texel size asked for, six squares of 10 texels and their gaps fill most of it
+        assertEquals(0.1, layout.texelSize(), 1e-9);
+        final int boxes = 6 * 12 * 12;
+        assertTrue(
+                layout.width() * layout.height() <= boxes * 1.3,
+                layout.width() + " by " + layout.height());
+    }
+
+    @Test
+    void testTooFineShrinksIntoTheLargestTile() {
+        final float[] corners = cube();
+        final BakeLayout layout = BakeLayout.at(corners, 0.001, MAX_SIDE);
+        assertSound(corners, layout);
+        assertTrue(layout.texelSize() > 0.001, "Texel " + layout.texelSize());
+        // But not by much more than the gaps and the shrinking steps take
+        assertTrue(layout.texelSize() < 0.05, "Texel " + layout.texelSize());
+    }
+
+    @Test
+    void testLongStripGetsLongTile() {
+        final List<float[]> triangles = new ArrayList<>();
+        triangles.add(join(new float[] {0, 0, 0}, new float[] {0, 0, 1}, new float[] {10, 0, 0}));
+        triangles.add(join(new float[] {10, 0, 0}, new float[] {0, 0, 1}, new float[] {10, 0, 1}));
+        final float[] corners = flatten(triangles);
+        final BakeLayout layout = BakeLayout.at(corners, 0.25, MAX_SIDE);
+        assertSound(corners, layout);
+        assertEquals(1, layout.chartCount());
+        // 40 by 4 texels, gaps and all, in 44 by 8 at most either way round
+        assertEquals(44 * 8, layout.width() * layout.height());
     }
 
     @Test
     void testCurvedStripSplitsWhereItTurns() {
         final float[] corners = halfCylinder(12);
-        final BakeLayout layout = BakeLayout.of(corners, TILE);
+        final BakeLayout layout = BakeLayout.at(corners, 0.05, MAX_SIDE);
         // Half a turn can't lie flat within 60 degrees of one facing
         assertTrue(layout.chartCount() >= 2 && layout.chartCount() <= 4, "" + layout.chartCount());
         assertSound(corners, layout);
@@ -171,7 +207,7 @@ class BakeLayoutTest {
                             new float[] {x, 1, z + 1}));
         }
         final float[] corners = flatten(triangles);
-        final BakeLayout layout = BakeLayout.of(corners, TILE);
+        final BakeLayout layout = BakeLayout.at(corners, 0.25, MAX_SIDE);
         assertEquals(128, layout.chartCount());
         assertSound(corners, layout);
     }

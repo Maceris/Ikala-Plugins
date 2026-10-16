@@ -11,10 +11,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Lays a cluster's triangles out in a square texture tile, for baking its appearance: triangles
- * facing much the same way are grown into charts, each chart is laid flat on its own plane, and the
- * charts are packed into the tile at one scale, as large as fits, with a gap of texels around each
- * so filtering never reaches a neighbor.
+ * Lays a cluster's triangles out in a texture tile, for baking its appearance: triangles facing
+ * much the same way are grown into charts, each chart is laid flat on its own plane, and the charts
+ * are packed at the texel size asked for, each either way round, into the smallest rectangle, whole
+ * multiples of {@value #ALIGN} texels each way, with a gap of texels around each chart so filtering
+ * never reaches a neighbor.
  *
  * <p>A chart only takes a triangle within {@value #CHART_DEGREES} degrees of its first one's facing
  * and that doesn't overlap the chart once flat, so laying it flat is one to one. Every chart has
@@ -43,8 +44,11 @@ public final class BakeLayout {
     /** Turns tried for each chart, in steps of 90 degrees over this, for the smallest box. */
     private static final int TURNS = 6;
 
-    /** Halvings of the scale tried when searching for the largest that fits. */
-    private static final int SCALE_STEPS = 24;
+    /** Tiles' sides are whole multiples of this many texels. */
+    static final int ALIGN = 4;
+
+    /** How much smaller the scale gets each time the charts don't fit the largest tile. */
+    private static final double SHRINK = 0.9;
 
     /** Each triangle corner's place in the tile, u then v, from 0 to 1, six floats a triangle. */
     private final float[] uvs;
@@ -58,8 +62,11 @@ public final class BakeLayout {
     /** World units a texel spans. */
     private final double texelSize;
 
-    /** The tile's side, in texels. */
-    private final int tile;
+    /** The tile's width, in texels. */
+    private final int width;
+
+    /** The tile's height, in texels. */
+    private final int height;
 
     /**
      * Keep a layout.
@@ -68,27 +75,39 @@ public final class BakeLayout {
      * @param charts Each triangle's chart.
      * @param chartCount How many charts there are.
      * @param texelSize World units a texel spans.
-     * @param tile The tile's side, in texels.
+     * @param width The tile's width, in texels.
+     * @param height The tile's height, in texels.
      */
-    private BakeLayout(float[] uvs, int[] charts, int chartCount, double texelSize, int tile) {
+    private BakeLayout(
+            float[] uvs, int[] charts, int chartCount, double texelSize, int width, int height) {
         this.uvs = uvs;
         this.charts = charts;
         this.chartCount = chartCount;
         this.texelSize = texelSize;
-        this.tile = tile;
+        this.width = width;
+        this.height = height;
     }
 
     /**
-     * The tile's side.
+     * The tile's width.
      *
-     * @return The side, in texels.
+     * @return The width, in texels.
      */
-    public int tile() {
-        return tile;
+    public int width() {
+        return width;
     }
 
     /**
-     * Each triangle corner's place in the tile, from 0 to 1.
+     * The tile's height.
+     *
+     * @return The height, in texels.
+     */
+    public int height() {
+        return height;
+    }
+
+    /**
+     * Each triangle corner's place in the tile, from 0 to 1 across its width and its height.
      *
      * @return u and v for each corner, six floats a triangle. Don't change them.
      */
@@ -124,14 +143,67 @@ public final class BakeLayout {
     }
 
     /**
-     * Lay triangles out in a tile.
+     * Lay triangles out in the smallest tile that holds them at a texel size, or if even a tile of
+     * the largest side doesn't, in that at a larger texel size.
      *
      * @param corners Their corners, 9 floats a triangle.
-     * @param tile The tile's side, in texels.
+     * @param texelSize World units a texel should span.
+     * @param maxSide The largest a tile's side may be, in texels.
      * @return The layout.
      */
-    public static BakeLayout of(float @NonNull [] corners, int tile) {
+    public static BakeLayout at(float @NonNull [] corners, double texelSize, int maxSide) {
         final int triangles = corners.length / TRIANGLE_VALUES;
+        final List<Chart> built = charts(corners, triangles);
+        double scale = texelSize > 0 ? 1 / texelSize : 1;
+        double largest = 0;
+        for (Chart c : built) {
+            largest = Math.max(largest, Math.max(c.width(), c.height()));
+        }
+        if (largest > 0) {
+            // No chart may be wider than the largest tile, gaps and all
+            scale = Math.min(scale, (maxSide - 2 * GUTTER - 1) / largest);
+        }
+        Packing best = null;
+        while (best == null) {
+            best = smallest(built, scale, maxSide);
+            if (best == null) {
+                scale *= SHRINK;
+            }
+        }
+        final float[] uvs = new float[triangles * CORNERS * 2];
+        final int[] chart = new int[triangles];
+        for (Chart c : built) {
+            final int[] place = best.places[c.id];
+            final boolean turned = best.turned[c.id];
+            final double w = c.width() * scale;
+            for (int i = 0; i < c.triangles.size(); ++i) {
+                final int t = c.triangles.getInt(i);
+                chart[t] = c.id;
+                for (int k = 0; k < CORNERS; ++k) {
+                    final double[] flat = c.flat(corners, t, k);
+                    double u = (flat[0] - c.minU) * scale;
+                    double v = (flat[1] - c.minV) * scale;
+                    if (turned) {
+                        final double was = u;
+                        u = v;
+                        v = w - was;
+                    }
+                    uvs[(t * CORNERS + k) * 2] = (float) ((place[0] + u) / best.width);
+                    uvs[(t * CORNERS + k) * 2 + 1] = (float) ((place[1] + v) / best.height);
+                }
+            }
+        }
+        return new BakeLayout(uvs, chart, built.size(), 1 / scale, best.width, best.height);
+    }
+
+    /**
+     * Grow a cluster's charts and turn each to its smallest box.
+     *
+     * @param corners The corners.
+     * @param triangles How many triangles.
+     * @return The charts.
+     */
+    private static List<Chart> charts(float @NonNull [] corners, int triangles) {
         final double[][] normals = new double[triangles][];
         final double[] areas = new double[triangles];
         for (int t = 0; t < triangles; ++t) {
@@ -188,80 +260,116 @@ public final class BakeLayout {
         for (Chart c : built) {
             c.turnToSmallestBox();
         }
-        // The largest scale, texels per world unit, at which the charts pack into the tile
-        double high = 0;
-        for (Chart c : built) {
-            high = Math.max(high, Math.max(c.width(), c.height()));
-        }
-        high = high > 0 ? tile / high : 1;
-        double low = 0;
-        for (int step = 0; step < SCALE_STEPS; ++step) {
-            final double scale = step == 0 ? high : (low + high) / 2;
-            if (pack(built, scale, tile) != null) {
-                low = scale;
-                if (step == 0) {
-                    break;
-                }
-            } else {
-                high = scale;
-            }
-        }
-        if (low <= 0) {
-            // Even the smallest scale tried didn't fit: too many charts for the tile's gaps
-            low = high / (1 << SCALE_STEPS);
-        }
-        final double[][] places = pack(built, low, tile);
-        final float[] uvs = new float[triangles * CORNERS * 2];
-        for (Chart c : built) {
-            final double[] place = places == null ? new double[2] : places[c.id];
-            for (int i = 0; i < c.triangles.size(); ++i) {
-                final int t = c.triangles.getInt(i);
-                for (int k = 0; k < CORNERS; ++k) {
-                    final double[] flat = c.flat(corners, t, k);
-                    uvs[(t * CORNERS + k) * 2] =
-                            (float) ((place[0] + (flat[0] - c.minU) * low) / tile);
-                    uvs[(t * CORNERS + k) * 2 + 1] =
-                            (float) ((place[1] + (flat[1] - c.minV) * low) / tile);
-                }
-            }
-        }
-        return new BakeLayout(uvs, chart, built.size(), low > 0 ? 1 / low : 0, tile);
+        return built;
     }
 
     /**
-     * Shelf-pack charts into the tile at a scale: tallest first, left to right in rows.
+     * Where charts went in a tile.
+     *
+     * @param width The tile's width.
+     * @param height The tile's height.
+     * @param places Each chart's corner, in texels, inside its gap.
+     * @param turned Whether each chart was turned a quarter.
+     */
+    private record Packing(int width, int height, int[][] places, boolean[] turned) {}
+
+    /**
+     * Find the smallest tile the charts pack into at a scale, trying every width.
      *
      * @param built The charts.
      * @param scale Texels per world unit.
-     * @param tile The tile's side, in texels.
-     * @return Each chart's corner in the tile, in texels, or null if they don't fit.
+     * @param maxSide The largest a tile's side may be.
+     * @return The packing, or null if no tile up to the largest holds them.
      */
-    private static double[][] pack(@NonNull List<Chart> built, double scale, int tile) {
-        final Chart[] order = built.toArray(new Chart[0]);
-        Arrays.sort(order, (x, y) -> Double.compare(y.height(), x.height()));
-        final double[][] places = new double[built.size()][];
-        double x = 0;
-        double y = 0;
-        double row = 0;
-        for (Chart c : order) {
-            final double w = Math.ceil(c.width() * scale) + 2 * GUTTER;
-            final double h = Math.ceil(c.height() * scale) + 2 * GUTTER;
-            if (w > tile || h > tile) {
-                return null;
-            }
-            if (x + w > tile) {
-                x = 0;
-                y += row;
-                row = 0;
-            }
-            if (y + h > tile) {
-                return null;
-            }
-            places[c.id] = new double[] {x + GUTTER, y + GUTTER};
-            x += w;
-            row = Math.max(row, h);
+    private static Packing smallest(@NonNull List<Chart> built, double scale, int maxSide) {
+        final int[] w = new int[built.size()];
+        final int[] h = new int[built.size()];
+        int widest = ALIGN;
+        for (Chart c : built) {
+            w[c.id] = (int) Math.ceil(c.width() * scale) + 2 * GUTTER;
+            h[c.id] = (int) Math.ceil(c.height() * scale) + 2 * GUTTER;
+            widest = Math.max(widest, Math.min(w[c.id], h[c.id]));
         }
-        return places;
+        Packing best = null;
+        for (int width = align(widest); width <= maxSide; width += ALIGN) {
+            final Packing packing = skyline(w, h, width, maxSide);
+            if (packing != null
+                    && (best == null
+                            || (long) packing.width * packing.height
+                                    < (long) best.width * best.height)) {
+                best = packing;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * Pack boxes into a tile of a width with a skyline: biggest first, each where its top would be
+     * lowest, either way round, then leftmost.
+     *
+     * @param w Each box's width.
+     * @param h Each box's height.
+     * @param width The tile's width.
+     * @param maxSide The tallest the tile may be.
+     * @return The packing, its height rounded up, or null if it would be too tall.
+     */
+    private static Packing skyline(int @NonNull [] w, int @NonNull [] h, int width, int maxSide) {
+        final Integer[] order = new Integer[w.length];
+        for (int i = 0; i < order.length; ++i) {
+            order[i] = i;
+        }
+        Arrays.sort(order, (a, b) -> Integer.compare(Math.max(w[b], h[b]), Math.max(w[a], h[a])));
+        // The height of each column of texels so far
+        final int[] sky = new int[width];
+        final int[][] places = new int[w.length][];
+        final boolean[] turned = new boolean[w.length];
+        int top = 0;
+        for (int box : order) {
+            int bestX = -1;
+            int bestY = Integer.MAX_VALUE;
+            boolean bestTurned = false;
+            for (int turn = 0; turn < 2; ++turn) {
+                final int bw = turn == 0 ? w[box] : h[box];
+                final int bh = turn == 0 ? h[box] : w[box];
+                if (bw > width) {
+                    continue;
+                }
+                for (int x = 0; x + bw <= width; ++x) {
+                    int y = 0;
+                    for (int column = x; column < x + bw; ++column) {
+                        y = Math.max(y, sky[column]);
+                    }
+                    if (y + bh < bestY || (y + bh == bestY && x < bestX)) {
+                        bestY = y + bh;
+                        bestX = x;
+                        bestTurned = turn == 1;
+                    }
+                }
+            }
+            if (bestX < 0 || bestY > maxSide) {
+                return null;
+            }
+            final int bw = bestTurned ? h[box] : w[box];
+            for (int column = bestX; column < bestX + bw; ++column) {
+                sky[column] = bestY;
+            }
+            places[box] =
+                    new int[] {bestX + GUTTER, bestY - (bestTurned ? w[box] : h[box]) + GUTTER};
+            turned[box] = bestTurned;
+            top = Math.max(top, bestY);
+        }
+        final int height = align(top);
+        return height > maxSide ? null : new Packing(width, height, places, turned);
+    }
+
+    /**
+     * Round texels up to a whole multiple of {@link #ALIGN}.
+     *
+     * @param texels The texels.
+     * @return The rounded count, at least {@link #ALIGN}.
+     */
+    private static int align(int texels) {
+        return Math.max(ALIGN, (texels + ALIGN - 1) / ALIGN * ALIGN);
     }
 
     /**

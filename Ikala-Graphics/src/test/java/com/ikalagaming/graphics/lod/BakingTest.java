@@ -14,10 +14,10 @@ class BakingTest {
     private static final int TILE = 64;
 
     /**
-     * Far groups of a textured sphere bake: each cluster gets a power of two tile, the smallest
-     * whose texels are within its error, and is laid out in it inside the gaps and without
-     * overlapping, their normals still point out from the sphere, and their tangents are at right
-     * angles to them.
+     * Far groups of a textured sphere bake: each cluster gets the tile its layout at its error
+     * needs, texels within the error unless it took a tile larger than the options' to fit, and is
+     * laid out in it inside the gaps and without overlapping, their normals still point out from
+     * the sphere, and their tangents are at right angles to them.
      */
     @Test
     void testFarGroupsBakeIntoTiles() {
@@ -41,21 +41,19 @@ class BakingTest {
                     tile = group.bakeTiles()[i];
                 }
             }
+            final int width = LodDag.tileWidth(tile);
+            final int height = LodDag.tileHeight(tile);
             assertTrue(
-                    Integer.bitCount(tile) == 1
-                            && tile >= DagBuilder.MIN_BAKE_TILE
-                            && tile <= 2 * TILE,
-                    "Tile " + tile);
-            final BakeLayout layout = BakeLayout.of(cluster.corners(), tile);
+                    width > 0 && height > 0 && width <= 2 * TILE && height <= 2 * TILE,
+                    width + " by " + height);
+            final BakeLayout layout = BakeLayout.at(cluster.corners(), cluster.error(), 2 * TILE);
+            assertTrue(layout.width() == width && layout.height() == height);
             assertTrue(
-                    tile == 2 * TILE || layout.texelSize() <= cluster.error(),
+                    Math.max(width, height) > TILE
+                            || layout.texelSize() <= cluster.error() * (1 + 1e-9),
                     "Texel " + layout.texelSize() + " for error " + cluster.error());
-            if (tile > DagBuilder.MIN_BAKE_TILE && tile <= TILE) {
-                // The next tile down wasn't fine enough
-                assertTrue(
-                        BakeLayout.of(cluster.corners(), tile / 2).texelSize() > cluster.error());
-            }
-            final double margin = (BakeLayout.GUTTER - 1e-3) / tile;
+            final double marginU = (BakeLayout.GUTTER - 1e-3) / width;
+            final double marginV = (BakeLayout.GUTTER - 1e-3) / height;
             final int[] attributes = cluster.attributes();
             final float[] corners = cluster.corners();
             final int triangles = cluster.triangleCount();
@@ -65,8 +63,8 @@ class BakingTest {
                     final int at = t * Attributes.PER_TRIANGLE + c * Attributes.VALUES;
                     final float[] place = Attributes.textureCoordinates(attributes, at);
                     // Half floats near 1 are coarse, so allow a little
-                    assertTrue(place[0] >= margin - 1e-3 && place[0] <= 1 - margin + 1e-3);
-                    assertTrue(place[1] >= margin - 1e-3 && place[1] <= 1 - margin + 1e-3);
+                    assertTrue(place[0] >= marginU - 1e-3 && place[0] <= 1 - marginU + 1e-3);
+                    assertTrue(place[1] >= marginV - 1e-3 && place[1] <= 1 - marginV + 1e-3);
                     uv[t * 6 + c * 2] = place[0];
                     uv[t * 6 + c * 2 + 1] = place[1];
                     Attributes.decodeDirection(attributes[at], normal);
@@ -119,9 +117,12 @@ class BakingTest {
             for (int i = 0; i < group.bakeTiles().length; ++i) {
                 final LodDag.Cluster cluster = dag.clusters().get(group.outputs()[i]);
                 final BakeTexels bake = dag.bakeOf(cluster.id());
-                assertTrue(bake != null && bake.tile() == group.bakeTiles()[i]);
-                texels += bake.tile() * bake.tile();
-                for (int texel = 0; texel < bake.tile() * bake.tile(); ++texel) {
+                assertTrue(
+                        bake != null
+                                && bake.width() == LodDag.tileWidth(group.bakeTiles()[i])
+                                && bake.height() == LodDag.tileHeight(group.bakeTiles()[i]));
+                texels += bake.width() * bake.height();
+                for (int texel = 0; texel < bake.width() * bake.height(); ++texel) {
                     final int child = bake.childCluster(texel);
                     if (child == BakeTexels.EMPTY) {
                         continue;

@@ -32,8 +32,11 @@ public final class BakeTexels {
     /** Half a texel, the distance from its corner to its center. */
     private static final double HALF = 0.5;
 
-    /** The tile's side, in texels. */
-    private final int tile;
+    /** The tile's width, in texels. */
+    private final int width;
+
+    /** The tile's height, in texels. */
+    private final int height;
 
     /** Each texel's child cluster, by id, row by row, or {@link #EMPTY}. */
     private final int[] childClusters;
@@ -53,11 +56,13 @@ public final class BakeTexels {
     /**
      * Keep a mapping.
      *
-     * @param tile The tile's side.
+     * @param width The tile's width.
+     * @param height The tile's height.
      */
-    private BakeTexels(int tile) {
-        this.tile = tile;
-        final int texels = tile * tile;
+    private BakeTexels(int width, int height) {
+        this.width = width;
+        this.height = height;
+        final int texels = width * height;
         childClusters = new int[texels];
         Arrays.fill(childClusters, EMPTY);
         childTriangles = new int[texels];
@@ -67,12 +72,21 @@ public final class BakeTexels {
     }
 
     /**
-     * The tile's side.
+     * The tile's width.
      *
-     * @return The side, in texels.
+     * @return The width, in texels.
      */
-    public int tile() {
-        return tile;
+    public int width() {
+        return width;
+    }
+
+    /**
+     * The tile's height.
+     *
+     * @return The height, in texels.
+     */
+    public int height() {
+        return height;
     }
 
     /**
@@ -162,7 +176,8 @@ public final class BakeTexels {
      *
      * @param corners The cluster's corners.
      * @param uvs Its corners' places in the tile, from {@link BakeLayout#uvs()}.
-     * @param tile The tile's side.
+     * @param width The tile's width.
+     * @param height The tile's height.
      * @param faces Each of its triangles' face id in the group's simplification, which is the
      *     merged triangle it started as.
      * @param map The group's correspondence.
@@ -173,15 +188,16 @@ public final class BakeTexels {
     static BakeTexels of(
             float @NonNull [] corners,
             float @NonNull [] uvs,
-            int tile,
+            int width,
+            int height,
             int @NonNull [] faces,
             @NonNull Correspondence map,
             @NonNull Source sources,
             @NonNull LodDag dag) {
-        final BakeTexels out = new BakeTexels(tile);
+        final BakeTexels out = new BakeTexels(width, height);
         final int triangles = corners.length / TRIANGLE_VALUES;
         // How far each texel's center is from the triangle it took, 0 inside one
-        final double[] taken = new double[tile * tile];
+        final double[] taken = new double[width * height];
         Arrays.fill(taken, Double.MAX_VALUE);
         final double[] at = new double[2];
         final double[] weights = new double[CORNERS];
@@ -195,8 +211,8 @@ public final class BakeTexels {
             double highU = -Double.MAX_VALUE;
             double highV = -Double.MAX_VALUE;
             for (int k = 0; k < CORNERS; ++k) {
-                u[k] = uvs[(t * CORNERS + k) * 2] * tile;
-                v[k] = uvs[(t * CORNERS + k) * 2 + 1] * tile;
+                u[k] = uvs[(t * CORNERS + k) * 2] * width;
+                v[k] = uvs[(t * CORNERS + k) * 2 + 1] * height;
                 lowU = Math.min(lowU, u[k]);
                 lowV = Math.min(lowV, v[k]);
                 highU = Math.max(highU, u[k]);
@@ -204,14 +220,14 @@ public final class BakeTexels {
             }
             final int x0 = Math.max(0, (int) Math.floor(lowU - BakeLayout.GUTTER - HALF));
             final int y0 = Math.max(0, (int) Math.floor(lowV - BakeLayout.GUTTER - HALF));
-            final int x1 = Math.min(tile - 1, (int) Math.ceil(highU + BakeLayout.GUTTER));
-            final int y1 = Math.min(tile - 1, (int) Math.ceil(highV + BakeLayout.GUTTER));
+            final int x1 = Math.min(width - 1, (int) Math.ceil(highU + BakeLayout.GUTTER));
+            final int y1 = Math.min(height - 1, (int) Math.ceil(highV + BakeLayout.GUTTER));
             for (int y = y0; y <= y1; ++y) {
                 for (int x = x0; x <= x1; ++x) {
                     at[0] = x + HALF;
                     at[1] = y + HALF;
                     final double distance = closestWeights(u, v, at, weights);
-                    final int texel = y * tile + x;
+                    final int texel = y * width + x;
                     if (distance > BakeLayout.GUTTER || distance >= taken[texel]) {
                         continue;
                     }

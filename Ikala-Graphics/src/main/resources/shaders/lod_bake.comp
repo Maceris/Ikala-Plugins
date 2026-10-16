@@ -27,10 +27,9 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer So
 layout(push_constant) uniform BakeConstants {
     Records texels;
     SourceMaterials sources;
-    // The tile's corner in the page, in texels, and its side
+    // The tile's corner in the page, in texels, and its width and height
     ivec2 origin;
-    int size;
-    int padding;
+    ivec2 extent;
 };
 
 layout(set = 0, binding = 0, rgba8) uniform restrict writeonly image2D colorPage;
@@ -72,7 +71,7 @@ vec4 sampleSource(int index, vec2 uv, float footprint)
 void main()
 {
     uint texel = gl_GlobalInvocationID.x;
-    if (texel >= uint(size * size)) {
+    if (texel >= uint(extent.x * extent.y)) {
         return;
     }
     uvec4 first = texels.records[texel * 2u];
@@ -116,7 +115,7 @@ void main()
         inBaked = normalize(vec3(inBaked.xy, 0.0));
     }
 
-    ivec2 at = origin + ivec2(int(texel) % size, int(texel) / size);
+    ivec2 at = origin + ivec2(int(texel) % extent.x, int(texel) / extent.x);
     imageStore(colorPage, at, vec4(color.rgb, 1.0));
     imageStore(dataPage, at, vec4(inBaked.xy * 0.5 + 0.5, roughness, metallic));
 }
