@@ -19,7 +19,6 @@ import com.ikalagaming.graphics.vulkan.*;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 
 import lombok.NonNull;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
 import org.joml.Vector3dc;
@@ -58,9 +57,6 @@ public class ShadowRender implements RenderStage {
      */
     private static final float DEPTH_BIAS_SLOPE = 1.5f;
 
-    /** The shader to use for rendering. */
-    @NonNull @Setter private ShaderVulkan shader;
-
     /** The shader for baked sections, in the baked vertex format. */
     @NonNull private final ShaderVulkan bakedShader;
 
@@ -72,6 +68,24 @@ public class ShadowRender implements RenderStage {
 
     /** VkPipeline for level of detail clusters, will be VK_NULL_HANDLE if not set up. */
     private long lodPipeline;
+
+    /**
+     * The shader for standard meshes in the cascades, which alpha tests their textures as the scene
+     * does, so cut out meshes cast the shadows of what is left.
+     */
+    @NonNull private final ShaderVulkan cutoutShader;
+
+    /** VkPipeline for standard meshes in the cascades, will be VK_NULL_HANDLE if not set up. */
+    private long cutoutPipeline;
+
+    /** The shader for baked sections' cut out meshes in the cascades, which alpha tests them. */
+    @NonNull private final ShaderVulkan bakedCutoutShader;
+
+    /**
+     * VkPipeline for baked sections' cut out meshes in the cascades, will be VK_NULL_HANDLE if not
+     * set up.
+     */
+    private long bakedCutoutPipeline;
 
     /** The shader for standard meshes in a point light shadow face. */
     @NonNull private final ShaderVulkan pointShader;
@@ -85,6 +99,12 @@ public class ShadowRender implements RenderStage {
     /** VkPipeline for baked sections in a point light shadow face. */
     private long pointBakedPipeline;
 
+    /**
+     * Where a standard vertex's texture coordinates are: after its position, normal, tangent and
+     * bitangent, see MeshData.
+     */
+    private static final int STANDARD_UV_OFFSET = 4 * 3 * Float.BYTES;
+
     /** Where in the push constants a point shadow face's placement goes, after the matrix. */
     private static final int POINT_PLACE_OFFSET = 16 * Float.BYTES;
 
@@ -93,9 +113,6 @@ public class ShadowRender implements RenderStage {
 
     /** VkPipelineLayout pointer, will be VK_NULL_HANDLE if not set up. */
     private long pipelineLayout;
-
-    /** VkPipeline pointer, will be VK_NULL_HANDLE if not set up. */
-    private long pipeline;
 
     /** VkDescriptorPool pointer, will be VK_NULL_HANDLE if not set up. */
     private long descriptorPool;
@@ -112,42 +129,45 @@ public class ShadowRender implements RenderStage {
     /**
      * Set up the shadow render stage.
      *
-     * @param shader The shader to use for rendering.
      * @param bakedShader The shader for baked sections.
      * @param lodShader The shader for level of detail clusters.
+     * @param cutoutShader The shader for standard meshes, alpha tested.
+     * @param bakedCutoutShader The shader for baked sections' cut out meshes, alpha tested.
      * @param pointShader The shader for standard meshes in point light shadow faces.
      * @param pointBakedShader The shader for baked sections in point light shadow faces.
      */
     public ShadowRender(
-            final @NonNull ShaderVulkan shader,
             final @NonNull ShaderVulkan bakedShader,
             final @NonNull ShaderVulkan lodShader,
+            final @NonNull ShaderVulkan cutoutShader,
+            final @NonNull ShaderVulkan bakedCutoutShader,
             final @NonNull ShaderVulkan pointShader,
             final @NonNull ShaderVulkan pointBakedShader) {
-        this.shader = shader;
         this.bakedShader = bakedShader;
         this.lodShader = lodShader;
+        this.cutoutShader = cutoutShader;
+        this.bakedCutoutShader = bakedCutoutShader;
         this.pointShader = pointShader;
         this.pointBakedShader = pointBakedShader;
         this.bakedPipeline = VK_NULL_HANDLE;
         this.lodPipeline = VK_NULL_HANDLE;
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
-        this.pipeline = VK_NULL_HANDLE;
         this.descriptorPool = VK_NULL_HANDLE;
         this.descriptorSets = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
-        this.writtenBuffers = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT][1];
+        this.writtenBuffers = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT][2];
     }
 
     @Override
     public void initialize(@NonNull VulkanState vulkanState) {
         log.debug("Initializing shadow render");
         createPipelineLayout(vulkanState);
-        pipeline = createPipeline(vulkanState, shader, false, false);
-        bakedPipeline = createPipeline(vulkanState, bakedShader, true, false);
-        lodPipeline = createPipeline(vulkanState, lodShader, false, true);
-        pointPipeline = createPipeline(vulkanState, pointShader, false, false);
-        pointBakedPipeline = createPipeline(vulkanState, pointBakedShader, true, false);
+        bakedPipeline = createPipeline(vulkanState, bakedShader, true, false, false);
+        lodPipeline = createPipeline(vulkanState, lodShader, false, true, false);
+        cutoutPipeline = createPipeline(vulkanState, cutoutShader, false, false, true);
+        bakedCutoutPipeline = createPipeline(vulkanState, bakedCutoutShader, true, false, true);
+        pointPipeline = createPipeline(vulkanState, pointShader, false, false, false);
+        pointBakedPipeline = createPipeline(vulkanState, pointBakedShader, true, false, false);
     }
 
     @Override
@@ -156,12 +176,14 @@ public class ShadowRender implements RenderStage {
         Arrays.fill(descriptorSets, VK_NULL_HANDLE);
         vkDestroyDescriptorPool(vulkanState.device.logical, descriptorPool, null);
         descriptorPool = VK_NULL_HANDLE;
-        vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
-        pipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, bakedPipeline, null);
         bakedPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, lodPipeline, null);
         lodPipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, cutoutPipeline, null);
+        cutoutPipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, bakedCutoutPipeline, null);
+        bakedCutoutPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, pointPipeline, null);
         pointPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, pointBakedPipeline, null);
@@ -185,11 +207,16 @@ public class ShadowRender implements RenderStage {
         // Worked out by the instance draw update stage, since culling needs them first
         CascadeShadowSplit[] cascadeShadowSplits = frameData.cascadeShadowSplits;
 
+        // The scene stage writes them too, but after this one, and cut out meshes need them now
+        SceneRender.updateMaterials(scene, vulkanState, frameData);
         SceneRender.writeStorageBindings(
                 vulkanState,
                 descriptorSets[vulkanState.frameIndex],
-                new SharedBuffer[] {frameData.sceneModelMatrices},
-                new int[] {ShaderBindings.Shadow.MODEL_MATRICES_BINDING},
+                new SharedBuffer[] {frameData.sceneModelMatrices, frameData.materials},
+                new int[] {
+                    ShaderBindings.Shadow.MODEL_MATRICES_BINDING,
+                    ShaderBindings.Shadow.MATERIALS_BINDING
+                },
                 writtenBuffers[vulkanState.frameIndex]);
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -633,7 +660,9 @@ public class ShadowRender implements RenderStage {
                         VK_PIPELINE_BIND_POINT_GRAPHICS,
                         pipelineLayout,
                         0,
-                        stack.longs(descriptorSets[state.frameIndex]),
+                        stack.longs(
+                                descriptorSets[state.frameIndex],
+                                state.bindlessTextures.getDescriptorSet()),
                         null);
 
                 vkCmdPushConstants(
@@ -670,9 +699,7 @@ public class ShadowRender implements RenderStage {
                         continue;
                     }
                     vkCmdBindPipeline(
-                            commandBuffer,
-                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            kind.isBaked() ? bakedPipeline : pipeline);
+                            commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineFor(kind));
                     final GeometryArena arena = state.arenaFor(kind);
                     vkCmdBindIndexBuffer(
                             commandBuffer, arena.getIndices().buffer, 0, VK_INDEX_TYPE_UINT32);
@@ -747,6 +774,21 @@ public class ShadowRender implements RenderStage {
                 VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barriers));
     }
 
+    /**
+     * The cascades' pipeline for a kind of mesh: alpha tested for standard meshes, as the scene's
+     * is, and for baked cut out meshes, so their holes reach their shadows; depth only otherwise.
+     *
+     * @param kind The kind.
+     * @return The VkPipeline.
+     */
+    private long pipelineFor(@NonNull MeshKind kind) {
+        return switch (kind) {
+            case STANDARD -> cutoutPipeline;
+            case BAKED_CUTOUT -> bakedCutoutPipeline;
+            default -> bakedPipeline;
+        };
+    }
+
     private void createPipelineLayout(@NonNull VulkanState state) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
@@ -759,12 +801,17 @@ public class ShadowRender implements RenderStage {
                     .size(ShaderBindings.Shadow.PUSH_CONSTANTS_SIZE);
 
             VkDescriptorSetLayoutBinding.Buffer bindings =
-                    VkDescriptorSetLayoutBinding.calloc(1, stack);
+                    VkDescriptorSetLayoutBinding.calloc(2, stack);
             bindings.get(0)
                     .binding(ShaderBindings.Shadow.MODEL_MATRICES_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1)
                     .stageFlags(VK_SHADER_STAGE_VERTEX_BIT);
+            bindings.get(1)
+                    .binding(ShaderBindings.Shadow.MATERIALS_BINDING)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                    .descriptorCount(1)
+                    .stageFlags(VK_SHADER_STAGE_FRAGMENT_BIT);
 
             // Each frame has its own set, only updated once the GPU is done with that frame
             VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo =
@@ -779,7 +826,10 @@ public class ShadowRender implements RenderStage {
             VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo =
                     VkPipelineLayoutCreateInfo.calloc(stack)
                             .sType$Default()
-                            .pSetLayouts(stack.longs(descriptorSetLayout))
+                            .pSetLayouts(
+                                    stack.longs(
+                                            descriptorSetLayout,
+                                            state.bindlessTextures.getDescriptorSetLayout()))
                             .pPushConstantRanges(pushConstantRanges);
             checkError(
                     vkCreatePipelineLayout(
@@ -790,7 +840,7 @@ public class ShadowRender implements RenderStage {
             poolSizes
                     .get(0)
                     .type(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                    .descriptorCount(GraphicsManager.MAX_FRAMES_IN_FLIGHT);
+                    .descriptorCount(2 * GraphicsManager.MAX_FRAMES_IN_FLIGHT);
             VkDescriptorPoolCreateInfo descriptorPoolCreateInfo =
                     VkDescriptorPoolCreateInfo.calloc(stack)
                             .sType$Default()
@@ -823,16 +873,24 @@ public class ShadowRender implements RenderStage {
      * @param shader The shader.
      * @param baked Whether it reads the baked vertex format.
      * @param lod Whether it reads the level of detail vertex format.
+     * @param cutout Whether it alpha tests, reading texture coordinates and, for baked meshes, the
+     *     material too.
      * @return The VkPipeline.
      */
     private long createPipeline(
-            @NonNull VulkanState state, @NonNull ShaderVulkan shader, boolean baked, boolean lod) {
+            @NonNull VulkanState state,
+            @NonNull ShaderVulkan shader,
+            boolean baked,
+            boolean lod,
+            boolean cutout) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
-            // Only the position is needed, the rest of the vertex is skipped over
+            // Only the position is needed, the rest of the vertex is skipped over, except the
+            // texture coordinates and material for alpha testing
+            final int attributeCount = cutout ? (baked ? 3 : 2) : 1;
             VkVertexInputAttributeDescription.Buffer vertexAttributes =
-                    VkVertexInputAttributeDescription.calloc(1, stack);
+                    VkVertexInputAttributeDescription.calloc(attributeCount, stack);
             vertexAttributes
                     .get(0)
                     .binding(0)
@@ -847,6 +905,22 @@ public class ShadowRender implements RenderStage {
                             lod
                                     ? LodVertex.POSITION_OFFSET
                                     : (baked ? BakedVertex.POSITION_OFFSET : 0));
+            if (cutout) {
+                vertexAttributes
+                        .get(1)
+                        .binding(0)
+                        .location(1)
+                        .format(baked ? VK_FORMAT_R16G16_SFLOAT : VK_FORMAT_R32G32_SFLOAT)
+                        .offset(baked ? BakedVertex.UV_OFFSET : STANDARD_UV_OFFSET);
+                if (baked) {
+                    vertexAttributes
+                            .get(2)
+                            .binding(0)
+                            .location(2)
+                            .format(VK_FORMAT_R16G16_UINT)
+                            .offset(BakedVertex.MATERIAL_OFFSET);
+                }
+            }
 
             VkVertexInputBindingDescription.Buffer vertexBindings =
                     VkVertexInputBindingDescription.calloc(1, stack);

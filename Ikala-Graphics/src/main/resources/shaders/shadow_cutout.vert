@@ -1,7 +1,14 @@
 #version 460
 #extension GL_EXT_buffer_reference : require
 
+// The shadow vertex shader for standard meshes whose texture can cut holes, like leaves: shadow.vert,
+// also passing the texture coordinates and material on to shadow_cutout.frag.
+
 layout(location = 0) in vec3 position;
+layout(location = 1) in vec2 texCoord;
+
+layout(location = 0) out vec2 outTextCoord;
+layout(location = 1) flat out uint outMaterialIdx;
 
 // What this frame draws, written by the culling pass: (instance slot, material) per instance,
 // grouped by mesh. Each draw command's first instance points at its mesh's group.
@@ -22,8 +29,8 @@ layout(std430, set = 0, binding = 0) readonly buffer Matrices {
 
 void main()
 {
-    vec4 initPos = vec4(position, 1.0);
-    // gl_InstanceIndex already includes the base instance, unlike gl_InstanceID in OpenGL
-    mat4 modelMatrix = modelMatrices[visible.visible[gl_InstanceIndex].x];
-    gl_Position = projViewMatrix * modelMatrix * initPos;
+    uvec2 instance = visible.visible[gl_InstanceIndex];
+    gl_Position = projViewMatrix * modelMatrices[instance.x] * vec4(position, 1.0);
+    outTextCoord = texCoord;
+    outMaterialIdx = instance.y;
 }

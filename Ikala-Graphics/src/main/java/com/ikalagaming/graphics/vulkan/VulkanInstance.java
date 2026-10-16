@@ -1628,18 +1628,11 @@ public class VulkanInstance {
         initializeGuiShader();
     }
 
-    /** Set up the shadow shader and uniforms. */
+    /**
+     * Set up the shadow shaders. Standard meshes use the cut out shader, alpha tested as the scene
+     * stage's are.
+     */
     private void initializeShadowShader() {
-        List<ShaderVulkan.ShaderModuleData> shaderModuleDataList = new ArrayList<>();
-        shaderModuleDataList.add(
-                new ShaderVulkan.ShaderModuleData(
-                        "shaders/shadow.vert",
-                        ShaderVulkan.Type.VERTEX,
-                        ShaderVulkan.Location.BUNDLED));
-        var shaderProgram = new ShaderVulkan(shaderModuleDataList, state);
-
-        shaderMap.addShader(RenderStage.Type.SHADOW, shaderProgram);
-
         List<ShaderVulkan.ShaderModuleData> bakedModules = new ArrayList<>();
         bakedModules.add(
                 new ShaderVulkan.ShaderModuleData(
@@ -1655,6 +1648,34 @@ public class VulkanInstance {
                         ShaderVulkan.Type.VERTEX,
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(RenderStage.Type.SHADOW_LOD, new ShaderVulkan(lodModules, state));
+
+        // Cut out meshes, whose textures cut holes in their shadows as in the surface
+        List<ShaderVulkan.ShaderModuleData> cutoutModules = new ArrayList<>();
+        cutoutModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/shadow_cutout.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        cutoutModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/shadow_cutout.frag",
+                        ShaderVulkan.Type.FRAGMENT,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(RenderStage.Type.SHADOW_CUTOUT, new ShaderVulkan(cutoutModules, state));
+
+        List<ShaderVulkan.ShaderModuleData> bakedCutoutModules = new ArrayList<>();
+        bakedCutoutModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/shadow_baked_cutout.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        bakedCutoutModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/shadow_cutout.frag",
+                        ShaderVulkan.Type.FRAGMENT,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(
+                RenderStage.Type.SHADOW_BAKED_CUTOUT, new ShaderVulkan(bakedCutoutModules, state));
 
         List<ShaderVulkan.ShaderModuleData> pointModules = new ArrayList<>();
         pointModules.add(

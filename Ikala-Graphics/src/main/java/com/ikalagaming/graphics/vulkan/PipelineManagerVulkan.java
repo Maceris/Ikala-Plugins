@@ -226,9 +226,10 @@ public class PipelineManagerVulkan {
         stageSkyboxRender.initialize(state);
         stageShadowRender =
                 new ShadowRender(
-                        shaders.getShader(RenderStage.Type.SHADOW),
                         shaders.getShader(RenderStage.Type.SHADOW_BAKED),
                         shaders.getShader(RenderStage.Type.SHADOW_LOD),
+                        shaders.getShader(RenderStage.Type.SHADOW_CUTOUT),
+                        shaders.getShader(RenderStage.Type.SHADOW_BAKED_CUTOUT),
                         shaders.getShader(RenderStage.Type.POINT_SHADOW),
                         shaders.getShader(RenderStage.Type.POINT_SHADOW_BAKED));
         stageShadowRender.initialize(state);

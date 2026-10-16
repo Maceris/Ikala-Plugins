@@ -1193,6 +1193,12 @@ public class ShaderBindings {
         /** The binding point for the model matrices buffer. */
         public static final int MODEL_MATRICES_BINDING = 0;
 
+        /**
+         * The binding point for the materials buffer, which cut out meshes' fragment shader reads
+         * for their textures.
+         */
+        public static final int MATERIALS_BINDING = 1;
+
         /** Private constructor so this class is not instantiated. */
         private Shadow() {
             cutItOut();
