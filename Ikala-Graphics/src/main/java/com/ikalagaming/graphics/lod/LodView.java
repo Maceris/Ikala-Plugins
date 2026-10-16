@@ -62,7 +62,12 @@ public final class LodView implements AutoCloseable {
          * Gray where a triangle is open to the outside, shading to red the more of it is hidden, as
          * the simplifier weighted it.
          */
-        VISIBILITY
+        VISIBILITY,
+        /**
+         * How a triangle keeps its look: gray with its own material, blue blended to its materials'
+         * average, orange baked into its cluster's tile.
+         */
+        BAKED
     }
 
     /**
@@ -98,6 +103,20 @@ public final class LodView implements AutoCloseable {
 
     /** The color of a material that isn't the most common one under it. */
     private static final float[] NOT_MAJORITY_RGB = {0.9f, 0.1f, 0.9f};
+
+    /** The baked colors, by key: its own material, blended to the average, baked. */
+    private static final float[][] BAKED_RGB = {
+        {0.6f, 0.6f, 0.6f}, {0.2f, 0.45f, 0.95f}, {0.95f, 0.55f, 0.1f}
+    };
+
+    /** The baked color key of a triangle keeping its own material. */
+    private static final int OWN_KEY = 0;
+
+    /** The baked color key of a triangle blended to its materials' average. */
+    private static final int AVERAGED_KEY = 1;
+
+    /** The baked color key of a triangle baked into its cluster's tile. */
+    private static final int BAKED_KEY = 2;
 
     /** The golden ratio's fractional part, for spreading hues apart. */
     private static final double GOLDEN = 0.618_033_988_749_895;
@@ -211,6 +230,9 @@ public final class LodView implements AutoCloseable {
     /** The mismatch color materials, by step, then the not most common color. */
     private final Material[] mismatchPalette = new Material[MISMATCH_STEPS + 1];
 
+    /** The baked color materials, by key. */
+    private final Material[] bakedPalette = new Material[BAKED_RGB.length];
+
     /** The DAG's fidelity, for the mismatch colors, or null. */
     private volatile Fidelity fidelity;
 
@@ -321,6 +343,10 @@ public final class LodView implements AutoCloseable {
         }
         mismatchPalette[NOT_MAJORITY_KEY] =
                 debugMaterial(cache, NOT_MAJORITY_RGB[0], NOT_MAJORITY_RGB[1], NOT_MAJORITY_RGB[2]);
+        for (int i = 0; i < BAKED_RGB.length; ++i) {
+            bakedPalette[i] =
+                    debugMaterial(cache, BAKED_RGB[i][0], BAKED_RGB[i][1], BAKED_RGB[i][2]);
+        }
         cache.setDirty(true);
         worker.execute(
                 () -> {
@@ -489,7 +515,7 @@ public final class LodView implements AutoCloseable {
                 continue;
             }
             for (int t = 0; t < cluster.triangleCount(); ++t) {
-                final int key = keyOf(cluster, t, settings.mode(), fidelity);
+                final int key = keyOf(dag, cluster, t, settings.mode(), fidelity);
                 float[] corners = new float[TRIANGLE_VALUES];
                 System.arraycopy(
                         cluster.corners(), t * TRIANGLE_VALUES, corners, 0, TRIANGLE_VALUES);
@@ -520,6 +546,7 @@ public final class LodView implements AutoCloseable {
     /**
      * Which mesh a triangle goes in.
      *
+     * @param dag The DAG.
      * @param cluster Its cluster.
      * @param triangle The triangle.
      * @param mode How triangles are colored.
@@ -527,7 +554,11 @@ public final class LodView implements AutoCloseable {
      * @return Its material index, or its debug color.
      */
     private static int keyOf(
-            LodDag.@NonNull Cluster cluster, int triangle, @NonNull Mode mode, Fidelity fidelity) {
+            @NonNull LodDag dag,
+            LodDag.@NonNull Cluster cluster,
+            int triangle,
+            @NonNull Mode mode,
+            Fidelity fidelity) {
         return switch (mode) {
             case MATERIALS -> cluster.materials()[triangle];
             case CLUSTERS -> Math.floorMod(cluster.id(), PALETTE);
@@ -539,7 +570,28 @@ public final class LodView implements AutoCloseable {
                     mismatchKey(fidelity == null ? 0 : fidelity.mark(cluster.id(), triangle));
             case VISIBILITY ->
                     Math.round((1 - cluster.visibility()[triangle]) * (MISMATCH_STEPS - 1));
+            case BAKED -> bakedKey(dag, cluster, triangle);
         };
+    }
+
+    /**
+     * How a triangle keeps its look.
+     *
+     * @param dag The DAG.
+     * @param cluster Its cluster.
+     * @param triangle The triangle.
+     * @return Its baked color key.
+     */
+    private static int bakedKey(
+            @NonNull LodDag dag, LodDag.@NonNull Cluster cluster, int triangle) {
+        if (cluster.producer() >= 0 && dag.groups().get(cluster.producer()).bakedClusters() > 0) {
+            return BAKED_KEY;
+        }
+        final int[] attributes = cluster.attributes();
+        return attributes.length > 0
+                        && Attributes.isAveraged(attributes, triangle * Attributes.PER_TRIANGLE)
+                ? AVERAGED_KEY
+                : OWN_KEY;
     }
 
     /**
@@ -748,6 +800,7 @@ public final class LodView implements AutoCloseable {
                     switch (built.mode()) {
                         case MATERIALS -> material(cache, key);
                         case MISMATCH, VISIBILITY -> mismatchPalette[key];
+                        case BAKED -> bakedPalette[key];
                         default -> palette[key];
                     });
             graphics.meshes().register(mesh);

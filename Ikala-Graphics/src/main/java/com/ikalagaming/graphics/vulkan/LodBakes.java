@@ -111,6 +111,21 @@ public final class LodBakes {
     /** Bytes a baked texel takes on the GPU: a texel of each page. */
     public static final int BYTES_PER_TEXEL = 8;
 
+    /** Bytes a page takes on the GPU, both textures. */
+    public static final long PAGE_BYTES = (long) PAGE * PAGE * BYTES_PER_TEXEL;
+
+    /**
+     * What is loaded.
+     *
+     * @param tiles Tiles loaded, over every world.
+     * @param texels The texels they hold.
+     * @param pages Pages made, whether or not they hold anything.
+     */
+    public record Stats(long tiles, long texels, int pages) {
+        /** Nothing loaded. */
+        public static final Stats NONE = new Stats(0, 0, 0);
+    }
+
     /**
      * A baked cluster: what its tile holds, worked out once, and baked again each time the cluster
      * is loaded.
@@ -511,11 +526,11 @@ public final class LodBakes {
     }
 
     /**
-     * How many tiles are loaded and the texels they hold.
+     * What is loaded. Safe from any thread.
      *
-     * @return The tile count, then the texels.
+     * @return The tiles, their texels and the pages.
      */
-    public long[] loadedTexels() {
+    public Stats stats() {
         lock.lock();
         try {
             long tiles = 0;
@@ -526,7 +541,11 @@ public final class LodBakes {
                     texels += tile.tile.texels();
                 }
             }
-            return new long[] {tiles, texels};
+            int made = 0;
+            for (Page page : pages) {
+                made += page.color == null ? 0 : 1;
+            }
+            return new Stats(tiles, texels, made);
         } finally {
             lock.unlock();
         }

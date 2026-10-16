@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.gui.data.IkBoolean;
 import com.ikalagaming.graphics.gui.data.IkInt;
 import com.ikalagaming.graphics.gui.flags.TreeNodeFlags;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.LodBakes;
 import com.ikalagaming.graphics.vulkan.LodRenderer;
 
 import lombok.NonNull;
@@ -46,7 +47,7 @@ public final class LodPanel implements AutoCloseable {
 
     /** The coloring choices, in combo order. */
     private static final String[] MODES = {
-        "Materials", "Clusters", "Groups", "Levels", "Mismatch", "Visibility"
+        "Materials", "Clusters", "Groups", "Levels", "Mismatch", "Visibility", "Baked"
     };
 
     /** Coordinates in a position. */
@@ -318,6 +319,11 @@ public final class LodPanel implements AutoCloseable {
                                     + " of it doesn't. Magenta: its material isn't even the most"
                                     + " common under it.");
         }
+        if (LodView.Mode.values()[mode.get()] == LodView.Mode.BAKED) {
+            IkGui.textWrapped(
+                    "Gray: its own material. Blue: blended to its materials' average. Orange: baked"
+                            + " into its cluster's tile.");
+        }
         IkGui.sliderInt("Draw level", fixedLevel, -1, topLevel, fixedLevel[0] < 0 ? "cut" : "%d");
         IkGui.sliderInt(
                 "Locked edges of",
@@ -369,9 +375,6 @@ public final class LodPanel implements AutoCloseable {
                             gpu.occluded(),
                             gpu.early(),
                             gpu.late()));
-            if (gpu.levelTriangles().length > 0) {
-                LodTables.draw(LodTables.cutLevels(gpu));
-            }
             final LodRenderer.LiveStats residency = view.residency();
             if (residency != null) {
                 IkGui.text(
@@ -382,6 +385,23 @@ public final class LodPanel implements AutoCloseable {
                                 residency.loadedBytes() / BYTES_PER_MIB,
                                 residency.totalBytes() / BYTES_PER_MIB,
                                 residency.wantedBytes() / BYTES_PER_MIB));
+            }
+            final long allBaked = bakedBytes(view.getDag());
+            if (allBaked > 0) {
+                final LodBakes.Stats bakes = graphics.lods().bakeStats();
+                IkGui.text(
+                        String.format(
+                                "Baked tiles: %,d loaded, %.1f of %.1f MiB, in %d pages of %.0f"
+                                        + " MiB.",
+                                bakes.tiles(),
+                                bakes.texels() * LodBakes.BYTES_PER_TEXEL / BYTES_PER_MIB,
+                                allBaked / BYTES_PER_MIB,
+                                bakes.pages(),
+                                bakes.pages() * LodBakes.PAGE_BYTES / BYTES_PER_MIB));
+            }
+            // Below the totals, which a long table would push out of sight
+            if (gpu.levelTriangles().length > 0) {
+                LodTables.draw(LodTables.cutLevels(gpu));
             }
         }
         if (IkGui.collapsingHeader("Levels##lod", TreeNodeFlags.DEFAULT_OPEN)) {
@@ -398,6 +418,20 @@ public final class LodPanel implements AutoCloseable {
         if (IkGui.collapsingHeader("Material shares##lod")) {
             fidelity.subList(1, fidelity.size()).forEach(LodTables::draw);
         }
+    }
+
+    /**
+     * The bytes every baked cluster's tile of a DAG would take on the GPU.
+     *
+     * @param dag The DAG.
+     * @return The bytes.
+     */
+    private static long bakedBytes(@NonNull LodDag dag) {
+        long texels = 0;
+        for (LodDag.Group group : dag.groups()) {
+            texels += group.bakedTexels();
+        }
+        return texels * LodBakes.BYTES_PER_TEXEL;
     }
 
     /**

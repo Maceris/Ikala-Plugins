@@ -139,6 +139,18 @@ public final class Lods {
     }
 
     /**
+     * What baked clusters' tiles take on the GPU, over all plugins.
+     *
+     * @return The tiles loaded and the pages, all zero if the renderer isn't running.
+     */
+    public LodBakes.Stats bakeStats() {
+        final VulkanInstance renderer = GraphicsManager.getRenderInstance();
+        return renderer == null || renderer.getState().lodBakes == null
+                ? LodBakes.Stats.NONE
+                : renderer.getState().lodBakes.stats();
+    }
+
+    /**
      * The running renderer's worlds.
      *
      * @return The worlds, or null if it isn't running.
