@@ -204,6 +204,38 @@ public class VolumeBricks {
     private final Set<LodStore.SectionPos> withoutSlot = new HashSet<>();
 
     /**
+     * Every section's brick, slotted or not, kept on the CPU so slots can move to the sections
+     * nearest the camera without voxelizing again.
+     */
+    private final Map<LodStore.SectionPos, VolumeVoxelizer.Brick> held = new HashMap<>();
+
+    /** Where the camera was when slots were last handed to the nearest sections, or null. */
+    private Vector3d balancedAt;
+
+    /** Whether a section without a slot came since slots were last handed out. */
+    private boolean waitingChanged;
+
+    /** Frames since slots were last handed out. */
+    private int framesSinceBalance;
+
+    /**
+     * How far the camera moves before slots are handed to the nearest sections again, in meters.
+     */
+    private static final double REBALANCE_DISTANCE = 8;
+
+    /** How many frames new sections without a slot wait, at most, to be weighed for one. */
+    private static final int REBALANCE_FRAMES = 30;
+
+    /**
+     * How much nearer, in meters, a section without a slot must be than one with a slot to take it,
+     * so two at about the same distance don't swap back and forth.
+     */
+    private static final double SWAP_MARGIN = 16;
+
+    /** The most slots that move to nearer sections in one go; the rest move next time. */
+    private static final int MAX_SWAPS = 256;
+
+    /**
      * Set up the atlas, cleared to empty in the general layout.
      *
      * @param state The Vulkan state.
@@ -461,16 +493,19 @@ public class VolumeBricks {
             remove(position);
             return;
         }
+        held.put(position, brick);
         if (!slots.containsKey(position)) {
             if (free.isEmpty()) {
                 if (!warnedFull) {
                     log.warn(
-                            "The volume atlas is full, at {} bricks; sections past the volume"
-                                    + " distance go without their cut out and translucent blocks",
+                            "The volume atlas is full, at {} bricks; the sections nearest the"
+                                    + " camera keep theirs, and the rest go without their cut out"
+                                    + " and translucent blocks",
                             VolumeMath.SLOTS);
                     warnedFull = true;
                 }
                 withoutSlot.add(position);
+                waitingChanged = true;
                 return;
             }
             slots.put(position, free.poll());
@@ -487,7 +522,96 @@ public class VolumeBricks {
      */
     public void remove(LodStore.@NonNull SectionPos position) {
         uploads.remove(position);
+        held.remove(position);
         release(position);
+    }
+
+    /**
+     * While the atlas is full, hand its slots to the sections nearest the camera: free slots to the
+     * nearest without one, then each farthest slotted section's to a nearer one without, by more
+     * than a margin. Weighed again once the camera moves, now and then while new sections wait, and
+     * whenever a slot is free. Render thread, before the frame's uploads are taken.
+     *
+     * @param camera The camera's position, in the world.
+     */
+    public void rebalance(@NonNull Vector3dc camera) {
+        ++framesSinceBalance;
+        if (withoutSlot.isEmpty()) {
+            return;
+        }
+        final boolean moved =
+                balancedAt == null || balancedAt.distance(camera) > REBALANCE_DISTANCE;
+        final boolean due = waitingChanged && framesSinceBalance >= REBALANCE_FRAMES;
+        if (free.isEmpty() && !moved && !due) {
+            return;
+        }
+        balancedAt = new Vector3d(camera);
+        waitingChanged = false;
+        framesSinceBalance = 0;
+        final List<LodStore.SectionPos> waiting = new ArrayList<>(withoutSlot);
+        waiting.sort(Comparator.comparingDouble(position -> distanceSquared(position, camera)));
+        int next = 0;
+        int moves = 0;
+        while (next < waiting.size() && !free.isEmpty() && moves < MAX_SWAPS) {
+            assign(waiting.get(next++));
+            ++moves;
+        }
+        if (next >= waiting.size() || moves >= MAX_SWAPS) {
+            return;
+        }
+        final List<LodStore.SectionPos> slotted = new ArrayList<>(slots.keySet());
+        slotted.sort(
+                Comparator.comparingDouble(
+                                (LodStore.SectionPos position) -> distanceSquared(position, camera))
+                        .reversed());
+        for (int far = 0; far < slotted.size() && next < waiting.size() && moves < MAX_SWAPS; ) {
+            final LodStore.SectionPos near = waiting.get(next);
+            final LodStore.SectionPos out = slotted.get(far);
+            if (Math.sqrt(distanceSquared(near, camera)) + SWAP_MARGIN
+                    >= Math.sqrt(distanceSquared(out, camera))) {
+                break;
+            }
+            // The far one keeps its brick on the CPU, and waits for a slot again
+            uploads.remove(out);
+            release(out);
+            withoutSlot.add(out);
+            assign(near);
+            ++next;
+            ++far;
+            ++moves;
+        }
+    }
+
+    /**
+     * Give a section without a slot a free one, and queue its brick to be copied in.
+     *
+     * @param position The section.
+     */
+    private void assign(LodStore.@NonNull SectionPos position) {
+        final VolumeVoxelizer.Brick brick = held.get(position);
+        withoutSlot.remove(position);
+        if (brick == null) {
+            return;
+        }
+        slots.put(position, free.poll());
+        slotsChanged = true;
+        uploads.put(position, brick);
+    }
+
+    /**
+     * How far a section's brick's middle is from the camera, squared.
+     *
+     * @param position The section.
+     * @param camera The camera's position.
+     * @return The squared distance, in square meters.
+     */
+    private static double distanceSquared(
+            LodStore.@NonNull SectionPos position, @NonNull Vector3dc camera) {
+        final double size = VolumeMath.BRICK * VolumeMath.VOXEL_SIZE;
+        final double dx = position.x() * size + size / 2 - camera.x();
+        final double dy = position.y() * size + size / 2 - camera.y();
+        final double dz = position.z() * size + size / 2 - camera.z();
+        return dx * dx + dy * dy + dz * dz;
     }
 
     /**

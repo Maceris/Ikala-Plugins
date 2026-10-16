@@ -121,6 +121,8 @@ public class VolumeUpload implements RenderStage {
             return;
         }
         publishMaterials(state, scene.getMaterialCache());
+        // The nearest sections first, while the atlas is full
+        bricks.rebalance(scene.getCamera().getPosition());
         final List<VolumeBricks.Upload> uploads = bricks.takeUploads(MAX_BRICKS);
         upload(state, uploads);
         // Bricks standing in for meshes off the GPU stand in for them in the occupancy volume too
