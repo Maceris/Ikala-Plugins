@@ -202,6 +202,10 @@ class IkGuiImplCombo {
                     false);
         }
 
+        IkGuiInternal.testEngineItemInfo(
+                id,
+                label,
+                context.lastItemData.statusFlags | (popupOpen ? ItemStatusFlags.OPENED : 0));
         if (!popupOpen) {
             return false;
         }

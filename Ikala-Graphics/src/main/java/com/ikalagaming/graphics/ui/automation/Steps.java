@@ -1,8 +1,10 @@
 package com.ikalagaming.graphics.ui.automation;
 
+import com.ikalagaming.graphics.gui.data.InputTextState;
 import com.ikalagaming.graphics.gui.data.Window;
 import com.ikalagaming.graphics.gui.enums.Key;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
+import com.ikalagaming.graphics.gui.flags.ItemStatusFlags;
 import com.ikalagaming.graphics.gui.util.RectFloat;
 import com.ikalagaming.graphics.ui.Node;
 import com.ikalagaming.graphics.ui.VirtualGrid;
@@ -24,6 +26,12 @@ import java.util.function.Function;
  * rectangles, so they test what a player would do: whether the node is on screen, whether something
  * covers it, and how the widget responds. A step that waits gives up after the timeout, 5 seconds
  * of IkGui time unless {@link #timeout(double)} changes it.
+ *
+ * <p>Two kinds of steps reach past the retained UI. Mouse steps like {@link #mouseClick(float,
+ * float)} and {@link #mouseDrag(float, float, float, float)} send input to a point in the window,
+ * for code that reads IkGui's input itself, like a 3D view. Item steps like {@link
+ * #clickItem(String, String)} find IkGui items drawn in immediate mode by label, from the
+ * rectangles IkGui recorded as they were submitted; see {@link ItemTarget} for how they are picked.
  */
 public final class Steps {
     /** The default time a step waits, in milliseconds. */
@@ -31,6 +39,9 @@ public final class Steps {
 
     /** How many frames the mouse may sit over a node without it being hovered. */
     private static final int HOVER_FRAMES = 10;
+
+    /** How many frames a drag moves the mouse over. */
+    private static final int DRAG_FRAMES = 10;
 
     /** The steps so far. */
     private final List<Step> list = new ArrayList<>();
@@ -314,6 +325,388 @@ public final class Steps {
                     }
                 });
         return this;
+    }
+
+    /**
+     * Move the mouse to a point in the window, in IkGui pixels from its top left corner, which is
+     * where the window's own mouse input lands. Code that reads IkGui's input directly, like a 3D
+     * view behind the UI, sees it as the player's mouse.
+     *
+     * @param x Pixels from the left.
+     * @param y Pixels from the top.
+     * @return These steps.
+     */
+    public Steps mouseMove(float x, float y) {
+        list.add(
+                new Sequence(
+                        String.format(Locale.ROOT, "mouseMove(%.1f, %.1f)", x, y),
+                        List.of(run -> move(run, x, y))));
+        return this;
+    }
+
+    /**
+     * Click the left mouse button at a point in the window, without looking for anything there.
+     *
+     * @param x Pixels from the left.
+     * @param y Pixels from the top.
+     * @return These steps.
+     * @see #mouseMove(float, float)
+     */
+    public Steps mouseClick(float x, float y) {
+        return mouseClick(x, y, MouseButton.LEFT);
+    }
+
+    /**
+     * Click a mouse button at a point in the window, without looking for anything there.
+     *
+     * @param x Pixels from the left.
+     * @param y Pixels from the top.
+     * @param button The button.
+     * @return These steps.
+     * @see #mouseMove(float, float)
+     */
+    public Steps mouseClick(float x, float y, @NonNull MouseButton button) {
+        checkButton(button);
+        list.add(
+                new Sequence(
+                        String.format(Locale.ROOT, "mouseClick(%.1f, %.1f, %s)", x, y, button),
+                        List.of(
+                                run -> move(run, x, y),
+                                run -> run.io().addMouseButtonEvent(button, true),
+                                run -> run.io().addMouseButtonEvent(button, false))));
+        return this;
+    }
+
+    /**
+     * Double click the left mouse button at a point in the window.
+     *
+     * @param x Pixels from the left.
+     * @param y Pixels from the top.
+     * @return These steps.
+     * @see #mouseMove(float, float)
+     */
+    public Steps mouseDoubleClick(float x, float y) {
+        list.add(
+                new Sequence(
+                        String.format(Locale.ROOT, "mouseDoubleClick(%.1f, %.1f)", x, y),
+                        List.of(
+                                run -> move(run, x, y),
+                                run -> run.io().addMouseButtonEvent(MouseButton.LEFT, true),
+                                run -> run.io().addMouseButtonEvent(MouseButton.LEFT, false),
+                                run -> run.io().addMouseButtonEvent(MouseButton.LEFT, true),
+                                run -> run.io().addMouseButtonEvent(MouseButton.LEFT, false))));
+        return this;
+    }
+
+    /**
+     * Drag with the left mouse button from one point in the window to another.
+     *
+     * @param fromX Where to press, in pixels from the left.
+     * @param fromY Where to press, in pixels from the top.
+     * @param toX Where to release, in pixels from the left.
+     * @param toY Where to release, in pixels from the top.
+     * @return These steps.
+     * @see #mouseDrag(float, float, float, float, MouseButton)
+     */
+    public Steps mouseDrag(float fromX, float fromY, float toX, float toY) {
+        return mouseDrag(fromX, fromY, toX, toY, MouseButton.LEFT);
+    }
+
+    /**
+     * Drag with a mouse button from one point in the window to another. The mouse moves in even
+     * steps over {@value #DRAG_FRAMES} frames with the button held, so code that follows the
+     * mouse's movement each frame, like a camera orbit, sees a steady drag.
+     *
+     * @param fromX Where to press, in pixels from the left.
+     * @param fromY Where to press, in pixels from the top.
+     * @param toX Where to release, in pixels from the left.
+     * @param toY Where to release, in pixels from the top.
+     * @param button The button.
+     * @return These steps.
+     * @see #mouseMove(float, float)
+     */
+    public Steps mouseDrag(
+            float fromX, float fromY, float toX, float toY, @NonNull MouseButton button) {
+        checkButton(button);
+        List<Consumer<Run>> actions = new ArrayList<>();
+        actions.add(run -> move(run, fromX, fromY));
+        actions.add(run -> run.io().addMouseButtonEvent(button, true));
+        for (int i = 1; i <= DRAG_FRAMES; ++i) {
+            float along = i / (float) DRAG_FRAMES;
+            float x = fromX + (toX - fromX) * along;
+            float y = fromY + (toY - fromY) * along;
+            actions.add(run -> move(run, x, y));
+        }
+        actions.add(run -> run.io().addMouseButtonEvent(button, false));
+        list.add(
+                new Sequence(
+                        String.format(
+                                Locale.ROOT,
+                                "mouseDrag(%.1f, %.1f, %.1f, %.1f, %s)",
+                                fromX,
+                                fromY,
+                                toX,
+                                toY,
+                                button),
+                        actions));
+        return this;
+    }
+
+    /**
+     * Turn the mouse wheel with the mouse at a point in the window.
+     *
+     * @param x Pixels from the left.
+     * @param y Pixels from the top.
+     * @param amount How far, in wheel notches, positive away from the player (scrolling up).
+     * @return These steps.
+     * @see #mouseMove(float, float)
+     */
+    public Steps mouseWheel(float x, float y, float amount) {
+        return mouseWheel(x, y, 0, amount);
+    }
+
+    /**
+     * Turn the mouse wheel, or tilt it, with the mouse at a point in the window.
+     *
+     * @param x Pixels from the left.
+     * @param y Pixels from the top.
+     * @param horizontal How far across, in notches, positive to the left as GLFW reports it.
+     * @param vertical How far, in wheel notches, positive away from the player (scrolling up).
+     * @return These steps.
+     * @see #mouseMove(float, float)
+     */
+    public Steps mouseWheel(float x, float y, float horizontal, float vertical) {
+        list.add(
+                new Sequence(
+                        String.format(
+                                Locale.ROOT,
+                                "mouseWheel(%.1f, %.1f, %.2f, %.2f)",
+                                x,
+                                y,
+                                horizontal,
+                                vertical),
+                        List.of(
+                                run -> move(run, x, y),
+                                run -> run.io().addMouseWheelEvent(horizontal, vertical))));
+        return this;
+    }
+
+    /**
+     * Click an IkGui item drawn in immediate mode with the left mouse button, once it is on screen.
+     *
+     * @param scope Where to look, like {@code tools//materials}, {@code window=Name} or {@code *}.
+     * @param label The item's label, like {@code Roughness}.
+     * @return These steps.
+     * @see ItemTarget
+     */
+    public Steps clickItem(@NonNull String scope, @NonNull String label) {
+        return clickItem(scope, label, MouseButton.LEFT);
+    }
+
+    /**
+     * Click an IkGui item drawn in immediate mode, once it is on screen.
+     *
+     * @param scope Where to look, like {@code tools//materials}, {@code window=Name} or {@code *}.
+     * @param label The item's label, like {@code Roughness}.
+     * @param button The mouse button.
+     * @return These steps.
+     * @see ItemTarget
+     */
+    public Steps clickItem(
+            @NonNull String scope, @NonNull String label, @NonNull MouseButton button) {
+        checkButton(button);
+        list.add(new ItemClick(new ItemTarget(scope, label), timeout, 1, button, false));
+        return this;
+    }
+
+    /**
+     * Double click an IkGui item drawn in immediate mode with the left mouse button.
+     *
+     * @param scope Where to look, like {@code tools//materials}, {@code window=Name} or {@code *}.
+     * @param label The item's label.
+     * @return These steps.
+     * @see ItemTarget
+     */
+    public Steps doubleClickItem(@NonNull String scope, @NonNull String label) {
+        list.add(new ItemClick(new ItemTarget(scope, label), timeout, 2, MouseButton.LEFT, false));
+        return this;
+    }
+
+    /**
+     * Move the mouse over an IkGui item drawn in immediate mode, and check it is hovered.
+     *
+     * @param scope Where to look, like {@code tools//materials}, {@code window=Name} or {@code *}.
+     * @param label The item's label.
+     * @return These steps.
+     * @see ItemTarget
+     */
+    public Steps hoverItem(@NonNull String scope, @NonNull String label) {
+        list.add(new ItemClick(new ItemTarget(scope, label), timeout, 0, MouseButton.LEFT, false));
+        return this;
+    }
+
+    /**
+     * Type into an IkGui item drawn in immediate mode, replacing its text. The item is Ctrl
+     * clicked, which turns a slider or drag into a text field, and selects all of a text field's
+     * text.
+     *
+     * @param scope Where to look, like {@code tools//materials}, {@code window=Name} or {@code *}.
+     * @param label The item's label.
+     * @param text The text to type.
+     * @return These steps.
+     * @see ItemTarget
+     */
+    public Steps typeItem(@NonNull String scope, @NonNull String label, @NonNull String text) {
+        return typeItem(scope, label, text, false);
+    }
+
+    /**
+     * Type into an IkGui item drawn in immediate mode, replacing its text, then press Enter if
+     * asked. The item is Ctrl clicked, which turns a slider or drag into a text field, and selects
+     * all of a text field's text.
+     *
+     * @param scope Where to look, like {@code tools//materials}, {@code window=Name} or {@code *}.
+     * @param label The item's label.
+     * @param text The text to type.
+     * @param enter Whether to press Enter afterwards.
+     * @return These steps.
+     * @see ItemTarget
+     */
+    public Steps typeItem(
+            @NonNull String scope, @NonNull String label, @NonNull String text, boolean enter) {
+        list.add(new ItemType(new ItemTarget(scope, label), timeout, text, enter));
+        return this;
+    }
+
+    /**
+     * Wait until an IkGui item drawn in immediate mode is on screen.
+     *
+     * @param scope Where to look, like {@code tools//materials}, {@code window=Name} or {@code *}.
+     * @param label The item's label.
+     * @return These steps.
+     * @see ItemTarget
+     */
+    public Steps waitForItem(@NonNull String scope, @NonNull String label) {
+        ItemTarget target = new ItemTarget(scope, label);
+        list.add(
+                new Wait(
+                        "waitForItem(" + target + ")", timeout, run -> target.find(run).problem()));
+        return this;
+    }
+
+    /**
+     * Check that a check box, or another item that can be checked, is checked or not. Waits for the
+     * item to be on screen first.
+     *
+     * @param scope Where to look, like {@code tools//materials}, {@code window=Name} or {@code *}.
+     * @param label The item's label.
+     * @param checked Whether it should be checked.
+     * @return These steps.
+     * @see ItemTarget
+     */
+    public Steps assertItemChecked(@NonNull String scope, @NonNull String label, boolean checked) {
+        ItemTarget target = new ItemTarget(scope, label);
+        long wait = timeout;
+        list.add(
+                new Step() {
+                    @Override
+                    public boolean advance(Run run) {
+                        ItemTarget.Lookup lookup = target.find(run);
+                        if (lookup.item() == null) {
+                            if (run.elapsed() >= wait) {
+                                throw new UiAutomationException(
+                                        "timed out after "
+                                                + seconds(wait)
+                                                + ": "
+                                                + lookup.problem());
+                            }
+                            return false;
+                        }
+                        int flags = lookup.item().statusFlags;
+                        if ((flags & ItemStatusFlags.CHECKABLE) == 0) {
+                            throw new UiAutomationException(
+                                    ItemTarget.describe(lookup.item()) + " can't be checked");
+                        }
+                        boolean is = (flags & ItemStatusFlags.CHECKED) != 0;
+                        if (is != checked) {
+                            throw new UiAutomationException(
+                                    ItemTarget.describe(lookup.item())
+                                            + (is ? " is checked" : " isn't checked"));
+                        }
+                        return true;
+                    }
+
+                    @Override
+                    public String describe() {
+                        return "assertItemChecked(" + target + ", " + checked + ")";
+                    }
+                });
+        return this;
+    }
+
+    /**
+     * Report whether an IkGui item drawn in immediate mode is on screen, without failing either
+     * way. Items are recorded from the first frame of a run, so this waits a frame before looking.
+     *
+     * @param scope Where to look, like {@code tools//materials}, {@code window=Name} or {@code *}.
+     * @param label The item's label.
+     * @param result Told true if exactly one item matches and is on screen.
+     * @return These steps.
+     * @see ItemTarget
+     */
+    public Steps itemExists(
+            @NonNull String scope, @NonNull String label, @NonNull Consumer<Boolean> result) {
+        ItemTarget target = new ItemTarget(scope, label);
+        list.add(
+                new Step() {
+                    /** Whether a frame has been recorded. */
+                    private boolean recorded;
+
+                    @Override
+                    public boolean advance(Run run) {
+                        if (!recorded) {
+                            recorded = true;
+                            return false;
+                        }
+                        boolean found;
+                        try {
+                            found = target.find(run).item() != null;
+                        } catch (UiAutomationException ambiguous) {
+                            found = false;
+                        }
+                        result.accept(found);
+                        return true;
+                    }
+
+                    @Override
+                    public String describe() {
+                        return "itemExists(" + target + ")";
+                    }
+                });
+        return this;
+    }
+
+    /**
+     * Send the mouse to a point.
+     *
+     * @param run The run.
+     * @param x Pixels from the left.
+     * @param y Pixels from the top.
+     */
+    private static void move(Run run, float x, float y) {
+        run.io().addMousePosEvent(x, y);
+    }
+
+    /**
+     * Check a mouse button can be pressed.
+     *
+     * @param button The button.
+     * @throws IllegalArgumentException If it is {@link MouseButton#NONE}.
+     */
+    private static void checkButton(MouseButton button) {
+        if (button == MouseButton.NONE) {
+            throw new IllegalArgumentException("There is no mouse button to press");
+        }
     }
 
     /**
@@ -869,6 +1262,380 @@ public final class Steps {
         @Override
         public String describe() {
             return "type(" + click.selector + ", " + text + (enter ? ", enter" : "") + ")";
+        }
+    }
+
+    /** Does one thing a frame, then waits a frame for the last of it to be seen. */
+    private static final class Sequence implements Step {
+        /** What it does. */
+        private final String description;
+
+        /** What is left to do, one a frame. */
+        private final List<Consumer<Run>> actions;
+
+        /**
+         * Create the step.
+         *
+         * @param description What it does.
+         * @param actions What to do, one a frame.
+         */
+        Sequence(String description, List<Consumer<Run>> actions) {
+            this.description = description;
+            this.actions = new ArrayList<>(actions);
+        }
+
+        @Override
+        public boolean advance(Run run) {
+            if (actions.isEmpty()) {
+                return true;
+            }
+            actions.removeFirst().accept(run);
+            return false;
+        }
+
+        @Override
+        public String describe() {
+            return description;
+        }
+    }
+
+    /** Moves the mouse onto an immediate mode item and clicks it some number of times. */
+    private static final class ItemClick implements Step {
+        /** Where the click is in its sequence. */
+        private enum Phase {
+            /** Waiting for the item to be on screen. */
+            FIND,
+            /** The mouse has moved; waiting for the item to be hovered. */
+            HOVER,
+            /** The button is down. */
+            DOWN,
+            /** The button is up between clicks. */
+            UP,
+            /** The last release was sent; waiting a frame for it to be seen. */
+            SETTLE
+        }
+
+        /** Picks out the item. */
+        private final ItemTarget target;
+
+        /** How long to wait for the item, in milliseconds. */
+        private final long timeout;
+
+        /** The number of clicks, or 0 to only hover. */
+        private final int clicks;
+
+        /** The button to click with. */
+        private final MouseButton button;
+
+        /** Whether to hold Ctrl while clicking. */
+        private final boolean ctrl;
+
+        /** Where the click is. */
+        private Phase phase = Phase.FIND;
+
+        /** The item being clicked, once found. */
+        private ItemRecorder.Item item;
+
+        /** Where the mouse was sent, in screen pixels. */
+        private float mouseX;
+
+        /** Where the mouse was sent, in screen pixels. */
+        private float mouseY;
+
+        /** Frames the mouse has been over the item without it being hovered. */
+        private int hoverFrames;
+
+        /** Clicks finished so far. */
+        private int done;
+
+        /**
+         * Create the step.
+         *
+         * @param target Picks out the item.
+         * @param timeout How long to wait for the item, in milliseconds.
+         * @param clicks The number of clicks, or 0 to only hover.
+         * @param button The button to click with.
+         * @param ctrl Whether to hold Ctrl while clicking.
+         */
+        ItemClick(ItemTarget target, long timeout, int clicks, MouseButton button, boolean ctrl) {
+            this.target = target;
+            this.timeout = timeout;
+            this.clicks = clicks;
+            this.button = button;
+            this.ctrl = ctrl;
+        }
+
+        /**
+         * The item clicked, once found.
+         *
+         * @return The item, or null.
+         */
+        ItemRecorder.Item item() {
+            return item;
+        }
+
+        @Override
+        public boolean advance(Run run) {
+            switch (phase) {
+                case FIND -> {
+                    ItemTarget.Lookup lookup = target.find(run);
+                    if (lookup.item() == null) {
+                        if (run.elapsed() >= timeout) {
+                            throw new UiAutomationException(
+                                    "timed out after "
+                                            + seconds(timeout)
+                                            + ": "
+                                            + lookup.problem());
+                        }
+                        return false;
+                    }
+                    item = lookup.item();
+                    moveTo(run);
+                    phase = Phase.HOVER;
+                    hoverFrames = 0;
+                    return false;
+                }
+                case HOVER -> {
+                    ItemRecorder.Item current = run.items().get(item.id);
+                    if (current == null || !current.isVisible()) {
+                        // It went away or out of view; look again until the timeout
+                        phase = Phase.FIND;
+                        return false;
+                    }
+                    item = current;
+                    if (run.gui().hoveredID == item.id
+                            || run.gui().hoveredIDPreviousFrame == item.id) {
+                        if (clicks == 0) {
+                            return true;
+                        }
+                        press(run);
+                        phase = Phase.DOWN;
+                        return false;
+                    }
+                    if (item.visible.getCenterX() != mouseX
+                            || item.visible.getCenterY() != mouseY) {
+                        // It moved, like a window being laid out
+                        moveTo(run);
+                    }
+                    if (++hoverFrames > HOVER_FRAMES) {
+                        throw new UiAutomationException(covered(run));
+                    }
+                    return false;
+                }
+                case DOWN -> {
+                    run.io().addMouseButtonEvent(button, false);
+                    if (ctrl) {
+                        run.io().addKeyEvent(Key.MOD_CTRL, false);
+                    }
+                    ++done;
+                    phase = done < clicks ? Phase.UP : Phase.SETTLE;
+                    return false;
+                }
+                case UP -> {
+                    press(run);
+                    phase = Phase.DOWN;
+                    return false;
+                }
+                default -> {
+                    return true;
+                }
+            }
+        }
+
+        /**
+         * Press the button, and Ctrl if asked.
+         *
+         * @param run The run.
+         */
+        private void press(Run run) {
+            if (ctrl) {
+                run.io().addKeyEvent(Key.MOD_CTRL, true);
+            }
+            run.io().addMouseButtonEvent(button, true);
+        }
+
+        /**
+         * Send the mouse to the middle of the visible part of the item.
+         *
+         * @param run The run.
+         */
+        private void moveTo(Run run) {
+            mouseX = item.visible.getCenterX();
+            mouseY = item.visible.getCenterY();
+            run.io().addMousePosEvent(mouseX, mouseY);
+        }
+
+        /**
+         * Explain why the item isn't hovered with the mouse over it.
+         *
+         * @param run The run.
+         * @return The explanation.
+         */
+        private String covered(Run run) {
+            Window hovered = run.gui().windowHovered;
+            String over = hovered == null ? "no window" : "window '" + hovered.name + "'";
+            return String.format(
+                    Locale.ROOT,
+                    "the mouse at (%.0f, %.0f) is over %s, but %s isn't hovered%s",
+                    mouseX,
+                    mouseY,
+                    over,
+                    ItemTarget.describe(item),
+                    run.gui().hoveredID != 0 ? " (another item is)" : "");
+        }
+
+        @Override
+        public String describe() {
+            String name =
+                    switch (clicks) {
+                        case 0 -> "hoverItem";
+                        case 1 -> "clickItem";
+                        default -> "doubleClickItem";
+                    };
+            return name + "(" + target + (button == MouseButton.LEFT ? "" : ", " + button) + ")";
+        }
+    }
+
+    /** Starts editing an immediate mode item's text and replaces it. */
+    private static final class ItemType implements Step {
+        /** Where typing is in its sequence. */
+        private enum Phase {
+            /** Clicking the item. */
+            CLICK,
+            /** Waiting for the item to start editing text. */
+            EDITING,
+            /** Select all is held down. */
+            SELECTED,
+            /** The text has been sent; waiting a frame for it to be seen. */
+            TYPED,
+            /** Enter is down. */
+            ENTER,
+            /** Everything has been sent; waiting a frame for it to be seen. */
+            SETTLE
+        }
+
+        /** Picks out the item. */
+        private final ItemTarget target;
+
+        /** How long to wait, in milliseconds. */
+        private final long timeout;
+
+        /** The text to type. */
+        private final String text;
+
+        /** Whether to press Enter afterwards. */
+        private final boolean enter;
+
+        /**
+         * Ctrl clicks the item. Sliders and drags only turn into text fields when Ctrl clicked, and
+         * a text field selects all its text.
+         */
+        private final ItemClick click;
+
+        /** Where typing is. */
+        private Phase phase = Phase.CLICK;
+
+        /** The modifier for select all on this platform. */
+        private Key shortcut;
+
+        /**
+         * Create the step.
+         *
+         * @param target Picks out the item.
+         * @param timeout How long to wait, in milliseconds.
+         * @param text The text to type.
+         * @param enter Whether to press Enter afterwards.
+         */
+        ItemType(ItemTarget target, long timeout, String text, boolean enter) {
+            this.target = target;
+            this.timeout = timeout;
+            this.text = text;
+            this.enter = enter;
+            click = new ItemClick(target, timeout, 1, MouseButton.LEFT, true);
+        }
+
+        @Override
+        public boolean advance(Run run) {
+            switch (phase) {
+                case CLICK -> {
+                    if (click.advance(run)) {
+                        phase = Phase.EDITING;
+                    }
+                    return false;
+                }
+                case EDITING -> {
+                    int id = click.item().id;
+                    boolean editing =
+                            run.gui().activeID == id
+                                    && run.gui().inputTextState != null
+                                    && run.gui().inputTextState.id == id;
+                    if (!editing) {
+                        if (run.elapsed() >= timeout) {
+                            throw new UiAutomationException(
+                                    ItemTarget.describe(click.item())
+                                            + " didn't start editing text");
+                        }
+                        return false;
+                    }
+                    shortcut = run.io().configMacOSXBehaviors ? Key.MOD_SUPER : Key.MOD_CTRL;
+                    run.io().addKeyEvent(shortcut, true);
+                    run.io().addKeyEvent(Key.A, true);
+                    phase = Phase.SELECTED;
+                    return false;
+                }
+                case SELECTED -> {
+                    run.io().addKeyEvent(Key.A, false);
+                    run.io().addKeyEvent(shortcut, false);
+                    if (text.isEmpty()) {
+                        run.io().addKeyEvent(Key.DELETE, true);
+                        run.io().addKeyEvent(Key.DELETE, false);
+                    } else {
+                        // Typing over the selection replaces it
+                        run.io().addInputCharacters(text);
+                    }
+                    phase = Phase.TYPED;
+                    return false;
+                }
+                case TYPED -> {
+                    InputTextState state = run.gui().inputTextState;
+                    String shown =
+                            state != null && state.id == click.item().id
+                                    ? state.text.toString()
+                                    : null;
+                    if (!text.equals(shown)) {
+                        if (run.elapsed() >= timeout) {
+                            throw new UiAutomationException(
+                                    ItemTarget.describe(click.item())
+                                            + (shown == null
+                                                    ? " stopped editing text"
+                                                    : " shows '" + shown + "'")
+                                            + " after typing '"
+                                            + text
+                                            + "'");
+                        }
+                        return false;
+                    }
+                    if (!enter) {
+                        return true;
+                    }
+                    run.io().addKeyEvent(Key.ENTER, true);
+                    phase = Phase.ENTER;
+                    return false;
+                }
+                case ENTER -> {
+                    run.io().addKeyEvent(Key.ENTER, false);
+                    phase = Phase.SETTLE;
+                    return false;
+                }
+                default -> {
+                    return true;
+                }
+            }
+        }
+
+        @Override
+        public String describe() {
+            return "typeItem(" + target + ", " + text + (enter ? ", enter" : "") + ")";
         }
     }
 }

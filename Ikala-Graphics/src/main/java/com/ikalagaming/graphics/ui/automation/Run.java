@@ -34,6 +34,9 @@ final class Run {
     /** The steps, in order. */
     private final List<Step> steps;
 
+    /** Records the IkGui items submitted each frame. */
+    private final ItemRecorder items;
+
     /**
      * Finishes when the run does. -- GETTER -- Finishes when the run does.
      *
@@ -58,10 +61,12 @@ final class Run {
      *
      * @param owner The plugin that started it.
      * @param steps The steps.
+     * @param items Records the IkGui items submitted each frame.
      */
-    Run(@NonNull GraphicsContext owner, @NonNull List<Step> steps) {
+    Run(@NonNull GraphicsContext owner, @NonNull List<Step> steps, @NonNull ItemRecorder items) {
         this.owner = owner;
         this.steps = List.copyOf(steps);
+        this.items = items;
     }
 
     /**
@@ -147,6 +152,15 @@ final class Run {
      */
     IkIO io() {
         return IkGui.getIO();
+    }
+
+    /**
+     * The IkGui items submitted lately, for finding immediate mode items.
+     *
+     * @return The recorder.
+     */
+    ItemRecorder items() {
+        return items;
     }
 
     /**

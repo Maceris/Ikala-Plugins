@@ -42,6 +42,9 @@ public final class UiAutomation {
     /** Runs started and not finished yet, so input is held off from the moment one starts. */
     private final AtomicInteger unfinished = new AtomicInteger();
 
+    /** Records IkGui items while runs go, so steps can find immediate mode items. */
+    private final ItemRecorder items = new ItemRecorder();
+
     /**
      * Create the automation for a UI manager, which owns it.
      *
@@ -74,7 +77,7 @@ public final class UiAutomation {
      * @return Finishes when the run does, or fails with a {@link UiAutomationException}.
      */
     public CompletableFuture<Void> run(@NonNull GraphicsContext owner, @NonNull Steps steps) {
-        final Run run = new Run(owner, steps.steps());
+        final Run run = new Run(owner, steps.steps(), items);
         // Counted now, so input a player sends from here on can't slip in before the first step
         unfinished.incrementAndGet();
         run.getFuture().whenComplete((done, error) -> unfinished.decrementAndGet());
@@ -113,14 +116,25 @@ public final class UiAutomation {
             }
         }
         if (current == null) {
+            if (waiting.isEmpty()) {
+                items.uninstall();
+            }
             return;
         }
+        items.install();
+        items.prune();
         if (current.advance(shown)) {
             finished.add(current);
-            // Leave nothing held down for the player or the next run
-            IkGui.getIO().addMouseButtonEvent(MouseButton.LEFT, false);
+            releaseButtons();
             current = null;
         }
+    }
+
+    /** Leave no mouse button held down for the player or the next run. */
+    private static void releaseButtons() {
+        IkGui.getIO().addMouseButtonEvent(MouseButton.LEFT, false);
+        IkGui.getIO().addMouseButtonEvent(MouseButton.RIGHT, false);
+        IkGui.getIO().addMouseButtonEvent(MouseButton.MIDDLE, false);
     }
 
     /**
@@ -157,7 +171,7 @@ public final class UiAutomation {
         if (current != null && current.getOwner() == owner) {
             log.debug("Cancelled the UI automation run from {}", owner.getOwner());
             current.cancel(reason);
-            IkGui.getIO().addMouseButtonEvent(MouseButton.LEFT, false);
+            releaseButtons();
             current = null;
         }
     }

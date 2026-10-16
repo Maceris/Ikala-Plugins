@@ -2,6 +2,7 @@ package com.ikalagaming.graphics.ui.script;
 
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.gui.enums.Key;
+import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.ui.UiManager;
 import com.ikalagaming.graphics.ui.automation.Steps;
 import com.ikalagaming.scripting.ScriptManager;
@@ -27,6 +28,9 @@ import java.util.function.Supplier;
  * await(ui.test().waitForVisible("about"));
  * await(ui.test().assertText("about//title", "About"));
  * boolean open = await(ui.test().exists("about"));
+ * await(ui.test().mouseDrag(640, 360, 700, 360));
+ * await(ui.test().clickItem("tools//lod", "Show cells"));
+ * await(ui.test().typeItem("tools//materials", "Roughness", "0.5", true));
  * </pre>
  *
  * <p>Selectors are written as for {@link com.ikalagaming.graphics.ui.automation.Selector}.
@@ -219,6 +223,224 @@ public final class ScriptAutomation {
      */
     public String frames(int count) {
         return start(steps -> steps.frames(count));
+    }
+
+    /**
+     * Move the mouse to a point in the window, in IkGui pixels from its top left corner.
+     *
+     * @param x Pixels from the left.
+     * @param y Pixels from the top.
+     * @return The tag to await.
+     */
+    public String mouseMove(float x, float y) {
+        return start(steps -> steps.mouseMove(x, y));
+    }
+
+    /**
+     * Click the left mouse button at a point in the window, like on a mesh in a 3D view.
+     *
+     * @param x Pixels from the left.
+     * @param y Pixels from the top.
+     * @return The tag to await.
+     */
+    public String mouseClick(float x, float y) {
+        return start(steps -> steps.mouseClick(x, y));
+    }
+
+    /**
+     * Click a mouse button at a point in the window.
+     *
+     * @param x Pixels from the left.
+     * @param y Pixels from the top.
+     * @param button {@code left}, {@code right} or {@code middle}.
+     * @return The tag to await.
+     * @throws IllegalArgumentException If the button isn't known.
+     */
+    public String mouseClick(float x, float y, @NonNull String button) {
+        MouseButton pressed = buttonNamed(button);
+        return start(steps -> steps.mouseClick(x, y, pressed));
+    }
+
+    /**
+     * Double click the left mouse button at a point in the window.
+     *
+     * @param x Pixels from the left.
+     * @param y Pixels from the top.
+     * @return The tag to await.
+     */
+    public String mouseDoubleClick(float x, float y) {
+        return start(steps -> steps.mouseDoubleClick(x, y));
+    }
+
+    /**
+     * Drag with the left mouse button from one point in the window to another.
+     *
+     * @param fromX Where to press, in pixels from the left.
+     * @param fromY Where to press, in pixels from the top.
+     * @param toX Where to release, in pixels from the left.
+     * @param toY Where to release, in pixels from the top.
+     * @return The tag to await.
+     */
+    public String mouseDrag(float fromX, float fromY, float toX, float toY) {
+        return start(steps -> steps.mouseDrag(fromX, fromY, toX, toY));
+    }
+
+    /**
+     * Drag with a mouse button from one point in the window to another.
+     *
+     * @param fromX Where to press, in pixels from the left.
+     * @param fromY Where to press, in pixels from the top.
+     * @param toX Where to release, in pixels from the left.
+     * @param toY Where to release, in pixels from the top.
+     * @param button {@code left}, {@code right} or {@code middle}.
+     * @return The tag to await.
+     * @throws IllegalArgumentException If the button isn't known.
+     */
+    public String mouseDrag(
+            float fromX, float fromY, float toX, float toY, @NonNull String button) {
+        MouseButton pressed = buttonNamed(button);
+        return start(steps -> steps.mouseDrag(fromX, fromY, toX, toY, pressed));
+    }
+
+    /**
+     * Turn the mouse wheel with the mouse at a point in the window.
+     *
+     * @param x Pixels from the left.
+     * @param y Pixels from the top.
+     * @param amount Wheel notches, positive scrolling up.
+     * @return The tag to await.
+     */
+    public String mouseWheel(float x, float y, float amount) {
+        return start(steps -> steps.mouseWheel(x, y, amount));
+    }
+
+    /**
+     * Click an IkGui item drawn in immediate mode.
+     *
+     * @param scope Where to look: a selector, {@code window=Name}, or {@code *}.
+     * @param label The item's label.
+     * @return The tag to await.
+     * @see com.ikalagaming.graphics.ui.automation.ItemTarget
+     */
+    public String clickItem(@NonNull String scope, @NonNull String label) {
+        return start(steps -> steps.clickItem(scope, label));
+    }
+
+    /**
+     * Click an IkGui item drawn in immediate mode with a mouse button.
+     *
+     * @param scope Where to look: a selector, {@code window=Name}, or {@code *}.
+     * @param label The item's label.
+     * @param button {@code left}, {@code right} or {@code middle}.
+     * @return The tag to await.
+     * @throws IllegalArgumentException If the button isn't known.
+     */
+    public String clickItem(@NonNull String scope, @NonNull String label, @NonNull String button) {
+        MouseButton pressed = buttonNamed(button);
+        return start(steps -> steps.clickItem(scope, label, pressed));
+    }
+
+    /**
+     * Double click an IkGui item drawn in immediate mode.
+     *
+     * @param scope Where to look: a selector, {@code window=Name}, or {@code *}.
+     * @param label The item's label.
+     * @return The tag to await.
+     */
+    public String doubleClickItem(@NonNull String scope, @NonNull String label) {
+        return start(steps -> steps.doubleClickItem(scope, label));
+    }
+
+    /**
+     * Move the mouse over an IkGui item drawn in immediate mode.
+     *
+     * @param scope Where to look: a selector, {@code window=Name}, or {@code *}.
+     * @param label The item's label.
+     * @return The tag to await.
+     */
+    public String hoverItem(@NonNull String scope, @NonNull String label) {
+        return start(steps -> steps.hoverItem(scope, label));
+    }
+
+    /**
+     * Replace the text of an IkGui text field, slider or drag drawn in immediate mode.
+     *
+     * @param scope Where to look: a selector, {@code window=Name}, or {@code *}.
+     * @param label The item's label.
+     * @param text The text.
+     * @return The tag to await.
+     */
+    public String typeItem(@NonNull String scope, @NonNull String label, @NonNull String text) {
+        return start(steps -> steps.typeItem(scope, label, text));
+    }
+
+    /**
+     * Replace the text of an IkGui text field, slider or drag drawn in immediate mode, then press
+     * Enter if asked.
+     *
+     * @param scope Where to look: a selector, {@code window=Name}, or {@code *}.
+     * @param label The item's label.
+     * @param text The text.
+     * @param enter Whether to press Enter.
+     * @return The tag to await.
+     */
+    public String typeItem(
+            @NonNull String scope, @NonNull String label, @NonNull String text, boolean enter) {
+        return start(steps -> steps.typeItem(scope, label, text, enter));
+    }
+
+    /**
+     * Wait until an IkGui item drawn in immediate mode is on screen.
+     *
+     * @param scope Where to look: a selector, {@code window=Name}, or {@code *}.
+     * @param label The item's label.
+     * @return The tag to await.
+     */
+    public String waitForItem(@NonNull String scope, @NonNull String label) {
+        return start(steps -> steps.waitForItem(scope, label));
+    }
+
+    /**
+     * Check whether a check box drawn in immediate mode is checked.
+     *
+     * @param scope Where to look: a selector, {@code window=Name}, or {@code *}.
+     * @param label The item's label.
+     * @param checked Whether it should be checked.
+     * @return The tag to await.
+     */
+    public String assertItemChecked(@NonNull String scope, @NonNull String label, boolean checked) {
+        return start(steps -> steps.assertItemChecked(scope, label, checked));
+    }
+
+    /**
+     * Find out whether an IkGui item drawn in immediate mode is on screen. Awaiting the tag gives
+     * true or false.
+     *
+     * @param scope Where to look: a selector, {@code window=Name}, or {@code *}.
+     * @param label The item's label.
+     * @return The tag to await.
+     */
+    public String itemExists(@NonNull String scope, @NonNull String label) {
+        AtomicReference<Boolean> found = new AtomicReference<>(false);
+        return start(steps -> steps.itemExists(scope, label, found::set), found::get);
+    }
+
+    /**
+     * Read a mouse button name.
+     *
+     * @param name {@code left}, {@code right} or {@code middle}, in any case.
+     * @return The button.
+     * @throws IllegalArgumentException If no button has that name.
+     */
+    private static MouseButton buttonNamed(String name) {
+        return switch (name.trim().toLowerCase(Locale.ROOT)) {
+            case "left" -> MouseButton.LEFT;
+            case "right" -> MouseButton.RIGHT;
+            case "middle" -> MouseButton.MIDDLE;
+            default ->
+                    throw new IllegalArgumentException(
+                            "There is no mouse button called '" + name + "'");
+        };
     }
 
     /**

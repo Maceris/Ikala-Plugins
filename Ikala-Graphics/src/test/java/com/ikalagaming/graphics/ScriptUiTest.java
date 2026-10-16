@@ -315,6 +315,23 @@ public class ScriptUiTest {
     }
 
     @Test
+    void scriptsDriveTheMouseAndImmediateItems() {
+        start(
+                """
+                Object t = ui.test();
+                await(t.mouseClick(900, 500, "right"));
+                await(t.mouseDrag(900, 500, 950.5, 520));
+                await(t.mouseWheel(950, 520, 1));
+                out.add(await(t.itemExists("*", "Nothing")));
+                out.add("done");
+                """);
+        framesUntil(() -> recorder.values().contains("done"));
+        assertEquals(List.of(false, "done"), recorder.values());
+        assertEquals(950, IkGui.getMousePos().x, 0.01f);
+        assertEquals(520, IkGui.getMousePos().y, 0.01f);
+    }
+
+    @Test
     void aFailedCheckStopsTheScript() {
         ScriptRuntime runtime =
                 start(
