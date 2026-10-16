@@ -91,6 +91,12 @@ final class LodSection {
     /** The side of the largest regular bake tile, in texels. */
     private static final int BAKE_TILE = 64;
 
+    /** The most texels across a baked cluster's error to choose. */
+    private static final int MAX_BAKE_DENSITY = 4;
+
+    /** Texels across a baked cluster's error. */
+    private final int[] bakeDensity = {(int) DagBuilder.Options.DEFAULT_BAKE_DENSITY};
+
     /** Whether to keep the lineage, to measure how faithful each level is. */
     private final IkBoolean measureFidelity = new IkBoolean(true);
 
@@ -168,6 +174,9 @@ final class LodSection {
         IkGui.checkbox("Join separate pieces (slow, needs a lot of memory)", virtualEdges);
         IkGui.checkbox("Keep normals and texture coordinates", keepAttributes);
         IkGui.checkbox("Bake far textures", bake);
+        if (bake.get()) {
+            IkGui.sliderInt("Bake texels per error", bakeDensity, 1, MAX_BAKE_DENSITY, "%d");
+        }
         IkGui.checkbox("Blend materials far out", blendFar);
         IkGui.checkbox("Measure fidelity", measureFidelity);
         IkGui.textWrapped(
@@ -254,7 +263,8 @@ final class LodSection {
                 defaults.visibilityReach(),
                 defaults.mergePlanar(),
                 blendFar.get() ? averages : null,
-                bake.get() ? BAKE_TILE : 0);
+                bake.get() ? BAKE_TILE : 0,
+                bakeDensity[0]);
     }
 
     /**

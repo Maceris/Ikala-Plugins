@@ -94,6 +94,9 @@ public final class DagBuilder {
      *     that size is fine enough for its error (see {@link #bakes}), and then simplifies its
      *     geometry alone, with no seams or material borders held. Each cluster's tile is then as
      *     small as its error allows, with sides up to twice this.
+     * @param bakeDensity Texels across a baked cluster's error: 1 for texels as wide as the error,
+     *     which then cover as many pixels as the error threshold where the cluster is drawn; more
+     *     for sharper tiles, at that squared in texels.
      */
     public record Options(
             double virtualEdgeFactor,
@@ -103,7 +106,45 @@ public final class DagBuilder {
             double visibilityReach,
             boolean mergePlanar,
             MaterialAverages averages,
-            int bakeTile) {
+            int bakeTile,
+            double bakeDensity) {
+
+        /** Texels across a baked cluster's error, unless asked otherwise. */
+        public static final double DEFAULT_BAKE_DENSITY = 2;
+
+        /**
+         * Options that bake at the default density.
+         *
+         * @param virtualEdgeFactor r for virtual edges, as a multiple of the average edge length.
+         * @param lockOpenBorder Whether the input's open border is locked at every level.
+         * @param threads Worker threads.
+         * @param keepLineage Whether to keep where every triangle came from.
+         * @param visibilityReach How far a leaf triangle's rays must get to count as seen.
+         * @param mergePlanar Whether to merge each input's coplanar triangles first.
+         * @param averages What each material looks like averaged, or null.
+         * @param bakeTile The side of the tile a baked cluster is expected to need, 0 never to
+         *     bake.
+         */
+        public Options(
+                double virtualEdgeFactor,
+                boolean lockOpenBorder,
+                int threads,
+                boolean keepLineage,
+                double visibilityReach,
+                boolean mergePlanar,
+                MaterialAverages averages,
+                int bakeTile) {
+            this(
+                    virtualEdgeFactor,
+                    lockOpenBorder,
+                    threads,
+                    keepLineage,
+                    visibilityReach,
+                    mergePlanar,
+                    averages,
+                    bakeTile,
+                    DEFAULT_BAKE_DENSITY);
+        }
 
         /**
          * Options that never bake.
@@ -195,7 +236,8 @@ public final class DagBuilder {
                     visibilityReach,
                     mergePlanar,
                     averages,
-                    bakeTile);
+                    bakeTile,
+                    bakeDensity);
         }
 
         /**
@@ -213,7 +255,8 @@ public final class DagBuilder {
                     visibilityReach,
                     mergePlanar,
                     materialAverages,
-                    bakeTile);
+                    bakeTile,
+                    bakeDensity);
         }
 
         /**
@@ -231,7 +274,8 @@ public final class DagBuilder {
                     visibilityReach,
                     merge,
                     averages,
-                    bakeTile);
+                    bakeTile,
+                    bakeDensity);
         }
 
         /**
@@ -249,7 +293,27 @@ public final class DagBuilder {
                     visibilityReach,
                     mergePlanar,
                     averages,
-                    tile);
+                    tile,
+                    bakeDensity);
+        }
+
+        /**
+         * The same options, baking with some other number of texels across a cluster's error.
+         *
+         * @param density The texels, at least 1.
+         * @return The options.
+         */
+        public Options withBakeDensity(double density) {
+            return new Options(
+                    virtualEdgeFactor,
+                    lockOpenBorder,
+                    threads,
+                    keepLineage,
+                    visibilityReach,
+                    mergePlanar,
+                    averages,
+                    bakeTile,
+                    density);
         }
 
         /**
@@ -1712,16 +1776,25 @@ public final class DagBuilder {
     }
 
     /**
-     * Lay a baked cluster out in the smallest tile whose texels are as wide as the cluster's error,
-     * so that it looks no blurrier than the cut allows, with sides up to twice the options' tile,
-     * for clusters whose many small charts' gaps take up much of it.
+     * Lay a baked cluster out in the smallest tile with the options' density of texels across the
+     * cluster's error, so that it looks no blurrier than the cut allows, with sides up to twice the
+     * options' tile, for clusters whose many small charts' gaps take up much of it.
      *
      * @param corners The cluster's corners.
      * @param error The cluster's error.
      * @return The layout.
      */
     private BakeLayout layoutFor(float @NonNull [] corners, double error) {
-        return BakeLayout.at(corners, error, 2 * options.bakeTile());
+        return BakeLayout.at(corners, error / bakeDensity(), 2 * options.bakeTile());
+    }
+
+    /**
+     * Texels across a baked cluster's error, at least 1.
+     *
+     * @return The density.
+     */
+    private double bakeDensity() {
+        return Math.max(1, options.bakeDensity());
     }
 
     /** The share of a tile charts are packed into, the rest gaps and corners left over. */
@@ -1729,11 +1802,11 @@ public final class DagBuilder {
 
     /**
      * Whether a group bakes its output: when baking is on and a child was baked, or some of its
-     * input is textured and a tile per output cluster gives texels no wider than its children's
-     * error, which the group's own is never under. Drawn only where its error is under the
-     * threshold, a texel then covers no more than that many pixels, so the bake looks no blurrier
-     * than the cut allows. Each output cluster stands for about twice the surface of a child,
-     * simplified to half.
+     * input is textured and a tile per output cluster gives the options' density of texels across
+     * its children's error, which the group's own is never under. Drawn only where its error is
+     * under the threshold, a texel then covers no more than that many pixels, so the bake looks no
+     * blurrier than the cut allows. Each output cluster stands for about twice the surface of a
+     * child, simplified to half.
      *
      * @param children The group's children.
      * @return True if it bakes.
@@ -1761,7 +1834,7 @@ public final class DagBuilder {
         }
         final double clusterArea = 2 * area / children.length;
         final double texels = BAKE_PACKING * options.bakeTile() * options.bakeTile();
-        return Math.sqrt(clusterArea / texels) <= childError;
+        return Math.sqrt(clusterArea / texels) * bakeDensity() <= childError;
     }
 
     /**

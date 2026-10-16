@@ -1226,8 +1226,8 @@ public class VulkanInstance {
         state.sunShadows = new SunShadowCache();
         state.skyOcclusion = new SkyOcclusion();
         state.pointShadows = new PointShadows();
-        state.lods = new LodRenderer(state);
         state.lodBakes = new LodBakes();
+        state.lods = new LodRenderer(state);
         state.bakeSources = new BakeSources();
         state.sections = new SectionManager(state.shadowInvalidation);
         state.instances = new InstanceTable(state);

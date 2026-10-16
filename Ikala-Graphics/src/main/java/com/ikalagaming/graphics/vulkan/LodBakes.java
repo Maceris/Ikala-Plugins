@@ -11,6 +11,7 @@ import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.lod.Attributes;
 import com.ikalagaming.graphics.lod.BakeTexels;
+import com.ikalagaming.graphics.lod.ClusterMeshes;
 import com.ikalagaming.graphics.lod.LodDag;
 import com.ikalagaming.graphics.vulkan.stages.SceneRender;
 
@@ -34,14 +35,15 @@ import java.util.concurrent.locks.ReentrantLock;
  * a color texture and a data texture of normal, roughness and metalness, drawn through one material
  * with {@link Material#isBakedData()} set, so baked clusters are ordinary textured triangles.
  *
- * <p>When a world with baked clusters is added, {@link #plan} gives each a tile, points its texture
- * coordinates into the tile's page and its triangles at the page's material, and works out from its
- * {@link BakeTexels} what each texel samples; {@code LodBake} then bakes a budget of tiles a frame,
- * children before parents, since parents sample their children's tiles. Until its tile is baked a
- * cluster draws the empty page.
+ * <p>When a world with baked clusters is added, {@link #plan} works out from each one's {@link
+ * BakeTexels} what each texel of its tile samples, down to the world's own materials. Tiles then
+ * follow residency (see {@link LodRenderer}): a cluster loaded gets a tile through {@link #load},
+ * its texture coordinates pointed into the tile's page and its triangles at the page's material,
+ * and its bake queued; {@code LodBake} bakes a budget of tiles a frame, in any order, since no tile
+ * reads another; the cluster is shown once it is baked, and its tile given back when it is evicted.
  *
- * <p>Planning, attaching and releasing are safe from any thread; pages are made and jobs taken on
- * the render thread.
+ * <p>Planning and releasing are safe from any thread; loading, unloading, making pages and taking
+ * jobs happen on the render thread.
  */
 @Slf4j
 public final class LodBakes {
@@ -106,44 +108,82 @@ public final class LodBakes {
         }
     }
 
+    /** Bytes a baked texel takes on the GPU: a texel of each page. */
+    public static final int BYTES_PER_TEXEL = 8;
+
+    /**
+     * A baked cluster: what its tile holds, worked out once, and baked again each time the cluster
+     * is loaded.
+     *
+     * @param cluster The cluster as built, with texture coordinates in its tile from 0 to 1.
+     * @param width Its tile's width, in texels.
+     * @param height Its tile's height.
+     * @param sources The materials its texels sample, which records refer to by index.
+     * @param records Each texel's record, row by row, {@link #RECORD_SIZE} bytes each.
+     * @param worldPerTexel World units a texel spans.
+     */
+    public record Baked(
+            LodDag.@NonNull Cluster cluster,
+            int width,
+            int height,
+            @NonNull List<Material> sources,
+            @NonNull ByteBuffer records,
+            double worldPerTexel) {
+
+        /**
+         * The bytes its tile takes on the GPU.
+         *
+         * @return The bytes.
+         */
+        public long bytes() {
+            return (long) width * height * BYTES_PER_TEXEL;
+        }
+    }
+
     /**
      * One tile to bake.
      *
      * @param tile The tile.
-     * @param level Its cluster's level, so children bake first.
-     * @param sources The materials its texels sample, which records refer to by index.
-     * @param records Each texel's record, row by row, {@link #RECORD_SIZE} bytes each.
-     * @param world The world it is for, set once attached.
+     * @param baked What it holds.
+     * @param world The world it is for.
      */
-    public record Job(
-            @NonNull Tile tile,
-            int level,
-            @NonNull List<Material> sources,
-            @NonNull ByteBuffer records,
-            long world) {}
+    public record Job(@NonNull Tile tile, @NonNull Baked baked, long world) {}
 
     /**
-     * What a world's bakes take: its baked clusters as they are drawn, their tiles, and the jobs
-     * that fill them.
+     * A world's baked clusters.
      *
-     * @param clusters Baked clusters as drawn, by id: texture coordinates in their page and its
-     *     material.
-     * @param tiles The tiles taken.
-     * @param jobs The jobs, children first.
+     * @param clusters Each baked cluster, by id.
      */
-    public record Plan(
-            @NonNull Map<Integer, LodDag.Cluster> clusters,
-            @NonNull List<Tile> tiles,
-            @NonNull List<Job> jobs) {
+    public record Plan(@NonNull Map<Integer, Baked> clusters) {
 
         /**
-         * A cluster as it is drawn.
+         * A cluster's bake.
          *
-         * @param original The cluster as built.
-         * @return The baked one, or the original if it isn't baked.
+         * @param id The cluster's id.
+         * @return Its bake, or null if it isn't baked.
          */
-        public LodDag.Cluster cluster(LodDag.@NonNull Cluster original) {
-            return clusters.getOrDefault(original.id(), original);
+        public Baked of(int id) {
+            return clusters.get(id);
+        }
+    }
+
+    /** A loaded cluster's tile, and whether it has been baked. */
+    private static final class Loaded {
+        /** The tile. */
+        final Tile tile;
+
+        /** Its job, until it is taken. */
+        Job job;
+
+        /**
+         * Keep a tile.
+         *
+         * @param tile The tile.
+         * @param job Its job.
+         */
+        Loaded(@NonNull Tile tile, @NonNull Job job) {
+            this.tile = tile;
+            this.job = job;
         }
     }
 
@@ -307,14 +347,11 @@ public final class LodBakes {
     /** The pages. */
     private final List<Page> pages = new ArrayList<>();
 
-    /** Jobs waiting for the GPU, children first. */
+    /** Jobs waiting for the GPU, in the order they came. */
     private final List<Job> jobs = new ArrayList<>();
 
-    /** Each world's tiles. */
-    private final Map<Long, List<Tile>> byWorld = new HashMap<>();
-
-    /** Each world's owner. */
-    private final Map<Long, String> owners = new HashMap<>();
+    /** Each world's loaded clusters, by id. */
+    private final Map<Long, Map<Integer, Loaded>> byWorld = new HashMap<>();
 
     /** The descriptor set layout bakes write pages through. Render thread. */
     private long setLayout = VK_NULL_HANDLE;
@@ -360,52 +397,139 @@ public final class LodBakes {
     }
 
     /**
-     * Give a world's baked clusters tiles, and work out what each texel samples. Safe from any
-     * thread.
+     * Work out what each texel of a world's baked clusters samples. A baked child's texels already
+     * name the materials and places they sample, so a texel over one samples those, at the nearest
+     * of its texels: every tile then samples only the world's own materials, and can be baked
+     * whether or not its children are. Safe from any thread.
      *
      * @param dag The world.
      * @param cache The scene's materials, which clusters' material indices are into.
      * @return The plan, or null if nothing in it is baked.
      */
-    public Plan plan(@NonNull LodDag dag, @NonNull MaterialCache cache) {
-        final List<int[]> baked = new ArrayList<>();
+    public static Plan plan(@NonNull LodDag dag, @NonNull MaterialCache cache) {
+        final List<LodDag.Cluster> baked = new ArrayList<>();
         for (LodDag.Group group : dag.groups()) {
-            for (int i = 0; i < group.bakeTiles().length; ++i) {
-                if (dag.bakeOf(group.outputs()[i]) != null) {
-                    baked.add(new int[] {group.outputs()[i], group.bakeTiles()[i]});
+            for (int output : group.bakeTiles().length > 0 ? group.outputs() : new int[0]) {
+                if (dag.bakeOf(output) != null) {
+                    baked.add(dag.clusters().get(output));
                 }
             }
         }
         if (baked.isEmpty()) {
             return null;
         }
-        baked.sort(Comparator.comparingInt(b -> b[0]));
-        final Map<Integer, LodDag.Cluster> clusters = new HashMap<>();
-        final Map<Integer, Tile> tiles = new HashMap<>();
+        // Children before parents, which read their records
+        baked.sort(
+                Comparator.comparingInt(LodDag.Cluster::level)
+                        .thenComparingInt(LodDag.Cluster::id));
+        final Map<Integer, Baked> out = new HashMap<>();
+        for (LodDag.Cluster cluster : baked) {
+            out.put(cluster.id(), bake(dag, cluster, out, cache));
+        }
+        return new Plan(out);
+    }
+
+    /**
+     * Give a loaded cluster a tile and queue its bake. Render thread.
+     *
+     * @param world The world's id.
+     * @param baked The cluster's bake.
+     * @return The cluster's mesh as drawn: texture coordinates in the tile's page, every triangle
+     *     the page's material.
+     */
+    public ClusterMeshes.Mesh load(long world, @NonNull Baked baked) {
+        final MaterialCache cache = GraphicsManager.getScene().getMaterialCache();
+        final Tile tile;
         lock.lock();
         try {
-            for (int[] b : baked) {
-                tiles.put(
-                        b[0],
-                        allocate(
-                                Math.min(LodDag.tileWidth(b[1]), PAGE),
-                                Math.min(LodDag.tileHeight(b[1]), PAGE),
-                                cache));
-            }
+            unloadLocked(world, baked.cluster().id());
+            tile = allocate(Math.min(baked.width(), PAGE), Math.min(baked.height(), PAGE), cache);
+            final Job job = new Job(tile, baked, world);
+            jobs.add(job);
+            byWorld.computeIfAbsent(world, w -> new HashMap<>())
+                    .put(baked.cluster().id(), new Loaded(tile, job));
         } finally {
             lock.unlock();
         }
-        for (int[] b : baked) {
-            final LodDag.Cluster cluster = dag.clusters().get(b[0]);
-            clusters.put(b[0], inPage(cluster, tiles.get(b[0])));
+        return ClusterMeshes.of(inPage(baked.cluster(), tile));
+    }
+
+    /**
+     * Whether a loaded cluster's tile has been baked: its job was taken, and so is written before
+     * anything that frame draws.
+     *
+     * @param world The world's id.
+     * @param cluster The cluster's id.
+     * @return True once it has.
+     */
+    public boolean isBaked(long world, int cluster) {
+        lock.lock();
+        try {
+            final Map<Integer, Loaded> loaded = byWorld.get(world);
+            final Loaded tile = loaded == null ? null : loaded.get(cluster);
+            return tile != null && tile.job == null;
+        } finally {
+            lock.unlock();
         }
-        final List<Job> planned = new ArrayList<>();
-        for (int[] b : baked) {
-            final LodDag.Cluster cluster = dag.clusters().get(b[0]);
-            planned.add(job(dag, cluster, tiles.get(b[0]), clusters, cache));
+    }
+
+    /**
+     * Give back a cluster's tile, and drop its bake if it is still waiting. Render thread.
+     *
+     * @param world The world's id.
+     * @param cluster The cluster's id.
+     */
+    public void unload(long world, int cluster) {
+        lock.lock();
+        try {
+            unloadLocked(world, cluster);
+        } finally {
+            lock.unlock();
         }
-        planned.sort(Comparator.comparingInt(Job::level));
-        return new Plan(clusters, new ArrayList<>(tiles.values()), planned);
+    }
+
+    /**
+     * Give back a cluster's tile. Lock held.
+     *
+     * @param world The world's id.
+     * @param cluster The cluster's id.
+     */
+    private void unloadLocked(long world, int cluster) {
+        final Map<Integer, Loaded> loaded = byWorld.get(world);
+        final Loaded tile = loaded == null ? null : loaded.remove(cluster);
+        if (tile == null) {
+            return;
+        }
+        if (tile.job != null) {
+            jobs.remove(tile.job);
+        }
+        pages.get(tile.tile.page())
+                .give(tile.tile.x(), tile.tile.y(), tile.tile.width(), tile.tile.height());
+        if (loaded.isEmpty()) {
+            byWorld.remove(world);
+        }
+    }
+
+    /**
+     * How many tiles are loaded and the texels they hold.
+     *
+     * @return The tile count, then the texels.
+     */
+    public long[] loadedTexels() {
+        lock.lock();
+        try {
+            long tiles = 0;
+            long texels = 0;
+            for (Map<Integer, Loaded> loaded : byWorld.values()) {
+                for (Loaded tile : loaded.values()) {
+                    ++tiles;
+                    texels += tile.tile.texels();
+                }
+            }
+            return new long[] {tiles, texels};
+        } finally {
+            lock.unlock();
+        }
     }
 
     /**
@@ -477,24 +601,24 @@ public final class LodBakes {
 
     /**
      * Work out what each texel of a cluster's tile samples: its child's material and texture
-     * coordinates there, the child's tangent frame and the cluster's, and how much of the child's
-     * texture a texel spans.
+     * coordinates there, or what the child's own tile samples there if it was baked too, the
+     * source's tangent frame and the cluster's, and how much of the source's texture a texel spans.
      *
      * @param dag The world.
      * @param cluster The baked cluster, as built.
-     * @param tile Its tile.
-     * @param drawn Baked clusters as drawn, for children that were baked too.
+     * @param planned Clusters baked so far, for children that were baked too.
      * @param cache The scene's materials.
-     * @return The job.
+     * @return The bake.
      */
-    private Job job(
+    private static Baked bake(
             @NonNull LodDag dag,
             LodDag.@NonNull Cluster cluster,
-            @NonNull Tile tile,
-            @NonNull Map<Integer, LodDag.Cluster> drawn,
+            @NonNull Map<Integer, Baked> planned,
             @NonNull MaterialCache cache) {
         final BakeTexels bake = dag.bakeOf(cluster.id());
-        final int texels = bake.width() * bake.height();
+        final int width = bake.width();
+        final int height = bake.height();
+        final int texels = width * height;
         final ByteBuffer records =
                 ByteBuffer.allocate(texels * RECORD_SIZE).order(ByteOrder.LITTLE_ENDIAN);
         final List<Material> sources = new ArrayList<>();
@@ -503,7 +627,7 @@ public final class LodBakes {
         final int[] child = new int[Attributes.VALUES];
         final int[] own = new int[Attributes.VALUES];
         final float[] direction = new float[AXES];
-        final double worldPerTexel = worldPerTexel(cluster, bake.width(), bake.height());
+        final double worldPerTexel = worldPerTexel(cluster, width, height);
         for (int texel = 0; texel < texels; ++texel) {
             final int at = texel * RECORD_SIZE;
             final int childId = bake.childCluster(texel);
@@ -511,9 +635,53 @@ public final class LodBakes {
                 records.putInt(at, EMPTY);
                 continue;
             }
-            final LodDag.Cluster source = drawn.getOrDefault(childId, dag.clusters().get(childId));
+            final LodDag.Cluster source = dag.clusters().get(childId);
             final int t = bake.childTriangle(texel);
-            final Material material = cache.getMaterial(source.materials()[t]);
+            final int[] attributes = source.attributes();
+            for (int c = 0; c < CORNERS; ++c) {
+                weights[c] = bake.childWeight(texel, c);
+            }
+            final Material material;
+            float u = 0;
+            float v = 0;
+            double footprint = 0;
+            final Baked childBake = planned.get(childId);
+            if (childBake != null) {
+                // What the child's tile holds there, from its nearest texel with anything
+                Attributes.blend(attributes, t * Attributes.PER_TRIANGLE, weights, child, 0);
+                final float[] place = Attributes.textureCoordinates(child, 0);
+                final int from = nearestFilled(childBake, place[0], place[1]);
+                if (from < 0) {
+                    records.putInt(at, EMPTY);
+                    continue;
+                }
+                final ByteBuffer was = childBake.records();
+                final int in = from * RECORD_SIZE;
+                material = childBake.sources().get(was.getInt(in));
+                u = was.getFloat(in + Integer.BYTES);
+                v = was.getFloat(in + 2 * Integer.BYTES);
+                child[0] = was.getInt(in + 3 * Integer.BYTES);
+                child[1] = was.getInt(in + 4 * Integer.BYTES);
+                footprint = was.getFloat(in + 7 * Integer.BYTES);
+                if (childBake.worldPerTexel() > 0) {
+                    footprint *= worldPerTexel / childBake.worldPerTexel();
+                }
+            } else {
+                material = cache.getMaterial(source.materials()[t]);
+                final boolean textured =
+                        Attributes.textured(attributes, t)
+                                && !Attributes.isAveraged(attributes, t * Attributes.PER_TRIANGLE);
+                if (textured) {
+                    Attributes.blend(attributes, t * Attributes.PER_TRIANGLE, weights, child, 0);
+                    final float[] uv = Attributes.textureCoordinates(child, 0);
+                    u = uv[0];
+                    v = uv[1];
+                    footprint = uvPerWorld(source, t) * worldPerTexel;
+                } else {
+                    // No texture to place: the triangle's own facing, any tangent across it
+                    faceFrame(source.corners(), t, direction, child);
+                }
+            }
             final int slot =
                     slots.computeIfAbsent(
                             material,
@@ -521,26 +689,6 @@ public final class LodBakes {
                                 sources.add(m);
                                 return sources.size() - 1;
                             });
-            final int[] attributes = source.attributes();
-            final boolean textured =
-                    Attributes.textured(attributes, t)
-                            && !Attributes.isAveraged(attributes, t * Attributes.PER_TRIANGLE);
-            float u = 0;
-            float v = 0;
-            double footprint = 0;
-            if (textured) {
-                for (int c = 0; c < CORNERS; ++c) {
-                    weights[c] = bake.childWeight(texel, c);
-                }
-                Attributes.blend(attributes, t * Attributes.PER_TRIANGLE, weights, child, 0);
-                final float[] uv = Attributes.textureCoordinates(child, 0);
-                u = uv[0];
-                v = uv[1];
-                footprint = uvPerWorld(source, t) * worldPerTexel;
-            } else {
-                // No texture to place: the triangle's own facing, any tangent across it
-                faceFrame(source.corners(), t, direction, child);
-            }
             for (int c = 0; c < CORNERS; ++c) {
                 weights[c] = bake.ownWeight(texel, c);
             }
@@ -559,7 +707,45 @@ public final class LodBakes {
             records.putInt(at + 6 * Integer.BYTES, own[1]);
             records.putFloat(at + 7 * Integer.BYTES, (float) footprint);
         }
-        return new Job(tile, cluster.level(), sources, records, 0);
+        return new Baked(cluster, width, height, sources, records, worldPerTexel);
+    }
+
+    /** How far from a place in a tile to look for a texel with anything in it, in texels. */
+    private static final int SEARCH = 2;
+
+    /**
+     * The texel of a baked tile nearest a place in it that stands for something.
+     *
+     * @param baked The bake.
+     * @param u The place across the tile, from 0 to 1.
+     * @param v The place down it.
+     * @return The texel, row by row, or -1 if none is near.
+     */
+    private static int nearestFilled(@NonNull Baked baked, float u, float v) {
+        final int width = baked.width();
+        final int height = baked.height();
+        final double x = u * width;
+        final double y = v * height;
+        final int cx = Math.clamp((int) Math.floor(x), 0, width - 1);
+        final int cy = Math.clamp((int) Math.floor(y), 0, height - 1);
+        int best = -1;
+        double bestDistance = Double.MAX_VALUE;
+        for (int ty = Math.max(0, cy - SEARCH); ty <= Math.min(height - 1, cy + SEARCH); ++ty) {
+            for (int tx = Math.max(0, cx - SEARCH); tx <= Math.min(width - 1, cx + SEARCH); ++tx) {
+                final int texel = ty * width + tx;
+                if (baked.records().getInt(texel * RECORD_SIZE) == EMPTY) {
+                    continue;
+                }
+                final double dx = tx + 0.5 - x;
+                final double dy = ty + 0.5 - y;
+                final double distance = dx * dx + dy * dy;
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = texel;
+                }
+            }
+        }
+        return best;
     }
 
     /**
@@ -671,66 +857,22 @@ public final class LodBakes {
     }
 
     /**
-     * Tie a plan's tiles and jobs to the world they were planned for, and queue its jobs. Safe from
-     * any thread.
-     *
-     * @param world The world's id.
-     * @param owner The key of the plugin that owns it.
-     * @param plan The plan.
-     */
-    public void attach(long world, @NonNull String owner, @NonNull Plan plan) {
-        lock.lock();
-        try {
-            byWorld.put(world, new ArrayList<>(plan.tiles()));
-            owners.put(world, owner);
-            for (Job job : plan.jobs()) {
-                jobs.add(new Job(job.tile(), job.level(), job.sources(), job.records(), world));
-            }
-            jobs.sort(Comparator.comparingInt(Job::level));
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    /**
-     * Give back a world's tiles, and drop its jobs. Safe from any thread.
+     * Give back a world's tiles, and drop its waiting bakes. Safe from any thread.
      *
      * @param world The world's id.
      */
     public void release(long world) {
         lock.lock();
         try {
-            final List<Tile> tiles = byWorld.remove(world);
-            owners.remove(world);
-            jobs.removeIf(job -> job.world() == world);
-            if (tiles != null) {
-                for (Tile tile : tiles) {
-                    pages.get(tile.page()).give(tile.x(), tile.y(), tile.width(), tile.height());
+            final Map<Integer, Loaded> loaded = byWorld.get(world);
+            if (loaded != null) {
+                for (Integer cluster : new ArrayList<>(loaded.keySet())) {
+                    unloadLocked(world, cluster);
                 }
             }
         } finally {
             lock.unlock();
         }
-    }
-
-    /**
-     * Give back the tiles of every world a plugin owns. Safe from any thread.
-     *
-     * @param owner The plugin's key.
-     */
-    public void releaseAllOwnedBy(@NonNull String owner) {
-        final List<Long> worlds = new ArrayList<>();
-        lock.lock();
-        try {
-            for (Map.Entry<Long, String> entry : owners.entrySet()) {
-                if (entry.getValue().equals(owner)) {
-                    worlds.add(entry.getKey());
-                }
-            }
-        } finally {
-            lock.unlock();
-        }
-        worlds.forEach(this::release);
     }
 
     /**
@@ -739,7 +881,7 @@ public final class LodBakes {
      *
      * @param state The Vulkan state.
      * @param texels The most texels to take, though at least one job is taken.
-     * @return The jobs, children first.
+     * @return The jobs.
      */
     public List<Job> take(@NonNull VulkanState state, long texels) {
         final List<Job> taken = new ArrayList<>();
@@ -750,6 +892,7 @@ public final class LodBakes {
             while (!jobs.isEmpty() && (taken.isEmpty() || total < texels)) {
                 final Job job = jobs.remove(0);
                 taken.add(job);
+                byWorld.get(job.world()).get(job.baked().cluster().id()).job = null;
                 total += job.tile().texels();
                 final Page page = pages.get(job.tile().page());
                 if (page.color == null && !toMake.contains(page)) {
@@ -1097,9 +1240,12 @@ public final class LodBakes {
         for (int i = 0; i < batch.size(); ++i) {
             final Job job = batch.get(i);
             offsets[i * 2] = bytes;
-            bytes += align((long) job.sources().size() * ShaderBindings.Scene.Material.SIZEOF);
+            bytes +=
+                    align(
+                            (long) job.baked().sources().size()
+                                    * ShaderBindings.Scene.Material.SIZEOF);
             offsets[i * 2 + 1] = bytes;
-            bytes += align(job.records().capacity());
+            bytes += align(job.baked().records().capacity());
         }
         SharedBuffer buffer = uploads[frame];
         if (buffer == null) {
@@ -1115,11 +1261,11 @@ public final class LodBakes {
         for (int i = 0; i < batch.size(); ++i) {
             final Job job = batch.get(i);
             data.position((int) offsets[i * 2]);
-            for (Material material : job.sources()) {
+            for (Material material : job.baked().sources()) {
                 SceneRender.writeMaterial(data, material, state.textureRegistry);
             }
             data.position((int) offsets[i * 2 + 1]);
-            data.put(job.records().duplicate().clear());
+            data.put(job.baked().records().duplicate().clear());
         }
         return buffer;
     }
@@ -1178,7 +1324,6 @@ public final class LodBakes {
             pages.clear();
             jobs.clear();
             byWorld.clear();
-            owners.clear();
         } finally {
             lock.unlock();
         }

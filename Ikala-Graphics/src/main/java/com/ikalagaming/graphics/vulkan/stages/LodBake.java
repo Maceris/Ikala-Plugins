@@ -22,8 +22,7 @@ import java.util.List;
 
 /**
  * Bakes level of detail clusters' appearance into their tiles, see {@link LodBakes}: a budget of
- * tiles a frame, before anything draws, children before parents, with a barrier wherever the level
- * goes up so parents see their children's tiles.
+ * tiles a frame, before anything draws. No tile reads another, so they bake in any order.
  */
 @Slf4j
 public class LodBake implements RenderStage {
@@ -106,32 +105,19 @@ public class LodBake implements RenderStage {
         final SharedBuffer buffer = bakes.write(state.frameIndex, state, jobs, offsets);
         final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            // Earlier frames sample the pages; this writes other tiles of them
+            // Earlier frames sample the pages, maybe where tiles given back are written again
             barrier(
                     commandBuffer,
                     VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT
                             | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                     VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
                     VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                    VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
                     stack);
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
             final ByteBuffer constants = stack.calloc(CONSTANTS_SIZE);
-            int level = jobs.get(0).level();
             for (int i = 0; i < jobs.size(); ++i) {
                 final LodBakes.Job job = jobs.get(i);
-                if (job.level() != level) {
-                    // Parents sample what their children's bakes just wrote
-                    barrier(
-                            commandBuffer,
-                            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                            VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                            VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                            VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
-                                    | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                            stack);
-                    level = job.level();
-                }
                 vkCmdBindDescriptorSets(
                         commandBuffer,
                         VK_PIPELINE_BIND_POINT_COMPUTE,

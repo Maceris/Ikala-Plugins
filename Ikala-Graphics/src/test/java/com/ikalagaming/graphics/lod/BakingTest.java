@@ -3,6 +3,9 @@ package com.ikalagaming.graphics.lod;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ikalagaming.graphics.graph.MaterialCache;
+import com.ikalagaming.graphics.vulkan.LodBakes;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -14,6 +17,13 @@ class BakingTest {
     private static final int TILE = 64;
 
     /**
+     * Options that bake with texels as wide as the error, so baking starts while the sphere is
+     * still fine enough for these tests' bounds on normals and texture coordinates.
+     */
+    private static final DagBuilder.Options OPTIONS =
+            AttributesTest.OPTIONS.withBakeTile(TILE).withBakeDensity(1);
+
+    /**
      * Far groups of a textured sphere bake: each cluster gets the tile its layout at its error
      * needs, texels within the error unless it took a tile larger than the options' to fit, and is
      * laid out in it inside the gaps and without overlapping, their normals still point out from
@@ -21,10 +31,7 @@ class BakingTest {
      */
     @Test
     void testFarGroupsBakeIntoTiles() {
-        final LodDag dag =
-                DagBuilder.build(
-                        List.of(AttributesTest.sphere()),
-                        AttributesTest.OPTIONS.withBakeTile(TILE));
+        final LodDag dag = DagBuilder.build(List.of(AttributesTest.sphere()), OPTIONS);
         int baked = 0;
         final float[] normal = new float[3];
         final float[] tangent = new float[3];
@@ -46,11 +53,11 @@ class BakingTest {
             assertTrue(
                     width > 0 && height > 0 && width <= 2 * TILE && height <= 2 * TILE,
                     width + " by " + height);
-            final BakeLayout layout = BakeLayout.at(cluster.corners(), cluster.error(), 2 * TILE);
+            final double texel = cluster.error();
+            final BakeLayout layout = BakeLayout.at(cluster.corners(), texel, 2 * TILE);
             assertTrue(layout.width() == width && layout.height() == height);
             assertTrue(
-                    Math.max(width, height) > TILE
-                            || layout.texelSize() <= cluster.error() * (1 + 1e-9),
+                    Math.max(width, height) > TILE || layout.texelSize() <= texel * (1 + 1e-9),
                     "Texel " + layout.texelSize() + " for error " + cluster.error());
             final double marginU = (BakeLayout.GUTTER - 1e-3) / width;
             final double marginV = (BakeLayout.GUTTER - 1e-3) / height;
@@ -100,16 +107,55 @@ class BakingTest {
     }
 
     /**
+     * Two texels across the error lay each baked cluster out at half its error, in a tile up to
+     * twice as wide, unless even that would be wider than the largest tile, and start baking no
+     * sooner than one texel does.
+     */
+    @Test
+    void testDensityHalvesTexels() {
+        final LodDag dag =
+                DagBuilder.build(List.of(AttributesTest.sphere()), OPTIONS.withBakeDensity(2));
+        int baked = 0;
+        for (LodDag.Group group : dag.groups()) {
+            for (int i = 0; i < group.bakeTiles().length; ++i) {
+                final LodDag.Cluster cluster = dag.clusters().get(group.outputs()[i]);
+                final int width = LodDag.tileWidth(group.bakeTiles()[i]);
+                final int height = LodDag.tileHeight(group.bakeTiles()[i]);
+                final BakeLayout layout =
+                        BakeLayout.at(cluster.corners(), cluster.error() / 2, 2 * TILE);
+                assertTrue(layout.width() == width && layout.height() == height);
+                assertTrue(
+                        Math.max(width, height) > TILE
+                                || layout.texelSize() <= cluster.error() / 2 * (1 + 1e-9),
+                        "Texel " + layout.texelSize() + " for error " + cluster.error());
+                ++baked;
+            }
+        }
+        assertTrue(baked > 0, "Nothing baked");
+        int firstDense = Integer.MAX_VALUE;
+        for (LodDag.Group group : dag.groups()) {
+            if (group.bakedClusters() > 0) {
+                firstDense = Math.min(firstDense, group.level());
+            }
+        }
+        final LodDag sparse = DagBuilder.build(List.of(AttributesTest.sphere()), OPTIONS);
+        int firstSparse = Integer.MAX_VALUE;
+        for (LodDag.Group group : sparse.groups()) {
+            if (group.bakedClusters() > 0) {
+                firstSparse = Math.min(firstSparse, group.level());
+            }
+        }
+        assertTrue(firstDense >= firstSparse, firstDense + " before " + firstSparse);
+    }
+
+    /**
      * Every texel of a baked tile stands for a point on one of its group's children, within the
      * group's error of the point on the baked triangle it lies on, and where the child still has
      * the sphere's own texture coordinates they are the sphere's mapping at that point.
      */
     @Test
     void testTexelsMapToTheirChildren() {
-        final LodDag dag =
-                DagBuilder.build(
-                        List.of(AttributesTest.sphere()),
-                        AttributesTest.OPTIONS.withBakeTile(TILE));
+        final LodDag dag = DagBuilder.build(List.of(AttributesTest.sphere()), OPTIONS);
         int mapped = 0;
         int checkedUv = 0;
         int texels = 0;
@@ -180,6 +226,63 @@ class BakingTest {
         }
         assertTrue(mapped > texels / 4, mapped + " of " + texels + " texels mapped");
         assertTrue(checkedUv > 0);
+    }
+
+    /**
+     * Planning a world's bakes takes a texel over a baked child through to what the child's own
+     * tile samples there, so every tile samples the sphere's own material, at the sphere's mapping
+     * of the texel's point.
+     */
+    @Test
+    void testBakesOverBakedChildrenSampleTheSource() {
+        final LodDag dag = DagBuilder.build(List.of(AttributesTest.sphere()), OPTIONS);
+        final MaterialCache cache = new MaterialCache();
+        final LodBakes.Plan plan = LodBakes.plan(dag, cache);
+        assertTrue(plan != null);
+        int checked = 0;
+        for (LodBakes.Baked baked : plan.clusters().values()) {
+            final LodDag.Cluster cluster = baked.cluster();
+            final BakeTexels bake = dag.bakeOf(cluster.id());
+            for (int texel = 0; texel < baked.width() * baked.height(); ++texel) {
+                final int at = texel * LodBakes.RECORD_SIZE;
+                final int slot = baked.records().getInt(at);
+                if (slot == -1) {
+                    continue;
+                }
+                assertTrue(
+                        baked.sources().get(slot) == cache.getMaterial(0),
+                        "Texel " + texel + " samples something else");
+                final int child = bake.childCluster(texel);
+                if (plan.of(child) == null) {
+                    continue;
+                }
+                final double[] here =
+                        point(cluster.corners(), bake.ownTriangle(texel), bake, texel, false);
+                final double length =
+                        Math.sqrt(here[0] * here[0] + here[1] * here[1] + here[2] * here[2]);
+                if (Math.abs(here[1] / length) >= 0.9) {
+                    continue;
+                }
+                double expected = Math.atan2(here[2], here[0]) / (2 * Math.PI);
+                if (expected < 0) {
+                    expected += 1;
+                }
+                final double u = baked.records().getFloat(at + Integer.BYTES);
+                final double du = Math.abs(expected - u);
+                assertTrue(
+                        Math.min(du, 1 - du) < 0.05,
+                        "Cluster "
+                                + cluster.id()
+                                + " texel "
+                                + texel
+                                + " u "
+                                + u
+                                + " for "
+                                + expected);
+                ++checked;
+            }
+        }
+        assertTrue(checked > 0, "No texel over a baked child");
     }
 
     /**

@@ -307,9 +307,6 @@ public class GraphicsManager {
         if (lods != null) {
             lods.removeAllOwnedBy(context.getOwnerKey());
         }
-        if (renderInstance.getState().lodBakes != null) {
-            renderInstance.getState().lodBakes.releaseAllOwnedBy(context.getOwnerKey());
-        }
         GeometryArena bakedGeometry = renderInstance.getState().bakedGeometry;
         if (bakedGeometry != null) {
             int meshes = bakedGeometry.releaseAllOwnedBy(context.getOwnerKey());

@@ -45,16 +45,14 @@ public final class Lods {
     public LodHandle add(@NonNull LodDag dag) {
         context.checkOpen();
         final VulkanInstance renderer = renderer();
-        // Baked clusters are drawn from their tiles, see LodBakes
+        // Baked clusters are drawn from tiles they get as they load, see LodBakes
         final LodBakes.Plan plan =
-                renderer.getState()
-                        .lodBakes
-                        .plan(dag, GraphicsManager.getScene().getMaterialCache());
+                LodBakes.plan(dag, GraphicsManager.getScene().getMaterialCache());
         final List<ClusterMeshes.Mesh> meshes = new ArrayList<>(dag.clusters().size());
         for (LodDag.Cluster cluster : dag.clusters()) {
-            meshes.add(ClusterMeshes.of(plan == null ? cluster : plan.cluster(cluster)));
+            meshes.add(ClusterMeshes.of(cluster));
         }
-        final long id =
+        return new LodHandle(
                 renderer.getState()
                         .lods
                         .add(
@@ -62,11 +60,8 @@ public final class Lods {
                                 context.getOwnerKey(),
                                 dag,
                                 meshes,
-                                GraphicsManager.getSettings().lodThresholdPixels);
-        if (plan != null) {
-            renderer.getState().lodBakes.attach(id, context.getOwnerKey(), plan);
-        }
-        return new LodHandle(id);
+                                GraphicsManager.getSettings().lodThresholdPixels,
+                                plan));
     }
 
     /**
@@ -176,7 +171,6 @@ public final class Lods {
         if (renderer != null && renderer.getState().lods != null) {
             renderer.getState().sections.stopLive(context.getOwnerKey(), world.id());
             renderer.getState().lods.remove(world.id(), context.getOwnerKey());
-            renderer.getState().lodBakes.release(world.id());
         }
     }
 

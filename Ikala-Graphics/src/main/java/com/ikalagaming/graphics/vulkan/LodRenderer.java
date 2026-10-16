@@ -141,6 +141,9 @@ public class LodRenderer {
      */
     @Getter private final GeometryArena arena;
 
+    /** The pages baked clusters' tiles are in, which load and unload with their units. */
+    private final LodBakes bakes;
+
     /**
      * Each cluster's entry, see {@link LodCullMath}. -- GETTER -- The cluster table.
      *
@@ -506,8 +509,14 @@ public class LodRenderer {
 
     /** One world. */
     private static final class World {
+        /** Its id. */
+        final long id;
+
         /** The plugin that owns it. */
         final String owner;
+
+        /** Its baked clusters, or null if it has none. */
+        final LodBakes.Plan bakes;
 
         /** Where its positions are measured from, in the world. */
         final double[] origin;
@@ -629,19 +638,25 @@ public class LodRenderer {
         /**
          * Keep a world.
          *
+         * @param id Its id.
          * @param owner The owner.
+         * @param bakes Its baked clusters, or null.
          * @param origin The origin.
          * @param slot Its slot.
          * @param cellOf The level 0 cell a section is in, or null.
          * @param thresholdPixels Its error threshold.
          */
         World(
+                long id,
                 String owner,
+                LodBakes.Plan bakes,
                 double[] origin,
                 int slot,
                 Function<LodStore.SectionPos, LodStore.CellKey> cellOf,
                 double thresholdPixels) {
+            this.id = id;
             this.owner = owner;
+            this.bakes = bakes;
             this.origin = origin;
             this.slot = slot;
             this.cellOf = cellOf;
@@ -655,6 +670,7 @@ public class LodRenderer {
      * @param state The Vulkan state.
      */
     public LodRenderer(@NonNull VulkanState state) {
+        bakes = state.lodBakes;
         arena = new GeometryArena(state, LodVertex.SIZE);
         clusters =
                 new DeviceTable(
@@ -677,6 +693,7 @@ public class LodRenderer {
      * @param dag The world.
      * @param meshes Each cluster's mesh, by cluster id.
      * @param thresholdPixels The most error a drawn cluster may have, in pixels.
+     * @param bakes Its baked clusters, whose tiles load with them, or null if it has none.
      * @return The world's id.
      */
     public long add(
@@ -684,8 +701,9 @@ public class LodRenderer {
             @NonNull String owner,
             @NonNull LodDag dag,
             @NonNull List<ClusterMeshes.Mesh> meshes,
-            double thresholdPixels) {
-        final long id = newWorld(owner, dag.getOrigin(), null, thresholdPixels);
+            double thresholdPixels,
+            LodBakes.Plan bakes) {
+        final long id = newWorld(owner, dag.getOrigin(), null, thresholdPixels, bakes);
         final List<LodStore.PieceCluster> clusterList = new ArrayList<>(meshes.size());
         for (int i = 0; i < meshes.size(); ++i) {
             final boolean consumed = dag.consumer(i) >= 0;
@@ -728,7 +746,7 @@ public class LodRenderer {
             double @NonNull [] origin,
             @NonNull Function<LodStore.SectionPos, LodStore.CellKey> cellOf,
             double thresholdPixels) {
-        return newWorld(owner, origin, cellOf, thresholdPixels);
+        return newWorld(owner, origin, cellOf, thresholdPixels, null);
     }
 
     /**
@@ -738,19 +756,28 @@ public class LodRenderer {
      * @param origin Its origin.
      * @param cellOf The level 0 cell a section is in, or null for a lone DAG.
      * @param thresholdPixels Its error threshold.
+     * @param bakes Its baked clusters, or null.
      * @return Its id.
      */
     private long newWorld(
             @NonNull String owner,
             double @NonNull [] origin,
             Function<LodStore.SectionPos, LodStore.CellKey> cellOf,
-            double thresholdPixels) {
+            double thresholdPixels,
+            LodBakes.Plan bakes) {
         lock.lock();
         try {
             final long id = nextId++;
             worlds.put(
                     id,
-                    new World(owner, origin.clone(), worldSlots.take(), cellOf, thresholdPixels));
+                    new World(
+                            id,
+                            owner,
+                            bakes,
+                            origin.clone(),
+                            worldSlots.take(),
+                            cellOf,
+                            thresholdPixels));
             return id;
         } finally {
             lock.unlock();
@@ -873,7 +900,10 @@ public class LodRenderer {
             if (mesh.triangleCount() > 0
                     && isWanted(world, piece.clusters().get(uploading.cluster))) {
                 uploading.meshes[uploading.piece][uploading.cluster] =
-                        register(state, world.owner, mesh);
+                        register(
+                                state,
+                                world.owner,
+                                drawn(world, piece.clusters().get(uploading.cluster), mesh));
                 bytes += bytes(mesh);
             }
             uploading.cluster += 1;
@@ -897,6 +927,35 @@ public class LodRenderer {
                         world.eye,
                         world.pixelsPerUnit)
                 > world.thresholdPixels * LodResidency.PREFETCH;
+    }
+
+    /**
+     * A cluster's mesh as it is drawn: a baked cluster takes a tile, and draws from it once it is
+     * baked. Render thread.
+     *
+     * @param world The world.
+     * @param cluster The cluster.
+     * @param mesh Its mesh as built.
+     * @return The mesh to register.
+     */
+    private ClusterMeshes.Mesh drawn(
+            @NonNull World world,
+            LodStore.@NonNull PieceCluster cluster,
+            ClusterMeshes.@NonNull Mesh mesh) {
+        final LodBakes.Baked baked = baked(world, cluster);
+        return baked == null ? mesh : bakes.load(world.id, baked);
+    }
+
+    /**
+     * A cluster's bake.
+     *
+     * @param world The world.
+     * @param cluster The cluster.
+     * @return Its bake, or null if it isn't baked.
+     */
+    private static LodBakes.Baked baked(
+            @NonNull World world, LodStore.@NonNull PieceCluster cluster) {
+        return world.bakes == null ? null : world.bakes.of(cluster.cluster().id());
     }
 
     /**
@@ -1100,6 +1159,9 @@ public class LodRenderer {
             removed.dirtyUnits.clear();
             removed.residency = null;
             removed.incoming.clear();
+            if (removed.bakes != null) {
+                bakes.release(removed.id);
+            }
             if (removed.uploading != null) {
                 releaseAll(removed.uploading.meshes);
                 removed.uploading = null;
@@ -1172,7 +1234,7 @@ public class LodRenderer {
             final Integer was = world.unitIndex.get(entry.getKey());
             loaded[u] =
                     before == null || was == null || world.dirtyUnits.contains(entry.getKey())
-                            ? isLoaded(members.get(u))
+                            ? isLoaded(world, members.get(u))
                             : before.isLoaded(was);
             ++u;
         }
@@ -1216,7 +1278,7 @@ public class LodRenderer {
                 world.unitStates.computeIfAbsent(
                         own, key -> new UnitState(cluster.parentBound(), cluster.parentError()));
         state.members.add(new Member(piece, i));
-        state.bytes += bytes(piece.meshData.get(i));
+        state.bytes += bytes(world, piece, i);
         world.dirtyUnits.add(own);
         final int producer = cluster.cluster().producer();
         if (producer >= 0) {
@@ -1241,7 +1303,7 @@ public class LodRenderer {
         final UnitKey own = ownUnitKey(cluster);
         final UnitState state = world.unitStates.get(own);
         if (state != null && state.members.remove(new Member(piece, i))) {
-            state.bytes -= bytes(piece.meshData.get(i));
+            state.bytes -= bytes(world, piece, i);
             if (state.members.isEmpty()) {
                 world.unitStates.remove(own);
             }
@@ -1285,18 +1347,36 @@ public class LodRenderer {
     }
 
     /**
-     * Whether every mesh of a unit is on the GPU.
+     * The bytes a piece's cluster takes on the GPU: its mesh, and its tile if it is baked.
      *
+     * @param world The world.
+     * @param piece The piece.
+     * @param i The cluster's index in it.
+     * @return The bytes.
+     */
+    private static long bytes(@NonNull World world, @NonNull Piece piece, int i) {
+        final LodBakes.Baked baked = baked(world, piece.clusters[i]);
+        return bytes(piece.meshData.get(i)) + (baked == null ? 0 : baked.bytes());
+    }
+
+    /**
+     * Whether every mesh of a unit is on the GPU, and every tile of it baked.
+     *
+     * @param world The world.
      * @param members The unit's clusters.
      * @return True if all with triangles are uploaded.
      */
-    private boolean isLoaded(@NonNull Collection<Member> members) {
+    private boolean isLoaded(@NonNull World world, @NonNull Collection<Member> members) {
         for (Member member : members) {
             if (member.piece().meshData.get(member.index()).triangleCount() == 0) {
                 continue;
             }
             final MeshHandle mesh = member.piece().meshes[member.index()];
             if (mesh == null || !arena.getRegistry().isResident(mesh)) {
+                return false;
+            }
+            final LodStore.PieceCluster cluster = member.piece().clusters[member.index()];
+            if (baked(world, cluster) != null && !bakes.isBaked(world.id, cluster.cluster().id())) {
                 return false;
             }
         }
@@ -1344,7 +1424,11 @@ public class LodRenderer {
                 final Piece piece = member.piece();
                 final ClusterMeshes.Mesh mesh = piece.meshData.get(member.index());
                 if (piece.meshes[member.index()] == null && mesh.triangleCount() > 0) {
-                    piece.meshes[member.index()] = register(state, world.owner, mesh);
+                    piece.meshes[member.index()] =
+                            register(
+                                    state,
+                                    world.owner,
+                                    drawn(world, piece.clusters[member.index()], mesh));
                     writeEntry(world, piece, member.index());
                     bytes += bytes(mesh);
                 }
@@ -1355,7 +1439,7 @@ public class LodRenderer {
         final Iterator<Integer> it = world.uploadingUnits.iterator();
         while (it.hasNext()) {
             final int unit = it.next();
-            if (isLoaded(world.unitMembers.get(unit))) {
+            if (isLoaded(world, world.unitMembers.get(unit))) {
                 residency.setLoaded(unit);
                 world.loads += 1;
                 it.remove();
@@ -1394,6 +1478,9 @@ public class LodRenderer {
                 piece.meshes[member.index()] = null;
                 arena.release(mesh);
                 writeEntry(world, piece, member.index());
+            }
+            if (baked(world, piece.clusters[member.index()]) != null) {
+                bakes.unload(world.id, piece.clusters[member.index()].cluster().id());
             }
         }
         world.evictions += 1;
@@ -1811,6 +1898,9 @@ public class LodRenderer {
             clusterEntries.next(piece.first + i);
             if (piece.meshes[i] != null) {
                 arena.release(piece.meshes[i]);
+            }
+            if (baked(world, piece.clusters[i]) != null) {
+                bakes.unload(world.id, piece.clusters[i].cluster().id());
             }
             final LodStore.SectionPos section = piece.sections[i];
             if (section != null) {
