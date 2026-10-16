@@ -19,6 +19,7 @@ import com.ikalagaming.graphics.ui.spec.Observable;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
 import com.ikalagaming.scripting.HostClass;
+import com.ikalagaming.scripting.ScriptLaunch;
 import com.ikalagaming.scripting.ScriptManager;
 
 import lombok.Getter;
@@ -49,11 +50,21 @@ public class ConverterPlugin extends Plugin {
     /** The level of detail prototype tool, while enabled. */
     private LodPrototype lodPrototype;
 
-    /** The startup property that opens the workbench on a file as soon as the menu opens. */
-    private static final String WORKBENCH_FILE_PROPERTY = "ikala.test.workbench";
+    /**
+     * The startup property naming a script to run once the plugin is enabled, for checks and
+     * captures that drive the editor as a user would (see {@link ConverterScripts}).
+     */
+    private static final String SCRIPT_PROPERTY = "ikala.test.script";
 
-    /** The asset workbench, while enabled. */
-    private Workbench workbench;
+    /** The startup property whose text the startup script gets as its global {@code args}. */
+    private static final String SCRIPT_ARGS_PROPERTY = "ikala.test.scriptArgs";
+
+    /**
+     * The asset workbench, while enabled. Render thread.
+     *
+     * @return The workbench, or null.
+     */
+    @Getter private Workbench workbench;
 
     @Override
     public Set<Listener> getListeners() {
@@ -139,18 +150,22 @@ public class ConverterPlugin extends Plugin {
                         () -> workbench.setVisible(true),
                         sampleCount)
                 .open();
-        // Straight into the workbench with a file, for captures and tests that can't click
-        final String workbenchFile = System.getProperty(WORKBENCH_FILE_PROPERTY);
-        if (workbenchFile != null) {
-            ui.setVisible(MainMenu.SURFACE_ID, false);
-            workbench.setVisible(true);
-            workbench.openStartup(workbenchFile);
-        }
         // Shown once so later toggles only change its visibility, and keep its state
         ui.show(new AssetInspectorWindow(ui, sampleCount).build());
         ui.setVisible(AssetInspectorWindow.SURFACE_ID, false);
 
         guiManager.setToolbar(graphics, new DebugToolbar(guiManager, this::setInspectorVisible));
+        final String script = System.getProperty(SCRIPT_PROPERTY);
+        if (script != null
+                && ScriptManager.start(
+                                ScriptLaunch.file(Path.of(script))
+                                        .owner(getName())
+                                        .global(
+                                                "args",
+                                                System.getProperty(SCRIPT_ARGS_PROPERTY, "")))
+                        .isEmpty()) {
+            log.warn("Could not start the startup script {}", script);
+        }
         return true;
     }
 }

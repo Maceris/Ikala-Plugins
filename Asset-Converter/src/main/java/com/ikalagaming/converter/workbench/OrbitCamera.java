@@ -4,6 +4,7 @@ import com.ikalagaming.graphics.scene.Camera;
 
 import lombok.Getter;
 import lombok.NonNull;
+import org.joml.Matrix3d;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 
@@ -78,17 +79,43 @@ public class OrbitCamera {
     }
 
     /**
-     * Turn the camera around the point.
+     * Turn the camera around a pivot, which it needn't be looking at: it swings around the pivot as
+     * it turns, so whatever was where on screen stays there relative to the pivot, with nothing
+     * jumping to the middle. Afterward, panning and zooming work on a point as far in front of the
+     * camera as the pivot is from it.
      *
      * @param camera The camera.
+     * @param pivot What to turn around.
      * @param dx Pixels dragged right.
      * @param dy Pixels dragged down.
      */
-    public void turn(@NonNull Camera camera, double dx, double dy) {
-        final double pitch =
-                Math.clamp(camera.getRotation().x + dy * TURN_PER_PIXEL, -MAX_PITCH, MAX_PITCH);
-        final double yaw = camera.getRotation().y + dx * TURN_PER_PIXEL;
-        place(camera, pitch, yaw);
+    public void turn(@NonNull Camera camera, @NonNull Vector3dc pivot, double dx, double dy) {
+        final double fromPitch = camera.getRotation().x;
+        final double fromYaw = camera.getRotation().y;
+        final double pitch = Math.clamp(fromPitch + dy * TURN_PER_PIXEL, -MAX_PITCH, MAX_PITCH);
+        final double yaw = fromYaw + dx * TURN_PER_PIXEL;
+        // Undo the old rotation and apply the new one to where the camera is from the pivot
+        final Vector3d offset = new Vector3d(camera.getPosition()).sub(pivot);
+        orientation(fromPitch, fromYaw).transpose().transform(offset);
+        orientation(pitch, yaw).transform(offset);
+        final Vector3d position = offset.add(pivot);
+        camera.setRotation((float) pitch, (float) yaw);
+        camera.setPosition(position.x, position.y, position.z);
+        distance = Math.max(MIN_DISTANCE, position.distance(pivot));
+        forward(pitch, yaw, target).mul(distance).add(camera.getPosition());
+        placed.set(camera.getPosition());
+    }
+
+    /**
+     * The rotation that turns -z, which an unturned camera looks along, to where a camera with this
+     * pitch and yaw looks, as {@link #forward} gives it.
+     *
+     * @param pitch The pitch.
+     * @param yaw The yaw.
+     * @return The rotation.
+     */
+    static Matrix3d orientation(double pitch, double yaw) {
+        return new Matrix3d().rotateY(-yaw).rotateX(-pitch);
     }
 
     /**

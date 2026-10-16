@@ -459,16 +459,18 @@ public class Workbench {
                 .onClick(() -> openPreview(shape));
     }
 
-    /** What a startup file names to open a preview shape instead, as in "preview:sphere". */
+    /**
+     * What a name starts with to open a preview shape instead of a file, as in "preview:sphere".
+     */
     static final String PREVIEW_PREFIX = "preview:";
 
     /**
-     * Open what a startup property names, for captures and tests that can't click: a file, or a
-     * preview shape as "preview:sphere", "preview:cube" or "preview:plane".
+     * Open what a script names: a file, or a preview shape as "preview:sphere", "preview:cube" or
+     * "preview:plane".
      *
      * @param what The file or preview.
      */
-    public void openStartup(@NonNull String what) {
+    public void openNamed(@NonNull String what) {
         if (what.startsWith(PREVIEW_PREFIX)) {
             final String name = what.substring(PREVIEW_PREFIX.length()).toUpperCase();
             try {

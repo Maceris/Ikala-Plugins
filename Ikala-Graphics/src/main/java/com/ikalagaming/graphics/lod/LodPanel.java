@@ -150,6 +150,44 @@ public final class LodPanel implements AutoCloseable {
             @NonNull Supplier<List<LodMesh>> inputs,
             @NonNull IntFunction<String> materialName,
             boolean cells) {
+        this(graphics, name, inputs, materialName, cells, DagBuilder.Options.defaults());
+    }
+
+    /**
+     * Start building one DAG in the background, with options of its own.
+     *
+     * @param graphics The plugin's graphics context.
+     * @param name What is being built, for the panel and the view's models.
+     * @param inputs The meshes, fetched on the build thread.
+     * @param materialName A name for each material index, for the fidelity report.
+     * @param options How to build. Fidelity is measured only if they keep the lineage.
+     */
+    public LodPanel(
+            @NonNull GraphicsContext graphics,
+            @NonNull String name,
+            @NonNull Supplier<List<LodMesh>> inputs,
+            @NonNull IntFunction<String> materialName,
+            DagBuilder.@NonNull Options options) {
+        this(graphics, name, inputs, materialName, false, options);
+    }
+
+    /**
+     * Start building a DAG in the background, as one DAG or in region cells.
+     *
+     * @param graphics The plugin's graphics context.
+     * @param name What is being built, for the panel and the view's models.
+     * @param inputs The meshes, fetched on the build thread.
+     * @param materialName A name for each material index, for the fidelity report.
+     * @param cells Whether to build in region cells.
+     * @param options How to build.
+     */
+    private LodPanel(
+            @NonNull GraphicsContext graphics,
+            @NonNull String name,
+            @NonNull Supplier<List<LodMesh>> inputs,
+            @NonNull IntFunction<String> materialName,
+            boolean cells,
+            DagBuilder.@NonNull Options options) {
         this.graphics = graphics;
         this.name = name;
         Thread builder =
@@ -158,10 +196,7 @@ public final class LodPanel implements AutoCloseable {
                             try {
                                 final List<LodMesh> meshes = inputs.get();
                                 final LodDag dag =
-                                        cells
-                                                ? inCells(meshes)
-                                                : DagBuilder.build(
-                                                        meshes, DagBuilder.Options.defaults());
+                                        cells ? inCells(meshes) : DagBuilder.build(meshes, options);
                                 buildMillis = (System.nanoTime() - started) / NANOS_PER_MILLI;
                                 levels = LodTables.levels(dag);
                                 log.info(
@@ -175,12 +210,17 @@ public final class LodPanel implements AutoCloseable {
                                                 view = new LodView(graphics, name, dag);
                                             }
                                         });
-                                if (cells) {
+                                if (cells || !options.keepLineage()) {
                                     fidelityTables =
                                             List.of(
                                                     new LodTables.Table(
-                                                            "Fidelity isn't measured in region"
-                                                                    + " cells: they keep no lineage.",
+                                                            cells
+                                                                    ? "Fidelity isn't measured in"
+                                                                            + " region cells: they"
+                                                                            + " keep no lineage."
+                                                                    : "Fidelity isn't measured:"
+                                                                            + " the lineage wasn't"
+                                                                            + " kept.",
                                                             new String[] {""},
                                                             List.of()));
                                     return;
@@ -236,6 +276,15 @@ public final class LodPanel implements AutoCloseable {
         }
         store.rebuild();
         return store.snapshot();
+    }
+
+    /**
+     * Whether the build is done and its cut is being shown.
+     *
+     * @return True once built. Render thread.
+     */
+    public boolean isBuilt() {
+        return view != null;
     }
 
     /** Draw the panel and keep the view up to date. Call once a frame, inside an IkGui window. */

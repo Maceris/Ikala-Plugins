@@ -34,10 +34,12 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
@@ -95,6 +97,15 @@ public final class ScenePlacement {
     /** The prefix of this placement's model IDs. */
     private final String idPrefix;
 
+    /** Where opacity is in a texture's average. */
+    private static final int ALPHA = 3;
+
+    /**
+     * A base color texture whose average opacity is under this has holes in it, so its material
+     * cuts out.
+     */
+    private static final float SOLID_ALPHA = 0.99f;
+
     /** One material per imported material, then those the editor made. */
     private final List<Material> materials = new ArrayList<>();
 
@@ -106,6 +117,15 @@ public final class ScenePlacement {
 
     /** Materials put on a node's meshes in place of their own, by scene mesh index. */
     private final Map<Node, Map<Integer, Material>> assigned = new IdentityHashMap<>();
+
+    /** Meshes hidden, as a level of detail standing in for them is, by scene mesh index. */
+    private final Map<Node, Set<Integer>> hidden = new IdentityHashMap<>();
+
+    /**
+     * Draws nothing: cut out everywhere, in the scene and in shadows. Put on hidden meshes, so they
+     * keep their place and come back as they were. Made when first needed.
+     */
+    private Material invisible;
 
     /** Textures the editor loaded for materials, released with the scene. */
     private final List<TextureHandle> editorTextures = new ArrayList<>();
@@ -158,6 +178,14 @@ public final class ScenePlacement {
      * @return The count.
      */
     @Getter private int texturesToLoad;
+
+    /**
+     * Whether every texture has been loaded, or failed to, and handed to its materials. Render
+     * thread.
+     *
+     * @return True once they all have.
+     */
+    @Getter private boolean texturesReady;
 
     /**
      * Where a model's instances go.
@@ -662,15 +690,69 @@ public final class ScenePlacement {
      * @param material The material, which must be one of this scene's, or null for the mesh's own.
      */
     public void assign(@NonNull Node node, int sceneMesh, @Nullable Material material) {
+        if (material == null) {
+            final Map<Integer, Material> put = assigned.get(node);
+            if (put != null) {
+                put.remove(sceneMesh);
+            }
+        } else {
+            assigned.computeIfAbsent(node, n -> new HashMap<>()).put(sceneMesh, material);
+        }
+        if (!isHidden(node, sceneMesh)) {
+            drawWith(node, sceneMesh, material);
+        }
+    }
+
+    /**
+     * Change the material a node's mesh is drawn with, in every place it was put.
+     *
+     * @param node The node.
+     * @param sceneMesh The scene's index of the mesh.
+     * @param material The material, or null for the mesh's own.
+     */
+    private void drawWith(@NonNull Node node, int sceneMesh, @Nullable Material material) {
         for (MeshSlot slot : meshSlotsOf(node)) {
             if (slot.sceneMesh() == sceneMesh) {
                 graphics.instances().setMaterial(slot.instance(), slot.modelMesh(), material);
             }
         }
-        if (material == null) {
-            assigned.getOrDefault(node, new IdentityHashMap<>()).remove(sceneMesh);
+    }
+
+    /**
+     * Whether a node's mesh is hidden.
+     *
+     * @param node The node.
+     * @param sceneMesh The scene's index of the mesh.
+     * @return True if it is hidden.
+     */
+    public boolean isHidden(@NonNull Node node, int sceneMesh) {
+        return hidden.getOrDefault(node, Set.of()).contains(sceneMesh);
+    }
+
+    /**
+     * Hide a node's mesh, or show it again with the material it had. Hidden meshes keep their
+     * place, drawing nothing, so a level of detail can be seen in their place. Render thread.
+     *
+     * @param node The node.
+     * @param sceneMesh The scene's index of the mesh.
+     * @param hide Whether to hide it.
+     */
+    public void setHidden(@NonNull Node node, int sceneMesh, boolean hide) {
+        if (hide == isHidden(node, sceneMesh)) {
+            return;
+        }
+        if (hide) {
+            if (invisible == null) {
+                invisible = new Material();
+                invisible.getBaseColor().set(0, 0, 0, 0);
+                invisible.setTransparency(Material.Transparency.CUTOUT);
+                GraphicsManager.getScene().getMaterialCache().addMaterial(invisible);
+            }
+            hidden.computeIfAbsent(node, n -> new HashSet<>()).add(sceneMesh);
+            drawWith(node, sceneMesh, invisible);
         } else {
-            assigned.computeIfAbsent(node, n -> new java.util.HashMap<>()).put(sceneMesh, material);
+            hidden.get(node).remove(sceneMesh);
+            drawWith(node, sceneMesh, assigned.getOrDefault(node, Map.of()).get(sceneMesh));
         }
     }
 
@@ -738,10 +820,20 @@ public final class ScenePlacement {
             pending.add(texture);
             pendingBytes.put(texture, bytes);
             final List<Use> users = entry.getValue();
+            final float[] average = graphics.textures().average(texture);
+            final boolean holes = average != null && average[ALPHA] < SOLID_ALPHA;
             post.accept(
                     () -> {
                         for (Use use : users) {
-                            apply(materials.get(use.material()), use.slot(), texture);
+                            final Material material = materials.get(use.material());
+                            apply(material, use.slot(), texture);
+                            if (holes
+                                    && use.slot() == TextureSlot.BASE_COLOR
+                                    && material.getTransparency() == Material.Transparency.OPAQUE) {
+                                // Drawn alpha tested either way; marked so what can't alpha
+                                // test, like level of detail, leaves it out
+                                material.setTransparency(Material.Transparency.CUTOUT);
+                            }
                         }
                     });
             ++texturesLoaded;
@@ -753,6 +845,8 @@ public final class ScenePlacement {
                             + " loaded"
                             + (failed > 0 ? ", " + failed + " could not be read" : ""));
         }
+        // Posted after every texture's, so it runs once they are all in their materials
+        post.accept(() -> texturesReady = true);
     }
 
     /**
@@ -876,6 +970,11 @@ public final class ScenePlacement {
         for (Material material : materials) {
             cache.removeMaterial(material);
         }
+        if (invisible != null) {
+            cache.removeMaterial(invisible);
+            invisible = null;
+        }
+        hidden.clear();
         cache.setDirty(true);
         for (TextureHandle texture : textures.values()) {
             graphics.textures().release(texture);

@@ -255,6 +255,23 @@ public final class Textures {
     }
 
     /**
+     * A texture's average color and opacity, worked out when it was loaded: linear red, green and
+     * blue, then alpha. Known as soon as a load returns, for 8 bit RGBA images and DDS files. Safe
+     * from any thread.
+     *
+     * @param texture The texture.
+     * @return The four values, or null if the handle is null or stale, or no average was worked
+     *     out.
+     */
+    @Nullable public float[] average(@Nullable TextureHandle texture) {
+        VulkanInstance renderer = GraphicsManager.getRenderInstance();
+        if (renderer == null || renderer.getState().textureRegistry == null) {
+            return null;
+        }
+        return renderer.getState().textureRegistry.average(texture);
+    }
+
+    /**
      * Whether a handle still refers to a live texture, which may still be loading.
      *
      * @param texture The handle to check.

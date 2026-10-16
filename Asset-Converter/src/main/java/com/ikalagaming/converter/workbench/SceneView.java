@@ -50,9 +50,6 @@ public class SceneView {
     /** The window that reads the mouse for the orbit camera, drawing nothing. */
     static final String INPUT_WINDOW = "Workbench scene input";
 
-    /** The startup property that places the camera once a scene is shown, for captures. */
-    static final String CAMERA_PROPERTY = "ikala.test.camera";
-
     /** The sun's color. */
     private static final Vector3f SUN_COLOR = new Vector3f(1, 0.97f, 0.9f);
 
@@ -89,6 +86,9 @@ public class SceneView {
     /** Edits the scene's materials. */
     private final MaterialEditor materials;
 
+    /** Builds and shows level of detail of the scene. */
+    private final LodSection lod;
+
     /** The selected mesh of the selected node, a scene mesh index, or -1. */
     private int selectedMesh = -1;
 
@@ -119,6 +119,12 @@ public class SceneView {
 
     /** Turns the camera around the scene. */
     private final OrbitCamera orbit = new OrbitCamera();
+
+    /** Whether a left drag is turning the camera. */
+    private boolean turning;
+
+    /** What the current turn swings around. */
+    private final Vector3d pivot = new Vector3d();
 
     /** Filters the outliner by name. */
     private final IkString filter = new IkString(64);
@@ -159,6 +165,7 @@ public class SceneView {
     public SceneView(@NonNull GraphicsContext graphics, @NonNull MaterialEditor materials) {
         this.graphics = graphics;
         this.materials = materials;
+        lod = new LodSection(graphics);
     }
 
     /**
@@ -172,7 +179,6 @@ public class SceneView {
         enter();
         useFileSun();
         frame(newPlacement.getImported().root());
-        placeTestCamera();
     }
 
     /**
@@ -194,36 +200,11 @@ public class SceneView {
                                 SUN_INTENSITY * sun.intensity()));
     }
 
-    /**
-     * Put the camera where the startup property says, as "x,y,z,pitch,yaw", for captures that can't
-     * move it with the mouse.
-     */
-    private static void placeTestCamera() {
-        final String property = System.getProperty(CAMERA_PROPERTY);
-        if (property == null) {
-            return;
-        }
-        final String[] parts = property.split(",");
-        if (parts.length != 5) {
-            return;
-        }
-        try {
-            final var camera = GraphicsManager.getScene().getCamera();
-            camera.setPosition(
-                    Double.parseDouble(parts[0].trim()),
-                    Double.parseDouble(parts[1].trim()),
-                    Double.parseDouble(parts[2].trim()));
-            camera.setRotation(
-                    Float.parseFloat(parts[3].trim()), Float.parseFloat(parts[4].trim()));
-        } catch (NumberFormatException e) {
-            // Leave the framed camera as it is
-        }
-    }
-
     /** Take the shown scene out of the world, if there is one, leaving the renderer as it is. */
     public void clear() {
         select(null, -1);
         materials.clear();
+        lod.close();
         if (placement != null) {
             placement.remove();
             placement = null;
@@ -500,6 +481,9 @@ public class SceneView {
         if (IkGui.collapsingHeader("Material###material", TreeNodeFlags.DEFAULT_OPEN)) {
             materials.draw(frame, shown, selected, selectedMesh);
         }
+        if (IkGui.collapsingHeader("Level of detail###lod", TreeNodeFlags.DEFAULT_OPEN)) {
+            lod.draw(shown, selected);
+        }
     }
 
     /**
@@ -764,19 +748,62 @@ public class SceneView {
         final var camera = GraphicsManager.getScene().getCamera();
         orbit.follow(camera);
         if (io.wantCaptureMouse) {
+            if (!IkGui.isMouseDown(MouseButton.LEFT)) {
+                // A turn that ended over a panel is over
+                turning = false;
+            }
             return;
         }
-        if (IkGui.isMouseReleased(MouseButton.LEFT)
-                && IkGui.getMouseDragDelta(MouseButton.LEFT, 0).length() < CLICK_SLOP) {
+        // A press that never became a drag is a click; turning is still set on the release frame
+        if (IkGui.isMouseReleased(MouseButton.LEFT) && !turning) {
             pick();
         }
-        if (IkGui.isMouseDragging(MouseButton.LEFT, 0)) {
-            orbit.turn(camera, io.mouseDelta.x, io.mouseDelta.y);
-        } else if (IkGui.isMouseDragging(MouseButton.MIDDLE, 0)) {
-            orbit.pan(camera, io.mouseDelta.x, io.mouseDelta.y, io.displaySize.y);
+        // Only a drag past the click slop turns or pans, so a click that wobbles a pixel or two
+        // picks without moving the camera
+        if (IkGui.isMouseDragging(MouseButton.LEFT, CLICK_SLOP)) {
+            if (!turning) {
+                turning = true;
+                pivotPoint(pivot);
+            }
+            orbit.turn(camera, pivot, io.mouseDelta.x, io.mouseDelta.y);
+        } else {
+            turning = false;
+            if (IkGui.isMouseDragging(MouseButton.MIDDLE, CLICK_SLOP)) {
+                orbit.pan(camera, io.mouseDelta.x, io.mouseDelta.y, io.displaySize.y);
+            }
         }
         if (io.mouseWheel != 0) {
             orbit.zoom(camera, io.mouseWheel);
+        }
+    }
+
+    /**
+     * What a turn swings around: the middle of what is selected; with nothing selected, the surface
+     * where the drag started, so turning from inside a scene keeps what is under the mouse in
+     * place; or failing that, the middle of the whole scene.
+     *
+     * @param out Where to put it.
+     */
+    private void pivotPoint(@NonNull Vector3d out) {
+        final ScenePlacement shown = placement;
+        if (shown == null) {
+            out.set(orbit.getTarget());
+            return;
+        }
+        final ImportedScene imported = shown.getImported();
+        if (selected == null) {
+            // Where the press was, before the drag moved it past the slop
+            final var dragged = IkGui.getMouseDragDelta(MouseButton.LEFT, 0);
+            if (hitAt(IkGui.getMousePos().x - dragged.x, IkGui.getMousePos().y - dragged.y, out)
+                    != null) {
+                return;
+            }
+        }
+        final Node around = selected == null ? imported.root() : selected;
+        if (imported.bounds(around, min, max) || imported.bounds(imported.root(), min, max)) {
+            out.set(min).add(max).mul(0.5);
+        } else {
+            out.set(orbit.getTarget());
         }
     }
 
@@ -785,26 +812,46 @@ public class SceneView {
      * camera through it.
      */
     private void pick() {
-        final ScenePlacement shown = placement;
-        if (shown == null) {
+        if (placement == null) {
             return;
         }
-        final IkIO io = IkGui.getIO();
-        final var camera = GraphicsManager.getScene().getCamera();
-        final Vector3d direction =
-                rayDirection(
-                        IkGui.getMousePos().x / io.displaySize.x,
-                        IkGui.getMousePos().y / io.displaySize.y,
-                        io.displaySize.x / Math.max(1, io.displaySize.y),
-                        camera.getRotation().x,
-                        camera.getRotation().y);
         final ScenePicker.Hit hit =
-                ScenePicker.pick(shown.getImported(), camera.getPosition(), direction);
+                hitAt(IkGui.getMousePos().x, IkGui.getMousePos().y, new Vector3d());
         if (hit == null) {
             select(null, -1);
         } else {
             select(hit.node(), hit.sceneMesh());
         }
+    }
+
+    /**
+     * Find the mesh at a point on the screen, by casting a ray from the camera through it.
+     *
+     * @param x The point across the window, in pixels.
+     * @param y The point down the window, in pixels.
+     * @param point Receives where the ray hits, if it does.
+     * @return The hit, or null if the ray hits nothing or no scene is shown.
+     */
+    @Nullable private ScenePicker.Hit hitAt(double x, double y, @NonNull Vector3d point) {
+        final ScenePlacement shown = placement;
+        if (shown == null) {
+            return null;
+        }
+        final IkIO io = IkGui.getIO();
+        final var camera = GraphicsManager.getScene().getCamera();
+        final Vector3d direction =
+                rayDirection(
+                        x / io.displaySize.x,
+                        y / io.displaySize.y,
+                        io.displaySize.x / Math.max(1, io.displaySize.y),
+                        camera.getRotation().x,
+                        camera.getRotation().y);
+        final ScenePicker.Hit hit =
+                ScenePicker.pick(shown.getImported(), camera.getPosition(), direction);
+        if (hit != null) {
+            point.set(direction).mul(hit.distance()).add(camera.getPosition());
+        }
+        return hit;
     }
 
     /**
