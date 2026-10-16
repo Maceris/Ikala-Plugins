@@ -163,19 +163,44 @@ public final class LodResidency {
             double thresholdPixels,
             long now,
             boolean streaming) {
+        update(new double[][] {eye}, pixelsPerUnit, thresholdPixels, now, streaming);
+    }
+
+    /**
+     * Work out which units are wanted from where several observers are, as when instances of a
+     * model each see it from their own place: a unit is wanted when any of them wants it, and roots
+     * always are.
+     *
+     * @param eyes The observers, from the world's origin, in its units.
+     * @param pixelsPerUnit Pixels per world unit at distance 1.
+     * @param thresholdPixels The error threshold.
+     * @param now The time, from {@link System#nanoTime()}.
+     * @param streaming Whether to stream; if not, every unit is wanted.
+     */
+    public void update(
+            double @NonNull [][] eyes,
+            double pixelsPerUnit,
+            double thresholdPixels,
+            long now,
+            boolean streaming) {
         for (int i = 0; i < units.size(); ++i) {
             final Unit unit = units.get(i);
             final double[] bound = unit.bound();
-            double sum = 0;
-            for (int axis = 0; axis < AXES; ++axis) {
-                final double d = bound[axis] - eye[axis];
-                sum += d * d;
+            double nearest = eyes.length == 0 ? 0 : Double.MAX_VALUE;
+            boolean any = !streaming || Double.isInfinite(unit.error());
+            for (double[] eye : eyes) {
+                double sum = 0;
+                for (int axis = 0; axis < AXES; ++axis) {
+                    final double d = bound[axis] - eye[axis];
+                    sum += d * d;
+                }
+                nearest = Math.min(nearest, Math.max(0, Math.sqrt(sum) - bound[AXES]));
+                any |=
+                        LodCut.projected(unit.error(), bound, eye, pixelsPerUnit)
+                                > thresholdPixels * PREFETCH;
             }
-            distance[i] = Math.max(0, Math.sqrt(sum) - bound[AXES]);
-            wanted[i] =
-                    !streaming
-                            || LodCut.projected(unit.error(), bound, eye, pixelsPerUnit)
-                                    > thresholdPixels * PREFETCH;
+            distance[i] = nearest;
+            wanted[i] = any;
             if (wanted[i]) {
                 unwantedSince[i] = WANTED;
             } else if (unwantedSince[i] == WANTED) {

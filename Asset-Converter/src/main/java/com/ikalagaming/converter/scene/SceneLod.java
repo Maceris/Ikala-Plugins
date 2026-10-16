@@ -8,11 +8,13 @@ import com.ikalagaming.graphics.lod.LodMesh;
 
 import lombok.NonNull;
 import org.joml.Matrix3d;
+import org.joml.Matrix4d;
 import org.joml.Matrix4dc;
 import org.joml.Vector3d;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.List;
 import java.util.function.ToIntFunction;
 
 /**
@@ -125,14 +127,6 @@ public final class SceneLod {
             boolean keepAttributes) {
         final double[] origin = middle(scene, top);
         final LodMesh.Builder builder = LodMesh.builder(origin);
-        final Vector3d point = new Vector3d();
-        final Vector3d normal = new Vector3d();
-        final Vector3d tangent = new Vector3d();
-        final Vector3d bitangent = new Vector3d();
-        final Vector3d cross = new Vector3d();
-        final Matrix3d normalMatrix = new Matrix3d();
-        final float[] direction = new float[AXES];
-        final int[] corners = new int[Attributes.PER_TRIANGLE];
         int placed = 0;
         int skipped = 0;
         boolean any = false;
@@ -141,10 +135,6 @@ public final class SceneLod {
         while (!open.isEmpty()) {
             final Node node = open.pop();
             node.children().forEach(open::push);
-            final Matrix4dc world = node.world();
-            world.normal(normalMatrix);
-            // A mirroring transform turns triangles inside out unless their winding is reversed
-            final boolean mirrored = world.determinant3x3() < 0;
             for (int sceneMesh : node.meshes()) {
                 final Material material = materials.of(node, sceneMesh);
                 if (material == null
@@ -153,55 +143,139 @@ public final class SceneLod {
                     continue;
                 }
                 ++placed;
-                final int index = materialIndex.applyAsInt(material);
-                final MeshData data = scene.meshes().get(sceneMesh).data();
-                final float[] v = data.getVertexData();
-                final int[] welded = new int[data.getVertexCount()];
-                for (int i = 0; i < welded.length; ++i) {
-                    final int at = i * STRIDE;
-                    world.transformPosition(point.set(v[at], v[at + 1], v[at + 2]));
-                    welded[i] =
-                            builder.vertex(
-                                    (float) (point.x - origin[0]),
-                                    (float) (point.y - origin[1]),
-                                    (float) (point.z - origin[2]));
-                }
-                final int[] indices = data.getIndices();
-                for (int i = 0; i + 2 < indices.length; i += CORNERS) {
-                    final int a = indices[i];
-                    final int b = mirrored ? indices[i + 2] : indices[i + 1];
-                    final int c = mirrored ? indices[i + 1] : indices[i + 2];
-                    final int[] order = {a, b, c};
-                    for (int corner = 0; corner < CORNERS; ++corner) {
-                        final int at = order[corner] * STRIDE;
-                        normalMatrix.transform(
-                                normal.set(v[at + NORMAL], v[at + NORMAL + 1], v[at + NORMAL + 2]));
-                        world.transformDirection(
-                                tangent.set(
-                                        v[at + TANGENT], v[at + TANGENT + 1], v[at + TANGENT + 2]));
-                        world.transformDirection(
-                                bitangent.set(
-                                        v[at + BITANGENT],
-                                        v[at + BITANGENT + 1],
-                                        v[at + BITANGENT + 2]));
-                        final int base = corner * Attributes.VALUES;
-                        corners[base] = encode(normal, direction);
-                        final boolean flipped = normal.cross(tangent, cross).dot(bitangent) < 0;
-                        corners[base + 1] =
-                                (encode(tangent, direction) & ~FLIP_BIT) | (flipped ? FLIP_BIT : 0);
-                        corners[base + 2] =
-                                (Float.floatToFloat16(v[at + UV]) & LOW_16)
-                                        | (Float.floatToFloat16(v[at + UV + 1]) << SHORT_BITS);
-                    }
-                    any |=
-                            keepAttributes
-                                    ? builder.triangle(
-                                            welded[a], welded[b], welded[c], index, 1, corners)
-                                    : builder.triangle(welded[a], welded[b], welded[c], index);
-                }
+                any |=
+                        add(
+                                builder,
+                                scene.meshes().get(sceneMesh).data(),
+                                node.world(),
+                                origin,
+                                materialIndex.applyAsInt(material),
+                                keepAttributes);
             }
         }
         return any ? new Input(builder.build(), placed, skipped) : null;
+    }
+
+    /**
+     * Turn a model's opaque meshes into one mesh for level of detail to build a model from (see
+     * {@code Lods#addModel}), in the model's own frame, each drawn with its own material.
+     *
+     * @param meshes The model's meshes.
+     * @param materialIndex A material's index in the scene's material cache.
+     * @param keepAttributes Whether triangles keep their normals, tangents and texture coordinates.
+     * @return The mesh, its origin at the middle of the model's bounds, or null if nothing in it is
+     *     opaque.
+     */
+    public static LodMesh ofModel(
+            @NonNull List<MeshData> meshes,
+            @NonNull ToIntFunction<Material> materialIndex,
+            boolean keepAttributes) {
+        final double[] low = {Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE};
+        final double[] high = {-Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE};
+        for (MeshData data : meshes) {
+            final float[] v = data.getVertexData();
+            for (int i = 0; i < data.getVertexCount(); ++i) {
+                for (int axis = 0; axis < AXES; ++axis) {
+                    low[axis] = Math.min(low[axis], v[i * STRIDE + axis]);
+                    high[axis] = Math.max(high[axis], v[i * STRIDE + axis]);
+                }
+            }
+        }
+        final double[] origin = new double[AXES];
+        for (int axis = 0; axis < AXES; ++axis) {
+            origin[axis] = low[axis] <= high[axis] ? (low[axis] + high[axis]) / 2 : 0;
+        }
+        final LodMesh.Builder builder = LodMesh.builder(origin);
+        boolean any = false;
+        final Matrix4d identity = new Matrix4d();
+        for (MeshData data : meshes) {
+            final Material material = data.getMaterial();
+            if (material != null && material.getTransparency() != Material.Transparency.OPAQUE) {
+                continue;
+            }
+            any |=
+                    add(
+                            builder,
+                            data,
+                            identity,
+                            origin,
+                            material == null ? 0 : materialIndex.applyAsInt(material),
+                            keepAttributes);
+        }
+        return any ? builder.build() : null;
+    }
+
+    /**
+     * Add a placed mesh's triangles to a builder, welded to what is there.
+     *
+     * @param builder The builder.
+     * @param data The mesh.
+     * @param world Where it is placed.
+     * @param origin The builder's origin, in the world.
+     * @param index Its material's index.
+     * @param keepAttributes Whether triangles keep their normals, tangents and texture coordinates.
+     * @return True if any triangle went in.
+     */
+    private static boolean add(
+            LodMesh.@NonNull Builder builder,
+            @NonNull MeshData data,
+            @NonNull Matrix4dc world,
+            double @NonNull [] origin,
+            int index,
+            boolean keepAttributes) {
+        final Vector3d point = new Vector3d();
+        final Vector3d normal = new Vector3d();
+        final Vector3d tangent = new Vector3d();
+        final Vector3d bitangent = new Vector3d();
+        final Vector3d cross = new Vector3d();
+        final Matrix3d normalMatrix = new Matrix3d();
+        final float[] direction = new float[AXES];
+        final int[] corners = new int[Attributes.PER_TRIANGLE];
+        world.normal(normalMatrix);
+        // A mirroring transform turns triangles inside out unless their winding is reversed
+        final boolean mirrored = world.determinant3x3() < 0;
+        final float[] v = data.getVertexData();
+        final int[] welded = new int[data.getVertexCount()];
+        for (int i = 0; i < welded.length; ++i) {
+            final int at = i * STRIDE;
+            world.transformPosition(point.set(v[at], v[at + 1], v[at + 2]));
+            welded[i] =
+                    builder.vertex(
+                            (float) (point.x - origin[0]),
+                            (float) (point.y - origin[1]),
+                            (float) (point.z - origin[2]));
+        }
+        boolean any = false;
+        final int[] indices = data.getIndices();
+        for (int i = 0; i + 2 < indices.length; i += CORNERS) {
+            final int a = indices[i];
+            final int b = mirrored ? indices[i + 2] : indices[i + 1];
+            final int c = mirrored ? indices[i + 1] : indices[i + 2];
+            final int[] order = {a, b, c};
+            for (int corner = 0; corner < CORNERS; ++corner) {
+                final int at = order[corner] * STRIDE;
+                normalMatrix.transform(
+                        normal.set(v[at + NORMAL], v[at + NORMAL + 1], v[at + NORMAL + 2]));
+                world.transformDirection(
+                        tangent.set(v[at + TANGENT], v[at + TANGENT + 1], v[at + TANGENT + 2]));
+                world.transformDirection(
+                        bitangent.set(
+                                v[at + BITANGENT], v[at + BITANGENT + 1], v[at + BITANGENT + 2]));
+                final int base = corner * Attributes.VALUES;
+                corners[base] = encode(normal, direction);
+                final boolean flipped = normal.cross(tangent, cross).dot(bitangent) < 0;
+                corners[base + 1] =
+                        (encode(tangent, direction) & ~FLIP_BIT) | (flipped ? FLIP_BIT : 0);
+                corners[base + 2] =
+                        (Float.floatToFloat16(v[at + UV]) & LOW_16)
+                                | (Float.floatToFloat16(v[at + UV + 1]) << SHORT_BITS);
+            }
+            any |=
+                    keepAttributes
+                            ? builder.triangle(welded[a], welded[b], welded[c], index, 1, corners)
+                            : builder.triangle(welded[a], welded[b], welded[c], index);
+        }
+        return any;
     }
 
     /**

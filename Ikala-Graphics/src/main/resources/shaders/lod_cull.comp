@@ -22,6 +22,11 @@
 // Only some streaming units are on the GPU (see LodResidency): a cluster is drawn only while its
 // unit is shown, and while its children's unit isn't, it is drawn whatever its own error, standing
 // in for them. Shown units are closed upward, so a cluster's parent is always there.
+//
+// Threads past the cluster table take the pairs of instances of models: each instance of a model
+// picks its own cut from the model's clusters, with the observer in the model's frame and its
+// clusters' spheres carried into the world by the instance's turn, scale and place (see
+// LodCullMath). Its draws carry its slot and the cluster's index in the model.
 
 // See LodCullMath for the layout
 struct Cluster {
@@ -45,6 +50,13 @@ struct World {
     vec4 cameraFraction;
     // x: unused, y: 1 if it is drawn, z: threshold bits, w: pixels per unit bits
     uvec4 info;
+    // An instance's turn, a quaternion
+    vec4 rotation;
+    // x: 1 + the model's first cluster entry (0 for a world), y: its cluster count, z: the
+    // instance's first pair, w: its material remaps
+    uvec4 model;
+    uvec4 remapFrom;
+    uvec4 remapTo;
 };
 
 // See GeometryArena for the layout
@@ -103,6 +115,11 @@ layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Sho
     uint shownUnits[];
 };
 
+// Each instance's clusters: x its world slot + 1 (0 for none), y whether it was visible last frame
+layout(buffer_reference, std430, buffer_reference_align = 8) buffer Pairs {
+    uvec2 pairs[];
+};
+
 // The frustum planes of each pass, six per pass, in render space. A point p is inside a plane
 // when dot(plane.xyz, p) + plane.w >= 0.
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Frusta {
@@ -134,8 +151,11 @@ layout(push_constant) uniform Constants {
     ShownUnits shownUnitTable;
     // PHASE_EARLY or PHASE_LATE
     uint phase;
-    // How many entries the cluster table has, which is how many commands each list has room for
+    // How many entries the cluster table has
     uint capacity;
+    Pairs pairTable;
+    // How many entries the pair table has; each list has room for capacity + pairCapacity commands
+    uint pairCapacity;
 };
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
@@ -278,9 +298,10 @@ bool stale(uint cell)
     return cell != NONE && (cellFlagTable.cellFlags[cell] & FLAG_STALE) != 0;
 }
 
-// Append a cluster's mesh to a list's draw commands. The cluster's entry goes in as the instance,
-// which the vertex shaders read its world, and so their camera, with.
-void draw(uint list, Mesh mesh, uint entry)
+// Append a cluster's mesh to a list's draw commands. Its draw id goes in as the instance: a
+// world's cluster's entry, which the vertex shaders read its world, and so their camera, with, or
+// an instanced draw's, see LodCullMath.drawId.
+void draw(uint list, Mesh mesh, uint drawId)
 {
     uint index = atomicAdd(countList.counts[list], 1u);
     Command command;
@@ -288,27 +309,75 @@ void draw(uint list, Mesh mesh, uint entry)
     command.instanceCount = 1;
     command.firstIndex = mesh.info.y;
     command.vertexOffset = int(mesh.info.x);
-    command.firstInstance = entry;
-    commandList.commands[list * capacity + index] = command;
+    command.firstInstance = drawId;
+    commandList.commands[list * (capacity + pairCapacity) + index] = command;
+}
+
+// See LodCullMath
+const uint INSTANCED = 0x80000000u;
+const uint INSTANCE_SHIFT = 16;
+
+// Turn a vector by a quaternion
+vec3 rotate(vec4 q, vec3 v)
+{
+    vec3 t = 2.0 * cross(q.xyz, v);
+    return v + q.w * t + cross(q.xyz, t);
+}
+
+// Whether a world's cluster or an instance's pair was visible last frame
+bool wasVisible(bool instanced, uint index)
+{
+    return instanced ? pairTable.pairs[index].y != 0u : historyTable.history[index] != 0u;
+}
+
+// Note whether it is visible this frame
+void setVisible(bool instanced, uint index, bool visible)
+{
+    if (instanced) {
+        pairTable.pairs[index].y = visible ? 1u : 0u;
+    } else {
+        historyTable.history[index] = visible ? 1u : 0u;
+    }
 }
 
 void main()
 {
-    uint entry = gl_GlobalInvocationID.x;
+    uint thread = gl_GlobalInvocationID.x;
     // Early, the scene then each cascade; late, only the scene
     uint pass = gl_GlobalInvocationID.y;
-    if (entry >= capacity) {
+    if (thread >= capacity + pairCapacity) {
         return;
     }
-    Cluster cluster = clusterTable.clusters[entry];
-    if (cluster.place.x == 0) {
-        return;
+    bool instanced = thread >= capacity;
+    // The world's cluster's entry, or the instance's pair
+    uint index = instanced ? thread - capacity : thread;
+    Cluster cluster;
+    World w;
+    uint drawId;
+    if (instanced) {
+        uint slot = pairTable.pairs[index].x;
+        if (slot == 0) {
+            return;
+        }
+        w = worldTable.worlds[slot - 1];
+        // A model not yet applied has no entries
+        if (w.model.x == 0) {
+            return;
+        }
+        uint local = index - w.model.z;
+        cluster = clusterTable.clusters[w.model.x - 1 + local];
+        drawId = INSTANCED | ((slot - 1) << INSTANCE_SHIFT) | local;
+    } else {
+        cluster = clusterTable.clusters[index];
+        if (cluster.place.x == 0) {
+            return;
+        }
+        w = worldTable.worlds[cluster.place.x - 1];
+        drawId = index;
     }
-    uint world = cluster.place.x - 1;
-    World w = worldTable.worlds[world];
     if (w.info.y == 0 || !shown(cluster.unit.x)) {
         if (phase == PHASE_LATE) {
-            historyTable.history[entry] = 0u;
+            setVisible(instanced, index, false);
         }
         return;
     }
@@ -337,14 +406,18 @@ void main()
     }
     if (!selected || !drawable) {
         if (phase == PHASE_LATE) {
-            historyTable.history[entry] = 0u;
+            setVisible(instanced, index, false);
         }
         return;
     }
 
-    vec3 center = cluster.tight.xyz + w.renderOffset.xyz;
-    float radius = cluster.tight.w;
-    // Clusters never move, so a cascade culls them by its planes for what doesn't move
+    // An instance's spheres are in the model's frame, its scale in renderOffset.w
+    vec3 center = instanced
+        ? rotate(w.rotation, cluster.tight.xyz * w.renderOffset.w) + w.renderOffset.xyz
+        : cluster.tight.xyz + w.renderOffset.xyz;
+    float radius = instanced ? cluster.tight.w * w.renderOffset.w : cluster.tight.w;
+    // Clusters never move, so a cascade culls them by its planes for what doesn't move; instances
+    // that move mark where they were and are as changed, see LodRenderer
     bool inView = inFrustum(pass > 0 ? PASS_COUNT + pass : pass, center, radius);
 
     if (phase == PHASE_EARLY) {
@@ -363,11 +436,11 @@ void main()
                 return;
             }
             // With occlusion on, what wasn't visible last frame waits for the late test
-            if ((view.flags & FLAG_OCCLUSION) == 0 || historyTable.history[entry] != 0) {
-                draw(LIST_SCENE_EARLY, mesh, entry);
+            if ((view.flags & FLAG_OCCLUSION) == 0 || wasVisible(instanced, index)) {
+                draw(LIST_SCENE_EARLY, mesh, drawId);
             }
         } else if (inView) {
-            draw(LIST_FIRST_CASCADE + pass - 1, mesh, entry);
+            draw(LIST_FIRST_CASCADE + pass - 1, mesh, drawId);
         }
         return;
     }
@@ -377,9 +450,9 @@ void main()
         seen = false;
         atomicAdd(countList.counts[COUNTER_OCCLUDED], 1u);
     }
-    bool drawnEarly = historyTable.history[entry] != 0;
-    historyTable.history[entry] = seen ? 1u : 0u;
+    bool drawnEarly = wasVisible(instanced, index);
+    setVisible(instanced, index, seen);
     if (seen && !drawnEarly) {
-        draw(LIST_SCENE_LATE, mesh, entry);
+        draw(LIST_SCENE_LATE, mesh, drawId);
     }
 }

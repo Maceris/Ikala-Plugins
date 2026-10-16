@@ -4,6 +4,8 @@ import com.ikalagaming.graphics.lod.LodCut;
 import com.ikalagaming.graphics.lod.LodDag;
 
 import lombok.NonNull;
+import org.joml.Quaterniondc;
+import org.joml.Vector3d;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -56,7 +58,20 @@ import java.nio.ByteOrder;
  * vec4 cameraFraction // the rest of the camera's position
  * uvec4 info          // the debug coloring's ordinal, 1 if it is drawn, float bits of the threshold in pixels and of
  *                     // pixels per unit at distance 1
+ * vec4 rotation       // an instance's turn, a quaternion x, y, z, w
+ * uvec4 model         // an instance's model: 1 + its first cluster entry (0 for a world, which draws
+ *                     // its own entries), its cluster count, the instance's first pair, its remaps
+ * uvec4 remapFrom     // the material indices an instance draws with others, up to MAX_REMAPS
+ * uvec4 remapTo       // what it draws them with
  * </pre>
+ *
+ * <p>An instance of a model (see {@link LodRenderer}) has a world slot of its own: its renderOffset
+ * is where the model's origin lands, minus the camera, with the instance's scale in w, and its eye
+ * is the observer moved into the model's frame, from the model's origin. Errors and distances scale
+ * together, so the cut is the model's own from there. Each instance owns a pair per model cluster,
+ * {@value #PAIR_ENTRY_SIZE} bytes in the pair table: its world slot + 1 (0 for none) and whether
+ * that cluster of it was visible last frame. Its draws carry {@link #INSTANCED} with its slot and
+ * the cluster's index in the model as their instance, see {@link #drawId}.
  */
 public final class LodCullMath {
 
@@ -94,7 +109,7 @@ public final class LodCullMath {
     public static final int BITS_PER_WORD = Integer.SIZE;
 
     /** The size of a world table entry, in bytes. */
-    public static final int WORLD_ENTRY_SIZE = 5 * 4 * Integer.BYTES;
+    public static final int WORLD_ENTRY_SIZE = 9 * 4 * Integer.BYTES;
 
     /** Where a world's offset into render space starts. */
     public static final int WORLD_RENDER_OFFSET_OFFSET = 0;
@@ -110,6 +125,36 @@ public final class LodCullMath {
 
     /** Where whether the world is drawn, its threshold and scale start. */
     public static final int WORLD_INFO_OFFSET = 4 * 4 * Float.BYTES;
+
+    /** Where an instance's rotation starts. */
+    public static final int WORLD_ROTATION_OFFSET = 5 * 4 * Float.BYTES;
+
+    /** Where an instance's model, first pair and remap count start. */
+    public static final int WORLD_MODEL_OFFSET = 6 * 4 * Float.BYTES;
+
+    /** Where the material indices an instance replaces start. */
+    public static final int WORLD_REMAP_FROM_OFFSET = 7 * 4 * Float.BYTES;
+
+    /** Where their replacements start. */
+    public static final int WORLD_REMAP_TO_OFFSET = 8 * 4 * Float.BYTES;
+
+    /** The most materials an instance can replace. */
+    public static final int MAX_REMAPS = 4;
+
+    /** The size of a pair table entry, in bytes. */
+    public static final int PAIR_ENTRY_SIZE = 2 * Integer.BYTES;
+
+    /** Set in a draw's instance when it is a cluster of an instance. */
+    public static final int INSTANCED = 1 << 31;
+
+    /** Where an instanced draw's world slot starts in its instance. */
+    public static final int INSTANCE_SHIFT = 16;
+
+    /** The most world slots an instance can have, so its slot fits beside the cluster's index. */
+    public static final int MAX_INSTANCE_SLOTS = 1 << (Integer.SIZE - 1 - INSTANCE_SHIFT);
+
+    /** The most clusters a model can have, so a cluster's index fits in an instanced draw. */
+    public static final int MAX_MODEL_CLUSTERS = 1 << INSTANCE_SHIFT;
 
     /** The nearest a sphere is treated as being, so errors stay finite, as in {@link LodCut}. */
     public static final float MIN_DISTANCE = 1e-6f;
@@ -409,6 +454,99 @@ public final class LodCullMath {
                             shownUnits);
         }
         return drawn;
+    }
+
+    /**
+     * The instance an instanced draw carries.
+     *
+     * @param slot The instance's world slot, under {@link #MAX_INSTANCE_SLOTS}.
+     * @param cluster The cluster's index in the model, under {@link #MAX_MODEL_CLUSTERS}.
+     * @return The draw's instance.
+     */
+    public static int drawId(int slot, int cluster) {
+        return INSTANCED | slot << INSTANCE_SHIFT | cluster;
+    }
+
+    /**
+     * Where the observer is in a model's frame, as an instance of it sees it.
+     *
+     * @param eye The observer, in the world.
+     * @param position Where the instance puts the model's frame, in the world.
+     * @param rotation The instance's turn.
+     * @param scale The instance's scale.
+     * @param origin The model's origin, in its frame.
+     * @return The observer from the model's origin, in model units.
+     */
+    public static double[] modelEye(
+            double @NonNull [] eye,
+            double @NonNull [] position,
+            @NonNull Quaterniondc rotation,
+            double scale,
+            double @NonNull [] origin) {
+        final Vector3d at =
+                new Vector3d(eye[0] - position[0], eye[1] - position[1], eye[2] - position[2]);
+        rotation.transformInverse(at).div(scale);
+        return new double[] {at.x - origin[0], at.y - origin[1], at.z - origin[2]};
+    }
+
+    /**
+     * A model's sphere where an instance puts it.
+     *
+     * @param sphere The sphere, x, y, z from the model's origin, radius.
+     * @param position Where the instance puts the model's frame, in the world.
+     * @param rotation The instance's turn.
+     * @param scale The instance's scale.
+     * @param origin The model's origin, in its frame.
+     * @return The sphere in the world.
+     */
+    public static double[] instanceSphere(
+            double @NonNull [] sphere,
+            double @NonNull [] position,
+            @NonNull Quaterniondc rotation,
+            double scale,
+            double @NonNull [] origin) {
+        final Vector3d at =
+                new Vector3d(origin[0] + sphere[0], origin[1] + sphere[1], origin[2] + sphere[2]);
+        rotation.transform(at.mul(scale));
+        return new double[] {
+            at.x + position[0], at.y + position[1], at.z + position[2], sphere[AXES] * scale
+        };
+    }
+
+    /**
+     * The cut the GPU picks for an instance of a whole DAG, from its eye in the model's frame.
+     *
+     * @param dag The DAG.
+     * @param view The viewpoint, in the world.
+     * @param thresholdPixels The most error a drawn cluster may have, in pixels.
+     * @param position Where the instance puts the model's frame, in the world.
+     * @param rotation The instance's turn.
+     * @param scale The instance's scale.
+     * @return Whether each cluster is drawn.
+     */
+    public static boolean[] selectInstance(
+            @NonNull LodDag dag,
+            LodCut.@NonNull View view,
+            double thresholdPixels,
+            double @NonNull [] position,
+            @NonNull Quaterniondc rotation,
+            double scale) {
+        final double[] origin = dag.getOrigin();
+        final double[] eye =
+                modelEye(
+                        new double[] {view.x(), view.y(), view.z()},
+                        position,
+                        rotation,
+                        scale,
+                        origin);
+        return select(
+                dag,
+                new LodCut.View(
+                        eye[0] + origin[0],
+                        eye[1] + origin[1],
+                        eye[2] + origin[2],
+                        view.pixelsPerUnit()),
+                thresholdPixels);
     }
 
     /** Static helpers only. */

@@ -1,5 +1,7 @@
 package com.ikalagaming.graphics;
 
+import com.ikalagaming.graphics.graph.Material;
+import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.lod.ClusterMeshes;
 import com.ikalagaming.graphics.lod.LodDag;
 import com.ikalagaming.graphics.vulkan.LodBakes;
@@ -7,6 +9,9 @@ import com.ikalagaming.graphics.vulkan.LodRenderer;
 import com.ikalagaming.graphics.vulkan.VulkanInstance;
 
 import lombok.NonNull;
+import org.joml.Quaterniond;
+import org.joml.Quaternionfc;
+import org.joml.Vector3dc;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,6 +21,11 @@ import java.util.List;
  * on the GPU whole. Each frame the GPU picks its cut from the observer, as {@link
  * com.ikalagaming.graphics.lod.LodCut} does, culls it, and draws it opaque with the scene and its
  * shadows, textured by projecting each material's texture along the triangle's main axis.
+ *
+ * <p>A model ({@link #addModel}) is a DAG put on the GPU once and drawn only by its instances
+ * ({@link #place}): each is the model turned, scaled and placed, picks its own cut of the model's
+ * clusters, and may draw some of the model's materials with others. Models aren't baked, nor
+ * blended far out, since both would fix one look for every instance.
  *
  * <p>Safe from any thread.
  */
@@ -171,6 +181,133 @@ public final class Lods {
         return renderer != null
                 && renderer.getState().lods != null
                 && renderer.getState().lods.isResident(world.id());
+    }
+
+    /**
+     * Put a model on the GPU, which draws nothing until instances of it are placed. Its clusters
+     * are turned into meshes on the calling thread and uploaded as its instances need them.
+     *
+     * @param dag The model, built without baking or blending materials.
+     * @return Its handle, which {@link #remove(LodHandle)} takes off the GPU with its instances.
+     * @throws IllegalStateException If the plugin was unloaded, or the renderer isn't running.
+     * @throws IllegalArgumentException If it has more clusters than an instance can draw.
+     */
+    public LodHandle addModel(@NonNull LodDag dag) {
+        context.checkOpen();
+        final VulkanInstance renderer = renderer();
+        final List<ClusterMeshes.Mesh> meshes = new ArrayList<>(dag.clusters().size());
+        for (LodDag.Cluster cluster : dag.clusters()) {
+            meshes.add(ClusterMeshes.of(cluster));
+        }
+        return new LodHandle(
+                renderer.getState()
+                        .lods
+                        .addModel(
+                                renderer.getState(),
+                                context.getOwnerKey(),
+                                dag,
+                                meshes,
+                                GraphicsManager.getSettings().lodThresholdPixels));
+    }
+
+    /**
+     * Place an instance of a model: the model's frame turned, scaled and moved into the world.
+     *
+     * @param model The model.
+     * @param position Where the model's frame goes.
+     * @param rotation Its turn.
+     * @param scale Its scale, the same along every axis.
+     * @return Its handle.
+     * @throws IllegalStateException If the plugin was unloaded, or the renderer isn't running.
+     * @throws IllegalArgumentException If the model is gone.
+     */
+    public LodInstanceHandle place(
+            @NonNull LodHandle model,
+            @NonNull Vector3dc position,
+            @NonNull Quaternionfc rotation,
+            float scale) {
+        context.checkOpen();
+        return new LodInstanceHandle(
+                renderer()
+                        .getState()
+                        .lods
+                        .place(
+                                context.getOwnerKey(),
+                                model.id(),
+                                new double[] {position.x(), position.y(), position.z()},
+                                new Quaterniond(rotation),
+                                scale));
+    }
+
+    /**
+     * Move an instance. Nothing happens if the handle is stale.
+     *
+     * @param instance The instance.
+     * @param position Where the model's frame goes.
+     * @param rotation Its turn.
+     * @param scale Its scale.
+     */
+    public void move(
+            @NonNull LodInstanceHandle instance,
+            @NonNull Vector3dc position,
+            @NonNull Quaternionfc rotation,
+            float scale) {
+        final LodRenderer lods = lods();
+        if (lods != null) {
+            lods.move(
+                    instance.id(),
+                    new double[] {position.x(), position.y(), position.z()},
+                    new Quaterniond(rotation),
+                    scale);
+        }
+    }
+
+    /**
+     * Draw one of an instance's model's materials with another, as {@link Instances#setMaterial}
+     * does for meshes. Both must be in the scene's material cache. Nothing happens if the handle is
+     * stale.
+     *
+     * @param instance The instance.
+     * @param original The model's material.
+     * @param replacement What to draw it with, or null to draw it as the model does again.
+     * @throws IllegalStateException If the instance would replace more than {@link
+     *     com.ikalagaming.graphics.vulkan.LodCullMath#MAX_REMAPS} materials.
+     */
+    public void setMaterial(
+            @NonNull LodInstanceHandle instance, @NonNull Material original, Material replacement) {
+        final LodRenderer lods = lods();
+        if (lods != null) {
+            final MaterialCache cache = GraphicsManager.getScene().getMaterialCache();
+            lods.setInstanceMaterial(
+                    instance.id(),
+                    cache.getMaterialIndex(original),
+                    replacement == null ? -1 : cache.getMaterialIndex(replacement));
+        }
+    }
+
+    /**
+     * Show or hide an instance. Nothing happens if the handle is stale.
+     *
+     * @param instance The instance.
+     * @param visible Whether it is drawn.
+     */
+    public void setVisible(@NonNull LodInstanceHandle instance, boolean visible) {
+        final LodRenderer lods = lods();
+        if (lods != null) {
+            lods.setInstanceVisible(instance.id(), visible);
+        }
+    }
+
+    /**
+     * Remove an instance. Nothing happens if the handle is stale.
+     *
+     * @param instance The instance.
+     */
+    public void remove(@NonNull LodInstanceHandle instance) {
+        final LodRenderer lods = lods();
+        if (lods != null) {
+            lods.removeInstance(instance.id(), context.getOwnerKey());
+        }
     }
 
     /**

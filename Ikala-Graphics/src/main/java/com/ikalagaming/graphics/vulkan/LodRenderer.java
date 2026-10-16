@@ -18,6 +18,8 @@ import com.ikalagaming.graphics.vulkan.stages.InstanceDrawUpdate;
 
 import lombok.Getter;
 import lombok.NonNull;
+import org.joml.Quaterniond;
+import org.joml.Quaterniondc;
 import org.joml.Vector3dc;
 import org.joml.Vector3f;
 import org.lwjgl.system.MemoryStack;
@@ -237,8 +239,31 @@ public class LodRenderer {
     /** Removed worlds whose pieces are taken out on the render thread. */
     private final Queue<World> removedWorlds = new ConcurrentLinkedQueue<>();
 
-    /** The next world's id. */
+    /** The next world's or instance's id. */
     private long nextId = 1;
+
+    /** Instances of models by id, in the order they were placed. Guarded by {@link #lock}. */
+    private final Map<Long, Instance> instances = new LinkedHashMap<>();
+
+    /** Removed instances whose pairs are taken out on the render thread. */
+    private final Queue<Instance> removedInstances = new ConcurrentLinkedQueue<>();
+
+    /** Where each instance's pairs are in the pair table. Render thread. */
+    private final RangeAllocator pairRanges = new RangeAllocator(INITIAL_SLOTS, Integer.MAX_VALUE);
+
+    /** Pair ranges of removed instances, freed next frame so no frame writes an entry twice. */
+    private final List<int[]> freePairsNextFrame = new ArrayList<>();
+
+    /**
+     * Each instance's pairs, a pair per cluster of its model, see {@link LodCullMath}. -- GETTER --
+     * The pair table.
+     *
+     * @return The pair table.
+     */
+    @Getter private final DeviceTable pairs;
+
+    /** Pair entries changed this frame, uploaded by {@link #record}. Render thread. */
+    private DeviceTable.Entries pairEntries = new DeviceTable.Entries(LodCullMath.PAIR_ENTRY_SIZE);
 
     /**
      * What the culling pass did, the last time its counts were read. -- GETTER -- Recent counts.
@@ -623,6 +648,18 @@ public class LodRenderer {
         /** The observer, from its origin, as of the last frame. Render thread. */
         double[] eye = new double[3];
 
+        /**
+         * Where the observers residency works from are, from its origin: the observer, or for a
+         * model the observer as each of its shown instances sees it. Render thread.
+         */
+        double[][] eyes = {eye};
+
+        /** How many clusters it has if it is a model, which only its instances draw; else -1. */
+        volatile int modelClusters = -1;
+
+        /** A model's sphere around everything it draws, from its origin, or null. */
+        volatile double[] modelBound;
+
         /** Pixels per unit at distance 1, as of the last frame. Render thread. */
         double pixelsPerUnit;
 
@@ -679,6 +716,7 @@ public class LodRenderer {
         cellFlags = new DeviceTable(state, "lod cell flags", WORD_SIZE, INITIAL_SLOTS);
         hiddenSections = new DeviceTable(state, "lod hidden sections", WORD_SIZE, INITIAL_SLOTS);
         shownUnits = new DeviceTable(state, "lod shown units", WORD_SIZE, INITIAL_SLOTS);
+        pairs = new DeviceTable(state, "lod pairs", LodCullMath.PAIR_ENTRY_SIZE, INITIAL_SLOTS);
         shadows =
                 state.shadowInvalidation != null
                         ? state.shadowInvalidation
@@ -703,7 +741,65 @@ public class LodRenderer {
             @NonNull List<ClusterMeshes.Mesh> meshes,
             double thresholdPixels,
             LodBakes.Plan bakes) {
+        return addDag(state, owner, dag, meshes, thresholdPixels, bakes, false);
+    }
+
+    /**
+     * Add a whole DAG as a model, which draws nothing itself: its instances, from {@link #place},
+     * each draw their own cut of its clusters, which are on the GPU once for all of them. Safe from
+     * any thread.
+     *
+     * @param state The Vulkan state.
+     * @param owner The key of the plugin that owns it.
+     * @param dag The model.
+     * @param meshes Each cluster's mesh, by cluster id.
+     * @param thresholdPixels The most error a drawn cluster may have, in pixels.
+     * @return The model's id.
+     * @throws IllegalArgumentException If it has more clusters than an instanced draw can name.
+     */
+    public long addModel(
+            @NonNull VulkanState state,
+            @NonNull String owner,
+            @NonNull LodDag dag,
+            @NonNull List<ClusterMeshes.Mesh> meshes,
+            double thresholdPixels) {
+        if (dag.clusters().size() > LodCullMath.MAX_MODEL_CLUSTERS) {
+            throw new IllegalArgumentException(
+                    "A model can have at most "
+                            + LodCullMath.MAX_MODEL_CLUSTERS
+                            + " clusters, not "
+                            + dag.clusters().size());
+        }
+        return addDag(state, owner, dag, meshes, thresholdPixels, null, true);
+    }
+
+    /**
+     * Add a whole DAG as a world or a model.
+     *
+     * @param state The Vulkan state.
+     * @param owner The key of the plugin that owns it.
+     * @param dag The DAG.
+     * @param meshes Each cluster's mesh, by cluster id.
+     * @param thresholdPixels The most error a drawn cluster may have, in pixels.
+     * @param bakes Its baked clusters, or null.
+     * @param model Whether it is a model, drawn only by its instances.
+     * @return Its id.
+     */
+    private long addDag(
+            @NonNull VulkanState state,
+            @NonNull String owner,
+            @NonNull LodDag dag,
+            @NonNull List<ClusterMeshes.Mesh> meshes,
+            double thresholdPixels,
+            LodBakes.Plan bakes,
+            boolean model) {
         final long id = newWorld(owner, dag.getOrigin(), null, thresholdPixels, bakes);
+        if (model) {
+            final World world = world(id);
+            world.visible = false;
+            world.modelBound = rootBound(dag);
+            world.modelClusters = dag.clusters().size();
+        }
         final List<LodStore.PieceCluster> clusterList = new ArrayList<>(meshes.size());
         for (int i = 0; i < meshes.size(); ++i) {
             final boolean consumed = dag.consumer(i) >= 0;
@@ -729,6 +825,336 @@ public class LodRenderer {
                         0,
                         System.nanoTime()));
         return id;
+    }
+
+    /**
+     * A sphere around a DAG's roots, which cover everything it draws.
+     *
+     * @param dag The DAG.
+     * @return The sphere, x, y, z from its origin, radius.
+     */
+    private static double[] rootBound(@NonNull LodDag dag) {
+        final double[] center = new double[AXES];
+        int roots = 0;
+        for (LodDag.Cluster cluster : dag.clusters()) {
+            if (dag.consumer(cluster.id()) < 0) {
+                for (int axis = 0; axis < AXES; ++axis) {
+                    center[axis] += cluster.tight()[axis];
+                }
+                ++roots;
+            }
+        }
+        for (int axis = 0; axis < AXES; ++axis) {
+            center[axis] /= Math.max(1, roots);
+        }
+        double radius = 0;
+        for (LodDag.Cluster cluster : dag.clusters()) {
+            if (dag.consumer(cluster.id()) < 0) {
+                final double[] tight = cluster.tight();
+                double sum = 0;
+                for (int axis = 0; axis < AXES; ++axis) {
+                    final double d = tight[axis] - center[axis];
+                    sum += d * d;
+                }
+                radius = Math.max(radius, Math.sqrt(sum) + tight[AXES]);
+            }
+        }
+        return new double[] {center[0], center[1], center[2], radius};
+    }
+
+    /**
+     * Where an instance puts its model: the model's frame turned, scaled and moved.
+     *
+     * @param position Where the model's frame goes, in the world.
+     * @param rotation Its turn.
+     * @param scale Its scale.
+     */
+    private record Placement(
+            double @NonNull [] position, @NonNull Quaterniond rotation, double scale) {}
+
+    /** One instance of a model. */
+    private static final class Instance {
+        /** Its id. */
+        final long id;
+
+        /** The plugin that owns it. */
+        final String owner;
+
+        /** Its model. */
+        final World model;
+
+        /** Its world slot, whose world table entry is its own. */
+        final int slot;
+
+        /** Where it is. */
+        volatile Placement placement;
+
+        /** Material indices it draws with others, each a pair: what it replaces, and with what. */
+        volatile int[][] remaps = new int[0][];
+
+        /** Whether it is drawn. */
+        volatile boolean visible = true;
+
+        /** Where its pairs start, or -1 until it has them. Render thread. */
+        int firstPair = -1;
+
+        /** Where cached shadows last saw it, or null. Render thread. */
+        Placement shadowed;
+
+        /**
+         * Keep an instance.
+         *
+         * @param id Its id.
+         * @param owner Its owner.
+         * @param model Its model.
+         * @param slot Its world slot.
+         * @param placement Where it is.
+         */
+        Instance(long id, String owner, World model, int slot, Placement placement) {
+            this.id = id;
+            this.owner = owner;
+            this.model = model;
+            this.slot = slot;
+            this.placement = placement;
+        }
+    }
+
+    /**
+     * Place an instance of a model. Safe from any thread.
+     *
+     * @param owner The key of the plugin that owns it.
+     * @param model The model's id, from {@link #addModel}.
+     * @param position Where the model's frame goes, in the world.
+     * @param rotation Its turn.
+     * @param scale Its scale.
+     * @return The instance's id.
+     * @throws IllegalArgumentException If there is no such model.
+     * @throws IllegalStateException If there are too many worlds and instances.
+     */
+    public long place(
+            @NonNull String owner,
+            long model,
+            double @NonNull [] position,
+            @NonNull Quaterniondc rotation,
+            double scale) {
+        lock.lock();
+        try {
+            final World world = worlds.get(model);
+            if (world == null || world.modelClusters < 0) {
+                throw new IllegalArgumentException("There is no model " + model);
+            }
+            final int slot = worldSlots.take();
+            if (slot >= LodCullMath.MAX_INSTANCE_SLOTS) {
+                worldSlots.give(slot);
+                throw new IllegalStateException("Out of level of detail instance slots");
+            }
+            final long id = nextId++;
+            instances.put(
+                    id,
+                    new Instance(
+                            id,
+                            owner,
+                            world,
+                            slot,
+                            new Placement(position.clone(), new Quaterniond(rotation), scale)));
+            return id;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * An instance by id.
+     *
+     * @param id The instance.
+     * @return It, or null if there is no such instance.
+     */
+    private Instance instance(long id) {
+        lock.lock();
+        try {
+            return instances.get(id);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Move an instance. Safe from any thread.
+     *
+     * @param id The instance.
+     * @param position Where the model's frame goes, in the world.
+     * @param rotation Its turn.
+     * @param scale Its scale.
+     */
+    public void move(
+            long id, double @NonNull [] position, @NonNull Quaterniondc rotation, double scale) {
+        final Instance instance = instance(id);
+        if (instance != null) {
+            instance.placement = new Placement(position.clone(), new Quaterniond(rotation), scale);
+        }
+    }
+
+    /**
+     * Draw one of an instance's model's materials with another. Safe from any thread.
+     *
+     * @param id The instance.
+     * @param from The model's material index to replace.
+     * @param to The index to draw it with, or -1 to draw it as the model does again.
+     * @throws IllegalStateException If the instance would replace too many materials.
+     */
+    public void setInstanceMaterial(long id, int from, int to) {
+        final Instance instance = instance(id);
+        if (instance == null) {
+            return;
+        }
+        final List<int[]> kept = new ArrayList<>();
+        for (int[] remap : instance.remaps) {
+            if (remap[0] != from) {
+                kept.add(remap);
+            }
+        }
+        if (to >= 0) {
+            kept.add(new int[] {from, to});
+        }
+        if (kept.size() > LodCullMath.MAX_REMAPS) {
+            throw new IllegalStateException(
+                    "An instance can replace at most " + LodCullMath.MAX_REMAPS + " materials");
+        }
+        instance.remaps = kept.toArray(new int[0][]);
+    }
+
+    /**
+     * Show or hide an instance. Safe from any thread.
+     *
+     * @param id The instance.
+     * @param visible Whether it is drawn.
+     */
+    public void setInstanceVisible(long id, boolean visible) {
+        final Instance instance = instance(id);
+        if (instance != null) {
+            instance.visible = visible;
+        }
+    }
+
+    /**
+     * Remove an instance. Safe from any thread.
+     *
+     * @param id The instance.
+     * @param owner The plugin asking, which must own it.
+     * @return True if it was removed.
+     */
+    public boolean removeInstance(long id, @NonNull String owner) {
+        lock.lock();
+        try {
+            final Instance instance = instances.get(id);
+            if (instance == null || !instance.owner.equals(owner)) {
+                return false;
+            }
+            instances.remove(id);
+            removedInstances.add(instance);
+            return true;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Take out the instances of models that are gone. Lock held.
+     *
+     * @param model Whether an instance's model is going.
+     */
+    private void removeInstancesOf(@NonNull java.util.function.Predicate<World> model) {
+        final Iterator<Instance> it = instances.values().iterator();
+        while (it.hasNext()) {
+            final Instance instance = it.next();
+            if (model.test(instance.model)) {
+                removedInstances.add(instance);
+                it.remove();
+            }
+        }
+    }
+
+    /**
+     * The instances, copied.
+     *
+     * @return The instances.
+     */
+    private List<Instance> snapshotInstances() {
+        lock.lock();
+        try {
+            return new ArrayList<>(instances.values());
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Give new instances their pairs and take removed ones' out. Render thread, at the start of a
+     * frame.
+     */
+    private void updateInstances() {
+        for (int[] range : freePairsNextFrame) {
+            pairRanges.free(range[0], range[1]);
+        }
+        freePairsNextFrame.clear();
+        Instance removed;
+        while ((removed = removedInstances.poll()) != null) {
+            if (removed.firstPair >= 0) {
+                writePairs(removed.firstPair, removed.model.modelClusters, 0);
+                freePairsNextFrame.add(new int[] {removed.firstPair, removed.model.modelClusters});
+            }
+            if (removed.shadowed != null) {
+                invalidate(removed, removed.shadowed);
+            }
+            lock.lock();
+            try {
+                worldSlots.give(removed.slot);
+            } finally {
+                lock.unlock();
+            }
+        }
+        for (Instance instance : snapshotInstances()) {
+            if (instance.firstPair < 0) {
+                instance.firstPair = pairRanges.allocate(instance.model.modelClusters);
+                writePairs(instance.firstPair, instance.model.modelClusters, instance.slot + 1);
+            }
+        }
+    }
+
+    /**
+     * Write a run of pair entries, each not yet visible.
+     *
+     * @param first The first pair.
+     * @param count How many.
+     * @param slot The world slot + 1 they name, 0 for none.
+     */
+    private void writePairs(int first, int count, int slot) {
+        for (int i = 0; i < count; ++i) {
+            final ByteBuffer out = pairEntries.next(first + i);
+            out.putInt(out.position(), slot);
+            out.putInt(out.position() + Integer.BYTES, 0);
+        }
+    }
+
+    /**
+     * Report where an instance's model is drawn as changed, for cached shadow maps.
+     *
+     * @param instance The instance.
+     * @param placement Where it was or is.
+     */
+    private void invalidate(@NonNull Instance instance, @NonNull Placement placement) {
+        final double[] bound = instance.model.modelBound;
+        if (bound == null) {
+            return;
+        }
+        shadows.addSphere(
+                new double[AXES],
+                LodCullMath.instanceSphere(
+                        bound,
+                        placement.position(),
+                        placement.rotation(),
+                        placement.scale(),
+                        instance.model.origin));
     }
 
     /**
@@ -921,12 +1347,15 @@ public class LodRenderer {
         if (!GraphicsManager.getSettings().lodStreaming || cluster.parentCell() == null) {
             return true;
         }
-        return LodCut.projected(
-                        cluster.parentError(),
-                        cluster.parentBound(),
-                        world.eye,
-                        world.pixelsPerUnit)
-                > world.thresholdPixels * LodResidency.PREFETCH;
+        // Any of the observers, as a model's instances each see it
+        for (double[] eye : world.eyes) {
+            if (LodCut.projected(
+                            cluster.parentError(), cluster.parentBound(), eye, world.pixelsPerUnit)
+                    > world.thresholdPixels * LodResidency.PREFETCH) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1014,6 +1443,20 @@ public class LodRenderer {
     }
 
     /**
+     * Whether there are any worlds or instances of models. Safe from any thread.
+     *
+     * @return True if there are.
+     */
+    public boolean hasWorlds() {
+        lock.lock();
+        try {
+            return !worlds.isEmpty() || !instances.isEmpty();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
      * Set the most error a world's drawn clusters may have.
      *
      * @param id The world.
@@ -1094,6 +1537,7 @@ public class LodRenderer {
             }
             worlds.remove(id);
             removedWorlds.add(world);
+            removeInstancesOf(model -> model == world);
             return true;
         } finally {
             lock.unlock();
@@ -1119,6 +1563,15 @@ public class LodRenderer {
                     ++count;
                 }
             }
+            // Instances it owns, and every instance of a model it owned
+            final Iterator<Instance> placed = instances.values().iterator();
+            while (placed.hasNext()) {
+                final Instance instance = placed.next();
+                if (instance.owner.equals(owner) || instance.model.owner.equals(owner)) {
+                    removedInstances.add(instance);
+                    placed.remove();
+                }
+            }
         } finally {
             lock.unlock();
         }
@@ -1137,6 +1590,7 @@ public class LodRenderer {
             ranges.free(range[0], range[1]);
         }
         freeNextFrame.clear();
+        updateInstances();
         World removed;
         while ((removed = removedWorlds.poll()) != null) {
             for (Piece piece : removed.pieces.values()) {
@@ -1400,7 +1854,7 @@ public class LodRenderer {
         if (now - world.lastResidency >= RESIDENCY_INTERVAL_NANOS) {
             world.lastResidency = now;
             residency.update(
-                    world.eye,
+                    world.eyes,
                     world.pixelsPerUnit,
                     world.thresholdPixels,
                     now,
@@ -2114,7 +2568,9 @@ public class LodRenderer {
                                     unitWords.length,
                                     (unitSlots.bound() + LodCullMath.BITS_PER_WORD - 1)
                                             / LodCullMath.BITS_PER_WORD));
+            final int pairCapacity = Math.max(1, pairRanges.getCapacity());
             if (!clusters.hasWork(capacity, clusterEntries)
+                    && !pairs.hasWork(pairCapacity, pairEntries)
                     && !history.hasWork(capacity, historyEntries)
                     && !cellFlags.hasWork(flagCapacity, flagEntries)
                     && !hiddenSections.hasWork(wordCapacity, wordEntries)
@@ -2124,6 +2580,7 @@ public class LodRenderer {
             DeviceTable.barrierBefore(commandBuffer, stack);
             clusters.record(state, commandBuffer, capacity, clusterEntries, stack);
             history.record(state, commandBuffer, capacity, historyEntries, stack);
+            pairs.record(state, commandBuffer, pairCapacity, pairEntries, stack);
             cellFlags.record(state, commandBuffer, flagCapacity, flagEntries, stack);
             hiddenSections.record(state, commandBuffer, wordCapacity, wordEntries, stack);
             shownUnits.record(state, commandBuffer, unitCapacity, unitEntries, stack);
@@ -2134,8 +2591,10 @@ public class LodRenderer {
             flagEntries.free();
             clusterEntries.free();
             historyEntries.free();
+            pairEntries.free();
             clusterEntries = new DeviceTable.Entries(LodCullMath.CLUSTER_ENTRY_SIZE);
             historyEntries = new DeviceTable.Entries(WORD_SIZE);
+            pairEntries = new DeviceTable.Entries(LodCullMath.PAIR_ENTRY_SIZE);
         }
     }
 
@@ -2184,6 +2643,7 @@ public class LodRenderer {
                 Math.abs(observer.getProjectionMatrix().m11()) * heightPixels / 2;
         final Vector3dc eye = observer.getPosition();
         final List<World> all = snapshotWorlds();
+        final List<Instance> placed = snapshotInstances();
         int slots = 0;
         int drawn = 0;
         for (World world : all) {
@@ -2192,13 +2652,17 @@ public class LodRenderer {
                 ++drawn;
             }
         }
+        for (Instance instance : placed) {
+            slots = Math.max(slots, instance.slot + 1);
+        }
         final int capacity = ranges.getCapacity();
-        frameData.lodWorldCount = drawn;
+        final int pairCapacity = Math.max(1, pairRanges.getCapacity());
         frameData.lodCapacity = capacity;
+        frameData.lodPairCapacity = pairCapacity;
         frameData.lodWorlds.ensureCapacity(
                 (long) Math.max(1, slots) * LodCullMath.WORLD_ENTRY_SIZE, state);
         frameData.lodDrawCommands.ensureCapacity(
-                (long) Math.max(1, capacity) * LIST_COUNT * COMMAND_SIZE, state);
+                ((long) Math.max(1, capacity) + pairCapacity) * LIST_COUNT * COMMAND_SIZE, state);
         final ByteBuffer table =
                 MemoryUtil.memByteBuffer(
                         frameData.lodWorlds.allocationInfo.pMappedData(),
@@ -2222,6 +2686,127 @@ public class LodRenderer {
                     (float) world.thresholdPixels,
                     pixelsPerUnit,
                     colors);
+            if (world.modelClusters < 0) {
+                world.eyes = new double[][] {world.eye};
+            }
+        }
+        // Each instance's entry, and its model's observers for residency
+        final Map<World, List<double[]>> modelEyes = new java.util.IdentityHashMap<>();
+        final double[] from = {eye.x(), eye.y(), eye.z()};
+        for (Instance instance : placed) {
+            final World model = instance.model;
+            final Placement placement = instance.placement;
+            final double[] modelEye =
+                    LodCullMath.modelEye(
+                            from,
+                            placement.position(),
+                            placement.rotation(),
+                            placement.scale(),
+                            model.origin);
+            final List<double[]> eyes = modelEyes.computeIfAbsent(model, key -> new ArrayList<>());
+            if (!instance.visible) {
+                continue;
+            }
+            eyes.add(modelEye);
+            final Piece piece = model.pieces.get(WHOLE);
+            if (piece == null || instance.firstPair < 0) {
+                continue;
+            }
+            ++drawn;
+            putInstance(
+                    table,
+                    instance.slot * LodCullMath.WORLD_ENTRY_SIZE,
+                    instance,
+                    placement,
+                    piece.first,
+                    camera,
+                    modelEye,
+                    (float) model.thresholdPixels,
+                    pixelsPerUnit,
+                    colors);
+            if (instance.shadowed != placement) {
+                if (instance.shadowed != null) {
+                    invalidate(instance, instance.shadowed);
+                }
+                invalidate(instance, placement);
+                instance.shadowed = placement;
+            }
+        }
+        for (World world : all) {
+            if (world.modelClusters >= 0) {
+                world.eyes = modelEyes.getOrDefault(world, List.of()).toArray(new double[0][]);
+            }
+        }
+        frameData.lodWorldCount = drawn;
+    }
+
+    /**
+     * Write an instance's entry in the world table, see {@link LodCullMath}.
+     *
+     * @param out The table.
+     * @param base Where the entry starts.
+     * @param instance The instance.
+     * @param placement Where it is.
+     * @param firstEntry Its model's first cluster entry.
+     * @param camera The camera's position, in the world.
+     * @param modelEye The observer in the model's frame, from its origin.
+     * @param thresholdPixels The error threshold.
+     * @param pixelsPerUnit Pixels per world unit at distance 1.
+     * @param colors What its clusters are colored by, for debugging.
+     */
+    private static void putInstance(
+            @NonNull ByteBuffer out,
+            int base,
+            @NonNull Instance instance,
+            @NonNull Placement placement,
+            int firstEntry,
+            @NonNull Vector3dc camera,
+            double @NonNull [] modelEye,
+            float thresholdPixels,
+            float pixelsPerUnit,
+            DebugVisualizers.@NonNull LodColors colors) {
+        // Where the model's origin lands
+        final double[] origin =
+                LodCullMath.instanceSphere(
+                        new double[AXES + 1],
+                        placement.position(),
+                        placement.rotation(),
+                        placement.scale(),
+                        instance.model.origin);
+        final double[] at = {camera.x(), camera.y(), camera.z()};
+        for (int axis = 0; axis < AXES; ++axis) {
+            out.putFloat(
+                    base + LodCullMath.WORLD_RENDER_OFFSET_OFFSET + axis * Float.BYTES,
+                    (float) (origin[axis] - at[axis]));
+            out.putFloat(
+                    base + LodCullMath.WORLD_EYE_OFFSET + axis * Float.BYTES,
+                    (float) modelEye[axis]);
+        }
+        out.putFloat(
+                base + LodCullMath.WORLD_RENDER_OFFSET_OFFSET + AXES * Float.BYTES,
+                (float) placement.scale());
+        out.putInt(base + LodCullMath.WORLD_INFO_OFFSET, colors.ordinal());
+        out.putInt(base + LodCullMath.WORLD_INFO_OFFSET + Integer.BYTES, 1);
+        out.putFloat(base + LodCullMath.WORLD_INFO_OFFSET + 2 * Integer.BYTES, thresholdPixels);
+        out.putFloat(base + LodCullMath.WORLD_INFO_OFFSET + 3 * Integer.BYTES, pixelsPerUnit);
+        final Quaterniond rotation = placement.rotation();
+        out.putFloat(base + LodCullMath.WORLD_ROTATION_OFFSET, (float) rotation.x);
+        out.putFloat(base + LodCullMath.WORLD_ROTATION_OFFSET + Float.BYTES, (float) rotation.y);
+        out.putFloat(
+                base + LodCullMath.WORLD_ROTATION_OFFSET + 2 * Float.BYTES, (float) rotation.z);
+        out.putFloat(
+                base + LodCullMath.WORLD_ROTATION_OFFSET + 3 * Float.BYTES, (float) rotation.w);
+        final int[][] remaps = instance.remaps;
+        out.putInt(base + LodCullMath.WORLD_MODEL_OFFSET, firstEntry + 1);
+        out.putInt(
+                base + LodCullMath.WORLD_MODEL_OFFSET + Integer.BYTES,
+                instance.model.modelClusters);
+        out.putInt(base + LodCullMath.WORLD_MODEL_OFFSET + 2 * Integer.BYTES, instance.firstPair);
+        out.putInt(base + LodCullMath.WORLD_MODEL_OFFSET + 3 * Integer.BYTES, remaps.length);
+        for (int i = 0; i < remaps.length; ++i) {
+            out.putInt(
+                    base + LodCullMath.WORLD_REMAP_FROM_OFFSET + i * Integer.BYTES, remaps[i][0]);
+            out.putInt(base + LodCullMath.WORLD_REMAP_TO_OFFSET + i * Integer.BYTES, remaps[i][1]);
         }
     }
 
@@ -2317,10 +2902,12 @@ public class LodRenderer {
             vkCmdDrawIndexedIndirectCount(
                     commandBuffer,
                     frameData.lodDrawCommands.buffer,
-                    (long) list * frameData.lodCapacity * COMMAND_SIZE,
+                    (long) list
+                            * (frameData.lodCapacity + frameData.lodPairCapacity)
+                            * COMMAND_SIZE,
                     frameData.lodCounts.buffer,
                     (long) list * Integer.BYTES,
-                    frameData.lodCapacity,
+                    frameData.lodCapacity + frameData.lodPairCapacity,
                     COMMAND_SIZE);
         }
     }
@@ -2334,10 +2921,15 @@ public class LodRenderer {
         lock.lock();
         try {
             worlds.clear();
+            instances.clear();
         } finally {
             lock.unlock();
         }
         removedWorlds.clear();
+        removedInstances.clear();
+        pairEntries.free();
+        pairEntries = new DeviceTable.Entries(LodCullMath.PAIR_ENTRY_SIZE);
+        pairs.cleanup(state);
         clusterEntries.free();
         historyEntries.free();
         clusterEntries = new DeviceTable.Entries(LodCullMath.CLUSTER_ENTRY_SIZE);

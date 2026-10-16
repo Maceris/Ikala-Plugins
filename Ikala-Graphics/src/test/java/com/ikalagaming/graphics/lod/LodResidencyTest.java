@@ -49,6 +49,25 @@ class LodResidencyTest {
         assertEquals(10 + 20 + 40, residency.wantedBytes());
     }
 
+    /**
+     * With several observers, as a model's instances each see it, a unit is wanted when any of them
+     * wants it; with none, only the roots are.
+     */
+    @Test
+    void testAnyObserverWants() {
+        final LodResidency residency = new LodResidency(tree(), new boolean[4]);
+        residency.update(new double[][] {{5000, 0, 0}, {1000, 0, 0}}, PIXELS, THRESHOLD, 0, true);
+        assertTrue(residency.isWanted(0));
+        assertFalse(residency.isWanted(1));
+        assertTrue(residency.isWanted(2));
+        assertFalse(residency.isWanted(3));
+        residency.update(new double[0][], PIXELS, THRESHOLD, 0, true);
+        assertTrue(residency.isWanted(0));
+        assertFalse(residency.isWanted(1));
+        assertFalse(residency.isWanted(2));
+        assertFalse(residency.isWanted(3));
+    }
+
     /** Units load parents first and show only once their parents are shown. */
     @Test
     void testLoadsParentsFirst() {

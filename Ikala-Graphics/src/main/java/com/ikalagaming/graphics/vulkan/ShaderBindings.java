@@ -193,15 +193,22 @@ public class ShaderBindings {
         /** Which phase this is, {@link Cull#PHASE_EARLY} or {@link Cull#PHASE_LATE}. */
         public static final int PUSH_CONSTANT_PHASE_OFFSET = 11 * Long.BYTES;
 
+        /** Device address of the pair table, see {@link LodCullMath}. */
+        public static final int PUSH_CONSTANT_PAIRS_OFFSET = 12 * Long.BYTES;
+
+        /** How many entries the pair table has. */
+        public static final int PUSH_CONSTANT_PAIR_CAPACITY_OFFSET = 13 * Long.BYTES;
+
         /**
-         * How many entries the cluster table has, which is how many commands each list has room
-         * for.
+         * How many entries the cluster table has; each list has room for this many commands plus
+         * the pair table's.
          */
         public static final int PUSH_CONSTANT_CAPACITY_OFFSET =
                 PUSH_CONSTANT_PHASE_OFFSET + Integer.BYTES;
 
         /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_CAPACITY_OFFSET + Integer.BYTES;
+        public static final int PUSH_CONSTANTS_SIZE =
+                PUSH_CONSTANT_PAIR_CAPACITY_OFFSET + Integer.BYTES;
 
         /** The number of clusters each compute workgroup handles. */
         public static final int WORKGROUP_SIZE = 64;

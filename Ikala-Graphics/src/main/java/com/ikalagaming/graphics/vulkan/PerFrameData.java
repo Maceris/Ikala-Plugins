@@ -114,7 +114,8 @@ public class PerFrameData {
 
     /**
      * Indirect draw commands for level of detail clusters this frame, written by the culling pass:
-     * {@link LodRenderer#LIST_COUNT} lists of {@link #lodCapacity} commands each.
+     * {@link LodRenderer#LIST_COUNT} lists of {@link #lodCapacity} plus {@link #lodPairCapacity}
+     * commands each.
      */
     public SharedBuffer lodDrawCommands;
 
@@ -130,11 +131,14 @@ public class PerFrameData {
     /** How many level of detail worlds are drawn this frame. */
     public int lodWorldCount;
 
-    /**
-     * How many entries the cluster table has, which is how many commands each level of detail list
-     * has room for.
-     */
+    /** How many entries the cluster table has. */
     public int lodCapacity;
+
+    /**
+     * How many entries the pair table has; each level of detail list has room for {@link
+     * #lodCapacity} plus this many commands.
+     */
+    public int lodPairCapacity;
 
     /**
      * Models drawn from CPU-written commands this frame, which culling doesn't handle: animated

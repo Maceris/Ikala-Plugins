@@ -24,6 +24,10 @@
 //
 // Either way outWorldPosition.xyz is the position in render space, as scene.vert gives it, and its
 // w the debug coloring's hue, or -1 for none.
+//
+// An instance of a model (see LodCullMath) draws the model's clusters turned, scaled and placed by
+// the instance, its positions grid steps from the model's origin, and draws some of the model's
+// materials with others of its own.
 
 layout(location = 0) in ivec3 position;      // grid steps from the world's origin
 layout(location = 1) in uvec2 materialFlags; // x: material index, y: flags
@@ -55,6 +59,12 @@ struct World {
     // xyz: the rest of the camera's position past that step, in units
     vec4 cameraFraction;
     uvec4 info;
+    // An instance's turn, a quaternion
+    vec4 rotation;
+    // x: 1 + the model's first cluster entry (0 for a world), w: the instance's material remaps
+    uvec4 model;
+    uvec4 remapFrom;
+    uvec4 remapTo;
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Worlds {
@@ -107,6 +117,19 @@ float hueOf(uint id)
 const float STEPS_PER_UNIT = 1024.0;
 const int STEP_BITS = 10;
 
+// An instanced draw's instance, see LodCullMath.drawId
+const uint INSTANCED = 0x80000000u;
+const uint INSTANCE_SHIFT = 16;
+const uint CLUSTER_MASK = 0xFFFFu;
+
+// Turn a vector by a quaternion
+vec3 rotate(vec4 q, vec3 v)
+{
+    vec3 t = 2.0 * cross(q.xyz, v);
+    return v + q.w * t + cross(q.xyz, t);
+}
+
+
 // LodVertex's flags
 const uint FLAG_FLIPPED_BITANGENT = 1;
 const uint FLAG_TEXTURED = 2;
@@ -124,18 +147,39 @@ vec3 fromOctahedral(vec2 e)
 
 void main()
 {
-    Cluster cluster = clusterTable.clusters[gl_InstanceIndex];
-    World world = worldTable.worlds[cluster.place.x - 1];
+    uint id = uint(gl_InstanceIndex);
+    bool instanced = (id & INSTANCED) != 0u;
+    Cluster cluster;
+    World world;
+    vec3 render;
+    if (instanced) {
+        world = worldTable.worlds[(id & ~INSTANCED) >> INSTANCE_SHIFT];
+        cluster = clusterTable.clusters[world.model.x - 1 + (id & CLUSTER_MASK)];
+        // The instance's scale is in renderOffset.w
+        render = rotate(world.rotation, vec3(position) * (world.renderOffset.w / STEPS_PER_UNIT))
+            + world.renderOffset.xyz;
+    } else {
+        cluster = clusterTable.clusters[id];
+        world = worldTable.worlds[cluster.place.x - 1];
+        render = vec3(position - world.cameraGrid.xyz) / STEPS_PER_UNIT
+            - world.cameraFraction.xyz;
+    }
     ivec4 cameraGrid = world.cameraGrid;
     vec4 cameraFraction = world.cameraFraction;
     outMaterialIdx = materialFlags.x;
+    for (uint i = 0u; instanced && i < world.model.w; ++i) {
+        if (world.remapFrom[i] == materialFlags.x) {
+            outMaterialIdx = world.remapTo[i];
+        }
+    }
+    // An instance's model frame turned into the world's; a world's is the world's
+    vec4 turn = instanced ? world.rotation : vec4(0.0, 0.0, 0.0, 1.0);
 
-    vec3 render = vec3(position - cameraGrid.xyz) / STEPS_PER_UNIT - cameraFraction.xyz;
     gl_Position = projectionMatrix * viewMatrix * vec4(render, 1.0);
 
     if ((materialFlags.y & FLAG_TEXTURED) != 0) {
-        vec3 normal = fromOctahedral(normalOct);
-        vec3 tangent = fromOctahedral(tangentOct);
+        vec3 normal = rotate(turn, fromOctahedral(normalOct));
+        vec3 tangent = rotate(turn, fromOctahedral(tangentOct));
         float handedness = (materialFlags.y & FLAG_FLIPPED_BITANGENT) != 0 ? -1.0 : 1.0;
         outNormal = normalize((viewMatrix * vec4(normal, 0.0)).xyz);
         outTangent = normalize((viewMatrix * vec4(tangent, 0.0)).xyz);
@@ -154,20 +198,22 @@ void main()
             outViewPosition = vec4(0.0);
         }
     } else {
-        // The camera within its block: the steps past the block's corner, and the rest
+        // The camera within its block: the steps past the block's corner, and the rest; an
+        // instance's blocks don't line up with the world's, so its projection starts at the camera
         ivec3 block = (cameraGrid.xyz >> STEP_BITS) << STEP_BITS;
-        outViewPosition =
-            vec4(vec3(cameraGrid.xyz - block) / STEPS_PER_UNIT + cameraFraction.xyz, 1.0);
-        outNormal = (viewMatrix * vec4(1.0, 0.0, 0.0, 0.0)).xyz;
-        outTangent = (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz;
-        outBitangent = (viewMatrix * vec4(0.0, 0.0, 1.0, 0.0)).xyz;
+        outViewPosition = instanced
+            ? vec4(0.0, 0.0, 0.0, 1.0)
+            : vec4(vec3(cameraGrid.xyz - block) / STEPS_PER_UNIT + cameraFraction.xyz, 1.0);
+        outNormal = (viewMatrix * vec4(rotate(turn, vec3(1.0, 0.0, 0.0)), 0.0)).xyz;
+        outTangent = (viewMatrix * vec4(rotate(turn, vec3(0.0, 1.0, 0.0)), 0.0)).xyz;
+        outBitangent = (viewMatrix * vec4(rotate(turn, vec3(0.0, 0.0, 1.0)), 0.0)).xyz;
         outTextCoord = vec2(0.0);
     }
     // The debug coloring's hue, or -1 for none
     float hue = -1.0;
     uint colors = world.info.x;
     if (colors == COLORS_CLUSTERS) {
-        hue = hueOf(uint(gl_InstanceIndex));
+        hue = hueOf(id);
     } else if (colors == COLORS_GROUPS) {
         uvec4 bound = floatBitsToUint(cluster.parentBound);
         hue = hueOf(bound.x ^ (bound.y * 3u) ^ (bound.z * 7u) ^ (bound.w * 13u));

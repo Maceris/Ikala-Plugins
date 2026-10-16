@@ -5,8 +5,11 @@ import com.ikalagaming.converter.ModelConverter;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.InstanceHandle;
 import com.ikalagaming.graphics.Instances;
+import com.ikalagaming.graphics.LightHandle;
 import com.ikalagaming.graphics.Lights;
 import com.ikalagaming.graphics.RenderConfig;
+import com.ikalagaming.graphics.TextureHandle;
+import com.ikalagaming.graphics.Textures;
 import com.ikalagaming.graphics.UI;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.Model;
@@ -133,6 +136,9 @@ public class MainMenu {
 
     private void loadSphereDemo() {
         Scene scene = GraphicsManager.getScene();
+        // What going back to the menu puts back
+        final int previousPipeline = GraphicsManager.getPipelineConfig();
+        final DirectionalLight previousSun = scene.getSceneLights().getDirLight();
 
         Model ballModel =
                 ModelConverter.loadModel(
@@ -155,6 +161,8 @@ public class MainMenu {
 
         final Instances instances =
                 GraphicsManager.forPlugin(ConverterPlugin.PLUGIN_NAME).instances();
+        // Draws the opaque balls through level of detail on request
+        final SphereDemoLod demo = new SphereDemoLod(ballModel, material);
         float zPos = 0;
 
         for (int i = 0; i <= 10; ++i) {
@@ -168,6 +176,7 @@ public class MainMenu {
             scene.getMaterialCache().addMaterial(customMaterial);
 
             instances.setMaterial(ball, 0, customMaterial);
+            demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         zPos += 1;
 
@@ -181,6 +190,7 @@ public class MainMenu {
             scene.getMaterialCache().addMaterial(customMaterial);
 
             instances.setMaterial(ball, 0, customMaterial);
+            demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         zPos += 1;
 
@@ -195,6 +205,7 @@ public class MainMenu {
             scene.getMaterialCache().addMaterial(customMaterial);
 
             instances.setMaterial(ball, 0, customMaterial);
+            demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         zPos += 1;
 
@@ -208,6 +219,7 @@ public class MainMenu {
             scene.getMaterialCache().addMaterial(customMaterial);
 
             instances.setMaterial(ball, 0, customMaterial);
+            demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         zPos += 1;
 
@@ -221,6 +233,7 @@ public class MainMenu {
             scene.getMaterialCache().addMaterial(customMaterial);
 
             instances.setMaterial(ball, 0, customMaterial);
+            demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         zPos += 1;
 
@@ -235,6 +248,7 @@ public class MainMenu {
             scene.getMaterialCache().addMaterial(customMaterial);
 
             instances.setMaterial(ball, 0, customMaterial);
+            demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         zPos += 1;
 
@@ -249,6 +263,7 @@ public class MainMenu {
             scene.getMaterialCache().addMaterial(customMaterial);
 
             instances.setMaterial(ball, 0, customMaterial);
+            demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         zPos += 1;
 
@@ -263,6 +278,7 @@ public class MainMenu {
             scene.getMaterialCache().addMaterial(customMaterial);
 
             instances.setMaterial(ball, 0, customMaterial);
+            demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         zPos += 1;
 
@@ -277,6 +293,7 @@ public class MainMenu {
             scene.getMaterialCache().addMaterial(customMaterial);
 
             instances.setMaterial(ball, 0, customMaterial);
+            demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
         zPos += 1;
 
@@ -290,6 +307,7 @@ public class MainMenu {
             scene.getMaterialCache().addMaterial(customMaterial);
 
             instances.setMaterial(ball, 0, customMaterial);
+            demo.add(new Vector3d(i, 0, zPos), customMaterial, ball);
         }
 
         // Behind the first row, where the camera sees them: fully metallic, from a mirror to fully
@@ -309,6 +327,7 @@ public class MainMenu {
             scene.getMaterialCache().addMaterial(customMaterial);
 
             instances.setMaterial(ball, 0, customMaterial);
+            demo.add(new Vector3d(i, 0, BEHIND_FIRST_ROW), customMaterial, ball);
         }
 
         // Translucent, from nearly clear to opaque
@@ -327,6 +346,7 @@ public class MainMenu {
             scene.getMaterialCache().addMaterial(customMaterial);
 
             instances.setMaterial(ball, 0, customMaterial);
+            demo.add(new Vector3d(i, 0, BEHIND_FIRST_ROW - 1), customMaterial, ball);
         }
 
         scene.getSceneLights()
@@ -339,8 +359,18 @@ public class MainMenu {
         // The demo has always lit to 10 m; brighter lights would otherwise reach further
         final float lightRange = 10;
         final Lights lights = GraphicsManager.forPlugin(ConverterPlugin.PLUGIN_NAME).lights();
-        lights.point(new Vector3d(8.5, 2.0, 7.5), new Vector3f(1.0f, 0.1f, 0.1f), 4f, lightRange);
-        lights.point(new Vector3d(1.7, 2.0, 7.5), new Vector3f(0.1f, 0.1f, 1.0f), 4f, lightRange);
+        final LightHandle red =
+                lights.point(
+                        new Vector3d(8.5, 2.0, 7.5),
+                        new Vector3f(1.0f, 0.1f, 0.1f),
+                        4f,
+                        lightRange);
+        final LightHandle blue =
+                lights.point(
+                        new Vector3d(1.7, 2.0, 7.5),
+                        new Vector3f(0.1f, 0.1f, 1.0f),
+                        4f,
+                        lightRange);
 
         var pipeline =
                 RenderConfig.builder().withAnimation().withScene().withSkybox().withGui().build();
@@ -354,9 +384,23 @@ public class MainMenu {
                                 PluginFolder.ResourceType.DATA,
                                 "textures/skybox.png")
                         .getAbsolutePath();
-        scene.setSkyboxTexture(
-                GraphicsManager.forPlugin(ConverterPlugin.PLUGIN_NAME)
-                        .textures()
-                        .load(texturePath));
+        final Textures textures = GraphicsManager.forPlugin(ConverterPlugin.PLUGIN_NAME).textures();
+        final TextureHandle skybox = textures.load(texturePath);
+        scene.setSkyboxTexture(skybox);
+        demo.open(
+                () -> {
+                    // The demo's balls are gone; take out the rest and show the menu again
+                    lights.remove(red);
+                    lights.remove(blue);
+                    scene.setSkyboxTexture(null);
+                    textures.release(skybox);
+                    scene.removeModel(ballModel.getId());
+                    GraphicsManager.forPlugin(ConverterPlugin.PLUGIN_NAME)
+                            .meshes()
+                            .release(ballModel);
+                    scene.getSceneLights().setDirLight(previousSun);
+                    GraphicsManager.swapPipeline(previousPipeline);
+                    ui.setVisible(SURFACE_ID, true);
+                });
     }
 }
