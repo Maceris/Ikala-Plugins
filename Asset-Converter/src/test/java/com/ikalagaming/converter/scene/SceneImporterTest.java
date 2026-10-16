@@ -14,6 +14,7 @@ import com.ikalagaming.graphics.graph.MeshData;
 
 import org.joml.Matrix4d;
 import org.joml.Vector3d;
+import org.joml.Vector3f;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -55,11 +56,16 @@ class SceneImporterTest {
                   "asset": {"version": "2.0"},
                   "scene": 0,
                   "scenes": [{"nodes": [0]}],
+                  "extensionsUsed": ["KHR_lights_punctual"],
+                  "extensions": {"KHR_lights_punctual": {"lights": [
+                    {"name": "Lamp", "type": "point", "color": [1, 0.5, 0.25], "intensity": 3}]}},
                   "nodes": [
-                    {"name": "Root", "children": [1, 2]},
+                    {"name": "Root", "children": [1, 2, 3]},
                     {"name": "Moved", "mesh": 0, "translation": [1, 0, 0]},
                     {"name": "Stretched", "mesh": 0, "translation": [0, 0, 5],
-                     "scale": [1, 2, 1]}
+                     "scale": [1, 2, 1]},
+                    {"name": "Lamp", "translation": [2, 3, 4],
+                     "extensions": {"KHR_lights_punctual": {"light": 0}}}
                   ],
                   "meshes": [{"name": "Triangle", "primitives": [
                     {"attributes": {"POSITION": 0}, "indices": 1, "material": 0}]}],
@@ -225,5 +231,101 @@ class SceneImporterTest {
      */
     private static Node placeholder() {
         return new Node("n", new Matrix4d(), null, new Matrix4d(), new int[0]);
+    }
+
+    @Test
+    void testLights() throws IOException {
+        ImportedScene scene = SceneImporter.read(writeScene(), message -> {});
+        assertEquals(1, scene.lights().size());
+        ImportedScene.ImportedLight lamp = scene.lights().get(0);
+        assertEquals(ImportedScene.LightType.POINT, lamp.type());
+        assertEquals(2, lamp.position().x, 1e-6);
+        assertEquals(4, lamp.position().z, 1e-6);
+        // The brightest channel is 1, the rest in proportion
+        assertEquals(1, lamp.color().x, 1e-5f);
+        assertEquals(0.5f, lamp.color().y, 1e-5f);
+        assertEquals(0.25f, lamp.color().z, 1e-5f);
+        assertTrue(lamp.intensity() > 0);
+        assertNull(ScenePlacement.prepare(null, scene).sun());
+    }
+
+    @Test
+    void testPicking() throws IOException {
+        ImportedScene scene = SceneImporter.read(writeScene(), message -> {});
+        // The moved triangle spans x 1 to 2, y 0 to 1, at z 0; look at it from in front
+        ScenePicker.Hit hit =
+                ScenePicker.pick(scene, new Vector3d(1.2, 0.2, 10), new Vector3d(0, 0, -1));
+        assertNotNull(hit);
+        assertEquals("Moved", hit.node().name());
+        assertEquals(10, hit.distance(), 1e-6);
+        // The stretched one is at z 5 and twice as tall, so only it is there
+        ScenePicker.Hit stretched =
+                ScenePicker.pick(scene, new Vector3d(0.2, 1.5, 10), new Vector3d(0, 0, -1));
+        assertNotNull(stretched);
+        assertEquals("Stretched", stretched.node().name());
+        assertEquals(5, stretched.distance(), 1e-6);
+        // Nothing to the side
+        assertNull(ScenePicker.pick(scene, new Vector3d(5, 5, 10), new Vector3d(0, 0, -1)));
+    }
+
+    @Test
+    void testPreviewShapes() {
+        for (PreviewShapes.Shape shape : PreviewShapes.Shape.values()) {
+            ImportedScene scene = PreviewShapes.scene(shape);
+            assertEquals(2, scene.meshes().size());
+            assertEquals(2, scene.materials().size());
+            for (ImportedScene.Mesh mesh : scene.meshes()) {
+                assertOutwardAndUnit(mesh.data());
+            }
+        }
+        assertEquals(
+                (PreviewShapes.SPHERE_SEGMENTS + 1) * (PreviewShapes.SPHERE_RINGS + 1),
+                PreviewShapes.sphere(1).getVertexCount());
+        assertEquals(12, PreviewShapes.cube(1).getIndices().length / 3);
+    }
+
+    /**
+     * Check every triangle winds counter-clockwise seen from where its normals point, and every
+     * normal is a unit vector at right angles to its tangent, with the bitangent their cross.
+     *
+     * @param mesh The mesh.
+     */
+    private static void assertOutwardAndUnit(MeshData mesh) {
+        final int stride = MeshData.VERTEX_SIZE_IN_FLOATS;
+        final float[] v = mesh.getVertexData();
+        for (int at = 0; at < v.length; at += stride) {
+            Vector3f n = new Vector3f(v[at + 3], v[at + 4], v[at + 5]);
+            Vector3f t = new Vector3f(v[at + 6], v[at + 7], v[at + 8]);
+            Vector3f b = new Vector3f(v[at + 9], v[at + 10], v[at + 11]);
+            assertEquals(1, n.length(), 1e-4f);
+            assertEquals(0, n.dot(t), 1e-4f);
+            assertTrue(n.cross(t, new Vector3f()).distance(b) < 1e-4f);
+        }
+        final int[] indices = mesh.getIndices();
+        for (int i = 0; i < indices.length; i += 3) {
+            Vector3f a = position(v, indices[i]);
+            Vector3f e1 = position(v, indices[i + 1]).sub(a);
+            Vector3f e2 = position(v, indices[i + 2]).sub(a);
+            Vector3f face = e1.cross(e2);
+            if (face.length() < 1e-9f) {
+                // The sphere's poles have triangles with no area
+                continue;
+            }
+            final int at = indices[i] * stride;
+            Vector3f normal = new Vector3f(v[at + 3], v[at + 4], v[at + 5]);
+            assertTrue(face.dot(normal) > 0, "Triangle " + i / 3 + " faces in");
+        }
+    }
+
+    /**
+     * A vertex's position.
+     *
+     * @param v The vertex data.
+     * @param vertex The vertex.
+     * @return Its position.
+     */
+    private static Vector3f position(float[] v, int vertex) {
+        final int at = vertex * MeshData.VERTEX_SIZE_IN_FLOATS;
+        return new Vector3f(v[at], v[at + 1], v[at + 2]);
     }
 }

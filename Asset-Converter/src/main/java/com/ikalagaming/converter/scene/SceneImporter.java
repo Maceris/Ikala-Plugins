@@ -11,6 +11,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4d;
 import org.joml.Matrix4dc;
+import org.joml.Vector3d;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 import org.lwjgl.PointerBuffer;
@@ -23,6 +24,7 @@ import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -203,9 +205,103 @@ public final class SceneImporter {
             correction.rotateX(-Math.PI / 2 * upSign);
         }
         final Node root = node(aiRoot, null, correction, meshes, warnings);
+        final List<ImportedScene.ImportedLight> lights =
+                lights(
+                        aiScene,
+                        root,
+                        file.getFileName().toString().toLowerCase().endsWith(".fbx"),
+                        warnings);
         final long millis = (System.nanoTime() - start) / 1_000_000;
         return new ImportedScene(
-                file, meshes, materials, root, unitScale, upAxis, warnings, millis);
+                file, meshes, materials, root, lights, unitScale, upAxis, warnings, millis);
+    }
+
+    /** Files keep a light's strength in its color, a hundred to a unit of strength. */
+    static final float COLOR_PER_INTENSITY = 100;
+
+    /**
+     * Read the scene's lights, placing each by the node of the same name, as assimp links them.
+     * Area lights aren't read.
+     *
+     * @param aiScene What assimp read.
+     * @param root The node tree, with world transforms.
+     * @param fbx Whether the file is FBX, where assimp points lights the wrong way.
+     * @param warnings Where to note lights that are skipped.
+     * @return The lights.
+     */
+    private static List<ImportedScene.ImportedLight> lights(
+            AIScene aiScene, Node root, boolean fbx, List<String> warnings) {
+        final List<ImportedScene.ImportedLight> lights = new ArrayList<>();
+        final PointerBuffer aiLights = aiScene.mLights();
+        if (aiLights == null) {
+            return lights;
+        }
+        final Map<String, Node> byName = new HashMap<>();
+        final ArrayDeque<Node> open = new ArrayDeque<>();
+        open.push(root);
+        while (!open.isEmpty()) {
+            final Node node = open.pop();
+            byName.putIfAbsent(node.name(), node);
+            node.children().forEach(open::push);
+        }
+        for (int i = 0; i < aiScene.mNumLights(); ++i) {
+            final AILight aiLight = AILight.create(aiLights.get(i));
+            final String name = name(aiLight.mName(), "light " + i);
+            final ImportedScene.LightType type =
+                    switch (aiLight.mType()) {
+                        case Assimp.aiLightSource_DIRECTIONAL ->
+                                ImportedScene.LightType.DIRECTIONAL;
+                        case Assimp.aiLightSource_POINT -> ImportedScene.LightType.POINT;
+                        case Assimp.aiLightSource_SPOT -> ImportedScene.LightType.SPOT;
+                        default -> null;
+                    };
+            if (type == null) {
+                warnings.add(
+                        "Skipped light " + name + ", only directional, point and spot are read");
+                continue;
+            }
+            final Matrix4dc world =
+                    byName.containsKey(name) ? byName.get(name).world() : root.world();
+            final AIColor3D aiColor = aiLight.mColorDiffuse();
+            final Vector3f color = new Vector3f(aiColor.r(), aiColor.g(), aiColor.b());
+            final float brightest = Math.max(color.x, Math.max(color.y, color.z));
+            if (brightest > 0) {
+                color.div(brightest);
+            } else {
+                color.set(1);
+            }
+            final Vector3d position =
+                    world.transformPosition(
+                            new Vector3d(
+                                    aiLight.mPosition().x(),
+                                    aiLight.mPosition().y(),
+                                    aiLight.mPosition().z()));
+            final Vector3d direction =
+                    world.transformDirection(
+                                    new Vector3d(
+                                            aiLight.mDirection().x(),
+                                            aiLight.mDirection().y(),
+                                            aiLight.mDirection().z()))
+                            .normalize();
+            if (fbx) {
+                // Assimp's FBX lights come out pointing back the way they shine: without this,
+                // Bistro's sun shines up from under the ground
+                direction.negate();
+            }
+            lights.add(
+                    new ImportedScene.ImportedLight(
+                            name,
+                            type,
+                            color,
+                            brightest / COLOR_PER_INTENSITY,
+                            position,
+                            new Vector3f(
+                                    (float) direction.x, (float) direction.y, (float) direction.z),
+                            // Assimp's cone angles are the whole cone, ours from its axis
+                            (float) Math.min(89, Math.toDegrees(aiLight.mAngleInnerCone()) / 2),
+                            (float) Math.min(89, Math.toDegrees(aiLight.mAngleOuterCone()) / 2)));
+        }
+        return lights;
     }
 
     /**

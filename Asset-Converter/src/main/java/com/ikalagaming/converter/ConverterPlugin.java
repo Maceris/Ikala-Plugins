@@ -144,7 +144,7 @@ public class ConverterPlugin extends Plugin {
         if (workbenchFile != null) {
             ui.setVisible(MainMenu.SURFACE_ID, false);
             workbench.setVisible(true);
-            workbench.open(Path.of(workbenchFile));
+            workbench.openStartup(workbenchFile);
         }
         // Shown once so later toggles only change its visibility, and keep its state
         ui.show(new AssetInspectorWindow(ui, sampleCount).build());

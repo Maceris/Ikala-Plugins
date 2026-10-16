@@ -8,6 +8,7 @@ import com.ikalagaming.graphics.ColorSpace;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.InstanceHandle;
+import com.ikalagaming.graphics.LightHandle;
 import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
@@ -94,8 +95,36 @@ public final class ScenePlacement {
     /** The prefix of this placement's model IDs. */
     private final String idPrefix;
 
-    /** One material per imported material. */
+    /** One material per imported material, then those the editor made. */
     private final List<Material> materials = new ArrayList<>();
+
+    /** Each material's name, in step with {@link #materials}. */
+    private final List<String> materialNames = new ArrayList<>();
+
+    /** Where each node's meshes were placed, in the order of the node's meshes. */
+    private final Map<Node, List<MeshSlot>> meshSlots = new IdentityHashMap<>();
+
+    /** Materials put on a node's meshes in place of their own, by scene mesh index. */
+    private final Map<Node, Map<Integer, Material>> assigned = new IdentityHashMap<>();
+
+    /** Textures the editor loaded for materials, released with the scene. */
+    private final List<TextureHandle> editorTextures = new ArrayList<>();
+
+    /** The file each texture was loaded from, for the editor to show. */
+    private final Map<TextureHandle, String> textureNames = new ConcurrentHashMap<>();
+
+    /** The point and spot lights placed, in step with {@link #lightSources}. */
+    private final List<LightHandle> lights = new ArrayList<>();
+
+    /** What each placed light was read as, for its strength. */
+    private final List<ImportedScene.ImportedLight> lightSources = new ArrayList<>();
+
+    /**
+     * How much stronger than the file says the point and spot lights shine.
+     *
+     * @return The scale.
+     */
+    @Getter private float lightScale = 1;
 
     /** The models to add, each with where its instances go. */
     private final List<Placed> models = new ArrayList<>();
@@ -135,8 +164,21 @@ public final class ScenePlacement {
      *
      * @param model The model.
      * @param transforms Each instance's node and transform: position, rotation and scale.
+     * @param sceneMeshes The scene's mesh index of each of the model's meshes.
      */
-    private record Placed(@NonNull Model model, @NonNull List<Transform> transforms) {}
+    private record Placed(
+            @NonNull Model model,
+            @NonNull List<Transform> transforms,
+            int @NonNull [] sceneMeshes) {}
+
+    /**
+     * Where one of a node's meshes is in the world: which instance, and which mesh of its model.
+     *
+     * @param instance The instance.
+     * @param modelMesh The mesh's index in the instance's model.
+     * @param sceneMesh The mesh's index in the scene.
+     */
+    public record MeshSlot(@NonNull InstanceHandle instance, int modelMesh, int sceneMesh) {}
 
     /**
      * An instance's transform.
@@ -180,6 +222,7 @@ public final class ScenePlacement {
             final Material material = material(source);
             material.setNormalGreenDown(placement.normalGreenDown);
             placement.materials.add(material);
+            placement.materialNames.add(source.name());
         }
         final Map<Integer, Placed> byMesh = new HashMap<>();
         final Deque<Node> open = new ArrayDeque<>();
@@ -237,7 +280,7 @@ public final class ScenePlacement {
         final Model model = new Model(idPrefix + "mesh-" + index);
         mesh.data().setMaterial(materials.get(mesh.material()));
         model.getMeshDataList().add(mesh.data());
-        final Placed placed = new Placed(model, new ArrayList<>());
+        final Placed placed = new Placed(model, new ArrayList<>(), new int[] {index});
         models.add(placed);
         return placed;
     }
@@ -260,7 +303,7 @@ public final class ScenePlacement {
         }
         final List<Transform> transforms = new ArrayList<>();
         transforms.add(new Transform(node, origin, new Quaternionf(), 1));
-        models.add(new Placed(model, transforms));
+        models.add(new Placed(model, transforms, node.meshes().clone()));
     }
 
     /**
@@ -446,7 +489,188 @@ public final class ScenePlacement {
                                         transform.rotation(),
                                         transform.scale());
                 instances.computeIfAbsent(transform.node(), node -> new ArrayList<>()).add(handle);
+                final List<MeshSlot> slots =
+                        meshSlots.computeIfAbsent(transform.node(), node -> new ArrayList<>());
+                for (int i = 0; i < placed.sceneMeshes().length; ++i) {
+                    slots.add(new MeshSlot(handle, i, placed.sceneMeshes()[i]));
+                }
             }
+        }
+        placeLights();
+    }
+
+    /** Place the scene's point and spot lights. Directional lights are left for the sun. */
+    private void placeLights() {
+        for (ImportedScene.ImportedLight light : imported.lights()) {
+            final LightHandle handle =
+                    switch (light.type()) {
+                        case POINT ->
+                                graphics.lights()
+                                        .point(
+                                                light.position(),
+                                                light.color(),
+                                                light.intensity() * lightScale);
+                        case SPOT ->
+                                graphics.lights()
+                                        .spot(
+                                                light.position(),
+                                                light.direction(),
+                                                light.color(),
+                                                light.intensity() * lightScale,
+                                                light.innerAngle(),
+                                                Math.max(light.outerAngle(), 1),
+                                                Float.NaN);
+                        default -> null;
+                    };
+            if (handle != null) {
+                lights.add(handle);
+                lightSources.add(light);
+            }
+        }
+    }
+
+    /**
+     * The scene's first directional light, which stands for the sun.
+     *
+     * @return The light, or null if the file has none.
+     */
+    public @Nullable ImportedScene.ImportedLight sun() {
+        for (ImportedScene.ImportedLight light : imported.lights()) {
+            if (light.type() == ImportedScene.LightType.DIRECTIONAL) {
+                return light;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * How many point and spot lights were placed.
+     *
+     * @return The count.
+     */
+    public int lightCount() {
+        return lights.size();
+    }
+
+    /**
+     * Scale the point and spot lights' strength from what the file says. Render thread.
+     *
+     * @param scale The scale, 1 for the file's.
+     */
+    public void setLightScale(float scale) {
+        lightScale = scale;
+        for (int i = 0; i < lights.size(); ++i) {
+            graphics.lights().setIntensity(lights.get(i), lightSources.get(i).intensity() * scale);
+        }
+    }
+
+    /**
+     * Every material, the file's then the editor's.
+     *
+     * @return The materials. Don't change the list.
+     */
+    public List<Material> getMaterials() {
+        return materials;
+    }
+
+    /**
+     * A material's name.
+     *
+     * @param index The material's index.
+     * @return The name.
+     */
+    public String nameOf(int index) {
+        return materialNames.get(index);
+    }
+
+    /**
+     * Rename a material.
+     *
+     * @param index The material's index.
+     * @param name The new name.
+     */
+    public void rename(int index, @NonNull String name) {
+        materialNames.set(index, name);
+    }
+
+    /**
+     * Add a material the editor made, putting it in the material cache. Render thread.
+     *
+     * @param name Its name.
+     * @param material The material.
+     * @return Its index.
+     */
+    public int addMaterial(@NonNull String name, @NonNull Material material) {
+        materials.add(material);
+        materialNames.add(name);
+        if (graphics != null) {
+            final MaterialCache cache = GraphicsManager.getScene().getMaterialCache();
+            cache.addMaterial(material);
+            cache.setDirty(true);
+        }
+        return materials.size() - 1;
+    }
+
+    /**
+     * Keep a texture the editor loaded for a material, so it goes with the scene.
+     *
+     * @param texture The texture.
+     * @param name The file it was loaded from, to show.
+     */
+    public void adoptTexture(@NonNull TextureHandle texture, @NonNull String name) {
+        editorTextures.add(texture);
+        textureNames.put(texture, name);
+    }
+
+    /**
+     * The file a texture of this scene was loaded from.
+     *
+     * @param texture The texture.
+     * @return The file's name, or "texture" if it isn't one of this scene's.
+     */
+    public String textureName(@NonNull TextureHandle texture) {
+        return textureNames.getOrDefault(texture, "texture");
+    }
+
+    /**
+     * Where a node's meshes were placed.
+     *
+     * @param node The node.
+     * @return The places, in the order of the node's meshes, empty if it draws nothing.
+     */
+    public List<MeshSlot> meshSlotsOf(@NonNull Node node) {
+        return meshSlots.getOrDefault(node, List.of());
+    }
+
+    /**
+     * The material one of a node's meshes is drawn with: one put on it, or its own.
+     *
+     * @param node The node.
+     * @param sceneMesh The scene's index of the mesh.
+     * @return The material.
+     */
+    public Material materialOf(@NonNull Node node, int sceneMesh) {
+        final Material put = assigned.getOrDefault(node, Map.of()).get(sceneMesh);
+        return put != null ? put : materials.get(imported.meshes().get(sceneMesh).material());
+    }
+
+    /**
+     * Draw one of a node's meshes with a material in place of its own. Render thread.
+     *
+     * @param node The node.
+     * @param sceneMesh The scene's index of the mesh.
+     * @param material The material, which must be one of this scene's, or null for the mesh's own.
+     */
+    public void assign(@NonNull Node node, int sceneMesh, @Nullable Material material) {
+        for (MeshSlot slot : meshSlotsOf(node)) {
+            if (slot.sceneMesh() == sceneMesh) {
+                graphics.instances().setMaterial(slot.instance(), slot.modelMesh(), material);
+            }
+        }
+        if (material == null) {
+            assigned.getOrDefault(node, new IdentityHashMap<>()).remove(sceneMesh);
+        } else {
+            assigned.computeIfAbsent(node, n -> new java.util.HashMap<>()).put(sceneMesh, material);
         }
     }
 
@@ -480,6 +704,7 @@ public final class ScenePlacement {
         texturesToLoad = uses.size();
         final List<TextureHandle> pending = new ArrayList<>();
         final Map<TextureHandle, Long> pendingBytes = new HashMap<>();
+        int failed = 0;
         for (Map.Entry<Path, List<Use>> entry : uses.entrySet()) {
             if (cancelled.getAsBoolean()) {
                 return;
@@ -499,9 +724,11 @@ public final class ScenePlacement {
                 }
             } catch (IOException | RuntimeException e) {
                 log.warn("Can't load texture {}", file, e);
+                ++failed;
                 continue;
             }
             textures.put(file, texture);
+            textureNames.put(texture, file.getFileName().toString());
             if (removed) {
                 // Taken out while this one loaded, so nothing will release it otherwise
                 textures.remove(file);
@@ -519,6 +746,12 @@ public final class ScenePlacement {
                     });
             ++texturesLoaded;
             progress.accept("Loading textures, " + texturesLoaded + " of " + texturesToLoad);
+        }
+        if (texturesToLoad > 0) {
+            progress.accept(
+                    texturesLoaded
+                            + " loaded"
+                            + (failed > 0 ? ", " + failed + " could not be read" : ""));
         }
     }
 
@@ -629,8 +862,8 @@ public final class ScenePlacement {
     }
 
     /**
-     * Take the scene out of the world: models with their meshes and instances, materials, and
-     * textures. Render thread only.
+     * Take the scene out of the world: models with their meshes and instances, materials, textures,
+     * and lights. Render thread only.
      */
     public void remove() {
         removed = true;
@@ -648,5 +881,15 @@ public final class ScenePlacement {
             graphics.textures().release(texture);
         }
         textures.clear();
+        for (TextureHandle texture : editorTextures) {
+            graphics.textures().release(texture);
+        }
+        editorTextures.clear();
+        textureNames.clear();
+        for (LightHandle light : lights) {
+            graphics.lights().remove(light);
+        }
+        lights.clear();
+        lightSources.clear();
     }
 }

@@ -37,9 +37,9 @@ import java.util.Locale;
  * <p>Textures end up in {@link VK13#VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL}, ready to be sampled. When
  * data is provided, mipmaps are generated if the format supports it, unless the data holds them
  * already, as DDS files do. Images whose format has an sRGB and a UNORM version can be read either
- * way, see {@link #applyColorSpace(TextureInfoVulkan, ColorSpace)}. {@link #load(String,
- * ByteBuffer, Format, int, int)} queues the upload and works from any thread; everything else is
- * for the render thread.
+ * way, see {@link #applyColorSpace(TextureInfoVulkan, ColorSpace)}. The load methods, such as
+ * {@link #load(String, ByteBuffer, Format, int, int, TextureWrap)}, queue the upload and work from
+ * any thread; everything else is for the render thread.
  */
 @Slf4j
 public class TextureLoaderVulkan {

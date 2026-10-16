@@ -1,6 +1,8 @@
 package com.ikalagaming.converter.workbench;
 
+import com.ikalagaming.converter.ConverterPlugin;
 import com.ikalagaming.converter.scene.ImportedScene;
+import com.ikalagaming.converter.scene.PreviewShapes;
 import com.ikalagaming.converter.scene.SceneImporter;
 import com.ikalagaming.converter.scene.ScenePlacement;
 import com.ikalagaming.graphics.ColorSpace;
@@ -10,6 +12,7 @@ import com.ikalagaming.graphics.TextureHandle;
 import com.ikalagaming.graphics.TextureWrap;
 import com.ikalagaming.graphics.UI;
 import com.ikalagaming.graphics.gui.IkGui;
+import com.ikalagaming.graphics.texture.DdsFile;
 import com.ikalagaming.graphics.ui.Align;
 import com.ikalagaming.graphics.ui.Anchors;
 import com.ikalagaming.graphics.ui.Button;
@@ -24,6 +27,7 @@ import com.ikalagaming.graphics.ui.Selectable;
 import com.ikalagaming.graphics.ui.Sizing;
 import com.ikalagaming.graphics.ui.TextInput;
 import com.ikalagaming.graphics.ui.UiFrame;
+import com.ikalagaming.launcher.PluginFolder;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +39,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import javax.annotation.Nullable;
 
 /**
@@ -67,6 +72,9 @@ public class Workbench {
 
     /** The height of the top bar. */
     private static final float TOP_HEIGHT = 74;
+
+    /** The shader ball model, in the plugin's data folder. */
+    private static final String SHADER_BALL = "models/shader_ball.obj";
 
     /** The width of the left panel. */
     private static final float FILES_WIDTH = 300;
@@ -156,7 +164,12 @@ public class Workbench {
         this.ui = ui;
         this.back = back;
         viewer = new ImageViewer(graphics.textures());
-        sceneView = new SceneView(graphics);
+        sceneView =
+                new SceneView(
+                        graphics,
+                        new MaterialEditor(
+                                this::loadTexture,
+                                () -> viewer.getImage() == null ? null : viewer.getImage().path()));
         browser = new FileBrowser(Path.of(""));
         path = new TextInput("path", "").onSubmit(this::openPath).width(Sizing.grow());
         files = new Column("files").align(Align.STRETCH);
@@ -214,7 +227,18 @@ public class Workbench {
                         .padding(Insets.all(4))
                         .gap(4)
                         .align(Align.STRETCH)
-                        .add(toolbar, status);
+                        .add(
+                                toolbar,
+                                new Row("status-bar")
+                                        .gap(8)
+                                        .add(
+                                                status.width(Sizing.grow()),
+                                                new Label("preview-label", "Try materials on:"),
+                                                previewButton(PreviewShapes.Shape.SPHERE),
+                                                previewButton(PreviewShapes.Shape.CUBE),
+                                                previewButton(PreviewShapes.Shape.PLANE),
+                                                new Button("shader-ball", "Shader ball")
+                                                        .onClick(this::openShaderBall)));
         ui.show(
                 ui.surface(SURFACE_ID)
                         .anchors(edges(0, 0, 1, 0, 0, 0, 0, 0))
@@ -422,6 +446,95 @@ public class Workbench {
         } catch (IllegalStateException unloaded) {
             // The plugin unloaded while loading, so there is nothing to tell
         }
+    }
+
+    /**
+     * A button that shows a preview shape.
+     *
+     * @param shape The shape.
+     * @return The button.
+     */
+    private Button previewButton(PreviewShapes.Shape shape) {
+        return new Button("preview-" + shape.name().toLowerCase(), shape.label)
+                .onClick(() -> openPreview(shape));
+    }
+
+    /** What a startup file names to open a preview shape instead, as in "preview:sphere". */
+    static final String PREVIEW_PREFIX = "preview:";
+
+    /**
+     * Open what a startup property names, for captures and tests that can't click: a file, or a
+     * preview shape as "preview:sphere", "preview:cube" or "preview:plane".
+     *
+     * @param what The file or preview.
+     */
+    public void openStartup(@NonNull String what) {
+        if (what.startsWith(PREVIEW_PREFIX)) {
+            final String name = what.substring(PREVIEW_PREFIX.length()).toUpperCase();
+            try {
+                openPreview(PreviewShapes.Shape.valueOf(name));
+            } catch (IllegalArgumentException e) {
+                status.text("No preview shape called " + name.toLowerCase());
+            }
+            return;
+        }
+        open(Path.of(what));
+    }
+
+    /**
+     * Show a preview shape on a floor, to try materials on.
+     *
+     * @param shape The shape.
+     */
+    private void openPreview(PreviewShapes.Shape shape) {
+        final int request = requests.incrementAndGet();
+        status.text("Making a " + shape.label.toLowerCase() + "...");
+        loader.execute(
+                () -> {
+                    final ScenePlacement placement =
+                            ScenePlacement.prepare(graphics, PreviewShapes.scene(shape));
+                    post(() -> sceneLoaded(request, placement));
+                });
+    }
+
+    /** Show the shader ball model the plugin ships, to try materials on. */
+    private void openShaderBall() {
+        open(
+                PluginFolder.getResource(
+                                ConverterPlugin.PLUGIN_NAME,
+                                PluginFolder.ResourceType.DATA,
+                                SHADER_BALL)
+                        .toPath());
+    }
+
+    /**
+     * Load a texture in the background for the material editor, handing it over on the render
+     * thread. Textures tile, as materials expect.
+     *
+     * @param file The image.
+     * @param colorSpace The color space to read it in.
+     * @param loaded Given the texture on the render thread.
+     */
+    private void loadTexture(Path file, ColorSpace colorSpace, Consumer<TextureHandle> loaded) {
+        status.text("Loading " + file.getFileName() + "...");
+        loader.execute(
+                () -> {
+                    try {
+                        final String name = file.getFileName().toString().toLowerCase();
+                        final TextureHandle texture =
+                                name.endsWith(".dds")
+                                        ? graphics.textures().load(DdsFile.read(file), colorSpace)
+                                        : graphics.textures().load(file.toString(), colorSpace);
+                        post(
+                                () -> {
+                                    loaded.accept(texture);
+                                    status.text("Loaded " + file.getFileName());
+                                });
+                    } catch (IOException | RuntimeException e) {
+                        log.warn("Could not load texture {}", file, e);
+                        post(() -> status.text("Can't load " + file.getFileName()));
+                    }
+                });
     }
 
     /**

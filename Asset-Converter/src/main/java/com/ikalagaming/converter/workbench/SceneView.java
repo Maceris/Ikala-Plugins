@@ -2,6 +2,7 @@ package com.ikalagaming.converter.workbench;
 
 import com.ikalagaming.converter.scene.ImportedScene;
 import com.ikalagaming.converter.scene.ImportedScene.Node;
+import com.ikalagaming.converter.scene.ScenePicker;
 import com.ikalagaming.converter.scene.ScenePlacement;
 import com.ikalagaming.graphics.CameraManager;
 import com.ikalagaming.graphics.DebugShapeHandle;
@@ -40,9 +41,10 @@ import javax.annotation.Nullable;
 
 /**
  * Shows a scene put in the world by a {@link ScenePlacement}: switches the renderer to draw the
- * scene with a sun, lists the scene's nodes in an outliner, outlines the selected node's meshes,
- * shows details of the scene and the selected node, and turns the camera around the scene with the
- * mouse. Render thread only.
+ * scene with a sun, lists the scene's nodes in an outliner, picks meshes with the mouse and
+ * outlines them, shows details of the scene and the selection, edits the lighting and, through a
+ * {@link MaterialEditor}, the materials, and turns the camera around the scene with the mouse.
+ * Render thread only.
  */
 public class SceneView {
     /** The window that reads the mouse for the orbit camera, drawing nothing. */
@@ -68,6 +70,36 @@ public class SceneView {
 
     /** How steeply the camera looks down at a scene it frames. */
     private static final float FRAMING_PITCH = 0.45f;
+
+    /** How far the mouse may move between press and release for it to count as a click. */
+    private static final float CLICK_SLOP = 4;
+
+    /** The strongest sun the slider offers. */
+    private static final float MAX_SUN = 20;
+
+    /** The strongest ambient light the slider offers. */
+    private static final float MAX_AMBIENT = 3;
+
+    /** The brightest exposure the slider offers. */
+    private static final float MAX_EXPOSURE = 8;
+
+    /** The most the imported lights' strength can be scaled by. */
+    private static final float MAX_LIGHT_SCALE = 20;
+
+    /** Edits the scene's materials. */
+    private final MaterialEditor materials;
+
+    /** The selected mesh of the selected node, a scene mesh index, or -1. */
+    private int selectedMesh = -1;
+
+    /** The exposure before entering. */
+    private float previousExposure = 1;
+
+    /** Scratch for sliders. */
+    private final float[] value = new float[1];
+
+    /** Scratch for color pickers. */
+    private final float[] color3 = new float[3];
 
     /** The plugin's graphics context. */
     private final GraphicsContext graphics;
@@ -122,9 +154,11 @@ public class SceneView {
      * Set up the view; nothing changes until a scene is shown.
      *
      * @param graphics The plugin's graphics context.
+     * @param materials Edits the scene's materials.
      */
-    public SceneView(@NonNull GraphicsContext graphics) {
+    public SceneView(@NonNull GraphicsContext graphics, @NonNull MaterialEditor materials) {
         this.graphics = graphics;
+        this.materials = materials;
     }
 
     /**
@@ -136,8 +170,28 @@ public class SceneView {
         clear();
         placement = newPlacement;
         enter();
+        useFileSun();
         frame(newPlacement.getImported().root());
         placeTestCamera();
+    }
+
+    /**
+     * Light the scene with the file's sun, its first directional light, if it has one: its
+     * direction and color, at the usual strength times what the file says.
+     */
+    private void useFileSun() {
+        final ScenePlacement shown = placement;
+        final ImportedScene.ImportedLight sun = shown == null ? null : shown.sun();
+        if (sun == null) {
+            return;
+        }
+        GraphicsManager.getScene()
+                .getSceneLights()
+                .setDirLight(
+                        new DirectionalLight(
+                                new Vector3f(sun.color()),
+                                new Vector3f(sun.direction()),
+                                SUN_INTENSITY * sun.intensity()));
     }
 
     /**
@@ -168,7 +222,8 @@ public class SceneView {
 
     /** Take the shown scene out of the world, if there is one, leaving the renderer as it is. */
     public void clear() {
-        select(null);
+        select(null, -1);
+        materials.clear();
         if (placement != null) {
             placement.remove();
             placement = null;
@@ -201,6 +256,7 @@ public class SceneView {
         previousPipeline = GraphicsManager.getPipelineConfig();
         previousSun = scene.getSceneLights().getDirLight();
         previousAmbient = scene.getSceneLights().getAmbientLight();
+        previousExposure = scene.getExposure();
         previousPosition.set(scene.getCamera().getPosition());
         previousRotation.set(scene.getCamera().getRotation());
         // The debug stage draws the selection's outline
@@ -233,6 +289,7 @@ public class SceneView {
         }
         scene.getSceneLights().setDirLight(previousSun);
         scene.getSceneLights().setAmbientLight(previousAmbient);
+        scene.setExposure(previousExposure);
         scene.getCamera().setPosition(previousPosition.x, previousPosition.y, previousPosition.z);
         scene.getCamera().setRotation(previousRotation.x, previousRotation.y);
         GraphicsManager.swapPipeline(previousPipeline);
@@ -259,19 +316,30 @@ public class SceneView {
     }
 
     /**
-     * Select a node, outlining its meshes.
+     * Select a node, or one of its meshes, outlining what is selected, and edit the mesh's
+     * material.
      *
      * @param node The node, or null for none.
+     * @param sceneMesh One of its meshes, a scene mesh index, or -1 for the whole node; a node with
+     *     one mesh selects that one.
      */
-    private void select(@Nullable Node node) {
+    private void select(@Nullable Node node, int sceneMesh) {
         for (DebugShapeHandle handle : highlights) {
             graphics.debug().remove(handle);
         }
         highlights.clear();
         selected = node;
+        selectedMesh = sceneMesh;
         final ScenePlacement shown = placement;
         if (node == null || shown == null) {
+            selectedMesh = -1;
             return;
+        }
+        if (selectedMesh < 0 && node.meshes().length == 1) {
+            selectedMesh = node.meshes()[0];
+        }
+        if (selectedMesh >= 0) {
+            materials.select(shown.getMaterials().indexOf(shown.materialOf(node, selectedMesh)));
         }
         final Vector3d scale = node.world().getScale(new Vector3d());
         final Matrix3d rotation = new Matrix3d();
@@ -279,6 +347,9 @@ public class SceneView {
         rotation.scale(1 / scale.x, 1 / scale.y, 1 / scale.z);
         final Quaterniond orientation = rotation.getNormalizedRotation(new Quaterniond());
         for (int index : node.meshes()) {
+            if (sceneMesh >= 0 && index != sceneMesh) {
+                continue;
+            }
             final MeshData data = shown.getImported().meshes().get(index).data();
             final Vector3d localCenter =
                     new Vector3d(data.getAabbMin()).add(new Vector3d(data.getAabbMax())).mul(0.5);
@@ -378,7 +449,7 @@ public class SceneView {
                 frame(node);
             }
             if (node != selected) {
-                select(node);
+                select(node, -1);
             }
         }
     }
@@ -412,7 +483,35 @@ public class SceneView {
             return;
         }
         final ImportedScene imported = shown.getImported();
-        IkGui.separatorText("Scene");
+        if (IkGui.collapsingHeader("Scene###scene", TreeNodeFlags.DEFAULT_OPEN)) {
+            drawScene(frame, shown, imported, closeScene);
+        }
+        if (IkGui.collapsingHeader("Lighting###lighting", TreeNodeFlags.DEFAULT_OPEN)) {
+            drawLighting(shown);
+        }
+        if (IkGui.collapsingHeader("Selected###selected", TreeNodeFlags.DEFAULT_OPEN)) {
+            final Node node = selected;
+            if (node == null) {
+                IkGui.textDisabled("Click a mesh in the scene, or pick a node in the outliner");
+            } else {
+                drawNode(shown, imported, node);
+            }
+        }
+        if (IkGui.collapsingHeader("Material###material", TreeNodeFlags.DEFAULT_OPEN)) {
+            materials.draw(frame, shown, selected, selectedMesh);
+        }
+    }
+
+    /**
+     * Draw the scene's details, and buttons to frame and close it.
+     *
+     * @param frame The current frame.
+     * @param shown The scene.
+     * @param imported What was read.
+     * @param closeScene Closes the scene.
+     */
+    private void drawScene(
+            UiFrame frame, ScenePlacement shown, ImportedScene imported, Runnable closeScene) {
         if (IkGui.beginTable("scene", 2, TableFlags.ROW_BACKGROUND)) {
             row("File", imported.file().getFileName().toString());
             row("Nodes", String.format("%,d", imported.nodeCount()));
@@ -431,6 +530,7 @@ public class SceneView {
             row("Up axis", "xyz".charAt(Math.clamp(imported.upAxis(), 0, 2)) + ", made y");
             row("Read in", String.format("%,d ms", imported.readMillis()));
             row("Textures", textureProgress.isEmpty() ? "none" : textureProgress);
+            row("Lights", lightText(imported));
             IkGui.endTable();
         }
         if (!imported.warnings().isEmpty()
@@ -453,16 +553,98 @@ public class SceneView {
         if (IkGui.button("Close scene")) {
             frame.fire(closeScene);
         }
-        IkGui.textDisabled("Left drag turns, middle drag pans, wheel zooms");
+        IkGui.textDisabled("Click picks, left drag turns, middle drag pans, wheel zooms");
         IkGui.textWrapped(CameraManager.CONTROLS);
+    }
 
-        IkGui.separatorText("Selected");
-        final Node node = selected;
-        if (node == null) {
-            IkGui.textDisabled("Pick a node in the outliner");
-            return;
+    /**
+     * Describe the file's lights.
+     *
+     * @param imported What was read.
+     * @return For example "1 directional, 4 point".
+     */
+    static String lightText(@NonNull ImportedScene imported) {
+        final int[] counts = new int[ImportedScene.LightType.values().length];
+        for (ImportedScene.ImportedLight light : imported.lights()) {
+            ++counts[light.type().ordinal()];
         }
-        drawNode(shown, imported, node);
+        final StringBuilder text = new StringBuilder();
+        for (ImportedScene.LightType type : ImportedScene.LightType.values()) {
+            if (counts[type.ordinal()] > 0) {
+                if (!text.isEmpty()) {
+                    text.append(", ");
+                }
+                text.append(counts[type.ordinal()])
+                        .append(' ')
+                        .append(type.name().toLowerCase(Locale.ROOT));
+            }
+        }
+        return text.isEmpty() ? "none" : text.toString();
+    }
+
+    /**
+     * Draw the lighting: the sun's direction, color and strength, the ambient light, the exposure,
+     * and how strong the file's lights shine.
+     *
+     * @param shown The scene.
+     */
+    private void drawLighting(ScenePlacement shown) {
+        final Scene scene = GraphicsManager.getScene();
+        final DirectionalLight sun = scene.getSceneLights().getDirLight();
+        // The direction the light travels, down for a sun overhead
+        final Vector3f direction = sun.getDirection();
+        final float length = Math.max(1e-6f, direction.length());
+        final float elevation = (float) Math.toDegrees(Math.asin(-direction.y / length));
+        final float azimuth = (float) Math.toDegrees(Math.atan2(direction.x, direction.z));
+        final float[] angles = {azimuth, elevation};
+        if (IkGui.sliderFloat2("Sun around, up", angles, -180, 180)) {
+            final double around = Math.toRadians(angles[0]);
+            final double up = Math.toRadians(Math.clamp(angles[1], 1, 90));
+            direction.set(
+                    (float) (Math.cos(up) * Math.sin(around)),
+                    (float) -Math.sin(up),
+                    (float) (Math.cos(up) * Math.cos(around)));
+        }
+        color3[0] = sun.getColor().x;
+        color3[1] = sun.getColor().y;
+        color3[2] = sun.getColor().z;
+        if (IkGui.colorEdit3("Sun color", color3)) {
+            sun.getColor().set(color3[0], color3[1], color3[2]);
+        }
+        value[0] = sun.getIntensity();
+        if (IkGui.sliderFloat("Sun strength", value, 0, MAX_SUN, "%.2f")) {
+            sun.setIntensity(value[0]);
+        }
+        if (shown.sun() != null) {
+            if (IkGui.button("Use the file's sun")) {
+                useFileSun();
+            }
+        }
+
+        final AmbientLight ambient = scene.getSceneLights().getAmbientLight();
+        color3[0] = ambient.getColor().x;
+        color3[1] = ambient.getColor().y;
+        color3[2] = ambient.getColor().z;
+        if (IkGui.colorEdit3("Ambient color", color3)) {
+            ambient.getColor().set(color3[0], color3[1], color3[2]);
+        }
+        value[0] = ambient.getIntensity();
+        if (IkGui.sliderFloat("Ambient strength", value, 0, MAX_AMBIENT, "%.2f")) {
+            ambient.setIntensity(value[0]);
+        }
+        value[0] = scene.getExposure();
+        if (IkGui.sliderFloat("Exposure", value, 0.05f, MAX_EXPOSURE, "%.2f")) {
+            scene.setExposure(value[0]);
+        }
+        if (shown.lightCount() > 0) {
+            value[0] = shown.getLightScale();
+            if (IkGui.sliderFloat("File's lights strength", value, 0, MAX_LIGHT_SCALE, "%.2fx")) {
+                shown.setLightScale(value[0]);
+            }
+            IkGui.setItemTooltip(
+                    "Files fold their lights' strength into their color in their own units, so"
+                            + " this scales what was read.");
+        }
     }
 
     /**
@@ -508,10 +690,15 @@ public class SceneView {
             final ImportedScene.Mesh mesh = imported.meshes().get(index);
             final ImportedScene.ImportedMaterial material =
                     imported.materials().get(mesh.material());
-            IkGui.bulletText(
+            if (IkGui.selectable(
                     String.format(
-                            "%s, %,d triangles, %s",
-                            mesh.name(), mesh.triangles(), material.name()));
+                                    "%s, %,d triangles, %s",
+                                    mesh.name(), mesh.triangles(), material.name())
+                            + "##mesh"
+                            + index,
+                    index == selectedMesh)) {
+                select(node, index);
+            }
             for (var texture : material.textures().entrySet()) {
                 IkGui.textDisabled(
                         "    "
@@ -579,6 +766,10 @@ public class SceneView {
         if (io.wantCaptureMouse) {
             return;
         }
+        if (IkGui.isMouseReleased(MouseButton.LEFT)
+                && IkGui.getMouseDragDelta(MouseButton.LEFT, 0).length() < CLICK_SLOP) {
+            pick();
+        }
         if (IkGui.isMouseDragging(MouseButton.LEFT, 0)) {
             orbit.turn(camera, io.mouseDelta.x, io.mouseDelta.y);
         } else if (IkGui.isMouseDragging(MouseButton.MIDDLE, 0)) {
@@ -587,6 +778,51 @@ public class SceneView {
         if (io.mouseWheel != 0) {
             orbit.zoom(camera, io.mouseWheel);
         }
+    }
+
+    /**
+     * Select the mesh under the mouse, or nothing if there is none, by casting a ray from the
+     * camera through it.
+     */
+    private void pick() {
+        final ScenePlacement shown = placement;
+        if (shown == null) {
+            return;
+        }
+        final IkIO io = IkGui.getIO();
+        final var camera = GraphicsManager.getScene().getCamera();
+        final Vector3d direction =
+                rayDirection(
+                        IkGui.getMousePos().x / io.displaySize.x,
+                        IkGui.getMousePos().y / io.displaySize.y,
+                        io.displaySize.x / Math.max(1, io.displaySize.y),
+                        camera.getRotation().x,
+                        camera.getRotation().y);
+        final ScenePicker.Hit hit =
+                ScenePicker.pick(shown.getImported(), camera.getPosition(), direction);
+        if (hit == null) {
+            select(null, -1);
+        } else {
+            select(hit.node(), hit.sceneMesh());
+        }
+    }
+
+    /**
+     * The direction from the camera through a point on the screen, in the world.
+     *
+     * @param x The point across the screen, 0 at the left to 1 at the right.
+     * @param y The point down the screen, 0 at the top to 1 at the bottom.
+     * @param aspect The screen's width over its height.
+     * @param pitch The camera's pitch, positive looking down.
+     * @param yaw The camera's yaw.
+     * @return The direction, normalized.
+     */
+    static Vector3d rayDirection(double x, double y, double aspect, double pitch, double yaw) {
+        final double tan = Math.tan(OrbitCamera.FIELD_OF_VIEW / 2);
+        // In view space: x right, y up, looking down -z
+        final Vector3d view = new Vector3d((2 * x - 1) * tan * aspect, (1 - 2 * y) * tan, -1);
+        // The camera's view is rotated by pitch then yaw; undo it
+        return new Matrix3d().rotateX(pitch).rotateY(yaw).transpose().transform(view).normalize();
     }
 
     /** Reads the mouse each frame for the orbit camera. Draws no window. */

@@ -26,6 +26,7 @@ import javax.annotation.Nullable;
  * @param meshes Every mesh, in local space.
  * @param materials Every material.
  * @param root The root node.
+ * @param lights The lights, placed in the world.
  * @param unitScale The scale applied to the root so one unit is one meter, from the file's unit.
  * @param upAxis The axis the file says is up: 0 for x, 1 for y, 2 for z.
  * @param warnings Things that were skipped or guessed while reading.
@@ -36,6 +37,7 @@ public record ImportedScene(
         @NonNull List<Mesh> meshes,
         @NonNull List<ImportedMaterial> materials,
         @NonNull Node root,
+        @NonNull List<ImportedLight> lights,
         double unitScale,
         int upAxis,
         @NonNull List<String> warnings,
@@ -58,6 +60,39 @@ public record ImportedScene(
             return data.getIndices().length / 3;
         }
     }
+
+    /** What kind of light a file has. */
+    public enum LightType {
+        /** Light from far away along one direction, like the sun. */
+        DIRECTIONAL,
+        /** Light from a point in every direction. */
+        POINT,
+        /** Light from a point in a cone. */
+        SPOT
+    }
+
+    /**
+     * A light from the file, in the world.
+     *
+     * @param name Its name in the file.
+     * @param type What kind it is.
+     * @param color Its color, brightest channel 1.
+     * @param intensity Its strength, the file's brightest color channel over 100, since files fold
+     *     their light's strength into its color; scaled further when placed.
+     * @param position Where it is in the world, for point and spot lights.
+     * @param direction Which way it shines in the world, for directional and spot lights.
+     * @param innerAngle Where a spot light starts to fade, in degrees from its axis.
+     * @param outerAngle Where a spot light ends, in degrees from its axis.
+     */
+    public record ImportedLight(
+            @NonNull String name,
+            @NonNull LightType type,
+            @NonNull Vector3f color,
+            float intensity,
+            @NonNull Vector3d position,
+            @NonNull Vector3f direction,
+            float innerAngle,
+            float outerAngle) {}
 
     /** What a texture is for. */
     public enum TextureSlot {
