@@ -6,6 +6,7 @@ import lombok.NonNull;
 import org.joml.Matrix4d;
 import org.joml.Matrix4dc;
 import org.joml.Vector3d;
+import org.joml.Vector3f;
 import org.joml.Vector4f;
 
 import java.nio.file.Path;
@@ -96,6 +97,7 @@ public record ImportedScene(
      * @param color The diffuse or base color, sRGB, with opacity in alpha.
      * @param roughness The roughness, or NaN if the file doesn't say.
      * @param metallic The metalness, or NaN if the file doesn't say.
+     * @param emissive The emitted color, as the file gives it, black for none.
      * @param textures The textures it names, by what they are for.
      */
     public record ImportedMaterial(
@@ -103,6 +105,7 @@ public record ImportedScene(
             @NonNull Vector4f color,
             float roughness,
             float metallic,
+            @NonNull Vector3f emissive,
             @NonNull Map<TextureSlot, TextureRef> textures) {
         /** Copy the textures so they can't change. */
         public ImportedMaterial {

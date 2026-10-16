@@ -63,7 +63,8 @@ class SceneImporterTest {
                   ],
                   "meshes": [{"name": "Triangle", "primitives": [
                     {"attributes": {"POSITION": 0}, "indices": 1, "material": 0}]}],
-                  "materials": [{"name": "Brick", "pbrMetallicRoughness": {
+                  "materials": [{"name": "Brick", "emissiveFactor": [0.1, 0.2, 0.3],
+                    "pbrMetallicRoughness": {
                     "baseColorFactor": [0.5, 0.25, 1, 1], "roughnessFactor": 0.75,
                     "baseColorTexture": {"index": 0}}}],
                   "textures": [{"source": 0}],
@@ -138,6 +139,7 @@ class SceneImporterTest {
         assertEquals("Brick", material.name());
         assertEquals(0.25f, material.color().y, 1e-6f);
         assertEquals(0.75f, material.roughness(), 1e-6f);
+        assertEquals(0.2f, material.emissive().y, 1e-6f);
         // Found by name, ignoring case, in the Textures folder
         ImportedScene.TextureRef base = material.textures().get(TextureSlot.BASE_COLOR);
         assertNotNull(base);
@@ -148,6 +150,7 @@ class SceneImporterTest {
     void testPlacementInstancesAndBakes() throws IOException {
         ImportedScene scene = SceneImporter.read(writeScene(), message -> {});
         ScenePlacement placement = ScenePlacement.prepare(null, scene);
+        assertFalse(placement.isNormalGreenDown());
         // The moved node shares the mesh's model; the stretched one is baked into its own
         assertEquals(2, placement.modelCount());
         assertEquals(2, placement.instanceCount());
@@ -203,6 +206,13 @@ class SceneImporterTest {
         assertEquals(ColorSpace.SRGB, ScenePlacement.colorSpace(TextureSlot.BASE_COLOR));
         assertEquals(ColorSpace.LINEAR, ScenePlacement.colorSpace(TextureSlot.NORMAL));
         assertEquals(ColorSpace.LINEAR, ScenePlacement.colorSpace(TextureSlot.SPECULAR));
+        assertEquals(ColorSpace.SRGB, ScenePlacement.colorSpace(TextureSlot.EMISSIVE));
+        assertTrue(ScenePlacement.applied(TextureSlot.SPECULAR));
+        assertTrue(ScenePlacement.applied(TextureSlot.EMISSIVE));
+        assertFalse(ScenePlacement.applied(TextureSlot.OPACITY));
+        // DirectX normal maps for FBX files, OpenGL ones for the rest
+        assertTrue(ScenePlacement.defaultGreenDown(Path.of("Bistro.FBX")));
+        assertFalse(ScenePlacement.defaultGreenDown(Path.of("scene.gltf")));
         assertThrows(
                 IOException.class,
                 () -> SceneImporter.read(folder.resolve("missing.fbx"), message -> {}));

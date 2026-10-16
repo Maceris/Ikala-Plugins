@@ -4,6 +4,7 @@ import com.ikalagaming.graphics.TextureHandle;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.joml.Vector3f;
 import org.joml.Vector4f;
 
 /**
@@ -71,6 +72,34 @@ public class Material {
     private TextureHandle texture;
 
     /**
+     * Packed occlusion (red), roughness (green) and metalness (blue), linear, as glTF and Bistro
+     * pack them, or null for none. Where set, its roughness and metalness stand in for the
+     * material's, and if {@link #packedOcclusion} is set, its red dims the ambient light.
+     */
+    private TextureHandle occlusionRoughnessMetal;
+
+    /**
+     * Whether {@link #occlusionRoughnessMetal}'s red channel is occlusion. Some packed maps leave
+     * it unused, like Bistro's, which hold 0 there and would black out the ambient light.
+     */
+    private boolean packedOcclusion;
+
+    /** The light the surface gives off, as an sRGB texture times {@link #emissive}, or null. */
+    private TextureHandle emissiveMap;
+
+    /**
+     * The light the surface gives off, in linear light, in the scene's light units: the color times
+     * its strength. Multiplies the emissive map if there is one. Black for none.
+     */
+    private final Vector3f emissive;
+
+    /**
+     * Whether the normal map's green channel points down the texture, as DirectX and many FBX
+     * exports have it, instead of up, as OpenGL and glTF have it.
+     */
+    private boolean normalGreenDown;
+
+    /**
      * How the material lets light through, which decides which faces it hides when baked and how it
      * is drawn.
      */
@@ -122,6 +151,10 @@ public class Material {
         subsurface = 0;
         normalMap = null;
         texture = null;
+        occlusionRoughnessMetal = null;
+        emissiveMap = null;
+        emissive = new Vector3f();
+        normalGreenDown = false;
         transparency = Transparency.OPAQUE;
         top = null;
         bottom = null;

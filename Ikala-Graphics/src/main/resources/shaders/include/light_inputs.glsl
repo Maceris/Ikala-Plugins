@@ -94,6 +94,8 @@ layout(set = 0, binding = 0) uniform Uniforms {
     int occupancyRays;
     // Nonzero to show how much of the light from lights that march rays gets through, in gray
     int occupancyRayView;
+    // The g-buffer's emission (rgb) and occlusion (a), see scene.frag
+    int emissionSamplerIndex;
 };
 
 // One point light shadow cube map: each face's matrix from render space, where it is drawn from in

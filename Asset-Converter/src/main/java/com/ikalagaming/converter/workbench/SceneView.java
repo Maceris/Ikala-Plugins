@@ -440,6 +440,12 @@ public class SceneView {
                 IkGui.textWrapped(warning);
             }
         }
+        if (IkGui.checkbox("Normal maps point green down (DirectX)", shown.isNormalGreenDown())) {
+            shown.setNormalGreenDown(!shown.isNormalGreenDown());
+        }
+        IkGui.setItemTooltip(
+                "Guessed from the file: on for FBX, off for the rest. Bumps look lit from below"
+                        + " when it is wrong.");
         if (IkGui.button("Frame scene")) {
             frame(imported.root());
         }

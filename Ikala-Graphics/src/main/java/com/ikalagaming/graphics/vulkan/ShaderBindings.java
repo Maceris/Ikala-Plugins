@@ -603,7 +603,7 @@ public class ShaderBindings {
 
         /** Offset in the uniforms of the bindless slot of the g-buffer depth texture. */
         public static final int DEPTH_INDEX_OFFSET =
-                BASE_COLOR_INDEX_OFFSET + GBuffer.TEXTURE_COUNT * Integer.BYTES;
+                BASE_COLOR_INDEX_OFFSET + (GBuffer.MATERIAL + 1) * Integer.BYTES;
 
         /** The size of the uniforms buffer. */
         public static final int UNIFORMS_BUFFER_SIZE = DEPTH_INDEX_OFFSET + Integer.BYTES;
@@ -981,9 +981,16 @@ public class ShaderBindings {
          */
         public static final int MAX_OCCUPANCY_RAYS = 8;
 
+        /**
+         * The offset into the uniforms for the bindless slot of the g-buffer's emission and
+         * occlusion texture.
+         */
+        public static final int EMISSION_SAMPLER_INDEX_OFFSET =
+                OCCUPANCY_RAY_VIEW_OFFSET + Integer.BYTES;
+
         /** The size of the uniforms buffer, padded out to 16 bytes under std140 rules. */
         public static final int UNIFORMS_BUFFER_SIZE =
-                (int) SharedBuffer.align(OCCUPANCY_RAY_VIEW_OFFSET + Integer.BYTES);
+                (int) SharedBuffer.align(EMISSION_SAMPLER_INDEX_OFFSET + Integer.BYTES);
 
         /** Uniforms buffer binding. */
         public static final int UNIFORMS_BINDING = 0;
@@ -1091,8 +1098,30 @@ public class ShaderBindings {
             /** Offset in bytes to the texture map index. */
             public static final int TEXTURE_INDEX = (4 + 4 + 4 + 2) * Float.BYTES + Integer.BYTES;
 
-            /** Total size of the struct in bytes. */
-            public static final int SIZEOF = (4 + 4 + 4 + 2) * Float.BYTES + 2 * Integer.BYTES;
+            /** Offset in bytes to the emitted light, a linear vec3. */
+            public static final int EMISSIVE = (4 + 4 + 4 + 4) * Float.BYTES;
+
+            /** Offset in bytes to the occlusion, 1 unless a pixel's texture says otherwise. */
+            public static final int OCCLUSION = EMISSIVE + 3 * Float.BYTES;
+
+            /** Offset in bytes to the packed occlusion, roughness and metal map index. */
+            public static final int OCCLUSION_ROUGHNESS_METAL_INDEX = OCCLUSION + Float.BYTES;
+
+            /** Offset in bytes to the emissive map index. */
+            public static final int EMISSIVE_INDEX =
+                    OCCLUSION_ROUGHNESS_METAL_INDEX + Integer.BYTES;
+
+            /** Offset in bytes to the flags, see {@link #FLAG_NORMAL_GREEN_DOWN}. */
+            public static final int FLAGS = EMISSIVE_INDEX + Integer.BYTES;
+
+            /** Flag: the normal map's green channel points down the texture, as in DirectX. */
+            public static final int FLAG_NORMAL_GREEN_DOWN = 1;
+
+            /** Flag: the packed occlusion, roughness and metal map's red channel is occlusion. */
+            public static final int FLAG_PACKED_OCCLUSION = 2;
+
+            /** Total size of the struct in bytes, padded to 16 bytes. */
+            public static final int SIZEOF = FLAGS + 2 * Integer.BYTES;
 
             /** Private constructor so this class is not instantiated. */
             private Material() {

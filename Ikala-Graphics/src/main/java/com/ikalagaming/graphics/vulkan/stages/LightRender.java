@@ -369,6 +369,9 @@ public class LightRender implements RenderStage {
         uniformData.putInt(
                 ShaderBindings.Light.DEPTH_SAMPLER_INDEX_OFFSET,
                 frameData.gBuffer.depth().bindlessIndex);
+        uniformData.putInt(
+                ShaderBindings.Light.EMISSION_SAMPLER_INDEX_OFFSET,
+                gBuffer[GBuffer.EMISSION].bindlessIndex);
         for (int i = 0; i < CascadeShadowSplit.SHADOW_MAP_CASCADE_COUNT; ++i) {
             uniformData.putInt(
                     ShaderBindings.Light.SHADOW_MAP_0_INDEX_OFFSET + i * Integer.BYTES,

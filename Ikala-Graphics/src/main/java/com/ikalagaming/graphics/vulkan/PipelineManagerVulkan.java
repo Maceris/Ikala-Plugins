@@ -40,6 +40,9 @@ public class PipelineManagerVulkan {
     /** Format of the material index texture in the g-buffer. */
     public static final int GBUFFER_MATERIAL_FORMAT = VK_FORMAT_R32_UINT;
 
+    /** Format of the emission and occlusion texture in the g-buffer. Emission can pass 1. */
+    public static final int GBUFFER_EMISSION_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
+
     /** Format of the g-buffer depth and the shadow maps. Supported everywhere for both uses. */
     public static final int DEPTH_FORMAT = VK_FORMAT_D32_SFLOAT;
 
@@ -1046,6 +1049,16 @@ public class PipelineManagerVulkan {
                         width,
                         height,
                         GBUFFER_MATERIAL_FORMAT,
+                        colorUsage,
+                        VK_IMAGE_ASPECT_COLOR_BIT,
+                        VK_FILTER_NEAREST,
+                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+        textures[GBuffer.EMISSION] =
+                createRenderTarget(
+                        state,
+                        width,
+                        height,
+                        GBUFFER_EMISSION_FORMAT,
                         colorUsage,
                         VK_IMAGE_ASPECT_COLOR_BIT,
                         VK_FILTER_NEAREST,

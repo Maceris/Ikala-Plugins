@@ -77,6 +77,14 @@ public final class ScenePlacement {
     /** Makes model IDs unique between placements. */
     private static final AtomicInteger PLACEMENTS = new AtomicInteger();
 
+    /**
+     * Whether the scene's normal maps point green down the texture, DirectX's way, which FBX files
+     * usually have, rather than up, OpenGL's way, which glTF and most others have.
+     *
+     * @return True for DirectX normal maps.
+     */
+    @Getter private boolean normalGreenDown;
+
     /** The plugin's graphics context, or null for a placement only looked at, in tests. */
     private final @Nullable GraphicsContext graphics;
 
@@ -167,8 +175,11 @@ public final class ScenePlacement {
     public static ScenePlacement prepare(
             @Nullable GraphicsContext graphics, @NonNull ImportedScene imported) {
         ScenePlacement placement = new ScenePlacement(graphics, imported);
+        placement.normalGreenDown = defaultGreenDown(imported.file());
         for (ImportedMaterial source : imported.materials()) {
-            placement.materials.add(material(source));
+            final Material material = material(source);
+            material.setNormalGreenDown(placement.normalGreenDown);
+            placement.materials.add(material);
         }
         final Map<Integer, Placed> byMesh = new HashMap<>();
         final Deque<Node> open = new ArrayDeque<>();
@@ -189,6 +200,30 @@ public final class ScenePlacement {
             }
         }
         return placement;
+    }
+
+    /**
+     * Guess which way a file's normal maps point green: down, DirectX's way, for FBX files, which
+     * mostly come from tools that bake that way, and up, OpenGL's way, for the rest.
+     *
+     * @param file The model file.
+     * @return True for DirectX normal maps.
+     */
+    static boolean defaultGreenDown(@NonNull Path file) {
+        return file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".fbx");
+    }
+
+    /**
+     * Set which way every material's normal map points green, for when the guess was wrong. Render
+     * thread only; the materials are written to the GPU every frame.
+     *
+     * @param greenDown True for DirectX normal maps, false for OpenGL ones.
+     */
+    public void setNormalGreenDown(boolean greenDown) {
+        normalGreenDown = greenDown;
+        for (Material material : materials) {
+            material.setNormalGreenDown(greenDown);
+        }
     }
 
     /**
@@ -352,6 +387,12 @@ public final class ScenePlacement {
         material.getBaseColor().set(source.color());
         material.setRoughness(Float.isNaN(source.roughness()) ? 0.5f : source.roughness());
         material.setMetallic(Float.isNaN(source.metallic()) ? 0 : source.metallic());
+        material.getEmissive().set(source.emissive());
+        if (source.textures().containsKey(TextureSlot.EMISSIVE)
+                && source.emissive().lengthSquared() == 0) {
+            // A texture with no color to scale it by glows as the texture shows
+            material.getEmissive().set(1);
+        }
         if (source.color().w < 1) {
             material.setTransparency(Material.Transparency.TRANSLUCENT);
         }
@@ -473,14 +514,7 @@ public final class ScenePlacement {
             post.accept(
                     () -> {
                         for (Use use : users) {
-                            final Material material = materials.get(use.material());
-                            if (use.slot() == TextureSlot.NORMAL) {
-                                material.setNormalMap(texture);
-                            } else {
-                                material.setTexture(texture);
-                                // The texture's color stands in for the material's
-                                material.getBaseColor().set(1, 1, 1, material.getBaseColor().w);
-                            }
+                            apply(materials.get(use.material()), use.slot(), texture);
                         }
                     });
             ++texturesLoaded;
@@ -489,14 +523,39 @@ public final class ScenePlacement {
     }
 
     /**
-     * Whether a slot's texture is used yet. Only base color and normal maps are, until materials
-     * gain the other slots.
+     * Whether a slot's texture is used: base color, normal, packed specular (occlusion, roughness
+     * and metalness, as metal-rough scenes like Bistro pack them) and emissive. Lone roughness,
+     * metalness, occlusion and opacity maps aren't yet.
      *
      * @param slot The slot.
      * @return True if it is loaded.
      */
     static boolean applied(@NonNull TextureSlot slot) {
-        return slot == TextureSlot.BASE_COLOR || slot == TextureSlot.NORMAL;
+        return switch (slot) {
+            case BASE_COLOR, NORMAL, SPECULAR, EMISSIVE -> true;
+            default -> false;
+        };
+    }
+
+    /**
+     * Give a material a loaded texture.
+     *
+     * @param material The material.
+     * @param slot What the texture is for.
+     * @param texture The texture.
+     */
+    private static void apply(Material material, TextureSlot slot, TextureHandle texture) {
+        switch (slot) {
+            case NORMAL -> material.setNormalMap(texture);
+                // Specular maps' red isn't reliably occlusion; Bistro's are 0 there
+            case SPECULAR -> material.setOcclusionRoughnessMetal(texture);
+            case EMISSIVE -> material.setEmissiveMap(texture);
+            default -> {
+                material.setTexture(texture);
+                // The texture's color stands in for the material's
+                material.getBaseColor().set(1, 1, 1, material.getBaseColor().w);
+            }
+        }
     }
 
     /**

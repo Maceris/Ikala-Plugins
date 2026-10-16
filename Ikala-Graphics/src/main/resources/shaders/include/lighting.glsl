@@ -511,8 +511,9 @@ vec3 lightSurface(vec4 baseColor, Material material, vec3 viewPosition, vec3 ren
 #endif
     float nDotV = max(dot(normal, normalize(-viewPosition)), MIN_N_DOT_V);
     vec3 ambient = ambientLight.intensity * ambientLight.color * mix(skyLightFloor, 1.0, sky) * open
-        * ambientReflectance(sRGBToLinear(baseColor.rgb), material, nDotV);
-    vec3 finalColor = ambient + color;
+        * material.occlusion * ambientReflectance(sRGBToLinear(baseColor.rgb), material, nDotV);
+    // Light the surface gives off isn't shadowed or occluded, only fogged
+    vec3 finalColor = ambient + color + material.emissive;
 
     if (fog.enabled == 1 && fog.density > 0) {
         finalColor = calcFog(viewPosition, finalColor, fog, ambientLight.color, directionalLight);

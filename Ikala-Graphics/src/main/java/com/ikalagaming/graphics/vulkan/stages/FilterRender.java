@@ -316,7 +316,8 @@ public class FilterRender implements RenderStage {
 
         uniformData.putInt(ShaderBindings.Filter.HAS_GBUFFER_OFFSET, hasScene ? 1 : 0);
         TextureInfoVulkan[] gBuffer = frameData.gBuffer.textures();
-        for (int i = 0; i < GBuffer.TEXTURE_COUNT; i++) {
+        // Filters see the textures up to the material index
+        for (int i = 0; i <= GBuffer.MATERIAL; i++) {
             uniformData.putInt(
                     ShaderBindings.Filter.BASE_COLOR_INDEX_OFFSET + i * Integer.BYTES,
                     gBuffer[i].bindlessIndex);

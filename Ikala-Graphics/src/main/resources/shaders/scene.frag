@@ -50,6 +50,8 @@ layout(location = 0) out vec4 buffBaseColor;
 layout(location = 1) out vec4 buffNormal;
 layout(location = 2) out vec4 buffTangent;
 layout(location = 3) out uint buffMaterial;
+// The light the surface gives off, linear, and how much ambient light reaches it, see lights.frag
+layout(location = 4) out vec4 buffEmission;
 
 layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
 
@@ -165,7 +167,26 @@ void main() {
     vec3 normal = surfaceNormal;
     if (!averaged && material.normalMapIndex > 0) {
         mat3 TBN = mat3(tangent, bitangent, surfaceNormal);
-        normal = normalize(TBN * normalFromMap(sampleTexture(material.normalMapIndex)));
+        normal = normalize(TBN * normalFromMap(sampleTexture(material.normalMapIndex), material));
+    }
+
+    // Light given off, and roughness, metalness and occlusion from a packed texture, which stand
+    // in for the material's own
+    vec3 emission = material.emissive;
+    float occlusion = 1.0;
+    bool packedLook = false;
+    vec3 packedValues = vec3(1.0);
+    if (!averaged) {
+        if (material.emissiveIndex > 0) {
+            emission *= sampleTexture(material.emissiveIndex).rgb;
+        }
+        if (material.occlusionRoughnessMetalIndex > 0) {
+            packedValues = sampleTexture(material.occlusionRoughnessMetalIndex).rgb;
+            if ((material.flags & MATERIAL_FLAG_PACKED_OCCLUSION) != 0) {
+                occlusion = packedValues.r;
+            }
+            packedLook = true;
+        }
     }
 
     if (VOLUME_FADE && debugSources != 0u) {
@@ -182,10 +203,16 @@ void main() {
         buffBaseColor = vec4(baseColor.rgb, outBitangent.x);
         buffNormal = vec4(normal, outTextCoord.x);
         buffTangent = vec4(normalize(tangent), outTextCoord.y);
+    } else if (packedLook && debugHue < 0.0) {
+        // The packed texture's roughness and metalness, with the material's specular
+        buffBaseColor = vec4(baseColor.rgb, material.specular);
+        buffNormal = vec4(normal, packedValues.g);
+        buffTangent = vec4(normalize(tangent), packedValues.b);
     } else {
         buffBaseColor = baseColor;
         buffNormal = vec4(normal, NO_OVERRIDE);
         buffTangent = vec4(normalize(tangent), 1.0);
     }
     buffMaterial = outMaterialIdx;
+    buffEmission = vec4(emission, occlusion);
 }

@@ -173,7 +173,12 @@ public final class SceneImporter {
         if (materials.isEmpty()) {
             materials.add(
                     new ImportedMaterial(
-                            "default", new Vector4f(1), Float.NaN, Float.NaN, Map.of()));
+                            "default",
+                            new Vector4f(1),
+                            Float.NaN,
+                            Float.NaN,
+                            new Vector3f(),
+                            Map.of()));
         }
 
         final List<Mesh> meshes = new ArrayList<>();
@@ -424,6 +429,16 @@ public final class SceneImporter {
             if (!Float.isNaN(opacity)) {
                 base.w = opacity;
             }
+            final Vector3f emissive = new Vector3f();
+            if (Assimp.aiGetMaterialColor(
+                            aiMaterial,
+                            Assimp.AI_MATKEY_COLOR_EMISSIVE,
+                            Assimp.aiTextureType_NONE,
+                            0,
+                            color)
+                    == Assimp.aiReturn_SUCCESS) {
+                emissive.set(color.r(), color.g(), color.b());
+            }
             final float roughness = factor(aiMaterial, Assimp.AI_MATKEY_ROUGHNESS_FACTOR, stack);
             final float metallic = factor(aiMaterial, Assimp.AI_MATKEY_METALLIC_FACTOR, stack);
 
@@ -458,7 +473,7 @@ public final class SceneImporter {
                     break;
                 }
             }
-            return new ImportedMaterial(name, base, roughness, metallic, textures);
+            return new ImportedMaterial(name, base, roughness, metallic, emissive, textures);
         }
     }
 

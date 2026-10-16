@@ -8,7 +8,7 @@ import java.util.Objects;
 /**
  * The gBuffer textures.
  *
- * @param textures Base color, normal, tangent, and material textures.
+ * @param textures Base color, normal, tangent, material, and emission textures.
  * @param depth The depth buffer.
  * @param width Width of the buffers.
  * @param height Height of the buffers.
@@ -31,8 +31,14 @@ public record GBuffer(
     /** Index of the material index texture. */
     public static final int MATERIAL = 3;
 
+    /**
+     * Index of the emission texture: the light a surface gives off, linear, and how much ambient
+     * light reaches it in alpha.
+     */
+    public static final int EMISSION = 4;
+
     /** The number of textures, not counting depth. */
-    public static final int TEXTURE_COUNT = 4;
+    public static final int TEXTURE_COUNT = 5;
 
     @Override
     public String toString() {

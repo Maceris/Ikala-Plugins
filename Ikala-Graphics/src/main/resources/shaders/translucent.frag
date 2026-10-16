@@ -81,7 +81,20 @@ void main() {
     if (material.normalMapIndex > 0) {
         mat3 TBN = mat3(outTangent, outBitangent, outNormal);
         vec4 texel = texture(bindlessTextures[nonuniformEXT(material.normalMapIndex)], outTextCoord);
-        normal = normalize(TBN * normalFromMap(texel));
+        normal = normalize(TBN * normalFromMap(texel, material));
+    }
+    if (material.emissiveIndex > 0) {
+        material.emissive *=
+            texture(bindlessTextures[nonuniformEXT(material.emissiveIndex)], outTextCoord).rgb;
+    }
+    if (material.occlusionRoughnessMetalIndex > 0) {
+        vec3 orm = texture(bindlessTextures[nonuniformEXT(material.occlusionRoughnessMetalIndex)],
+            outTextCoord).rgb;
+        if ((material.flags & MATERIAL_FLAG_PACKED_OCCLUSION) != 0) {
+            material.occlusion = orm.r;
+        }
+        material.roughness = orm.g;
+        material.metallic = orm.b;
     }
     // Both sides of a pane are drawn, and the back is lit from behind
     if (!gl_FrontFacing) {

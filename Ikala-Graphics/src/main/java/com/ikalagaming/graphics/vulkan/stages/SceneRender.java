@@ -22,6 +22,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.joml.Vector3f;
 import org.joml.Vector4f;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
@@ -116,6 +117,24 @@ public class SceneRender implements RenderStage {
             materialData.putFloat(material.getSubsurface());
             materialData.putInt(state.textureRegistry.slotOrDefault(material.getNormalMap()));
             materialData.putInt(state.textureRegistry.slotOrDefault(material.getTexture()));
+
+            final Vector3f emissive = material.getEmissive();
+            materialData.putFloat(emissive.x);
+            materialData.putFloat(emissive.y);
+            materialData.putFloat(emissive.z);
+            // Full ambient light, unless a pixel's occlusion texture says less
+            materialData.putFloat(1.0f);
+            materialData.putInt(
+                    state.textureRegistry.slotOrDefault(material.getOcclusionRoughnessMetal()));
+            materialData.putInt(state.textureRegistry.slotOrDefault(material.getEmissiveMap()));
+            materialData.putInt(
+                    (material.isNormalGreenDown()
+                                    ? ShaderBindings.Scene.Material.FLAG_NORMAL_GREEN_DOWN
+                                    : 0)
+                            | (material.isPackedOcclusion()
+                                    ? ShaderBindings.Scene.Material.FLAG_PACKED_OCCLUSION
+                                    : 0));
+            materialData.putInt(0);
         }
     }
 
@@ -1215,7 +1234,8 @@ public class SceneRender implements RenderStage {
                                             PipelineManagerVulkan.GBUFFER_COLOR_FORMAT,
                                             PipelineManagerVulkan.GBUFFER_COLOR_FORMAT,
                                             PipelineManagerVulkan.GBUFFER_COLOR_FORMAT,
-                                            PipelineManagerVulkan.GBUFFER_MATERIAL_FORMAT))
+                                            PipelineManagerVulkan.GBUFFER_MATERIAL_FORMAT,
+                                            PipelineManagerVulkan.GBUFFER_EMISSION_FORMAT))
                             .depthAttachmentFormat(PipelineManagerVulkan.DEPTH_FORMAT);
 
             // No blending, like OpenGL during the scene pass

@@ -56,6 +56,10 @@ void main()
         material.specular = baseColor.a;
         baseColor.a = 1.0;
     }
+    // The light the surface gives off and how much ambient light reaches it, from its textures
+    vec4 emission = texelFetch(bindlessTextures[nonuniformEXT(emissionSamplerIndex)], pixel, 0);
+    material.emissive = emission.rgb;
+    material.occlusion = emission.a;
 
     // How far the texture coordinates move a pixel, before any pixel of the quad is discarded
     vec2 pixelStep = vec2(dFdx(outTextCoord.x), dFdy(outTextCoord.y));

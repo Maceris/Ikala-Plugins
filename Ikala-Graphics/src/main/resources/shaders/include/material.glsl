@@ -20,13 +20,32 @@ struct Material
     float subsurface;
     int normalMapIndex;
     int textureIndex;
+
+    // Light given off, linear, times the emissive map if there is one
+    vec3 emissive;
+    // How much ambient light reaches the surface, 1 unless a pixel's occlusion says less
+    float occlusion;
+    // Packed occlusion (r), roughness (g) and metalness (b), linear, or 0 for none
+    int occlusionRoughnessMetalIndex;
+    int emissiveIndex;
+    // See MATERIAL_FLAG_*
+    int flags;
+    int padding;
 };
 
+// The normal map's green channel points down the texture, as in DirectX
+const int MATERIAL_FLAG_NORMAL_GREEN_DOWN = 1;
+// The packed occlusion, roughness and metal map's red channel is occlusion; some leave it unused
+const int MATERIAL_FLAG_PACKED_OCCLUSION = 2;
+
 // A tangent space normal from a normal map texel: x and y from red and green, z rebuilt, so two
-// channel (BC5) maps read the same as three channel ones.
-vec3 normalFromMap(vec4 texel)
+// channel (BC5) maps read the same as three channel ones. Green flips for maps made DirectX's way.
+vec3 normalFromMap(vec4 texel, Material material)
 {
     vec2 xy = texel.xy * 2.0 - 1.0;
+    if ((material.flags & MATERIAL_FLAG_NORMAL_GREEN_DOWN) != 0) {
+        xy.y = -xy.y;
+    }
     return vec3(xy, sqrt(max(0.0, 1.0 - dot(xy, xy))));
 }
 
