@@ -154,6 +154,15 @@ public class GraphicsManager {
     /** The windows besides the main one, in the order they were created. Main thread only. */
     private static final List<Window> extraWindows = new ArrayList<>();
 
+    /**
+     * The windows IkGui created for its viewports, which it also closes. Kept apart from the other
+     * windows, so nothing else closes them or draws the scene in them. Main thread only.
+     */
+    private static final List<Window> guiWindows = new ArrayList<>();
+
+    /** Connects IkGui to GLFW, null while graphics aren't running. */
+    private static GlfwGuiBackend guiBackend;
+
     /** Work other threads asked to do on the main thread, run at the start of the next tick. */
     private static final Queue<Runnable> mainThreadTasks = new ConcurrentLinkedQueue<>();
 
@@ -245,8 +254,13 @@ public class GraphicsManager {
         ikIO.iniFilename = null;
         // Tab, arrow keys and gamepads move between items, so menus work without a mouse
         ikIO.configFlags |= ConfigFlags.NAV_ENABLE_KEYBOARD | ConfigFlags.NAV_ENABLE_GAMEPAD;
+        if (settings.guiViewports) {
+            // GUI windows can be dragged out of the main window into windows of their own
+            ikIO.configFlags |= ConfigFlags.VIEWPORTS_ENABLE;
+        }
         ikIO.displaySize.set(window.getWidth(), window.getHeight());
-        window.setupIkGuiPlatformIO();
+        guiBackend = new GlfwGuiBackend(window);
+        guiBackend.install();
     }
 
     /**
@@ -411,6 +425,8 @@ public class GraphicsManager {
         if (RenderConfig.hasGuiStage(renderInstance.getPipelineConfig())) {
             final IkIO io = IkGui.getIO();
             windowManager.drawGui((int) io.displaySize.x, (int) io.displaySize.y);
+            // Creates, moves and closes the windows of IkGui viewports
+            IkGui.updatePlatformWindows();
             gui = guiDrawData();
         }
         renderInstance.render(scene, sceneWindow, gui);
@@ -440,7 +456,7 @@ public class GraphicsManager {
         for (Viewport viewport : IkGui.getPlatformIO().viewports) {
             if (viewport.platformHandle instanceof Window window
                     && window != mainWindow
-                    && extraWindows.contains(window)
+                    && guiWindows.contains(window)
                     && viewport.drawData.valid) {
                 gui.put(window, viewport.drawData);
             }
@@ -506,9 +522,63 @@ public class GraphicsManager {
             throw e;
         }
         extraWindows.add(window);
+        if (options.guiInput()) {
+            guiBackend.installInputCallbacks(window);
+        }
         log.debug("Created window {}", window.getTitle());
         new WindowCreated(window.getWindowHandle()).fire();
         return window;
+    }
+
+    /**
+     * Create a hidden window for an IkGui viewport. Its swapchain is made separately, once IkGui
+     * asks the renderer for it.
+     *
+     * @param options How to create the window.
+     * @return The window.
+     */
+    static Window createGuiWindow(@NonNull WindowOptions options) {
+        Window window = new Window(options, GraphicsManager::windowResized);
+        guiWindows.add(window);
+        return window;
+    }
+
+    /**
+     * Give an IkGui viewport's window its swapchain.
+     *
+     * @param window The window.
+     */
+    static void createGuiPresentation(@NonNull Window window) {
+        renderInstance.createPresentation(window);
+    }
+
+    /**
+     * Destroy an IkGui viewport's swapchain, before its window.
+     *
+     * @param window The window.
+     */
+    static void destroyGuiPresentation(@NonNull Window window) {
+        renderInstance.destroyPresentation(window);
+    }
+
+    /**
+     * Destroy an IkGui viewport's window, once its swapchain is gone.
+     *
+     * @param window The window.
+     */
+    static void destroyGuiWindow(@NonNull Window window) {
+        if (guiWindows.remove(window)) {
+            window.destroy();
+        }
+    }
+
+    /**
+     * IkGui resized a viewport's window, so its swapchain follows.
+     *
+     * @param window The window.
+     */
+    static void guiWindowResized(@NonNull Window window) {
+        renderInstance.resize(window);
     }
 
     /**
@@ -669,6 +739,12 @@ public class GraphicsManager {
             // Queues everything up for deletion, which the renderer processes as it cleans up
             scene.cleanup();
         }
+        if (guiBackend != null && IkGui.getContext() != null) {
+            // Destroys the windows of viewports, while the renderer can still destroy their
+            // swapchains
+            guiBackend.shutdown();
+        }
+        guiBackend = null;
         // Destroys the window surfaces too, which must go before the windows
         renderInstance.cleanup();
         if (IkGui.getContext() != null) {
@@ -677,6 +753,8 @@ public class GraphicsManager {
 
         extraWindows.forEach(Window::destroy);
         extraWindows.clear();
+        guiWindows.forEach(Window::destroy);
+        guiWindows.clear();
         mainThreadTasks.clear();
         if (null != mainWindow) {
             mainWindow.destroy();
@@ -713,8 +791,8 @@ public class GraphicsManager {
             return Launcher.STATUS_REQUEST_REMOVAL;
         }
 
-        // Handles the input for every window, though only the main window's goes to IkGui
-        mainWindow.pollEvents();
+        // Handles the input for every window
+        guiBackend.pollEvents();
         closeClosedWindows();
         runMainThreadTasks();
         uiManager.setContentScale(mainWindow.getContentScale());

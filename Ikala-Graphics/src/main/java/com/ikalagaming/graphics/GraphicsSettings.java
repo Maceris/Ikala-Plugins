@@ -34,6 +34,12 @@ public class GraphicsSettings {
     public int requestedWindowWidth = 0;
 
     /**
+     * Whether GUI windows can be dragged out of the main window into windows of their own, using
+     * IkGui viewports. Read when graphics start.
+     */
+    public boolean guiViewports = false;
+
+    /**
      * The target frames per second. If zero (or negative), this will be interpreted as requesting
      * VSync and thus will be effectively whatever the monitor's refresh rate is.
      */

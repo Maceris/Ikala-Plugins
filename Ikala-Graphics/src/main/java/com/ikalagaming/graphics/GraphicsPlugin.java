@@ -40,6 +40,9 @@ public class GraphicsPlugin extends Plugin {
     /** The config value of the level of detail cache's size cap, in mebibytes. */
     private static final String LOD_CACHE_MAX_MB = "lod-cache-max-mb";
 
+    /** The config value turning IkGui viewports on, so GUI windows can leave the main window. */
+    private static final String GUI_VIEWPORTS = "gui-viewports";
+
     /** Bytes in a mebibyte. */
     private static final long BYTES_PER_MIB = 1024L * 1024L;
 
@@ -86,6 +89,10 @@ public class GraphicsPlugin extends Plugin {
         settings.antiAliasing = true;
         settings.targetFPS = GraphicsManager.TARGET_FPS;
         readLodCache(settings);
+        final PluginConfig config = ConfigManager.loadConfig(GraphicsPlugin.PLUGIN_NAME);
+        if (config.isPresent(GUI_VIEWPORTS)) {
+            settings.guiViewports = config.getBoolean(GUI_VIEWPORTS);
+        }
 
         if (!GraphicsManager.initialize()) {
             return false;

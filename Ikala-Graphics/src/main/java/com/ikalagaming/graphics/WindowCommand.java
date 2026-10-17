@@ -1,5 +1,11 @@
 package com.ikalagaming.graphics;
 
+import com.ikalagaming.graphics.gui.IkGui;
+import com.ikalagaming.graphics.gui.component.GuiWindow;
+import com.ikalagaming.graphics.gui.data.Viewport;
+import com.ikalagaming.graphics.gui.enums.Condition;
+import com.ikalagaming.graphics.gui.flags.WindowFlags;
+
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -8,7 +14,9 @@ import java.util.List;
 /**
  * The {@value #COMMAND} console command, for trying out extra windows: {@code window open [width
  * height]} opens a blank one, {@code window close} closes every extra window, {@code window list}
- * lists them all, and {@code window scene <number|main>} draws the scene in another window.
+ * lists them all, {@code window scene <number|main>} draws the scene in another window, and {@code
+ * window viewport} shows or hides a GUI window placed half outside the main window, which gets a
+ * window of its own when IkGui viewports are on.
  */
 @Slf4j
 final class WindowCommand {
@@ -21,6 +29,39 @@ final class WindowCommand {
 
     /** The height of a window opened without a size, in screen coordinates. */
     private static final int DEFAULT_HEIGHT = 360;
+
+    /** The name the viewport test window is shown under. */
+    private static final String VIEWPORT_TEST_WINDOW = "graphics/viewport-test";
+
+    /**
+     * A GUI window that starts out over the right edge of the main window, so it can't be merged
+     * into the main viewport. Unlike other GUI windows, it isn't kept in the main viewport.
+     */
+    private static final class ViewportTestWindow extends GuiWindow {
+        /** Create the window. */
+        ViewportTestWindow() {
+            super("Viewport test", WindowFlags.NONE);
+        }
+
+        @Override
+        public void draw(final int width, final int height) {
+            final Viewport main = IkGui.getMainViewport();
+            IkGui.setNextWindowPos(
+                    main.position.x + main.size.x - 150,
+                    main.position.y + 120,
+                    Condition.APPEARING);
+            IkGui.setNextWindowSize(320, 160, Condition.APPEARING);
+            if (IkGui.begin(title, windowOpen, windowFlags)) {
+                final Viewport viewport = IkGui.getWindowViewport();
+                IkGui.text("This window can leave the main window.");
+                IkGui.text(
+                        viewport == main
+                                ? "It is in the main viewport."
+                                : "It has a viewport of its own.");
+            }
+            IkGui.end();
+        }
+    }
 
     /** Counts opened windows, to give each a different title. */
     private static int opened = 0;
@@ -42,6 +83,7 @@ final class WindowCommand {
             }
             case "close" -> GraphicsManager.runOnMainThread(WindowCommand::closeExtraWindows);
             case "list" -> GraphicsManager.runOnMainThread(WindowCommand::list);
+            case "viewport" -> GraphicsManager.runOnMainThread(WindowCommand::toggleViewportTest);
             case "scene" -> {
                 final String which = args.size() < 2 ? "main" : args.get(1);
                 GraphicsManager.runOnMainThread(() -> moveScene(which));
@@ -49,7 +91,7 @@ final class WindowCommand {
             default ->
                     log.info(
                             "Usage: window [open [width height] | close | list | scene"
-                                    + " <number|main>]");
+                                    + " <number|main> | viewport]");
         }
     }
 
@@ -118,6 +160,23 @@ final class WindowCommand {
             }
         }
         log.info("There is no open window {}", which);
+    }
+
+    /** Show the viewport test window, or hide it if it is showing. Main thread. */
+    private static void toggleViewportTest() {
+        final var windows = GraphicsManager.getWindowManager();
+        if (windows.isVisible(VIEWPORT_TEST_WINDOW)) {
+            windows.removeWindow(VIEWPORT_TEST_WINDOW);
+            log.info("Hid the viewport test window");
+            return;
+        }
+        final ViewportTestWindow window = new ViewportTestWindow();
+        windows.addWindow(
+                GraphicsManager.forPlugin(GraphicsPlugin.PLUGIN_NAME),
+                VIEWPORT_TEST_WINDOW,
+                window);
+        windows.show(VIEWPORT_TEST_WINDOW);
+        log.info("Showed the viewport test window");
     }
 
     /** Log every open window. Main thread. */

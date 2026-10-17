@@ -14,8 +14,10 @@ import lombok.NonNull;
  * @param floating Whether the window stays on top of other windows.
  * @param focusOnShow Whether the window takes the input focus when it is shown.
  * @param icon Whether to give the window the program icon.
- * @param guiInput Whether the window's mouse, keyboard and focus go to IkGui. Only one window can
- *     send them until IkGui gets a platform backend for several windows.
+ * @param guiInput Whether the window's mouse, keyboard and focus go to IkGui. With IkGui viewports
+ *     on, the windows IkGui creates send theirs too.
+ * @param visible Whether to show the window as soon as it is created. Hidden windows are shown with
+ *     {@link Window#show(boolean)} once they are ready.
  */
 public record WindowOptions(
         @NonNull String title,
@@ -26,7 +28,8 @@ public record WindowOptions(
         boolean floating,
         boolean focusOnShow,
         boolean icon,
-        boolean guiInput) {
+        boolean guiInput,
+        boolean visible) {
 
     /**
      * The options for the main window, which is decorated and resizable, and maximized unless the
@@ -49,6 +52,7 @@ public record WindowOptions(
                 false,
                 true,
                 true,
+                true,
                 true);
     }
 
@@ -62,7 +66,23 @@ public record WindowOptions(
      * @return The options for the window.
      */
     public static WindowOptions plain(@NonNull String title, int width, int height) {
-        return new WindowOptions(title, width, height, true, true, false, true, true, false);
+        return new WindowOptions(title, width, height, true, true, false, true, true, false, true);
+    }
+
+    /**
+     * The options for a window IkGui creates for a viewport, which starts hidden, sends its input
+     * to IkGui, and doesn't take the focus when shown.
+     *
+     * @param width The width in screen coordinates.
+     * @param height The height in screen coordinates.
+     * @param decorated Whether it gets a title bar and border from the OS.
+     * @param floating Whether it stays on top of other windows.
+     * @return The options for the window.
+     */
+    public static WindowOptions guiViewport(
+            int width, int height, boolean decorated, boolean floating) {
+        return new WindowOptions(
+                "Untitled", width, height, decorated, true, floating, false, false, true, false);
     }
 
     /**

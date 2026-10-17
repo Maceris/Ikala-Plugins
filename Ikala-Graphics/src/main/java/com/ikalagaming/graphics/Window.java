@@ -7,11 +7,6 @@ import com.ikalagaming.graphics.exceptions.TextureException;
 import com.ikalagaming.graphics.exceptions.WindowCreationException;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.IkIO;
-import com.ikalagaming.graphics.gui.data.PlatformIO;
-import com.ikalagaming.graphics.gui.enums.Key;
-import com.ikalagaming.graphics.gui.enums.MouseButton;
-import com.ikalagaming.graphics.gui.flags.BackendFlags;
-import com.ikalagaming.graphics.gui.flags.ConfigFlags;
 import com.ikalagaming.launcher.PluginFolder;
 import com.ikalagaming.launcher.PluginFolder.ResourceType;
 import com.ikalagaming.plugins.config.ConfigManager;
@@ -30,12 +25,13 @@ import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.util.function.Consumer;
 
-/** Provides convenience methods for a GLFW window. */
+/**
+ * Provides convenience methods for a GLFW window. Input that goes to IkGui is hooked up by {@link
+ * GlfwGuiBackend}.
+ */
 @Slf4j
 @Getter
 public class Window {
-    // TODO(ches) move this somewhere more specific, like frontend. Possibly tighter integration
-    // with the gui system
 
     /**
      * Set up the window hints.
@@ -45,6 +41,8 @@ public class Window {
     private static void setWindowHints(@NonNull WindowOptions options) {
         glfwDefaultWindowHints();
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        // Windows that start hidden are shown when ready, which shouldn't take the focus
+        glfwWindowHint(GLFW_FOCUSED, options.visible() ? GLFW_TRUE : GLFW_FALSE);
         glfwWindowHint(GLFW_RESIZABLE, options.resizable() ? GLFW_TRUE : GLFW_FALSE);
         glfwWindowHint(GLFW_DECORATED, options.decorated() ? GLFW_TRUE : GLFW_FALSE);
         glfwWindowHint(GLFW_FLOATING, options.floating() ? GLFW_TRUE : GLFW_FALSE);
@@ -80,39 +78,28 @@ public class Window {
     /** Whether we are currently fullscreen (borderless). */
     private boolean fullscreen;
 
-    /** Whether the OS cursor is over the window, from GLFW. */
-    private volatile boolean cursorInside;
-
     /** The resize function to call. */
     private final Consumer<Window> resizeFunc;
 
-    /** The title that was provided for the window. */
-    private final String title;
-
-    /** The mouse cursors shown for IkGui, null until the IkGui platform IO is set up. */
-    private GlfwMouseCursors mouseCursors;
-
-    /** How IkGui changes the cursor of this window. */
-    private final GlfwMouseCursors.CursorTarget cursorTarget =
-            new GlfwMouseCursors.CursorTarget() {
-                @Override
-                public int getCursorMode() {
-                    return glfwGetInputMode(windowHandle, GLFW_CURSOR);
-                }
-
-                @Override
-                public void setCursorMode(int mode) {
-                    glfwSetInputMode(windowHandle, GLFW_CURSOR, mode);
-                }
-
-                @Override
-                public void setCursor(long cursor) {
-                    glfwSetCursor(windowHandle, cursor);
-                }
-            };
+    /** The title shown for the window. */
+    private String title;
 
     /**
-     * Create and show a new window. {@link GlfwPlatform} must be initialized first.
+     * Whether the window's mouse, keyboard and focus go to IkGui.
+     *
+     * @return True if IkGui gets the window's input.
+     */
+    private final boolean guiInput;
+
+    /** Where {@link #getContentScale} reads the horizontal scale into, kept between calls. */
+    private final float[] contentScaleX = new float[1];
+
+    /** Where it reads the vertical scale into. */
+    private final float[] contentScaleY = new float[1];
+
+    /**
+     * Create a new window, and show it unless the options say not to. {@link GlfwPlatform} must be
+     * initialized first.
      *
      * @param options How to create the window.
      * @param resizeFunc The function to call upon the window resizing.
@@ -124,6 +111,7 @@ public class Window {
         }
         this.resizeFunc = resizeFunc;
         this.fullscreen = false;
+        this.guiInput = options.guiInput();
 
         setWindowHints(options);
 
@@ -150,13 +138,15 @@ public class Window {
             throw new WindowCreationException(error);
         }
 
-        setCallbacks(options.guiInput());
+        glfwSetFramebufferSizeCallback(windowHandle, (window, w, h) -> resized(w, h));
 
         if (options.icon() && glfwGetPlatform() != GLFW_PLATFORM_COCOA) {
             setWindowIcon();
         }
 
-        glfwShowWindow(windowHandle);
+        if (options.visible()) {
+            glfwShowWindow(windowHandle);
+        }
 
         int[] arrWidth = new int[1];
         int[] arrHeight = new int[1];
@@ -166,90 +156,25 @@ public class Window {
     }
 
     /**
-     * Fetch the IkGui IO to forward input to, if IkGui is set up yet.
+     * Show the window, if it was created hidden.
      *
-     * @return The IkGui IO, or null if there is no IkGui context yet.
+     * @param focus Whether to give it the input focus too.
      */
-    private static IkIO getIkGuiIO() {
-        return IkGui.getContext() == null ? null : IkGui.getIO();
-    }
-
-    /**
-     * The IkGui IO to send the player's mouse and keyboard input to, unless UI automation is
-     * driving input, so the player's input doesn't fight it.
-     *
-     * @return The IO, or null if there is no context or automation is driving.
-     */
-    private static IkIO getPlayerInputIO() {
-        if (isAutomationDriving()) {
-            return null;
+    public void show(boolean focus) {
+        glfwShowWindow(windowHandle);
+        if (focus) {
+            glfwFocusWindow(windowHandle);
         }
-        return getIkGuiIO();
     }
 
     /**
-     * Whether UI automation is driving input instead of the player.
+     * Change the title shown for the window.
      *
-     * @return True while an automation run drives input.
+     * @param newTitle The new title.
      */
-    private static boolean isAutomationDriving() {
-        return GraphicsManager.getUiManager().getAutomation().isDriving();
-    }
-
-    /**
-     * Convert a GLFW mouse button into an IkGui mouse button.
-     *
-     * @param button The GLFW mouse button.
-     * @return The IkGui mouse button, or MouseButton.NONE if there is no equivalent.
-     */
-    private static MouseButton mapGLFWToIkGuiMouseButton(int button) {
-        return switch (button) {
-            case GLFW_MOUSE_BUTTON_1 -> MouseButton.LEFT;
-            case GLFW_MOUSE_BUTTON_2 -> MouseButton.RIGHT;
-            case GLFW_MOUSE_BUTTON_3 -> MouseButton.MIDDLE;
-            case GLFW_MOUSE_BUTTON_4 -> MouseButton.BACK;
-            case GLFW_MOUSE_BUTTON_5 -> MouseButton.FORWARD;
-            default -> MouseButton.NONE;
-        };
-    }
-
-    /**
-     * Send the modifier key state to IkGui. GLFW provides the modifiers with key and mouse button
-     * events, which is more reliable than tracking the left/right keys ourselves, like when a
-     * modifier is released while the window is unfocused.
-     *
-     * @param io The IkGui IO.
-     * @param mods The GLFW modifier bit flags.
-     */
-    private static void updateKeyModifiers(@NonNull IkIO io, int mods) {
-        io.addKeyEvent(Key.MOD_CTRL, (mods & GLFW_MOD_CONTROL) != 0);
-        io.addKeyEvent(Key.MOD_SHIFT, (mods & GLFW_MOD_SHIFT) != 0);
-        io.addKeyEvent(Key.MOD_ALT, (mods & GLFW_MOD_ALT) != 0);
-        io.addKeyEvent(Key.MOD_SUPER, (mods & GLFW_MOD_SUPER) != 0);
-    }
-
-    /**
-     * GLFW reports the modifier state from before a modifier key event, so fix up the modifiers
-     * when the key itself is a modifier.
-     *
-     * @param key The GLFW key code.
-     * @param action The GLFW action.
-     * @param mods The GLFW modifier bit flags provided with the key event.
-     * @return The modifier bit flags including the effect of this key event.
-     */
-    private static int keyToModifier(int key, int action, int mods) {
-        final int modifier =
-                switch (key) {
-                    case GLFW_KEY_LEFT_CONTROL, GLFW_KEY_RIGHT_CONTROL -> GLFW_MOD_CONTROL;
-                    case GLFW_KEY_LEFT_SHIFT, GLFW_KEY_RIGHT_SHIFT -> GLFW_MOD_SHIFT;
-                    case GLFW_KEY_LEFT_ALT, GLFW_KEY_RIGHT_ALT -> GLFW_MOD_ALT;
-                    case GLFW_KEY_LEFT_SUPER, GLFW_KEY_RIGHT_SUPER -> GLFW_MOD_SUPER;
-                    default -> 0;
-                };
-        if (modifier == 0) {
-            return mods;
-        }
-        return action == GLFW_RELEASE ? mods & ~modifier : mods | modifier;
+    public void setTitle(@NonNull String newTitle) {
+        title = newTitle;
+        glfwSetWindowTitle(windowHandle, newTitle);
     }
 
     /**
@@ -267,10 +192,6 @@ public class Window {
             return;
         }
 
-        if (mouseCursors != null) {
-            mouseCursors.destroy();
-            mouseCursors = null;
-        }
         Callbacks.glfwFreeCallbacks(windowHandle);
         glfwDestroyWindow(windowHandle);
         windowHandle = NULL;
@@ -293,9 +214,11 @@ public class Window {
      * @return True if the key is pressed, false if not.
      */
     public boolean isKeyPressed(int keyCode) {
-        final IkIO io = getIkGuiIO();
-        if (io != null && io.wantCaptureKeyboard) {
-            return false;
+        if (IkGui.getContext() != null) {
+            final IkIO io = IkGui.getIO();
+            if (io.wantCaptureKeyboard) {
+                return false;
+            }
         }
         return glfwGetKey(windowHandle, keyCode) == GLFW_PRESS;
     }
@@ -309,72 +232,6 @@ public class Window {
     public float getContentScale() {
         glfwGetWindowContentScale(windowHandle, contentScaleX, contentScaleY);
         return contentScaleX[0];
-    }
-
-    /** Where {@link #getContentScale} reads the horizontal scale into, kept between calls. */
-    private final float[] contentScaleX = new float[1];
-
-    /** Where it reads the vertical scale into. */
-    private final float[] contentScaleY = new float[1];
-
-    /**
-     * Send the first connected gamepad's state to IkGui, and tell IkGui whether there is one.
-     *
-     * @param io The IkGui IO to send key events to.
-     */
-    private static void updateGamepad(@NonNull IkIO io) {
-        io.backendFlags &= ~BackendFlags.HAS_GAMEPAD;
-        for (int joystick = GLFW_JOYSTICK_1; joystick <= GLFW_JOYSTICK_LAST; ++joystick) {
-            if (!glfwJoystickIsGamepad(joystick)) {
-                continue;
-            }
-            try (MemoryStack stack = MemoryStack.stackPush()) {
-                GLFWGamepadState state = GLFWGamepadState.malloc(stack);
-                if (!glfwGetGamepadState(joystick, state)) {
-                    continue;
-                }
-                byte[] buttons = new byte[GLFW_GAMEPAD_BUTTON_LAST + 1];
-                float[] axes = new float[GLFW_GAMEPAD_AXIS_LAST + 1];
-                for (int i = 0; i < buttons.length; ++i) {
-                    buttons[i] = state.buttons(i);
-                }
-                for (int i = 0; i < axes.length; ++i) {
-                    axes[i] = state.axes(i);
-                }
-                io.backendFlags |= BackendFlags.HAS_GAMEPAD;
-                GamepadInput.apply(buttons, axes, io::addKeyAnalogEvent);
-            }
-            return;
-        }
-    }
-
-    /** Poll for events and process input. */
-    public void pollEvents() {
-        if (IkGui.getContext() != null) {
-            final IkIO io = IkGui.getIO();
-            // Move the OS cursor if navigation requested it (io.configNavMoveSetMousePosition)
-            if (io.wantSetMousePosition) {
-                glfwSetCursorPos(windowHandle, io.mousePosition.x, io.mousePosition.y);
-            }
-            // Show the cursor shape IkGui wants
-            if (mouseCursors != null) {
-                mouseCursors.update(
-                        cursorTarget,
-                        IkGui.getMouseCursor(),
-                        (io.configFlags & ConfigFlags.NO_MOUSE_CURSOR_CHANGE) != 0,
-                        io.configMouseDrawCursor);
-            }
-        }
-        glfwPollEvents();
-        if (IkGui.getContext() != null) {
-            final IkIO io = IkGui.getIO();
-            // Automation moves its own mouse, which counts as inside even when the real one isn't
-            final boolean driving = isAutomationDriving();
-            io.mouseInsideWindow = cursorInside || driving;
-            if (!driving) {
-                updateGamepad(io);
-            }
-        }
     }
 
     /**
@@ -391,95 +248,6 @@ public class Window {
         } catch (Exception e) {
             log.warn("Error calling resize callback", e);
         }
-    }
-
-    /**
-     * Set up the window callbacks.
-     *
-     * @param guiInput Whether to send the window's input and focus to IkGui.
-     */
-    private void setCallbacks(boolean guiInput) {
-
-        glfwSetFramebufferSizeCallback(windowHandle, (window, w, h) -> resized(w, h));
-        if (!guiInput) {
-            return;
-        }
-
-        glfwSetKeyCallback(
-                windowHandle,
-                (window, key, scancode, action, mods) -> {
-                    // Key repeats are generated by IkGui itself
-                    if (action != GLFW_PRESS && action != GLFW_RELEASE) {
-                        return;
-                    }
-                    final IkIO io = getPlayerInputIO();
-                    if (io == null) {
-                        return;
-                    }
-                    updateKeyModifiers(io, keyToModifier(key, action, mods));
-                    final int translatedKey = translateUntranslatedKey(key, scancode);
-                    io.addKeyEvent(mapGLFWToIkGuiKey(translatedKey), action == GLFW_PRESS);
-                });
-        glfwSetWindowFocusCallback(
-                windowHandle,
-                (window, focused) -> {
-                    final IkIO io = getIkGuiIO();
-                    if (io != null) {
-                        io.addFocusEvent(focused);
-                    }
-                });
-        // GLFW only reports the cursor entering later, so start from where it is now
-        cursorInside = glfwGetWindowAttrib(windowHandle, GLFW_HOVERED) == GLFW_TRUE;
-        glfwSetCursorEnterCallback(
-                windowHandle,
-                (window, entered) -> {
-                    cursorInside = entered;
-                    final IkIO io = getIkGuiIO();
-                    if (io != null) {
-                        io.mouseInsideWindow = entered || isAutomationDriving();
-                    }
-                });
-        glfwSetCursorPosCallback(
-                windowHandle,
-                (window, posX, posY) -> {
-                    // Keep sending positions while the cursor is disabled, since the camera
-                    // controls use the mouse delta from IkIO
-                    final IkIO io = getPlayerInputIO();
-                    if (io != null) {
-                        io.addMousePosEvent((float) posX, (float) posY);
-                    }
-                });
-        glfwSetMouseButtonCallback(
-                windowHandle,
-                (window, button, action, mods) -> {
-                    final MouseButton buttonType = mapGLFWToIkGuiMouseButton(button);
-                    if (buttonType == MouseButton.NONE
-                            || (action != GLFW_PRESS && action != GLFW_RELEASE)) {
-                        return;
-                    }
-                    final IkIO io = getPlayerInputIO();
-                    if (io == null) {
-                        return;
-                    }
-                    updateKeyModifiers(io, mods);
-                    io.addMouseButtonEvent(buttonType, action == GLFW_PRESS);
-                });
-        glfwSetScrollCallback(
-                windowHandle,
-                (window, xOffset, yOffset) -> {
-                    final IkIO io = getPlayerInputIO();
-                    if (io != null) {
-                        io.addMouseWheelEvent((float) xOffset, (float) yOffset);
-                    }
-                });
-        glfwSetCharCallback(
-                windowHandle,
-                (window, codepoint) -> {
-                    final IkIO io = getPlayerInputIO();
-                    if (io != null) {
-                        io.addInputCharacter(codepoint);
-                    }
-                });
     }
 
     /** Set up the window icon. */
@@ -526,8 +294,8 @@ public class Window {
     }
 
     /**
-     * Ask the window to close, as if the user closed it, which shuts graphics down on the next
-     * tick.
+     * Ask the window to close, as if the user closed it. For the main window, that shuts graphics
+     * down on the next tick.
      */
     public void requestClose() {
         glfwSetWindowShouldClose(windowHandle, true);
@@ -542,204 +310,8 @@ public class Window {
         return glfwWindowShouldClose(windowHandle);
     }
 
-    /**
-     * Hook up the IkGui platform functions (like the clipboard) to this window. Call this after the
-     * IkGui context is created.
-     */
-    public void setupIkGuiPlatformIO() {
-        final PlatformIO platformIO = IkGui.getPlatformIO();
-        platformIO.getClipboardTextFunction =
-                () -> {
-                    final String text = glfwGetClipboardString(windowHandle);
-                    return text == null ? "" : text;
-                };
-        platformIO.setClipboardTextFunction = text -> glfwSetClipboardString(windowHandle, text);
-        // We can honor io.wantSetMousePosition requests
-        IkGui.getIO().backendFlags |= BackendFlags.HAS_SET_MOUSE_POS;
-        // We can honor getMouseCursor() values
-        if (mouseCursors == null) {
-            mouseCursors = GlfwMouseCursors.createStandardCursors();
-        }
-        IkGui.getIO().backendFlags |= BackendFlags.HAS_MOUSE_CURSORS;
-    }
-
-    /**
-     * GLFW key codes are for the physical position of the key on a US keyboard, but shortcuts
-     * should use what is printed on the key in the current keyboard layout, like Ctrl+Z being
-     * labelled Ctrl+W on a French keyboard. Use the printable character of the key to figure out
-     * which key it is in the current layout.
-     *
-     * @param key The GLFW key code.
-     * @param scancode The platform specific scancode of the key.
-     * @return The GLFW key code for the key in the current keyboard layout.
-     */
-    private static int translateUntranslatedKey(int key, int scancode) {
-        // The keypad keys are the same in all layouts, and GLFW reports printable names for them
-        if (key >= GLFW_KEY_KP_0 && key <= GLFW_KEY_KP_EQUAL) {
-            return key;
-        }
-        final String keyName = glfwGetKeyName(key, scancode);
-        if (keyName == null || keyName.length() != 1) {
-            return key;
-        }
-        final char c = keyName.charAt(0);
-        if (c >= '0' && c <= '9') {
-            return GLFW_KEY_0 + (c - '0');
-        }
-        if (c >= 'A' && c <= 'Z') {
-            return GLFW_KEY_A + (c - 'A');
-        }
-        if (c >= 'a' && c <= 'z') {
-            return GLFW_KEY_A + (c - 'a');
-        }
-        return switch (c) {
-            case '`' -> GLFW_KEY_GRAVE_ACCENT;
-            case '-' -> GLFW_KEY_MINUS;
-            case '=' -> GLFW_KEY_EQUAL;
-            case '[' -> GLFW_KEY_LEFT_BRACKET;
-            case ']' -> GLFW_KEY_RIGHT_BRACKET;
-            case '\\' -> GLFW_KEY_BACKSLASH;
-            case ',' -> GLFW_KEY_COMMA;
-            case ';' -> GLFW_KEY_SEMICOLON;
-            case '\'' -> GLFW_KEY_APOSTROPHE;
-            case '.' -> GLFW_KEY_PERIOD;
-            case '/' -> GLFW_KEY_SLASH;
-            default -> key;
-        };
-    }
-
-    /**
-     * Convert a GLFW key code into an IkGui key.
-     *
-     * @param key The GLFW key code.
-     * @return The IkGui key, or Key.NONE if there is no equivalent.
-     */
-    public static Key mapGLFWToIkGuiKey(int key) {
-        return switch (key) {
-            case GLFW_KEY_TAB -> Key.TAB;
-            case GLFW_KEY_LEFT -> Key.ARROW_LEFT;
-            case GLFW_KEY_RIGHT -> Key.ARROW_RIGHT;
-            case GLFW_KEY_UP -> Key.ARROW_UP;
-            case GLFW_KEY_DOWN -> Key.ARROW_DOWN;
-            case GLFW_KEY_PAGE_UP -> Key.PAGE_UP;
-            case GLFW_KEY_PAGE_DOWN -> Key.PAGE_DOWN;
-            case GLFW_KEY_HOME -> Key.HOME;
-            case GLFW_KEY_END -> Key.END;
-            case GLFW_KEY_INSERT -> Key.INSERT;
-            case GLFW_KEY_DELETE -> Key.DELETE;
-            case GLFW_KEY_BACKSPACE -> Key.BACKSPACE;
-            case GLFW_KEY_SPACE -> Key.SPACE;
-            case GLFW_KEY_ENTER -> Key.ENTER;
-            case GLFW_KEY_ESCAPE -> Key.ESCAPE;
-            case GLFW_KEY_KP_ENTER -> Key.NUMPAD_ENTER;
-            case GLFW_KEY_LEFT_CONTROL -> Key.LEFT_CTRL;
-            case GLFW_KEY_RIGHT_CONTROL -> Key.RIGHT_CTRL;
-            case GLFW_KEY_LEFT_SHIFT -> Key.LEFT_SHIFT;
-            case GLFW_KEY_RIGHT_SHIFT -> Key.RIGHT_SHIFT;
-            case GLFW_KEY_LEFT_ALT -> Key.LEFT_ALT;
-            case GLFW_KEY_RIGHT_ALT -> Key.RIGHT_ALT;
-            case GLFW_KEY_LEFT_SUPER -> Key.LEFT_SUPER;
-            case GLFW_KEY_RIGHT_SUPER -> Key.RIGHT_SUPER;
-            case GLFW_KEY_MENU -> Key.MENU;
-            case GLFW_KEY_PAUSE -> Key.PAUSE;
-            case GLFW_KEY_CAPS_LOCK -> Key.CAPS_LOCK;
-            case GLFW_KEY_SCROLL_LOCK -> Key.SCROLL_LOCK;
-            case GLFW_KEY_PRINT_SCREEN -> Key.PRINT_SCREEN;
-
-            case GLFW_KEY_A -> Key.A;
-            case GLFW_KEY_B -> Key.B;
-            case GLFW_KEY_C -> Key.C;
-            case GLFW_KEY_D -> Key.D;
-            case GLFW_KEY_E -> Key.E;
-            case GLFW_KEY_F -> Key.F;
-            case GLFW_KEY_G -> Key.G;
-            case GLFW_KEY_H -> Key.H;
-            case GLFW_KEY_I -> Key.I;
-            case GLFW_KEY_J -> Key.J;
-            case GLFW_KEY_K -> Key.K;
-            case GLFW_KEY_L -> Key.L;
-            case GLFW_KEY_M -> Key.M;
-            case GLFW_KEY_N -> Key.N;
-            case GLFW_KEY_O -> Key.O;
-            case GLFW_KEY_P -> Key.P;
-            case GLFW_KEY_Q -> Key.Q;
-            case GLFW_KEY_R -> Key.R;
-            case GLFW_KEY_S -> Key.S;
-            case GLFW_KEY_T -> Key.T;
-            case GLFW_KEY_U -> Key.U;
-            case GLFW_KEY_V -> Key.V;
-            case GLFW_KEY_W -> Key.W;
-            case GLFW_KEY_X -> Key.X;
-            case GLFW_KEY_Y -> Key.Y;
-            case GLFW_KEY_Z -> Key.Z;
-
-            case GLFW_KEY_0 -> Key.ZERO;
-            case GLFW_KEY_1 -> Key.ONE;
-            case GLFW_KEY_2 -> Key.TWO;
-            case GLFW_KEY_3 -> Key.THREE;
-            case GLFW_KEY_4 -> Key.FOUR;
-            case GLFW_KEY_5 -> Key.FIVE;
-            case GLFW_KEY_6 -> Key.SIX;
-            case GLFW_KEY_7 -> Key.SEVEN;
-            case GLFW_KEY_8 -> Key.EIGHT;
-            case GLFW_KEY_9 -> Key.NINE;
-
-            case GLFW_KEY_KP_0 -> Key.NUMPAD_ZERO;
-            case GLFW_KEY_KP_1 -> Key.NUMPAD_ONE;
-            case GLFW_KEY_KP_2 -> Key.NUMPAD_TWO;
-            case GLFW_KEY_KP_3 -> Key.NUMPAD_THREE;
-            case GLFW_KEY_KP_4 -> Key.NUMPAD_FOUR;
-            case GLFW_KEY_KP_5 -> Key.NUMPAD_FIVE;
-            case GLFW_KEY_KP_6 -> Key.NUMPAD_SIX;
-            case GLFW_KEY_KP_7 -> Key.NUMPAD_SEVEN;
-            case GLFW_KEY_KP_8 -> Key.NUMPAD_EIGHT;
-            case GLFW_KEY_KP_9 -> Key.NUMPAD_NINE;
-            case GLFW_KEY_KP_DECIMAL -> Key.NUMPAD_PERIOD;
-            case GLFW_KEY_KP_DIVIDE -> Key.NUMPAD_DIVIDE;
-            case GLFW_KEY_KP_MULTIPLY -> Key.NUMPAD_MULTIPLY;
-            case GLFW_KEY_KP_SUBTRACT -> Key.NUMPAD_SUBTRACT;
-            case GLFW_KEY_KP_ADD -> Key.NUMPAD_ADD;
-            case GLFW_KEY_KP_EQUAL -> Key.NUMPAD_EQUAL;
-            case GLFW_KEY_NUM_LOCK -> Key.NUM_LOCK;
-
-            case GLFW_KEY_F1 -> Key.F1;
-            case GLFW_KEY_F2 -> Key.F2;
-            case GLFW_KEY_F3 -> Key.F3;
-            case GLFW_KEY_F4 -> Key.F4;
-            case GLFW_KEY_F5 -> Key.F5;
-            case GLFW_KEY_F6 -> Key.F6;
-            case GLFW_KEY_F7 -> Key.F7;
-            case GLFW_KEY_F8 -> Key.F8;
-            case GLFW_KEY_F9 -> Key.F9;
-            case GLFW_KEY_F10 -> Key.F10;
-            case GLFW_KEY_F11 -> Key.F11;
-            case GLFW_KEY_F12 -> Key.F12;
-            case GLFW_KEY_F13 -> Key.F13;
-            case GLFW_KEY_F14 -> Key.F14;
-            case GLFW_KEY_F15 -> Key.F15;
-            case GLFW_KEY_F16 -> Key.F16;
-            case GLFW_KEY_F17 -> Key.F17;
-            case GLFW_KEY_F18 -> Key.F18;
-            case GLFW_KEY_F19 -> Key.F19;
-            case GLFW_KEY_F20 -> Key.F20;
-            case GLFW_KEY_F21 -> Key.F21;
-            case GLFW_KEY_F22 -> Key.F22;
-            case GLFW_KEY_F23 -> Key.F23;
-            case GLFW_KEY_F24 -> Key.F24;
-
-            case GLFW_KEY_APOSTROPHE -> Key.APOSTROPHE;
-            case GLFW_KEY_COMMA -> Key.COMMA;
-            case GLFW_KEY_MINUS -> Key.MINUS;
-            case GLFW_KEY_PERIOD -> Key.PERIOD;
-            case GLFW_KEY_SLASH -> Key.FORWARD_SLASH;
-            case GLFW_KEY_SEMICOLON -> Key.SEMICOLON;
-            case GLFW_KEY_EQUAL -> Key.EQUALS;
-            case GLFW_KEY_LEFT_BRACKET -> Key.LEFT_BRACKET;
-            case GLFW_KEY_BACKSLASH -> Key.BACK_SLASH;
-            case GLFW_KEY_RIGHT_BRACKET -> Key.RIGHT_BRACKET;
-            case GLFW_KEY_GRAVE_ACCENT -> Key.GRAVE_ACCENT;
-            case GLFW_KEY_WORLD_1, GLFW_KEY_WORLD_2 -> Key.OEM_102;
-            default -> Key.NONE;
-        };
+    @Override
+    public String toString() {
+        return "Window " + title;
     }
 }
