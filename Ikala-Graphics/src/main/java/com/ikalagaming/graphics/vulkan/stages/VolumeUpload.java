@@ -4,6 +4,7 @@ import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
+import com.ikalagaming.graphics.Sections;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.VolumeMaterials;
@@ -128,12 +129,22 @@ public class VolumeUpload implements RenderStage {
         bricks.rebalance(scene.getCamera().getPosition());
         final List<VolumeBricks.Upload> uploads = bricks.takeUploads(MAX_BRICKS);
         upload(state, uploads);
-        // Bricks standing in for meshes off the GPU stand in for them in the occupancy volume too
-        if (state.occupancy != null) {
-            for (VolumeBricks.Upload upload : uploads) {
-                if (state.sections.bricksStandIn(upload.position())) {
-                    state.occupancy.brickArrived(upload.position());
-                }
+        // Bricks standing in for meshes off the GPU stand in for them in the occupancy volume and
+        // the shadow maps too, which draw them again where a new one came in
+        for (VolumeBricks.Upload upload : uploads) {
+            if (!state.sections.bricksStandIn(upload.position())) {
+                continue;
+            }
+            if (state.occupancy != null) {
+                state.occupancy.brickArrived(upload.position());
+            }
+            if (state.shadowInvalidation != null) {
+                final double size = Sections.SECTION_SIZE;
+                state.shadowInvalidation.addSection(
+                        new Vector3d(
+                                upload.position().x() * size,
+                                upload.position().y() * size,
+                                upload.position().z() * size));
             }
         }
         bricks.writeDraws(

@@ -839,6 +839,12 @@ public final class GateBenchmark {
                 if (sunCache != null) {
                     GraphicsManager.getSettings().sunShadowCache = Boolean.parseBoolean(sunCache);
                 }
+                // Off, far leaves whose meshes are off the GPU cast no sun shadow
+                final String volumeShadows = System.getProperty(PROPERTY + ".volumeShadows");
+                if (volumeShadows != null) {
+                    GraphicsManager.getSettings().volumeShadows =
+                            Boolean.parseBoolean(volumeShadows);
+                }
                 // Off, ambient light isn't dimmed under cover; the view shows sky light in gray
                 final String sky = System.getProperty(PROPERTY + ".sky");
                 if (sky != null) {

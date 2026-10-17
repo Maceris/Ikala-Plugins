@@ -1498,6 +1498,21 @@ public class VulkanInstance {
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(RenderStage.Type.SHADOW_VOLUME, new ShaderVulkan(volumeModules, state));
 
+        // Sections' volume bricks, standing in for their meshes off the GPU, walked along the
+        // map's direction from their boxes
+        List<ShaderVulkan.ShaderModuleData> brickModules = new ArrayList<>();
+        brickModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/shadow_brick.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        brickModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/shadow_brick.frag",
+                        ShaderVulkan.Type.FRAGMENT,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(RenderStage.Type.SHADOW_BRICK, new ShaderVulkan(brickModules, state));
+
         // Cut out meshes, whose textures cut holes in their shadows as in the surface
         List<ShaderVulkan.ShaderModuleData> cutoutModules = new ArrayList<>();
         cutoutModules.add(

@@ -224,6 +224,12 @@ public class SectionManager {
         /** Whether its brick is drawn for its cut out and translucent blocks. */
         boolean bricked;
 
+        /**
+         * Whether its brick stands in for some of its cut out and translucent meshes off the GPU,
+         * so casts their shadows.
+         */
+        boolean standIn;
+
         /** What it adds to {@link #placedTotal}. */
         long placed;
 
@@ -398,6 +404,18 @@ public class SectionManager {
 
     /** Whether {@link #bricked} changed since {@link #volumeSections} was made. */
     private boolean brickedChanged;
+
+    /**
+     * Sections whose bricks stand in for some of their cut out and translucent meshes off the GPU,
+     * so cast their shadows, a new list whenever they change.
+     */
+    private volatile List<LodStore.SectionPos> standInSections = List.of();
+
+    /** The sections whose bricks stand in for meshes off the GPU. Guarded by {@link #lock}. */
+    private final Set<LodStore.SectionPos> standIn = new LinkedHashSet<>();
+
+    /** Whether {@link #standIn} changed since {@link #standInSections} was made. */
+    private boolean standInChanged;
 
     /** How many triangles the resident bakes have, less those bricks stood in for last frame. */
     private volatile long placedTriangles;
@@ -872,6 +890,7 @@ public class SectionManager {
         placedTotal -= section.placed;
         section.placed = 0;
         setBricked(section, false);
+        updateStandIn(section);
         behind.remove(section);
         overriding.remove(section);
     }
@@ -1353,6 +1372,7 @@ public class SectionManager {
                 residentTriangles += pending.triangles();
                 section.current = pending;
                 section.pending = null;
+                updateStandIn(section);
                 waiting.remove();
                 section.pendingBrick = null;
                 section.restoring = false;
@@ -1701,6 +1721,10 @@ public class SectionManager {
                 volumeSections = List.copyOf(bricked);
                 brickedChanged = false;
             }
+            if (standInChanged) {
+                standInSections = List.copyOf(standIn);
+                standInChanged = false;
+            }
             placedTriangles = placedTotal;
         } finally {
             lock.unlock();
@@ -1896,6 +1920,7 @@ public class SectionManager {
                 wait = RETRY;
             }
         }
+        updateStandIn(section);
         if (!wanted.isEmpty() && !section.restoring) {
             restoreLater(id, section, wanted);
         }
@@ -2082,9 +2107,40 @@ public class SectionManager {
                 }
             }
             section.restoring = false;
+            updateStandIn(section);
             queueCheck(section, travel);
         } finally {
             lock.unlock();
+        }
+    }
+
+    /**
+     * Note whether a section's brick stands in for some of its cut out and translucent meshes off
+     * the GPU, which makes it cast their shadows, and have the shadow maps there drawn again when
+     * that changes, since the meshes stopped or started casting them. Hold the lock.
+     *
+     * @param section The section.
+     */
+    private void updateStandIn(@NonNull Section section) {
+        final Version current = section.current;
+        final boolean stands =
+                !section.removed
+                        && section.position != null
+                        && current != null
+                        && (current.offGpu().contains(Material.Transparency.CUTOUT)
+                                || current.offGpu().contains(Material.Transparency.TRANSLUCENT));
+        if (stands == section.standIn) {
+            return;
+        }
+        section.standIn = stands;
+        if (stands) {
+            standIn.add(section.position);
+        } else {
+            standIn.remove(section.position);
+        }
+        standInChanged = true;
+        if (current != null) {
+            shadows.addSection(current.origin());
         }
     }
 
@@ -2177,6 +2233,16 @@ public class SectionManager {
      */
     public List<LodStore.SectionPos> getVolumeSections() {
         return volumeSections;
+    }
+
+    /**
+     * The sections whose volume bricks stand in for some of their cut out and translucent meshes
+     * off the GPU, so cast their shadows. The same list while they stay the same.
+     *
+     * @return The sections.
+     */
+    public List<LodStore.SectionPos> getStandInSections() {
+        return standInSections;
     }
 
     /**

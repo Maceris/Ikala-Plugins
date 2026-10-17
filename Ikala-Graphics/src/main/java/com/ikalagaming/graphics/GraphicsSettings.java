@@ -106,6 +106,12 @@ public class GraphicsSettings {
     public boolean sunShadowCache = true;
 
     /**
+     * Whether volume bricks cast the shadows of the cut out and translucent blocks they stand in
+     * for, once those blocks' own meshes are off the GPU. Off, far leaves cast no sun shadow.
+     */
+    public boolean volumeShadows = true;
+
+    /**
      * Whether ambient light is dimmed where something stands above a point, from the sky occlusion
      * map, so caves and rooms aren't lit like open ground.
      */

@@ -20,6 +20,9 @@ layout(location = 3) flat out vec2 outCell;
 layout(location = 4) flat out uint outSlot;
 // The direction the map looks along, in render space
 layout(location = 5) flat out vec3 outDirection;
+// How much the map's depth grows per meter along its direction: the maps are orthographic, so the
+// fragment shader finds a point's depth from its own without the matrix
+layout(location = 6) flat out float outDepthStep;
 
 
 struct World {
@@ -101,4 +104,5 @@ void main()
     vec4 near = inverseMatrix * vec4(gl_Position.xy / gl_Position.w, 0.0, 1.0);
     vec4 far = inverseMatrix * vec4(gl_Position.xy / gl_Position.w, 1.0, 1.0);
     outDirection = normalize(far.xyz / far.w - near.xyz / near.w);
+    outDepthStep = (projViewMatrix * vec4(outDirection, 0.0)).z;
 }

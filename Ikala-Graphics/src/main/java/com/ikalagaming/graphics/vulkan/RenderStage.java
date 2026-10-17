@@ -31,6 +31,7 @@ public interface RenderStage {
         SHADOW_LOD,
         SHADOW_LOD_CUTOUT,
         SHADOW_VOLUME,
+        SHADOW_BRICK,
         SHADOW_CUTOUT,
         SHADOW_BAKED_CUTOUT,
         POINT_SHADOW,

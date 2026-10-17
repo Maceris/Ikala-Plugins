@@ -20,6 +20,7 @@ import com.ikalagaming.graphics.vulkan.RenderStage;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.joml.Matrix4f;
+import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import org.joml.Vector3f;
 import org.lwjgl.system.MemoryStack;
@@ -39,6 +40,9 @@ import java.util.Map;
  * in their maps, drawn again whole or in part only when the cache says, and draw what moves into
  * their maps of what moves every frame there is any. The shadow maps are left in the read only
  * layout for the light stage.
+ *
+ * <p>Sections whose cut out and translucent meshes are off the GPU, far away, cast their shadows
+ * from their volume bricks instead, walked along the map's direction, with what doesn't move.
  */
 @Slf4j
 public class ShadowRender implements RenderStage {
@@ -79,6 +83,18 @@ public class ShadowRender implements RenderStage {
 
     /** The pipeline for coverage volumes' bricks. */
     private long volumePipeline;
+
+    /** The shader for sections' volume bricks, standing in for their meshes off the GPU. */
+    @NonNull private final ShaderVulkan brickShader;
+
+    /** The pipeline for sections' volume bricks. */
+    private long brickPipeline;
+
+    /** Vertices of a volume brick's box: 12 triangles. */
+    private static final int BRICK_VERTICES = 36;
+
+    /** The descriptor set the volume brick atlas is bound as. */
+    private static final int BRICK_SET = 2;
 
     /**
      * The shader for standard meshes in the cascades, which alpha tests their textures as the scene
@@ -144,6 +160,7 @@ public class ShadowRender implements RenderStage {
      * @param lodShader The shader for level of detail clusters.
      * @param lodCutoutShader The shader for level of detail clusters with cut out materials.
      * @param volumeShader The shader for coverage volumes' bricks.
+     * @param brickShader The shader for sections' volume bricks.
      * @param cutoutShader The shader for standard meshes, alpha tested.
      * @param bakedCutoutShader The shader for baked sections' cut out meshes, alpha tested.
      * @param pointShader The shader for standard meshes in point light shadow faces.
@@ -154,6 +171,7 @@ public class ShadowRender implements RenderStage {
             final @NonNull ShaderVulkan lodShader,
             final @NonNull ShaderVulkan lodCutoutShader,
             final @NonNull ShaderVulkan volumeShader,
+            final @NonNull ShaderVulkan brickShader,
             final @NonNull ShaderVulkan cutoutShader,
             final @NonNull ShaderVulkan bakedCutoutShader,
             final @NonNull ShaderVulkan pointShader,
@@ -162,6 +180,8 @@ public class ShadowRender implements RenderStage {
         this.lodShader = lodShader;
         this.lodCutoutShader = lodCutoutShader;
         this.volumeShader = volumeShader;
+        this.brickShader = brickShader;
+        this.brickPipeline = VK_NULL_HANDLE;
         this.cutoutShader = cutoutShader;
         this.bakedCutoutShader = bakedCutoutShader;
         this.pointShader = pointShader;
@@ -185,6 +205,7 @@ public class ShadowRender implements RenderStage {
         lodPipeline = createPipeline(vulkanState, lodShader, false, true, false);
         lodCutoutPipeline = createPipeline(vulkanState, lodCutoutShader, false, true, true);
         volumePipeline = createVolumePipeline(vulkanState);
+        brickPipeline = createPipeline(vulkanState, brickShader, false, false, false, false, true);
         cutoutPipeline = createPipeline(vulkanState, cutoutShader, false, false, true);
         bakedCutoutPipeline = createPipeline(vulkanState, bakedCutoutShader, true, false, true);
         pointPipeline = createPipeline(vulkanState, pointShader, false, false, false);
@@ -205,6 +226,8 @@ public class ShadowRender implements RenderStage {
         lodCutoutPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, volumePipeline, null);
         volumePipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, brickPipeline, null);
+        brickPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, cutoutPipeline, null);
         cutoutPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, bakedCutoutPipeline, null);
@@ -243,6 +266,19 @@ public class ShadowRender implements RenderStage {
                     ShaderBindings.Shadow.MATERIALS_BINDING
                 },
                 writtenBuffers[vulkanState.frameIndex]);
+
+        // The volume bricks standing in for meshes off the GPU, cast with what doesn't move
+        if (vulkanState.volumeBricks != null) {
+            vulkanState.volumeBricks.writeShadowDraws(
+                    vulkanState.frameIndex,
+                    vulkanState,
+                    vulkanState.sections == null
+                                    || scene == null
+                                    || !GraphicsManager.getSettings().volumeShadows
+                            ? List.of()
+                            : vulkanState.sections.getStandInSections(),
+                    scene == null ? new Vector3d() : scene.getCamera().getPosition());
+        }
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             ByteBuffer pushConstants = stack.calloc(ShaderBindings.Shadow.PUSH_CONSTANTS_SIZE);
@@ -668,9 +704,14 @@ public class ShadowRender implements RenderStage {
                 vkCmdClearAttachments(commandBuffer, clear, clearRect);
             }
 
+            final int bricks =
+                    statics && state.volumeBricks != null
+                            ? state.volumeBricks.shadowCount(state.frameIndex)
+                            : 0;
             if (frameData.meshSlotCount + frameData.bakedSlotCount > 0
                     || !frameData.modelDrawInfo.isEmpty()
-                    || LodRenderer.hasDraws(frameData)) {
+                    || LodRenderer.hasDraws(frameData)
+                    || bricks > 0) {
                 // Not flipped, so the light stage can use the shadow map coordinates as is
                 VkViewport.Buffer viewports = VkViewport.calloc(1, stack);
                 viewports.get(0).width(size).height(size).minDepth(0).maxDepth(1);
@@ -736,6 +777,29 @@ public class ShadowRender implements RenderStage {
                             pipelineLayout,
                             ShaderBindings.Shadow.PUSH_CONSTANT_LOD_WORLDS_OFFSET,
                             LodRenderer.VOLUME_LISTS + list);
+                }
+
+                // Volume bricks standing in for sections' meshes off the GPU, walked along the
+                // map's direction; their list's address goes where level of detail's worlds were
+                if (bricks > 0) {
+                    vkCmdBindPipeline(
+                            commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, brickPipeline);
+                    vkCmdBindDescriptorSets(
+                            commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            pipelineLayout,
+                            BRICK_SET,
+                            stack.longs(state.volumeBricks.getSet()),
+                            null);
+                    final ByteBuffer brickConstants = stack.calloc(Long.BYTES);
+                    brickConstants.putLong(0, state.volumeBricks.shadowList(state.frameIndex));
+                    vkCmdPushConstants(
+                            commandBuffer,
+                            pipelineLayout,
+                            VK_SHADER_STAGE_VERTEX_BIT,
+                            ShaderBindings.Shadow.PUSH_CONSTANT_LOD_WORLDS_OFFSET,
+                            brickConstants);
+                    vkCmdDraw(commandBuffer, BRICK_VERTICES, bricks, 0, 0);
                 }
 
                 // Everything culling handled for this cascade, each kind from its own buffers,
@@ -851,7 +915,7 @@ public class ShadowRender implements RenderStage {
      * @return The VkPipeline.
      */
     private long createVolumePipeline(@NonNull VulkanState state) {
-        return createPipeline(state, volumeShader, false, true, false, true);
+        return createPipeline(state, volumeShader, false, true, false, true, false);
     }
 
     private void createPipelineLayout(@NonNull VulkanState state) {
@@ -900,7 +964,8 @@ public class ShadowRender implements RenderStage {
                             .pSetLayouts(
                                     stack.longs(
                                             descriptorSetLayout,
-                                            state.bindlessTextures.getDescriptorSetLayout()))
+                                            state.bindlessTextures.getDescriptorSetLayout(),
+                                            state.volumeBricks.getSetLayout()))
                             .pPushConstantRanges(pushConstantRanges);
             checkError(
                     vkCreatePipelineLayout(
@@ -954,7 +1019,7 @@ public class ShadowRender implements RenderStage {
             boolean baked,
             boolean lod,
             boolean cutout) {
-        return createPipeline(state, shader, baked, lod, cutout, false);
+        return createPipeline(state, shader, baked, lod, cutout, false, false);
     }
 
     /**
@@ -966,6 +1031,9 @@ public class ShadowRender implements RenderStage {
      * @param lod Whether it reads level of detail vertices.
      * @param cutout Whether it alpha tests.
      * @param volume Whether it walks coverage volumes' bricks.
+     * @param brick Whether it walks sections' volume bricks, whose boxes come from the vertex index
+     *     with no vertex buffer, their faces toward the light drawn, and no depth bias, since the
+     *     walk writes the depth.
      * @return The VkPipeline.
      */
     private long createPipeline(
@@ -974,7 +1042,8 @@ public class ShadowRender implements RenderStage {
             boolean baked,
             boolean lod,
             boolean cutout,
-            boolean volume) {
+            boolean volume,
+            boolean brick) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             LongBuffer longOutput = stack.callocLong(1);
 
@@ -1031,10 +1100,12 @@ public class ShadowRender implements RenderStage {
                     .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
 
             VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo =
-                    VkPipelineVertexInputStateCreateInfo.calloc(stack)
-                            .sType$Default()
-                            .pVertexBindingDescriptions(vertexBindings)
-                            .pVertexAttributeDescriptions(vertexAttributes);
+                    VkPipelineVertexInputStateCreateInfo.calloc(stack).sType$Default();
+            if (!brick) {
+                vertexInputStateCreateInfo
+                        .pVertexBindingDescriptions(vertexBindings)
+                        .pVertexAttributeDescriptions(vertexAttributes);
+            }
 
             VkPipelineInputAssemblyStateCreateInfo inputAssemblyState =
                     VkPipelineInputAssemblyStateCreateInfo.calloc(stack)
@@ -1079,7 +1150,7 @@ public class ShadowRender implements RenderStage {
                             .polygonMode(VK_POLYGON_MODE_FILL)
                             .cullMode(volume ? VK_CULL_MODE_NONE : VK_CULL_MODE_BACK_BIT)
                             .frontFace(VK_FRONT_FACE_CLOCKWISE)
-                            .depthBiasEnable(!volume)
+                            .depthBiasEnable(!volume && !brick)
                             .depthBiasConstantFactor(DEPTH_BIAS_CONSTANT)
                             .depthBiasSlopeFactor(DEPTH_BIAS_SLOPE)
                             .lineWidth(1.0f);

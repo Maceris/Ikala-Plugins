@@ -13,13 +13,13 @@ layout(location = 2) flat in vec4 outTurn;
 layout(location = 3) flat in vec2 outCell;
 layout(location = 4) flat in uint outSlot;
 layout(location = 5) flat in vec3 outDirection;
+layout(location = 6) flat in float outDepthStep;
 
 layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Bricks {
     uvec4 words[];
 };
 
 layout(push_constant) uniform ShadowConstants {
-    mat4 projViewMatrix;
     layout(offset = 88) Bricks bricks;
     uint frame;
 };
@@ -105,9 +105,9 @@ void main()
             float through = extinction * (exit - t) / scale;
             if (depth + through >= threshold) {
                 float hit = t + (threshold - depth) / max(extinction, 1e-6) * scale;
-                vec4 clip = projViewMatrix
-                    * vec4(origin + direction * (hit + SHADOW_OFFSET * cell), 1.0);
-                float fragmentDepth = clip.z / clip.w;
+                // This fragment's point is back along the ray from the walk's origin
+                float fragmentDepth = gl_FragCoord.z
+                    + outDepthStep * (hit + SHADOW_OFFSET * cell - back);
                 if (!(fragmentDepth >= 0.0 && fragmentDepth <= 1.0)) {
                     discard;
                 }

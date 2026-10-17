@@ -239,6 +239,7 @@ public class PipelineManagerVulkan {
                         shaders.getShader(RenderStage.Type.SHADOW_LOD),
                         shaders.getShader(RenderStage.Type.SHADOW_LOD_CUTOUT),
                         shaders.getShader(RenderStage.Type.SHADOW_VOLUME),
+                        shaders.getShader(RenderStage.Type.SHADOW_BRICK),
                         shaders.getShader(RenderStage.Type.SHADOW_CUTOUT),
                         shaders.getShader(RenderStage.Type.SHADOW_BAKED_CUTOUT),
                         shaders.getShader(RenderStage.Type.POINT_SHADOW),

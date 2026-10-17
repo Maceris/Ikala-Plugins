@@ -42,7 +42,9 @@ import java.util.Set;
  * <p>Bricks are voxelized on the bake workers with their sections' bakes (see {@link
  * VolumeVoxelizer}), and put here as their bakes go in; {@code VolumeUpload} copies the queued ones
  * into their slots a budget at a time. Each frame it also lists the bricks to draw: those of
- * sections that don't draw their own blocks now, which the transparency stages ray march.
+ * sections that don't draw their own blocks now, which the transparency stages ray march, and the
+ * bricks to cast shadows: those of sections whose own cut out and translucent meshes are off the
+ * GPU, which the shadow stage walks along the sun.
  *
  * <p>The atlas stays in the general layout, which compute writes it in, as uploads do. Render
  * thread only.
@@ -165,6 +167,13 @@ public class VolumeBricks {
 
     /** How many draws each frame's list has. */
     private final int[] drawCounts = new int[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /** Each frame in flight's list of bricks casting shadows, written by the CPU. */
+    private final SharedBuffer[] shadowLists =
+            new SharedBuffer[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
+
+    /** How many bricks each frame's shadow list has. */
+    private final int[] shadowCounts = new int[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
 
     /** Each frame in flight's nearest solid face at each pixel, see {@code VolumeDepth}. */
     private final SharedBuffer[] hitBuffers =
@@ -419,6 +428,9 @@ public class VolumeBricks {
         }
         for (int i = 0; i < drawLists.length; ++i) {
             drawLists[i] =
+                    SharedBuffer.allocate(
+                            (long) DRAW_SIZE * 1024, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+            shadowLists[i] =
                     SharedBuffer.allocate(
                             (long) DRAW_SIZE * 1024, state, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
         }
@@ -818,6 +830,66 @@ public class VolumeBricks {
     }
 
     /**
+     * Write this frame's shadow list: the filled brick of each of the given sections, its corner
+     * relative to the camera, in the draw list's layout. Each is walked along the sun into every
+     * shadow map drawn this frame, which clip what is outside them.
+     *
+     * @param frame The frame in flight.
+     * @param state The Vulkan state.
+     * @param sections The sections whose bricks stand in for their meshes.
+     * @param camera The camera's position, in the world.
+     * @return How many bricks cast shadows.
+     */
+    public int writeShadowDraws(
+            int frame,
+            @NonNull VulkanState state,
+            @NonNull List<LodStore.SectionPos> sections,
+            @NonNull Vector3dc camera) {
+        final SharedBuffer buffer = shadowLists[frame];
+        buffer.ensureCapacity((long) Math.max(1, sections.size()) * DRAW_SIZE, state);
+        final ByteBuffer out =
+                MemoryUtil.memByteBuffer(
+                        buffer.allocationInfo.pMappedData(),
+                        Math.max(1, sections.size()) * DRAW_SIZE);
+        final double size = VolumeMath.BRICK * VolumeMath.VOXEL_SIZE;
+        int count = 0;
+        for (LodStore.SectionPos position : sections) {
+            final Integer slot = slots.get(position);
+            if (slot == null || !filled[slot]) {
+                continue;
+            }
+            final int base = count * DRAW_SIZE;
+            out.putFloat(base, (float) (position.x() * size - camera.x()));
+            out.putFloat(base + Float.BYTES, (float) (position.y() * size - camera.y()));
+            out.putFloat(base + 2 * Float.BYTES, (float) (position.z() * size - camera.z()));
+            out.putInt(base + 3 * Float.BYTES, slot);
+            ++count;
+        }
+        shadowCounts[frame] = count;
+        return count;
+    }
+
+    /**
+     * A frame's shadow list's device address.
+     *
+     * @param frame The frame in flight.
+     * @return The address.
+     */
+    public long shadowList(int frame) {
+        return shadowLists[frame].deviceAddress;
+    }
+
+    /**
+     * How many bricks cast shadows in a frame.
+     *
+     * @param frame The frame in flight.
+     * @return The count.
+     */
+    public int shadowCount(int frame) {
+        return shadowCounts[frame];
+    }
+
+    /**
      * A frame's draw list's device address.
      *
      * @param frame The frame in flight.
@@ -921,6 +993,8 @@ public class VolumeBricks {
         for (int i = 0; i < drawLists.length; ++i) {
             SharedBuffer.free(drawLists[i], state);
             drawLists[i] = null;
+            SharedBuffer.free(shadowLists[i], state);
+            shadowLists[i] = null;
             if (uploadBuffers[i] != null) {
                 SharedBuffer.free(uploadBuffers[i], state);
                 uploadBuffers[i] = null;
