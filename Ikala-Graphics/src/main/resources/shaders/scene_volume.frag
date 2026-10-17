@@ -1,5 +1,8 @@
 #version 460
 #extension GL_EXT_buffer_reference : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "roughening.glsl"
 
 // Coverage volumes, see CoverageVolume and CoverageBricks: each fragment of a brick's box walks
 // the brick a voxel at a time (Amanatides and Woo 1987), each voxel's microflakes stopping light by
@@ -11,7 +14,8 @@
 // microflakes' visible normals (the paper's algorithm 1): lit by lights.frag as a diffuse surface,
 // one sample would be one sample of the diffuse microflake phase function (its equation 26), but
 // so noisy that temporal antialiasing's history clamping keeps the noise; the mean shades smoothly,
-// a little brighter than the true average.
+// a little brighter than the true average. The samples' spread widens the roughness, see
+// roughening.glsl, so the mean doesn't shine sharper than the microflakes it stands for.
 //
 // Boxes are drawn by their back faces, so a camera inside one still sees it, and the walk starts
 // where the ray enters the box, or at the camera.
@@ -184,6 +188,7 @@ void main()
                     float angle = (float(n) + random(seed)) / float(NORMAL_SAMPLES);
                     sampled += sampleVisibleNormal(-modelDirection, S, random(seed), angle);
                 }
+                float spread = length(sampled) / float(NORMAL_SAMPLES);
                 sampled = normalize(sampled);
                 if (any(isnan(sampled))) {
                     // A matrix too flat to sample: face the viewer
@@ -198,7 +203,7 @@ void main()
                 vec3 tangent = normalize(cross(viewNormal, across));
                 vec4 extra = unpackUnorm4x8(data.x);
                 buffBaseColor = vec4(unpackUnorm4x8(data.y).rgb, SPECULAR);
-                buffNormal = vec4(viewNormal, extra.z);
+                buffNormal = vec4(viewNormal, roughenBySpread(extra.z, spread));
                 buffTangent = vec4(tangent, extra.w);
                 buffMaterial = 0u;
                 buffEmission = vec4(0.0, 0.0, 0.0, 1.0);

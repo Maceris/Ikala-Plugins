@@ -16,7 +16,8 @@ import java.util.Map;
  * it. The blend weighs each input triangle within the footprint by its area, how visible it is, how
  * far it faces the way the corner does, and how near it is, so a corner takes the look of the
  * surface it stands for whatever materials that surface was made of, and what is hidden or faces
- * away counts for little.
+ * away counts for little. Its roughness widens by how far the input's normals there differed (see
+ * {@link Roughening}), so a bumpy surface flattened far out keeps its highlights broad.
  */
 final class AverageTransfer {
 
@@ -244,6 +245,7 @@ final class AverageTransfer {
         final IntArrayList near =
                 cells.get(key(cellOf(point[0]), cellOf(point[1]), cellOf(point[2])));
         final double[] sum = new double[MaterialAverages.VALUES];
+        final double[] normalSum = new double[AXES];
         double total = 0;
         int nearest = -1;
         double nearestDistance = Double.MAX_VALUE;
@@ -272,6 +274,9 @@ final class AverageTransfer {
                 for (int k = 0; k < sum.length; ++k) {
                     sum[k] += weight * value[k];
                 }
+                for (int axis = 0; axis < AXES; ++axis) {
+                    normalSum[axis] += weight * n[axis];
+                }
                 total += weight;
             }
         }
@@ -279,6 +284,14 @@ final class AverageTransfer {
             for (int k = 0; k < sum.length; ++k) {
                 out[k] = (float) (sum[k] / total);
             }
+            final double meanLength =
+                    Math.sqrt(
+                                    normalSum[0] * normalSum[0]
+                                            + normalSum[1] * normalSum[1]
+                                            + normalSum[2] * normalSum[2])
+                            / total;
+            out[MaterialAverages.ROUGHNESS] =
+                    (float) Roughening.widen(out[MaterialAverages.ROUGHNESS], meanLength);
             return;
         }
         // Nothing near faces this way: take the nearest, or failing that, anything

@@ -5,6 +5,7 @@
 
 #include "color.glsl"
 #include "material.glsl"
+#include "roughening.glsl"
 
 // Bakes a level of detail cluster's appearance into its tile of a bake page, see LodBakes: a thread
 // a texel. Each texel's record says which of the job's source materials to sample and where, the
@@ -13,7 +14,8 @@
 // the data page holds the normal's x and y, roughness and metalness, see MATERIAL_FLAG_BAKED_DATA;
 // pages of emitting tiles have an emission page too, written by encodeEmission. A texel's splats,
 // input no texel samples laid onto it (BakeTexels.splat), are blended in over what it samples
-// itself, each by the share of the texel it covers.
+// itself, each by the share of the texel it covers, and the texel's roughness widens by how far
+// their normals differed, see roughening.glsl.
 
 layout(local_size_x = 64) in;
 
@@ -191,6 +193,8 @@ void main()
         metallic += laid.metallic * share;
         emission += laid.emission * share;
     }
+    // Unit normals blended by shares that sum to 1, so the blend's length is their mean's
+    roughness = roughenBySpread(roughness, length(normal));
     normal = length(normal) > 0.0 ? normalize(normal) : own.normal;
 
     ivec2 at = origin + ivec2(int(texel) % extent.x, int(texel) / extent.x);
