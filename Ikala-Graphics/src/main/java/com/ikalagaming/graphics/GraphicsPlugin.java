@@ -4,6 +4,7 @@ import com.ikalagaming.event.Listener;
 import com.ikalagaming.launcher.Launcher;
 import com.ikalagaming.localization.Localization;
 import com.ikalagaming.plugins.Plugin;
+import com.ikalagaming.plugins.PluginManager;
 import com.ikalagaming.plugins.config.ConfigManager;
 import com.ikalagaming.plugins.config.PluginConfig;
 import com.ikalagaming.scripting.ScriptManager;
@@ -74,6 +75,7 @@ public class GraphicsPlugin extends Plugin {
          * from ever ticking again to do the cleanup.
          */
         ScriptManager.unregisterGlobal(GraphicsPlugin.SCRIPT_UI_GLOBAL);
+        PluginManager.getInstance().unregisterCommand(WindowCommand.COMMAND);
         GraphicsManager.requestShutdown();
         return true;
     }
@@ -89,6 +91,8 @@ public class GraphicsPlugin extends Plugin {
             return false;
         }
         Launcher.addMainThreadStage(GraphicsManager::tick);
+        PluginManager.getInstance()
+                .registerCommand(WindowCommand.COMMAND, WindowCommand::run, PLUGIN_NAME);
         // Each plugin's scripts get that plugin's UI, so what they open is owned by the plugin
         ScriptManager.unregisterGlobal(GraphicsPlugin.SCRIPT_UI_GLOBAL);
         ScriptManager.registerGlobal(

@@ -6,6 +6,7 @@ import static org.lwjgl.vulkan.VK13.vkCmdPipelineBarrier2;
 
 import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.Presentation;
 import com.ikalagaming.graphics.vulkan.RenderStage;
 import com.ikalagaming.graphics.vulkan.VulkanState;
 
@@ -37,9 +38,10 @@ public class SwapchainPresent implements RenderStage {
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
 
-        VulkanState.WindowInfo windowInfo = vulkanState.windows.get(window);
+        final Presentation presentation = vulkanState.presentations.get(window);
 
-        final long swapchainImage = windowInfo.swapchainImages[windowInfo.currentSwapchainIndex];
+        final long swapchainImage =
+                presentation.swapchainImages[presentation.currentSwapchainIndex];
         final long sourceImage =
                 vulkanState.perFrameData[vulkanState.frameIndex].finalTexture.texture;
 
@@ -103,7 +105,7 @@ public class SwapchainPresent implements RenderStage {
             VkOffset3D.Buffer destOffsets = VkOffset3D.calloc(2, stack);
             destOffsets.get(0).set(0, 0, 0);
             // Usually the same size, but the swapchain can briefly disagree with the window
-            destOffsets.get(1).set(windowInfo.swapchainWidth, windowInfo.swapchainHeight, 1);
+            destOffsets.get(1).set(presentation.swapchainWidth, presentation.swapchainHeight, 1);
 
             VkImageBlit.Buffer blitRegions = VkImageBlit.calloc(1, stack);
             blitRegions

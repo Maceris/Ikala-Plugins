@@ -97,6 +97,16 @@ public final class GlfwPlatform {
     }
 
     /**
+     * Wait for input to any window, or until some time passes, whichever comes first. Callbacks run
+     * for whatever input arrives, as they would when polling. Main thread.
+     *
+     * @param seconds The longest to wait.
+     */
+    public static void waitEvents(double seconds) {
+        glfwWaitEventsTimeout(seconds);
+    }
+
+    /**
      * Find the biggest video mode of any monitor, which is as big as render targets ever need to
      * get.
      *

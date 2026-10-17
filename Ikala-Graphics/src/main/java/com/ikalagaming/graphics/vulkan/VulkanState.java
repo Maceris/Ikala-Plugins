@@ -15,7 +15,7 @@ import lombok.NonNull;
 import org.lwjgl.vulkan.*;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -146,9 +146,6 @@ public class VulkanState {
      */
     public boolean hasSeparateTransferQueue = false;
 
-    /** Semaphores for signaling presentation. One per frame in flight. */
-    public final long[] imageAcquiredSemaphores = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
-
     /** The physical devices we found on the system. */
     public final List<PhysicalDeviceInfo> physicalDevices = new ArrayList<>();
 
@@ -165,8 +162,8 @@ public class VulkanState {
     /** The Vulkan Memory Allocator handle. */
     public long vmaAllocator = VK_NULL_HANDLE;
 
-    /** Info specific to windows. */
-    public final Map<Window, WindowInfo> windows = new HashMap<>();
+    /** Where each window's frames are presented, in the order the windows were added. */
+    public final Map<Window, Presentation> presentations = new LinkedHashMap<>();
 
     /**
      * Resource frees that have to wait until no frame in flight can be using the resource, one list
@@ -283,62 +280,5 @@ public class VulkanState {
          * the queue family properties are dropped.
          */
         public int graphicsTimestampValidBits = 0;
-    }
-
-    /** Info specific to a window. */
-    public static class WindowInfo {
-        /** Placeholder when we know we should not be touching swapchain images. */
-        public static final int INVALID_SWAPCHAIN_INDEX = -1;
-
-        /**
-         * The index of the swapchain images (/views/semaphores) for the current frame, from
-         * vkAcquireNextImageKHR. Only valid during the actual frame rendering.
-         */
-        public int currentSwapchainIndex;
-
-        /** Semaphores for signaling presentation. One per swapchain image. */
-        public long[] renderCompleteSemaphores;
-
-        /** The surface capabilities, queried again each time the swapchain is created. */
-        public final VkSurfaceCapabilitiesKHR capabilities = VkSurfaceCapabilitiesKHR.create();
-
-        public long surfaceHandle;
-        public long swapchainHandle;
-        public long[] swapchainImages;
-        public long[] swapchainImageViews;
-
-        /** The swapchain image width in pixels, which might not match the window. */
-        public int swapchainWidth;
-
-        /** The swapchain image height in pixels, which might not match the window. */
-        public int swapchainHeight;
-
-        /** If we need to update the swapchain. */
-        public boolean updateSwapchain;
-
-        /** The time (in millis) when the window was last resized. */
-        public long lastResize;
-
-        /** The time (in millis) when the swapchain was last regenerated. */
-        public long lastSwapchainGeneration;
-
-        public final @NonNull Window window;
-
-        /**
-         * Create a struct for the specified window.
-         *
-         * @param window The window this is related to.
-         */
-        public WindowInfo(@NonNull Window window) {
-            this.currentSwapchainIndex = INVALID_SWAPCHAIN_INDEX;
-            this.renderCompleteSemaphores = null;
-            this.surfaceHandle = VK_NULL_HANDLE;
-            this.swapchainHandle = VK_NULL_HANDLE;
-            this.swapchainImages = null;
-            this.swapchainImageViews = null;
-            this.updateSwapchain = false;
-            this.lastSwapchainGeneration = 0;
-            this.window = window;
-        }
     }
 }

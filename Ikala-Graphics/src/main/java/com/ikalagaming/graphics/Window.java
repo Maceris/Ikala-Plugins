@@ -150,7 +150,7 @@ public class Window {
             throw new WindowCreationException(error);
         }
 
-        setCallbacks();
+        setCallbacks(options.guiInput());
 
         if (options.icon() && glfwGetPlatform() != GLFW_PLATFORM_COCOA) {
             setWindowIcon();
@@ -318,16 +318,6 @@ public class Window {
     private final float[] contentScaleY = new float[1];
 
     /**
-     * Wait for input, or until some time passes, whichever comes first, handling any that comes as
-     * {@link #pollEvents} would. Main thread.
-     *
-     * @param seconds The longest to wait.
-     */
-    public void waitEvents(double seconds) {
-        glfwWaitEventsTimeout(seconds);
-    }
-
-    /**
      * Send the first connected gamepad's state to IkGui, and tell IkGui whether there is one.
      *
      * @param io The IkGui IO to send key events to.
@@ -403,10 +393,17 @@ public class Window {
         }
     }
 
-    /** Set up the window callbacks. */
-    private void setCallbacks() {
+    /**
+     * Set up the window callbacks.
+     *
+     * @param guiInput Whether to send the window's input and focus to IkGui.
+     */
+    private void setCallbacks(boolean guiInput) {
 
         glfwSetFramebufferSizeCallback(windowHandle, (window, w, h) -> resized(w, h));
+        if (!guiInput) {
+            return;
+        }
 
         glfwSetKeyCallback(
                 windowHandle,

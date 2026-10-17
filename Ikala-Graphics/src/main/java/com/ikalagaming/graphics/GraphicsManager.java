@@ -28,8 +28,13 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
@@ -134,6 +139,12 @@ public class GraphicsManager {
      * @return The main window.
      */
     @Getter private static Window mainWindow;
+
+    /** The windows besides the main one, in the order they were created. Main thread only. */
+    private static final List<Window> extraWindows = new ArrayList<>();
+
+    /** Work other threads asked to do on the main thread, run at the start of the next tick. */
+    private static final Queue<Runnable> mainThreadTasks = new ConcurrentLinkedQueue<>();
 
     /**
      * The window manager for drawing GUIs.
@@ -395,11 +406,132 @@ public class GraphicsManager {
         }
     }
 
+    /**
+     * The main window was resized, which the scene and GUI follow.
+     *
+     * @param window The main window.
+     */
     private static void resize(@NonNull Window window) {
         int width = window.getWidth();
         int height = window.getHeight();
         scene.resize(width, height);
-        renderInstance.resize(window, width, height);
+        renderInstance.resize(window);
+        IkGui.getIO().displaySize.set(width, height);
+    }
+
+    /**
+     * Create another window, which the application owns until it is closed. Closing it, from the OS
+     * or {@link #closeWindow(Window)}, only destroys that window. Main thread only, see {@link
+     * #runOnMainThread(Runnable)}.
+     *
+     * @param options How to create the window.
+     * @return The new window.
+     * @throws IllegalStateException If graphics aren't running, or this isn't the main thread.
+     */
+    public static Window createWindow(@NonNull WindowOptions options) {
+        checkMainThread();
+        Window window = new Window(options, GraphicsManager::extraWindowResized);
+        try {
+            renderInstance.createPresentation(window);
+        } catch (RuntimeException e) {
+            window.destroy();
+            throw e;
+        }
+        extraWindows.add(window);
+        log.debug("Created window {}", window.getTitle());
+        new WindowCreated(window.getWindowHandle()).fire();
+        return window;
+    }
+
+    /**
+     * Close a window. Closing the main window asks the application to shut down, like the user
+     * closing it would. Main thread only, see {@link #runOnMainThread(Runnable)}.
+     *
+     * @param window The window to close.
+     * @throws IllegalStateException If this isn't the main thread.
+     */
+    public static void closeWindow(@NonNull Window window) {
+        checkMainThread();
+        if (window == mainWindow) {
+            mainWindow.requestClose();
+            return;
+        }
+        if (!extraWindows.remove(window)) {
+            return;
+        }
+        // The surface has to go before the window it was made for
+        renderInstance.destroyPresentation(window);
+        window.destroy();
+        log.debug("Closed window {}", window.getTitle());
+    }
+
+    /**
+     * Every open window, the main window first. Main thread only.
+     *
+     * @return The windows, which can't be changed.
+     */
+    public static List<Window> getWindows() {
+        if (mainWindow == null) {
+            return List.of();
+        }
+        List<Window> windows = new ArrayList<>(extraWindows.size() + 1);
+        windows.add(mainWindow);
+        windows.addAll(extraWindows);
+        return Collections.unmodifiableList(windows);
+    }
+
+    /**
+     * Run something on the main thread at the start of the next tick, such as creating or closing
+     * windows. Safe from any thread. Dropped if graphics shut down first.
+     *
+     * @param task The work to do.
+     */
+    public static void runOnMainThread(@NonNull Runnable task) {
+        mainThreadTasks.add(task);
+    }
+
+    /** Run the work other threads queued up for the main thread. */
+    private static void runMainThreadTasks() {
+        Runnable task = mainThreadTasks.poll();
+        while (task != null) {
+            try {
+                task.run();
+            } catch (RuntimeException e) {
+                log.warn("A main thread task failed", e);
+            }
+            task = mainThreadTasks.poll();
+        }
+    }
+
+    /**
+     * Make sure graphics are running and we are on the main thread, where GLFW and the renderer
+     * must be used.
+     *
+     * @throws IllegalStateException If not.
+     */
+    private static void checkMainThread() {
+        if (mainWindow == null || Thread.currentThread() != mainThread) {
+            throw new IllegalStateException(
+                    "Windows can only be changed on the main thread while graphics are running");
+        }
+    }
+
+    /**
+     * A window other than the main one was resized, so only its swapchain changes.
+     *
+     * @param window The window.
+     */
+    private static void extraWindowResized(@NonNull Window window) {
+        renderInstance.resize(window);
+    }
+
+    /** Close any windows the user closed, other than the main window. */
+    private static void closeClosedWindows() {
+        for (Window window : List.copyOf(extraWindows)) {
+            if (window.windowShouldClose()) {
+                closeWindow(window);
+            }
+        }
     }
 
     /**
@@ -480,6 +612,9 @@ public class GraphicsManager {
             IkGui.destroyContext();
         }
 
+        extraWindows.forEach(Window::destroy);
+        extraWindows.clear();
+        mainThreadTasks.clear();
         if (null != mainWindow) {
             mainWindow.destroy();
             mainWindow = null;
@@ -514,7 +649,10 @@ public class GraphicsManager {
             return Launcher.STATUS_REQUEST_REMOVAL;
         }
 
+        // Handles the input for every window, though only the main window's goes to IkGui
         mainWindow.pollEvents();
+        closeClosedWindows();
+        runMainThreadTasks();
         uiManager.setContentScale(mainWindow.getContentScale());
         // Button clicks and the like from the last frame, run here rather than mid-render
         uiManager.dispatchEvents();
@@ -568,7 +706,7 @@ public class GraphicsManager {
         // keep frames evenly spaced.
         final double idle = Math.min(nextUpdateTime, nextRenderTime) - getTime() - WAKE_EARLY;
         if (idle > 0) {
-            mainWindow.waitEvents(Math.min(idle, FRAME_TIME));
+            GlfwPlatform.waitEvents(Math.min(idle, FRAME_TIME));
         }
 
         return Launcher.STATUS_OK;

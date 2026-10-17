@@ -14,6 +14,8 @@ import lombok.NonNull;
  * @param floating Whether the window stays on top of other windows.
  * @param focusOnShow Whether the window takes the input focus when it is shown.
  * @param icon Whether to give the window the program icon.
+ * @param guiInput Whether the window's mouse, keyboard and focus go to IkGui. Only one window can
+ *     send them until IkGui gets a platform backend for several windows.
  */
 public record WindowOptions(
         @NonNull String title,
@@ -23,7 +25,8 @@ public record WindowOptions(
         boolean resizable,
         boolean floating,
         boolean focusOnShow,
-        boolean icon) {
+        boolean icon,
+        boolean guiInput) {
 
     /**
      * The options for the main window, which is decorated and resizable, and maximized unless the
@@ -45,7 +48,21 @@ public record WindowOptions(
                 true,
                 false,
                 true,
+                true,
                 true);
+    }
+
+    /**
+     * The options for a plain extra window, decorated and resizable, whose input doesn't go to
+     * IkGui.
+     *
+     * @param title The title of the window.
+     * @param width The width in screen coordinates.
+     * @param height The height in screen coordinates.
+     * @return The options for the window.
+     */
+    public static WindowOptions plain(@NonNull String title, int width, int height) {
+        return new WindowOptions(title, width, height, true, true, false, true, true, false);
     }
 
     /**
