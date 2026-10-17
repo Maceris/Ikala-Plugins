@@ -12,7 +12,6 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.SectionHandle;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.bake.Face;
 import com.ikalagaming.graphics.bake.Faces;
@@ -617,7 +616,7 @@ final class LabPreview implements AutoCloseable {
         }
 
         @Override
-        public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+        public boolean handleGuiInput(@NonNull Scene scene) {
             return false;
         }
     }

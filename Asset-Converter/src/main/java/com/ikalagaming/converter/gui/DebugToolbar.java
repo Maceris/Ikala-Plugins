@@ -3,7 +3,6 @@ package com.ikalagaming.converter.gui;
 import static com.ikalagaming.converter.gui.DefaultWindows.*;
 
 import com.ikalagaming.converter.ConverterPlugin;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.WindowManager;
 import com.ikalagaming.graphics.gui.component.Checkbox;
@@ -79,7 +78,7 @@ public class DebugToolbar extends MainToolbar {
     }
 
     @Override
-    public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+    public boolean handleGuiInput(@NonNull Scene scene) {
         if (debug.checkResult()) {
             windowManager.setVisible(DEBUG.getName(), debug.getState());
             return true;
@@ -100,7 +99,7 @@ public class DebugToolbar extends MainToolbar {
     }
 
     @Override
-    public void updateValues(@NonNull Scene scene, @NonNull Window window) {
+    public void updateValues(@NonNull Scene scene) {
         // Not required
     }
 }

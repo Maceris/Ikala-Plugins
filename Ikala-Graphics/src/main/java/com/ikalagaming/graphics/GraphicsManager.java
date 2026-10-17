@@ -4,6 +4,7 @@ import static org.lwjgl.glfw.GLFW.glfwGetTime;
 
 import com.ikalagaming.graphics.benchmark.GateBenchmark;
 import com.ikalagaming.graphics.events.WindowCreated;
+import com.ikalagaming.graphics.events.WindowDestroyed;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.WindowManager;
 import com.ikalagaming.graphics.gui.data.DrawData;
@@ -160,6 +161,9 @@ public class GraphicsManager {
      */
     private static final List<Window> guiWindows = new ArrayList<>();
 
+    /** Whether graphics are shutting down, when window events are no longer fired. */
+    private static boolean terminating = false;
+
     /** Connects IkGui to GLFW, null while graphics aren't running. */
     private static GlfwGuiBackend guiBackend;
 
@@ -230,7 +234,7 @@ public class GraphicsManager {
 
         scene = new Scene(mainWindow.getWidth(), mainWindow.getHeight());
 
-        cameraManager = new CameraManager(scene.getCamera(), mainWindow);
+        cameraManager = new CameraManager(scene.getCamera(), GraphicsManager::getSceneWindow);
 
         lastRenderTime = getTime();
         nextRenderTime = lastRenderTime + FRAME_TIME;
@@ -500,6 +504,8 @@ public class GraphicsManager {
         if (window == sceneWindow) {
             return;
         }
+        // Don't leave the cursor hidden in the old window if it was turning the camera
+        sceneWindow.enableCursor();
         sceneWindow = window;
         scene.resize(window.getWidth(), window.getHeight());
         renderInstance.sceneWindowChanged(window);
@@ -543,6 +549,7 @@ public class GraphicsManager {
     static Window createGuiWindow(@NonNull WindowOptions options) {
         Window window = new Window(options, GraphicsManager::windowResized);
         guiWindows.add(window);
+        new WindowCreated(window.getWindowHandle()).fire();
         return window;
     }
 
@@ -571,6 +578,9 @@ public class GraphicsManager {
      */
     static void destroyGuiWindow(@NonNull Window window) {
         if (guiWindows.remove(window)) {
+            if (!terminating) {
+                new WindowDestroyed(window.getWindowHandle()).fire();
+            }
             window.destroy();
         }
     }
@@ -606,6 +616,7 @@ public class GraphicsManager {
         extraWindows.remove(window);
         // The surface has to go before the window it was made for
         renderInstance.destroyPresentation(window);
+        new WindowDestroyed(window.getWindowHandle()).fire();
         window.destroy();
         log.debug("Closed window {}", window.getTitle());
     }
@@ -735,6 +746,7 @@ public class GraphicsManager {
         if (!initialized.get()) {
             return;
         }
+        terminating = true;
         // The renderer releases every texture as it cleans up
         contexts.values().forEach(GraphicsContext::close);
         contexts.clear();
@@ -766,6 +778,7 @@ public class GraphicsManager {
         }
 
         GlfwPlatform.terminate();
+        terminating = false;
         initialized.set(false);
     }
 
@@ -813,16 +826,17 @@ public class GraphicsManager {
 
             IkIO ikIO = IkGui.getIO();
             if (!ikIO.wantCaptureMouse) {
+                // The camera turns in the window that shows the scene
                 if (ikIO.getMouseDown(MouseButton.RIGHT)) {
-                    mainWindow.disableCursor();
+                    sceneWindow.disableCursor();
                 } else {
-                    mainWindow.enableCursor();
+                    sceneWindow.enableCursor();
                 }
             }
             cameraManager.updateCamera(elapsedTime);
 
-            windowManager.handleGuiInput(scene, mainWindow);
-            windowManager.updateValues(scene, mainWindow);
+            windowManager.handleGuiInput(scene);
+            windowManager.updateValues(scene);
 
             // Update the next time we should update models
             lastUpdateTime = currentTime;

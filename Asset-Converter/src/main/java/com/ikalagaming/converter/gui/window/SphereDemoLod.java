@@ -9,7 +9,6 @@ import com.ikalagaming.graphics.Instances;
 import com.ikalagaming.graphics.LodHandle;
 import com.ikalagaming.graphics.LodInstanceHandle;
 import com.ikalagaming.graphics.Lods;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -457,7 +456,7 @@ final class SphereDemoLod {
         }
 
         @Override
-        public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+        public boolean handleGuiInput(@NonNull Scene scene) {
             return false;
         }
     }

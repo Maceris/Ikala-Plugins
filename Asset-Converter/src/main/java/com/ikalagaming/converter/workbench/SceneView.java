@@ -9,7 +9,6 @@ import com.ikalagaming.graphics.DebugShapeHandle;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.component.GuiWindow;
@@ -951,7 +950,7 @@ public class SceneView {
         }
 
         @Override
-        public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+        public boolean handleGuiInput(@NonNull Scene scene) {
             return false;
         }
     }

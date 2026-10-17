@@ -17,6 +17,8 @@ import com.ikalagaming.graphics.scene.Camera;
 import lombok.Getter;
 import lombok.NonNull;
 
+import java.util.function.Supplier;
+
 /** Handles the position and movement of the camera. */
 public class CameraManager {
 
@@ -57,8 +59,8 @@ public class CameraManager {
      */
     @Getter private final Camera camera;
 
-    /** The window we are managing the camera for. */
-    private final Window window;
+    /** The window the scene is shown in, whose keys move the camera. */
+    private final Supplier<Window> window;
 
     /** The mouse sensitivity. Radians per pixel of mouse movement. */
     private float sensitivity;
@@ -77,12 +79,12 @@ public class CameraManager {
     private boolean wasControl;
 
     /**
-     * Create a new camera manager for the given window.
+     * Create a new camera manager, moved by the keys of whichever window shows the scene.
      *
      * @param camera The camera we are managing.
-     * @param window The window the camera renders to.
+     * @param window Fetches the window the scene is shown in, which can change.
      */
-    public CameraManager(@NonNull Camera camera, @NonNull Window window) {
+    public CameraManager(@NonNull Camera camera, @NonNull Supplier<Window> window) {
         this.camera = camera;
         this.window = window;
         this.sensitivity = DEFAULT_MOUSE_SENSITIVITY;
@@ -117,6 +119,7 @@ public class CameraManager {
         }
         wasTurning = turning;
 
+        final Window window = this.window.get();
         // Toggle on the press, not while held; not while typing, where Ctrl makes shortcuts
         final boolean control =
                 window.isKeyPressed(GLFW_KEY_LEFT_CONTROL)

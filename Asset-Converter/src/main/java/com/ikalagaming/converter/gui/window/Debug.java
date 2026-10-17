@@ -2,7 +2,6 @@ package com.ikalagaming.converter.gui.window;
 
 import static com.ikalagaming.converter.gui.DefaultWindows.DEBUG;
 
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.component.GuiWindow;
 import com.ikalagaming.graphics.gui.enums.Condition;
@@ -54,7 +53,7 @@ public class Debug extends GuiWindow {
     }
 
     @Override
-    public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+    public boolean handleGuiInput(@NonNull Scene scene) {
         return false;
     }
 }

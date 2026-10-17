@@ -1,6 +1,5 @@
 package com.ikalagaming.graphics.gui.component;
 
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.gui.util.Alignment;
 import com.ikalagaming.graphics.gui.util.RectFloat;
 import com.ikalagaming.graphics.scene.Scene;
@@ -287,12 +286,12 @@ public class Component implements Drawable {
     }
 
     @Override
-    public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+    public boolean handleGuiInput(@NonNull Scene scene) {
         for (Component child : children) {
             if (!child.isVisible()) {
                 continue;
             }
-            if (child.handleGuiInput(scene, window)) {
+            if (child.handleGuiInput(scene)) {
                 return true;
             }
         }
@@ -460,10 +459,10 @@ public class Component implements Drawable {
     }
 
     @Override
-    public void updateValues(@NonNull Scene scene, @NonNull Window window) {
+    public void updateValues(@NonNull Scene scene) {
         for (Component child : children) {
             if (child.isVisible()) {
-                child.updateValues(scene, window);
+                child.updateValues(scene);
             }
         }
     }

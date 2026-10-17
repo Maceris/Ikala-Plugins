@@ -23,12 +23,12 @@ class WindowOwnershipTest {
         public void draw(int width, int height) {}
 
         @Override
-        public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+        public boolean handleGuiInput(@NonNull Scene scene) {
             return false;
         }
 
         @Override
-        public void updateValues(@NonNull Scene scene, @NonNull Window window) {}
+        public void updateValues(@NonNull Scene scene) {}
     }
 
     private WindowManager manager;

@@ -3,7 +3,9 @@ package com.ikalagaming.graphics.events;
 import com.ikalagaming.event.Event;
 
 /**
- * Fired off when a new GLFWwindow has been created.
+ * Fired off when a new GLFW window has been created: the main window, windows made with {@link
+ * com.ikalagaming.graphics.GraphicsManager#createWindow}, and the windows IkGui makes for its
+ * viewports.
  *
  * @author Ches Burks
  */

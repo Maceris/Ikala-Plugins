@@ -7,7 +7,6 @@ import com.ikalagaming.graphics.CameraManager;
 import com.ikalagaming.graphics.GraphicsContext;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakeSource;
 import com.ikalagaming.graphics.bake.SectionBaker;
 import com.ikalagaming.graphics.graph.Material;
@@ -284,7 +283,7 @@ final class LabLod implements AutoCloseable {
         }
 
         @Override
-        public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+        public boolean handleGuiInput(@NonNull Scene scene) {
             return false;
         }
     }

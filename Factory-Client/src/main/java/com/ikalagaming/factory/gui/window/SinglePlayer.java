@@ -8,7 +8,6 @@ import com.ikalagaming.factory.LocalServer;
 import com.ikalagaming.factory.gui.component.menu.SaveEntry;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.gui.WindowManager;
 import com.ikalagaming.graphics.gui.component.Button;
@@ -99,7 +98,7 @@ public class SinglePlayer extends GuiWindow {
     }
 
     @Override
-    public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+    public boolean handleGuiInput(@NonNull Scene scene) {
         if (back.checkResult()) {
             windowManager.hide(SINGLE_PLAYER.getName());
             windowManager.show(MAIN_MENU.getName());

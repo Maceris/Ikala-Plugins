@@ -4,7 +4,6 @@ import static com.ikalagaming.factory.gui.DefaultWindows.*;
 
 import com.ikalagaming.factory.FactoryClientPlugin;
 import com.ikalagaming.factory.lab.LabTool;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.WindowManager;
 import com.ikalagaming.graphics.gui.component.Checkbox;
@@ -92,7 +91,7 @@ public class DebugToolbar extends MainToolbar {
     }
 
     @Override
-    public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+    public boolean handleGuiInput(@NonNull Scene scene) {
         if (debug.checkResult()) {
             windowManager.setVisible(DEBUG.getName(), debug.getState());
             return true;
@@ -128,7 +127,7 @@ public class DebugToolbar extends MainToolbar {
     }
 
     @Override
-    public void updateValues(@NonNull Scene scene, @NonNull Window window) {
+    public void updateValues(@NonNull Scene scene) {
         // The Lab can close itself
         LabTool lab = FactoryClientPlugin.getLabTool();
         worldgenLab.setState(lab != null && lab.isOpen());

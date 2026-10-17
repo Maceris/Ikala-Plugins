@@ -4,7 +4,6 @@ import static com.ikalagaming.factory.gui.DefaultWindows.MAIN_MENU;
 import static com.ikalagaming.factory.gui.DefaultWindows.SINGLE_PLAYER;
 
 import com.ikalagaming.factory.FactoryClientPlugin;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.gui.WindowManager;
 import com.ikalagaming.graphics.gui.component.Button;
 import com.ikalagaming.graphics.gui.component.GuiWindow;
@@ -63,7 +62,7 @@ public class MainMenu extends GuiWindow {
     }
 
     @Override
-    public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+    public boolean handleGuiInput(@NonNull Scene scene) {
         if (singlePlayer.checkResult()) {
             windowManager.hide(MAIN_MENU.getName());
             windowManager.show(SINGLE_PLAYER.getName());

@@ -590,8 +590,8 @@ public class GraphicsDebug extends GuiWindow {
     }
 
     @Override
-    public boolean handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
-        super.handleGuiInput(scene, window);
+    public boolean handleGuiInput(@NonNull Scene scene) {
+        super.handleGuiInput(scene);
 
         if (fogEnabled.checkResult()) {
             scene.getFog().setActive(fogEnabled.getState());
@@ -637,8 +637,8 @@ public class GraphicsDebug extends GuiWindow {
     }
 
     @Override
-    public void updateValues(@NonNull Scene scene, @NonNull Window window) {
-        super.updateValues(scene, window);
+    public void updateValues(@NonNull Scene scene) {
+        super.updateValues(scene);
 
         fogEnabled.setState(scene.getFog().isActive());
         int config = GraphicsManager.getPipelineConfig();

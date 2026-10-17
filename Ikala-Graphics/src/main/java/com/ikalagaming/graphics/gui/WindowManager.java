@@ -1,7 +1,6 @@
 package com.ikalagaming.graphics.gui;
 
 import com.ikalagaming.graphics.GraphicsContext;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.gui.component.Component;
 import com.ikalagaming.graphics.gui.component.GuiWindow;
 import com.ikalagaming.graphics.gui.component.MainToolbar;
@@ -222,31 +221,29 @@ public class WindowManager {
      * Process GUI inputs, which might happen at a different frequency than rendering.
      *
      * @param scene The scene we are rendering.
-     * @param window The window we are using.
      */
-    public void handleGuiInput(@NonNull Scene scene, @NonNull Window window) {
+    public void handleGuiInput(@NonNull Scene scene) {
         MainToolbar currentToolbar = getToolbar();
         if (currentToolbar != null) {
-            currentToolbar.handleGuiInput(scene, window);
+            currentToolbar.handleGuiInput(scene);
         }
 
         windows.values().stream()
                 .map(Owned::value)
                 .filter(Component::isVisible)
-                .forEach(component -> component.handleGuiInput(scene, window));
+                .forEach(component -> component.handleGuiInput(scene));
     }
 
     /**
      * Update any internal values as required.
      *
      * @param scene The scene we are rendering.
-     * @param window The window we are using.
      */
-    public void updateValues(@NonNull Scene scene, @NonNull Window window) {
+    public void updateValues(@NonNull Scene scene) {
         windows.values().stream()
                 .map(Owned::value)
                 .filter(Component::isVisible)
-                .forEach(component -> component.updateValues(scene, window));
+                .forEach(component -> component.updateValues(scene));
     }
 
     /**
