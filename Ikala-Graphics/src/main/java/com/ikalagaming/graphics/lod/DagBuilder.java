@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.IntPredicate;
 
 /**
  * Builds a level of detail DAG the way Nanite does (Karis et al., <i>Nanite: A Deep Dive</i>,
@@ -97,6 +98,9 @@ public final class DagBuilder {
      * @param bakeDensity Texels across a baked cluster's error: 1 for texels as wide as the error,
      *     which then cover as many pixels as the error threshold where the cluster is drawn; more
      *     for sharper tiles, at that squared in texels.
+     * @param cutOut Which materials have holes cut out by their textures, like leaves, or null for
+     *     none. A group holding such triangles neither blends its look per vertex nor bakes, either
+     *     of which would fill the holes, so it keeps its textures and their seams.
      */
     public record Options(
             double virtualEdgeFactor,
@@ -107,10 +111,48 @@ public final class DagBuilder {
             boolean mergePlanar,
             MaterialAverages averages,
             int bakeTile,
-            double bakeDensity) {
+            double bakeDensity,
+            IntPredicate cutOut) {
 
         /** Texels across a baked cluster's error, unless asked otherwise. */
         public static final double DEFAULT_BAKE_DENSITY = 2;
+
+        /**
+         * Options with no cut out materials.
+         *
+         * @param virtualEdgeFactor r for virtual edges, as a multiple of the average edge length.
+         * @param lockOpenBorder Whether the input's open border is locked at every level.
+         * @param threads Worker threads.
+         * @param keepLineage Whether to keep where every triangle came from.
+         * @param visibilityReach How far a leaf triangle's rays must get to count as seen.
+         * @param mergePlanar Whether to merge each input's coplanar triangles first.
+         * @param averages What each material looks like averaged, or null.
+         * @param bakeTile The side of the tile a baked cluster is expected to need, 0 never to
+         *     bake.
+         * @param bakeDensity Texels across a baked cluster's error.
+         */
+        public Options(
+                double virtualEdgeFactor,
+                boolean lockOpenBorder,
+                int threads,
+                boolean keepLineage,
+                double visibilityReach,
+                boolean mergePlanar,
+                MaterialAverages averages,
+                int bakeTile,
+                double bakeDensity) {
+            this(
+                    virtualEdgeFactor,
+                    lockOpenBorder,
+                    threads,
+                    keepLineage,
+                    visibilityReach,
+                    mergePlanar,
+                    averages,
+                    bakeTile,
+                    bakeDensity,
+                    null);
+        }
 
         /**
          * Options that bake at the default density.
@@ -237,7 +279,8 @@ public final class DagBuilder {
                     mergePlanar,
                     averages,
                     bakeTile,
-                    bakeDensity);
+                    bakeDensity,
+                    cutOut);
         }
 
         /**
@@ -256,7 +299,8 @@ public final class DagBuilder {
                     mergePlanar,
                     materialAverages,
                     bakeTile,
-                    bakeDensity);
+                    bakeDensity,
+                    cutOut);
         }
 
         /**
@@ -275,7 +319,8 @@ public final class DagBuilder {
                     merge,
                     averages,
                     bakeTile,
-                    bakeDensity);
+                    bakeDensity,
+                    cutOut);
         }
 
         /**
@@ -294,7 +339,8 @@ public final class DagBuilder {
                     mergePlanar,
                     averages,
                     tile,
-                    bakeDensity);
+                    bakeDensity,
+                    cutOut);
         }
 
         /**
@@ -313,7 +359,38 @@ public final class DagBuilder {
                     mergePlanar,
                     averages,
                     bakeTile,
-                    density);
+                    density,
+                    cutOut);
+        }
+
+        /**
+         * The same options, with some materials cut out.
+         *
+         * @param materials Which materials have holes cut out by their textures, or null for none.
+         * @return The options.
+         */
+        public Options withCutOut(IntPredicate materials) {
+            return new Options(
+                    virtualEdgeFactor,
+                    lockOpenBorder,
+                    threads,
+                    keepLineage,
+                    visibilityReach,
+                    mergePlanar,
+                    averages,
+                    bakeTile,
+                    bakeDensity,
+                    materials);
+        }
+
+        /**
+         * Whether a material has holes cut out by its texture.
+         *
+         * @param material The material.
+         * @return True if it does.
+         */
+        public boolean isCutOut(int material) {
+            return cutOut != null && cutOut.test(material);
         }
 
         /**
@@ -618,8 +695,7 @@ public final class DagBuilder {
             for (int axis = 0; axis < AXES; ++axis) {
                 offset[axis] = (float) (mesh.getOrigin()[axis] - dag.getOrigin()[axis]);
             }
-            for (int[] triangles :
-                    Clusters.split(mesh, Clusters.MAX_TRIANGLES, options.threads())) {
+            for (int[] triangles : leafClusters(mesh)) {
                 final float[] corners = Clusters.corners(mesh, triangles, offset);
                 final int[] materials = new int[triangles.length];
                 final float[] visibility = new float[triangles.length];
@@ -738,7 +814,7 @@ public final class DagBuilder {
                 dag.setStopReason("reached " + MAX_LEVELS + " levels");
                 return;
             }
-            final int[][] groups = Grouping.group(dag, active);
+            final int[][] groups = group(active);
             final Map<Grouping.Corner, Integer> owners = owners(groups);
             if (cellMin != null) {
                 lockCellBoundary(owners, active);
@@ -1894,7 +1970,7 @@ public final class DagBuilder {
      * @return True if it bakes.
      */
     private boolean bakes(int @NonNull [] children) {
-        if (options.bakeTile() <= 0) {
+        if (options.bakeTile() <= 0 || anyCutOut(children)) {
             return false;
         }
         double childError = 0;
@@ -2026,7 +2102,7 @@ public final class DagBuilder {
      * @return True if it averages.
      */
     private boolean averages(int @NonNull [] children) {
-        if (options.averages() == null) {
+        if (options.averages() == null || anyCutOut(children)) {
             return false;
         }
         double childError = 0;
@@ -2039,6 +2115,85 @@ public final class DagBuilder {
             }
         }
         return childError > 0 && childError >= repeat;
+    }
+
+    /**
+     * Split an input into leaf clusters, cut out triangles apart from the rest, so no cluster mixes
+     * them: a cut out cluster is drawn alpha tested, and its groups can't blend or bake.
+     *
+     * @param mesh The input.
+     * @return The triangles of each cluster.
+     */
+    private int[][] leafClusters(@NonNull LodMesh mesh) {
+        if (options.cutOut() == null) {
+            return Clusters.split(mesh, Clusters.MAX_TRIANGLES, options.threads());
+        }
+        final IntArrayList cut = new IntArrayList();
+        final IntArrayList rest = new IntArrayList();
+        for (int t = 0; t < mesh.getTriangleCount(); ++t) {
+            (options.isCutOut(mesh.material(t)) ? cut : rest).addInt(t);
+        }
+        if (cut.isEmpty()) {
+            return Clusters.split(mesh, Clusters.MAX_TRIANGLES, options.threads());
+        }
+        final List<int[]> out = new ArrayList<>();
+        for (IntArrayList kind : List.of(rest, cut)) {
+            if (!kind.isEmpty()) {
+                out.addAll(
+                        List.of(
+                                Clusters.split(
+                                        mesh,
+                                        Clusters.MAX_TRIANGLES,
+                                        options.threads(),
+                                        kind.toIntArray())));
+            }
+        }
+        return out.toArray(new int[0][]);
+    }
+
+    /**
+     * Group a level's clusters, cut out ones apart from the rest, so the rest still blend and bake
+     * where cut out triangles would stop them.
+     *
+     * @param active The level's clusters.
+     * @return The groups.
+     */
+    private int[][] group(int @NonNull [] active) {
+        if (options.cutOut() == null) {
+            return Grouping.group(dag, active);
+        }
+        final IntArrayList cut = new IntArrayList();
+        final IntArrayList rest = new IntArrayList();
+        for (int id : active) {
+            (anyCutOut(new int[] {id}) ? cut : rest).addInt(id);
+        }
+        final List<int[]> out = new ArrayList<>();
+        for (IntArrayList kind : List.of(rest, cut)) {
+            if (!kind.isEmpty()) {
+                out.addAll(List.of(Grouping.group(dag, kind.toIntArray())));
+            }
+        }
+        return out.toArray(new int[0][]);
+    }
+
+    /**
+     * Whether any of a group's children has a triangle of a cut out material.
+     *
+     * @param children The children.
+     * @return True if one does.
+     */
+    private boolean anyCutOut(int @NonNull [] children) {
+        if (options.cutOut() == null) {
+            return false;
+        }
+        for (int id : children) {
+            for (int material : dag.clusters().get(id).materials()) {
+                if (options.isCutOut(material)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

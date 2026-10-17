@@ -38,7 +38,7 @@ struct Cluster {
     // x: world slot + 1 (0 for an empty entry), y: cell slot, z: parent's cell slot (NONE for a
     // root), w: section slot for a leaf (NONE above the leaves)
     uvec4 place;
-    // x: streaming unit slot, y: its children's unit slot (NONE for a leaf), z: level
+    // x: streaming unit slot, y: its children's unit slot (NONE for a leaf), z: level, w: flags
     uvec4 unit;
 };
 
@@ -178,21 +178,27 @@ const uint LIST_SCENE_EARLY = 0;
 const uint LIST_SCENE_LATE = 1;
 const uint LIST_FIRST_CASCADE = 2;
 const uint LIST_COUNT = 6;
+// A cut out cluster's draws go to its list plus this, to be drawn with an alpha test
+const uint CUT_OUT_LISTS = LIST_COUNT;
+const uint LIST_SLOTS = 2 * LIST_COUNT;
 
 // The passes, as in cull.comp: the cascades and the sky map cull clusters by the planes for what
 // doesn't move
 const uint PASS_COUNT = 5;
 
 // The counters after the lists' counts, see LodRenderer
-const uint COUNTER_SELECTED = LIST_COUNT;
-const uint COUNTER_TRIANGLES = LIST_COUNT + 1;
-const uint COUNTER_OUTSIDE = LIST_COUNT + 2;
-const uint COUNTER_OCCLUDED = LIST_COUNT + 3;
+const uint COUNTER_SELECTED = LIST_SLOTS;
+const uint COUNTER_TRIANGLES = LIST_SLOTS + 1;
+const uint COUNTER_OUTSIDE = LIST_SLOTS + 2;
+const uint COUNTER_OCCLUDED = LIST_SLOTS + 3;
 // Then, for each level up to LEVEL_COUNTERS, the cut's clusters, its triangles, and its triangles
 // inside the scene's frustum, each level's three together
-const uint COUNTER_LEVELS = LIST_COUNT + 4;
+const uint COUNTER_LEVELS = LIST_SLOTS + 4;
 const uint LEVEL_COUNTERS = 32u;
 const uint COUNTERS_PER_LEVEL = 3u;
+
+// Set in a cluster's flags, unit.w, when some of its materials are cut out, see LodCullMath
+const uint CLUSTER_CUT_OUT = 1;
 
 // Set in the view flags when the scene is culled by occlusion
 const uint FLAG_OCCLUSION = 1;
@@ -411,6 +417,9 @@ void main()
         return;
     }
 
+    // Cut out clusters go to their lists' cut out share
+    uint lists = (cluster.unit.w & CLUSTER_CUT_OUT) != 0u ? CUT_OUT_LISTS : 0u;
+
     // An instance's spheres are in the model's frame, its scale in renderOffset.w
     vec3 center = instanced
         ? rotate(w.rotation, cluster.tight.xyz * w.renderOffset.w) + w.renderOffset.xyz
@@ -437,10 +446,10 @@ void main()
             }
             // With occlusion on, what wasn't visible last frame waits for the late test
             if ((view.flags & FLAG_OCCLUSION) == 0 || wasVisible(instanced, index)) {
-                draw(LIST_SCENE_EARLY, mesh, drawId);
+                draw(lists + LIST_SCENE_EARLY, mesh, drawId);
             }
         } else if (inView) {
-            draw(LIST_FIRST_CASCADE + pass - 1, mesh, drawId);
+            draw(lists + LIST_FIRST_CASCADE + pass - 1, mesh, drawId);
         }
         return;
     }
@@ -453,6 +462,6 @@ void main()
     bool drawnEarly = wasVisible(instanced, index);
     setVisible(instanced, index, seen);
     if (seen && !drawnEarly) {
-        draw(LIST_SCENE_LATE, mesh, drawId);
+        draw(lists + LIST_SCENE_LATE, mesh, drawId);
     }
 }

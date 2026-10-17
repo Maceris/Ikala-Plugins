@@ -19,14 +19,14 @@ import java.util.function.ToIntFunction;
 
 /**
  * Turns part of an imported scene into one mesh for level of detail to build from: every mesh under
- * a node, placed in the world, welded where they touch so clusters can span them. Only opaque
- * meshes go in, since level of detail draws without an alpha test or blending; cut out and
- * translucent ones keep drawing as they are. Every triangle keeps its corners' normals, tangents
- * and texture coordinates, so curved surfaces stay smooth. Untextured ones keep their texture
- * coordinates too: level of detail takes coordinates that don't change across a triangle for a
- * texture that never repeats, which would keep it from ever blending far groups' materials. They
- * can be left out, to see how much their seams hold simplifying back: the triangles are then drawn
- * flat, with their textures projected.
+ * a node, placed in the world, welded where they touch so clusters can span them. Opaque meshes go
+ * in, and cut out ones if asked, which level of detail draws with an alpha test; translucent ones
+ * keep drawing as they are, since level of detail doesn't blend. Every triangle keeps its corners'
+ * normals, tangents and texture coordinates, so curved surfaces stay smooth. Untextured ones keep
+ * their texture coordinates too: level of detail takes coordinates that don't change across a
+ * triangle for a texture that never repeats, which would keep it from ever blending far groups'
+ * materials. They can be left out, to see how much their seams hold simplifying back: the triangles
+ * are then drawn flat, with their textures projected.
  */
 public final class SceneLod {
 
@@ -85,7 +85,8 @@ public final class SceneLod {
      *
      * @param mesh The welded mesh, positions relative to its origin at the middle of what went in.
      * @param meshes How many placed meshes went in.
-     * @param skipped How many placed meshes were left out for not being opaque.
+     * @param skipped How many placed meshes were left out for being translucent, or cut out when
+     *     those weren't asked for.
      */
     public record Input(@NonNull LodMesh mesh, int meshes, int skipped) {}
 
@@ -125,6 +126,27 @@ public final class SceneLod {
             @NonNull Materials materials,
             @NonNull ToIntFunction<Material> materialIndex,
             boolean keepAttributes) {
+        return gather(scene, top, materials, materialIndex, keepAttributes, false);
+    }
+
+    /**
+     * Gather the meshes under a node that level of detail can draw into one mesh, in the world.
+     *
+     * @param scene The scene.
+     * @param top The node whose meshes, and its children's, go in.
+     * @param materials Which material each placed mesh is drawn with.
+     * @param materialIndex A material's index in the scene's material cache.
+     * @param keepAttributes Whether triangles keep their normals, tangents and texture coordinates.
+     * @param cutOut Whether cut out meshes go in too, not only opaque ones.
+     * @return The mesh, or null if nothing under the node goes in.
+     */
+    public static Input gather(
+            @NonNull ImportedScene scene,
+            @NonNull Node top,
+            @NonNull Materials materials,
+            @NonNull ToIntFunction<Material> materialIndex,
+            boolean keepAttributes,
+            boolean cutOut) {
         final double[] origin = middle(scene, top);
         final LodMesh.Builder builder = LodMesh.builder(origin);
         int placed = 0;
@@ -137,8 +159,7 @@ public final class SceneLod {
             node.children().forEach(open::push);
             for (int sceneMesh : node.meshes()) {
                 final Material material = materials.of(node, sceneMesh);
-                if (material == null
-                        || material.getTransparency() != Material.Transparency.OPAQUE) {
+                if (material == null || !goesIn(material, cutOut)) {
                     ++skipped;
                     continue;
                 }
@@ -154,6 +175,21 @@ public final class SceneLod {
             }
         }
         return any ? new Input(builder.build(), placed, skipped) : null;
+    }
+
+    /**
+     * Whether level of detail takes a mesh drawn with a material.
+     *
+     * @param material The material.
+     * @param cutOut Whether cut out meshes go in.
+     * @return True for opaque materials, and cut out ones if they go in.
+     */
+    public static boolean goesIn(@NonNull Material material, boolean cutOut) {
+        return switch (material.getTransparency()) {
+            case OPAQUE -> true;
+            case CUTOUT -> cutOut;
+            case TRANSLUCENT -> false;
+        };
     }
 
     /**

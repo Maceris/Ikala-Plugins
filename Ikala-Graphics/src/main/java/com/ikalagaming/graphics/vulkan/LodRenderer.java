@@ -5,6 +5,8 @@ import static org.lwjgl.vulkan.VK12.vkCmdDrawIndexedIndirectCount;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshHandle;
+import com.ikalagaming.graphics.graph.Material;
+import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.lod.ClusterMeshes;
 import com.ikalagaming.graphics.lod.LiveLod;
 import com.ikalagaming.graphics.lod.LodCut;
@@ -88,8 +90,17 @@ public class LodRenderer {
      */
     public static final int LIST_COUNT = InstanceDrawUpdate.LIST_TRANSLUCENT;
 
+    /**
+     * Where each list's cut out share starts: clusters with {@link LodCullMath#FLAG_CUT_OUT} go to
+     * their list plus this, to be drawn with an alpha test.
+     */
+    public static final int CUT_OUT_LISTS = LIST_COUNT;
+
+    /** Every list, opaque then cut out. */
+    public static final int LIST_SLOTS = 2 * LIST_COUNT;
+
     /** The counter of clusters in the cut, after one count per list. */
-    public static final int COUNTER_SELECTED = LIST_COUNT;
+    public static final int COUNTER_SELECTED = LIST_SLOTS;
 
     /** The counter of triangles in the cut. */
     public static final int COUNTER_TRIANGLES = COUNTER_SELECTED + 1;
@@ -2225,7 +2236,30 @@ public class LodRenderer {
                                 ? LodCullMath.NONE
                                 : unitSlot(world, new UnitKey(piece.key, producer)),
                         // Counted from the finest: the cell's own level plus the level within it
-                        piece.key.level() + cluster.cluster().level()));
+                        piece.key.level() + cluster.cluster().level()),
+                cutOut(cluster.cluster()) ? LodCullMath.FLAG_CUT_OUT : 0);
+    }
+
+    /**
+     * Whether any of a cluster's triangles has a material with holes cut out by its texture.
+     *
+     * @param cluster The cluster.
+     * @return True if one has.
+     */
+    private static boolean cutOut(LodDag.@NonNull Cluster cluster) {
+        final MaterialCache cache = GraphicsManager.getScene().getMaterialCache();
+        int last = -1;
+        for (int material : cluster.materials()) {
+            if (material == last) {
+                continue;
+            }
+            last = material;
+            final Material found = cache.getMaterial(material);
+            if (found != null && found.getTransparency() == Material.Transparency.CUTOUT) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -2628,8 +2662,12 @@ public class LodRenderer {
                             counts.get(COUNTER_TRIANGLES),
                             counts.get(COUNTER_OUTSIDE),
                             counts.get(COUNTER_OCCLUDED),
-                            counts.get(InstanceDrawUpdate.LIST_SCENE_EARLY),
-                            counts.get(InstanceDrawUpdate.LIST_SCENE_LATE),
+                            counts.get(InstanceDrawUpdate.LIST_SCENE_EARLY)
+                                    + counts.get(
+                                            CUT_OUT_LISTS + InstanceDrawUpdate.LIST_SCENE_EARLY),
+                            counts.get(InstanceDrawUpdate.LIST_SCENE_LATE)
+                                    + counts.get(
+                                            CUT_OUT_LISTS + InstanceDrawUpdate.LIST_SCENE_LATE),
                             levelCounts(counts, 0),
                             levelCounts(counts, 1),
                             levelCounts(counts, 2));
@@ -2662,7 +2700,7 @@ public class LodRenderer {
         frameData.lodWorlds.ensureCapacity(
                 (long) Math.max(1, slots) * LodCullMath.WORLD_ENTRY_SIZE, state);
         frameData.lodDrawCommands.ensureCapacity(
-                ((long) Math.max(1, capacity) + pairCapacity) * LIST_COUNT * COMMAND_SIZE, state);
+                ((long) Math.max(1, capacity) + pairCapacity) * LIST_SLOTS * COMMAND_SIZE, state);
         final ByteBuffer table =
                 MemoryUtil.memByteBuffer(
                         frameData.lodWorlds.allocationInfo.pMappedData(),
@@ -2875,7 +2913,7 @@ public class LodRenderer {
      * @param pipelineLayout The pipeline's layout.
      * @param worldsOffset Where the world table's address goes in its vertex push constants; the
      *     cluster table's goes right after it.
-     * @param list Which list to draw.
+     * @param list Which list to draw, plus {@link #CUT_OUT_LISTS} for its cut out share.
      */
     public void draw(
             @NonNull VkCommandBuffer commandBuffer,
@@ -2883,7 +2921,7 @@ public class LodRenderer {
             long pipelineLayout,
             int worldsOffset,
             int list) {
-        if (!hasDraws(frameData) || list < 0 || list >= LIST_COUNT) {
+        if (!hasDraws(frameData) || list < 0 || list >= LIST_SLOTS) {
             return;
         }
         try (MemoryStack stack = MemoryStack.stackPush()) {

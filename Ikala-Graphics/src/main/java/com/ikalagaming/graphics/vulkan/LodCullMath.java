@@ -44,7 +44,8 @@ import java.nio.ByteOrder;
  *                   // leaf ({@link #NONE} above the leaves)
  * uvec4 unit        // its streaming unit's slot, the slot of its children's unit ({@link #NONE}
  *                   // for a leaf), its level counted from the finest (its cell's level plus its
- *                   // level within the cell), for the debug coloring, unused
+ *                   // level within the cell), for the debug coloring, its flags
+ *                   // ({@link #FLAG_CUT_OUT})
  * </pre>
  *
  * <p>A world table entry, {@value #WORLD_ENTRY_SIZE} bytes, one per world slot, rewritten each
@@ -77,6 +78,12 @@ public final class LodCullMath {
 
     /** The size of a cluster table entry, in bytes. */
     public static final int CLUSTER_ENTRY_SIZE = 6 * 4 * Integer.BYTES;
+
+    /**
+     * A cluster flag: some of its triangles' materials have holes cut out by their textures, so it
+     * is drawn into the cut out lists, with an alpha test.
+     */
+    public static final int FLAG_CUT_OUT = 1;
 
     /** Where a cluster's tight sphere starts. */
     public static final int CLUSTER_TIGHT_OFFSET = 0;
@@ -194,6 +201,7 @@ public final class LodCullMath {
      * @param meshSlot Its mesh's slot, or {@link #NO_MESH}.
      * @param generation The slot's generation.
      * @param place Where it sits.
+     * @param flags Its flags, such as {@link #FLAG_CUT_OUT}.
      */
     public static void putCluster(
             @NonNull ByteBuffer out,
@@ -202,7 +210,8 @@ public final class LodCullMath {
             double @NonNull [] parentBound,
             int meshSlot,
             int generation,
-            @NonNull Place place) {
+            @NonNull Place place,
+            int flags) {
         final int base = out.position();
         putSphere(out, base + CLUSTER_TIGHT_OFFSET, cluster.tight());
         putSphere(out, base + CLUSTER_BOUND_OFFSET, cluster.bound());
@@ -221,7 +230,7 @@ public final class LodCullMath {
         out.putInt(base + CLUSTER_UNIT_OFFSET, place.unit());
         out.putInt(base + CLUSTER_UNIT_OFFSET + Integer.BYTES, place.childUnit());
         out.putInt(base + CLUSTER_UNIT_OFFSET + 2 * Integer.BYTES, place.level());
-        out.putInt(base + CLUSTER_UNIT_OFFSET + 3 * Integer.BYTES, 0);
+        out.putInt(base + CLUSTER_UNIT_OFFSET + 3 * Integer.BYTES, flags);
     }
 
     /**
@@ -246,7 +255,8 @@ public final class LodCullMath {
                 dag.parentBound(cluster),
                 meshSlot,
                 generation,
-                Place.LONE);
+                Place.LONE,
+                0);
     }
 
     /**

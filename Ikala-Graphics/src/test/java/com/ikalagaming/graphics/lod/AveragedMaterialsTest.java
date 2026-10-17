@@ -186,4 +186,33 @@ class AveragedMaterialsTest {
         return Attributes.textured(cluster.attributes(), t)
                 && Attributes.isAveraged(cluster.attributes(), t * Attributes.PER_TRIANGLE);
     }
+
+    /**
+     * Cut out triangles are kept apart: no cluster mixes them with the rest, they are never
+     * averaged, which would fill their holes, and the rest still are far out.
+     */
+    @Test
+    void testCutOutKeptApart() {
+        final int cut = MATERIALS - 1;
+        final LodDag dag =
+                DagBuilder.build(
+                        checkered(), OPTIONS.withAverages(spread()).withCutOut(m -> m == cut));
+        int restAveraged = 0;
+        for (LodDag.Cluster cluster : dag.clusters()) {
+            boolean anyCut = false;
+            boolean anyRest = false;
+            for (int t = 0; t < cluster.triangleCount(); ++t) {
+                final boolean isCut = cluster.materials()[t] == cut;
+                anyCut |= isCut;
+                anyRest |= !isCut;
+                if (isCut) {
+                    assertFalse(averaged(cluster, t), "Cluster " + cluster.id() + " averaged");
+                } else if (averaged(cluster, t)) {
+                    ++restAveraged;
+                }
+            }
+            assertFalse(anyCut && anyRest, "Cluster " + cluster.id() + " mixes cut out and not");
+        }
+        assertTrue(restAveraged > 0, "Nothing averaged");
+    }
 }

@@ -1455,6 +1455,21 @@ public class VulkanInstance {
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(RenderStage.Type.SHADOW_LOD, new ShaderVulkan(lodModules, state));
 
+        // Level of detail clusters with cut out materials, alpha tested as cut out meshes are
+        List<ShaderVulkan.ShaderModuleData> lodCutoutModules = new ArrayList<>();
+        lodCutoutModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/shadow_lod_cutout.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        lodCutoutModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/shadow_cutout.frag",
+                        ShaderVulkan.Type.FRAGMENT,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(
+                RenderStage.Type.SHADOW_LOD_CUTOUT, new ShaderVulkan(lodCutoutModules, state));
+
         // Cut out meshes, whose textures cut holes in their shadows as in the surface
         List<ShaderVulkan.ShaderModuleData> cutoutModules = new ArrayList<>();
         cutoutModules.add(

@@ -23,9 +23,12 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.IntPredicate;
 import javax.annotation.Nullable;
 
 /**
@@ -81,6 +84,9 @@ final class LodSection {
      * Bistro's exterior stops halving at level 3; without them it gets to level 7.
      */
     private final IkBoolean keepAttributes = new IkBoolean(true);
+
+    /** Whether cut out meshes, like leaves, go in too, drawn with an alpha test. */
+    private final IkBoolean cutOut = new IkBoolean(true);
 
     /**
      * Whether far groups bake their appearance into texture tiles and simplify their geometry
@@ -173,6 +179,7 @@ final class LodSection {
         }
         IkGui.checkbox("Join separate pieces (slow, needs a lot of memory)", virtualEdges);
         IkGui.checkbox("Keep normals and texture coordinates", keepAttributes);
+        IkGui.checkbox("Include cut out meshes", cutOut);
         IkGui.checkbox("Bake far textures", bake);
         if (bake.get()) {
             IkGui.sliderInt("Bake texels per error", bakeDensity, 1, MAX_BAKE_DENSITY, "%d");
@@ -180,8 +187,9 @@ final class LodSection {
         IkGui.checkbox("Blend materials far out", blendFar);
         IkGui.checkbox("Measure fidelity", measureFidelity);
         IkGui.textWrapped(
-                "Builds from the opaque meshes; cut outs and see-through ones stay as they are."
-                        + " Bistro's exterior takes a few minutes and about 11 GB.");
+                "Builds from the opaque meshes, and the cut out ones if included, drawn alpha"
+                        + " tested; see-through ones stay as they are. Bistro's exterior takes a"
+                        + " few minutes and about 11 GB.");
         if (IkGui.button("Build level of detail")) {
             build(shown, top);
         }
@@ -205,6 +213,7 @@ final class LodSection {
             names.put(cache.getMaterialIndex(sceneMaterials.get(i)), shown.nameOf(i));
         }
         parts.clear();
+        final boolean withCutOut = cutOut.get();
         final Deque<Node> open = new ArrayDeque<>();
         open.push(top);
         while (!open.isEmpty()) {
@@ -214,7 +223,7 @@ final class LodSection {
                 final Material material = shown.materialOf(node, sceneMesh);
                 drawnWith.computeIfAbsent(node, n -> new HashMap<>()).put(sceneMesh, material);
                 indices.computeIfAbsent(material, cache::getMaterialIndex);
-                if (material.getTransparency() == Material.Transparency.OPAQUE) {
+                if (SceneLod.goesIn(material, withCutOut)) {
                     parts.add(new Part(node, sceneMesh));
                 }
             }
@@ -237,14 +246,16 @@ final class LodSection {
                                                             .getOrDefault(node, Map.of())
                                                             .get(mesh),
                                             indices::get,
-                                            attributes);
+                                            attributes,
+                                            withCutOut);
                             if (input == null) {
                                 throw new IllegalArgumentException("there are no opaque meshes");
                             }
                             return List.<LodMesh>of(input.mesh());
                         },
                         material -> names.getOrDefault(material, "material " + material),
-                        options(averages(indices)));
+                        options(averages(indices))
+                                .withCutOut(withCutOut ? cutOutMaterials(indices) : null));
     }
 
     /**
@@ -294,6 +305,22 @@ final class LodSection {
             known.put(entry.getValue(), out);
         }
         return known::get;
+    }
+
+    /**
+     * Which of the materials that go in are cut out, by index, taken now for the build.
+     *
+     * @param indices Each material's index in the material cache.
+     * @return Whether a material index is cut out.
+     */
+    private static IntPredicate cutOutMaterials(@NonNull Map<Material, Integer> indices) {
+        final Set<Integer> cut = new HashSet<>();
+        for (Map.Entry<Material, Integer> entry : indices.entrySet()) {
+            if (entry.getKey().getTransparency() == Material.Transparency.CUTOUT) {
+                cut.add(entry.getValue());
+            }
+        }
+        return cut::contains;
     }
 
     /**

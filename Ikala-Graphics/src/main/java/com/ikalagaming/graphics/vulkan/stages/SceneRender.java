@@ -165,6 +165,9 @@ public class SceneRender implements RenderStage {
     /** VkPipeline for level of detail clusters, opaque and textured by projection. */
     private long lodPipeline;
 
+    /** The pipeline for level of detail clusters with cut out materials, alpha tested. */
+    private long lodCutOutPipeline;
+
     /** VkPipeline for level of detail clusters as wireframes. */
     private long lodWireframe;
 
@@ -241,6 +244,7 @@ public class SceneRender implements RenderStage {
         this.bakedShader = bakedShader;
         this.lodShader = lodShader;
         this.lodPipeline = VK_NULL_HANDLE;
+        this.lodCutOutPipeline = VK_NULL_HANDLE;
         this.lodWireframe = VK_NULL_HANDLE;
         this.bakedPipeline = VK_NULL_HANDLE;
         this.bakedAlphaPipeline = VK_NULL_HANDLE;
@@ -269,6 +273,8 @@ public class SceneRender implements RenderStage {
         this.bakedWireframe =
                 createPipeline(vulkanState, bakedShader, VertexFormat.BAKED, true, true);
         this.lodPipeline = createPipeline(vulkanState, lodShader, VertexFormat.LOD, false, false);
+        this.lodCutOutPipeline =
+                createPipeline(vulkanState, lodShader, VertexFormat.LOD, false, true);
         this.lodWireframe = createPipeline(vulkanState, lodShader, VertexFormat.LOD, true, false);
     }
 
@@ -288,6 +294,8 @@ public class SceneRender implements RenderStage {
         bakedWireframe = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, lodPipeline, null);
         lodPipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, lodCutOutPipeline, null);
+        lodCutOutPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, lodWireframe, null);
         lodWireframe = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
@@ -487,7 +495,8 @@ public class SceneRender implements RenderStage {
         LongBuffer vertexBuffers = stack.callocLong(1);
         LongBuffer vertexOffsets = stack.callocLong(1);
 
-        // Level of detail clusters, the list's share of the cut, as many as culling counted
+        // Level of detail clusters, the list's share of the cut, as many as culling counted: the
+        // opaque ones, then those with cut out materials, alpha tested
         if (LodRenderer.hasDraws(frameData)) {
             vkCmdBindPipeline(
                     commandBuffer,
@@ -499,6 +508,16 @@ public class SceneRender implements RenderStage {
                     pipelineLayout,
                     ShaderBindings.Scene.PUSH_CONSTANT_LOD_WORLDS_OFFSET,
                     list);
+            if (!wireframe) {
+                vkCmdBindPipeline(
+                        commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lodCutOutPipeline);
+            }
+            state.lods.draw(
+                    commandBuffer,
+                    frameData,
+                    pipelineLayout,
+                    ShaderBindings.Scene.PUSH_CONSTANT_LOD_WORLDS_OFFSET,
+                    LodRenderer.CUT_OUT_LISTS + list);
         }
 
         // Everything culling handled: the list's commands for each kind, one per mesh slot, from

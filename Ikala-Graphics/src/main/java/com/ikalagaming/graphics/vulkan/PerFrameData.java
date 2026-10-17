@@ -114,7 +114,7 @@ public class PerFrameData {
 
     /**
      * Indirect draw commands for level of detail clusters this frame, written by the culling pass:
-     * {@link LodRenderer#LIST_COUNT} lists of {@link #lodCapacity} plus {@link #lodPairCapacity}
+     * {@link LodRenderer#LIST_SLOTS} lists of {@link #lodCapacity} plus {@link #lodPairCapacity}
      * commands each.
      */
     public SharedBuffer lodDrawCommands;

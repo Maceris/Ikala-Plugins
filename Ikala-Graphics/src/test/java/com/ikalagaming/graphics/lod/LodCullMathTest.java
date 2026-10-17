@@ -278,7 +278,8 @@ class LodCullMathTest {
                                 section,
                                 LodCullMath.NONE,
                                 LodCullMath.NONE,
-                                piece.cluster().level()));
+                                piece.cluster().level()),
+                        0);
                 ++at;
             }
         }
@@ -409,7 +410,8 @@ class LodCullMathTest {
                                 LodCullMath.NONE,
                                 own.get(at)[0],
                                 child == null ? LodCullMath.NONE : child,
-                                piece.cluster().level()));
+                                piece.cluster().level()),
+                        0);
                 ++at;
             }
         }

@@ -46,17 +46,33 @@ public final class Clusters {
      * @return The triangles of each cluster.
      */
     public static int[][] split(@NonNull LodMesh mesh, int cap, int threads) {
-        final int n = mesh.getTriangleCount();
+        final int[] all = new int[mesh.getTriangleCount()];
+        for (int t = 0; t < all.length; ++t) {
+            all[t] = t;
+        }
+        return split(mesh, cap, threads, all);
+    }
+
+    /**
+     * Split some of a mesh's triangles into clusters, a big mesh on several threads, giving the
+     * same clusters as on one.
+     *
+     * @param mesh The mesh.
+     * @param cap The most triangles a cluster may have.
+     * @param threads How many threads to split on.
+     * @param subset The triangles to split.
+     * @return The triangles of each cluster, by their index in the mesh.
+     */
+    public static int[][] split(
+            @NonNull LodMesh mesh, int cap, int threads, int @NonNull [] subset) {
+        final int n = subset.length;
         if (n <= cap) {
-            final int[] all = new int[n];
-            for (int t = 0; t < n; ++t) {
-                all[t] = t;
-            }
-            return new int[][] {all};
+            return new int[][] {subset.clone()};
         }
         Graph.Builder builder = new Graph.Builder(n);
         final LongIntMap firstUse = new LongIntMap(n * CORNERS);
-        for (int t = 0; t < n; ++t) {
+        for (int i = 0; i < n; ++i) {
+            final int t = subset[i];
             double x = 0;
             double y = 0;
             double z = 0;
@@ -67,12 +83,12 @@ public final class Clusters {
                 z += mesh.position(v, 2);
                 final int w = mesh.corner(t, (corner + 1) % CORNERS);
                 final int other =
-                        firstUse.putIfAbsent(LongIntMap.pair(Math.min(v, w), Math.max(v, w)), t);
+                        firstUse.putIfAbsent(LongIntMap.pair(Math.min(v, w), Math.max(v, w)), i);
                 if (other != LongIntMap.MISSING) {
-                    builder.edge(t, other, 1);
+                    builder.edge(i, other, 1);
                 }
             }
-            builder.position(t, x / CORNERS, y / CORNERS, z / CORNERS);
+            builder.position(i, x / CORNERS, y / CORNERS, z / CORNERS);
         }
         final int[] part = GraphPartitioner.partition(builder.build(), cap, threads);
         final int parts = GraphPartitioner.partCount(part);
@@ -85,8 +101,8 @@ public final class Clusters {
             clusters[p] = new int[sizes[p]];
         }
         final int[] fill = new int[parts];
-        for (int t = 0; t < n; ++t) {
-            clusters[part[t]][fill[part[t]]++] = t;
+        for (int i = 0; i < n; ++i) {
+            clusters[part[i]][fill[part[i]]++] = subset[i];
         }
         return clusters;
     }

@@ -68,6 +68,12 @@ public class ShadowRender implements RenderStage {
     /** VkPipeline for level of detail clusters, will be VK_NULL_HANDLE if not set up. */
     private long lodPipeline;
 
+    /** The shader for level of detail clusters with cut out materials, alpha tested. */
+    @NonNull private final ShaderVulkan lodCutoutShader;
+
+    /** The pipeline for level of detail clusters with cut out materials. */
+    private long lodCutoutPipeline;
+
     /**
      * The shader for standard meshes in the cascades, which alpha tests their textures as the scene
      * does, so cut out meshes cast the shadows of what is left.
@@ -130,6 +136,7 @@ public class ShadowRender implements RenderStage {
      *
      * @param bakedShader The shader for baked sections.
      * @param lodShader The shader for level of detail clusters.
+     * @param lodCutoutShader The shader for level of detail clusters with cut out materials.
      * @param cutoutShader The shader for standard meshes, alpha tested.
      * @param bakedCutoutShader The shader for baked sections' cut out meshes, alpha tested.
      * @param pointShader The shader for standard meshes in point light shadow faces.
@@ -138,18 +145,21 @@ public class ShadowRender implements RenderStage {
     public ShadowRender(
             final @NonNull ShaderVulkan bakedShader,
             final @NonNull ShaderVulkan lodShader,
+            final @NonNull ShaderVulkan lodCutoutShader,
             final @NonNull ShaderVulkan cutoutShader,
             final @NonNull ShaderVulkan bakedCutoutShader,
             final @NonNull ShaderVulkan pointShader,
             final @NonNull ShaderVulkan pointBakedShader) {
         this.bakedShader = bakedShader;
         this.lodShader = lodShader;
+        this.lodCutoutShader = lodCutoutShader;
         this.cutoutShader = cutoutShader;
         this.bakedCutoutShader = bakedCutoutShader;
         this.pointShader = pointShader;
         this.pointBakedShader = pointBakedShader;
         this.bakedPipeline = VK_NULL_HANDLE;
         this.lodPipeline = VK_NULL_HANDLE;
+        this.lodCutoutPipeline = VK_NULL_HANDLE;
         this.descriptorSetLayout = VK_NULL_HANDLE;
         this.pipelineLayout = VK_NULL_HANDLE;
         this.descriptorPool = VK_NULL_HANDLE;
@@ -163,6 +173,7 @@ public class ShadowRender implements RenderStage {
         createPipelineLayout(vulkanState);
         bakedPipeline = createPipeline(vulkanState, bakedShader, true, false, false);
         lodPipeline = createPipeline(vulkanState, lodShader, false, true, false);
+        lodCutoutPipeline = createPipeline(vulkanState, lodCutoutShader, false, true, true);
         cutoutPipeline = createPipeline(vulkanState, cutoutShader, false, false, true);
         bakedCutoutPipeline = createPipeline(vulkanState, bakedCutoutShader, true, false, true);
         pointPipeline = createPipeline(vulkanState, pointShader, false, false, false);
@@ -179,6 +190,8 @@ public class ShadowRender implements RenderStage {
         bakedPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, lodPipeline, null);
         lodPipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, lodCutoutPipeline, null);
+        lodCutoutPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, cutoutPipeline, null);
         cutoutPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, bakedCutoutPipeline, null);
@@ -673,7 +686,8 @@ public class ShadowRender implements RenderStage {
                 LongBuffer vertexBuffers = stack.callocLong(1);
                 LongBuffer vertexOffsets = stack.callocLong(1);
 
-                // Level of detail clusters, the cut the scene sees, in this cascade's frustum
+                // Level of detail clusters, the cut the scene sees, in this cascade's frustum: the
+                // opaque ones, then those with cut out materials, alpha tested
                 if (statics && LodRenderer.hasDraws(frameData)) {
                     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lodPipeline);
                     state.lods.draw(
@@ -682,6 +696,14 @@ public class ShadowRender implements RenderStage {
                             pipelineLayout,
                             ShaderBindings.Shadow.PUSH_CONSTANT_LOD_WORLDS_OFFSET,
                             list);
+                    vkCmdBindPipeline(
+                            commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lodCutoutPipeline);
+                    state.lods.draw(
+                            commandBuffer,
+                            frameData,
+                            pipelineLayout,
+                            ShaderBindings.Shadow.PUSH_CONSTANT_LOD_WORLDS_OFFSET,
+                            LodRenderer.CUT_OUT_LISTS + list);
                 }
 
                 // Everything culling handled for this cascade, each kind from its own buffers,
@@ -887,7 +909,7 @@ public class ShadowRender implements RenderStage {
 
             // Only the position is needed, the rest of the vertex is skipped over, except the
             // texture coordinates and material for alpha testing
-            final int attributeCount = cutout ? (baked ? 3 : 2) : 1;
+            final int attributeCount = cutout ? (baked || lod ? 3 : 2) : 1;
             VkVertexInputAttributeDescription.Buffer vertexAttributes =
                     VkVertexInputAttributeDescription.calloc(attributeCount, stack);
             vertexAttributes
@@ -909,15 +931,18 @@ public class ShadowRender implements RenderStage {
                         .get(1)
                         .binding(0)
                         .location(1)
-                        .format(baked ? VK_FORMAT_R16G16_SFLOAT : VK_FORMAT_R32G32_SFLOAT)
-                        .offset(baked ? BakedVertex.UV_OFFSET : STANDARD_UV_OFFSET);
-                if (baked) {
+                        .format(baked || lod ? VK_FORMAT_R16G16_SFLOAT : VK_FORMAT_R32G32_SFLOAT)
+                        .offset(
+                                lod
+                                        ? LodVertex.UV_OFFSET
+                                        : (baked ? BakedVertex.UV_OFFSET : STANDARD_UV_OFFSET));
+                if (baked || lod) {
                     vertexAttributes
                             .get(2)
                             .binding(0)
                             .location(2)
                             .format(VK_FORMAT_R16G16_UINT)
-                            .offset(BakedVertex.MATERIAL_OFFSET);
+                            .offset(lod ? LodVertex.MATERIAL_OFFSET : BakedVertex.MATERIAL_OFFSET);
                 }
             }
 
