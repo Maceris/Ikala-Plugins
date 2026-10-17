@@ -171,6 +171,9 @@ public class DrawList {
     /** The splitter used by {@link #channelsSplit(int)}. */
     private final DrawListSplitter splitter;
 
+    /** The characters of the text being drawn, reused by every call to draw a line. */
+    private final List<FontAtlas.CharInfo> textInfo = new ArrayList<>();
+
     /**
      * A transform applied to text, see {@link #pushTextTransform}. While active, text is laid out
      * in "label space", then rotated and moved into place.
@@ -1731,17 +1734,17 @@ public class DrawList {
 
         // TODO(ches) RTL, vertical
 
-        List<FontAtlas.CharInfo> infoList = new ArrayList<>(text.length());
+        // One list for every call, since text is drawn many times a frame
+        final List<FontAtlas.CharInfo> infoList = textInfo;
+        infoList.clear();
 
         for (int pos = 0; pos < text.length(); ++pos) {
             final char c = text.charAt(pos);
-            atlas.registerCharacter(c, fontSize);
-
-            Optional<FontAtlas.CharInfo> maybeInfo = atlas.getFontMapInfo(c, fontSize);
-            if (maybeInfo.isEmpty()) {
+            final FontAtlas.CharInfo info = atlas.charInfo(c, fontSize);
+            if (info == null) {
                 IkGuiInternal.reportError(log, "Could not find a font for character '{}'", c);
             } else {
-                infoList.add(maybeInfo.get());
+                infoList.add(info);
             }
         }
 
@@ -1921,11 +1924,21 @@ public class DrawList {
             return (float) Math.ceil(text.length() * fontSize * fontScale * 0.5f);
         }
         FontAtlas atlas = IkGui.getContext().io.fonts;
-        final List<FontAtlas.CharInfo> infoList =
-                layoutCharacters(atlas, text, 0, text.length(), fontSize);
+        // As penAdvance adds them up over the found characters, without a list of them
         float penX = 0;
-        for (int i = 0; i < infoList.size(); ++i) {
-            penX += penAdvance(atlas, infoList, i, fontSize);
+        FontAtlas.CharInfo previous = null;
+        for (int i = 0; i < text.length(); ++i) {
+            final FontAtlas.CharInfo info = atlas.charInfo(text.charAt(i), fontSize);
+            if (info == null) {
+                continue;
+            }
+            if (previous != null) {
+                penX += previous.advance + atlas.getKerning(previous.value, info.value, fontSize);
+            }
+            previous = info;
+        }
+        if (previous != null) {
+            penX += previous.advance;
         }
         return (float) Math.ceil(penX);
     }
@@ -1948,9 +1961,10 @@ public class DrawList {
             int fontSize) {
         final List<FontAtlas.CharInfo> infoList = new ArrayList<>(Math.max(0, end - start));
         for (int i = start; i < end; ++i) {
-            final char c = text.charAt(i);
-            atlas.registerCharacter(c, fontSize);
-            atlas.getFontMapInfo(c, fontSize).ifPresent(infoList::add);
+            final FontAtlas.CharInfo info = atlas.charInfo(text.charAt(i), fontSize);
+            if (info != null) {
+                infoList.add(info);
+            }
         }
         return infoList;
     }
@@ -1987,10 +2001,9 @@ public class DrawList {
         float penX = 0;
         for (int i = 0; i < count; ++i) {
             final char c = text.charAt(start + i);
-            atlas.registerCharacter(c, fontSize);
-            final Optional<FontAtlas.CharInfo> maybeInfo = atlas.getFontMapInfo(c, fontSize);
-            if (maybeInfo.isPresent()) {
-                penX += maybeInfo.get().advance;
+            final FontAtlas.CharInfo info = atlas.charInfo(c, fontSize);
+            if (info != null) {
+                penX += info.advance;
                 if (i + 1 < count) {
                     penX += atlas.getKerning(c, text.charAt(start + i + 1), fontSize);
                 }

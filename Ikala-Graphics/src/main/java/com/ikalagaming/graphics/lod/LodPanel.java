@@ -14,6 +14,7 @@ import com.ikalagaming.graphics.vulkan.LodRenderer;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.IntFunction;
 import java.util.function.Supplier;
@@ -100,6 +101,12 @@ public final class LodPanel implements AutoCloseable {
 
     /** The last crack check's result, or empty. */
     private String crackResult = "";
+
+    /** The GPU cut table, and the counts it was made from, so it is made again only on change. */
+    private LodTables.Table cutTable;
+
+    /** The counts {@link #cutTable} shows. */
+    private LodRenderer.Stats cutCounts;
 
     /** Whether it was closed. */
     private volatile boolean closed;
@@ -402,7 +409,11 @@ public final class LodPanel implements AutoCloseable {
             }
             // Below the totals, which a long table would push out of sight
             if (gpu.levelTriangles().length > 0) {
-                LodTables.draw(LodTables.cutLevels(gpu));
+                if (cutTable == null || !sameLevels(gpu, cutCounts)) {
+                    cutTable = LodTables.cutLevels(gpu);
+                    cutCounts = gpu;
+                }
+                LodTables.draw(cutTable);
             }
         }
         if (IkGui.collapsingHeader("Levels##lod", TreeNodeFlags.DEFAULT_OPEN)) {
@@ -434,6 +445,21 @@ public final class LodPanel implements AutoCloseable {
             }
         }
         return false;
+    }
+
+    /**
+     * Whether two sets of GPU counts would make the same cut table.
+     *
+     * @param a One.
+     * @param b The other, or null.
+     * @return True if their level counts and totals match.
+     */
+    private static boolean sameLevels(LodRenderer.@NonNull Stats a, LodRenderer.Stats b) {
+        return b != null
+                && a.selectedTriangles() == b.selectedTriangles()
+                && Arrays.equals(a.levelClusters(), b.levelClusters())
+                && Arrays.equals(a.levelTriangles(), b.levelTriangles())
+                && Arrays.equals(a.levelInView(), b.levelInView());
     }
 
     /**

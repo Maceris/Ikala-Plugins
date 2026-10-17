@@ -350,7 +350,11 @@ public class InstanceTable {
                                     models.add(new ModelCount(model, instanceCount));
                                 }
                             });
-            snapshot = new Snapshot(List.copyOf(models), capacities.slots());
+            if (capacities.modelsReported()) {
+                snapshot = new Snapshot(List.copyOf(models), capacities.slots());
+            } else if (snapshot.slotCapacity() != capacities.slots()) {
+                snapshot = new Snapshot(snapshot.models(), capacities.slots());
+            }
 
             final boolean work =
                     instances.hasWork(capacities.slots(), instanceEntries)

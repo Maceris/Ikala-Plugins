@@ -24,6 +24,15 @@ import org.joml.Vector2f;
 class IkGuiImplTrees {
     static Context context;
 
+    /** A tree node's label size, reused by every node: IkGui runs on one thread. */
+    private static final Vector2f SCRATCH_LABEL_SIZE = new Vector2f();
+
+    /** A tree node's frame, reused by every node. */
+    private static final RectFloat SCRATCH_FRAME = new RectFloat();
+
+    /** A tree node's interactive area, reused by every node. */
+    private static final RectFloat SCRATCH_INTERACT = new RectFloat();
+
     /**
      * A tree node with a frame, which doesn't indent or push on the ID stack when open.
      *
@@ -464,7 +473,8 @@ class IkGuiImplTrees {
                         : Math.min(window.baseOffsetCurrentLine, style.framePadding.y);
 
         final String displayedLabel = Hash.getDisplayedText(label);
-        final Vector2f labelSize = new Vector2f();
+        // Scratch, since a tree can have thousands of nodes a frame; nothing below keeps them
+        final Vector2f labelSize = SCRATCH_LABEL_SIZE;
         IkGuiImplUtils.calcTextSize(labelSize, displayedLabel, false, -1.0f);
 
         // Collapsing arrow width + spacing
@@ -497,12 +507,12 @@ class IkGuiImplTrees {
                         : (treeNodeFlags & TreeNodeFlags.SPAN_LABEL_WIDTH) != 0
                                 ? window.cursorPosition.x + textWidth + paddingX
                                 : window.rectWork.getRight();
-        final RectFloat frameBB =
-                new RectFloat(
-                        frameMinX,
-                        window.cursorPosition.y,
-                        frameMaxX,
-                        window.cursorPosition.y + frameHeight);
+        final RectFloat frameBB = SCRATCH_FRAME;
+        frameBB.set(
+                frameMinX,
+                window.cursorPosition.y,
+                frameMaxX,
+                window.cursorPosition.y + frameHeight);
         if (displayFrame) {
             // Framed headers expand a little outside the default padding
             final float outerExtend = IkGuiInternal.truncate(window.padding.x * 0.5f);
@@ -515,7 +525,7 @@ class IkGuiImplTrees {
         IkGuiInternal.itemSize(textWidth, frameHeight, paddingY);
 
         // For regular tree nodes, we arbitrarily allow clicking past 2 worth of item spacing
-        final RectFloat interactBB = new RectFloat();
+        final RectFloat interactBB = SCRATCH_INTERACT;
         interactBB.set(frameBB);
         if ((treeNodeFlags
                         & (TreeNodeFlags.FRAMED

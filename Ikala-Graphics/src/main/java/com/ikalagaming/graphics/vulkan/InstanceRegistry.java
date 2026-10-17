@@ -131,7 +131,8 @@ public class InstanceRegistry {
         void override(int index, @Nullable Material material);
 
         /**
-         * A model that has instances, and how many. Every such model is reported every time.
+         * A model that has instances, and how many. Every such model is reported whenever any
+         * model's count changed since the last time, see {@link Capacities#modelsReported}.
          *
          * @param model The model.
          * @param instanceCount Its instance count.
@@ -145,8 +146,10 @@ public class InstanceRegistry {
      * @param slots The instance table.
      * @param modelMeshes The model mesh list.
      * @param overrides The material override list.
+     * @param modelsReported Whether every model's instance count was reported, which happens only
+     *     when one changed since the last time.
      */
-    public record Capacities(int slots, int modelMeshes, int overrides) {}
+    public record Capacities(int slots, int modelMeshes, int overrides, boolean modelsReported) {}
 
     /**
      * The instances of one model, and where its meshes are in the model mesh list.
@@ -217,6 +220,9 @@ public class InstanceRegistry {
     /** Models whose model mesh list entries are out of date. */
     private final Set<Model> changedModels = new LinkedHashSet<>();
 
+    /** Whether any model's instance count changed since they were last reported. */
+    private boolean countsChanged = true;
+
     /** Slots whose material overrides are out of date. */
     private final BitSet changedOverrides = new BitSet();
 
@@ -260,6 +266,7 @@ public class InstanceRegistry {
                 changedModels.add(model);
             }
             state.slots().add(slot);
+            countsChanged = true;
             overrideFirsts[slot] = allocate(overrides, meshCount);
             changedOverrides.set(slot);
             changed.set(slot);
@@ -562,9 +569,14 @@ public class InstanceRegistry {
                 }
             }
             changedOverrides.clear();
-            byModel.forEach((model, state) -> changes.model(model, state.slots().size()));
+            // Only when they changed, so a still scene reports nothing a frame
+            final boolean report = countsChanged;
+            if (report) {
+                byModel.forEach((model, state) -> changes.model(model, state.slots().size()));
+                countsChanged = false;
+            }
             return new Capacities(
-                    handles.length, modelMeshes.getCapacity(), overrides.getCapacity());
+                    handles.length, modelMeshes.getCapacity(), overrides.getCapacity(), report);
         } finally {
             lock.unlock();
         }
@@ -763,6 +775,7 @@ public class InstanceRegistry {
         ModelState state = byModel.get(model);
         if (state != null) {
             state.slots().remove(slot);
+            countsChanged = true;
             if (state.slots().isEmpty()) {
                 modelMeshes.free(state.meshFirst(), state.meshCount());
                 byModel.remove(model);

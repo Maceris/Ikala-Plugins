@@ -238,12 +238,14 @@ class InstanceRegistryTest {
         assertEquals(2, recorded.instanceLists.getFirst()[1]);
         assertEquals(Map.of(ball, 1), recorded.models);
 
-        // A second instance shares the list, and every model is still reported
+        // A second instance shares the list, and every model is reported with the new count
         place("p", ball, 2);
         recorded = take();
         assertTrue(recorded.modelMeshes.isEmpty());
         assertEquals(meshFirst, recorded.instanceLists.getFirst()[0]);
-        assertEquals(Map.of(ball, 2), take().models);
+        assertEquals(Map.of(ball, 2), recorded.models);
+        // With no count changed, nothing is reported again
+        assertTrue(take().models.isEmpty());
 
         // The list goes with the last instance, and the next model can reuse it
         registry.removeAllOf(ball);

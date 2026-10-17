@@ -15,6 +15,7 @@ import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.component.GuiWindow;
 import com.ikalagaming.graphics.gui.data.IkIO;
 import com.ikalagaming.graphics.gui.data.IkString;
+import com.ikalagaming.graphics.gui.data.ListClipper;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.gui.flags.TableFlags;
 import com.ikalagaming.graphics.gui.flags.TreeNodeFlags;
@@ -35,8 +36,10 @@ import org.joml.Vector3d;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 /**
@@ -124,6 +127,15 @@ public class SceneView {
     private boolean turning;
 
     /**
+     * Each outliner node's ID and label, made once rather than every frame, since a scene can have
+     * thousands of nodes. Cleared when the scene changes.
+     */
+    private final Map<Node, String[]> outlinerText = new IdentityHashMap<>();
+
+    /** Clips long runs of leaf nodes in the outliner to the rows in view. */
+    private final ListClipper outlinerClipper = new ListClipper();
+
+    /**
      * Whether the left button went down over the scene rather than the UI, so only a click that
      * starts on the scene picks or turns, not one that starts on a slider and ends over a mesh.
      */
@@ -182,6 +194,7 @@ public class SceneView {
     public void show(@NonNull ScenePlacement newPlacement) {
         clear();
         placement = newPlacement;
+        outlinerText.clear();
         enter();
         useFileSun();
         frame(newPlacement.getImported().root());
@@ -214,6 +227,7 @@ public class SceneView {
         if (placement != null) {
             placement.remove();
             placement = null;
+            outlinerText.clear();
         }
         textureProgress = "";
     }
@@ -388,16 +402,45 @@ public class SceneView {
         if (node.parent() == null) {
             flags |= TreeNodeFlags.DEFAULT_OPEN;
         }
-        final boolean open =
-                IkGui.treeNodeEx(
-                        Integer.toHexString(System.identityHashCode(node)), flags, label(node));
+        final String[] text = outlinerText(node);
+        final boolean open = IkGui.treeNodeEx(text[0], flags, text[1]);
         clicked(node);
         if (open && !node.children().isEmpty()) {
-            for (Node child : node.children()) {
-                drawNode(shown, child);
+            final List<Node> children = node.children();
+            if (allLeaves(children)) {
+                // Rows of the same height: only those in view are drawn, as a scene can have
+                // thousands of meshes under one node
+                outlinerClipper.begin(children.size());
+                while (outlinerClipper.step()) {
+                    for (int i = outlinerClipper.displayStart;
+                            i < outlinerClipper.displayEnd;
+                            ++i) {
+                        drawNode(shown, children.get(i));
+                    }
+                }
+                outlinerClipper.end();
+            } else {
+                for (Node child : children) {
+                    drawNode(shown, child);
+                }
             }
             IkGui.treePop();
         }
+    }
+
+    /**
+     * Whether nodes have no children of their own, so each is one row of the outliner.
+     *
+     * @param nodes The nodes.
+     * @return True if none has children.
+     */
+    private static boolean allLeaves(@NonNull List<Node> nodes) {
+        for (Node node : nodes) {
+            if (!node.children().isEmpty()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -416,8 +459,8 @@ public class SceneView {
             if (node == selected) {
                 flags |= TreeNodeFlags.SELECTED;
             }
-            IkGui.treeNodeEx(
-                    Integer.toHexString(System.identityHashCode(node)), flags, label(node));
+            final String[] text = outlinerText(node);
+            IkGui.treeNodeEx(text[0], flags, text[1]);
             clicked(node);
         }
         for (Node child : node.children()) {
@@ -439,6 +482,18 @@ public class SceneView {
                 select(node, -1);
             }
         }
+    }
+
+    /**
+     * A node's ID and label in the outliner, made the first time they are asked for.
+     *
+     * @param node The node.
+     * @return The ID, then the label.
+     */
+    private String[] outlinerText(Node node) {
+        return outlinerText.computeIfAbsent(
+                node,
+                n -> new String[] {Integer.toHexString(System.identityHashCode(n)), label(n)});
     }
 
     /**

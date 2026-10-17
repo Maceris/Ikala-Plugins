@@ -292,7 +292,8 @@ public class FontAtlas {
      * @return The index in the cache array.
      */
     private int cacheIndex(@NonNull Font font, char c, int fontSize) {
-        return Objects.hash(font, c, fontSize) & cacheMask;
+        // Objects.hash(font, c, fontSize), without its array and boxes
+        return (31 * (31 * (31 + font.hashCode()) + c) + fontSize) & cacheMask;
     }
 
     /**
@@ -634,6 +635,37 @@ public class FontAtlas {
         }
         moveToFront(element);
         return Optional.of(element.info);
+    }
+
+    /**
+     * Load a character if it isn't yet, as {@link #registerCharacter} does, and fetch its position
+     * in the font map, as {@link #getFontMapInfo} does, in one pass and without wrapping the
+     * result, since text looks up every character it draws or measures every frame.
+     *
+     * @param c The character to look up.
+     * @param fontSize The font size.
+     * @return The character info, or null if no font can display it.
+     */
+    @Synchronized
+    public CharInfo charInfo(char c, int fontSize) {
+        final ResolvedChar resolved = resolveFont(c);
+        if (resolved == null) {
+            IkGuiInternal.reportError(log, "No fonts are loaded to display the character '{}'", c);
+            return null;
+        }
+        if (resolved.value() != c) {
+            IkGuiInternal.reportError(log, "No loaded font supports the character '{}'", c);
+        }
+        CacheElement element = cacheFind(resolved.font(), resolved.value(), fontSize);
+        if (element == null) {
+            cacheAdd(resolved.font(), resolved.value(), fontSize);
+            element = cacheFind(resolved.font(), resolved.value(), fontSize);
+            if (element == null) {
+                return null;
+            }
+        }
+        moveToFront(element);
+        return element.info;
     }
 
     /**
