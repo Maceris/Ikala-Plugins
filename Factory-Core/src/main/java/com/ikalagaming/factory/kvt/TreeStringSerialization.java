@@ -33,6 +33,26 @@ public class TreeStringSerialization {
     static final Pattern NORMAL_KEY_PATTERN = Pattern.compile("^[a-zA-Z0-9_\\-\\.\\+]+$");
 
     /**
+     * Matches keys that the lexer would read as a whole integer, floating point or boolean literal
+     * instead of an identifier, so they must be quoted. This mirrors KVTLexer.g4, where those rules
+     * come before Identifier and win ties.
+     */
+    static final Pattern LITERAL_KEY_PATTERN =
+            Pattern.compile(
+                    "^(?:true|false"
+                            // Integer
+                            + "|[+-]?[0-9]+[bBlLsS]?"
+                            // Floating point, with a digit before the point
+                            + "|[+-]?[0-9]+\\.[0-9]*(?:[eE][+-]?[0-9]+)?[fFdD]?"
+                            // Floating point starting with the point
+                            + "|[+-]?\\.[0-9]+(?:[eE][+-]?[0-9]+)?[fFdD]?"
+                            // Floating point with an exponent or suffix but no point
+                            + "|[+-]?[0-9]+(?:[eE][+-]?[0-9]+)[fFdD]?"
+                            + "|[+-]?[0-9]+[fFdD]"
+                            // Not a number and the infinities
+                            + "|[+-]?(?:NaN|Infinity)[fFdD]?)$");
+
+    /**
      * Handle the parsing of a character stream.
      *
      * @param input The input stream.
@@ -271,7 +291,7 @@ public class TreeStringSerialization {
      * @return The string without quotes on the outside.
      */
     private static String trimQuotes(final @NonNull String text) {
-        if (text.length() > 2 && text.startsWith("\"") && text.endsWith("\"")) {
+        if (text.length() >= 2 && text.startsWith("\"") && text.endsWith("\"")) {
             return text.substring(1, text.length() - 1);
         }
         return text;

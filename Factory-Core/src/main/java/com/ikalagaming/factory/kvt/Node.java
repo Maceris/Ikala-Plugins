@@ -31,7 +31,8 @@ public class Node implements KVT {
      * @return The key, escaped if necessary.
      */
     private static String formatKey(final @NonNull String key) {
-        if (TreeStringSerialization.NORMAL_KEY_PATTERN.matcher(key).matches()) {
+        if (TreeStringSerialization.NORMAL_KEY_PATTERN.matcher(key).matches()
+                && !TreeStringSerialization.LITERAL_KEY_PATTERN.matcher(key).matches()) {
             return key;
         }
         return "\"" + key + "\"";
@@ -78,94 +79,56 @@ public class Node implements KVT {
 
     @Override
     public void add(final @NonNull String name) {
-        this.add(name, new Node());
+        this.addPath(name, new Node());
     }
 
-    private void add(final @NonNull String name, @NonNull KVT node) {
+    private void addPath(final @NonNull String name, @NonNull KVT node) {
         this.add(List.of(name.split("\\.")), 0, node);
     }
 
     @Override
     public void add(String name, @NonNull NodeType type, @NonNull Boolean value) {
-        this.add(name, new ValueNode<>(type, value));
+        this.addPath(name, new ValueNode<>(type, value));
     }
 
     @Override
     public <T> void add(String name, @NonNull NodeType type, @NonNull List<T> value) {
-        this.add(name, new ArrayNode<>(type, value));
+        this.addPath(name, new ArrayNode<>(type, value));
     }
 
     @Override
     public void add(String name, @NonNull NodeType type, @NonNull Node value) {
-        this.add(name, value);
+        this.addPath(name, value);
     }
 
     @Override
     public void add(String name, @NonNull NodeType type, @NonNull String value) {
-        this.add(name, new ValueNode<>(type, value));
+        this.addPath(name, new ValueNode<>(type, value));
     }
 
     @Override
     public <T extends Number> void add(String name, @NonNull NodeType type, @NonNull T value) {
-        this.add(name, new ValueNode<>(type, value));
+        this.addPath(name, new ValueNode<>(type, value));
     }
 
     @Override
     public <U> void add(final @NonNull String name, @NonNull U childValue) {
 
-        if (childValue instanceof Boolean cast) {
-            var node = new ValueNode<>(NodeType.BOOLEAN, cast);
-            values.put(name, node);
-            return;
-        }
-
-        if (childValue instanceof Byte cast) {
-            var node = new ValueNode<>(NodeType.BYTE, cast);
-            values.put(name, node);
-            return;
-        }
-
-        if (childValue instanceof Double cast) {
-            var node = new ValueNode<>(NodeType.DOUBLE, cast);
-            values.put(name, node);
-            return;
-        }
-
-        if (childValue instanceof Float cast) {
-            var node = new ValueNode<>(NodeType.FLOAT, cast);
-            values.put(name, node);
-            return;
-        }
-
-        if (childValue instanceof Integer cast) {
-            var node = new ValueNode<>(NodeType.INTEGER, cast);
-            values.put(name, node);
-            return;
-        }
-
-        if (childValue instanceof Long cast) {
-            var node = new ValueNode<>(NodeType.LONG, cast);
-            values.put(name, node);
-            return;
-        }
-
-        if (childValue instanceof Node cast) {
-            var node = new ValueNode<>(NodeType.NODE, cast);
-            values.put(name, node);
-            return;
-        }
-
-        if (childValue instanceof Short cast) {
-            var node = new ValueNode<>(NodeType.SHORT, cast);
-            values.put(name, node);
-            return;
-        }
-
-        if (childValue instanceof String cast) {
-            var node = new ValueNode<>(NodeType.BOOLEAN, cast);
-            values.put(name, node);
-        }
-        throw new UnsupportedOperationException();
+        final KVT node =
+                switch (childValue) {
+                    case Boolean cast -> new ValueNode<>(NodeType.BOOLEAN, cast);
+                    case Byte cast -> new ValueNode<>(NodeType.BYTE, cast);
+                    case Double cast -> new ValueNode<>(NodeType.DOUBLE, cast);
+                    case Float cast -> new ValueNode<>(NodeType.FLOAT, cast);
+                    case Integer cast -> new ValueNode<>(NodeType.INTEGER, cast);
+                    case Long cast -> new ValueNode<>(NodeType.LONG, cast);
+                    case Node cast -> cast;
+                    case Short cast -> new ValueNode<>(NodeType.SHORT, cast);
+                    case String cast -> new ValueNode<>(NodeType.STRING, cast);
+                    default -> throw new UnsupportedOperationException();
+                };
+        // Through the path aware add, so periods nest like every other add
+        this.addPath(name, node);
     }
 
     @SuppressWarnings("unchecked")

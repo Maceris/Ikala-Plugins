@@ -50,6 +50,8 @@ FloatingPointLiteral
     |	Sign? '.' Digits ExponentPart? FloatTypeSuffix?
     |	SignedInteger ExponentPart FloatTypeSuffix?
     |	SignedInteger FloatTypeSuffix
+    // The names Java writes for values that are not finite numbers
+    |	Sign? ('NaN' | 'Infinity') FloatTypeSuffix?
 	;
 
 IntegerLiteral

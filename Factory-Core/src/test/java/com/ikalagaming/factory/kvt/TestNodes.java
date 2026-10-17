@@ -308,4 +308,41 @@ class TestNodes {
         assertNull(tree.getString("DoesNotExist"));
         assertNull(tree.getStringArray("DoesNotExist"));
     }
+
+    /** The generic add picks the type from the value, for every supported value type. */
+    @Test
+    void testGenericAdd() {
+        KVT tree = new Node();
+        Node child = new Node();
+        child.addInteger("inner", 7);
+
+        tree.add("bool", true);
+        tree.add("byte", (byte) 1);
+        tree.add("double", 1.02);
+        tree.add("float", 2.34f);
+        tree.add("int", 3);
+        tree.add("long", 4L);
+        tree.add("short", (short) 5);
+        tree.add("string", "test");
+        tree.add("child", child);
+        tree.add("parent.nested", "deep");
+
+        assertEquals(Optional.of(NodeType.BOOLEAN), tree.getType("bool"));
+        assertEquals(Optional.of(NodeType.BYTE), tree.getType("byte"));
+        assertEquals(Optional.of(NodeType.DOUBLE), tree.getType("double"));
+        assertEquals(Optional.of(NodeType.FLOAT), tree.getType("float"));
+        assertEquals(Optional.of(NodeType.INTEGER), tree.getType("int"));
+        assertEquals(Optional.of(NodeType.LONG), tree.getType("long"));
+        assertEquals(Optional.of(NodeType.SHORT), tree.getType("short"));
+        assertEquals(Optional.of(NodeType.STRING), tree.getType("string"));
+        assertEquals(Optional.of(NodeType.NODE), tree.getType("child"));
+        assertEquals(Optional.of(NodeType.STRING), tree.getType("parent.nested"));
+
+        assertEquals("test", tree.getString("string"));
+        assertSame(child, tree.getNode("child"));
+        assertEquals(7, tree.getInteger("child.inner"));
+        assertEquals("deep", tree.getString("parent.nested"));
+
+        assertThrows(UnsupportedOperationException.class, () -> tree.add("char", 'c'));
+    }
 }

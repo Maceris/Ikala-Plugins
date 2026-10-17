@@ -93,4 +93,90 @@ class TestStringSerialization {
                 TreeStringSerialization.fromString("{/* note */a:1,/* note */b:[I;1,/* x */2]}")
                         .isPresent());
     }
+
+    /** Keys that would read as a number or boolean are quoted, so they read back as keys. */
+    @Test
+    void testLiteralKeys() {
+        // A period is a path, so floating point keys with a point can't happen
+        List<String> literalKeys =
+                List.of(
+                        "12",
+                        "-3",
+                        "+4",
+                        "5b",
+                        "6L",
+                        "7s",
+                        "true",
+                        "false",
+                        "1e5",
+                        "-2E+3f",
+                        "3f",
+                        "4D",
+                        "NaN",
+                        "-Infinity",
+                        "InfinityF");
+        for (String key : literalKeys) {
+            KVT tree = new Node();
+            tree.addInteger(key, 1);
+            Assertions.assertEquals("{\"" + key + "\":1}", tree.toString(), key);
+            Optional<Node> maybeNode = TreeStringSerialization.fromString(tree.toString());
+            Assertions.assertTrue(maybeNode.isPresent(), key);
+            Assertions.assertEquals(tree, maybeNode.get(), key);
+        }
+
+        // Only whole literals need quotes, the lexer reads anything longer as an identifier
+        List<String> plainKeys = List.of("x12", "12x", "1-2", "truey", "_true", "1e", "a+b");
+        for (String key : plainKeys) {
+            KVT tree = new Node();
+            tree.addInteger(key, 1);
+            Assertions.assertEquals("{" + key + ":1}", tree.toString(), key);
+            Optional<Node> maybeNode = TreeStringSerialization.fromString(tree.toString());
+            Assertions.assertTrue(maybeNode.isPresent(), key);
+            Assertions.assertEquals(tree, maybeNode.get(), key);
+        }
+    }
+
+    /** Values that are not finite numbers are written in a form that reads back. */
+    @Test
+    void testNonFiniteNumbers() {
+        KVT tree = new Node();
+        tree.addDouble("dNaN", Double.NaN);
+        tree.addDouble("dPos", Double.POSITIVE_INFINITY);
+        tree.addDouble("dNeg", Double.NEGATIVE_INFINITY);
+        tree.addFloat("fNaN", Float.NaN);
+        tree.addFloat("fPos", Float.POSITIVE_INFINITY);
+        tree.addFloat("fNeg", Float.NEGATIVE_INFINITY);
+        tree.addDoubleArray(
+                "dArray", List.of(Double.NaN, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY));
+        tree.addFloatArray(
+                "fArray", List.of(Float.NaN, Float.NEGATIVE_INFINITY, Float.POSITIVE_INFINITY));
+
+        Optional<Node> maybeNode = TreeStringSerialization.fromString(tree.toString());
+        Assertions.assertTrue(maybeNode.isPresent(), tree.toString());
+        Assertions.assertEquals(tree, maybeNode.get());
+        Assertions.assertEquals(Optional.of(NodeType.FLOAT), maybeNode.get().getType("fNeg"));
+        Assertions.assertEquals(Optional.of(NodeType.DOUBLE), maybeNode.get().getType("dNeg"));
+
+        // Written by hand, with either suffix and sign
+        Optional<Node> handWritten =
+                TreeStringSerialization.fromString("{a:+Infinityd,b:-NaNf,c:Infinity}");
+        Assertions.assertTrue(handWritten.isPresent());
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, handWritten.get().getDouble("a"));
+        Assertions.assertTrue(Float.isNaN(handWritten.get().getFloat("b")));
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, handWritten.get().getDouble("c"));
+    }
+
+    /** An empty key is written as a pair of quotes, which read back as the empty key. */
+    @Test
+    void testEmptyKey() {
+        KVT tree = new Node();
+        tree.addInteger("", 1);
+        tree.addStringArray("strings", List.of("", "a"));
+        Assertions.assertEquals("{\"\":1,strings:[T;\"\",\"a\"]}", tree.toString());
+
+        Optional<Node> maybeNode = TreeStringSerialization.fromString(tree.toString());
+        Assertions.assertTrue(maybeNode.isPresent());
+        Assertions.assertEquals(List.of(""), maybeNode.get().getKeys().subList(0, 1));
+        Assertions.assertEquals(tree, maybeNode.get());
+    }
 }
