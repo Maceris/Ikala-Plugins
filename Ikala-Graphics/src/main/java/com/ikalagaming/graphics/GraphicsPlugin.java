@@ -85,7 +85,7 @@ public class GraphicsPlugin extends Plugin {
         settings.targetFPS = GraphicsManager.TARGET_FPS;
         readLodCache(settings);
 
-        if (!GraphicsManager.createWindow()) {
+        if (!GraphicsManager.initialize()) {
             return false;
         }
         Launcher.addMainThreadStage(GraphicsManager::tick);

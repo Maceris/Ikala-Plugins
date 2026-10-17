@@ -910,7 +910,7 @@ public final class GateBenchmark {
             if (unattended && (phase == Phase.DONE || phase == Phase.STOPPED)) {
                 unattended = false;
                 log.info("Gate benchmark finished, closing");
-                GraphicsManager.getWindow().requestClose();
+                GraphicsManager.getMainWindow().requestClose();
             }
         }
     }
@@ -1772,8 +1772,8 @@ public final class GateBenchmark {
                         frames.get(),
                         timings,
                         passed,
-                        GraphicsManager.getWindow().getWidth(),
-                        GraphicsManager.getWindow().getHeight(),
+                        GraphicsManager.getMainWindow().getWidth(),
+                        GraphicsManager.getMainWindow().getHeight(),
                         gateResults());
         phase = Phase.DONE;
         final String report = report(results);

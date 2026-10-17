@@ -5,8 +5,8 @@ import static org.lwjgl.util.vma.Vma.*;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.*;
+import com.ikalagaming.graphics.GlfwPlatform;
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.SkyOcclusion;
 import com.ikalagaming.graphics.graph.SunShadowCache;
@@ -176,14 +176,14 @@ public class PipelineManagerVulkan {
     private final PointerBuffer pointerOutput = MemoryUtil.memAllocPointer(1);
 
     public PipelineManagerVulkan(
-            @NonNull Window window, @NonNull ShaderMap shaders, @NonNull VulkanState state) {
+            int width, int height, @NonNull ShaderMap shaders, @NonNull VulkanState state) {
 
         log.trace("Initializing pipeline manager");
 
         renderers = new HashMap<>();
         createShadowMaps(state);
         log.trace("Created shadow maps");
-        createShaderData(window, state);
+        createShaderData(width, height, state);
         log.trace("Created shader data");
         createGuiFont();
         log.trace("Created GUI font");
@@ -629,17 +629,17 @@ public class PipelineManagerVulkan {
         pointDynamicAtlas = null;
     }
 
-    private void createShaderData(@NonNull Window window, @NonNull VulkanState state) {
+    private void createShaderData(int width, int height, @NonNull VulkanState state) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             // TODO(ches) make the gBuffer like 2560 × 1440, just use viewport+scissor if smaller
             // than that
             VkExtent3D imageExtent = VkExtent3D.calloc(stack);
-            imageExtent.set(window.getWidth(), window.getHeight(), 1);
-            state.realSize.set(window.getWidth(), window.getHeight(), 1);
+            imageExtent.set(width, height, 1);
+            state.realSize.set(width, height, 1);
             state.depthPyramid = new DepthPyramid(state);
-            state.depthPyramid.resize(state, window.getWidth(), window.getHeight());
+            state.depthPyramid.resize(state, width, height);
             state.oitVolume = new OitVolume(state);
-            state.oitVolume.resize(state, window.getWidth(), window.getHeight());
+            state.oitVolume.resize(state, width, height);
             state.occupancy = new OccupancyVolume(state);
             state.volumeBricks = new VolumeBricks(state);
 
@@ -1135,13 +1135,13 @@ public class PipelineManagerVulkan {
                             width,
                             Math.min(
                                     Math.max(state.realSize.width(), width) * 2,
-                                    Window.getLargestMonitorWidth()));
+                                    GlfwPlatform.getLargestMonitorWidth()));
             final int newHeight =
                     Math.max(
                             height,
                             Math.min(
                                     Math.max(state.realSize.height(), height) * 2,
-                                    Window.getLargestMonitorHeight()));
+                                    GlfwPlatform.getLargestMonitorHeight()));
 
             VkExtent3D imageExtent = VkExtent3D.calloc(stack);
             imageExtent.set(newWidth, newHeight, 1);

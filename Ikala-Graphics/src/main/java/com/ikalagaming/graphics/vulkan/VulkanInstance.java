@@ -4,6 +4,7 @@ import static org.lwjgl.glfw.GLFW.GLFW_ICONIFIED;
 import static org.lwjgl.glfw.GLFW.GLFW_VISIBLE;
 import static org.lwjgl.glfw.GLFW.glfwGetWindowAttrib;
 import static org.lwjgl.glfw.GLFWVulkan.glfwCreateWindowSurface;
+import static org.lwjgl.glfw.GLFWVulkan.glfwGetPhysicalDevicePresentationSupport;
 import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
 import static org.lwjgl.system.MemoryUtil.NULL;
 import static org.lwjgl.util.vma.Vma.*;
@@ -30,7 +31,6 @@ import com.ikalagaming.graphics.graph.SunShadowCache;
 import com.ikalagaming.graphics.graph.TaaMath;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.data.IkIO;
-import com.ikalagaming.graphics.gui.flags.ConfigFlags;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.util.SafeResourceLoader;
 
@@ -423,8 +423,6 @@ public class VulkanInstance {
         state.stagingRing = null;
         state.immediateCommands.cleanup(state);
         state.immediateCommands = null;
-        // Created in initializeGui()
-        IkGui.destroyContext();
 
         for (VulkanState.WindowInfo windowInfo : state.windows.values()) {
             cleanupWindow(windowInfo);
@@ -470,8 +468,6 @@ public class VulkanInstance {
      * @param deviceInfo The struct to clean up.
      */
     private void cleanupPhysicalDeviceInfo(@NonNull VulkanState.PhysicalDeviceInfo deviceInfo) {
-        deviceInfo.capabilities = null;
-        deviceInfo.formats = null;
         deviceInfo.queueFamilyProperties = null;
     }
 
@@ -506,23 +502,11 @@ public class VulkanInstance {
     }
 
     /**
-     * Set up a surface for a window, and selects the physical device.
-     *
-     * @param window The window.
+     * Select the physical device and create the logical device and its queues. No window is needed,
+     * since GLFW tells us which queue families can present without a surface.
      */
-    private void createSurface(@NonNull Window window) {
-        VulkanState.WindowInfo windowInfo = new VulkanState.WindowInfo(window);
-        if (state.windows.containsKey(window)) {
-            log.error("Trying to create a surface for a window twice");
-        }
-        state.windows.put(window, windowInfo);
-
-        checkError(
-                glfwCreateWindowSurface(
-                        state.instance, window.getWindowHandle(), null, longOutput));
-        windowInfo.surfaceHandle = longOutput.get(0);
-
-        state.device.physical = selectPhysicalDevice(windowInfo.surfaceHandle);
+    private void createDevice() {
+        state.device.physical = selectPhysicalDevice();
         state.physicalDevices.remove(state.device.physical);
         state.physicalDevices.forEach(this::cleanupPhysicalDeviceInfo);
         state.physicalDevices.clear();
@@ -689,7 +673,7 @@ public class VulkanInstance {
     private boolean createSwapchain(@NonNull VulkanState.WindowInfo windowInfo) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             long swapTimer = System.nanoTime();
-            VkSurfaceCapabilitiesKHR capabilities = state.device.physical.capabilities;
+            VkSurfaceCapabilitiesKHR capabilities = windowInfo.capabilities;
             checkError(
                     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
                             state.device.physical.physicalDevice,
@@ -865,10 +849,10 @@ public class VulkanInstance {
     /**
      * Set up the vulkan instance.
      *
-     * @param window The window we are setting up to render with.
+     * @param applicationName The name of the application.
      * @throws RenderException If an unrecoverable issue occurs setting up vulkan.
      */
-    private void createVulkanInstance(@NonNull Window window) {
+    private void createVulkanInstance(@NonNull String applicationName) {
         try (BufferHolder freeThese = new BufferHolder()) {
             PointerBuffer requiredExtensionNames = PointerBuffer.allocateDirect(64);
 
@@ -927,7 +911,7 @@ public class VulkanInstance {
             }
             requiredExtensionNames.flip();
 
-            ByteBuffer appName = MemoryUtil.memUTF8(window.getTitle());
+            ByteBuffer appName = MemoryUtil.memUTF8(applicationName);
             freeThese.add(appName);
             ByteBuffer engineName = MemoryUtil.memUTF8("Ikala Engine");
             freeThese.add(engineName);
@@ -1118,17 +1102,20 @@ public class VulkanInstance {
     }
 
     /**
-     * Initialize the instance to prepare for rendering for the first time.
+     * Initialize the instance, device and everything that doesn't depend on a window. GLFW must be
+     * initialized first. After this, give windows somewhere to present with {@link
+     * #createPresentation(Window)}, then call {@link #initializePipelines(int, int)} once the IkGui
+     * context exists.
      *
-     * @param window The window we will be rendering to.
+     * @param applicationName The name of the application, which tools like RenderDoc show.
      * @return Whether we were successful. False if there were (unrecoverable) errors.
      */
-    public boolean initialize(@NonNull Window window) {
+    public boolean initialize(@NonNull String applicationName) {
         log.trace("Initializing Vulkan");
-        createVulkanInstance(window);
+        createVulkanInstance(applicationName);
         log.trace("Created Vulkan instance");
-        createSurface(window);
-        log.trace("Created surface");
+        createDevice();
+        log.trace("Created device");
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VmaVulkanFunctions vkFunctions =
@@ -1145,13 +1132,6 @@ public class VulkanInstance {
             state.vmaAllocator = pointerOutput.get(0);
         }
         log.trace("Created VMA allocator");
-
-        VulkanState.WindowInfo windowInfo = state.windows.get(window);
-        if (!createSwapchain(windowInfo)) {
-            // Started minimized, try again once it has a size
-            windowInfo.updateSwapchain = true;
-        }
-        log.trace("Created swapchain");
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkCommandPoolCreateInfo commandPoolCreateInfo =
@@ -1238,18 +1218,56 @@ public class VulkanInstance {
 
         initializeShaders();
         log.trace("Initialized shaders");
-        initializeGui(window);
-        log.trace("Initialized GUI");
-        pipelineManager = new PipelineManagerVulkan(window, shaderMap, state);
-        log.trace("Created pipeline manager");
-        renderConfig = RenderConfig.builder().withGui().build();
-        pipeline = pipelineManager.getPipeline(renderConfig);
-        log.trace("Built initial pipeline");
 
         createSynchronizationInfo();
         log.trace("Created synchronization info");
 
         return true;
+    }
+
+    /**
+     * Create the render targets and pipelines, sized for the window the scene is drawn in. Call
+     * once, after {@link #initialize(String)} and after the IkGui context is created, since the GUI
+     * stage uploads its font atlas.
+     *
+     * @param width The width of the scene window in pixels.
+     * @param height The height of the scene window in pixels.
+     */
+    public void initializePipelines(int width, int height) {
+        pipelineManager = new PipelineManagerVulkan(width, height, shaderMap, state);
+        log.trace("Created pipeline manager");
+        renderConfig = RenderConfig.builder().withGui().build();
+        pipeline = pipelineManager.getPipeline(renderConfig);
+        log.trace("Built initial pipeline");
+    }
+
+    /**
+     * Give a window a surface and swapchain to present to. The surface must support the swapchain
+     * format, which every desktop driver does.
+     *
+     * @param window The window.
+     * @throws RenderException If the device can't present to the window.
+     */
+    public void createPresentation(@NonNull Window window) {
+        if (state.windows.containsKey(window)) {
+            log.error("Trying to create a presentation for a window twice");
+            return;
+        }
+        VulkanState.WindowInfo windowInfo = new VulkanState.WindowInfo(window);
+
+        checkError(
+                glfwCreateWindowSurface(
+                        state.instance, window.getWindowHandle(), null, longOutput));
+        windowInfo.surfaceHandle = longOutput.get(0);
+        state.windows.put(window, windowInfo);
+
+        checkSurfaceSupport(windowInfo.surfaceHandle);
+
+        if (!createSwapchain(windowInfo)) {
+            // Started minimized, try again once it has a size
+            windowInfo.updateSwapchain = true;
+        }
+        log.trace("Created presentation for {}", window.getTitle());
     }
 
     /** Set up the instance transform, culling and depth pyramid shaders. */
@@ -1332,22 +1350,6 @@ public class VulkanInstance {
 
             shaderMap.addShader(view.getShaderType(), shaderProgram);
         }
-    }
-
-    /**
-     * Create an IkGui context and configure it.
-     *
-     * @param window The window to pull display info from.
-     */
-    private void initializeGui(@NonNull Window window) {
-        IkGui.createContext();
-
-        IkIO ikIO = IkGui.getIO();
-        ikIO.iniFilename = null;
-        // Tab, arrow keys and gamepads move between items, so menus work without a mouse
-        ikIO.configFlags |= ConfigFlags.NAV_ENABLE_KEYBOARD | ConfigFlags.NAV_ENABLE_GAMEPAD;
-        ikIO.displaySize.set(window.getWidth(), window.getHeight());
-        window.setupIkGuiPlatformIO();
     }
 
     /** Set up the GUI shader and uniforms. */
@@ -2022,11 +2024,9 @@ public class VulkanInstance {
      * Give a device a score based on how suitable it is, for use in device selection.
      *
      * @param deviceInfo The device we want to score.
-     * @param surfaceHandle The surface handle, for checking swapchain support.
      */
-    private int scoreDevice(
-            @NonNull VulkanState.PhysicalDeviceInfo deviceInfo, final long surfaceHandle) {
-        updateQueueFamilies(deviceInfo, surfaceHandle);
+    private int scoreDevice(@NonNull VulkanState.PhysicalDeviceInfo deviceInfo) {
+        updateQueueFamilies(deviceInfo);
 
         /* Quick checks to rule out the device entirely. */
 
@@ -2069,16 +2069,6 @@ public class VulkanInstance {
             return 0;
         }
 
-        updateSwapChainSupport(deviceInfo, surfaceHandle);
-        if (deviceInfo.formats == null
-                || deviceInfo.presentModes == null
-                || deviceInfo.presentModes.length == 0
-                || !supportsSwapchainFormat(deviceInfo.formats)) {
-            deviceInfo.capabilities = null;
-            deviceInfo.formats = null;
-            deviceInfo.presentModes = null;
-            return 0;
-        }
         int score = 0;
 
         if (deviceInfo.queueFamilyIndices.transfer() != deviceInfo.queueFamilyIndices.graphics()) {
@@ -2100,16 +2090,15 @@ public class VulkanInstance {
     /**
      * Select a physical device to use.
      *
-     * @param surfaceHandle The surface handle, for checking swapchain support.
      * @return The selected physical device.
      * @throws RenderException If no device could possibly work.
      */
-    private VulkanState.PhysicalDeviceInfo selectPhysicalDevice(final long surfaceHandle) {
+    private VulkanState.PhysicalDeviceInfo selectPhysicalDevice() {
         VulkanState.PhysicalDeviceInfo bestChoice = null;
         int highestScore = Integer.MIN_VALUE;
 
         for (VulkanState.PhysicalDeviceInfo device : state.physicalDevices) {
-            int score = scoreDevice(device, surfaceHandle);
+            int score = scoreDevice(device);
             // 0 means the device can't run the engine at all
             if (score > 0 && score > highestScore) {
                 highestScore = score;
@@ -2195,7 +2184,7 @@ public class VulkanInstance {
 
     /**
      * Check if the specified device supports every feature we enable when creating the logical
-     * device. Keep this in sync with {@link #createSurface(Window)}.
+     * device. Keep this in sync with {@link #createDevice()}.
      *
      * @param deviceInfo The device to check.
      * @return Whether all the features we need are supported.
@@ -2320,10 +2309,8 @@ public class VulkanInstance {
      * device.
      *
      * @param deviceInfo The device we are interested in.
-     * @param surfaceHandle The surface handle, for checking support.
      */
-    private void updateQueueFamilies(
-            @NonNull VulkanState.PhysicalDeviceInfo deviceInfo, final long surfaceHandle) {
+    private void updateQueueFamilies(@NonNull VulkanState.PhysicalDeviceInfo deviceInfo) {
         int graphicsFamily = QueueFamilyIndices.MISSING;
         int graphicsQueueCount = 0;
         int presentFamily = QueueFamilyIndices.MISSING;
@@ -2356,10 +2343,10 @@ public class VulkanInstance {
 
                 if (presentFamily == QueueFamilyIndices.MISSING
                         || presentFamily != graphicsFamily) {
-                    checkError(
-                            vkGetPhysicalDeviceSurfaceSupportKHR(
-                                    deviceInfo.physicalDevice, i, surfaceHandle, intOutput));
-                    if (intOutput.get(0) == VK_TRUE) {
+                    // Whether the family can present to any window on this platform, so we can
+                    // pick the device before there are windows
+                    if (glfwGetPhysicalDevicePresentationSupport(
+                            state.instance, deviceInfo.physicalDevice, i)) {
                         presentFamily = i;
                         if (graphicsFamily != i
                                 && (family.queueFlags() & VK_QUEUE_GRAPHICS_BIT) != 0) {
@@ -2410,45 +2397,44 @@ public class VulkanInstance {
     }
 
     /**
-     * Check the swap chain support provided for the surface by the provided device.
+     * Check that the device can present to a new surface with the swapchain format. Device
+     * selection only knows the queue family can present on this platform, and Vulkan wants the
+     * surface itself checked before making a swapchain for it.
      *
-     * @param deviceInfo The device info to update.
+     * @param surfaceHandle The surface to check.
+     * @throws RenderException If the device can't present to the surface.
      */
-    private void updateSwapChainSupport(
-            @NonNull VulkanState.PhysicalDeviceInfo deviceInfo, long surfaceHandle) {
-        deviceInfo.capabilities = VkSurfaceCapabilitiesKHR.create();
-
+    private void checkSurfaceSupport(long surfaceHandle) {
+        final VkPhysicalDevice physicalDevice = state.device.physical.physicalDevice;
         checkError(
-                vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-                        deviceInfo.physicalDevice, surfaceHandle, deviceInfo.capabilities));
+                vkGetPhysicalDeviceSurfaceSupportKHR(
+                        physicalDevice,
+                        state.device.physical.queueFamilyIndices.present(),
+                        surfaceHandle,
+                        intOutput));
+        if (intOutput.get(0) != VK_TRUE) {
+            final var message = "The device can't present to the window surface";
+            log.error(message);
+            throw new RenderException(message);
+        }
 
         checkError(
                 vkGetPhysicalDeviceSurfaceFormatsKHR(
-                        deviceInfo.physicalDevice, surfaceHandle, intOutput, null));
-
-        if (intOutput.get(0) > 0) {
-            deviceInfo.formats = VkSurfaceFormatKHR.create(intOutput.get(0));
-            checkError(
-                    vkGetPhysicalDeviceSurfaceFormatsKHR(
-                            deviceInfo.physicalDevice,
-                            surfaceHandle,
-                            intOutput,
-                            deviceInfo.formats));
+                        physicalDevice, surfaceHandle, intOutput, null));
+        final int formatCount = intOutput.get(0);
+        if (formatCount > 0) {
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                VkSurfaceFormatKHR.Buffer formats = VkSurfaceFormatKHR.malloc(formatCount, stack);
+                checkError(
+                        vkGetPhysicalDeviceSurfaceFormatsKHR(
+                                physicalDevice, surfaceHandle, intOutput, formats));
+                if (supportsSwapchainFormat(formats)) {
+                    return;
+                }
+            }
         }
-
-        checkError(
-                vkGetPhysicalDeviceSurfacePresentModesKHR(
-                        deviceInfo.physicalDevice, surfaceHandle, intOutput, null));
-        if (intOutput.get(0) > 0) {
-            final int presentModeCount = intOutput.get(0);
-            deviceInfo.presentModes = new int[presentModeCount];
-            int[] arrayForSignatureReasons = new int[] {presentModeCount};
-            checkError(
-                    vkGetPhysicalDeviceSurfacePresentModesKHR(
-                            deviceInfo.physicalDevice,
-                            surfaceHandle,
-                            arrayForSignatureReasons,
-                            deviceInfo.presentModes));
-        }
+        final var message = "The window surface doesn't support the swapchain format";
+        log.error(message);
+        throw new RenderException(message);
     }
 }

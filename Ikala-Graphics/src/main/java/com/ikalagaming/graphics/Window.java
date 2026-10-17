@@ -21,17 +21,13 @@ import com.ikalagaming.util.SafeResourceLoader;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.*;
 import org.lwjgl.stb.STBImage;
-import org.lwjgl.system.APIUtil;
 import org.lwjgl.system.MemoryStack;
-import org.lwjgl.system.MemoryUtil;
 
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
-import java.util.Map;
 import java.util.function.Consumer;
 
 /** Provides convenience methods for a GLFW window. */
@@ -44,25 +40,21 @@ public class Window {
     /**
      * Set up the window hints.
      *
-     * @param settings The configuration to use.
+     * @param options How to create the window.
      */
-    private static void setWindowHints(@NonNull GraphicsSettings settings) {
+    private static void setWindowHints(@NonNull WindowOptions options) {
         glfwDefaultWindowHints();
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-
-        if (settings.antiAliasing) {
-            glfwWindowHint(GLFW_SAMPLES, 4);
+        glfwWindowHint(GLFW_RESIZABLE, options.resizable() ? GLFW_TRUE : GLFW_FALSE);
+        glfwWindowHint(GLFW_DECORATED, options.decorated() ? GLFW_TRUE : GLFW_FALSE);
+        glfwWindowHint(GLFW_FLOATING, options.floating() ? GLFW_TRUE : GLFW_FALSE);
+        glfwWindowHint(GLFW_FOCUS_ON_SHOW, options.focusOnShow() ? GLFW_TRUE : GLFW_FALSE);
+        if (options.maximized()) {
+            glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
         }
-
+        // Vulkan draws to the window, so GLFW shouldn't make an OpenGL context
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     }
-
-    /** The width of the largest monitor we could find, in pixels. */
-    @Getter private static int largestMonitorWidth = 0;
-
-    /** The height of the largest monitor we could find, in pixels. */
-    @Getter private static int largestMonitorHeight = 0;
 
     /**
      * The GLFW window handle.
@@ -120,43 +112,22 @@ public class Window {
             };
 
     /**
-     * Create a new window.
+     * Create and show a new window. {@link GlfwPlatform} must be initialized first.
      *
-     * @param title The title of the window to display.
-     * @param settings Graphics settings.
+     * @param options How to create the window.
      * @param resizeFunc The function to call upon the window resizing.
+     * @throws WindowCreationException If the window could not be created.
      */
-    public Window(
-            @NonNull String title,
-            @NonNull GraphicsSettings settings,
-            @NonNull Consumer<Window> resizeFunc) {
+    public Window(@NonNull WindowOptions options, @NonNull Consumer<Window> resizeFunc) {
+        if (!GlfwPlatform.isInitialized()) {
+            throw new WindowCreationException("GLFW must be initialized before creating windows");
+        }
         this.resizeFunc = resizeFunc;
         this.fullscreen = false;
 
-        glfwInitHint(GLFW_COCOA_CHDIR_RESOURCES, GLFW_TRUE);
-        if (!glfwInit()) {
-            final String error = "Unable to initialize GLFW";
-            log.warn(error);
-            throw new WindowCreationException(error);
-        }
+        setWindowHints(options);
 
-        if (glfwSetErrorCallback(createGLFWErrorLogger()) != null) {
-            log.debug("We are replacing a GLFWErrorCallback, hope that's fine");
-        }
-
-        if (!GLFWVulkan.glfwVulkanSupported()) {
-            final String error = "GLFW cannot find the Vulkan loader";
-            log.warn(error);
-            throw new WindowCreationException(error);
-        }
-
-        setWindowHints(settings);
-
-        if (settings.requestedWindowWidth > 0 && settings.requestedWindowHeight > 0) {
-            width = settings.requestedWindowWidth;
-            height = settings.requestedWindowHeight;
-        } else {
-            glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
+        if (options.maximized()) {
             GLFWVidMode vidMode = glfwGetVideoMode(glfwGetPrimaryMonitor());
             if (vidMode == null) {
                 final String error =
@@ -166,39 +137,12 @@ public class Window {
             }
             width = vidMode.width();
             height = vidMode.height();
+        } else {
+            width = options.width();
+            height = options.height();
         }
 
-        if (largestMonitorWidth == 0 || largestMonitorHeight == 0) {
-            PointerBuffer monitors = glfwGetMonitors();
-            if (monitors == null) {
-                final String error = "Can't find monitor info";
-                log.warn(error);
-                throw new WindowCreationException(error);
-            }
-            int maxWidth = 0;
-            int maxHeight = 0;
-            int maxArea = 0;
-            for (int i = 0; i < monitors.limit(); i++) {
-                final GLFWVidMode.Buffer modes = glfwGetVideoModes(monitors.get(i));
-                for (int j = 0; j < modes.limit(); j++) {
-                    final GLFWVidMode mode = modes.get(j);
-                    final int area = mode.width() * mode.height();
-                    if (area > maxArea) {
-                        maxWidth = mode.width();
-                        maxHeight = mode.height();
-                        maxArea = area;
-                    }
-                }
-            }
-            largestMonitorWidth = maxWidth;
-            largestMonitorHeight = maxHeight;
-            log.debug(
-                    "We found a monitor that is {}x{}, using that as the max size for rendering targets",
-                    maxWidth,
-                    maxHeight);
-        }
-
-        this.title = title;
+        this.title = options.title();
         windowHandle = glfwCreateWindow(width, height, title, NULL, NULL);
         if (windowHandle == NULL) {
             final String error = "Failed to create a GLFW window";
@@ -208,7 +152,7 @@ public class Window {
 
         setCallbacks();
 
-        if (glfwGetPlatform() != GLFW_PLATFORM_COCOA) {
+        if (options.icon() && glfwGetPlatform() != GLFW_PLATFORM_COCOA) {
             setWindowIcon();
         }
 
@@ -308,37 +252,6 @@ public class Window {
         return action == GLFW_RELEASE ? mods & ~modifier : mods | modifier;
     }
 
-    private GLFWErrorCallback createGLFWErrorLogger() {
-        return new GLFWErrorCallback() {
-            private final Map<Integer, String> ERROR_CODES =
-                    APIUtil.apiClassTokens(
-                            (field, value) -> 0x10000 < value && value < 0x20000, null, GLFW.class);
-
-            @Override
-            public void invoke(int error, long description) {
-                String msg = getDescription(description);
-
-                StringBuilder sb = new StringBuilder(512);
-                sb.append("[GLFW] ")
-                        .append(ERROR_CODES.get(error))
-                        .append(" error\n")
-                        .append("\tDescription : ")
-                        .append(msg)
-                        .append("\n")
-                        .append("\tStacktrace  :\n");
-
-                StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-                for (int i = 4; i < stack.length; i++) {
-                    sb.append("\t\t");
-                    sb.append(stack[i]);
-                    sb.append("\n");
-                }
-
-                log.error(sb.toString());
-            }
-        };
-    }
-
     /**
      * Disable the cursor.
      *
@@ -348,7 +261,7 @@ public class Window {
         glfwSetInputMode(windowHandle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     }
 
-    /** Destroy the window. */
+    /** Destroy the window. GLFW stays initialized, for the other windows. */
     public void destroy() {
         if (NULL == windowHandle) {
             return;
@@ -360,10 +273,6 @@ public class Window {
         }
         Callbacks.glfwFreeCallbacks(windowHandle);
         glfwDestroyWindow(windowHandle);
-        GLFWErrorCallback callback = glfwSetErrorCallback(null);
-        if (callback != null) {
-            callback.free();
-        }
         windowHandle = NULL;
         log.debug("Window destroyed");
     }
@@ -498,10 +407,6 @@ public class Window {
     private void setCallbacks() {
 
         glfwSetFramebufferSizeCallback(windowHandle, (window, w, h) -> resized(w, h));
-
-        glfwSetErrorCallback(
-                (int errorCode, long msgPtr) ->
-                        log.error("Error code {} - {}", errorCode, MemoryUtil.memUTF8(msgPtr)));
 
         glfwSetKeyCallback(
                 windowHandle,

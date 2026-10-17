@@ -243,17 +243,11 @@ public class VulkanState {
     /** Information about the physical hardware devices. */
     public static class PhysicalDeviceInfo {
 
-        /** The surface capability information. */
-        public VkSurfaceCapabilitiesKHR capabilities = null;
-
         /** The depth format we selected from among the list that this device supports. */
         public int depthFormat = VK_FORMAT_UNDEFINED;
 
         public VkPhysicalDeviceFeatures deviceFeatures = VkPhysicalDeviceFeatures.create();
         public VkPhysicalDeviceProperties deviceProperties = VkPhysicalDeviceProperties.create();
-
-        /** The formats, if any. Null if there are no supported formats. */
-        public VkSurfaceFormatKHR.Buffer formats = null;
 
         /**
          * The maximum number of sampled image descriptors we can support in descriptor set. We
@@ -265,15 +259,9 @@ public class VulkanState {
         public VkPhysicalDevice physicalDevice = null;
 
         /**
-         * The present modes (VkPresentModeKHR), if any. Null if there are no supported present
-         * modes.
-         */
-        public int[] presentModes = null;
-
-        /**
-         * Used once we have a surface to check for graphics support, stores relevant queue family
-         * indices once found. Will be null if we haven't looked, but exist with missing values if
-         * we just couldn't find one or more queues.
+         * Stores the queue family indices we care about once they are found while selecting a
+         * device. Will be null if we haven't looked, but exist with missing values if we just
+         * couldn't find one or more queues.
          */
         public QueueFamilyIndices queueFamilyIndices = null;
 
@@ -284,9 +272,9 @@ public class VulkanState {
         public boolean portabilitySubset = false;
 
         /**
-         * An intermediate list of queue family properties. Once we have a surface to work with,
-         * this is cleared out again and {@link #queueFamilyIndices} is populated with the indices
-         * we care about.
+         * An intermediate list of queue family properties. Once the device is scored, this is
+         * cleared out again and {@link #queueFamilyIndices} is populated with the indices we care
+         * about.
          */
         public VkQueueFamilyProperties.Buffer queueFamilyProperties = null;
 
@@ -310,6 +298,9 @@ public class VulkanState {
 
         /** Semaphores for signaling presentation. One per swapchain image. */
         public long[] renderCompleteSemaphores;
+
+        /** The surface capabilities, queried again each time the swapchain is created. */
+        public final VkSurfaceCapabilitiesKHR capabilities = VkSurfaceCapabilitiesKHR.create();
 
         public long surfaceHandle;
         public long swapchainHandle;

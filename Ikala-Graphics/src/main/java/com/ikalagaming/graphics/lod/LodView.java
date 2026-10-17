@@ -475,7 +475,7 @@ public final class LodView implements AutoCloseable {
     private static double pixelsPerUnit(@NonNull Observer observer) {
         // m11 is 1 / tan(fov / 2), negative with Vulkan's y flip
         final double focal = Math.abs(observer.getProjectionMatrix().m11());
-        return focal * GraphicsManager.getWindow().getHeight() / 2;
+        return focal * GraphicsManager.getMainWindow().getHeight() / 2;
     }
 
     /**

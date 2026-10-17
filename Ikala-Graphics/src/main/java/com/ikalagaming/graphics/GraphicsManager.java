@@ -1,8 +1,6 @@
 package com.ikalagaming.graphics;
 
 import static org.lwjgl.glfw.GLFW.glfwGetTime;
-import static org.lwjgl.glfw.GLFW.glfwSetErrorCallback;
-import static org.lwjgl.glfw.GLFW.glfwTerminate;
 
 import com.ikalagaming.graphics.benchmark.GateBenchmark;
 import com.ikalagaming.graphics.events.WindowCreated;
@@ -10,6 +8,7 @@ import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.WindowManager;
 import com.ikalagaming.graphics.gui.data.IkIO;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
+import com.ikalagaming.graphics.gui.flags.ConfigFlags;
 import com.ikalagaming.graphics.scene.ModelLoader;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.debug.DebugShape;
@@ -28,10 +27,8 @@ import com.ikalagaming.plugins.PluginManager;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.lwjgl.glfw.GLFWErrorCallback;
 
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -40,6 +37,9 @@ import javax.annotation.Nullable;
 /** Provides utilities for handling graphics. */
 @Slf4j
 public class GraphicsManager {
+
+    /** The name of the application, used for the main window title and the Vulkan instance. */
+    public static final String APPLICATION_NAME = "Ikala Gaming";
 
     /** Whether we are currently initialized. */
     static final AtomicBoolean initialized = new AtomicBoolean(false);
@@ -123,17 +123,17 @@ public class GraphicsManager {
     private static final AtomicBoolean shutdownFlag = new AtomicBoolean(false);
 
     /**
-     * The thread that created the window. GLFW and the renderer must only be used from this thread,
-     * including when cleaning up.
+     * The thread that initialized graphics. GLFW and the renderer must only be used from this
+     * thread, including when cleaning up.
      */
     private static Thread mainThread;
 
     /**
-     * The window utility.
+     * The main window. Closing it shuts the application down.
      *
-     * @return The window object.
+     * @return The main window.
      */
-    @Getter private static Window window;
+    @Getter private static Window mainWindow;
 
     /**
      * The window manager for drawing GUIs.
@@ -159,42 +159,46 @@ public class GraphicsManager {
     /** The graphics context for each plugin that asked for one, by plugin name. */
     private static final Map<String, GraphicsContext> contexts = new ConcurrentHashMap<>();
 
-    /** The settings to use for rendering. Should be set up before creating a window. */
+    /** The settings to use for rendering. Should be set up before initializing. */
     @Getter private static final GraphicsSettings settings = new GraphicsSettings();
 
     /**
-     * Creates a graphics window, fires off a {@link WindowCreated} event. Won't do anything if a
-     * window already exists.
+     * Start up graphics: GLFW, then the Vulkan instance and device, then the main window, which
+     * fires off a {@link WindowCreated} event, then the GUI and scene. Won't do anything if we are
+     * already initialized.
+     *
+     * @return True if graphics started, false if they were already running or failed.
      */
-    public static boolean createWindow() {
-        if ((null != window) || !initialized.compareAndSet(false, true)) {
+    public static boolean initialize() {
+        if ((null != mainWindow) || !initialized.compareAndSet(false, true)) {
             return false;
         }
         shutdownFlag.set(false);
         mainThread = Thread.currentThread();
 
-        /*
-         * TODO(ches) we will probably want to refactor this so windows are more transient, rather than being treated
-         * as equivalent to the application. Some amount of the rendering instance can survive windows being
-         * created and destroyed, besides things like swapchains.
-         */
-
-        window = new Window("Ikala Gaming", settings, GraphicsManager::resize);
-
-        log.debug("Window created");
-        new WindowCreated(window.getWindowHandle()).fire();
+        GlfwPlatform.initialize();
 
         renderInstance = new VulkanInstance();
-
-        if (!renderInstance.initialize(window)) {
+        if (!renderInstance.initialize(APPLICATION_NAME)) {
             return false;
         }
-
         log.debug("Renderer created");
 
-        scene = new Scene(window.getWidth(), window.getHeight());
+        mainWindow =
+                new Window(
+                        WindowOptions.mainWindow(APPLICATION_NAME, settings),
+                        GraphicsManager::resize);
+        log.debug("Window created");
+        new WindowCreated(mainWindow.getWindowHandle()).fire();
 
-        cameraManager = new CameraManager(scene.getCamera(), window);
+        renderInstance.createPresentation(mainWindow);
+        initializeGui(mainWindow);
+        log.trace("Initialized GUI");
+        renderInstance.initializePipelines(mainWindow.getWidth(), mainWindow.getHeight());
+
+        scene = new Scene(mainWindow.getWidth(), mainWindow.getHeight());
+
+        cameraManager = new CameraManager(scene.getCamera(), mainWindow);
 
         lastRenderTime = getTime();
         nextRenderTime = lastRenderTime + FRAME_TIME;
@@ -204,6 +208,22 @@ public class GraphicsManager {
 
         lastFPSTime = glfwGetTime();
         return true;
+    }
+
+    /**
+     * Create the IkGui context, which every window shares, and configure it.
+     *
+     * @param window The main window, which IkGui gets its display size and platform functions from.
+     */
+    private static void initializeGui(@NonNull Window window) {
+        IkGui.createContext();
+
+        IkIO ikIO = IkGui.getIO();
+        ikIO.iniFilename = null;
+        // Tab, arrow keys and gamepads move between items, so menus work without a mouse
+        ikIO.configFlags |= ConfigFlags.NAV_ENABLE_KEYBOARD | ConfigFlags.NAV_ENABLE_GAMEPAD;
+        ikIO.displaySize.set(window.getWidth(), window.getHeight());
+        window.setupIkGuiPlatformIO();
     }
 
     /**
@@ -355,7 +375,7 @@ public class GraphicsManager {
     /**
      * Whether we are currently initialized.
      *
-     * @return If we have already set up the window.
+     * @return If graphics are running.
      */
     public static boolean isInitialized() {
         return initialized.get();
@@ -363,7 +383,7 @@ public class GraphicsManager {
 
     /** Render to the screen. */
     private static void render() {
-        renderInstance.render(scene, window);
+        renderInstance.render(scene, mainWindow);
 
         ++framesSinceLastCalculation;
 
@@ -440,9 +460,8 @@ public class GraphicsManager {
     }
 
     /**
-     * Clean up the renderer, terminate GLFW and free the error callback. If any windows still
-     * remain, they are destroyed. Does nothing if we already terminated. Must be called from the
-     * main thread.
+     * Clean up the renderer and the GUI, destroy the windows, then terminate GLFW. Does nothing if
+     * we already terminated. Must be called from the main thread.
      */
     public static void terminate() {
         if (!initialized.get()) {
@@ -455,15 +474,18 @@ public class GraphicsManager {
             // Queues everything up for deletion, which the renderer processes as it cleans up
             scene.cleanup();
         }
+        // Destroys the window surfaces too, which must go before the windows
         renderInstance.cleanup();
-
-        if (null != window) {
-            window.destroy();
-            window = null;
+        if (IkGui.getContext() != null) {
+            IkGui.destroyContext();
         }
 
-        glfwTerminate();
-        Optional.ofNullable(glfwSetErrorCallback(null)).ifPresent(GLFWErrorCallback::free);
+        if (null != mainWindow) {
+            mainWindow.destroy();
+            mainWindow = null;
+        }
+
+        GlfwPlatform.terminate();
         initialized.set(false);
     }
 
@@ -473,7 +495,7 @@ public class GraphicsManager {
      * @return A status indicating to the launcher the status of this main loop stage.
      */
     static int tick() {
-        if (null == window) {
+        if (null == mainWindow) {
             // Already terminated, so there is nothing left to tick
             return Launcher.STATUS_REQUEST_REMOVAL;
         }
@@ -482,7 +504,7 @@ public class GraphicsManager {
             return Launcher.STATUS_REQUEST_REMOVAL;
         }
 
-        if (window.windowShouldClose()) {
+        if (mainWindow.windowShouldClose()) {
             /*
              * Clean up the renderer now, while the window it renders to still exists. Once this stage is removed
              * nothing would call terminate() later.
@@ -492,8 +514,8 @@ public class GraphicsManager {
             return Launcher.STATUS_REQUEST_REMOVAL;
         }
 
-        window.pollEvents();
-        uiManager.setContentScale(window.getContentScale());
+        mainWindow.pollEvents();
+        uiManager.setContentScale(mainWindow.getContentScale());
         // Button clicks and the like from the last frame, run here rather than mid-render
         uiManager.dispatchEvents();
 
@@ -509,15 +531,15 @@ public class GraphicsManager {
             IkIO ikIO = IkGui.getIO();
             if (!ikIO.wantCaptureMouse) {
                 if (ikIO.getMouseDown(MouseButton.RIGHT)) {
-                    window.disableCursor();
+                    mainWindow.disableCursor();
                 } else {
-                    window.enableCursor();
+                    mainWindow.enableCursor();
                 }
             }
             cameraManager.updateCamera(elapsedTime);
 
-            windowManager.handleGuiInput(scene, window);
-            windowManager.updateValues(scene, window);
+            windowManager.handleGuiInput(scene, mainWindow);
+            windowManager.updateValues(scene, mainWindow);
 
             // Update the next time we should update models
             lastUpdateTime = currentTime;
@@ -546,7 +568,7 @@ public class GraphicsManager {
         // keep frames evenly spaced.
         final double idle = Math.min(nextUpdateTime, nextRenderTime) - getTime() - WAKE_EARLY;
         if (idle > 0) {
-            window.waitEvents(Math.min(idle, FRAME_TIME));
+            mainWindow.waitEvents(Math.min(idle, FRAME_TIME));
         }
 
         return Launcher.STATUS_OK;
