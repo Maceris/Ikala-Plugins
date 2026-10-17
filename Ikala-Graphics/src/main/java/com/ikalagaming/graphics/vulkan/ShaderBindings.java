@@ -1064,8 +1064,15 @@ public class ShaderBindings {
         public static final int PUSH_CONSTANT_DEBUG_OFFSET =
                 PUSH_CONSTANT_FRAME_OFFSET + Integer.BYTES;
 
+        /**
+         * Push constant offset for the device address of the coverage volume brick table, which
+         * {@code scene_volume.frag} reads.
+         */
+        public static final int PUSH_CONSTANT_BRICKS_OFFSET =
+                PUSH_CONSTANT_DEBUG_OFFSET + Integer.BYTES;
+
         /** The size of the push constants in bytes. */
-        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_DEBUG_OFFSET + Integer.BYTES;
+        public static final int PUSH_CONSTANTS_SIZE = PUSH_CONSTANT_BRICKS_OFFSET + Long.BYTES;
 
         /** Offsets into the material struct. */
         public static class Material {
@@ -1199,9 +1206,23 @@ public class ShaderBindings {
         public static final int PUSH_CONSTANT_LOD_CLUSTERS_OFFSET =
                 PUSH_CONSTANT_LOD_WORLDS_OFFSET + Long.BYTES;
 
-        /** The size of the push constants in bytes. */
+        /** The size of the push constants the vertex shaders read, in bytes. */
         public static final int PUSH_CONSTANTS_SIZE =
                 PUSH_CONSTANT_LOD_CLUSTERS_OFFSET + Long.BYTES;
+
+        /**
+         * Push constant offset for the device address of the coverage volume brick table, which
+         * {@code shadow_volume.frag} reads, after what the vertex shaders read.
+         */
+        public static final int PUSH_CONSTANT_BRICKS_OFFSET = PUSH_CONSTANTS_SIZE;
+
+        /** Push constant offset for the frame number, for the volumes' stochastic coverage. */
+        public static final int PUSH_CONSTANT_FRAME_OFFSET =
+                PUSH_CONSTANT_BRICKS_OFFSET + Long.BYTES;
+
+        /** The size of the push constants {@code shadow_volume.frag} reads, in bytes. */
+        public static final int VOLUME_PUSH_CONSTANTS_SIZE =
+                PUSH_CONSTANT_FRAME_OFFSET + Integer.BYTES - PUSH_CONSTANT_BRICKS_OFFSET;
 
         /** The binding point for the model matrices buffer. */
         public static final int MODEL_MATRICES_BINDING = 0;

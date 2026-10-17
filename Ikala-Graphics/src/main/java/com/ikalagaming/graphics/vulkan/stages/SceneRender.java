@@ -58,7 +58,9 @@ public class SceneRender implements RenderStage {
         /** Baked sections, BakedVertex. */
         BAKED,
         /** Level of detail clusters, LodVertex. */
-        LOD
+        LOD,
+        /** Coverage volume bricks' boxes, LodVertex as CoverageBricks writes it. */
+        VOLUME
     }
 
     /** The size of a material in the materials buffer, in bytes. */
@@ -168,6 +170,12 @@ public class SceneRender implements RenderStage {
     /** The pipeline for level of detail clusters with cut out materials, alpha tested. */
     private long lodCutOutPipeline;
 
+    /** The shader for coverage volumes' bricks. */
+    @NonNull private final ShaderVulkan volumeShader;
+
+    /** The pipeline for coverage volumes' bricks, walked from their boxes' back faces. */
+    private long volumePipeline;
+
     /** VkPipeline for level of detail clusters as wireframes. */
     private long lodWireframe;
 
@@ -235,16 +243,20 @@ public class SceneRender implements RenderStage {
      * @param shader The shader to use for rendering.
      * @param bakedShader The shader for baked sections.
      * @param lodShader The shader for level of detail clusters.
+     * @param volumeShader The shader for coverage volumes' bricks.
      */
     public SceneRender(
             final @NonNull ShaderVulkan shader,
             final @NonNull ShaderVulkan bakedShader,
-            final @NonNull ShaderVulkan lodShader) {
+            final @NonNull ShaderVulkan lodShader,
+            final @NonNull ShaderVulkan volumeShader) {
         this.shader = shader;
         this.bakedShader = bakedShader;
         this.lodShader = lodShader;
         this.lodPipeline = VK_NULL_HANDLE;
         this.lodCutOutPipeline = VK_NULL_HANDLE;
+        this.volumeShader = volumeShader;
+        this.volumePipeline = VK_NULL_HANDLE;
         this.lodWireframe = VK_NULL_HANDLE;
         this.bakedPipeline = VK_NULL_HANDLE;
         this.bakedAlphaPipeline = VK_NULL_HANDLE;
@@ -275,6 +287,8 @@ public class SceneRender implements RenderStage {
         this.lodPipeline = createPipeline(vulkanState, lodShader, VertexFormat.LOD, false, false);
         this.lodCutOutPipeline =
                 createPipeline(vulkanState, lodShader, VertexFormat.LOD, false, true);
+        this.volumePipeline =
+                createPipeline(vulkanState, volumeShader, VertexFormat.VOLUME, false, false);
         this.lodWireframe = createPipeline(vulkanState, lodShader, VertexFormat.LOD, true, false);
     }
 
@@ -296,6 +310,8 @@ public class SceneRender implements RenderStage {
         lodPipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, lodCutOutPipeline, null);
         lodCutOutPipeline = VK_NULL_HANDLE;
+        vkDestroyPipeline(vulkanState.device.logical, volumePipeline, null);
+        volumePipeline = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, lodWireframe, null);
         lodWireframe = VK_NULL_HANDLE;
         vkDestroyPipeline(vulkanState.device.logical, pipeline, null);
@@ -518,6 +534,24 @@ public class SceneRender implements RenderStage {
                     pipelineLayout,
                     ShaderBindings.Scene.PUSH_CONSTANT_LOD_WORLDS_OFFSET,
                     LodRenderer.CUT_OUT_LISTS + list);
+            // Coverage volumes, walked from their bricks' boxes
+            if (!wireframe) {
+                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, volumePipeline);
+                final ByteBuffer brickTable = stack.malloc(Long.BYTES);
+                brickTable.putLong(0, state.lods.getBricks().getBuffer().deviceAddress);
+                vkCmdPushConstants(
+                        commandBuffer,
+                        pipelineLayout,
+                        VK_SHADER_STAGE_FRAGMENT_BIT,
+                        ShaderBindings.Scene.PUSH_CONSTANT_BRICKS_OFFSET,
+                        brickTable);
+                state.lods.draw(
+                        commandBuffer,
+                        frameData,
+                        pipelineLayout,
+                        ShaderBindings.Scene.PUSH_CONSTANT_LOD_WORLDS_OFFSET,
+                        LodRenderer.VOLUME_LISTS + list);
+            }
         }
 
         // Everything culling handled: the list's commands for each kind, one per mesh slot, from
@@ -941,7 +975,8 @@ public class SceneRender implements RenderStage {
                     .binding(ShaderBindings.Scene.UNIFORMS_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
                     .descriptorCount(1)
-                    .stageFlags(VK_SHADER_STAGE_VERTEX_BIT);
+                    // Coverage volumes' fragments project where they stop light, for its depth
+                    .stageFlags(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
             bindings.get(1)
                     .binding(ShaderBindings.Scene.MODEL_MATRICES_BINDING)
                     .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
@@ -1115,6 +1150,32 @@ public class SceneRender implements RenderStage {
     }
 
     /**
+     * Describe a coverage volume brick box's corners, see LodVertex#putVolume: grid position, the
+     * brick's voxel size, which corner, the brick's slot.
+     *
+     * @param stack The stack to allocate on.
+     * @return The attributes, read from binding 0.
+     */
+    static VkVertexInputAttributeDescription.Buffer volumeVertexAttributes(
+            @NonNull MemoryStack stack) {
+        final int[] formats = {
+            VK_FORMAT_R32G32B32_SINT, VK_FORMAT_R32_SFLOAT, VK_FORMAT_R32_UINT, VK_FORMAT_R32_UINT
+        };
+        final int[] offsets = {
+            LodVertex.POSITION_OFFSET,
+            LodVertex.NORMAL_OFFSET,
+            LodVertex.TANGENT_OFFSET,
+            LodVertex.UV_OFFSET
+        };
+        VkVertexInputAttributeDescription.Buffer attributes =
+                VkVertexInputAttributeDescription.calloc(formats.length, stack);
+        for (int i = 0; i < formats.length; ++i) {
+            attributes.get(i).binding(0).location(i).format(formats[i]).offset(offsets[i]);
+        }
+        return attributes;
+    }
+
+    /**
      * Describe the level of detail vertex format, see LodVertex: grid position, material and flags,
      * then a textured triangle's normal, tangent and texture coordinates.
      *
@@ -1215,9 +1276,11 @@ public class SceneRender implements RenderStage {
             LongBuffer longOutput = stack.callocLong(1);
 
             VkVertexInputAttributeDescription.Buffer vertexAttributes =
-                    format == VertexFormat.LOD
-                            ? lodVertexAttributes(stack)
-                            : vertexAttributes(format == VertexFormat.BAKED, stack);
+                    switch (format) {
+                        case LOD -> lodVertexAttributes(stack);
+                        case VOLUME -> volumeVertexAttributes(stack);
+                        default -> vertexAttributes(format == VertexFormat.BAKED, stack);
+                    };
             VkVertexInputBindingDescription.Buffer vertexBindings =
                     VkVertexInputBindingDescription.calloc(1, stack);
             vertexBindings
@@ -1227,7 +1290,7 @@ public class SceneRender implements RenderStage {
                             switch (format) {
                                 case STANDARD -> MeshData.VERTEX_SIZE_IN_BYTES;
                                 case BAKED -> BakedVertex.SIZE;
-                                case LOD -> LodVertex.SIZE;
+                                case LOD, VOLUME -> LodVertex.SIZE;
                             })
                     .inputRate(VK_VERTEX_INPUT_RATE_VERTEX);
 
@@ -1298,7 +1361,11 @@ public class SceneRender implements RenderStage {
                     VkPipelineRasterizationStateCreateInfo.calloc(stack)
                             .sType$Default()
                             .polygonMode(wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL)
-                            .cullMode(VK_CULL_MODE_BACK_BIT)
+                            // A volume's boxes by their back faces, so a camera inside one sees it
+                            .cullMode(
+                                    format == VertexFormat.VOLUME
+                                            ? VK_CULL_MODE_FRONT_BIT
+                                            : VK_CULL_MODE_BACK_BIT)
                             .frontFace(VK_FRONT_FACE_COUNTER_CLOCKWISE)
                             .lineWidth(1.0f);
             VkPipelineMultisampleStateCreateInfo multisampleState =

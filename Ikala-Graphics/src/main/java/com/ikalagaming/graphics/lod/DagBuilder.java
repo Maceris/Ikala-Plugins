@@ -1718,19 +1718,27 @@ public final class DagBuilder {
             merged = welded;
         }
         lockEars(merged);
+        // Cut out leaves turn into a volume as soon as one is cheaper than they are, never
+        // simplified as triangles first, which would shrink their cards and lose their coverage
+        final boolean cutOutVolume = options.volumes() && anyCutOut(children);
         // What would go to a volume rather than stay triangles, see MacroSurfaces
         final Map<Integer, byte[]> volumeKinds =
-                childError > 0
+                childError > 0 || cutOutVolume
                         ? volumeKinds(children, merged, childError, sourceCluster, sourceTriangle)
                         : Map.of();
         // Far enough out, what is finer than the group's resolution leaves its triangles for a
         // coverage volume, where the voxels cost less than the triangles they stand for
         final VolumePart volumePart =
-                options.volumes() && childError > 0
+                options.volumes() && (childError > 0 || cutOutVolume)
                         ? volumePart(children, merged, volumeKinds, sourceCluster, sourceTriangle)
                         : null;
         if (volumePart != null) {
             merged = dropFaces(merged, volumePart.faces(), sourceCluster, sourceTriangle);
+        } else if (cutOutVolume) {
+            // Not a volume yet: kept as they are
+            for (int v = 0; v < merged.getVertexCount(); ++v) {
+                merged.setLocked(v, true);
+            }
         }
         // Far enough out, small parts standing free of the group's borders go: their look stays in
         // the blend around them, and the measured error counts what is missing
@@ -2389,7 +2397,8 @@ public final class DagBuilder {
             final int t = sourceTriangle.getInt(f);
             final LodDag.Cluster cluster = dag.clusters().get(id);
             byte kind = LodDag.VOLUME_NONE;
-            if (options.isCutOut(cluster.materials()[t]) && childError >= repeatOf(cluster, t)) {
+            if (options.isCutOut(cluster.materials()[t])
+                    && (options.volumes() || childError >= repeatOf(cluster, t))) {
                 kind = LodDag.VOLUME_CUT_OUT;
             } else if (!macro[f]) {
                 kind = LodDag.VOLUME_GEOMETRY;
@@ -2415,7 +2424,8 @@ public final class DagBuilder {
      * they would take are fewer than they are, or all of it its children's volumes stand for. A
      * volume's voxels are {@link #VOXEL_STEP} times its middle child's error wide, and no finer
      * than its children's volumes', or it would take more voxels than they did. Its error is a
-     * voxel, which then raises the group's little past what its children already reach.
+     * voxel, which then raises the group's little past what its children already reach. Cut out
+     * leaves go at once, their voxels widened until they cost no more than the leaves do.
      *
      * @param children The group's children.
      * @param merged The merged triangles.
@@ -2439,27 +2449,40 @@ public final class DagBuilder {
                 voxel = Math.max(voxel, own.voxelSize());
             }
         }
-        if (voxel <= 0) {
-            return null;
-        }
         final int n = merged.getTriangleCount();
         final boolean[] faces = new boolean[n];
         int count = 0;
+        int cutOut = 0;
         double area = 0;
+        double cutOutArea = 0;
         for (int f = 0; f < n; ++f) {
             final byte[] own = kinds.get(sourceCluster.getInt(f));
-            if (own != null && own[sourceTriangle.getInt(f)] != LodDag.VOLUME_NONE) {
+            final byte kind = own == null ? LodDag.VOLUME_NONE : own[sourceTriangle.getInt(f)];
+            if (kind != LodDag.VOLUME_NONE) {
                 faces[f] = true;
                 ++count;
-                area += Geometry.triangleArea(merged, f);
+                final double faceArea = Geometry.triangleArea(merged, f);
+                area += faceArea;
+                if (kind == LodDag.VOLUME_CUT_OUT) {
+                    ++cutOut;
+                    cutOutArea += faceArea;
+                }
             }
+        }
+        if (cutOut > 0) {
+            // Cut out leaves go as soon as voxels cost no more than they do: voxels at least that
+            // wide
+            voxel = Math.max(voxel, Math.sqrt(VOXELS_PER_FACE_AREA * cutOutArea / cutOut));
+        }
+        if (voxel <= 0) {
+            return null;
         }
         if (count == 0 && !fromChildren) {
             return null;
         }
         // A surface passes through about its area over a voxel's face of voxels, and the blur
-        // reaches as many again
-        if (!fromChildren && VOXELS_PER_FACE_AREA * area / (voxel * voxel) > count) {
+        // reaches as many again; cut out leaves' voxels are already sized to pass
+        if (!fromChildren && cutOut == 0 && VOXELS_PER_FACE_AREA * area / (voxel * voxel) > count) {
             return null;
         }
         final float[] corners = new float[n * TRIANGLE_VALUES];

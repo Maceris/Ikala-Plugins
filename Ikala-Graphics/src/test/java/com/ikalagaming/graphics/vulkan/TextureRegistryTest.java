@@ -210,12 +210,21 @@ class TextureRegistryTest {
     @Test
     void averagesInLinearLight() {
         // Black and white average to half the light, which is brighter than half the sRGB value
-        byte[] pixels = {0, 0, 0, 0, -1, -1, -1, -1};
+        byte[] pixels = {0, 0, 0, -1, -1, -1, -1, -1};
         float[] srgb = TextureLoaderVulkan.average(pixels, 0, 2, true);
         assertEquals(0.5f, srgb[0], 0.0001f);
-        assertEquals(0.5f, srgb[3], 0.0001f);
+        assertEquals(1, srgb[3], 0.0001f);
         float[] linear = TextureLoaderVulkan.average(new byte[] {64, 0, 0, -1}, 0, 1, false);
         assertEquals(64 / 255.0f, linear[0], 0.0001f);
         assertEquals(1, linear[3], 0.0001f);
+    }
+
+    @Test
+    void averagesWhatIsCovered() {
+        // A white texel and a hole holding black: the color is the white, half of it covered
+        byte[] pixels = {-1, -1, -1, -1, 0, 0, 0, 0};
+        float[] average = TextureLoaderVulkan.average(pixels, 0, 2, true);
+        assertEquals(1, average[0], 0.0001f);
+        assertEquals(0.5f, average[3], 0.0001f);
     }
 }

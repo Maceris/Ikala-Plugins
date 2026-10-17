@@ -8,6 +8,8 @@ import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.lod.ClusterMeshes;
+import com.ikalagaming.graphics.lod.CoverageBricks;
+import com.ikalagaming.graphics.lod.CoverageVolume;
 import com.ikalagaming.graphics.lod.LiveLod;
 import com.ikalagaming.graphics.lod.LodCut;
 import com.ikalagaming.graphics.lod.LodDag;
@@ -39,6 +41,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -96,8 +99,14 @@ public class LodRenderer {
      */
     public static final int CUT_OUT_LISTS = LIST_COUNT;
 
-    /** Every list, opaque then cut out. */
-    public static final int LIST_SLOTS = 2 * LIST_COUNT;
+    /**
+     * Where each list's volume share starts: clusters with {@link LodCullMath#FLAG_VOLUME} go to
+     * their list plus this, to be drawn by walking their bricks.
+     */
+    public static final int VOLUME_LISTS = 2 * LIST_COUNT;
+
+    /** Every list, opaque, cut out, then volumes. */
+    public static final int LIST_SLOTS = 3 * LIST_COUNT;
 
     /** The counter of clusters in the cut, after one count per list. */
     public static final int COUNTER_SELECTED = LIST_SLOTS;
@@ -125,6 +134,9 @@ public class LodRenderer {
 
     /** How many counters there are. */
     public static final int COUNTER_COUNT = COUNTER_LEVELS + LEVEL_COUNTERS * COUNTERS_PER_LEVEL;
+
+    /** How many coverage volume bricks the brick table starts with room for. */
+    private static final int INITIAL_BRICKS = 64;
 
     /** How many clusters the tables start with room for. */
     private static final int INITIAL_CLUSTERS = 1024;
@@ -272,6 +284,23 @@ public class LodRenderer {
      * @return The pair table.
      */
     @Getter private final DeviceTable pairs;
+
+    /**
+     * The coverage volumes' bricks, see {@link CoverageBricks}, by slot. -- GETTER -- The brick
+     * table.
+     *
+     * @return The table.
+     */
+    @Getter private final DeviceTable bricks;
+
+    /** Brick table entries changed this frame. */
+    private DeviceTable.Entries brickEntries = new DeviceTable.Entries(CoverageBricks.BRICK_BYTES);
+
+    /** The brick table's slots. */
+    private final Slots brickSlots = new Slots();
+
+    /** The brick slots each registered volume mesh holds, given back with it. */
+    private final Map<MeshHandle, int[]> brickSlotsOf = new IdentityHashMap<>();
 
     /** Pair entries changed this frame, uploaded by {@link #record}. Render thread. */
     private DeviceTable.Entries pairEntries = new DeviceTable.Entries(LodCullMath.PAIR_ENTRY_SIZE);
@@ -554,6 +583,12 @@ public class LodRenderer {
         /** Its baked clusters, or null if it has none. */
         final LodBakes.Plan bakes;
 
+        /** Its coverage volumes, by cluster id, and their bricks, set when it is added. */
+        final Map<Integer, CoverageVolume> volumes = new HashMap<>();
+
+        /** Each coverage volume's bricks, by cluster id. */
+        final Map<Integer, List<CoverageBricks.Brick>> volumeBricks = new HashMap<>();
+
         /** Where its positions are measured from, in the world. */
         final double[] origin;
 
@@ -728,6 +763,9 @@ public class LodRenderer {
         hiddenSections = new DeviceTable(state, "lod hidden sections", WORD_SIZE, INITIAL_SLOTS);
         shownUnits = new DeviceTable(state, "lod shown units", WORD_SIZE, INITIAL_SLOTS);
         pairs = new DeviceTable(state, "lod pairs", LodCullMath.PAIR_ENTRY_SIZE, INITIAL_SLOTS);
+        bricks =
+                new DeviceTable(
+                        state, "lod volume bricks", CoverageBricks.BRICK_BYTES, INITIAL_BRICKS);
         shadows =
                 state.shadowInvalidation != null
                         ? state.shadowInvalidation
@@ -805,6 +843,15 @@ public class LodRenderer {
             LodBakes.Plan bakes,
             boolean model) {
         final long id = newWorld(owner, dag.getOrigin(), null, thresholdPixels, bakes);
+        // Coverage volumes draw as the boxes of their bricks, laid out now
+        final World added = world(id);
+        for (int i = 0; i < dag.clusters().size(); ++i) {
+            final CoverageVolume volume = dag.volumeOf(i);
+            if (volume != null) {
+                added.volumes.put(i, volume);
+                added.volumeBricks.put(i, CoverageBricks.of(volume));
+            }
+        }
         if (model) {
             final World world = world(id);
             world.visible = false;
@@ -1334,13 +1381,11 @@ public class LodRenderer {
             }
             final ClusterMeshes.Mesh mesh = pieceMeshes.get(uploading.cluster);
             // Only what the observer wants now; the rest streams in once the batch is applied
-            if (mesh.triangleCount() > 0
+            if ((mesh.triangleCount() > 0
+                            || isVolume(world, piece.clusters().get(uploading.cluster)))
                     && isWanted(world, piece.clusters().get(uploading.cluster))) {
                 uploading.meshes[uploading.piece][uploading.cluster] =
-                        register(
-                                state,
-                                world.owner,
-                                drawn(world, piece.clusters().get(uploading.cluster), mesh));
+                        registerDrawn(state, world, piece.clusters().get(uploading.cluster), mesh);
                 bytes += bytes(mesh);
             }
             uploading.cluster += 1;
@@ -1384,6 +1429,64 @@ public class LodRenderer {
             ClusterMeshes.@NonNull Mesh mesh) {
         final LodBakes.Baked baked = baked(world, cluster);
         return baked == null ? mesh : bakes.load(world.id, baked);
+    }
+
+    /**
+     * Register a cluster's mesh as it is drawn: a coverage volume's brick boxes, its bricks taking
+     * slots in the brick table, or its triangles, from its tile if it is baked. Render thread.
+     *
+     * @param state The Vulkan state.
+     * @param world The world.
+     * @param cluster The cluster.
+     * @param mesh Its mesh as built.
+     * @return Its handle.
+     */
+    private MeshHandle registerDrawn(
+            @NonNull VulkanState state,
+            @NonNull World world,
+            LodStore.@NonNull PieceCluster cluster,
+            ClusterMeshes.@NonNull Mesh mesh) {
+        final int id = cluster.cluster().id();
+        final CoverageVolume volume = world.volumes.get(id);
+        if (volume == null) {
+            return register(state, world.owner, drawn(world, cluster, mesh));
+        }
+        final List<CoverageBricks.Brick> list = world.volumeBricks.get(id);
+        final int[] slots = new int[list.size()];
+        for (int b = 0; b < slots.length; ++b) {
+            slots[b] = brickSlots.take();
+            brickEntries.next(slots[b]).put(list.get(b).data().duplicate().clear());
+        }
+        final MeshHandle handle =
+                register(state, world.owner, CoverageBricks.mesh(volume, list, slots));
+        brickSlotsOf.put(handle, slots);
+        return handle;
+    }
+
+    /**
+     * Whether a cluster is a coverage volume.
+     *
+     * @param world The world.
+     * @param cluster The cluster.
+     * @return True if it is.
+     */
+    private static boolean isVolume(@NonNull World world, LodStore.@NonNull PieceCluster cluster) {
+        return world.volumes.containsKey(cluster.cluster().id());
+    }
+
+    /**
+     * Release a cluster's mesh, and its bricks' slots if it is a volume. Render thread.
+     *
+     * @param mesh The mesh.
+     */
+    private void release(@NonNull MeshHandle mesh) {
+        arena.release(mesh);
+        final int[] slots = brickSlotsOf.remove(mesh);
+        if (slots != null) {
+            for (int slot : slots) {
+                brickSlots.give(slot);
+            }
+        }
     }
 
     /**
@@ -1888,12 +1991,11 @@ public class LodRenderer {
             for (Member member : world.unitMembers.get(unit)) {
                 final Piece piece = member.piece();
                 final ClusterMeshes.Mesh mesh = piece.meshData.get(member.index());
-                if (piece.meshes[member.index()] == null && mesh.triangleCount() > 0) {
+                if (piece.meshes[member.index()] == null
+                        && (mesh.triangleCount() > 0
+                                || isVolume(world, piece.clusters[member.index()]))) {
                     piece.meshes[member.index()] =
-                            register(
-                                    state,
-                                    world.owner,
-                                    drawn(world, piece.clusters[member.index()], mesh));
+                            registerDrawn(state, world, piece.clusters[member.index()], mesh);
                     writeEntry(world, piece, member.index());
                     bytes += bytes(mesh);
                 }
@@ -1941,7 +2043,7 @@ public class LodRenderer {
             final MeshHandle mesh = piece.meshes[member.index()];
             if (mesh != null) {
                 piece.meshes[member.index()] = null;
-                arena.release(mesh);
+                release(mesh);
                 writeEntry(world, piece, member.index());
             }
             if (baked(world, piece.clusters[member.index()]) != null) {
@@ -2067,7 +2169,7 @@ public class LodRenderer {
         for (MeshHandle[] piece : meshes) {
             for (MeshHandle mesh : piece) {
                 if (mesh != null) {
-                    arena.release(mesh);
+                    release(mesh);
                 }
             }
         }
@@ -2237,7 +2339,10 @@ public class LodRenderer {
                                 : unitSlot(world, new UnitKey(piece.key, producer)),
                         // Counted from the finest: the cell's own level plus the level within it
                         piece.key.level() + cluster.cluster().level()),
-                cutOut(cluster.cluster()) ? LodCullMath.FLAG_CUT_OUT : 0);
+                (cutOut(cluster.cluster()) ? LodCullMath.FLAG_CUT_OUT : 0)
+                        | (world.volumes.containsKey(cluster.cluster().id())
+                                ? LodCullMath.FLAG_VOLUME
+                                : 0));
     }
 
     /**
@@ -2385,7 +2490,7 @@ public class LodRenderer {
             // An empty entry, which the culling pass skips
             clusterEntries.next(piece.first + i);
             if (piece.meshes[i] != null) {
-                arena.release(piece.meshes[i]);
+                release(piece.meshes[i]);
             }
             if (baked(world, piece.clusters[i]) != null) {
                 bakes.unload(world.id, piece.clusters[i].cluster().id());
@@ -2603,7 +2708,9 @@ public class LodRenderer {
                                     (unitSlots.bound() + LodCullMath.BITS_PER_WORD - 1)
                                             / LodCullMath.BITS_PER_WORD));
             final int pairCapacity = Math.max(1, pairRanges.getCapacity());
+            final int brickCapacity = Math.max(1, brickSlots.bound());
             if (!clusters.hasWork(capacity, clusterEntries)
+                    && !bricks.hasWork(brickCapacity, brickEntries)
                     && !pairs.hasWork(pairCapacity, pairEntries)
                     && !history.hasWork(capacity, historyEntries)
                     && !cellFlags.hasWork(flagCapacity, flagEntries)
@@ -2618,6 +2725,7 @@ public class LodRenderer {
             cellFlags.record(state, commandBuffer, flagCapacity, flagEntries, stack);
             hiddenSections.record(state, commandBuffer, wordCapacity, wordEntries, stack);
             shownUnits.record(state, commandBuffer, unitCapacity, unitEntries, stack);
+            bricks.record(state, commandBuffer, brickCapacity, brickEntries, stack);
             DeviceTable.barrierAfter(commandBuffer, stack);
         } finally {
             unitEntries.free();
@@ -2629,6 +2737,8 @@ public class LodRenderer {
             clusterEntries = new DeviceTable.Entries(LodCullMath.CLUSTER_ENTRY_SIZE);
             historyEntries = new DeviceTable.Entries(WORD_SIZE);
             pairEntries = new DeviceTable.Entries(LodCullMath.PAIR_ENTRY_SIZE);
+            brickEntries.free();
+            brickEntries = new DeviceTable.Entries(CoverageBricks.BRICK_BYTES);
         }
     }
 
@@ -2913,7 +3023,8 @@ public class LodRenderer {
      * @param pipelineLayout The pipeline's layout.
      * @param worldsOffset Where the world table's address goes in its vertex push constants; the
      *     cluster table's goes right after it.
-     * @param list Which list to draw, plus {@link #CUT_OUT_LISTS} for its cut out share.
+     * @param list Which list to draw, plus {@link #CUT_OUT_LISTS} for its cut out share or {@link
+     *     #VOLUME_LISTS} for its volumes.
      */
     public void draw(
             @NonNull VkCommandBuffer commandBuffer,
@@ -2977,6 +3088,10 @@ public class LodRenderer {
         cellFlags.cleanup(state);
         history.cleanup(state);
         clusters.cleanup(state);
+        bricks.cleanup(state);
+        brickEntries.free();
+        brickEntries = new DeviceTable.Entries(CoverageBricks.BRICK_BYTES);
+        brickSlotsOf.clear();
         arena.cleanup(state);
     }
 }

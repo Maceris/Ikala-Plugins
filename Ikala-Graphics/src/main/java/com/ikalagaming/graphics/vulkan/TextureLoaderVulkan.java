@@ -444,30 +444,43 @@ public class TextureLoaderVulkan {
 
     /**
      * Work out the average color of 8 bit RGBA pixels: sRGB colors averaged in linear light, linear
-     * ones as stored.
+     * ones as stored. Colors are weighted by their opacity, so the color of a texture with holes,
+     * like leaves, is that of what it covers, not darkened by whatever color its holes hold; its
+     * opacity says how much it covers.
      *
      * @param pixels The pixels.
      * @param start Where the first pixel starts.
      * @param count How many pixels.
      * @param srgb Whether the colors are sRGB encoded.
-     * @return The average linear red, green and blue and the average opacity, or null if there are
-     *     no pixels.
+     * @return The average linear red, green and blue of what is covered, and the average opacity,
+     *     or null if there are no pixels.
      */
     static float[] average(byte @NonNull [] pixels, int start, int count, boolean srgb) {
         if (count <= 0) {
             return null;
         }
         final double[] sums = new double[RGBA];
+        final double[] weighted = new double[ALPHA];
         for (int i = 0; i < count; ++i) {
+            final double opacity =
+                    Byte.toUnsignedInt(pixels[start + i * RGBA + ALPHA]) / (double) BYTE_MAX;
             for (int channel = 0; channel < RGBA; ++channel) {
                 final int value = Byte.toUnsignedInt(pixels[start + i * RGBA + channel]);
-                sums[channel] +=
+                final double decoded =
                         srgb && channel < ALPHA ? DECODED[value] : value / (double) BYTE_MAX;
+                sums[channel] += decoded;
+                if (channel < ALPHA) {
+                    weighted[channel] += decoded * opacity;
+                }
             }
         }
         final float[] average = new float[RGBA];
         for (int channel = 0; channel < RGBA; ++channel) {
-            average[channel] = (float) (sums[channel] / count);
+            average[channel] =
+                    (float)
+                            (channel < ALPHA && sums[ALPHA] > 0
+                                    ? weighted[channel] / sums[ALPHA]
+                                    : sums[channel] / count);
         }
         return average;
     }

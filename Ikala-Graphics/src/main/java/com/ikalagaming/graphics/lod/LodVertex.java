@@ -74,6 +74,13 @@ public final class LodVertex {
      */
     public static final int FLAG_AVERAGED = 1 << 2;
 
+    /**
+     * A corner of a coverage volume's brick box ({@link CoverageBricks}): its normal's bits hold
+     * the brick's voxel size as a float, its tangent's which corner of the box it is, and its
+     * texture coordinates' the brick's slot in the brick table.
+     */
+    public static final int FLAG_VOLUME = 1 << 3;
+
     /** The largest material index that fits. */
     public static final int MAX_MATERIAL = 0xFFFF;
 
@@ -147,6 +154,34 @@ public final class LodVertex {
         }
         out.putShort(base + MATERIAL_OFFSET, (short) material);
         out.putShort(base + FLAGS_OFFSET, (short) flags);
+    }
+
+    /**
+     * Write a corner of a coverage volume's brick box.
+     *
+     * @param out Where it goes, a little endian buffer.
+     * @param index Which vertex it is; it goes at {@code index * SIZE}.
+     * @param grid Its position, in grid steps.
+     * @param voxelSize The brick's voxel size.
+     * @param slot The brick's slot in the brick table.
+     * @param corner Which corner of the box it is, its bits x, y, z from the lowest.
+     */
+    public static void putVolume(
+            @NonNull ByteBuffer out,
+            int index,
+            int @NonNull [] grid,
+            float voxelSize,
+            int slot,
+            int corner) {
+        final int base = index * SIZE;
+        for (int axis = 0; axis < AXES; ++axis) {
+            out.putInt(base + POSITION_OFFSET + axis * Integer.BYTES, grid[axis]);
+        }
+        out.putFloat(base + NORMAL_OFFSET, voxelSize);
+        out.putInt(base + TANGENT_OFFSET, corner);
+        out.putInt(base + UV_OFFSET, slot);
+        out.putShort(base + MATERIAL_OFFSET, (short) 0);
+        out.putShort(base + FLAGS_OFFSET, (short) FLAG_VOLUME);
     }
 
     /**

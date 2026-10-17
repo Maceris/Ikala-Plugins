@@ -85,6 +85,12 @@ final class LodSection {
      */
     private final IkBoolean keepAttributes = new IkBoolean(true);
 
+    /** Where a packed occlusion, roughness and metal texture's roughness is. */
+    private static final int PACKED_ROUGHNESS = 1;
+
+    /** Where its metalness is. */
+    private static final int PACKED_METALLIC = 2;
+
     /** Whether cut out meshes, like leaves, go in too, drawn with an alpha test. */
     private final IkBoolean cutOut = new IkBoolean(true);
 
@@ -183,7 +189,7 @@ final class LodSection {
         IkGui.checkbox("Join separate pieces (slow, needs a lot of memory)", virtualEdges);
         IkGui.checkbox("Keep normals and texture coordinates", keepAttributes);
         IkGui.checkbox("Include cut out meshes", cutOut);
-        IkGui.checkbox("Far fine parts as volumes (not drawn yet)", volumes);
+        IkGui.checkbox("Far fine parts as volumes", volumes);
         IkGui.checkbox("Bake far textures", bake);
         if (bake.get()) {
             IkGui.sliderInt("Bake texels per error", bakeDensity, 1, MAX_BAKE_DENSITY, "%d");
@@ -311,6 +317,14 @@ final class LodSection {
             }
             out[MaterialAverages.ROUGHNESS] = material.getRoughness();
             out[MaterialAverages.METALLIC] = material.getMetallic();
+            // A packed texture's roughness and metalness stand in for the material's, as the scene
+            // draws it
+            final float[] packed =
+                    graphics.textures().average(material.getOcclusionRoughnessMetal());
+            if (packed != null) {
+                out[MaterialAverages.ROUGHNESS] = packed[PACKED_ROUGHNESS];
+                out[MaterialAverages.METALLIC] = packed[PACKED_METALLIC];
+            }
             out[MaterialAverages.SPECULAR] = material.getSpecular();
             known.put(entry.getValue(), out);
         }

@@ -1415,6 +1415,20 @@ public class VulkanInstance {
                         ShaderVulkan.Type.FRAGMENT,
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(RenderStage.Type.SCENE_LOD, new ShaderVulkan(lodModules, state));
+
+        // Coverage volumes, walked from their bricks' boxes
+        List<ShaderVulkan.ShaderModuleData> volumeModules = new ArrayList<>();
+        volumeModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/scene_volume.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        volumeModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/scene_volume.frag",
+                        ShaderVulkan.Type.FRAGMENT,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(RenderStage.Type.SCENE_VOLUME, new ShaderVulkan(volumeModules, state));
     }
 
     /**
@@ -1469,6 +1483,20 @@ public class VulkanInstance {
                         ShaderVulkan.Location.BUNDLED));
         shaderMap.addShader(
                 RenderStage.Type.SHADOW_LOD_CUTOUT, new ShaderVulkan(lodCutoutModules, state));
+
+        // Coverage volumes, walked along the map's direction from their bricks' boxes
+        List<ShaderVulkan.ShaderModuleData> volumeModules = new ArrayList<>();
+        volumeModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/shadow_volume.vert",
+                        ShaderVulkan.Type.VERTEX,
+                        ShaderVulkan.Location.BUNDLED));
+        volumeModules.add(
+                new ShaderVulkan.ShaderModuleData(
+                        "shaders/shadow_volume.frag",
+                        ShaderVulkan.Type.FRAGMENT,
+                        ShaderVulkan.Location.BUNDLED));
+        shaderMap.addShader(RenderStage.Type.SHADOW_VOLUME, new ShaderVulkan(volumeModules, state));
 
         // Cut out meshes, whose textures cut holes in their shadows as in the surface
         List<ShaderVulkan.ShaderModuleData> cutoutModules = new ArrayList<>();

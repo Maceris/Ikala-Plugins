@@ -45,7 +45,7 @@ import java.nio.ByteOrder;
  * uvec4 unit        // its streaming unit's slot, the slot of its children's unit ({@link #NONE}
  *                   // for a leaf), its level counted from the finest (its cell's level plus its
  *                   // level within the cell), for the debug coloring, its flags
- *                   // ({@link #FLAG_CUT_OUT})
+ *                   // ({@link #FLAG_CUT_OUT}, {@link #FLAG_VOLUME})
  * </pre>
  *
  * <p>A world table entry, {@value #WORLD_ENTRY_SIZE} bytes, one per world slot, rewritten each
@@ -84,6 +84,12 @@ public final class LodCullMath {
      * is drawn into the cut out lists, with an alpha test.
      */
     public static final int FLAG_CUT_OUT = 1;
+
+    /**
+     * A cluster flag: it is a coverage volume, its mesh the boxes of its bricks, so it is drawn
+     * into the volume lists, walked by {@code scene_volume.frag}.
+     */
+    public static final int FLAG_VOLUME = 2;
 
     /** Where a cluster's tight sphere starts. */
     public static final int CLUSTER_TIGHT_OFFSET = 0;

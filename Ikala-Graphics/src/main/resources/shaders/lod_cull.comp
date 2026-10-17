@@ -180,7 +180,9 @@ const uint LIST_FIRST_CASCADE = 2;
 const uint LIST_COUNT = 6;
 // A cut out cluster's draws go to its list plus this, to be drawn with an alpha test
 const uint CUT_OUT_LISTS = LIST_COUNT;
-const uint LIST_SLOTS = 2 * LIST_COUNT;
+// A coverage volume's draws go to its list plus this, to be walked by scene_volume.frag
+const uint VOLUME_LISTS = 2 * LIST_COUNT;
+const uint LIST_SLOTS = 3 * LIST_COUNT;
 
 // The passes, as in cull.comp: the cascades and the sky map cull clusters by the planes for what
 // doesn't move
@@ -199,6 +201,8 @@ const uint COUNTERS_PER_LEVEL = 3u;
 
 // Set in a cluster's flags, unit.w, when some of its materials are cut out, see LodCullMath
 const uint CLUSTER_CUT_OUT = 1;
+// Set when it is a coverage volume, its mesh its bricks' boxes
+const uint CLUSTER_VOLUME = 2;
 
 // Set in the view flags when the scene is culled by occlusion
 const uint FLAG_OCCLUSION = 1;
@@ -418,7 +422,8 @@ void main()
     }
 
     // Cut out clusters go to their lists' cut out share
-    uint lists = (cluster.unit.w & CLUSTER_CUT_OUT) != 0u ? CUT_OUT_LISTS : 0u;
+    uint lists = (cluster.unit.w & CLUSTER_VOLUME) != 0u ? VOLUME_LISTS
+        : (cluster.unit.w & CLUSTER_CUT_OUT) != 0u ? CUT_OUT_LISTS : 0u;
 
     // An instance's spheres are in the model's frame, its scale in renderOffset.w
     vec3 center = instanced

@@ -123,4 +123,26 @@ class CoverageVolumesTest {
                         + plain.trianglesAt(top)
                         + " without volumes");
     }
+
+    /**
+     * Cut out leaves turn into volumes at once, never simplified as triangles, which would shrink
+     * their cards: no cluster above the leaves has any of them.
+     */
+    @Test
+    void testCutOutLeavesNeverSimplified() {
+        final LodDag dag =
+                DagBuilder.build(
+                        fieldWithBushes(), OPTIONS.withCutOut(m -> m == 1).withVolumes(true));
+        int volumes = 0;
+        for (LodDag.Cluster cluster : dag.clusters()) {
+            volumes += dag.volumeOf(cluster.id()) != null ? 1 : 0;
+            if (cluster.level() == 0) {
+                continue;
+            }
+            for (int material : cluster.materials()) {
+                assertTrue(material != 1, "Cluster " + cluster.id() + " keeps cut out leaves");
+            }
+        }
+        assertTrue(volumes > 0, "No volumes");
+    }
 }
