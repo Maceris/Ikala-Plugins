@@ -123,6 +123,12 @@ public class SceneView {
     /** Whether a left drag is turning the camera. */
     private boolean turning;
 
+    /**
+     * Whether the left button went down over the scene rather than the UI, so only a click that
+     * starts on the scene picks or turns, not one that starts on a slider and ends over a mesh.
+     */
+    private boolean pressedOnScene;
+
     /** What the current turn swings around. */
     private final Vector3d pivot = new Vector3d();
 
@@ -747,6 +753,9 @@ public class SceneView {
         final IkIO io = IkGui.getIO();
         final var camera = GraphicsManager.getScene().getCamera();
         orbit.follow(camera);
+        if (IkGui.isMouseClicked(MouseButton.LEFT)) {
+            pressedOnScene = !io.wantCaptureMouse;
+        }
         if (io.wantCaptureMouse) {
             if (!IkGui.isMouseDown(MouseButton.LEFT)) {
                 // A turn that ended over a panel is over
@@ -755,12 +764,12 @@ public class SceneView {
             return;
         }
         // A press that never became a drag is a click; turning is still set on the release frame
-        if (IkGui.isMouseReleased(MouseButton.LEFT) && !turning) {
+        if (IkGui.isMouseReleased(MouseButton.LEFT) && !turning && pressedOnScene) {
             pick();
         }
         // Only a drag past the click slop turns or pans, so a click that wobbles a pixel or two
         // picks without moving the camera
-        if (IkGui.isMouseDragging(MouseButton.LEFT, CLICK_SLOP)) {
+        if (pressedOnScene && IkGui.isMouseDragging(MouseButton.LEFT, CLICK_SLOP)) {
             if (!turning) {
                 turning = true;
                 pivotPoint(pivot);
