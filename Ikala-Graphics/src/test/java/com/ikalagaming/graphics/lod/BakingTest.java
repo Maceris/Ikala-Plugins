@@ -318,6 +318,95 @@ class BakingTest {
     }
 
     /**
+     * Small cubes floating just off the sphere, which simplification takes away, are laid onto the
+     * baked tiles as splats: some sample the cubes' material, each covers some of its texel, and
+     * splats are in order of texel.
+     */
+    @Test
+    void testRemovedPartsAreSplatted() {
+        final LodMesh.Builder cubes = LodMesh.builder(new double[3]);
+        for (int i = 0; i < SPLAT_CUBES; ++i) {
+            // Around the sphere's upper half, just off its surface
+            final double theta = Math.PI * (0.15 + 0.3 * (i % 4) / 4.0);
+            final double phi = 2 * Math.PI * i / SPLAT_CUBES;
+            final double r = SPHERE_RADIUS + CUBE_LIFT;
+            cube(
+                    cubes,
+                    (float) (r * Math.sin(theta) * Math.cos(phi)),
+                    (float) (r * Math.cos(theta)),
+                    (float) (r * Math.sin(theta) * Math.sin(phi)));
+        }
+        final LodDag dag =
+                DagBuilder.build(List.of(AttributesTest.sphere(), cubes.build()), OPTIONS);
+        final MaterialCache cache = new MaterialCache();
+        Material material = null;
+        while (cache.getMaterialIndex(material) != CUBE_MATERIAL) {
+            material = new Material();
+            cache.addMaterial(material);
+        }
+        final LodBakes.Plan plan = LodBakes.plan(dag, cache);
+        assertTrue(plan != null);
+        int cubeSplats = 0;
+        for (LodBakes.Baked baked : plan.clusters().values()) {
+            int last = -1;
+            for (int s = 0; s < baked.splatCount(); ++s) {
+                final int at = s * LodBakes.SPLAT_SIZE;
+                final int texel = baked.splats().getInt(at);
+                assertTrue(texel >= last, "Splats out of order");
+                last = texel;
+                assertTrue(baked.splats().getFloat(at + Integer.BYTES) > 0, "Empty splat");
+                final int slot = baked.splats().getInt(at + 4 * Integer.BYTES);
+                if (baked.sources().get(slot) == material) {
+                    ++cubeSplats;
+                }
+            }
+        }
+        assertTrue(cubeSplats > 0, "No splat samples the cubes");
+    }
+
+    /** How many cubes float over the sphere. */
+    private static final int SPLAT_CUBES = 24;
+
+    /** The test sphere's radius. */
+    private static final double SPHERE_RADIUS = 8;
+
+    /** How far off the sphere the cubes float. */
+    private static final double CUBE_LIFT = 0.05;
+
+    /** The cubes' side. */
+    private static final float CUBE_SIDE = 0.6f;
+
+    /** The cubes' material. */
+    private static final int CUBE_MATERIAL = 5;
+
+    /**
+     * Add a closed cube, its faces outward, centered on a point.
+     *
+     * @param builder The mesh.
+     * @param x Its center's x.
+     * @param y Its center's y.
+     * @param z Its center's z.
+     */
+    private static void cube(LodMesh.Builder builder, float x, float y, float z) {
+        final int[] v = new int[8];
+        final float half = CUBE_SIDE / 2;
+        for (int i = 0; i < 8; ++i) {
+            v[i] =
+                    builder.vertex(
+                            x + ((i & 1) != 0 ? half : -half),
+                            y + ((i & 2) != 0 ? half : -half),
+                            z + ((i & 4) != 0 ? half : -half));
+        }
+        final int[][] faces = {
+            {0, 2, 3, 1}, {4, 5, 7, 6}, {0, 1, 5, 4}, {2, 6, 7, 3}, {0, 4, 6, 2}, {1, 3, 7, 5}
+        };
+        for (int[] f : faces) {
+            builder.triangle(v[f[0]], v[f[1]], v[f[2]], CUBE_MATERIAL);
+            builder.triangle(v[f[0]], v[f[2]], v[f[3]], CUBE_MATERIAL);
+        }
+    }
+
+    /**
      * The point a texel's weights give on a triangle.
      *
      * @param corners The triangles' corners.

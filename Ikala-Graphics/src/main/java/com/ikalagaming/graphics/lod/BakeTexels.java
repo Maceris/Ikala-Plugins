@@ -2,7 +2,14 @@ package com.ikalagaming.graphics.lod;
 
 import lombok.NonNull;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * What each texel of a baked cluster's tile stands for: the point on one of its group's children it
@@ -52,6 +59,21 @@ public final class BakeTexels {
 
     /** Each texel's weights on its own triangle's second and third corners, two a texel. */
     private final float[] ownWeights;
+
+    /** Each splat's texel, row by row, in increasing order. */
+    private int[] splatTexels = new int[0];
+
+    /** Each splat's child cluster, by id. */
+    private int[] splatClusters = new int[0];
+
+    /** Each splat's triangle in its child cluster. */
+    private int[] splatTriangles = new int[0];
+
+    /** Each splat's weights on its child triangle's second and third corners, two a splat. */
+    private float[] splatWeights = new float[0];
+
+    /** How much of its texel each splat covers, 0 to 1 or more where splats pile up. */
+    private float[] splatCoverage = new float[0];
 
     /**
      * Keep a mapping.
@@ -139,6 +161,294 @@ public final class BakeTexels {
      */
     public float ownWeight(int texel, int corner) {
         return weight(ownWeights, texel, corner);
+    }
+
+    /**
+     * How many splats the tile has: input surface no texel samples, laid onto the texels it stands
+     * over, see {@link #splat}.
+     *
+     * @return The count.
+     */
+    public int splatCount() {
+        return splatTexels.length;
+    }
+
+    /**
+     * The texel a splat lands on. Splats are in increasing order of texel.
+     *
+     * @param splat The splat.
+     * @return The texel, row by row.
+     */
+    public int splatTexel(int splat) {
+        return splatTexels[splat];
+    }
+
+    /**
+     * The child cluster a splat samples.
+     *
+     * @param splat The splat.
+     * @return The child's id.
+     */
+    public int splatCluster(int splat) {
+        return splatClusters[splat];
+    }
+
+    /**
+     * The triangle in its child cluster a splat samples.
+     *
+     * @param splat The splat.
+     * @return The triangle.
+     */
+    public int splatTriangle(int splat) {
+        return splatTriangles[splat];
+    }
+
+    /**
+     * A splat's barycentric weight on its child triangle's corner.
+     *
+     * @param splat The splat.
+     * @param corner The corner, 0 to 2.
+     * @return The weight.
+     */
+    public float splatWeight(int splat, int corner) {
+        return weight(splatWeights, splat, corner);
+    }
+
+    /**
+     * How much of its texel a splat covers: the area of input it stands for, seen along the baked
+     * surface, over the texel's.
+     *
+     * @param splat The splat.
+     * @return The share, 0 to 1, or more where splats pile up.
+     */
+    public float splatCoverage(int splat) {
+        return splatCoverage[splat];
+    }
+
+    /**
+     * Lay a group's input that no texel of its tiles samples onto those tiles, as splats: parts
+     * simplification took away, like a lamp on a table, and detail smaller than a texel. Each such
+     * visible input triangle is sampled about a texel apart, each sample goes to the nearest output
+     * triangle facing its way, and the area it stands for, seen along that triangle, becomes a
+     * share of the texel it lands on. Baking blends those in over what the texel samples itself, so
+     * a far group keeps the color of what it no longer has the triangles for.
+     *
+     * @param tiles The group's baked clusters' mappings, given their splats here.
+     * @param corners Each baked cluster's corners.
+     * @param layouts Each baked cluster's layout.
+     * @param merged The group's merged triangles.
+     * @param sources Where each merged triangle came from.
+     * @param dag The DAG, for the children's corners.
+     */
+    static void splat(
+            @NonNull List<BakeTexels> tiles,
+            @NonNull List<float[]> corners,
+            @NonNull List<BakeLayout> layouts,
+            @NonNull LodMesh merged,
+            @NonNull Source sources,
+            @NonNull LodDag dag) {
+        if (tiles.isEmpty()) {
+            return;
+        }
+        // The child triangles some texel samples already
+        final Set<Long> sampled = new HashSet<>();
+        for (BakeTexels tile : tiles) {
+            for (int texel = 0; texel < tile.childClusters.length; ++texel) {
+                if (tile.childClusters[texel] != EMPTY) {
+                    sampled.add(pair(tile.childClusters[texel], tile.childTriangles[texel]));
+                }
+            }
+        }
+        // Every output triangle, and which tile it is in
+        int total = 0;
+        double spacing = Double.MAX_VALUE;
+        for (int i = 0; i < tiles.size(); ++i) {
+            total += corners.get(i).length;
+            spacing = Math.min(spacing, layouts.get(i).texelSize());
+        }
+        final float[] all = new float[total];
+        final int[] tileOf = new int[total / TRIANGLE_VALUES];
+        final int[] firstOf = new int[tiles.size()];
+        int filled = 0;
+        for (int i = 0; i < tiles.size(); ++i) {
+            final float[] own = corners.get(i);
+            System.arraycopy(own, 0, all, filled, own.length);
+            firstOf[i] = filled / TRIANGLE_VALUES;
+            Arrays.fill(tileOf, firstOf[i], firstOf[i] + own.length / TRIANGLE_VALUES, i);
+            filled += own.length;
+        }
+        final TriangleBvh tree = new TriangleBvh(all);
+        final TriangleBvh.Scratch scratch = new TriangleBvh.Scratch();
+        final List<Map<Splat, double[]>> found = new ArrayList<>();
+        for (int i = 0; i < tiles.size(); ++i) {
+            found.add(new HashMap<>());
+        }
+        final double[] a = new double[AXES];
+        final double[] b = new double[AXES];
+        final double[] c = new double[AXES];
+        final double[] point = new double[AXES];
+        final double[] inputNormal = new double[AXES];
+        final double[] outputNormal = new double[AXES];
+        final double[] closest = new double[AXES];
+        final double[] own = new double[CORNERS];
+        final double[] childWeights = new double[CORNERS];
+        final double[] oa = new double[AXES];
+        final double[] ob = new double[AXES];
+        final double[] oc = new double[AXES];
+        for (int f = 0; f < merged.getTriangleCount(); ++f) {
+            if (merged.visibility(f) < Fidelity.VISIBLE) {
+                continue;
+            }
+            final int[] child = sources.of(f);
+            if (sampled.contains(pair(child[0], child[1]))) {
+                continue;
+            }
+            Geometry.corners(merged, f, a, b, c);
+            Geometry.normal(a, b, c, inputNormal);
+            if (!unit(inputNormal)) {
+                continue;
+            }
+            final float[] childCorners = dag.clusters().get(child[0]).corners();
+            Hausdorff.sample(
+                    a,
+                    b,
+                    c,
+                    spacing,
+                    false,
+                    point,
+                    (p, area) -> {
+                        if (area <= 0) {
+                            return;
+                        }
+                        tree.nearest(p, Double.POSITIVE_INFINITY, scratch);
+                        final int t = scratch.triangle;
+                        final int tile = tileOf[t];
+                        final int local = t - firstOf[tile];
+                        final float[] tileCorners = corners.get(tile);
+                        read(tileCorners, local, 0, oa);
+                        read(tileCorners, local, 1, ob);
+                        read(tileCorners, local, 2, oc);
+                        Geometry.normal(oa, ob, oc, outputNormal);
+                        if (!unit(outputNormal)) {
+                            return;
+                        }
+                        final double facing = Geometry.dot(inputNormal, outputNormal);
+                        if (facing <= 0) {
+                            return;
+                        }
+                        // Where on the output triangle, and so which texel
+                        Geometry.closestOnTriangle(p, oa, ob, oc, closest);
+                        AttributeTransfer.weights(
+                                tileCorners, local * TRIANGLE_VALUES, closest, own);
+                        final BakeTexels into = tiles.get(tile);
+                        final float[] uvs = layouts.get(tile).uvs();
+                        double u = 0;
+                        double v = 0;
+                        for (int k = 0; k < CORNERS; ++k) {
+                            u += own[k] * uvs[(local * CORNERS + k) * 2];
+                            v += own[k] * uvs[(local * CORNERS + k) * 2 + 1];
+                        }
+                        final int x =
+                                Math.clamp((int) Math.floor(u * into.width), 0, into.width - 1);
+                        final int y =
+                                Math.clamp((int) Math.floor(v * into.height), 0, into.height - 1);
+                        final int texel = y * into.width + x;
+                        if (into.childClusters[texel] == EMPTY) {
+                            return;
+                        }
+                        final double texelSize = layouts.get(tile).texelSize();
+                        final double coverage = area * facing / (texelSize * texelSize);
+                        AttributeTransfer.weights(
+                                childCorners, child[1] * TRIANGLE_VALUES, p, childWeights);
+                        final double[] sum =
+                                found.get(tile)
+                                        .computeIfAbsent(
+                                                new Splat(texel, child[0], child[1]),
+                                                k -> new double[SPLAT_SUMS]);
+                        sum[0] += coverage;
+                        sum[1] += coverage * childWeights[1];
+                        sum[2] += coverage * childWeights[2];
+                    });
+        }
+        for (int i = 0; i < tiles.size(); ++i) {
+            final List<Map.Entry<Splat, double[]>> entries =
+                    new ArrayList<>(found.get(i).entrySet());
+            entries.sort(
+                    Comparator.comparingInt((Map.Entry<Splat, double[]> e) -> e.getKey().texel())
+                            .thenComparingInt(e -> e.getKey().cluster())
+                            .thenComparingInt(e -> e.getKey().triangle()));
+            final BakeTexels tile = tiles.get(i);
+            final int n = entries.size();
+            tile.splatTexels = new int[n];
+            tile.splatClusters = new int[n];
+            tile.splatTriangles = new int[n];
+            tile.splatWeights = new float[n * 2];
+            tile.splatCoverage = new float[n];
+            for (int s = 0; s < n; ++s) {
+                final Splat key = entries.get(s).getKey();
+                final double[] sum = entries.get(s).getValue();
+                tile.splatTexels[s] = key.texel();
+                tile.splatClusters[s] = key.cluster();
+                tile.splatTriangles[s] = key.triangle();
+                tile.splatWeights[s * 2] = (float) (sum[1] / sum[0]);
+                tile.splatWeights[s * 2 + 1] = (float) (sum[2] / sum[0]);
+                tile.splatCoverage[s] = (float) sum[0];
+            }
+        }
+    }
+
+    /** Sums kept per splat: coverage, and coverage times the second and third weights. */
+    private static final int SPLAT_SUMS = 3;
+
+    /**
+     * A splat's key: the texel it lands on and the child triangle it samples.
+     *
+     * @param texel The texel.
+     * @param cluster The child cluster.
+     * @param triangle The child triangle.
+     */
+    private record Splat(int texel, int cluster, int triangle) {}
+
+    /**
+     * A child triangle as one key.
+     *
+     * @param cluster The child cluster.
+     * @param triangle Its triangle.
+     * @return The key.
+     */
+    private static long pair(int cluster, int triangle) {
+        return (long) cluster << Integer.SIZE | (triangle & 0xFFFFFFFFL);
+    }
+
+    /**
+     * Scale a direction to unit length.
+     *
+     * @param direction The direction, scaled in place.
+     * @return False if it has no length.
+     */
+    private static boolean unit(double @NonNull [] direction) {
+        final double length = Math.sqrt(Geometry.dot(direction, direction));
+        if (length <= 0) {
+            return false;
+        }
+        for (int axis = 0; axis < AXES; ++axis) {
+            direction[axis] /= length;
+        }
+        return true;
+    }
+
+    /**
+     * Read a triangle's corner.
+     *
+     * @param corners The corners, 9 floats a triangle.
+     * @param t The triangle.
+     * @param corner The corner.
+     * @param out Receives the corner.
+     */
+    private static void read(float @NonNull [] corners, int t, int corner, double @NonNull [] out) {
+        for (int axis = 0; axis < AXES; ++axis) {
+            out[axis] = corners[t * TRIANGLE_VALUES + corner * AXES + axis];
+        }
     }
 
     /**

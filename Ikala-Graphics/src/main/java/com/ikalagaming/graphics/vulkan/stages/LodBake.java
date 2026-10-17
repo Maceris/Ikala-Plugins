@@ -31,10 +31,10 @@ public class LodBake implements RenderStage {
     private static final long TEXELS_PER_FRAME = 1L << 22;
 
     /**
-     * The size of the push constants: two addresses, the tile's corner and its size, whether it
-     * emits, padding.
+     * The size of the push constants: three addresses, the tile's corner and its size, whether it
+     * emits, how many splats it has.
      */
-    private static final int CONSTANTS_SIZE = 2 * Long.BYTES + 8 * Integer.BYTES;
+    private static final int CONSTANTS_SIZE = 3 * Long.BYTES + 6 * Integer.BYTES;
 
     /** Threads in a workgroup, see lod_bake.comp. */
     private static final int GROUP = 64;
@@ -104,7 +104,7 @@ public class LodBake implements RenderStage {
         if (jobs.isEmpty()) {
             return;
         }
-        final long[] offsets = new long[jobs.size() * 2];
+        final long[] offsets = new long[jobs.size() * LodBakes.OFFSETS];
         final SharedBuffer buffer = bakes.write(state.frameIndex, state, jobs, offsets);
         final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -128,14 +128,17 @@ public class LodBake implements RenderStage {
                         0,
                         stack.longs(bakes.setOf(job), state.bindlessTextures.getDescriptorSet()),
                         null);
-                constants.putLong(0, buffer.deviceAddress + offsets[i * 2 + 1]);
-                constants.putLong(Long.BYTES, buffer.deviceAddress + offsets[i * 2]);
-                constants.putInt(2 * Long.BYTES, job.tile().x());
-                constants.putInt(2 * Long.BYTES + Integer.BYTES, job.tile().y());
-                constants.putInt(2 * Long.BYTES + 2 * Integer.BYTES, job.tile().width());
-                constants.putInt(2 * Long.BYTES + 3 * Integer.BYTES, job.tile().height());
+                final int at = i * LodBakes.OFFSETS;
+                constants.putLong(0, buffer.deviceAddress + offsets[at + 1]);
+                constants.putLong(Long.BYTES, buffer.deviceAddress + offsets[at]);
+                constants.putLong(2 * Long.BYTES, buffer.deviceAddress + offsets[at + 2]);
+                constants.putInt(3 * Long.BYTES, job.tile().x());
+                constants.putInt(3 * Long.BYTES + Integer.BYTES, job.tile().y());
+                constants.putInt(3 * Long.BYTES + 2 * Integer.BYTES, job.tile().width());
+                constants.putInt(3 * Long.BYTES + 3 * Integer.BYTES, job.tile().height());
                 constants.putInt(
-                        2 * Long.BYTES + 4 * Integer.BYTES, job.baked().emissive() ? 1 : 0);
+                        3 * Long.BYTES + 4 * Integer.BYTES, job.baked().emissive() ? 1 : 0);
+                constants.putInt(3 * Long.BYTES + 5 * Integer.BYTES, job.baked().splatCount());
                 vkCmdPushConstants(
                         commandBuffer, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, constants);
                 final int texels = job.tile().texels();

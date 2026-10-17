@@ -23,6 +23,7 @@ import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.util.vma.VmaAllocationCreateInfo;
 import org.lwjgl.vulkan.*;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.LongBuffer;
@@ -65,6 +66,15 @@ public final class LodBakes {
 
     /** Bytes a texel's record takes, see {@code lod_bake.comp}. */
     public static final int RECORD_SIZE = 8 * Integer.BYTES;
+
+    /** Bytes before a splat's record: its texel, the share covered, and padding to 16. */
+    private static final int SPLAT_HEADER = 4 * Integer.BYTES;
+
+    /** Bytes a splat takes. */
+    public static final int SPLAT_SIZE = SPLAT_HEADER + RECORD_SIZE;
+
+    /** Offsets {@link #write} gives each job: its materials', records' and splats'. */
+    public static final int OFFSETS = 3;
 
     /** A texel's record's material slot when it stands for nothing. */
     private static final int EMPTY = -1;
@@ -152,6 +162,8 @@ public final class LodBakes {
      * @param height Its tile's height.
      * @param sources The materials its texels sample, which records refer to by index.
      * @param records Each texel's record, row by row, {@link #RECORD_SIZE} bytes each.
+     * @param splats Its splats, {@link #SPLAT_SIZE} bytes each, in increasing order of texel: the
+     *     texel, the share of it covered, then a record.
      * @param worldPerTexel World units a texel spans.
      * @param emissive Whether any of its sources give off light, so it needs an emission page.
      */
@@ -161,6 +173,7 @@ public final class LodBakes {
             int height,
             @NonNull List<Material> sources,
             @NonNull ByteBuffer records,
+            @NonNull ByteBuffer splats,
             double worldPerTexel,
             boolean emissive) {
 
@@ -171,6 +184,15 @@ public final class LodBakes {
          */
         public long bytes() {
             return (long) width * height * bytesPerTexel(emissive);
+        }
+
+        /**
+         * How many splats it has.
+         *
+         * @return The count.
+         */
+        public int splatCount() {
+            return splats.capacity() / SPLAT_SIZE;
         }
     }
 
@@ -667,9 +689,131 @@ public final class LodBakes {
     }
 
     /**
+     * What a place on a child triangle samples, worked out by {@link #resolve}.
+     *
+     * @param material The source material.
+     * @param u The texture coordinate across it.
+     * @param v The texture coordinate down it.
+     * @param normal The source's packed normal there.
+     * @param tangent The source's packed tangent there.
+     * @param footprint How much of the source's texture a texel of the baked tile spans.
+     * @param childBake The child's own bake, if it was baked, else null.
+     * @param childTexel The child's texel it took its record from, if it was baked.
+     */
+    private record Sampled(
+            @NonNull Material material,
+            float u,
+            float v,
+            int normal,
+            int tangent,
+            double footprint,
+            Baked childBake,
+            int childTexel) {}
+
+    /**
+     * Work out what a place on a child triangle samples: the child's material and texture
+     * coordinates there, or what the child's own tile samples there if it was baked too.
+     *
+     * @param dag The world.
+     * @param childId The child cluster.
+     * @param t Its triangle.
+     * @param weights The place's barycentric weights on it.
+     * @param planned Clusters baked so far.
+     * @param cache The scene's materials.
+     * @param worldPerTexel World units a texel of the tile being baked spans.
+     * @return What it samples, or null if a baked child has nothing near there.
+     */
+    private static Sampled resolve(
+            @NonNull LodDag dag,
+            int childId,
+            int t,
+            double @NonNull [] weights,
+            @NonNull Map<Integer, Baked> planned,
+            @NonNull MaterialCache cache,
+            double worldPerTexel) {
+        final LodDag.Cluster source = dag.clusters().get(childId);
+        final int[] attributes = source.attributes();
+        final int[] child = new int[Attributes.VALUES];
+        final Baked childBake = planned.get(childId);
+        if (childBake != null) {
+            // What the child's tile holds there, from its nearest texel with anything
+            Attributes.blend(attributes, t * Attributes.PER_TRIANGLE, weights, child, 0);
+            final float[] place = Attributes.textureCoordinates(child, 0);
+            final int from = nearestFilled(childBake, place[0], place[1]);
+            if (from < 0) {
+                return null;
+            }
+            final ByteBuffer was = childBake.records();
+            final int in = from * RECORD_SIZE;
+            double footprint = was.getFloat(in + 7 * Integer.BYTES);
+            if (childBake.worldPerTexel() > 0) {
+                footprint *= worldPerTexel / childBake.worldPerTexel();
+            }
+            return new Sampled(
+                    childBake.sources().get(was.getInt(in)),
+                    was.getFloat(in + Integer.BYTES),
+                    was.getFloat(in + 2 * Integer.BYTES),
+                    was.getInt(in + 3 * Integer.BYTES),
+                    was.getInt(in + 4 * Integer.BYTES),
+                    footprint,
+                    childBake,
+                    from);
+        }
+        final Material material = cache.getMaterial(source.materials()[t]);
+        final boolean textured =
+                Attributes.textured(attributes, t)
+                        && !Attributes.isAveraged(attributes, t * Attributes.PER_TRIANGLE);
+        if (textured) {
+            Attributes.blend(attributes, t * Attributes.PER_TRIANGLE, weights, child, 0);
+            final float[] uv = Attributes.textureCoordinates(child, 0);
+            return new Sampled(
+                    material,
+                    uv[0],
+                    uv[1],
+                    child[0],
+                    child[1],
+                    uvPerWorld(source, t) * worldPerTexel,
+                    null,
+                    EMPTY);
+        }
+        // No texture to place: the triangle's own facing, any tangent across it
+        faceFrame(source.corners(), t, new float[AXES], child);
+        return new Sampled(material, 0, 0, child[0], child[1], 0, null, EMPTY);
+    }
+
+    /**
+     * Write a texel's record.
+     *
+     * @param out Where to write.
+     * @param at The byte to start at.
+     * @param slot The source material's slot.
+     * @param sampled What it samples.
+     * @param footprint How much of the source's texture it spans.
+     * @param own The baked triangle's packed normal and tangent there.
+     */
+    private static void putRecord(
+            @NonNull ByteBuffer out,
+            int at,
+            int slot,
+            @NonNull Sampled sampled,
+            double footprint,
+            int @NonNull [] own) {
+        out.putInt(at, slot);
+        out.putFloat(at + Integer.BYTES, sampled.u());
+        out.putFloat(at + 2 * Integer.BYTES, sampled.v());
+        out.putInt(at + 3 * Integer.BYTES, sampled.normal());
+        out.putInt(at + 4 * Integer.BYTES, sampled.tangent());
+        out.putInt(at + 5 * Integer.BYTES, own[0]);
+        out.putInt(at + 6 * Integer.BYTES, own[1]);
+        out.putFloat(at + 7 * Integer.BYTES, (float) footprint);
+    }
+
+    /**
      * Work out what each texel of a cluster's tile samples: its child's material and texture
      * coordinates there, or what the child's own tile samples there if it was baked too, the
      * source's tangent frame and the cluster's, and how much of the source's texture a texel spans.
+     * Then its splats, see {@link BakeTexels#splat}: the cluster's own, and those of the baked
+     * child texel it took its record from, so what a lower level laid down stays up the levels.
      *
      * @param dag The world.
      * @param cluster The baked cluster, as built.
@@ -688,12 +832,13 @@ public final class LodBakes {
         final int texels = width * height;
         final ByteBuffer records =
                 ByteBuffer.allocate(texels * RECORD_SIZE).order(ByteOrder.LITTLE_ENDIAN);
+        final ByteArrayOutputStream splatBytes = new ByteArrayOutputStream();
+        final ByteBuffer splat = ByteBuffer.allocate(SPLAT_SIZE).order(ByteOrder.LITTLE_ENDIAN);
+        int nextOwnSplat = 0;
         final List<Material> sources = new ArrayList<>();
         final Map<Material, Integer> slots = new IdentityHashMap<>();
         final double[] weights = new double[CORNERS];
-        final int[] child = new int[Attributes.VALUES];
         final int[] own = new int[Attributes.VALUES];
-        final float[] direction = new float[AXES];
         final double worldPerTexel = worldPerTexel(cluster, width, height);
         for (int texel = 0; texel < texels; ++texel) {
             final int at = texel * RECORD_SIZE;
@@ -702,60 +847,22 @@ public final class LodBakes {
                 records.putInt(at, EMPTY);
                 continue;
             }
-            final LodDag.Cluster source = dag.clusters().get(childId);
-            final int t = bake.childTriangle(texel);
-            final int[] attributes = source.attributes();
             for (int c = 0; c < CORNERS; ++c) {
                 weights[c] = bake.childWeight(texel, c);
             }
-            final Material material;
-            float u = 0;
-            float v = 0;
-            double footprint = 0;
-            final Baked childBake = planned.get(childId);
-            if (childBake != null) {
-                // What the child's tile holds there, from its nearest texel with anything
-                Attributes.blend(attributes, t * Attributes.PER_TRIANGLE, weights, child, 0);
-                final float[] place = Attributes.textureCoordinates(child, 0);
-                final int from = nearestFilled(childBake, place[0], place[1]);
-                if (from < 0) {
-                    records.putInt(at, EMPTY);
-                    continue;
-                }
-                final ByteBuffer was = childBake.records();
-                final int in = from * RECORD_SIZE;
-                material = childBake.sources().get(was.getInt(in));
-                u = was.getFloat(in + Integer.BYTES);
-                v = was.getFloat(in + 2 * Integer.BYTES);
-                child[0] = was.getInt(in + 3 * Integer.BYTES);
-                child[1] = was.getInt(in + 4 * Integer.BYTES);
-                footprint = was.getFloat(in + 7 * Integer.BYTES);
-                if (childBake.worldPerTexel() > 0) {
-                    footprint *= worldPerTexel / childBake.worldPerTexel();
-                }
-            } else {
-                material = cache.getMaterial(source.materials()[t]);
-                final boolean textured =
-                        Attributes.textured(attributes, t)
-                                && !Attributes.isAveraged(attributes, t * Attributes.PER_TRIANGLE);
-                if (textured) {
-                    Attributes.blend(attributes, t * Attributes.PER_TRIANGLE, weights, child, 0);
-                    final float[] uv = Attributes.textureCoordinates(child, 0);
-                    u = uv[0];
-                    v = uv[1];
-                    footprint = uvPerWorld(source, t) * worldPerTexel;
-                } else {
-                    // No texture to place: the triangle's own facing, any tangent across it
-                    faceFrame(source.corners(), t, direction, child);
-                }
+            final Sampled sampled =
+                    resolve(
+                            dag,
+                            childId,
+                            bake.childTriangle(texel),
+                            weights,
+                            planned,
+                            cache,
+                            worldPerTexel);
+            if (sampled == null) {
+                records.putInt(at, EMPTY);
+                continue;
             }
-            final int slot =
-                    slots.computeIfAbsent(
-                            material,
-                            m -> {
-                                sources.add(m);
-                                return sources.size() - 1;
-                            });
             for (int c = 0; c < CORNERS; ++c) {
                 weights[c] = bake.ownWeight(texel, c);
             }
@@ -765,21 +872,131 @@ public final class LodBakes {
                     weights,
                     own,
                     0);
-            records.putInt(at, slot);
-            records.putFloat(at + Integer.BYTES, u);
-            records.putFloat(at + 2 * Integer.BYTES, v);
-            records.putInt(at + 3 * Integer.BYTES, child[0]);
-            records.putInt(at + 4 * Integer.BYTES, child[1]);
-            records.putInt(at + 5 * Integer.BYTES, own[0]);
-            records.putInt(at + 6 * Integer.BYTES, own[1]);
-            records.putFloat(at + 7 * Integer.BYTES, (float) footprint);
+            putRecord(
+                    records,
+                    at,
+                    slotOf(sampled.material(), sources, slots),
+                    sampled,
+                    sampled.footprint(),
+                    own);
+            // The splats of the child texel this one took its record from
+            final Baked childBake = sampled.childBake();
+            if (childBake != null) {
+                final ByteBuffer was = childBake.splats();
+                for (int s = firstSplat(childBake, sampled.childTexel());
+                        s < childBake.splatCount()
+                                && was.getInt(s * SPLAT_SIZE) == sampled.childTexel();
+                        ++s) {
+                    final int in = s * SPLAT_SIZE + SPLAT_HEADER;
+                    double footprint = was.getFloat(in + 7 * Integer.BYTES);
+                    if (childBake.worldPerTexel() > 0) {
+                        footprint *= worldPerTexel / childBake.worldPerTexel();
+                    }
+                    final Sampled inherited =
+                            new Sampled(
+                                    childBake.sources().get(was.getInt(in)),
+                                    was.getFloat(in + Integer.BYTES),
+                                    was.getFloat(in + 2 * Integer.BYTES),
+                                    was.getInt(in + 3 * Integer.BYTES),
+                                    was.getInt(in + 4 * Integer.BYTES),
+                                    footprint,
+                                    null,
+                                    EMPTY);
+                    splat.putInt(0, texel);
+                    splat.putFloat(Integer.BYTES, was.getFloat(s * SPLAT_SIZE + Integer.BYTES));
+                    putRecord(
+                            splat,
+                            SPLAT_HEADER,
+                            slotOf(inherited.material(), sources, slots),
+                            inherited,
+                            footprint,
+                            own);
+                    splatBytes.write(splat.array(), 0, SPLAT_SIZE);
+                }
+            }
+            // The cluster's own splats on this texel
+            while (nextOwnSplat < bake.splatCount() && bake.splatTexel(nextOwnSplat) < texel) {
+                ++nextOwnSplat;
+            }
+            for (;
+                    nextOwnSplat < bake.splatCount() && bake.splatTexel(nextOwnSplat) == texel;
+                    ++nextOwnSplat) {
+                for (int c = 0; c < CORNERS; ++c) {
+                    weights[c] = bake.splatWeight(nextOwnSplat, c);
+                }
+                final Sampled laid =
+                        resolve(
+                                dag,
+                                bake.splatCluster(nextOwnSplat),
+                                bake.splatTriangle(nextOwnSplat),
+                                weights,
+                                planned,
+                                cache,
+                                worldPerTexel);
+                if (laid == null) {
+                    continue;
+                }
+                splat.putInt(0, texel);
+                splat.putFloat(Integer.BYTES, bake.splatCoverage(nextOwnSplat));
+                putRecord(
+                        splat,
+                        SPLAT_HEADER,
+                        slotOf(laid.material(), sources, slots),
+                        laid,
+                        laid.footprint(),
+                        own);
+                splatBytes.write(splat.array(), 0, SPLAT_SIZE);
+            }
         }
         boolean emissive = false;
         for (Material source : sources) {
             final org.joml.Vector3f light = source.getEmissive();
             emissive |= light.x > 0 || light.y > 0 || light.z > 0;
         }
-        return new Baked(cluster, width, height, sources, records, worldPerTexel, emissive);
+        final ByteBuffer splats =
+                ByteBuffer.wrap(splatBytes.toByteArray()).order(ByteOrder.LITTLE_ENDIAN);
+        return new Baked(cluster, width, height, sources, records, splats, worldPerTexel, emissive);
+    }
+
+    /**
+     * A source material's slot in a bake's list, added if new.
+     *
+     * @param material The material.
+     * @param sources The bake's materials.
+     * @param slots Each material's slot.
+     * @return Its slot.
+     */
+    private static int slotOf(
+            @NonNull Material material,
+            @NonNull List<Material> sources,
+            @NonNull Map<Material, Integer> slots) {
+        return slots.computeIfAbsent(
+                material,
+                m -> {
+                    sources.add(m);
+                    return sources.size() - 1;
+                });
+    }
+
+    /**
+     * The first of a bake's splats on a texel or after it, by binary search.
+     *
+     * @param baked The bake.
+     * @param texel The texel.
+     * @return The splat, or the splat count if none is.
+     */
+    private static int firstSplat(@NonNull Baked baked, int texel) {
+        int low = 0;
+        int high = baked.splatCount();
+        while (low < high) {
+            final int middle = (low + high) >>> 1;
+            if (baked.splats().getInt(middle * SPLAT_SIZE) < texel) {
+                low = middle + 1;
+            } else {
+                high = middle;
+            }
+        }
+        return low;
     }
 
     /** How far from a place in a tile to look for a texel with anything in it, in texels. */
@@ -1322,14 +1539,14 @@ public final class LodBakes {
     }
 
     /**
-     * Write jobs into a frame's upload buffer: each job's source materials, then its records, each
-     * part on a 16 byte boundary. The buffer is only rewritten once that frame is done with it.
-     * Render thread.
+     * Write jobs into a frame's upload buffer: each job's source materials, then its records, then
+     * its splats, each part on a 16 byte boundary. The buffer is only rewritten once that frame is
+     * done with it. Render thread.
      *
      * @param frame The frame in flight.
      * @param state The Vulkan state.
      * @param batch The jobs.
-     * @param offsets Receives each job's materials' and records' offsets, two a job.
+     * @param offsets Receives each job's materials', records' and splats' offsets, three a job.
      * @return The buffer.
      */
     public SharedBuffer write(
@@ -1340,13 +1557,15 @@ public final class LodBakes {
         long bytes = 0;
         for (int i = 0; i < batch.size(); ++i) {
             final Job job = batch.get(i);
-            offsets[i * 2] = bytes;
+            offsets[i * OFFSETS] = bytes;
             bytes +=
                     align(
                             (long) job.baked().sources().size()
                                     * ShaderBindings.Scene.Material.SIZEOF);
-            offsets[i * 2 + 1] = bytes;
+            offsets[i * OFFSETS + 1] = bytes;
             bytes += align(job.baked().records().capacity());
+            offsets[i * OFFSETS + 2] = bytes;
+            bytes += align(job.baked().splats().capacity());
         }
         SharedBuffer buffer = uploads[frame];
         if (buffer == null) {
@@ -1361,12 +1580,14 @@ public final class LodBakes {
                         .order(ByteOrder.LITTLE_ENDIAN);
         for (int i = 0; i < batch.size(); ++i) {
             final Job job = batch.get(i);
-            data.position((int) offsets[i * 2]);
+            data.position((int) offsets[i * OFFSETS]);
             for (Material material : job.baked().sources()) {
                 SceneRender.writeMaterial(data, material, state.textureRegistry);
             }
-            data.position((int) offsets[i * 2 + 1]);
+            data.position((int) offsets[i * OFFSETS + 1]);
             data.put(job.baked().records().duplicate().clear());
+            data.position((int) offsets[i * OFFSETS + 2]);
+            data.put(job.baked().splats().duplicate().clear());
         }
         return buffer;
     }

@@ -1675,8 +1675,12 @@ public final class DagBuilder {
         final int[] bakeTiles = baking ? new int[outCorners.size()] : new int[0];
         final List<BakeTexels> bakes = new ArrayList<>();
         final Correspondence map = baking ? new Correspondence(merged, result.history()) : null;
+        final List<BakeLayout> layouts = new ArrayList<>();
+        final BakeTexels.Source source =
+                face -> new int[] {sourceCluster.getInt(face), sourceTriangle.getInt(face)};
         for (int i = 0; i < bakeTiles.length; ++i) {
             final BakeLayout layout = layoutFor(outCorners.get(i), error);
+            layouts.add(layout);
             bakeTiles[i] = LodDag.packTile(layout.width(), layout.height());
             outAttributes.set(i, bakedAttributes(outCorners.get(i), outAttributes.get(i), layout));
             bakes.add(
@@ -1687,12 +1691,11 @@ public final class DagBuilder {
                             layout.height(),
                             outFaces.get(i),
                             map,
-                            face ->
-                                    new int[] {
-                                        sourceCluster.getInt(face), sourceTriangle.getInt(face)
-                                    },
+                            source,
                             dag));
         }
+        // What no texel samples, laid onto the texels it stands over
+        BakeTexels.splat(bakes, outCorners, layouts, merged, source, dag);
         final List<long[]> outBases = shareOut(bases, outCorners);
         final double[] bound = Clusters.enclose(spheres);
         final int[] edgeCounts = countEdges(merged);

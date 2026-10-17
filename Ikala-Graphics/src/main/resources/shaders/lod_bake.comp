@@ -11,7 +11,9 @@
 // source triangle's tangent frame there, and the baked triangle's, which the normal is turned into.
 // The color page is written through a UNORM view, sRGB encoded, and sampled through an sRGB one;
 // the data page holds the normal's x and y, roughness and metalness, see MATERIAL_FLAG_BAKED_DATA;
-// pages of emitting tiles have an emission page too, written by encodeEmission.
+// pages of emitting tiles have an emission page too, written by encodeEmission. A texel's splats,
+// input no texel samples laid onto it (BakeTexels.splat), are blended in over what it samples
+// itself, each by the share of the texel it covers.
 
 layout(local_size_x = 64) in;
 
@@ -25,17 +27,23 @@ layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer So
     Material materials[];
 };
 
+// Three uvec4 a splat: its texel, the share of the texel it covers (float bits) and padding, then
+// a record as above; in increasing order of texel
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Splats {
+    uvec4 splats[];
+};
+
 layout(push_constant) uniform BakeConstants {
     Records texels;
     SourceMaterials sources;
+    Splats splats;
     // The tile's corner in the page, in texels, and its width and height
     ivec2 origin;
     ivec2 extent;
     // Whether the tile's page has an emission page to write; if not, binding 2 is its data page
     int emitting;
-    int padding0;
-    int padding1;
-    int padding2;
+    // How many splats the tile has
+    uint splatCount;
 };
 
 layout(set = 0, binding = 0, rgba8) uniform restrict writeonly image2D colorPage;
@@ -75,28 +83,29 @@ vec4 sampleSource(int index, vec2 uv, float footprint)
     return textureLod(bindlessTextures[nonuniformEXT(index)], uv, lod);
 }
 
-void main()
+// What a record samples: linear color, so shares blend as light does, the normal in the baked triangle's tangent space,
+// roughness, metalness and emission
+struct Sampled {
+    vec3 color;
+    vec3 normal;
+    float roughness;
+    float metallic;
+    vec3 emission;
+};
+
+Sampled sampleRecord(uvec4 first, uvec4 second)
 {
-    uint texel = gl_GlobalInvocationID.x;
-    if (texel >= uint(extent.x * extent.y)) {
-        return;
-    }
-    uvec4 first = texels.records[texel * 2u];
-    if (first.x == EMPTY) {
-        return;
-    }
-    uvec4 second = texels.records[texel * 2u + 1u];
     Material material = sources.materials[first.x];
     vec2 uv = uintBitsToFloat(first.yz);
     float footprint = uintBitsToFloat(second.w);
     mat3 source = frame(first.w, second.x);
     mat3 baked = frame(second.y, second.z);
 
-    // Base color as the scene draws it: the texture in place of the color, sRGB encoded
-    vec4 color = material.baseColor;
+    // Base color as the scene draws it: the texture, decoded by its sRGB view, in place of the
+    // color, which is kept as the page stores it, sRGB encoded
+    vec3 color = sRGBToLinear(material.baseColor.rgb);
     if (material.textureIndex > 0) {
-        color = sampleSource(material.textureIndex, uv, footprint);
-        color.rgb = linearToSRGB(color.rgb);
+        color = sampleSource(material.textureIndex, uv, footprint).rgb;
     }
 
     // The source's shading normal in the world, then in the baked triangle's tangent space
@@ -122,14 +131,72 @@ void main()
         inBaked = normalize(vec3(inBaked.xy, 0.0));
     }
 
-    ivec2 at = origin + ivec2(int(texel) % extent.x, int(texel) / extent.x);
-    imageStore(colorPage, at, vec4(color.rgb, 1.0));
-    imageStore(dataPage, at, vec4(inBaked.xy * 0.5 + 0.5, roughness, metallic));
+    vec3 emission = vec3(0.0);
     if (emitting != 0) {
-        vec3 emission = material.emissive;
+        emission = material.emissive;
         if (material.emissiveIndex > 0) {
             emission *= sampleSource(material.emissiveIndex, uv, footprint).rgb;
         }
+    }
+    return Sampled(color, inBaked, roughness, metallic, emission);
+}
+
+// The first splat on a texel or after it
+uint firstSplat(uint texel)
+{
+    uint low = 0u;
+    uint high = splatCount;
+    while (low < high) {
+        uint middle = (low + high) / 2u;
+        if (splats.splats[middle * 3u].x < texel) {
+            low = middle + 1u;
+        } else {
+            high = middle;
+        }
+    }
+    return low;
+}
+
+void main()
+{
+    uint texel = gl_GlobalInvocationID.x;
+    if (texel >= uint(extent.x * extent.y)) {
+        return;
+    }
+    uvec4 first = texels.records[texel * 2u];
+    if (first.x == EMPTY) {
+        return;
+    }
+    Sampled own = sampleRecord(first, texels.records[texel * 2u + 1u]);
+
+    // The splats' shares, scaled down together where they cover more than the whole texel
+    uint start = firstSplat(texel);
+    float covered = 0.0;
+    for (uint s = start; s < splatCount && splats.splats[s * 3u].x == texel; ++s) {
+        covered += uintBitsToFloat(splats.splats[s * 3u].y);
+    }
+    float scale = covered > 1.0 ? 1.0 / covered : 1.0;
+    float keep = 1.0 - min(covered, 1.0);
+    vec3 color = own.color * keep;
+    vec3 normal = own.normal * keep;
+    float roughness = own.roughness * keep;
+    float metallic = own.metallic * keep;
+    vec3 emission = own.emission * keep;
+    for (uint s = start; s < splatCount && splats.splats[s * 3u].x == texel; ++s) {
+        float share = uintBitsToFloat(splats.splats[s * 3u].y) * scale;
+        Sampled laid = sampleRecord(splats.splats[s * 3u + 1u], splats.splats[s * 3u + 2u]);
+        color += laid.color * share;
+        normal += laid.normal * share;
+        roughness += laid.roughness * share;
+        metallic += laid.metallic * share;
+        emission += laid.emission * share;
+    }
+    normal = length(normal) > 0.0 ? normalize(normal) : own.normal;
+
+    ivec2 at = origin + ivec2(int(texel) % extent.x, int(texel) / extent.x);
+    imageStore(colorPage, at, vec4(linearToSRGB(color), 1.0));
+    imageStore(dataPage, at, vec4(normal.xy * 0.5 + 0.5, roughness, metallic));
+    if (emitting != 0) {
         imageStore(emissionPage, at, encodeEmission(emission));
     }
 }
