@@ -18,6 +18,13 @@ import java.util.TreeSet;
  * out material passes with the chance of its average coverage, so leaves with holes stop as much
  * light as their texture covers. The density is then solved so the voxel's attenuation over a
  * voxel, averaged over every direction, is the share of rays that hit (§5.4).
+ *
+ * <p>Leaves in a voxel shade each other, which a voxel drawn as one medium can't show: its shadows
+ * start {@link #SELF_SHADOW_REACH} voxels past where it stops light, so it doesn't shadow itself.
+ * So each hit also casts a ray that far in a random direction, and the share that gets out scales
+ * the voxel's color, as Loubet and Neyret's isotropic self-shadowing scales the albedo of light
+ * scattered once (<i>A new microflake model with microscopic self-shadowing for accurate volume
+ * downsampling</i>, 2018, §4.3). Without it far foliage is brighter and flatter than its leaves.
  */
 public final class CoverageVoxelizer {
 
@@ -44,6 +51,15 @@ public final class CoverageVoxelizer {
      * density: what is left gets through.
      */
     private static final double MOST_OPAQUE = 0.999;
+
+    /**
+     * How far leaves shade each other within a voxel's own medium, in voxels: as far past its stop
+     * as a volume's shadow starts, see shadow_volume.frag's SHADOW_OFFSET.
+     */
+    private static final double SELF_SHADOW_REACH = 1.5;
+
+    /** How far off its surface a hit's shadow ray starts, in voxels, so it misses that surface. */
+    private static final double SHADOW_START = 1e-4;
 
     /** The smoothest a voxel's microflakes are, by projected area across a surface. */
     private static final double MIN_SPREAD = 0.05;
@@ -94,6 +110,9 @@ public final class CoverageVoxelizer {
         final double[] ray = new double[AXES];
         final double[] along = new double[1];
         final double[] normal = new double[AXES];
+        final double[] hitPoint = new double[AXES];
+        final double[] shadowRay = new double[AXES];
+        final double[] shadowAlong = new double[1];
         final int count = candidates.length;
         final long[] keys = new long[count];
         final float[] density = new float[count];
@@ -114,6 +133,7 @@ public final class CoverageVoxelizer {
         for (long key : candidates) {
             final SplittableRandom random = new SplittableRandom(seed ^ key * 0x9E3779B97F4A7C15L);
             int hits = 0;
+            int lit = 0;
             Arrays.fill(matrix, 0);
             Arrays.fill(look, 0);
             for (int r = 0; r < RAYS; ++r) {
@@ -135,6 +155,22 @@ public final class CoverageVoxelizer {
                 }
                 ++hits;
                 faceNormal(triangles, t, normal);
+                lit +=
+                        escapes(
+                                        bvh,
+                                        stack,
+                                        start,
+                                        ray,
+                                        along[0],
+                                        normal,
+                                        voxelSize,
+                                        random,
+                                        coverageOf,
+                                        hitPoint,
+                                        shadowRay,
+                                        shadowAlong)
+                                ? 1
+                                : 0;
                 final float[] average = lookOf[t];
                 final double alpha =
                         average[MaterialAverages.ROUGHNESS] * average[MaterialAverages.ROUGHNESS];
@@ -150,9 +186,11 @@ public final class CoverageVoxelizer {
             for (int k = 0; k < CoverageVolume.SGGX_VALUES; ++k) {
                 sggx[kept * CoverageVolume.SGGX_VALUES + k] = (float) (matrix[k] / hits);
             }
+            // Light scattered once leaves as much as gets past the voxel's own leaves
+            final double shadowing = (double) lit / hits;
             for (int c = 0; c < CoverageVolume.COLOR_VALUES; ++c) {
                 color[kept * CoverageVolume.COLOR_VALUES + c] =
-                        (float) (look[MaterialAverages.RED + c] / hits);
+                        (float) (look[MaterialAverages.RED + c] / hits * shadowing);
             }
             roughness[kept] = (float) (look[MaterialAverages.ROUGHNESS] / hits);
             metallic[kept] = (float) (look[MaterialAverages.METALLIC] / hits);
@@ -225,6 +263,53 @@ public final class CoverageVoxelizer {
             out[i++] = key;
         }
         return out;
+    }
+
+    /**
+     * Whether light gets from a hit {@link #SELF_SHADOW_REACH} voxels in a random direction past
+     * the triangles around it, a cut out triangle in the way letting it by with the chance of its
+     * coverage.
+     *
+     * @param bvh The triangles.
+     * @param stack Scratch for queries.
+     * @param start Where the ray that hit started.
+     * @param ray The ray that hit, its length its reach.
+     * @param share How far along it the hit was.
+     * @param normal The hit triangle's unit normal.
+     * @param voxelSize How wide a voxel is.
+     * @param random The random numbers.
+     * @param coverageOf Each triangle's coverage.
+     * @param point Scratch for the hit.
+     * @param shadow Scratch for the shadow ray.
+     * @param along Scratch for the shadow ray's hit.
+     * @return True if the light gets out.
+     */
+    private static boolean escapes(
+            @NonNull TriangleBvh bvh,
+            int @NonNull [] stack,
+            double @NonNull [] start,
+            double @NonNull [] ray,
+            double share,
+            double @NonNull [] normal,
+            double voxelSize,
+            @NonNull SplittableRandom random,
+            float @NonNull [] coverageOf,
+            double @NonNull [] point,
+            double @NonNull [] shadow,
+            double @NonNull [] along) {
+        randomDirection(random, shadow);
+        final double side =
+                Math.signum(shadow[0] * normal[0] + shadow[1] * normal[1] + shadow[2] * normal[2]);
+        for (int axis = 0; axis < AXES; ++axis) {
+            // Off the surface on the side the ray leaves by
+            point[axis] =
+                    start[axis]
+                            + ray[axis] * share
+                            + side * normal[axis] * SHADOW_START * voxelSize;
+            shadow[axis] *= SELF_SHADOW_REACH * voxelSize;
+        }
+        final int blocker = bvh.firstHit(point, shadow, stack, along);
+        return blocker < 0 || random.nextDouble() >= coverageOf[blocker];
     }
 
     /**

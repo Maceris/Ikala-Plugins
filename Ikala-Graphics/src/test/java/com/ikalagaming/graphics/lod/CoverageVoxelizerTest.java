@@ -114,6 +114,58 @@ class CoverageVoxelizerTest {
         assertTrue(half > 0.35 * full && half < 0.65 * full, half + " of " + full);
     }
 
+    /** How many planes the test stack has. */
+    private static final int STACK = 8;
+
+    /** How far apart the stacked planes are, a fraction of a voxel. */
+    private static final float STACK_SPACING = 0.05f;
+
+    /**
+     * Planes stacked closer than a voxel, as leaves crowd a canopy.
+     *
+     * @return The corners.
+     */
+    private static float[] stack() {
+        final float[] out = new float[STACK * 18];
+        for (int i = 0; i < STACK; ++i) {
+            System.arraycopy(plane(1.25f + i * STACK_SPACING), 0, out, i * 18, 18);
+        }
+        return out;
+    }
+
+    /**
+     * The voxels' mean color's first value, over the look's.
+     *
+     * @param volume The volume.
+     * @return The share of the look the voxels keep.
+     */
+    private static double keptColor(CoverageVolume volume) {
+        double sum = 0;
+        for (int v = 0; v < volume.size(); ++v) {
+            sum += volume.color(v, 0);
+        }
+        return sum / volume.size() / LOOK[0];
+    }
+
+    /**
+     * Leaves crowded in a voxel shade each other: stacked planes come out darker than their look,
+     * and less so where their textures leave holes, while one plane alone keeps its look (see
+     * {@link #testPlaneStopsLightAlongItsNormal}).
+     */
+    @Test
+    void testCrowdedLeavesShadeEachOther() {
+        final double full =
+                keptColor(
+                        CoverageVoxelizer.voxelize(
+                                stack(), new int[STACK * 2], covering(1), VOXEL, SEED));
+        final double holes =
+                keptColor(
+                        CoverageVoxelizer.voxelize(
+                                stack(), new int[STACK * 2], covering(0.3f), VOXEL, SEED));
+        assertTrue(full < 0.8, "Crowded leaves keep " + full + " of their color");
+        assertTrue(holes > full, "Leaves with holes keep " + holes + ", solid ones " + full);
+    }
+
     /** The same input and seed give the same volume. */
     @Test
     void testSameSeedSameVolume() {
