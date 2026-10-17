@@ -25,7 +25,9 @@ import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.graph.SkyOcclusion;
 import com.ikalagaming.graphics.graph.SunShadowCache;
 import com.ikalagaming.graphics.graph.TaaMath;
+import com.ikalagaming.graphics.gui.data.DrawData;
 import com.ikalagaming.graphics.scene.Scene;
+import com.ikalagaming.graphics.vulkan.stages.GuiRender;
 import com.ikalagaming.util.SafeResourceLoader;
 
 import lombok.NonNull;
@@ -1593,14 +1595,20 @@ public class VulkanInstance {
     }
 
     /**
-     * Render a frame to every window: the scene in the scene window, and for now just a clear color
-     * in the others. Windows that are minimized or resizing are skipped, and the scene is only
-     * drawn when its window has an image to draw into.
+     * Render a frame to every window: the scene in the scene window, then the GUI over it in the
+     * GUI window, and the other windows cleared. Windows that are minimized or resizing are
+     * skipped, and the scene is only drawn when its window has an image to draw into.
      *
      * @param scene The scene to render.
      * @param sceneWindow The window the scene is drawn in.
+     * @param guiWindow The window the GUI is drawn in.
+     * @param guiDrawData What the GUI drew this frame, or null to draw no GUI.
      */
-    public void render(@NonNull Scene scene, @NonNull Window sceneWindow) {
+    public void render(
+            @NonNull Scene scene,
+            @NonNull Window sceneWindow,
+            @NonNull Window guiWindow,
+            DrawData guiDrawData) {
         if (pipeline == PipelineManagerVulkan.ERROR_PIPELINE) {
             return;
         }
@@ -1652,13 +1660,23 @@ public class VulkanInstance {
         state.recordingFrame = true;
 
         if (drawScene) {
-            recordScene(scene, sceneWindow, commandBuffer);
+            recordScene(scene, sceneTarget, commandBuffer);
         }
+        final boolean sceneCopied =
+                drawScene && PipelineManagerVulkan.drawsFinalImage(renderConfig);
+        final GuiRender gui = pipelineManager.getGuiRender();
+        gui.prepare(commandBuffer, state, guiDrawData);
         for (Presentation presentation : acquired) {
-            if (presentation != sceneTarget) {
-                // Nothing draws in other windows yet
-                presentation.recordClear(commandBuffer, 0.1f, 0.1f, 0.1f);
-            }
+            // Readies every image to present, even in windows with nothing drawn yet
+            gui.recordWindow(
+                    commandBuffer,
+                    state,
+                    presentation,
+                    sceneCopied && presentation == sceneTarget,
+                    guiDrawData != null && presentation.getWindow() == guiWindow);
+        }
+        if (drawScene) {
+            state.frameTimings.mark(commandBuffer, state.frameIndex, "GuiRender");
         }
 
         checkError(vkEndCommandBuffer(commandBuffer));
@@ -1677,17 +1695,20 @@ public class VulkanInstance {
     }
 
     /**
-     * Record the uploads and the scene pipeline, which ends by copying the scene and GUI into the
-     * scene window's swapchain image.
+     * Record the uploads and the scene pipeline, which ends by copying the scene into the scene
+     * window's swapchain image.
      *
      * @param scene The scene to render.
-     * @param sceneWindow The window the scene is drawn in, which has an acquired image.
+     * @param presentation The scene window, which has an acquired image.
      * @param commandBuffer The frame's command buffer.
      */
     private void recordScene(
             @NonNull Scene scene,
-            @NonNull Window sceneWindow,
+            @NonNull Presentation presentation,
             @NonNull VkCommandBuffer commandBuffer) {
+        final Window sceneWindow = presentation.getWindow();
+        final SceneTarget target =
+                new SceneTarget(sceneWindow.getWidth(), sceneWindow.getHeight(), presentation);
         state.frameTimings.begin(commandBuffer, state.frameIndex, state);
 
         // Before anything that could sample the textures or draw the meshes
@@ -1718,12 +1739,12 @@ public class VulkanInstance {
                 state.perFrameData[state.frameIndex],
                 scene.getCamera().getPosition(),
                 scene.getObserver(),
-                sceneWindow.getHeight(),
+                target.height(),
                 scene.getDebugVisualizers().getLodColors());
         state.frameTimings.mark(commandBuffer, state.frameIndex, "Uploads");
 
         // This will record the command buffer
-        pipeline.render(scene, sceneWindow, state);
+        pipeline.render(scene, target, state);
     }
 
     /**
@@ -1814,6 +1835,22 @@ public class VulkanInstance {
         if (presentation != null) {
             presentation.markResized();
         }
+    }
+
+    /**
+     * The scene is drawn in another window from now on, so grow the render targets to fit it if
+     * needed. If the window has no swapchain yet, that happens once it gets one. Call between
+     * frames.
+     *
+     * @param window The new scene window.
+     */
+    public void sceneWindowChanged(@NonNull Window window) {
+        Presentation presentation = state.presentations.get(window);
+        if (presentation == null || presentation.swapchainHandle == VK_NULL_HANDLE) {
+            return;
+        }
+        checkError(vkDeviceWaitIdle(state.device.logical));
+        pipelineManager.resize(state, presentation.swapchainWidth, presentation.swapchainHeight);
     }
 
     /**

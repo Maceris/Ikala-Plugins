@@ -6,6 +6,7 @@ import com.ikalagaming.graphics.benchmark.GateBenchmark;
 import com.ikalagaming.graphics.events.WindowCreated;
 import com.ikalagaming.graphics.gui.IkGui;
 import com.ikalagaming.graphics.gui.WindowManager;
+import com.ikalagaming.graphics.gui.data.DrawData;
 import com.ikalagaming.graphics.gui.data.IkIO;
 import com.ikalagaming.graphics.gui.enums.MouseButton;
 import com.ikalagaming.graphics.gui.flags.ConfigFlags;
@@ -140,6 +141,14 @@ public class GraphicsManager {
      */
     @Getter private static Window mainWindow;
 
+    /**
+     * The window the scene is drawn in, the main window unless {@link #setSceneWindow(Window)}
+     * moved it.
+     *
+     * @return The scene window.
+     */
+    @Getter private static Window sceneWindow;
+
     /** The windows besides the main one, in the order they were created. Main thread only. */
     private static final List<Window> extraWindows = new ArrayList<>();
 
@@ -198,7 +207,8 @@ public class GraphicsManager {
         mainWindow =
                 new Window(
                         WindowOptions.mainWindow(APPLICATION_NAME, settings),
-                        GraphicsManager::resize);
+                        GraphicsManager::windowResized);
+        sceneWindow = mainWindow;
         log.debug("Window created");
         new WindowCreated(mainWindow.getWindowHandle()).fire();
 
@@ -394,7 +404,14 @@ public class GraphicsManager {
 
     /** Render to the screen. */
     private static void render() {
-        renderInstance.render(scene, mainWindow);
+        // The GUI is built before rendering starts, since it can create and close windows
+        DrawData guiDrawData = null;
+        if (RenderConfig.hasGuiStage(renderInstance.getPipelineConfig())) {
+            final IkIO io = IkGui.getIO();
+            windowManager.drawGui((int) io.displaySize.x, (int) io.displaySize.y);
+            guiDrawData = IkGui.getDrawData();
+        }
+        renderInstance.render(scene, sceneWindow, mainWindow, guiDrawData);
 
         ++framesSinceLastCalculation;
 
@@ -407,16 +424,42 @@ public class GraphicsManager {
     }
 
     /**
-     * The main window was resized, which the scene and GUI follow.
+     * A window was resized. Its swapchain follows, the scene follows the scene window, and the GUI
+     * follows the main window.
      *
-     * @param window The main window.
+     * @param window The window.
      */
-    private static void resize(@NonNull Window window) {
-        int width = window.getWidth();
-        int height = window.getHeight();
-        scene.resize(width, height);
+    private static void windowResized(@NonNull Window window) {
         renderInstance.resize(window);
-        IkGui.getIO().displaySize.set(width, height);
+        if (window == sceneWindow) {
+            scene.resize(window.getWidth(), window.getHeight());
+        }
+        if (window == mainWindow) {
+            IkGui.getIO().displaySize.set(window.getWidth(), window.getHeight());
+        }
+    }
+
+    /**
+     * Draw the scene in another open window from the next frame on. Only one window draws the scene
+     * at a time, and every window can draw GUI. If the scene window closes, the scene goes back to
+     * the main window. Main thread only, see {@link #runOnMainThread(Runnable)}.
+     *
+     * @param window The window to draw the scene in.
+     * @throws IllegalArgumentException If the window isn't open.
+     * @throws IllegalStateException If this isn't the main thread.
+     */
+    public static void setSceneWindow(@NonNull Window window) {
+        checkMainThread();
+        if (window != mainWindow && !extraWindows.contains(window)) {
+            throw new IllegalArgumentException("The scene can only be drawn in an open window");
+        }
+        if (window == sceneWindow) {
+            return;
+        }
+        sceneWindow = window;
+        scene.resize(window.getWidth(), window.getHeight());
+        renderInstance.sceneWindowChanged(window);
+        log.debug("Drawing the scene in {}", window.getTitle());
     }
 
     /**
@@ -430,7 +473,7 @@ public class GraphicsManager {
      */
     public static Window createWindow(@NonNull WindowOptions options) {
         checkMainThread();
-        Window window = new Window(options, GraphicsManager::extraWindowResized);
+        Window window = new Window(options, GraphicsManager::windowResized);
         try {
             renderInstance.createPresentation(window);
         } catch (RuntimeException e) {
@@ -456,9 +499,13 @@ public class GraphicsManager {
             mainWindow.requestClose();
             return;
         }
-        if (!extraWindows.remove(window)) {
+        if (!extraWindows.contains(window)) {
             return;
         }
+        if (window == sceneWindow) {
+            setSceneWindow(mainWindow);
+        }
+        extraWindows.remove(window);
         // The surface has to go before the window it was made for
         renderInstance.destroyPresentation(window);
         window.destroy();
@@ -514,15 +561,6 @@ public class GraphicsManager {
             throw new IllegalStateException(
                     "Windows can only be changed on the main thread while graphics are running");
         }
-    }
-
-    /**
-     * A window other than the main one was resized, so only its swapchain changes.
-     *
-     * @param window The window.
-     */
-    private static void extraWindowResized(@NonNull Window window) {
-        renderInstance.resize(window);
     }
 
     /** Close any windows the user closed, other than the main window. */
@@ -618,6 +656,7 @@ public class GraphicsManager {
         if (null != mainWindow) {
             mainWindow.destroy();
             mainWindow = null;
+            sceneWindow = null;
         }
 
         GlfwPlatform.terminate();

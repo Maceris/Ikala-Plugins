@@ -3,11 +3,11 @@ package com.ikalagaming.graphics.vulkan.stages;
 import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.InstanceTable;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.RenderStage;
+import com.ikalagaming.graphics.vulkan.SceneTarget;
 import com.ikalagaming.graphics.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.vulkan.VulkanState;
@@ -97,7 +97,10 @@ public class InstanceTransform implements RenderStage {
 
     @Override
     public void render(
-            Scene scene, @NonNull Window window, @NonNull VulkanState state, int renderConfig) {
+            Scene scene,
+            @NonNull SceneTarget sceneTarget,
+            @NonNull VulkanState state,
+            int renderConfig) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
         final int count = frameData.instanceCount;
         if (count == 0) {

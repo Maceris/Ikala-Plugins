@@ -3,7 +3,6 @@ package com.ikalagaming.graphics.vulkan.stages;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.MeshKind;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
@@ -21,6 +20,7 @@ import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
 import com.ikalagaming.graphics.vulkan.PointShadows;
 import com.ikalagaming.graphics.vulkan.RenderStage;
+import com.ikalagaming.graphics.vulkan.SceneTarget;
 import com.ikalagaming.graphics.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.vulkan.VulkanState;
 
@@ -262,7 +262,7 @@ public class InstanceDrawUpdate implements RenderStage {
     @Override
     public void render(
             Scene scene,
-            @NonNull Window window,
+            @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState vulkanState,
             int renderConfig) {
         final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
@@ -429,7 +429,7 @@ public class InstanceDrawUpdate implements RenderStage {
             }
         }
         writeFrusta(scene, frameData, visualizers.isCullingDisabled());
-        writeOcclusionView(scene, window, vulkanState, frameData, visualizers);
+        writeOcclusionView(scene, sceneTarget, vulkanState, frameData, visualizers);
 
         if (listed.isEmpty()) {
             return;
@@ -704,14 +704,14 @@ public class InstanceDrawUpdate implements RenderStage {
      * has been built, as after a resize, the occlusion test lets everything through.
      *
      * @param scene The scene.
-     * @param window The window, whose size the scene is drawn at.
+     * @param sceneTarget What the scene is drawn into, and its size.
      * @param state The Vulkan state.
      * @param frameData This frame's data.
      * @param visualizers The debug switches.
      */
     private static void writeOcclusionView(
             @NonNull Scene scene,
-            @NonNull Window window,
+            @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState state,
             @NonNull PerFrameData frameData,
             @NonNull DebugVisualizers visualizers) {
@@ -723,8 +723,8 @@ public class InstanceDrawUpdate implements RenderStage {
             // The same size the scene draws at, the g-buffer can be bigger than the window
             final Observer observer = scene.getObserver();
             pyramid.markBuilt(
-                    Math.min(window.getWidth(), frameData.gBuffer.width()),
-                    Math.min(window.getHeight(), frameData.gBuffer.height()),
+                    Math.min(sceneTarget.width(), frameData.gBuffer.width()),
+                    Math.min(sceneTarget.height(), frameData.gBuffer.height()),
                     observer.getPosition(),
                     new Matrix4f(observer.getProjectionMatrix()).mul(observer.getViewMatrix()));
         }

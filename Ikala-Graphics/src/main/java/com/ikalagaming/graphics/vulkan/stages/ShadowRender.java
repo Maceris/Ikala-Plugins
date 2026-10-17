@@ -7,7 +7,6 @@ import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshHandle;
 import com.ikalagaming.graphics.MeshKind;
 import com.ikalagaming.graphics.Sections;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakedVertex;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.MeshData;
@@ -197,7 +196,7 @@ public class ShadowRender implements RenderStage {
     @Override
     public void render(
             Scene scene,
-            @NonNull Window window,
+            @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState vulkanState,
             int renderConfig) {
         final VkCommandBuffer commandBuffer =

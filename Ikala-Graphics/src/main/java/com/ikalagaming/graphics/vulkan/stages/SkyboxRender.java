@@ -6,7 +6,6 @@ import static org.lwjgl.vulkan.VK13.*;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.TextureHandle;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.*;
 import com.ikalagaming.graphics.vulkan.RenderStage;
@@ -96,7 +95,7 @@ public class SkyboxRender implements RenderStage {
     @Override
     public void render(
             Scene scene,
-            @NonNull Window window,
+            @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState vulkanState,
             int renderConfig) {
         final VkCommandBuffer commandBuffer =
@@ -109,8 +108,8 @@ public class SkyboxRender implements RenderStage {
 
         updateUniforms(scene, vulkanState, frameData);
 
-        final int width = Math.min(window.getWidth(), vulkanState.realSize.width());
-        final int height = Math.min(window.getHeight(), vulkanState.realSize.height());
+        final int width = Math.min(sceneTarget.width(), vulkanState.realSize.width());
+        final int height = Math.min(sceneTarget.height(), vulkanState.realSize.height());
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkImageMemoryBarrier2.Buffer barriers = VkImageMemoryBarrier2.calloc(2, stack);

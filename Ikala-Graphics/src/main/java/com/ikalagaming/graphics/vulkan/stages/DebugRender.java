@@ -4,7 +4,6 @@ import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.MeshData;
 import com.ikalagaming.graphics.graph.Model;
 import com.ikalagaming.graphics.scene.Scene;
@@ -15,6 +14,7 @@ import com.ikalagaming.graphics.vulkan.DebugVisualizerShapes;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
 import com.ikalagaming.graphics.vulkan.RenderStage;
+import com.ikalagaming.graphics.vulkan.SceneTarget;
 import com.ikalagaming.graphics.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.vulkan.SharedBuffer;
 import com.ikalagaming.graphics.vulkan.TextureInfoVulkan;
@@ -145,7 +145,7 @@ public class DebugRender implements RenderStage {
     @Override
     public void render(
             Scene scene,
-            @NonNull Window window,
+            @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState vulkanState,
             int renderConfig) {
         final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
@@ -173,8 +173,8 @@ public class DebugRender implements RenderStage {
             onTop.copyTo(vertices, depthTested.count() * VERTEX_SIZE);
         }
 
-        final int width = Math.min(window.getWidth(), vulkanState.realSize.width());
-        final int height = Math.min(window.getHeight(), vulkanState.realSize.height());
+        final int width = Math.min(sceneTarget.width(), vulkanState.realSize.width());
+        final int height = Math.min(sceneTarget.height(), vulkanState.realSize.height());
         if (width <= 0 || height <= 0) {
             return;
         }

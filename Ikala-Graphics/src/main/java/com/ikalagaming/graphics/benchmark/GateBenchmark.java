@@ -1772,8 +1772,8 @@ public final class GateBenchmark {
                         frames.get(),
                         timings,
                         passed,
-                        GraphicsManager.getMainWindow().getWidth(),
-                        GraphicsManager.getMainWindow().getHeight(),
+                        GraphicsManager.getSceneWindow().getWidth(),
+                        GraphicsManager.getSceneWindow().getHeight(),
                         gateResults());
         phase = Phase.DONE;
         final String report = report(results);

@@ -467,7 +467,8 @@ public final class LodView implements AutoCloseable {
     }
 
     /**
-     * Pixels per world unit at distance 1, from the observer's projection and the window height.
+     * Pixels per world unit at distance 1, from the observer's projection and the scene window
+     * height.
      *
      * @param observer The observer.
      * @return The scale.
@@ -475,7 +476,7 @@ public final class LodView implements AutoCloseable {
     private static double pixelsPerUnit(@NonNull Observer observer) {
         // m11 is 1 / tan(fov / 2), negative with Vulkan's y flip
         final double focal = Math.abs(observer.getProjectionMatrix().m11());
-        return focal * GraphicsManager.getMainWindow().getHeight() / 2;
+        return focal * GraphicsManager.getSceneWindow().getHeight() / 2;
     }
 
     /**

@@ -306,6 +306,28 @@ public class PipelineManagerVulkan {
         stageSwapchainPresent.initialize(state);
     }
 
+    /**
+     * Whether a pipeline draws anything into the final image, which is copied into the scene
+     * window. Without that, the scene window only shows the GUI.
+     *
+     * @param configuration The pipeline configuration.
+     * @return True if the final image is drawn and copied.
+     */
+    public static boolean drawsFinalImage(final int configuration) {
+        return RenderConfig.hasSceneStage(configuration)
+                || RenderConfig.hasSkyboxStage(configuration)
+                || RenderConfig.hasFilterStage(configuration);
+    }
+
+    /**
+     * The GUI renderer, which draws in every window after the pipeline runs.
+     *
+     * @return The GUI renderer.
+     */
+    public GuiRender getGuiRender() {
+        return stageGuiRender;
+    }
+
     private PipelineVulkan buildPipeline(final int configuration) {
         List<RenderStage> stages = new ArrayList<>();
         if (RenderConfig.hasError(configuration)) {
@@ -369,10 +391,10 @@ public class PipelineManagerVulkan {
             // After filters so they don't distort the lines, depth tested against the scene
             stages.add(stageDebugRender);
         }
-        if (RenderConfig.hasGuiStage(configuration)) {
-            stages.add(stageGuiRender);
+        if (drawsFinalImage(configuration)) {
+            // The GUI is drawn over it in the scene window afterward, see GuiRender
+            stages.add(stageSwapchainPresent);
         }
-        stages.add(stageSwapchainPresent);
 
         return new PipelineVulkan(stages.toArray(new RenderStage[0]), configuration);
     }

@@ -1,21 +1,17 @@
 package com.ikalagaming.graphics.vulkan.stages;
 
 import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
+import static org.lwjgl.vulkan.KHRSwapchain.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.ColorSpace;
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.RenderConfig;
 import com.ikalagaming.graphics.TextureHandle;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.gui.IkGui;
-import com.ikalagaming.graphics.gui.WindowManager;
 import com.ikalagaming.graphics.gui.data.DrawData;
 import com.ikalagaming.graphics.gui.data.FontAtlas;
 import com.ikalagaming.graphics.gui.data.IkIO;
-import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.*;
-import com.ikalagaming.graphics.vulkan.RenderStage;
 
 import lombok.NonNull;
 import lombok.Setter;
@@ -30,11 +26,13 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Renders IkGui on top of the final image. Every draw list is packed into the same per-frame
- * buffers, and push constants tell the shader where the current draw list starts.
+ * Renders IkGui straight onto the windows' swapchain images, after the scene is copied into its
+ * window. Every draw list is packed into the same per-frame buffers once a frame, and push
+ * constants tell the shader where the current draw list starts. Each window then gets a pass, which
+ * also readies its image to present even with nothing drawn.
  */
 @Slf4j
-public class GuiRender implements RenderStage {
+public class GuiRender {
 
     /** The number of descriptors in the set for each frame. */
     private static final int DESCRIPTOR_COUNT = 5;
@@ -63,6 +61,12 @@ public class GuiRender implements RenderStage {
     /** The VkDescriptorSet for each frame in flight, VK_NULL_HANDLE if not set up. */
     private final long[] descriptorSets;
 
+    /** The draw data uploaded by {@link #prepare}, or null if there is none this frame. */
+    private DrawData preparedDrawData;
+
+    /** Where each prepared draw list starts in the packed buffers. */
+    private DrawListOffsets[] preparedOffsets = new DrawListOffsets[0];
+
     /**
      * Set up the GUI render stage.
      *
@@ -80,14 +84,22 @@ public class GuiRender implements RenderStage {
         this.descriptorSets = new long[GraphicsManager.MAX_FRAMES_IN_FLIGHT];
     }
 
-    @Override
+    /**
+     * Create the pipeline and descriptors.
+     *
+     * @param vulkanState The Vulkan state.
+     */
     public void initialize(@NonNull VulkanState vulkanState) {
         log.debug("Initializing gui render");
         createPipelineLayout(vulkanState);
         createPipeline(vulkanState);
     }
 
-    @Override
+    /**
+     * Destroy the pipeline and descriptors.
+     *
+     * @param vulkanState The Vulkan state.
+     */
     public void cleanup(@NonNull VulkanState vulkanState) {
         // Freed along with the pool
         Arrays.fill(descriptorSets, VK_NULL_HANDLE);
@@ -101,97 +113,113 @@ public class GuiRender implements RenderStage {
         descriptorSetLayout = VK_NULL_HANDLE;
     }
 
-    @Override
-    public void render(
-            Scene scene,
-            @NonNull Window window,
+    /**
+     * Upload the glyphs added to the font atlas and this frame's draw lists. Call once a frame,
+     * before any window's pass and outside of rendering, since it records transfers.
+     *
+     * @param commandBuffer The frame's command buffer.
+     * @param vulkanState The Vulkan state.
+     * @param drawData The draw data to show, or null to draw no GUI this frame.
+     */
+    public void prepare(
+            @NonNull VkCommandBuffer commandBuffer,
             @NonNull VulkanState vulkanState,
-            int renderConfig) {
-        final IkIO io = IkGui.getIO();
-
-        final int width = (int) io.displaySize.x;
-        final int height = (int) io.displaySize.y;
-
-        WindowManager windowManager = GraphicsManager.getWindowManager();
-        if (windowManager == null) {
-            return;
-        }
-
-        windowManager.drawGui(width, height);
-
-        final VkCommandBuffer commandBuffer =
-                vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
+            DrawData drawData) {
         final PerFrameData frameData = vulkanState.perFrameData[vulkanState.frameIndex];
 
-        // Transfers have to happen outside of rendering
         uploadFontGlyphs(commandBuffer, vulkanState, frameData);
 
-        final DrawData drawData = IkGui.getDrawData();
-        DrawListOffsets[] offsets = new DrawListOffsets[0];
+        preparedDrawData = drawData;
+        preparedOffsets = new DrawListOffsets[0];
         if (drawData != null) {
-            updateUniforms(width, height, drawData, frameData);
-            offsets = uploadDrawLists(drawData, vulkanState, frameData);
+            final IkIO io = IkGui.getIO();
+            updateUniforms((int) io.displaySize.x, (int) io.displaySize.y, drawData, frameData);
+            preparedOffsets = uploadDrawLists(drawData, vulkanState, frameData);
         } else {
             ensureBuffersExist(vulkanState, frameData);
         }
         updateBindings(vulkanState, frameData);
+    }
 
-        // Earlier stages leave the final image as a color attachment, otherwise we start it here
-        final boolean firstToRender =
-                !RenderConfig.hasSceneStage(renderConfig)
-                        && !RenderConfig.hasSkyboxStage(renderConfig)
-                        && !RenderConfig.hasFilterStage(renderConfig);
-
-        // The image can be bigger than the window, but not smaller
-        final int renderWidth = Math.min(width, vulkanState.realSize.width());
-        final int renderHeight = Math.min(height, vulkanState.realSize.height());
+    /**
+     * Record a window's pass: draw the prepared GUI over its swapchain image if asked, then leave
+     * the image ready to present.
+     *
+     * @param commandBuffer The frame's command buffer.
+     * @param vulkanState The Vulkan state.
+     * @param presentation The window, with its swapchain image acquired.
+     * @param sceneCopied Whether the scene was copied into the image, which is kept. Otherwise it
+     *     starts out cleared.
+     * @param drawGui Whether to draw the prepared GUI in this window.
+     */
+    public void recordWindow(
+            @NonNull VkCommandBuffer commandBuffer,
+            @NonNull VulkanState vulkanState,
+            @NonNull Presentation presentation,
+            boolean sceneCopied,
+            boolean drawGui) {
+        final long image = presentation.swapchainImages[presentation.currentSwapchainIndex];
+        final long view = presentation.swapchainImageViews[presentation.currentSwapchainIndex];
+        final int imageWidth = presentation.swapchainWidth;
+        final int imageHeight = presentation.swapchainHeight;
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            transitionFinalImage(commandBuffer, frameData, firstToRender, stack);
+            transitionToDraw(commandBuffer, image, sceneCopied, stack);
 
             VkRenderingAttachmentInfo.Buffer colorAttachments =
                     VkRenderingAttachmentInfo.calloc(1, stack);
             colorAttachments
                     .get(0)
                     .sType$Default()
-                    .imageView(frameData.finalTexture.view)
+                    .imageView(view)
                     .imageLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
-                    .loadOp(
-                            firstToRender
-                                    ? VK_ATTACHMENT_LOAD_OP_CLEAR
-                                    : VK_ATTACHMENT_LOAD_OP_LOAD)
+                    .loadOp(sceneCopied ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR)
                     .storeOp(VK_ATTACHMENT_STORE_OP_STORE);
             // The clear value is already zeroed, which matches the OpenGL default clear color
 
             VkRenderingInfo renderingInfo =
                     VkRenderingInfo.calloc(stack)
                             .sType$Default()
-                            .renderArea(area -> area.extent().set(renderWidth, renderHeight))
+                            .renderArea(area -> area.extent().set(imageWidth, imageHeight))
                             .layerCount(1)
                             .pColorAttachments(colorAttachments);
             vkCmdBeginRendering(commandBuffer, renderingInfo);
 
-            if (offsets.length > 0 && renderWidth > 0 && renderHeight > 0) {
-                drawLists(commandBuffer, vulkanState, drawData, offsets, renderWidth, renderHeight);
+            if (drawGui && preparedDrawData != null && preparedOffsets.length > 0) {
+                final IkIO io = IkGui.getIO();
+                // The swapchain can briefly disagree with the display size while resizing
+                final int width = Math.min((int) io.displaySize.x, imageWidth);
+                final int height = Math.min((int) io.displaySize.y, imageHeight);
+                if (width > 0 && height > 0) {
+                    drawLists(
+                            commandBuffer,
+                            vulkanState,
+                            preparedDrawData,
+                            preparedOffsets,
+                            width,
+                            height);
+                }
             }
 
             vkCmdEndRendering(commandBuffer);
+
+            transitionToPresent(commandBuffer, image, stack);
         }
     }
 
     /**
-     * Move the final image to be a color attachment we can render to. If we are the first to render
-     * to it this frame, the old contents are discarded since we clear it anyway.
+     * Move a swapchain image to be a color attachment we can draw to. A copied scene is kept,
+     * otherwise the old contents are discarded since the pass clears them.
      *
      * @param commandBuffer The command buffer to record into.
-     * @param frameData The data for the current frame.
-     * @param firstToRender Whether no earlier stage rendered to the final image this frame.
+     * @param image The swapchain image.
+     * @param sceneCopied Whether the scene was just copied into the image.
      * @param stack The stack to allocate on.
      */
-    private void transitionFinalImage(
+    private static void transitionToDraw(
             @NonNull VkCommandBuffer commandBuffer,
-            @NonNull PerFrameData frameData,
-            boolean firstToRender,
+            long image,
+            boolean sceneCopied,
             @NonNull MemoryStack stack) {
         VkImageMemoryBarrier2.Buffer barriers = VkImageMemoryBarrier2.calloc(1, stack);
         barriers.get(0)
@@ -203,25 +231,57 @@ public class GuiRender implements RenderStage {
                 .newLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
                 .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
                 .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-                .image(frameData.finalTexture.texture)
+                .image(image)
                 .subresourceRange(
                         range ->
                                 range.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
                                         .levelCount(1)
                                         .layerCount(1));
-        if (firstToRender) {
-            // Last used as the source of the blit to the swapchain
+        if (sceneCopied) {
+            // Written by the blit from the scene
             barriers.get(0)
-                    .srcStageMask(VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT)
-                    .srcAccessMask(VK_ACCESS_2_NONE)
-                    .oldLayout(VK_IMAGE_LAYOUT_UNDEFINED);
+                    .srcStageMask(VK_PIPELINE_STAGE_2_BLIT_BIT)
+                    .srcAccessMask(VK_ACCESS_2_TRANSFER_WRITE_BIT)
+                    .oldLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
         } else {
-            // An earlier stage rendered to it this frame
+            // Chained to the acquire semaphore, which the submit waits on at this stage
             barriers.get(0)
                     .srcStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
-                    .srcAccessMask(VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT)
-                    .oldLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                    .srcAccessMask(VK_ACCESS_2_NONE)
+                    .oldLayout(VK_IMAGE_LAYOUT_UNDEFINED);
         }
+        VkDependencyInfo dependencyInfo =
+                VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barriers);
+        vkCmdPipelineBarrier2(commandBuffer, dependencyInfo);
+    }
+
+    /**
+     * Ready a swapchain image we drew to for presenting.
+     *
+     * @param commandBuffer The command buffer to record into.
+     * @param image The swapchain image.
+     * @param stack The stack to allocate on.
+     */
+    private static void transitionToPresent(
+            @NonNull VkCommandBuffer commandBuffer, long image, @NonNull MemoryStack stack) {
+        VkImageMemoryBarrier2.Buffer barriers = VkImageMemoryBarrier2.calloc(1, stack);
+        // Presenting waits on the render complete semaphore, so nothing needs to wait here
+        barriers.get(0)
+                .sType$Default()
+                .srcStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
+                .srcAccessMask(VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT)
+                .dstStageMask(VK_PIPELINE_STAGE_2_NONE)
+                .dstAccessMask(VK_ACCESS_2_NONE)
+                .oldLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+                .newLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+                .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                .image(image)
+                .subresourceRange(
+                        range ->
+                                range.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
+                                        .levelCount(1)
+                                        .layerCount(1));
         VkDependencyInfo dependencyInfo =
                 VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barriers);
         vkCmdPipelineBarrier2(commandBuffer, dependencyInfo);
@@ -725,13 +785,13 @@ public class GuiRender implements RenderStage {
                                     stack.ints(
                                             VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR));
 
-            // Not sRGB, matching the OpenGL backend
+            // Drawn straight onto the swapchain images, which aren't sRGB, matching the OpenGL
+            // backend
             VkPipelineRenderingCreateInfo renderingCreateInfo =
                     VkPipelineRenderingCreateInfo.calloc(stack)
                             .sType$Default()
                             .colorAttachmentCount(1)
-                            .pColorAttachmentFormats(
-                                    stack.ints(PipelineManagerVulkan.SCREEN_FORMAT));
+                            .pColorAttachmentFormats(stack.ints(Presentation.SWAPCHAIN_FORMAT));
 
             // Same blending as the OpenGL backend
             VkPipelineColorBlendAttachmentState.Buffer blendAttachments =

@@ -1,13 +1,12 @@
 package com.ikalagaming.graphics.vulkan.stages;
 
-import static org.lwjgl.vulkan.KHRSwapchain.*;
 import static org.lwjgl.vulkan.VK13.*;
 import static org.lwjgl.vulkan.VK13.vkCmdPipelineBarrier2;
 
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.Presentation;
 import com.ikalagaming.graphics.vulkan.RenderStage;
+import com.ikalagaming.graphics.vulkan.SceneTarget;
 import com.ikalagaming.graphics.vulkan.VulkanState;
 
 import lombok.NonNull;
@@ -15,6 +14,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 
+/**
+ * Copies the finished scene into the scene window's swapchain image. The image is left as a
+ * transfer destination, and the window's GUI pass draws over it and readies it to present.
+ */
 @Slf4j
 public class SwapchainPresent implements RenderStage {
 
@@ -31,14 +34,13 @@ public class SwapchainPresent implements RenderStage {
     @Override
     public void render(
             Scene scene,
-            @NonNull Window window,
+            @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState vulkanState,
             int renderConfig) {
-        // TODO(ches) remove this when we don't have the nothingburger state?
         final VkCommandBuffer commandBuffer =
                 vulkanState.commandBuffersGraphics[vulkanState.frameIndex];
 
-        final Presentation presentation = vulkanState.presentations.get(window);
+        final Presentation presentation = sceneTarget.presentation();
 
         final long swapchainImage =
                 presentation.swapchainImages[presentation.currentSwapchainIndex];
@@ -91,8 +93,8 @@ public class SwapchainPresent implements RenderStage {
                             .layerCount(1)
                             .mipLevel(0);
             // The same region the other stages render to
-            final int renderWidth = Math.min(window.getWidth(), vulkanState.realSize.width());
-            final int renderHeight = Math.min(window.getHeight(), vulkanState.realSize.height());
+            final int renderWidth = Math.min(sceneTarget.width(), vulkanState.realSize.width());
+            final int renderHeight = Math.min(sceneTarget.height(), vulkanState.realSize.height());
             VkOffset3D.Buffer sourceOffsets = VkOffset3D.calloc(2, stack);
             sourceOffsets.get(0).set(0, 0, 0);
             sourceOffsets.get(1).set(renderWidth, renderHeight, 1);
@@ -123,28 +125,6 @@ public class SwapchainPresent implements RenderStage {
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                     blitRegions,
                     VK_FILTER_LINEAR);
-
-            VkImageMemoryBarrier2.Buffer barrierPresents = VkImageMemoryBarrier2.calloc(1, stack);
-            barrierPresents
-                    .get(0)
-                    .sType$Default()
-                    .srcStageMask(VK_PIPELINE_STAGE_2_BLIT_BIT)
-                    .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
-                    .dstStageMask(VK_PIPELINE_STAGE_2_NONE)
-                    .dstAccessMask(0)
-                    .oldLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
-                    .newLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
-                    .image(swapchainImage)
-                    .subresourceRange(
-                            VkImageSubresourceRange.calloc(stack)
-                                    .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
-                                    .levelCount(1)
-                                    .layerCount(1));
-            VkDependencyInfo barrierPresentDependencyInfo =
-                    VkDependencyInfo.calloc(stack)
-                            .sType$Default()
-                            .pImageMemoryBarriers(barrierPresents);
-            vkCmdPipelineBarrier2(commandBuffer, barrierPresentDependencyInfo);
         }
     }
 }

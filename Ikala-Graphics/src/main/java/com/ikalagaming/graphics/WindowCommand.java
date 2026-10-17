@@ -7,8 +7,8 @@ import java.util.List;
 
 /**
  * The {@value #COMMAND} console command, for trying out extra windows: {@code window open [width
- * height]} opens a blank one, {@code window close} closes every extra window, and {@code window
- * list} lists them all.
+ * height]} opens a blank one, {@code window close} closes every extra window, {@code window list}
+ * lists them all, and {@code window scene <number|main>} draws the scene in another window.
  */
 @Slf4j
 final class WindowCommand {
@@ -42,7 +42,14 @@ final class WindowCommand {
             }
             case "close" -> GraphicsManager.runOnMainThread(WindowCommand::closeExtraWindows);
             case "list" -> GraphicsManager.runOnMainThread(WindowCommand::list);
-            default -> log.info("Usage: window [open [width height] | close | list]");
+            case "scene" -> {
+                final String which = args.size() < 2 ? "main" : args.get(1);
+                GraphicsManager.runOnMainThread(() -> moveScene(which));
+            }
+            default ->
+                    log.info(
+                            "Usage: window [open [width height] | close | list | scene"
+                                    + " <number|main>]");
         }
     }
 
@@ -92,13 +99,35 @@ final class WindowCommand {
         log.info("Closed {} windows", Math.max(0, windows.size() - 1));
     }
 
+    /**
+     * Draw the scene in another window. Main thread.
+     *
+     * @param which The number in the window's title, or main for the main window.
+     */
+    private static void moveScene(@NonNull String which) {
+        final String title = "main".equals(which) ? null : "Window " + which;
+        for (Window window : GraphicsManager.getWindows()) {
+            final boolean match =
+                    title == null
+                            ? window == GraphicsManager.getMainWindow()
+                            : title.equals(window.getTitle());
+            if (match) {
+                GraphicsManager.setSceneWindow(window);
+                log.info("Drawing the scene in {}", window.getTitle());
+                return;
+            }
+        }
+        log.info("There is no open window {}", which);
+    }
+
     /** Log every open window. Main thread. */
     private static void list() {
         for (Window window : GraphicsManager.getWindows()) {
             log.info(
-                    "{}{} ({}x{})",
+                    "{}{}{} ({}x{})",
                     window.getTitle(),
                     window == GraphicsManager.getMainWindow() ? " (main)" : "",
+                    window == GraphicsManager.getSceneWindow() ? " (scene)" : "",
                     window.getWidth(),
                     window.getHeight());
         }

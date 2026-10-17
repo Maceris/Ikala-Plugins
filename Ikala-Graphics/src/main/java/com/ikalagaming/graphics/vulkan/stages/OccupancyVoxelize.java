@@ -4,7 +4,6 @@ import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.OccupancyClipmap;
 import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.scene.Scene;
@@ -12,6 +11,7 @@ import com.ikalagaming.graphics.vulkan.GeometryArena;
 import com.ikalagaming.graphics.vulkan.MeshRegistry;
 import com.ikalagaming.graphics.vulkan.OccupancyVolume;
 import com.ikalagaming.graphics.vulkan.RenderStage;
+import com.ikalagaming.graphics.vulkan.SceneTarget;
 import com.ikalagaming.graphics.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.vulkan.SharedBuffer;
 import com.ikalagaming.graphics.vulkan.VulkanState;
@@ -214,7 +214,10 @@ public class OccupancyVoxelize implements RenderStage {
 
     @Override
     public void render(
-            Scene scene, @NonNull Window window, @NonNull VulkanState state, int renderConfig) {
+            Scene scene,
+            @NonNull SceneTarget sceneTarget,
+            @NonNull VulkanState state,
+            int renderConfig) {
         final OccupancyVolume volume = state.occupancy;
         if (!GraphicsManager.getSettings().occupancy) {
             // Nothing is kept up to date meanwhile, so it starts over when turned on again

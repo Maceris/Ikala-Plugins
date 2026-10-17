@@ -33,7 +33,7 @@ public class Presentation {
     public static final int INVALID_SWAPCHAIN_INDEX = -1;
 
     /** The swapchain image format. Supported practically everywhere, checked for each surface. */
-    static final int SWAPCHAIN_FORMAT = VK_FORMAT_B8G8R8A8_UNORM;
+    public static final int SWAPCHAIN_FORMAT = VK_FORMAT_B8G8R8A8_UNORM;
 
     /** The swapchain color space, paired with {@link #SWAPCHAIN_FORMAT}. */
     static final int SWAPCHAIN_COLOR_SPACE = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
@@ -263,57 +263,6 @@ public class Presentation {
                                     imageIndex));
             currentSwapchainIndex = acquired ? imageIndex.get(0) : INVALID_SWAPCHAIN_INDEX;
             return acquired;
-        }
-    }
-
-    /**
-     * Fill the acquired swapchain image with one color and leave it ready to present, for windows
-     * that have nothing else drawn in them yet.
-     *
-     * @param commandBuffer The command buffer to record into.
-     * @param red The red value, from 0 to 1.
-     * @param green The green value, from 0 to 1.
-     * @param blue The blue value, from 0 to 1.
-     */
-    void recordClear(@NonNull VkCommandBuffer commandBuffer, float red, float green, float blue) {
-        final long image = swapchainImages[currentSwapchainIndex];
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            VkImageSubresourceRange range =
-                    VkImageSubresourceRange.calloc(stack)
-                            .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
-                            .levelCount(1)
-                            .layerCount(1);
-            VkImageMemoryBarrier2.Buffer barrier = VkImageMemoryBarrier2.calloc(1, stack);
-            // Chained to the acquire semaphore, which the submit waits on at this stage
-            barrier.get(0)
-                    .sType$Default()
-                    .srcStageMask(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT)
-                    .srcAccessMask(VK_ACCESS_2_NONE)
-                    .dstStageMask(VK_PIPELINE_STAGE_2_CLEAR_BIT)
-                    .dstAccessMask(VK_ACCESS_2_TRANSFER_WRITE_BIT)
-                    .oldLayout(VK_IMAGE_LAYOUT_UNDEFINED)
-                    .newLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
-                    .srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-                    .dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-                    .image(image)
-                    .subresourceRange(range);
-            VkDependencyInfo dependencyInfo =
-                    VkDependencyInfo.calloc(stack).sType$Default().pImageMemoryBarriers(barrier);
-            vkCmdPipelineBarrier2(commandBuffer, dependencyInfo);
-
-            VkClearColorValue color = VkClearColorValue.calloc(stack);
-            color.float32(0, red).float32(1, green).float32(2, blue).float32(3, 1);
-            vkCmdClearColorImage(
-                    commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, color, range);
-
-            barrier.get(0)
-                    .srcStageMask(VK_PIPELINE_STAGE_2_CLEAR_BIT)
-                    .srcAccessMask(VK_ACCESS_2_TRANSFER_WRITE_BIT)
-                    .dstStageMask(VK_PIPELINE_STAGE_2_NONE)
-                    .dstAccessMask(VK_ACCESS_2_NONE)
-                    .oldLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
-                    .newLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-            vkCmdPipelineBarrier2(commandBuffer, dependencyInfo);
         }
     }
 

@@ -3,7 +3,6 @@ package com.ikalagaming.graphics.vulkan.stages;
 import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Projection;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.scene.lights.LightRegistry;
@@ -11,6 +10,7 @@ import com.ikalagaming.graphics.vulkan.ClusterMath;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.PointShadows;
 import com.ikalagaming.graphics.vulkan.RenderStage;
+import com.ikalagaming.graphics.vulkan.SceneTarget;
 import com.ikalagaming.graphics.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.vulkan.VulkanState;
@@ -111,7 +111,10 @@ public class LightCull implements RenderStage {
 
     @Override
     public void render(
-            Scene scene, @NonNull Window window, @NonNull VulkanState state, int renderConfig) {
+            Scene scene,
+            @NonNull SceneTarget sceneTarget,
+            @NonNull VulkanState state,
+            int renderConfig) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
         final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
 

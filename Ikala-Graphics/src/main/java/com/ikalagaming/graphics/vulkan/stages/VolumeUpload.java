@@ -4,13 +4,13 @@ import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
 import com.ikalagaming.graphics.graph.VolumeMaterials;
 import com.ikalagaming.graphics.graph.VolumeMath;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.RenderStage;
+import com.ikalagaming.graphics.vulkan.SceneTarget;
 import com.ikalagaming.graphics.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.vulkan.SharedBuffer;
 import com.ikalagaming.graphics.vulkan.TextureRegistry;
@@ -114,7 +114,10 @@ public class VolumeUpload implements RenderStage {
 
     @Override
     public void render(
-            Scene scene, @NonNull Window window, @NonNull VulkanState state, int renderConfig) {
+            Scene scene,
+            @NonNull SceneTarget sceneTarget,
+            @NonNull VulkanState state,
+            int renderConfig) {
         final VolumeBricks bricks = state.volumeBricks;
         if (state.sections == null || scene == null) {
             bricks.writeDraws(state.frameIndex, state, List.of(), new Vector3d());

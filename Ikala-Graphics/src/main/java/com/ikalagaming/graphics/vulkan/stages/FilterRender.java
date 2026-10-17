@@ -5,7 +5,6 @@ import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.RenderConfig;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.*;
 import com.ikalagaming.graphics.vulkan.RenderStage;
@@ -119,7 +118,7 @@ public class FilterRender implements RenderStage {
     @Override
     public void render(
             Scene scene,
-            @NonNull Window window,
+            @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState vulkanState,
             int renderConfig) {
         final VkCommandBuffer commandBuffer =
@@ -130,8 +129,8 @@ public class FilterRender implements RenderStage {
         final boolean hasScene = RenderConfig.hasSceneStage(renderConfig);
         final boolean sourceRendered = hasScene || RenderConfig.hasSkyboxStage(renderConfig);
 
-        final int width = Math.min(window.getWidth(), vulkanState.realSize.width());
-        final int height = Math.min(window.getHeight(), vulkanState.realSize.height());
+        final int width = Math.min(sceneTarget.width(), vulkanState.realSize.width());
+        final int height = Math.min(sceneTarget.height(), vulkanState.realSize.height());
 
         updateUniforms(scene, vulkanState, frameData, width, height, hasScene);
         updateScreenTexture(vulkanState, source);

@@ -1,6 +1,5 @@
 package com.ikalagaming.graphics.vulkan;
 
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
@@ -58,7 +57,11 @@ public interface RenderStage {
     /** Clean up any resources for the stage. Calling render is not valid after this point. */
     default void cleanup(@NonNull VulkanState state) {}
 
-    void render(Scene scene, @NonNull Window window, @NonNull VulkanState state, int renderConfig);
+    void render(
+            Scene scene,
+            @NonNull SceneTarget sceneTarget,
+            @NonNull VulkanState state,
+            int renderConfig);
 
     /**
      * What the stage is called in frame timings.

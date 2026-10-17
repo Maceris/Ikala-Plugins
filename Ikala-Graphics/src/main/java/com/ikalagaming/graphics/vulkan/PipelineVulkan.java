@@ -1,6 +1,5 @@
 package com.ikalagaming.graphics.vulkan;
 
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
 
 import lombok.NonNull;
@@ -20,13 +19,13 @@ public class PipelineVulkan {
      * Run each render stage in order.
      *
      * @param scene The scene to render.
-     * @param window The window we are rendering to.
+     * @param sceneTarget What the scene is drawn into.
      * @param state The Vulkan state.
      */
-    public void render(Scene scene, @NonNull Window window, @NonNull VulkanState state) {
+    public void render(Scene scene, @NonNull SceneTarget sceneTarget, @NonNull VulkanState state) {
         final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
         for (RenderStage stage : renderStages) {
-            stage.render(scene, window, state, renderConfig);
+            stage.render(scene, sceneTarget, state, renderConfig);
             state.frameTimings.mark(commandBuffer, state.frameIndex, stage.name());
         }
     }

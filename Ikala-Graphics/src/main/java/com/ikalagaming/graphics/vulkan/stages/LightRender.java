@@ -4,7 +4,6 @@ import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.CascadeShadowSplit;
 import com.ikalagaming.graphics.graph.OccupancyClipmap;
 import com.ikalagaming.graphics.scene.Fog;
@@ -122,7 +121,7 @@ public class LightRender implements RenderStage {
     @Override
     public void render(
             Scene scene,
-            @NonNull Window window,
+            @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState vulkanState,
             int renderConfig) {
         final VkCommandBuffer commandBuffer =
@@ -144,8 +143,8 @@ public class LightRender implements RenderStage {
                 STORAGE_BINDINGS,
                 writtenBuffers[vulkanState.frameIndex]);
 
-        final int width = Math.min(window.getWidth(), vulkanState.realSize.width());
-        final int height = Math.min(window.getHeight(), vulkanState.realSize.height());
+        final int width = Math.min(sceneTarget.width(), vulkanState.realSize.width());
+        final int height = Math.min(sceneTarget.height(), vulkanState.realSize.height());
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             // Last read by the tone map stage, a frame or more ago

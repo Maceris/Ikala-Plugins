@@ -6,7 +6,6 @@ import static org.lwjgl.vulkan.VK13.*;
 import com.ikalagaming.graphics.GraphicsManager;
 import com.ikalagaming.graphics.MeshKind;
 import com.ikalagaming.graphics.RenderConfig;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.bake.BakedVertex;
 import com.ikalagaming.graphics.graph.Material;
 import com.ikalagaming.graphics.graph.MaterialCache;
@@ -190,8 +189,11 @@ public class SceneRender implements RenderStage {
     private final class LateHalf implements RenderStage {
         @Override
         public void render(
-                Scene scene, @NonNull Window window, @NonNull VulkanState state, int renderConfig) {
-            renderLate(scene, window, state, renderConfig);
+                Scene scene,
+                @NonNull SceneTarget sceneTarget,
+                @NonNull VulkanState state,
+                int renderConfig) {
+            renderLate(scene, sceneTarget, state, renderConfig);
         }
 
         @Override
@@ -299,7 +301,7 @@ public class SceneRender implements RenderStage {
     @Override
     public void render(
             Scene scene,
-            @NonNull Window window,
+            @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState vulkanState,
             int renderConfig) {
         final VkCommandBuffer commandBuffer =
@@ -316,7 +318,7 @@ public class SceneRender implements RenderStage {
             // Cleared to zero like OpenGL, the material index clears to the default material
             drawList(
                     commandBuffer,
-                    window,
+                    sceneTarget,
                     vulkanState,
                     renderConfig,
                     VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -332,13 +334,13 @@ public class SceneRender implements RenderStage {
      * for the light stage.
      *
      * @param scene The scene.
-     * @param window The window.
+     * @param sceneTarget What the scene is drawn into.
      * @param vulkanState The Vulkan state.
      * @param renderConfig The render configuration.
      */
     private void renderLate(
             Scene scene,
-            @NonNull Window window,
+            @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState vulkanState,
             int renderConfig) {
         final VkCommandBuffer commandBuffer =
@@ -348,7 +350,7 @@ public class SceneRender implements RenderStage {
             transitionForLate(commandBuffer, gBuffer, stack);
             drawList(
                     commandBuffer,
-                    window,
+                    sceneTarget,
                     vulkanState,
                     renderConfig,
                     VK_ATTACHMENT_LOAD_OP_LOAD,
@@ -363,7 +365,7 @@ public class SceneRender implements RenderStage {
      * Draw one of the scene's visible lists into the g-buffer, in its own rendering scope.
      *
      * @param commandBuffer The command buffer to record into.
-     * @param window The window, to find the size to render at.
+     * @param sceneTarget What the scene is drawn into, to find the size to render at.
      * @param state The Vulkan state.
      * @param renderConfig The render configuration, to pick wireframe or not.
      * @param loadOp The VkAttachmentLoadOp: clear for the early half, load for the late one.
@@ -373,7 +375,7 @@ public class SceneRender implements RenderStage {
      */
     private void drawList(
             @NonNull VkCommandBuffer commandBuffer,
-            @NonNull Window window,
+            @NonNull SceneTarget sceneTarget,
             @NonNull VulkanState state,
             int renderConfig,
             int loadOp,
@@ -383,8 +385,8 @@ public class SceneRender implements RenderStage {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
         final GBuffer gBuffer = frameData.gBuffer;
         // The g-buffer can be bigger than the window, but not smaller
-        final int width = Math.min(window.getWidth(), gBuffer.width());
-        final int height = Math.min(window.getHeight(), gBuffer.height());
+        final int width = Math.min(sceneTarget.width(), gBuffer.width());
+        final int height = Math.min(sceneTarget.height(), gBuffer.height());
 
         VkRenderingAttachmentInfo.Buffer colorAttachments =
                 VkRenderingAttachmentInfo.calloc(GBuffer.TEXTURE_COUNT, stack);

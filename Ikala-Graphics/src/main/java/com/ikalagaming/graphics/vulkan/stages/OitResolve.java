@@ -3,13 +3,13 @@ package com.ikalagaming.graphics.vulkan.stages;
 import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.FullScreenPass;
 import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
 import com.ikalagaming.graphics.vulkan.QuadMesh;
 import com.ikalagaming.graphics.vulkan.RenderStage;
+import com.ikalagaming.graphics.vulkan.SceneTarget;
 import com.ikalagaming.graphics.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.vulkan.VoxelOitMath;
@@ -99,11 +99,14 @@ public class OitResolve implements RenderStage {
 
     @Override
     public void render(
-            Scene scene, @NonNull Window window, @NonNull VulkanState state, int renderConfig) {
+            Scene scene,
+            @NonNull SceneTarget sceneTarget,
+            @NonNull VulkanState state,
+            int renderConfig) {
         final VkCommandBuffer commandBuffer = state.commandBuffersGraphics[state.frameIndex];
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
-        final int width = Math.min(window.getWidth(), state.realSize.width());
-        final int height = Math.min(window.getHeight(), state.realSize.height());
+        final int width = Math.min(sceneTarget.width(), state.realSize.width());
+        final int height = Math.min(sceneTarget.height(), state.realSize.height());
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkImageMemoryBarrier2.Buffer barriers = VkImageMemoryBarrier2.calloc(3, stack);

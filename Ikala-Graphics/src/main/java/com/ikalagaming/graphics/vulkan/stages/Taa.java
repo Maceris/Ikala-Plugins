@@ -4,7 +4,6 @@ import static com.ikalagaming.graphics.vulkan.VulkanInstance.checkError;
 import static org.lwjgl.vulkan.VK13.*;
 
 import com.ikalagaming.graphics.GraphicsManager;
-import com.ikalagaming.graphics.Window;
 import com.ikalagaming.graphics.graph.TaaMath;
 import com.ikalagaming.graphics.scene.Scene;
 import com.ikalagaming.graphics.vulkan.FullScreenPass;
@@ -12,6 +11,7 @@ import com.ikalagaming.graphics.vulkan.PerFrameData;
 import com.ikalagaming.graphics.vulkan.PipelineManagerVulkan;
 import com.ikalagaming.graphics.vulkan.QuadMesh;
 import com.ikalagaming.graphics.vulkan.RenderStage;
+import com.ikalagaming.graphics.vulkan.SceneTarget;
 import com.ikalagaming.graphics.vulkan.ShaderBindings;
 import com.ikalagaming.graphics.vulkan.ShaderVulkan;
 import com.ikalagaming.graphics.vulkan.VulkanState;
@@ -126,7 +126,10 @@ public class Taa implements RenderStage {
 
     @Override
     public void render(
-            Scene scene, @NonNull Window window, @NonNull VulkanState state, int renderConfig) {
+            Scene scene,
+            @NonNull SceneTarget sceneTarget,
+            @NonNull VulkanState state,
+            int renderConfig) {
         final PerFrameData frameData = state.perFrameData[state.frameIndex];
         if (!GraphicsManager.getSettings().taa) {
             frameData.taaApplied = false;
@@ -138,8 +141,8 @@ public class Taa implements RenderStage {
                 state.perFrameData[
                         (state.frameIndex + GraphicsManager.MAX_FRAMES_IN_FLIGHT - 1)
                                 % GraphicsManager.MAX_FRAMES_IN_FLIGHT];
-        final int width = Math.min(window.getWidth(), state.realSize.width());
-        final int height = Math.min(window.getHeight(), state.realSize.height());
+        final int width = Math.min(sceneTarget.width(), state.realSize.width());
+        final int height = Math.min(sceneTarget.height(), state.realSize.height());
 
         final Matrix4f projection = scene.getProjection().getProjectionMatrix();
         final Matrix4f view = scene.getCamera().getViewMatrix();
